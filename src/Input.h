@@ -10,9 +10,9 @@
 // Button ADC thresholds
 #define BTN_THRESHOLD 100  // Threshold tolerance
 #define BTN_RIGHT_VAL 3
-#define BTN_LEFT_VAL 1470
-#define BTN_CONFIRM_VAL 2655
-#define BTN_BACK_VAL 3470
+#define BTN_LEFT_VAL 1500
+#define BTN_CONFIRM_VAL 2700
+#define BTN_BACK_VAL 3550
 #define BTN_VOLUME_DOWN_VAL 3
 #define BTN_VOLUME_UP_VAL 2305
 
