@@ -3,43 +3,6 @@
 #include <EpdRenderer.h>
 #include <Serialization.h>
 
-static bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n'; }
-
-// move past anything that should be considered part of a work
-static int skipWord(const std::string& text, int index, const int length) {
-  while (index < length && !isWhitespace(text[index])) {
-    index++;
-  }
-  return index;
-}
-
-// skip past any white space characters
-static int skipWhitespace(const std::string& html, int index, const int length) {
-  while (index < length && isWhitespace(html[index])) {
-    index++;
-  }
-  return index;
-}
-
-void TextBlock::addSpan(const std::string& span, const bool is_bold, const bool is_italic) {
-  // adding a span to text block
-  // make a copy of the text as we'll modify it
-  const int length = span.length();
-  // const auto text = new char[length + 1];
-  // strcpy(text, span);
-  // work out where each word is in the span
-  int index = 0;
-  while (index < length) {
-    // skip past any whitespace to the start of a word
-    index = skipWhitespace(span, index, length);
-    const int wordStart = index;
-    // find the end of the word
-    index = skipWord(span, index, length);
-    const int wordLength = index - wordStart;
-    addWord(span.substr(wordStart, wordLength), is_bold, is_italic);
-  }
-}
-
 void TextBlock::addWord(const std::string& word, const bool is_bold, const bool is_italic) {
   if (word.length() == 0) return;
 

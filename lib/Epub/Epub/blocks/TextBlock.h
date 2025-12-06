@@ -36,7 +36,6 @@ class TextBlock final : public Block {
                      const std::vector<uint8_t>& word_styles, const BLOCK_STYLE style)
       : words(words), wordXpos(word_xpos), wordStyles(word_styles), style(style) {}
   ~TextBlock() override = default;
-  void addSpan(const std::string& span, bool is_bold, bool is_italic);
   void addWord(const std::string& word, bool is_bold, bool is_italic);
   void setStyle(const BLOCK_STYLE style) { this->style = style; }
   BLOCK_STYLE getStyle() const { return style; }

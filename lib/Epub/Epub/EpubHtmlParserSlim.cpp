@@ -24,6 +24,8 @@ constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 const char* SKIP_TAGS[] = {"head", "table"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
+bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n'; }
+
 // given the start and end of a tag, check to see if it matches a known tag
 bool matches_s(const char* tag_name, const char* possible_tags[], const int possible_tag_count) {
   for (int i = 0; i < possible_tag_count; i++) {
@@ -119,17 +121,19 @@ void XMLCALL EpubHtmlParserSlim::characterData(void* userData, const XML_Char* s
   }
 
   for (int i = 0; i < len; i++) {
-    // TODO: Extract check
-    if (s[i] == ' ' || s[i] == '\r' || s[i] == '\n') {
+    if (isWhitespace(s[i])) {
+      // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
         self->partWordBuffer[self->partWordBufferIndex] = '\0';
         self->currentTextBlock->addWord(replaceHtmlEntities(self->partWordBuffer), self->boldUntilDepth < self->depth,
                                         self->italicUntilDepth < self->depth);
         self->partWordBufferIndex = 0;
       }
+      // Skip the whitespace char
       continue;
     }
 
+    // If we're about to run out of space, then cut the word off and start a new one
     if (self->partWordBufferIndex >= PART_WORD_BUFFER_SIZE - 2) {
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
       self->currentTextBlock->addWord(replaceHtmlEntities(self->partWordBuffer), self->boldUntilDepth < self->depth,
