@@ -1,6 +1,6 @@
 #pragma once
 
-#include <expat_external.h>
+#include <expat.h>
 #include <limits.h>
 
 #include <functional>
@@ -21,7 +21,7 @@ class EpubHtmlParserSlim {
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
   // If we encounter words longer than this, but this is pretty large
-  char partWordBuffer[PART_WORD_BUFFER_SIZE];
+  char partWordBuffer[PART_WORD_BUFFER_SIZE] = {};
   int partWordBufferIndex = 0;
   TextBlock* currentTextBlock = nullptr;
   Page* currentPage = nullptr;

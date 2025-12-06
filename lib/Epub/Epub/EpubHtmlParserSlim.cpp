@@ -188,7 +188,7 @@ bool EpubHtmlParserSlim::parseAndBuildPages() {
   FILE* file = fopen(filepath, "r");
 
   do {
-    void* const buf = XML_GetBuffer(parser, BUFSIZ);
+    void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
       Serial.println("Couldn't allocate memory for buffer");
       XML_ParserFree(parser);
@@ -196,7 +196,7 @@ bool EpubHtmlParserSlim::parseAndBuildPages() {
       return false;
     }
 
-    const size_t len = fread(buf, 1, BUFSIZ, file);
+    const size_t len = fread(buf, 1, 1024, file);
 
     if (ferror(file)) {
       Serial.println("Read error");
