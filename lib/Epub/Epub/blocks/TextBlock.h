@@ -30,15 +30,16 @@ class TextBlock final : public Block {
   BLOCK_STYLE style;
 
  public:
-  void addSpan(const std::string& span, bool is_bold, bool is_italic);
   explicit TextBlock(const BLOCK_STYLE style) : style(style) {}
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<uint16_t>& word_xpos,
                      // the styles of each word
                      const std::vector<uint8_t>& word_styles, const BLOCK_STYLE style)
       : words(words), wordXpos(word_xpos), wordStyles(word_styles), style(style) {}
   ~TextBlock() override = default;
-  void set_style(const BLOCK_STYLE style) { this->style = style; }
-  BLOCK_STYLE get_style() const { return style; }
+  void addSpan(const std::string& span, bool is_bold, bool is_italic);
+  void addWord(const std::string& word, bool is_bold, bool is_italic);
+  void setStyle(const BLOCK_STYLE style) { this->style = style; }
+  BLOCK_STYLE getStyle() const { return style; }
   bool isEmpty() override { return words.empty(); }
   void layout(EpdRenderer& renderer) override {};
   // given a renderer works out where to break the words into lines

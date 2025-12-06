@@ -5,11 +5,11 @@
 
 #include <fstream>
 
-#include "EpubHtmlParser.h"
+#include "EpubHtmlParserSlim.h"
 #include "Page.h"
 
 void Section::onPageComplete(const Page* page) {
-  Serial.printf("Page %d complete\n", pageCount);
+  Serial.printf("Page %d complete - free mem: %lu\n", pageCount, ESP.getFreeHeap());
 
   const auto filePath = cachePath + "/page_" + std::to_string(pageCount) + ".bin";
   // TODO can this be removed?
@@ -77,11 +77,11 @@ bool Section::persistPageDataToSD() {
   }
 
   const auto sdTmpHtmlPath = "/sd" + tmpHtmlPath;
-  auto visitor =
-      EpubHtmlParser(sdTmpHtmlPath.c_str(), renderer, [this](const Page* page) { this->onPageComplete(page); });
 
-  // TODO: Come back and see if mem used here can be lowered?
+  auto visitor =
+      EpubHtmlParserSlim(sdTmpHtmlPath.c_str(), renderer, [this](const Page* page) { this->onPageComplete(page); });
   const bool success = visitor.parseAndBuildPages();
+
   SD.remove(tmpHtmlPath.c_str());
   if (!success) {
     Serial.println("Failed to parse and build pages");

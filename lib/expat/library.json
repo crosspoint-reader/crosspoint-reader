@@ -1,0 +1,11 @@
+{
+  "name": "expat",
+  "version": "2.7.3",
+  "build": {
+    "srcFilter": [
+      "+<xmlparse.c>",
+      "+<xmlrole.c>",
+      "+<xmltok.c>"
+    ]
+  }
+}

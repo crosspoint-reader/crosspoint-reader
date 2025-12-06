@@ -36,11 +36,15 @@ void TextBlock::addSpan(const std::string& span, const bool is_bold, const bool 
     // find the end of the word
     index = skipWord(span, index, length);
     const int wordLength = index - wordStart;
-    if (wordLength > 0) {
-      words.push_back(span.substr(wordStart, wordLength));
-      wordStyles.push_back((is_bold ? BOLD_SPAN : 0) | (is_italic ? ITALIC_SPAN : 0));
-    }
+    addWord(span.substr(wordStart, wordLength), is_bold, is_italic);
   }
+}
+
+void TextBlock::addWord(const std::string& word, const bool is_bold, const bool is_italic) {
+  if (word.length() == 0) return;
+
+  words.push_back(word);
+  wordStyles.push_back((is_bold ? BOLD_SPAN : 0) | (is_italic ? ITALIC_SPAN : 0));
 }
 
 std::list<TextBlock*> TextBlock::splitIntoLines(const EpdRenderer& renderer) {
@@ -189,17 +193,12 @@ std::list<TextBlock*> TextBlock::splitIntoLines(const EpdRenderer& renderer) {
 
 void TextBlock::render(const EpdRenderer& renderer, const int x, const int y) const {
   for (int i = 0; i < words.size(); i++) {
-    // get the style
-    const uint8_t wordStyle = wordStyles[i];
     // render the word
     EpdFontStyle fontStyle = REGULAR;
-    if (wordStyles[i] & BOLD_SPAN) {
-      if (wordStyles[i] & ITALIC_SPAN) {
-        fontStyle = BOLD_ITALIC;
-      } else {
-        fontStyle = BOLD;
-      }
-
+    if (wordStyles[i] & BOLD_SPAN && wordStyles[i] & ITALIC_SPAN) {
+      fontStyle = BOLD_ITALIC;
+    } else if (wordStyles[i] & BOLD_SPAN) {
+      fontStyle = BOLD;
     } else if (wordStyles[i] & ITALIC_SPAN) {
       fontStyle = ITALIC;
     }
