@@ -204,6 +204,13 @@ void EpdRenderer::clearScreen(const uint8_t color) const {
   einkDisplay.clearScreen(color);
 }
 
+void EpdRenderer::invertScreen() const {
+  uint8_t *buffer = einkDisplay.getFrameBuffer();
+  for (int i = 0; i < EInkDisplay::BUFFER_SIZE; i++) {
+    buffer[i] = ~buffer[i];
+  }
+}
+
 void EpdRenderer::flushDisplay(const EInkDisplay::RefreshMode refreshMode) const {
   einkDisplay.displayBuffer(refreshMode);
 }

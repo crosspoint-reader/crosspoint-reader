@@ -37,6 +37,9 @@ class EpdRenderer {
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;
   void clearScreen(uint8_t color = 0xFF) const;
+
+  void invertScreen() const;
+
   void flushDisplay(EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH) const;
   void flushArea(int x, int y, int width, int height) const;
 
