@@ -141,7 +141,7 @@ void onSelectEpubFile(const std::string& path) {
     enterNewScreen(new EpubReaderScreen(renderer, inputManager, epub, onGoHome));
   } else {
     exitScreen();
-    enterNewScreen(new FullScreenMessageScreen(renderer, inputManager, "Failed to load epub", REGULAR, false, false));
+    enterNewScreen(new FullScreenMessageScreen(renderer, inputManager, "Failed to load epub", REGULAR, EInkDisplay::HALF_REFRESH));
     delay(2000);
     onGoHome();
   }

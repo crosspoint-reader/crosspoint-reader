@@ -120,7 +120,7 @@ void FileSelectionScreen::render() const {
 
   const auto pageWidth = renderer.getPageWidth();
   const auto titleWidth = renderer.getTextWidth("CrossPoint Reader", BOLD);
-  renderer.drawText((pageWidth - titleWidth) / 2, 0, "CrossPoint Reader", 1, BOLD);
+  renderer.drawText((pageWidth - titleWidth) / 2, 0, "CrossPoint Reader", true, BOLD);
 
   if (files.empty()) {
     renderer.drawUiText(10, 50, "No EPUBs found");
@@ -130,7 +130,7 @@ void FileSelectionScreen::render() const {
 
     for (size_t i = 0; i < files.size(); i++) {
       const auto file = files[i];
-      renderer.drawUiText(10, 50 + i * 30, file.c_str(), i == selectorIndex ? 0 : 1);
+      renderer.drawUiText(10, 50 + i * 30, file.c_str(), i != selectorIndex);
     }
   }
 

@@ -6,7 +6,7 @@
 
 #include "Battery.h"
 
-constexpr int PAGES_PER_REFRESH = 20;
+constexpr int PAGES_PER_REFRESH = 15;
 constexpr unsigned long SKIP_CHAPTER_MS = 700;
 
 void EpubReaderScreen::taskTrampoline(void* param) {
@@ -218,10 +218,16 @@ void EpubReaderScreen::renderScreen() {
   f.close();
 }
 
-void EpubReaderScreen::renderContents(const Page* p) const {
+void EpubReaderScreen::renderContents(const Page* p) {
   p->render(renderer);
   renderStatusBar();
-  renderer.flushDisplay();
+  if (pagesUntilFullRefresh <= 1) {
+    renderer.flushDisplay(EInkDisplay::HALF_REFRESH);
+    pagesUntilFullRefresh = PAGES_PER_REFRESH;
+  } else {
+    renderer.flushDisplay();
+    pagesUntilFullRefresh--;
+  }
 
   // grayscale rendering
   {

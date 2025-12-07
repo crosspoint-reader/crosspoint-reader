@@ -128,7 +128,7 @@ void EpdRenderer::drawTextBox(const int x, const int y, const std::string& text,
   int ypos = 0;
   while (true) {
     if (end >= length) {
-      drawText(x, y + ypos, text.substr(start, length - start).c_str(), 1, style);
+      drawText(x, y + ypos, text.substr(start, length - start).c_str(), true, style);
       break;
     }
 
@@ -137,7 +137,7 @@ void EpdRenderer::drawTextBox(const int x, const int y, const std::string& text,
     }
 
     if (text[end - 1] == '\n') {
-      drawText(x, y + ypos, text.substr(start, end - start).c_str(), 1, style);
+      drawText(x, y + ypos, text.substr(start, end - start).c_str(), true, style);
       ypos += getLineHeight();
       start = end;
       end = start + 1;
@@ -145,7 +145,7 @@ void EpdRenderer::drawTextBox(const int x, const int y, const std::string& text,
     }
 
     if (getTextWidth(text.substr(start, end - start).c_str(), style) > width) {
-      drawText(x, y + ypos, text.substr(start, end - start - 1).c_str(), 1, style);
+      drawText(x, y + ypos, text.substr(start, end - start - 1).c_str(), true, style);
       ypos += getLineHeight();
       start = end - 1;
       continue;
@@ -204,8 +204,8 @@ void EpdRenderer::clearScreen(const uint8_t color) const {
   einkDisplay.clearScreen(color);
 }
 
-void EpdRenderer::flushDisplay(const bool partialUpdate) const {
-  einkDisplay.displayBuffer(partialUpdate ? EInkDisplay::FAST_REFRESH : EInkDisplay::FULL_REFRESH);
+void EpdRenderer::flushDisplay(const EInkDisplay::RefreshMode refreshMode) const {
+  einkDisplay.displayBuffer(refreshMode);
 }
 
 // TODO: Support partial window update

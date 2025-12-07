@@ -165,7 +165,7 @@ void TextBlock::render(const EpdRenderer& renderer, const int x, const int y) co
     } else if (wordStyles[i] & ITALIC_SPAN) {
       fontStyle = ITALIC;
     }
-    renderer.drawText(x + wordXpos[i], y, words[i].c_str(), 1, fontStyle);
+    renderer.drawText(x + wordXpos[i], y, words[i].c_str(), true, fontStyle);
   }
 }
 

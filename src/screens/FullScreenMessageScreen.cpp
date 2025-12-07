@@ -8,7 +8,7 @@ void FullScreenMessageScreen::onEnter() {
   const auto left = (renderer.getPageWidth() - width) / 2;
   const auto top = (renderer.getPageHeight() - height) / 2;
 
-  renderer.clearScreen(invert);
-  renderer.drawUiText(left, top, text.c_str(), invert ? 0 : 1, style);
-  renderer.flushDisplay(partialUpdate);
+  renderer.clearScreen();
+  renderer.drawUiText(left, top, text.c_str(), true, style);
+  renderer.flushDisplay(refreshMode);
 }
