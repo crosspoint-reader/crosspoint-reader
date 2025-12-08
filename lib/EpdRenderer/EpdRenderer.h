@@ -33,6 +33,7 @@ class EpdRenderer {
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawImageNoMargin(const uint8_t bitmap[], int x, int y, int width, int height) const;
 
+  void swapBuffers() const;
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;
@@ -41,7 +42,7 @@ class EpdRenderer {
   void invertScreen() const;
 
   void flushDisplay(EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH) const;
-  void flushArea(int x, int y, int width, int height) const;
+  // void flushArea(int x, int y, int width, int height) const;
 
   int getPageWidth() const;
   int getPageHeight() const;

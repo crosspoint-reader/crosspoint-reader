@@ -160,10 +160,12 @@ void EpubReaderScreen::renderScreen() {
         constexpr int y = 50;
         const int w = textWidth + margin * 2;
         const int h = renderer.getLineHeight() + margin * 2;
+        renderer.swapBuffers();
         renderer.fillRect(x, y, w, h, 0);
         renderer.drawText(x + margin, y + margin, "Indexing...");
         renderer.drawRect(x + 5, y + 5, w - 10, h - 10);
-        renderer.flushArea(x, y, w, h);
+        renderer.flushDisplay(EInkDisplay::HALF_REFRESH);
+        pagesUntilFullRefresh = 0;
       }
 
       section->setupCacheDir();

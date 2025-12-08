@@ -216,9 +216,12 @@ void EpdRenderer::flushDisplay(const EInkDisplay::RefreshMode refreshMode) const
 }
 
 // TODO: Support partial window update
-void EpdRenderer::flushArea(const int x, const int y, const int width, const int height) const {
-  einkDisplay.displayBuffer();
-}
+// void EpdRenderer::flushArea(const int x, const int y, const int width, const int height) const {
+//   const int rotatedX = y;
+//   const int rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
+//
+//   einkDisplay.displayBuffer(EInkDisplay::FAST_REFRESH, rotatedX, rotatedY, height, width);
+// }
 
 int EpdRenderer::getPageWidth() const { return EInkDisplay::DISPLAY_HEIGHT - marginLeft - marginRight; }
 
@@ -229,6 +232,8 @@ int EpdRenderer::getSpaceWidth() const { return regularFontRenderer->fontFamily-
 int EpdRenderer::getLineHeight() const {
   return regularFontRenderer->fontFamily->getData(REGULAR)->advanceY * lineCompression;
 }
+
+void EpdRenderer::swapBuffers() const { einkDisplay.swapBuffers(); }
 
 void EpdRenderer::copyGrayscaleLsbBuffers() const { einkDisplay.copyGrayscaleLsbBuffers(einkDisplay.getFrameBuffer()); }
 
