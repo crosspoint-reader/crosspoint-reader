@@ -62,19 +62,18 @@ constexpr unsigned long POWER_BUTTON_WAKEUP_MS = 1000;
 // Time required to enter sleep mode
 constexpr unsigned long POWER_BUTTON_SLEEP_MS = 1000;
 
-Epub* loadEpub(const std::string& path) {
+std::unique_ptr<Epub> loadEpub(const std::string& path) {
   if (!SD.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }
 
-  const auto epub = new Epub(path, "/.crosspoint");
+  auto epub = std::unique_ptr<Epub>(new Epub(path, "/.crosspoint"));
   if (epub->load()) {
     return epub;
   }
 
   Serial.printf("[%lu] [   ] Failed to load epub\n", millis());
-  delete epub;
   return nullptr;
 }
 
@@ -151,12 +150,12 @@ void onSelectEpubFile(const std::string& path) {
   exitScreen();
   enterNewScreen(new FullScreenMessageScreen(renderer, inputManager, "Loading..."));
 
-  Epub* epub = loadEpub(path);
+  auto epub = loadEpub(path);
   if (epub) {
     appState.openEpubPath = path;
     appState.saveToFile();
     exitScreen();
-    enterNewScreen(new EpubReaderScreen(renderer, inputManager, epub, onGoHome));
+    enterNewScreen(new EpubReaderScreen(renderer, inputManager, std::move(epub), onGoHome));
   } else {
     exitScreen();
     enterNewScreen(
@@ -206,10 +205,10 @@ void setup() {
 
   appState.loadFromFile();
   if (!appState.openEpubPath.empty()) {
-    Epub* epub = loadEpub(appState.openEpubPath);
+    auto epub = loadEpub(appState.openEpubPath);
     if (epub) {
       exitScreen();
-      enterNewScreen(new EpubReaderScreen(renderer, inputManager, epub, onGoHome));
+      enterNewScreen(new EpubReaderScreen(renderer, inputManager, std::move(epub), onGoHome));
       // Ensure we're not still holding the power button before leaving setup
       waitForPowerRelease();
       return;

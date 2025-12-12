@@ -38,7 +38,7 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
 }
 
 // start a new text block if needed
-void EpubHtmlParserSlim::startNewTextBlock(const BLOCK_STYLE style) {
+void EpubHtmlParserSlim::startNewTextBlock(const TextBlock::BLOCK_STYLE style) {
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -46,11 +46,9 @@ void EpubHtmlParserSlim::startNewTextBlock(const BLOCK_STYLE style) {
       return;
     }
 
-    currentTextBlock->finish();
     makePages();
-    delete currentTextBlock;
   }
-  currentTextBlock = new TextBlock(style);
+  currentTextBlock.reset(new ParsedText(style));
 }
 
 void XMLCALL EpubHtmlParserSlim::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -94,13 +92,13 @@ void XMLCALL EpubHtmlParserSlim::startElement(void* userData, const XML_Char* na
   }
 
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
-    self->startNewTextBlock(CENTER_ALIGN);
+    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
     self->boldUntilDepth = min(self->boldUntilDepth, self->depth);
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
       self->startNewTextBlock(self->currentTextBlock->getStyle());
     } else {
-      self->startNewTextBlock(JUSTIFIED);
+      self->startNewTextBlock(TextBlock::JUSTIFIED);
     }
   } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
     self->boldUntilDepth = min(self->boldUntilDepth, self->depth);
@@ -124,8 +122,8 @@ void XMLCALL EpubHtmlParserSlim::characterData(void* userData, const XML_Char* s
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
         self->partWordBuffer[self->partWordBufferIndex] = '\0';
-        self->currentTextBlock->addWord(replaceHtmlEntities(self->partWordBuffer), self->boldUntilDepth < self->depth,
-                                        self->italicUntilDepth < self->depth);
+        self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)),
+                                        self->boldUntilDepth < self->depth, self->italicUntilDepth < self->depth);
         self->partWordBufferIndex = 0;
       }
       // Skip the whitespace char
@@ -135,8 +133,8 @@ void XMLCALL EpubHtmlParserSlim::characterData(void* userData, const XML_Char* s
     // If we're about to run out of space, then cut the word off and start a new one
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(replaceHtmlEntities(self->partWordBuffer), self->boldUntilDepth < self->depth,
-                                      self->italicUntilDepth < self->depth);
+      self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)),
+                                      self->boldUntilDepth < self->depth, self->italicUntilDepth < self->depth);
       self->partWordBufferIndex = 0;
     }
 
@@ -159,8 +157,8 @@ void XMLCALL EpubHtmlParserSlim::endElement(void* userData, const XML_Char* name
 
     if (shouldBreakText) {
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(replaceHtmlEntities(self->partWordBuffer), self->boldUntilDepth < self->depth,
-                                      self->italicUntilDepth < self->depth);
+      self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)),
+                                      self->boldUntilDepth < self->depth, self->italicUntilDepth < self->depth);
       self->partWordBufferIndex = 0;
     }
   }
@@ -184,7 +182,7 @@ void XMLCALL EpubHtmlParserSlim::endElement(void* userData, const XML_Char* name
 }
 
 bool EpubHtmlParserSlim::parseAndBuildPages() {
-  startNewTextBlock(JUSTIFIED);
+  startNewTextBlock(TextBlock::JUSTIFIED);
 
   const XML_Parser parser = XML_ParserCreate(nullptr);
   int done;
@@ -240,10 +238,9 @@ bool EpubHtmlParserSlim::parseAndBuildPages() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
-    completePageFn(currentPage);
-    currentPage = nullptr;
-    delete currentTextBlock;
-    currentTextBlock = nullptr;
+    completePageFn(std::move(currentPage));
+    currentPage.reset();
+    currentTextBlock.reset();
   }
 
   return true;
@@ -256,7 +253,7 @@ void EpubHtmlParserSlim::makePages() {
   }
 
   if (!currentPage) {
-    currentPage = new Page();
+    currentPage.reset(new Page());
     currentPageNextY = marginTop;
   }
 
@@ -266,30 +263,18 @@ void EpubHtmlParserSlim::makePages() {
   // Long running task, make sure to let other things happen
   vTaskDelay(1);
 
-  if (currentTextBlock->getType() == TEXT_BLOCK) {
-    const auto lines = currentTextBlock->splitIntoLines(renderer, fontId, marginLeft + marginRight);
+  const auto lines = currentTextBlock->splitIntoLines(renderer, fontId, marginLeft + marginRight);
 
-    for (const auto line : lines) {
-      if (currentPageNextY + lineHeight > pageHeight) {
-        completePageFn(currentPage);
-        currentPage = new Page();
-        currentPageNextY = marginTop;
-      }
-
-      currentPage->elements.push_back(new PageLine(line, marginLeft, currentPageNextY));
-      currentPageNextY += lineHeight;
+  for (auto&& line : lines) {
+    if (currentPageNextY + lineHeight > pageHeight) {
+      completePageFn(std::move(currentPage));
+      currentPage.reset(new Page());
+      currentPageNextY = marginTop;
     }
-    // add some extra line between blocks
-    currentPageNextY += lineHeight / 2;
+
+    currentPage->elements.push_back(std::make_shared<PageLine>(line, marginLeft, currentPageNextY));
+    currentPageNextY += lineHeight;
   }
-  // TODO: Image block support
-  // if (block->getType() == BlockType::IMAGE_BLOCK) {
-  //   ImageBlock *imageBlock = (ImageBlock *)block;
-  //   if (y + imageBlock->height > page_height) {
-  //     pages.push_back(new Page());
-  //     y = 0;
-  //   }
-  //   pages.back()->elements.push_back(new PageImage(imageBlock, y));
-  //   y += imageBlock->height;
-  // }
+  // add some extra line between blocks
+  currentPageNextY += lineHeight / 2;
 }

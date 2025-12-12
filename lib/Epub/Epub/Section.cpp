@@ -1,6 +1,5 @@
 #include "Section.h"
 
-#include <GfxRenderer.h>
 #include <SD.h>
 
 #include <fstream>
@@ -11,7 +10,7 @@
 
 constexpr uint8_t SECTION_FILE_VERSION = 3;
 
-void Section::onPageComplete(const Page* page) {
+void Section::onPageComplete(std::unique_ptr<Page> page) {
   const auto filePath = cachePath + "/page_" + std::to_string(pageCount) + ".bin";
 
   std::ofstream outputFile("/sd" + filePath);
@@ -21,7 +20,6 @@ void Section::onPageComplete(const Page* page) {
   Serial.printf("[%lu] [SCT] Page %d processed\n", millis(), pageCount);
 
   pageCount++;
-  delete page;
 }
 
 void Section::writeCacheMetadata(const int fontId, const float lineCompression, const int marginTop,
@@ -114,8 +112,9 @@ bool Section::persistPageDataToSD(const int fontId, const float lineCompression,
 
   const auto sdTmpHtmlPath = "/sd" + tmpHtmlPath;
 
-  auto visitor = EpubHtmlParserSlim(sdTmpHtmlPath.c_str(), renderer, fontId, lineCompression, marginTop, marginRight,
-                                    marginBottom, marginLeft, [this](const Page* page) { this->onPageComplete(page); });
+  EpubHtmlParserSlim visitor(sdTmpHtmlPath.c_str(), renderer, fontId, lineCompression, marginTop, marginRight,
+                             marginBottom, marginLeft,
+                             [this](std::unique_ptr<Page> page) { this->onPageComplete(std::move(page)); });
   success = visitor.parseAndBuildPages();
 
   SD.remove(tmpHtmlPath.c_str());
@@ -129,7 +128,7 @@ bool Section::persistPageDataToSD(const int fontId, const float lineCompression,
   return true;
 }
 
-Page* Section::loadPageFromSD() const {
+std::unique_ptr<Page> Section::loadPageFromSD() const {
   const auto filePath = "/sd" + cachePath + "/page_" + std::to_string(currentPage) + ".bin";
   if (!SD.exists(filePath.c_str() + 3)) {
     Serial.printf("[%lu] [SCT] Page file does not exist: %s\n", millis(), filePath.c_str());
@@ -137,7 +136,7 @@ Page* Section::loadPageFromSD() const {
   }
 
   std::ifstream inputFile(filePath);
-  Page* p = Page::deserialize(inputFile);
+  auto page = Page::deserialize(inputFile);
   inputFile.close();
-  return p;
+  return page;
 }

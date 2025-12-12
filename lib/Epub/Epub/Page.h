@@ -1,4 +1,7 @@
 #pragma once
+#include <utility>
+#include <vector>
+
 #include "blocks/TextBlock.h"
 
 enum PageElementTag : uint8_t {
@@ -18,27 +21,21 @@ class PageElement {
 
 // a line from a block element
 class PageLine final : public PageElement {
-  const TextBlock* block;
+  std::shared_ptr<TextBlock> block;
 
  public:
-  PageLine(const TextBlock* block, const int xPos, const int yPos) : PageElement(xPos, yPos), block(block) {}
-  ~PageLine() override { delete block; }
+  PageLine(std::shared_ptr<TextBlock> block, const int xPos, const int yPos)
+      : PageElement(xPos, yPos), block(std::move(block)) {}
   void render(GfxRenderer& renderer, int fontId) override;
   void serialize(std::ostream& os) override;
-  static PageLine* deserialize(std::istream& is);
+  static std::unique_ptr<PageLine> deserialize(std::istream& is);
 };
 
 class Page {
  public:
-  ~Page() {
-    for (const auto element : elements) {
-      delete element;
-    }
-  }
-
   // the list of block index and line numbers on this page
-  std::vector<PageElement*> elements;
+  std::vector<std::shared_ptr<PageElement>> elements;
   void render(GfxRenderer& renderer, int fontId) const;
   void serialize(std::ostream& os) const;
-  static Page* deserialize(std::istream& is);
+  static std::unique_ptr<Page> deserialize(std::istream& is);
 };

@@ -4,7 +4,9 @@
 
 #include <climits>
 #include <functional>
+#include <memory>
 
+#include "ParsedText.h"
 #include "blocks/TextBlock.h"
 
 class Page;
@@ -15,7 +17,7 @@ class GfxRenderer;
 class EpubHtmlParserSlim {
   const char* filepath;
   GfxRenderer& renderer;
-  std::function<void(Page*)> completePageFn;
+  std::function<void(std::unique_ptr<Page>)> completePageFn;
   int depth = 0;
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
@@ -24,8 +26,8 @@ class EpubHtmlParserSlim {
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
-  TextBlock* currentTextBlock = nullptr;
-  Page* currentPage = nullptr;
+  std::unique_ptr<ParsedText> currentTextBlock = nullptr;
+  std::unique_ptr<Page> currentPage = nullptr;
   int currentPageNextY = 0;
   int fontId;
   float lineCompression;
@@ -34,7 +36,7 @@ class EpubHtmlParserSlim {
   int marginBottom;
   int marginLeft;
 
-  void startNewTextBlock(BLOCK_STYLE style);
+  void startNewTextBlock(TextBlock::BLOCK_STYLE style);
   void makePages();
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
@@ -45,7 +47,7 @@ class EpubHtmlParserSlim {
   explicit EpubHtmlParserSlim(const char* filepath, GfxRenderer& renderer, const int fontId,
                               const float lineCompression, const int marginTop, const int marginRight,
                               const int marginBottom, const int marginLeft,
-                              const std::function<void(Page*)>& completePageFn)
+                              const std::function<void(std::unique_ptr<Page>)>& completePageFn)
       : filepath(filepath),
         renderer(renderer),
         fontId(fontId),
