@@ -3,7 +3,7 @@
 #include <HardwareSerial.h>
 #include <Serialization.h>
 
-constexpr uint8_t PAGE_FILE_VERSION = 1;
+constexpr uint8_t PAGE_FILE_VERSION = 2;
 
 void PageLine::render(GfxRenderer& renderer, const int fontId) { block->render(renderer, fontId, xPos, yPos); }
 
