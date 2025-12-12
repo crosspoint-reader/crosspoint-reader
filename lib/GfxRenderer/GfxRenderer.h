@@ -1,10 +1,9 @@
 #pragma once
 
 #include <EInkDisplay.h>
+#include <EpdFontFamily.h>
 
 #include <map>
-
-#include "EpdFontFamily.h"
 
 class GfxRenderer {
  public:

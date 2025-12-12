@@ -117,13 +117,21 @@ void XMLCALL EpubHtmlParserSlim::characterData(void* userData, const XML_Char* s
     return;
   }
 
+  EpdFontStyle fontStyle = REGULAR;
+  if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth) {
+    fontStyle = BOLD_ITALIC;
+  } else if (self->boldUntilDepth < self->depth) {
+    fontStyle = BOLD;
+  } else if (self->italicUntilDepth < self->depth) {
+    fontStyle = ITALIC;
+  }
+
   for (int i = 0; i < len; i++) {
     if (isWhitespace(s[i])) {
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
         self->partWordBuffer[self->partWordBufferIndex] = '\0';
-        self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)),
-                                        self->boldUntilDepth < self->depth, self->italicUntilDepth < self->depth);
+        self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)), fontStyle);
         self->partWordBufferIndex = 0;
       }
       // Skip the whitespace char
@@ -133,8 +141,7 @@ void XMLCALL EpubHtmlParserSlim::characterData(void* userData, const XML_Char* s
     // If we're about to run out of space, then cut the word off and start a new one
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)),
-                                      self->boldUntilDepth < self->depth, self->italicUntilDepth < self->depth);
+      self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)), fontStyle);
       self->partWordBufferIndex = 0;
     }
 
@@ -156,9 +163,17 @@ void XMLCALL EpubHtmlParserSlim::endElement(void* userData, const XML_Char* name
         matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) || self->depth == 1;
 
     if (shouldBreakText) {
+      EpdFontStyle fontStyle = REGULAR;
+      if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth) {
+        fontStyle = BOLD_ITALIC;
+      } else if (self->boldUntilDepth < self->depth) {
+        fontStyle = BOLD;
+      } else if (self->italicUntilDepth < self->depth) {
+        fontStyle = ITALIC;
+      }
+
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)),
-                                      self->boldUntilDepth < self->depth, self->italicUntilDepth < self->depth);
+      self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)), fontStyle);
       self->partWordBufferIndex = 0;
     }
   }
@@ -263,7 +278,7 @@ void EpubHtmlParserSlim::makePages() {
   // Long running task, make sure to let other things happen
   vTaskDelay(1);
 
-  const auto lines = currentTextBlock->splitIntoLines(renderer, fontId, marginLeft + marginRight);
+  const auto lines = currentTextBlock->layoutAndExtractLines(renderer, fontId, marginLeft + marginRight);
 
   for (auto&& line : lines) {
     if (currentPageNextY + lineHeight > pageHeight) {

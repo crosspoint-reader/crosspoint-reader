@@ -1,4 +1,6 @@
 #pragma once
+#include <EpdFontFamily.h>
+
 #include <list>
 #include <memory>
 #include <string>
@@ -8,11 +10,6 @@
 // represents a block of words in the html document
 class TextBlock final : public Block {
  public:
-  enum SPAN_STYLE : uint8_t {
-    BOLD_SPAN = 1,
-    ITALIC_SPAN = 2,
-  };
-
   enum BLOCK_STYLE : uint8_t {
     JUSTIFIED = 0,
     LEFT_ALIGN = 1,
@@ -23,19 +20,14 @@ class TextBlock final : public Block {
  private:
   std::list<std::string> words;
   std::list<uint16_t> wordXpos;
-  std::list<uint8_t> wordStyles;
-
-  // the style of the block - left, center, right aligned
+  std::list<EpdFontStyle> wordStyles;
   BLOCK_STYLE style;
 
  public:
-  explicit TextBlock(const BLOCK_STYLE style) : style(style) {}
-  explicit TextBlock(std::list<std::string> words, std::list<uint16_t> word_xpos,
-                     // the styles of each word
-                     std::list<uint8_t> word_styles, const BLOCK_STYLE style)
+  explicit TextBlock(std::list<std::string> words, std::list<uint16_t> word_xpos, std::list<EpdFontStyle> word_styles,
+                     const BLOCK_STYLE style)
       : words(std::move(words)), wordXpos(std::move(word_xpos)), wordStyles(std::move(word_styles)), style(style) {}
   ~TextBlock() override = default;
-  void addWord(std::string word, bool is_bold, bool is_italic);
   void setStyle(const BLOCK_STYLE style) { this->style = style; }
   BLOCK_STYLE getStyle() const { return style; }
   bool isEmpty() override { return words.empty(); }
