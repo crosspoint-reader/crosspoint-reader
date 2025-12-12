@@ -10,9 +10,9 @@
 constexpr int PAGES_PER_REFRESH = 15;
 constexpr unsigned long SKIP_CHAPTER_MS = 700;
 constexpr float lineCompression = 0.95f;
-constexpr int marginTop = 11;
+constexpr int marginTop = 10;
 constexpr int marginRight = 10;
-constexpr int marginBottom = 30;
+constexpr int marginBottom = 20;
 constexpr int marginLeft = 10;
 
 void EpubReaderScreen::taskTrampoline(void* param) {
