@@ -163,7 +163,7 @@ void EpubReaderScreen::renderScreen() {
         const int w = textWidth + margin * 2;
         const int h = renderer.getLineHeight(READER_FONT_ID) + margin * 2;
         renderer.grayscaleRevert();
-        uint8_t *fb1 = renderer.getFrameBuffer();
+        uint8_t* fb1 = renderer.getFrameBuffer();
         renderer.swapBuffers();
         memcpy(fb1, renderer.getFrameBuffer(), EInkDisplay::BUFFER_SIZE);
         renderer.fillRect(x, y, w, h, 0);

@@ -162,9 +162,7 @@ int GfxRenderer::getLineHeight(const int fontId) const {
   return fontMap.at(fontId).getData(REGULAR)->advanceY;
 }
 
-uint8_t *GfxRenderer::getFrameBuffer() const {
-  return einkDisplay.getFrameBuffer();
-}
+uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 void GfxRenderer::swapBuffers() const { einkDisplay.swapBuffers(); }
 

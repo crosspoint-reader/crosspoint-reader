@@ -5,9 +5,9 @@
 
 #include <fstream>
 
-#include "EpubHtmlParserSlim.h"
 #include "FsHelpers.h"
 #include "Page.h"
+#include "parsers/ChapterHtmlSlimParser.h"
 
 constexpr uint8_t SECTION_FILE_VERSION = 4;
 
@@ -127,9 +127,9 @@ bool Section::persistPageDataToSD(const int fontId, const float lineCompression,
 
   const auto sdTmpHtmlPath = "/sd" + tmpHtmlPath;
 
-  EpubHtmlParserSlim visitor(sdTmpHtmlPath.c_str(), renderer, fontId, lineCompression, marginTop, marginRight,
-                             marginBottom, marginLeft,
-                             [this](std::unique_ptr<Page> page) { this->onPageComplete(std::move(page)); });
+  ChapterHtmlSlimParser visitor(sdTmpHtmlPath.c_str(), renderer, fontId, lineCompression, marginTop, marginRight,
+                                marginBottom, marginLeft,
+                                [this](std::unique_ptr<Page> page) { this->onPageComplete(std::move(page)); });
   success = visitor.parseAndBuildPages();
 
   SD.remove(tmpHtmlPath.c_str());

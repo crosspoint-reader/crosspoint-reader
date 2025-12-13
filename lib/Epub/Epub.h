@@ -1,22 +1,13 @@
 #pragma once
 #include <Print.h>
-#include <tinyxml2.h>
 
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-class ZipFile;
+#include "Epub/EpubTocEntry.h"
 
-class EpubTocEntry {
- public:
-  std::string title;
-  std::string href;
-  std::string anchor;
-  int level;
-  EpubTocEntry(std::string title, std::string href, std::string anchor, const int level)
-      : title(std::move(title)), href(std::move(href)), anchor(std::move(anchor)), level(level) {}
-};
+class ZipFile;
 
 class Epub {
   // the title read from the EPUB meta data
@@ -36,11 +27,9 @@ class Epub {
   // Uniq cache key based on filepath
   std::string cachePath;
 
-  // find the path for the content.opf file
-  static bool findContentOpfFile(const ZipFile& zip, std::string& contentOpfFile);
-  bool parseContentOpf(ZipFile& zip, std::string& content_opf_file);
-  bool parseTocNcxFile(const ZipFile& zip);
-  void recursivelyParseNavMap(tinyxml2::XMLElement* element);
+  bool findContentOpfFile(std::string* contentOpfFile) const;
+  bool parseContentOpf(const std::string& contentOpfFilePath);
+  bool parseTocNcxFile();
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
@@ -59,6 +48,7 @@ class Epub {
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize) const;
+  bool getItemSize(const std::string& itemHref, size_t* size) const;
   std::string& getSpineItem(int spineIndex);
   int getSpineItemsCount() const;
   EpubTocEntry& getTocItem(int tocTndex);

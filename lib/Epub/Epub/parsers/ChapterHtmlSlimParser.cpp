@@ -1,11 +1,11 @@
-#include "EpubHtmlParserSlim.h"
+#include "ChapterHtmlSlimParser.h"
 
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 #include <expat.h>
 
-#include "Page.h"
-#include "htmlEntities.h"
+#include "../Page.h"
+#include "../htmlEntities.h"
 
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
@@ -38,7 +38,7 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
 }
 
 // start a new text block if needed
-void EpubHtmlParserSlim::startNewTextBlock(const TextBlock::BLOCK_STYLE style) {
+void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::BLOCK_STYLE style) {
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -51,8 +51,8 @@ void EpubHtmlParserSlim::startNewTextBlock(const TextBlock::BLOCK_STYLE style) {
   currentTextBlock.reset(new ParsedText(style));
 }
 
-void XMLCALL EpubHtmlParserSlim::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
-  auto* self = static_cast<EpubHtmlParserSlim*>(userData);
+void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
+  auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
   (void)atts;
 
   // Middle of skip
@@ -62,23 +62,7 @@ void XMLCALL EpubHtmlParserSlim::startElement(void* userData, const XML_Char* na
   }
 
   if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
-    // const char* src = element.Attribute("src");
-    // if (src) {
-    //   // don't leave an empty text block in the list
-    //   // const BLOCK_STYLE style = currentTextBlock->get_style();
-    //   if (currentTextBlock->isEmpty()) {
-    //     delete currentTextBlock;
-    //     currentTextBlock = nullptr;
-    //   }
-    //   // TODO: Fix this
-    //   // blocks.push_back(new ImageBlock(m_base_path + src));
-    //   // start a new text block - with the same style as before
-    //   // startNewTextBlock(style);
-    // } else {
-    //   // ESP_LOGE(TAG, "Could not find src attribute");
-    // }
-
-    // start skip
+    // TODO: Start processing image tags
     self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
@@ -109,8 +93,8 @@ void XMLCALL EpubHtmlParserSlim::startElement(void* userData, const XML_Char* na
   self->depth += 1;
 }
 
-void XMLCALL EpubHtmlParserSlim::characterData(void* userData, const XML_Char* s, const int len) {
-  auto* self = static_cast<EpubHtmlParserSlim*>(userData);
+void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
+  auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
@@ -149,8 +133,8 @@ void XMLCALL EpubHtmlParserSlim::characterData(void* userData, const XML_Char* s
   }
 }
 
-void XMLCALL EpubHtmlParserSlim::endElement(void* userData, const XML_Char* name) {
-  auto* self = static_cast<EpubHtmlParserSlim*>(userData);
+void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
+  auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
   (void)name;
 
   if (self->partWordBufferIndex > 0) {
@@ -196,7 +180,7 @@ void XMLCALL EpubHtmlParserSlim::endElement(void* userData, const XML_Char* name
   }
 }
 
-bool EpubHtmlParserSlim::parseAndBuildPages() {
+bool ChapterHtmlSlimParser::parseAndBuildPages() {
   startNewTextBlock(TextBlock::JUSTIFIED);
 
   const XML_Parser parser = XML_ParserCreate(nullptr);
@@ -261,7 +245,7 @@ bool EpubHtmlParserSlim::parseAndBuildPages() {
   return true;
 }
 
-void EpubHtmlParserSlim::makePages() {
+void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock) {
     Serial.printf("[%lu] [EHP] !! No text block to make pages for !!\n", millis());
     return;

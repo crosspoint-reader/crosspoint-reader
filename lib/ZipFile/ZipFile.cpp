@@ -40,7 +40,7 @@ bool ZipFile::loadFileStat(const char* filename, mz_zip_archive_file_stat* fileS
   // find the file
   mz_uint32 fileIndex = 0;
   if (!mz_zip_reader_locate_file_v2(&zipArchive, filename, nullptr, 0, &fileIndex)) {
-    Serial.printf("[%lu] [ZIP] Could not find file %s\n", millis, filename);
+    Serial.printf("[%lu] [ZIP] Could not find file %s\n", millis(), filename);
     mz_zip_reader_end(&zipArchive);
     return false;
   }
@@ -80,6 +80,16 @@ long ZipFile::getDataOffset(const mz_zip_archive_file_stat& fileStat) const {
   const uint16_t filenameLength = pLocalHeader[26] + (pLocalHeader[27] << 8);
   const uint16_t extraOffset = pLocalHeader[28] + (pLocalHeader[29] << 8);
   return fileOffset + localHeaderSize + filenameLength + extraOffset;
+}
+
+bool ZipFile::getInflatedFileSize(const char* filename, size_t* size) const {
+  mz_zip_archive_file_stat fileStat;
+  if (!loadFileStat(filename, &fileStat)) {
+    return false;
+  }
+
+  *size = static_cast<size_t>(fileStat.m_uncomp_size);
+  return true;
 }
 
 uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const bool trailingNullByte) const {
@@ -268,7 +278,14 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
       // Write output chunk
       if (outBytes > 0) {
         processedOutputBytes += outBytes;
-        out.write(outputBuffer + outputCursor, outBytes);
+        if (out.write(outputBuffer + outputCursor, outBytes) != outBytes) {
+          Serial.printf("[%lu] [ZIP] Failed to write all output bytes to stream\n", millis());
+          fclose(file);
+          free(outputBuffer);
+          free(fileReadBuffer);
+          free(inflator);
+          return false;
+        }
         // Update output position in buffer (with wraparound)
         outputCursor = (outputCursor + outBytes) & (TINFL_LZ_DICT_SIZE - 1);
       }
