@@ -14,6 +14,7 @@
 #include <builtinFonts/ubuntu_bold_10.h>
 
 #include "Battery.h"
+#include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "config.h"
 #include "screens/BootLogoScreen.h"
@@ -41,6 +42,7 @@ InputManager inputManager;
 GfxRenderer renderer(einkDisplay);
 Screen* currentScreen;
 CrossPointState appState;
+CrossPointSettings appSettings;
 
 // Fonts
 EpdFont bookerlyFont(&bookerly_2b);
@@ -131,7 +133,8 @@ void waitForPowerRelease() {
 // Enter deep sleep mode
 void enterDeepSleep() {
   exitScreen();
-  enterNewScreen(new SleepScreen(renderer, inputManager));
+  appSettings.saveToFile();
+  enterNewScreen(new SleepScreen(renderer, inputManager, appSettings));
 
   Serial.printf("[%lu] [   ] Power button released after a long press. Entering deep sleep.\n", millis());
   delay(1000);  // Allow Serial buffer to empty and display to update
@@ -199,6 +202,7 @@ void setup() {
   // SD Card Initialization
   SD.begin(SD_SPI_CS, SPI, SPI_FQ);
 
+  appSettings.loadFromFile();
   appState.loadFromFile();
   if (!appState.openEpubPath.empty()) {
     auto epub = loadEpub(appState.openEpubPath);
