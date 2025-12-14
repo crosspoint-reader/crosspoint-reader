@@ -9,5 +9,5 @@ class SleepActivity final : public Activity {
 
  private:
   void renderDefaultSleepScreen();
-  void renderCustomSleepScreen(File file);
+  void renderCustomSleepScreen(File& file);
 };

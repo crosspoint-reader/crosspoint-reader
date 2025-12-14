@@ -2,6 +2,8 @@
 
 #include <Utf8.h>
 
+#include "BmpToMono.h"
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
@@ -117,6 +119,37 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   // Flip X and Y for portrait mode
   einkDisplay.drawImage(bitmap, y, x, height, width);
+}
+
+bool GfxRenderer::drawFullScreenBmp(File& file) {
+  if (!file) {
+    Serial.printf("[%lu] [GFX] drawFullScreenBmp: invalid file\n", millis());
+    return false;
+  }
+
+  file.seek(0);  // Ensure we're at the start of the file
+
+  MonoBitmap mono;
+  auto err = BmpToMono::convert24Rotate90CW(file, mono, 160, false);
+
+  if (err != BmpToMonoError::Ok) {
+    Serial.printf("[%lu] [GFX] BMP convert failed: %s\n", millis(), BmpToMono::errorToString(err));
+    return false;
+  }
+
+  // Hard requirement: must match panel exactly
+  if (mono.width != EInkDisplay::DISPLAY_WIDTH || mono.height != EInkDisplay::DISPLAY_HEIGHT) {
+    Serial.printf("[%lu] [GFX] drawFullScreenBmp: rotated BMP size %dx%d does not match panel %dx%d\n", millis(),
+                  mono.width, mono.height, EInkDisplay::DISPLAY_WIDTH, EInkDisplay::DISPLAY_HEIGHT);
+    BmpToMono::freeMonoBitmap(mono);
+    return false;
+  }
+
+  // Raw full-screen blit
+  einkDisplay.drawImage(mono.data, 0, 0, mono.width, mono.height);
+
+  BmpToMono::freeMonoBitmap(mono);
+  return true;
 }
 
 void GfxRenderer::clearScreen(const uint8_t color) const { einkDisplay.clearScreen(color); }

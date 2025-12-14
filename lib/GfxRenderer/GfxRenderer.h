@@ -2,6 +2,7 @@
 
 #include <EInkDisplay.h>
 #include <EpdFontFamily.h>
+#include <FS.h>
 
 #include <map>
 
@@ -45,6 +46,7 @@ class GfxRenderer {
   void drawRect(int x, int y, int width, int height, bool state = true) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
+  bool drawFullScreenBmp(File& file);
 
   // Text
   int getTextWidth(int fontId, const char* text, EpdFontStyle style = REGULAR) const;

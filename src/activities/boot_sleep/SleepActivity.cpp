@@ -36,15 +36,14 @@ void SleepActivity::renderDefaultSleepScreen() {
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderCustomSleepScreen(File file) {
-  Serial.println("Rendering custom sleep screen from sleep.bmp");
-
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
-
+void SleepActivity::renderCustomSleepScreen(File& file) {
   renderer.clearScreen();
+  bool didImageDrawSuccessfully = renderer.drawFullScreenBmp(file);
 
-  renderer.drawCenteredText(UI_FONT_ID, pageHeight / 2 + 70, "CUSTOM SLEEP SCREEN", true, BOLD);
+  if (!didImageDrawSuccessfully) {
+    renderer.clearScreen();
+    renderer.drawCenteredText(UI_FONT_ID, GfxRenderer::getScreenHeight() / 2, "BAD CUSTOM SLEEP SCREEN", true, BOLD);
+  }
 
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
