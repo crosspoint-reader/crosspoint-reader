@@ -129,8 +129,8 @@ bool GfxRenderer::drawFullScreenBmp(File& file) {
 
   file.seek(0);  // Ensure we're at the start of the file
 
-  MonoBitmap mono;
-  auto err = BmpToMono::convert24Rotate90CW(file, mono, 160, false);
+  MonoBitmap bmp;
+  auto err = BmpToMono::convert24BitRotate90CCW(file, bmp);
 
   if (err != BmpToMonoError::Ok) {
     Serial.printf("[%lu] [GFX] BMP convert failed: %s\n", millis(), BmpToMono::errorToString(err));
@@ -138,17 +138,17 @@ bool GfxRenderer::drawFullScreenBmp(File& file) {
   }
 
   // Hard requirement: must match panel exactly
-  if (mono.width != EInkDisplay::DISPLAY_WIDTH || mono.height != EInkDisplay::DISPLAY_HEIGHT) {
+  if (bmp.width != EInkDisplay::DISPLAY_WIDTH || bmp.height != EInkDisplay::DISPLAY_HEIGHT) {
     Serial.printf("[%lu] [GFX] drawFullScreenBmp: rotated BMP size %dx%d does not match panel %dx%d\n", millis(),
-                  mono.width, mono.height, EInkDisplay::DISPLAY_WIDTH, EInkDisplay::DISPLAY_HEIGHT);
-    BmpToMono::freeMonoBitmap(mono);
+                  bmp.width, bmp.height, EInkDisplay::DISPLAY_WIDTH, EInkDisplay::DISPLAY_HEIGHT);
+    BmpToMono::freeMonoBitmap(bmp);
     return false;
   }
 
-  // Raw full-screen blit
-  einkDisplay.drawImage(mono.data, 0, 0, mono.width, mono.height);
+  // Full-screen blit
+  einkDisplay.drawImage(bmp.data, 0, 0, bmp.width, bmp.height);
 
-  BmpToMono::freeMonoBitmap(mono);
+  BmpToMono::freeMonoBitmap(bmp);
   return true;
 }
 

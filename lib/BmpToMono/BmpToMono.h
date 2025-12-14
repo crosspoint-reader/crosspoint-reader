@@ -32,20 +32,16 @@ enum class BmpToMonoError : uint8_t {
 
 class BmpToMono {
  public:
-  // No rotation: output size == BMP size
-  static BmpToMonoError convert24(fs::File& file, MonoBitmap& out, uint8_t threshold = 160, bool invert = false);
-
-  // Rotate 90° clockwise: (w,h) -> (h,w)
-  // Useful for converting portrait BMP (480x800) into landscape framebuffer (800x480).
-  static BmpToMonoError convert24Rotate90CW(fs::File& file, MonoBitmap& out, uint8_t threshold = 160,
-                                            bool invert = false);
+  // Rotate 90° counter-clockwise: (w,h) -> (h,w)
+  // Used for converting portrait BMP (480x800) into landscape framebuffer (800x480)
+  static BmpToMonoError convert24BitRotate90CCW(File& file, MonoBitmap& out, uint8_t threshold = 160);
 
   static void freeMonoBitmap(MonoBitmap& bmp);
   static const char* errorToString(BmpToMonoError err);
 
  private:
-  static uint16_t readLE16(fs::File& f);
-  static uint32_t readLE32(fs::File& f);
+  static uint16_t readLE16(File& f);
+  static uint32_t readLE32(File& f);
 
   // Writes a single pixel into a row-aligned 1bpp buffer (MSB-first), 0=black, 1=white
   static inline void setMonoPixel(uint8_t* buf, int w, int x, int y, bool isBlack) {
@@ -58,5 +54,5 @@ class BmpToMono {
       buf[idx] |= mask;
   }
 
-  static BmpToMonoError convert24Impl(fs::File& file, MonoBitmap& out, uint8_t threshold, bool invert, bool rotate90CW);
+  static BmpToMonoError convert24BitImpl(File& file, MonoBitmap& out, uint8_t threshold, bool rotate90CW);
 };

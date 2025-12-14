@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
-uint16_t BmpToMono::readLE16(fs::File& f) {
+uint16_t BmpToMono::readLE16(File& f) {
   const int c0 = f.read();
   const int c1 = f.read();
   const uint8_t b0 = (uint8_t)(c0 < 0 ? 0 : c0);
@@ -11,7 +11,7 @@ uint16_t BmpToMono::readLE16(fs::File& f) {
   return (uint16_t)b0 | ((uint16_t)b1 << 8);
 }
 
-uint32_t BmpToMono::readLE32(fs::File& f) {
+uint32_t BmpToMono::readLE32(File& f) {
   const int c0 = f.read();
   const int c1 = f.read();
   const int c2 = f.read();
@@ -67,15 +67,11 @@ const char* BmpToMono::errorToString(BmpToMonoError err) {
   return "Unknown";
 }
 
-BmpToMonoError BmpToMono::convert24(fs::File& file, MonoBitmap& out, uint8_t threshold, bool invert) {
-  return convert24Impl(file, out, threshold, invert, false);
+BmpToMonoError BmpToMono::convert24BitRotate90CCW(File& file, MonoBitmap& out, uint8_t threshold) {
+  return convert24BitImpl(file, out, threshold, true);
 }
 
-BmpToMonoError BmpToMono::convert24Rotate90CW(fs::File& file, MonoBitmap& out, uint8_t threshold, bool invert) {
-  return convert24Impl(file, out, threshold, invert, true);
-}
-
-BmpToMonoError BmpToMono::convert24Impl(fs::File& f, MonoBitmap& out, uint8_t threshold, bool invert, bool rotate90CW) {
+BmpToMonoError BmpToMono::convert24BitImpl(File& f, MonoBitmap& out, uint8_t threshold, bool rotate90CCW) {
   freeMonoBitmap(out);
 
   if (!f) return BmpToMonoError::FileInvalid;
@@ -117,8 +113,8 @@ BmpToMonoError BmpToMono::convert24Impl(fs::File& f, MonoBitmap& out, uint8_t th
   if (srcH <= 0) return BmpToMonoError::BadDimensions;
 
   // Output dimensions
-  out.width = rotate90CW ? (int)srcH : (int)srcW;
-  out.height = rotate90CW ? (int)srcW : (int)srcH;
+  out.width = rotate90CCW ? (int)srcH : (int)srcW;
+  out.height = rotate90CCW ? (int)srcW : (int)srcH;
 
   const size_t outBytesPerRow = (size_t)(out.width + 7) / 8;
   out.len = outBytesPerRow * (size_t)out.height;
@@ -158,16 +154,15 @@ BmpToMonoError BmpToMono::convert24Impl(fs::File& f, MonoBitmap& out, uint8_t th
 
       const uint8_t lum = (uint8_t)((77u * r + 150u * g + 29u * b) >> 8);
       bool isBlack = (lum < threshold);
-      if (invert) isBlack = !isBlack;
 
       int outX, outY;
-      if (!rotate90CW) {
+      if (!rotate90CCW) {
         outX = srcX;
         outY = srcY;
       } else {
-        // 90° clockwise: (x,y) -> (h-1-y, x)
-        outX = (int)srcH - 1 - srcY;
-        outY = srcX;
+        // 90° counter-clockwise: (x,y) -> (y, w-1-x)
+        outX = srcY;
+        outY = (int)srcW - 1 - srcX;
       }
 
       setMonoPixel(out.data, out.width, outX, outY, isBlack);
