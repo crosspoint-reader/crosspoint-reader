@@ -90,9 +90,23 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
-  // TODO: Support book cover
-  // if (self->state == IN_METADATA && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
-  // }
+  if (self->state == IN_METADATA && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
+    bool isCover = false;
+    std::string coverItemId;
+
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "name") == 0 && strcmp(atts[i + 1], "cover") == 0) {
+        isCover = true;
+      } else if (strcmp(atts[i], "content") == 0) {
+        coverItemId = atts[i + 1];
+      }
+    }
+
+    if (isCover) {
+      self->coverItemId = coverItemId;
+    }
+    return;
+  }
 
   if (self->state == IN_MANIFEST && (strcmp(name, "item") == 0 || strcmp(name, "opf:item") == 0)) {
     std::string itemId;

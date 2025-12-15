@@ -301,19 +301,19 @@ void EpubReaderScreen::renderContents(std::unique_ptr<Page> page) {
   // TODO: Only do this if font supports it
   {
     renderer.clearScreen(0x00);
-    renderer.setFontRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, READER_FONT_ID);
     renderer.copyGrayscaleLsbBuffers();
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
-    renderer.setFontRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer, READER_FONT_ID);
     renderer.copyGrayscaleMsbBuffers();
 
     // display grayscale part
     renderer.displayGrayBuffer();
-    renderer.setFontRenderMode(GfxRenderer::BW);
+    renderer.setRenderMode(GfxRenderer::BW);
   }
 }
 

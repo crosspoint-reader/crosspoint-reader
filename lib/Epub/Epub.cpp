@@ -69,6 +69,9 @@ bool Epub::parseContentOpf(const std::string& contentOpfFilePath) {
 
   // Grab data from opfParser into epub
   title = opfParser.title;
+  if (!opfParser.coverItemId.empty() && opfParser.items.count(opfParser.coverItemId) > 0) {
+    coverImageItem = opfParser.items.at(opfParser.coverItemId);
+  }
   constexpr const char* NCX_MEDIA_TYPE = "application/x-dtbncx+xml";
 
   for (const auto& [id, manifestItem] : opfParser.items) {

@@ -7,17 +7,17 @@
 
 class GfxRenderer {
  public:
-  enum FontRenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
 
  private:
   EInkDisplay& einkDisplay;
-  FontRenderMode fontRenderMode;
+  RenderMode renderMode;
   std::map<int, EpdFontFamily> fontMap;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontStyle style) const;
 
  public:
-  explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), fontRenderMode(BW) {}
+  explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW) {}
   ~GfxRenderer() = default;
 
   // Setup
@@ -41,15 +41,17 @@ class GfxRenderer {
   int getTextWidth(int fontId, const char* text, EpdFontStyle style = REGULAR) const;
   void drawCenteredText(int fontId, int y, const char* text, bool black = true, EpdFontStyle style = REGULAR) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true, EpdFontStyle style = REGULAR) const;
-  void setFontRenderMode(const FontRenderMode mode) { this->fontRenderMode = mode; }
   int getSpaceWidth(int fontId) const;
   int getLineHeight(int fontId) const;
+
+  // Grayscale functions
+  void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
+  void copyGrayscaleLsbBuffers() const;
+  void copyGrayscaleMsbBuffers() const;
+  void displayGrayBuffer() const;
 
   // Low level functions
   uint8_t* getFrameBuffer() const;
   void swapBuffers() const;
   void grayscaleRevert() const;
-  void copyGrayscaleLsbBuffers() const;
-  void copyGrayscaleMsbBuffers() const;
-  void displayGrayBuffer() const;
 };

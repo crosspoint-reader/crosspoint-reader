@@ -207,14 +207,20 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
         if (is2Bit) {
           const uint8_t byte = bitmap[pixelPosition / 4];
           const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
+          // we swap this to better match the way images and screen think about colors:
+          // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
+          const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
 
-          const uint8_t val = (byte >> bit_index) & 0x3;
-          if (fontRenderMode == BW && val > 0) {
+          if (renderMode == BW && bmpVal < 3) {
+            // Black (also paints over the grays in BW mode)
             drawPixel(screenX, screenY, pixelState);
-          } else if (fontRenderMode == GRAYSCALE_MSB && val == 1) {
-            // TODO: Not sure how this anti-aliasing goes on black backgrounds
+          } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+            // Light gray (also mark the MSB if it's going to be a dark gray too)
+            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
             drawPixel(screenX, screenY, false);
-          } else if (fontRenderMode == GRAYSCALE_LSB && val == 2) {
+          } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+            // Dark gray
             drawPixel(screenX, screenY, false);
           }
         } else {
