@@ -70,16 +70,18 @@ bool Epub::parseContentOpf(const std::string& contentOpfFilePath) {
   // Grab data from opfParser into epub
   title = opfParser.title;
   if (!opfParser.coverItemId.empty() && opfParser.items.count(opfParser.coverItemId) > 0) {
-    coverImageItem = opfParser.items.at(opfParser.coverItemId).href;
+    coverImageItem = opfParser.items.at(opfParser.coverItemId);
   }
 
-  if (!opfParser.tocNcxPath.empty()) {
-    tocNcxItem = opfParser.tocNcxPath;
+  if (opfParser.items.count("ncx")) {
+    tocNcxItem = opfParser.items.at("ncx");
+  } else if (opfParser.items.count("ncxtoc")) {
+    tocNcxItem = opfParser.items.at("ncxtoc");
   }
 
   for (auto& spineRef : opfParser.spineRefs) {
     if (opfParser.items.count(spineRef)) {
-      spine.emplace_back(spineRef, opfParser.items.at(spineRef).href);
+      spine.emplace_back(spineRef, opfParser.items.at(spineRef));
     }
   }
 
