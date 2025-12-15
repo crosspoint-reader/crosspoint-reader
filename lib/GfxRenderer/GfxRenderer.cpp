@@ -130,7 +130,7 @@ bool GfxRenderer::drawFullScreenBmp(File& file) {
   file.seek(0);  // Ensure we're at the start of the file
 
   MonoBitmap bmp;
-  auto err = BmpReader::convert24BitRotate90CCW(file, bmp);
+  auto err = BmpReader::read(file, bmp);
 
   if (err != BmpReaderError::Ok) {
     Serial.printf("[%lu] [GFX] BMP convert failed: %s\n", millis(), BmpReader::errorToString(err));

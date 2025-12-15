@@ -34,7 +34,8 @@ class BmpReader {
  public:
   // Rotate 90° counter-clockwise: (w,h) -> (h,w)
   // Used for converting portrait BMP (480x800) into landscape framebuffer (800x480)
-  static BmpReaderError convert24BitRotate90CCW(File& file, MonoBitmap& out, uint8_t threshold = 160);
+  // Supports 8-bit, 24-bit, 32-bit color and 1-bit monochrome BMPs.
+  static BmpReaderError read(File& file, MonoBitmap& out, uint8_t threshold = 160);
 
   static void freeMonoBitmap(MonoBitmap& bmp);
   static const char* errorToString(BmpReaderError err);
@@ -53,6 +54,4 @@ class BmpReader {
     else
       buf[idx] |= mask;
   }
-
-  static BmpReaderError convert24BitImpl(File& file, MonoBitmap& out, uint8_t threshold, bool rotate90CCW);
 };
