@@ -25,7 +25,7 @@ constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 const char* SKIP_TAGS[] = {"head", "table"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
-bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n'; }
+bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
 // given the start and end of a tag, check to see if it matches a known tag
 bool matches(const char* tag_name, const char* possible_tags[], const int possible_tag_count) {
