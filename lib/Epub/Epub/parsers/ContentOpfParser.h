@@ -2,6 +2,8 @@
 #include <Print.h>
 
 #include <map>
+#include <string>
+#include <vector>
 
 #include "Epub.h"
 #include "expat.h"
@@ -26,9 +28,14 @@ class ContentOpfParser final : public Print {
   static void endElement(void* userData, const XML_Char* name);
 
  public:
+  struct ManifestItem {
+    std::string href;
+    std::string mediaType;
+  };
+
   std::string title;
   std::string tocNcxPath;
-  std::map<std::string, std::string> items;
+  std::map<std::string, ManifestItem> items;
   std::vector<std::string> spineRefs;
 
   explicit ContentOpfParser(const std::string& baseContentPath, const size_t xmlSize)

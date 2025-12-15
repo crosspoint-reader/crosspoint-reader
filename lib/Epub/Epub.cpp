@@ -69,16 +69,31 @@ bool Epub::parseContentOpf(const std::string& contentOpfFilePath) {
 
   // Grab data from opfParser into epub
   title = opfParser.title;
+  constexpr const char* NCX_MEDIA_TYPE = "application/x-dtbncx+xml";
 
-  if (opfParser.items.count("ncx")) {
-    tocNcxItem = opfParser.items.at("ncx");
-  } else if (opfParser.items.count("ncxtoc")) {
-    tocNcxItem = opfParser.items.at("ncxtoc");
+  for (const auto& [id, manifestItem] : opfParser.items) {
+    (void)id;
+    if (manifestItem.mediaType == NCX_MEDIA_TYPE) {
+      tocNcxItem = manifestItem.href;
+      break;
+    }
+  }
+
+  if (tocNcxItem.empty() && !opfParser.tocNcxPath.empty()) {
+    tocNcxItem = opfParser.tocNcxPath;
+  }
+
+  if (tocNcxItem.empty()) {
+    if (opfParser.items.count("ncx")) {
+      tocNcxItem = opfParser.items.at("ncx").href;
+    } else if (opfParser.items.count("ncxtoc")) {
+      tocNcxItem = opfParser.items.at("ncxtoc").href;
+    }
   }
 
   for (auto& spineRef : opfParser.spineRefs) {
     if (opfParser.items.count(spineRef)) {
-      spine.emplace_back(spineRef, opfParser.items.at(spineRef));
+      spine.emplace_back(spineRef, opfParser.items.at(spineRef).href);
     }
   }
 

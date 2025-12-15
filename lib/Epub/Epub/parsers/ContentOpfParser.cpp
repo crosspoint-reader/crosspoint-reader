@@ -96,17 +96,24 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
   if (self->state == IN_MANIFEST && (strcmp(name, "item") == 0 || strcmp(name, "opf:item") == 0)) {
     std::string itemId;
-    std::string href;
+    ManifestItem item;
 
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "id") == 0) {
         itemId = atts[i + 1];
       } else if (strcmp(atts[i], "href") == 0) {
-        href = self->baseContentPath + atts[i + 1];
+        item.href = self->baseContentPath + atts[i + 1];
+      } else if (strcmp(atts[i], "media-type") == 0) {
+        item.mediaType = atts[i + 1];
       }
     }
 
-    self->items[itemId] = href;
+    if (!itemId.empty()) {
+      self->items[itemId] = item;
+      if (item.mediaType == "application/x-dtbncx+xml" && self->tocNcxPath.empty()) {
+        self->tocNcxPath = item.href;
+      }
+    }
     return;
   }
 
