@@ -3,6 +3,10 @@
 #include <HardwareSerial.h>
 #include <ZipFile.h>
 
+namespace {
+constexpr const char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
+}
+
 bool ContentOpfParser::setup() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
@@ -125,7 +129,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
     self->items[itemId] = href;
 
-    if (mediaType == "application/x-dtbncx+xml") {
+    if (mediaType == MEDIA_TYPE_NCX) {
       if (self->tocNcxPath.empty()) {
         self->tocNcxPath = href;
       } else {
