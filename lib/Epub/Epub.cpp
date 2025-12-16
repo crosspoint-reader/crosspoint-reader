@@ -152,11 +152,11 @@ bool Epub::load() {
   size_t spineItemsCount = getSpineItemsCount();
   size_t spineItemsSize = 0;
   for (size_t i = 0; i < spineItemsCount; i++) {
-      std::string spineItem = getSpineItem(i);
-      size_t s = 0;
-      getItemSize(spineItem, &s);
-      spineItemsSize += s;
-      cumulativeSpineItemSize.emplace_back(spineItemsSize);
+    std::string spineItem = getSpineItem(i);
+    size_t s = 0;
+    getItemSize(spineItem, &s);
+    spineItemsSize += s;
+    cumulativeSpineItemSize.emplace_back(spineItemsSize);
   }
   Serial.printf("[%lu] [EBP] Book size: %u\n", millis(), spineItemsSize);
 

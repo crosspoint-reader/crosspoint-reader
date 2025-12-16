@@ -329,16 +329,19 @@ void EpubReaderScreen::renderStatusBar() const {
   size_t prevChapterSize = epub->getCumulativeSpineItemSize(currentSpineIndex - 1);
   size_t curChapterSize = epub->getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
   size_t bookSize = epub->getCumulativeSpineItemSize(epub->getSpineItemsCount() - 1);
-  size_t sectionProgSize = static_cast<size_t>(static_cast<float>(section->currentPage) / section->pageCount * curChapterSize);
+  size_t sectionProgSize =
+      static_cast<size_t>(static_cast<float>(section->currentPage) / section->pageCount * curChapterSize);
   float bookProgress = static_cast<float>(prevChapterSize + sectionProgSize) / bookSize * 100.0;
   char bookProgressStr[6] = "--.-";
-  std:snprintf(bookProgressStr, 6, "%.1f", bookProgress);
-  // Serial.printf("[%lu] [EBP] prevChapterSize: %u bookSize: %u sectionProgSize: %u bookSize:%u Book progress: %s %%\n", millis(),
+std:
+  snprintf(bookProgressStr, 6, "%.1f", bookProgress);
+  // Serial.printf("[%lu] [EBP] prevChapterSize: %u bookSize: %u sectionProgSize: %u bookSize:%u Book progress: %s
+  // %%\n", millis(),
   //     prevChapterSize, bookSize, sectionProgSize, bookSize, bookProgressStr);
 
   // Right aligned text for progress counter
-  const std::string progress = std::to_string(section->currentPage + 1) + "/" + std::to_string(section->pageCount)
-    + "  " + bookProgressStr + "%";
+  const std::string progress = std::to_string(section->currentPage + 1) + "/" + std::to_string(section->pageCount) +
+                               "  " + bookProgressStr + "%";
   const auto progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progress.c_str());
   renderer.drawText(SMALL_FONT_ID, GfxRenderer::getScreenWidth() - marginRight - progressTextWidth, textY,
                     progress.c_str());
