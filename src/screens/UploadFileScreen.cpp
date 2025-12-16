@@ -34,9 +34,9 @@ void UploadFileScreen::render() const {
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "UPLOADING");
 
   if (currentUploadStatus == InProgress) {
+    const double complete = static_cast<double>(currentUploadCompleteSize) / static_cast<double>(currentUploadTotalSize);
     renderer.drawRect(20, pageHeight / 2 + 110, pageWidth - 40, 50);
-    renderer.fillRect(22, pageHeight / 2 + 112,
-                      static_cast<size_t>(pageWidth - 44) * currentUploadCompleteSize / currentUploadTotalSize, 46);
+    renderer.fillRect(22, pageHeight / 2 + 112, (pageWidth - 44) * complete, 46);
   }
 
   renderer.displayBuffer();
@@ -69,10 +69,12 @@ void UploadFileScreen::onFileUploadPart(AsyncWebServerRequest* request, const ui
   request->_tempFile.write(data, len);
   xSemaphoreGive(renderingMutex);
 
+  const int oldPercent = static_cast<double>(currentUploadCompleteSize) / static_cast<double>(currentUploadTotalSize) * 100;
   currentUploadCompleteSize += len;
+  const int newPercent = static_cast<double>(currentUploadCompleteSize) / static_cast<double>(currentUploadTotalSize) * 100;
+
   // Only update the screen at most every 5% to avoid blocking the SPI channel
-  if (currentUploadTotalSize > 0 && (currentUploadCompleteSize - len) * 100 / currentUploadTotalSize / 5 <
-                                        currentUploadCompleteSize * 100 / currentUploadTotalSize / 5) {
+  if (oldPercent / 5 < newPercent / 5) {
     updateRequired = true;
   }
 }
