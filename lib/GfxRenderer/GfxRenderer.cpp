@@ -255,25 +255,8 @@ void GfxRenderer::restoreBwBuffer() {
     }
 
     const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
-    // bwBufferChunks[i] = static_cast<uint8_t*>(malloc(chunkSize));
-    //
-    // if (!bwBufferChunks[i]) {
-    //   Serial.printf("[%lu] [GFX] !! Failed to allocate BW buffer chunk %zu (%zu bytes)\n", millis(), i, chunkSize);
-    //   // Free previously allocated chunks
-    //   freeBwBufferChunks();
-    //   return;
-    // }
-
     memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
   }
-
-  // // Create array of chunk pointers for the SDK call
-  // const uint8_t* chunkPointers[BW_BUFFER_NUM_CHUNKS];
-  // for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
-  //   chunkPointers[i] = bwBufferChunks[i];
-  // }
-
-  // einkDisplay.cleanupGrayscaleBuffersChunked(chunkPointers, BW_BUFFER_CHUNK_SIZE, BW_BUFFER_NUM_CHUNKS);
 
   einkDisplay.cleanupGrayscaleBuffers(frameBuffer);
 
