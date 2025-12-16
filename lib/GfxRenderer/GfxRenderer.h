@@ -11,8 +11,9 @@ class GfxRenderer {
 
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
-  static constexpr size_t BW_BUFFER_NUM_CHUNKS =
-      (EInkDisplay::BUFFER_SIZE + BW_BUFFER_CHUNK_SIZE - 1) / BW_BUFFER_CHUNK_SIZE;
+  static constexpr size_t BW_BUFFER_NUM_CHUNKS = EInkDisplay::BUFFER_SIZE / BW_BUFFER_CHUNK_SIZE;
+  static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == EInkDisplay::BUFFER_SIZE,
+                "BW buffer chunking does not line up with display buffer size");
 
   EInkDisplay& einkDisplay;
   RenderMode renderMode;
