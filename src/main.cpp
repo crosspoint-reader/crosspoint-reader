@@ -5,6 +5,7 @@
 #include <InputManager.h>
 #include <SD.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <builtinFonts/bookerly_2b.h>
 #include <builtinFonts/bookerly_bold_2b.h>
 #include <builtinFonts/bookerly_bold_italic_2b.h>
@@ -16,6 +17,7 @@
 #include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "CrossPointWebServer.h"
 #include "config.h"
 #include "screens/BootLogoScreen.h"
 #include "screens/EpubReaderScreen.h"
@@ -242,6 +244,11 @@ void loop() {
     Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
                   ESP.getHeapSize(), ESP.getMinFreeHeap());
     lastMemPrint = millis();
+  }
+
+  // Handle web server clients if WiFi is connected
+  if (WiFi.status() == WL_CONNECTED) {
+    crossPointWebServer.handleClient();
   }
 
   inputManager.update();

@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <WiFi.h>
 
+#include "CrossPointWebServer.h"
 #include "config.h"
 
 void WifiScreen::taskTrampoline(void* param) {
@@ -164,6 +165,10 @@ void WifiScreen::checkConnectionStatus() {
     connectedIP = ipStr;
     state = WifiScreenState::CONNECTED;
     updateRequired = true;
+    
+    // Start the web server
+    crossPointWebServer.begin();
+    
     return;
   }
 
@@ -434,18 +439,22 @@ void WifiScreen::renderConnected() const {
   const auto pageWidth = GfxRenderer::getScreenWidth();
   const auto pageHeight = GfxRenderer::getScreenHeight();
   const auto height = renderer.getLineHeight(UI_FONT_ID);
-  const auto top = (pageHeight - height * 3) / 2;
+  const auto top = (pageHeight - height * 4) / 2;
 
-  renderer.drawCenteredText(READER_FONT_ID, top - 20, "Connected!", true, BOLD);
+  renderer.drawCenteredText(READER_FONT_ID, top - 30, "Connected!", true, BOLD);
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
     ssidInfo = ssidInfo.substr(0, 25) + "...";
   }
-  renderer.drawCenteredText(UI_FONT_ID, top + 20, ssidInfo.c_str(), true, REGULAR);
+  renderer.drawCenteredText(UI_FONT_ID, top + 10, ssidInfo.c_str(), true, REGULAR);
 
   std::string ipInfo = "IP Address: " + connectedIP;
-  renderer.drawCenteredText(UI_FONT_ID, top + 50, ipInfo.c_str(), true, REGULAR);
+  renderer.drawCenteredText(UI_FONT_ID, top + 40, ipInfo.c_str(), true, REGULAR);
+
+  // Show web server info
+  std::string webInfo = "Web: http://" + connectedIP + "/";
+  renderer.drawCenteredText(UI_FONT_ID, top + 70, webInfo.c_str(), true, REGULAR);
 
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "Press any button to continue", true, REGULAR);
 }
