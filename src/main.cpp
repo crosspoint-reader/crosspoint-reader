@@ -63,6 +63,8 @@ EpdFontFamily ubuntuFontFamily(&ubuntu10Font, &ubuntuBold10Font);
 constexpr unsigned long POWER_BUTTON_WAKEUP_MS = 500;
 // Time required to enter sleep mode
 constexpr unsigned long POWER_BUTTON_SLEEP_MS = 500;
+// Auto-sleep timeout (10 minutes of inactivity)
+constexpr unsigned long AUTO_SLEEP_TIMEOUT_MS = 10 * 60 * 1000;
 
 std::unique_ptr<Epub> loadEpub(const std::string& path) {
   if (!SD.exists(path.c_str())) {
@@ -237,6 +239,20 @@ void loop() {
   }
 
   inputManager.update();
+
+  // Check for any user activity (button press or release)
+  static unsigned long lastActivityTime = millis();
+  if (inputManager.wasAnyPressed() || inputManager.wasAnyReleased()) {
+    lastActivityTime = millis();  // Reset inactivity timer
+  }
+
+  if (millis() - lastActivityTime >= AUTO_SLEEP_TIMEOUT_MS) {
+    Serial.printf("[%lu] [SLP] Auto-sleep triggered after %lu ms of inactivity\n", millis(), AUTO_SLEEP_TIMEOUT_MS);
+    enterDeepSleep();
+    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    return;
+  }
+
   if (inputManager.wasReleased(InputManager::BTN_POWER) && inputManager.getHeldTime() > POWER_BUTTON_WAKEUP_MS) {
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start

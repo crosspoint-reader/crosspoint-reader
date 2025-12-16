@@ -16,9 +16,11 @@ class ParsedText {
   std::list<std::string> words;
   std::list<EpdFontStyle> wordStyles;
   TextBlock::BLOCK_STYLE style;
+  bool extraParagraphSpacing;
 
  public:
-  explicit ParsedText(const TextBlock::BLOCK_STYLE style) : style(style) {}
+  explicit ParsedText(const TextBlock::BLOCK_STYLE style, const bool extraParagraphSpacing)
+      : style(style), extraParagraphSpacing(extraParagraphSpacing) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontStyle fontStyle);

@@ -132,13 +132,19 @@ void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode) cons
   einkDisplay.displayBuffer(refreshMode);
 }
 
-// TODO: Support partial window update
-// void GfxRenderer::flushArea(const int x, const int y, const int width, const int height) const {
-//   const int rotatedX = y;
-//   const int rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
-//
-//   einkDisplay.displayBuffer(EInkDisplay::FAST_REFRESH, rotatedX, rotatedY, height, width);
-// }
+void GfxRenderer::displayWindow(const int x, const int y, const int width, const int height) const {
+  // Rotate coordinates from portrait (480x800) to landscape (800x480)
+  // Rotation: 90 degrees clockwise
+  // Portrait coordinates: (x, y) with dimensions (width, height)
+  // Landscape coordinates: (rotatedX, rotatedY) with dimensions (rotatedWidth, rotatedHeight)
+
+  const int rotatedX = y;
+  const int rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x - width + 1;
+  const int rotatedWidth = height;
+  const int rotatedHeight = width;
+
+  einkDisplay.displayWindow(rotatedX, rotatedY, rotatedWidth, rotatedHeight);
+}
 
 // Note: Internal driver treats screen in command orientation, this library treats in portrait orientation
 int GfxRenderer::getScreenWidth() { return EInkDisplay::DISPLAY_HEIGHT; }
@@ -164,7 +170,7 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 
 uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
-void GfxRenderer::swapBuffers() const { einkDisplay.swapBuffers(); }
+size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
 
 void GfxRenderer::grayscaleRevert() const { einkDisplay.grayscaleRevert(); }
 
@@ -173,6 +179,35 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { einkDisplay.copyGrayscaleLsb
 void GfxRenderer::copyGrayscaleMsbBuffers() const { einkDisplay.copyGrayscaleMsbBuffers(einkDisplay.getFrameBuffer()); }
 
 void GfxRenderer::displayGrayBuffer() const { einkDisplay.displayGrayBuffer(); }
+
+/**
+ * This should be called before grayscale buffers are populated.
+ * A `restoreBwBuffer` call should always follow the grayscale render if this method was called.
+ */
+void GfxRenderer::storeBwBuffer() {
+  if (bwBuffer) {
+    Serial.printf("[%lu] [GFX] !! BW buffer already stored - this is likely a bug, freeing it\n", millis());
+    free(bwBuffer);
+  }
+
+  bwBuffer = static_cast<uint8_t*>(malloc(EInkDisplay::BUFFER_SIZE));
+  memcpy(bwBuffer, einkDisplay.getFrameBuffer(), EInkDisplay::BUFFER_SIZE);
+}
+
+/**
+ * This can only be called if `storeBwBuffer` was called prior to the grayscale render.
+ * It should be called to restore the BW buffer state after grayscale rendering is complete.
+ */
+void GfxRenderer::restoreBwBuffer() {
+  if (!bwBuffer) {
+    Serial.printf("[%lu] [GFX] !! BW buffer not stored - this is likely a bug\n", millis());
+    return;
+  }
+
+  einkDisplay.cleanupGrayscaleBuffers(bwBuffer);
+  free(bwBuffer);
+  bwBuffer = nullptr;
+}
 
 void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
                              const bool pixelState, const EpdFontStyle style) const {
