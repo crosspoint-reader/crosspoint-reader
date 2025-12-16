@@ -243,7 +243,7 @@ void loop() {
   // Check for any user activity (button press or release)
   static unsigned long lastActivityTime = millis();
   if (inputManager.wasAnyPressed() || inputManager.wasAnyReleased()) {
-    lastActivityTime = millis(); // Reset inactivity timer
+    lastActivityTime = millis();  // Reset inactivity timer
   }
 
   if (millis() - lastActivityTime >= AUTO_SLEEP_TIMEOUT_MS) {
