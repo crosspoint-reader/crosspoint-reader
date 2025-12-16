@@ -5,7 +5,6 @@
 #include <freertos/task.h>
 
 #include <memory>
-#include <vector>
 
 #include "Screen.h"
 
@@ -16,13 +15,11 @@ class EpubReaderChapterSelectionScreen final : public Screen {
   int currentSpineIndex = 0;
   int selectorIndex = 0;
   bool updateRequired = false;
-  std::vector<int> visibleSpineIndices;
   const std::function<void()> onGoBack;
   const std::function<void(int newSpineIndex)> onSelectSpineIndex;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
-  void rebuildVisibleSpineIndices();
   void renderScreen();
 
  public:
