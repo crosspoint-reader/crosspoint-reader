@@ -4,6 +4,7 @@
 #include <WiFi.h>
 
 #include "CrossPointWebServer.h"
+#include "WifiCredentialStore.h"
 #include "config.h"
 
 void WifiScreen::taskTrampoline(void* param) {
@@ -14,6 +15,9 @@ void WifiScreen::taskTrampoline(void* param) {
 void WifiScreen::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
 
+  // Load saved WiFi credentials
+  WIFI_STORE.loadFromFile();
+
   // Reset state
   selectedNetworkIndex = 0;
   networks.clear();
@@ -21,6 +25,9 @@ void WifiScreen::onEnter() {
   selectedSSID.clear();
   connectedIP.clear();
   connectionError.clear();
+  enteredPassword.clear();
+  usedSavedPassword = false;
+  savePromptSelection = 0;
   keyboard.reset();
 
   // Trigger first update to show scanning message
@@ -93,6 +100,7 @@ void WifiScreen::processWifiScanResults() {
     network.ssid = WiFi.SSID(i).c_str();
     network.rssi = WiFi.RSSI(i);
     network.isEncrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+    network.hasSavedPassword = WIFI_STORE.hasSavedCredential(network.ssid);
 
     // Skip hidden networks (empty SSID)
     if (!network.ssid.empty()) {
@@ -118,6 +126,18 @@ void WifiScreen::selectNetwork(int index) {
   const auto& network = networks[index];
   selectedSSID = network.ssid;
   selectedRequiresPassword = network.isEncrypted;
+  usedSavedPassword = false;
+  enteredPassword.clear();
+
+  // Check if we have saved credentials for this network
+  const auto* savedCred = WIFI_STORE.findCredential(selectedSSID);
+  if (savedCred && !savedCred->password.empty()) {
+    // Use saved password - connect directly
+    enteredPassword = savedCred->password;
+    usedSavedPassword = true;
+    attemptConnection();
+    return;
+  }
 
   if (selectedRequiresPassword) {
     // Show password entry
@@ -145,8 +165,13 @@ void WifiScreen::attemptConnection() {
 
   WiFi.mode(WIFI_STA);
   
-  if (selectedRequiresPassword && keyboard) {
-    WiFi.begin(selectedSSID.c_str(), keyboard->getText().c_str());
+  // Get password from keyboard if we just entered it
+  if (keyboard && !usedSavedPassword) {
+    enteredPassword = keyboard->getText();
+  }
+  
+  if (selectedRequiresPassword && !enteredPassword.empty()) {
+    WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
   } else {
     WiFi.begin(selectedSSID.c_str());
   }
@@ -165,12 +190,19 @@ void WifiScreen::checkConnectionStatus() {
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     connectedIP = ipStr;
-    state = WifiScreenState::CONNECTED;
-    updateRequired = true;
     
     // Start the web server
     crossPointWebServer.begin();
     
+    // If we used a saved password, go directly to connected screen
+    // If we entered a new password, ask if user wants to save it
+    if (usedSavedPassword || enteredPassword.empty()) {
+      state = WifiScreenState::CONNECTED;
+    } else {
+      state = WifiScreenState::SAVE_PROMPT;
+      savePromptSelection = 0;  // Default to "Yes"
+    }
+    updateRequired = true;
     return;
   }
 
@@ -224,6 +256,36 @@ void WifiScreen::handleInput() {
     }
     
     updateRequired = true;
+    return;
+  }
+
+  // Handle save prompt state
+  if (state == WifiScreenState::SAVE_PROMPT) {
+    if (inputManager.wasPressed(InputManager::BTN_LEFT) || 
+        inputManager.wasPressed(InputManager::BTN_UP)) {
+      if (savePromptSelection > 0) {
+        savePromptSelection--;
+        updateRequired = true;
+      }
+    } else if (inputManager.wasPressed(InputManager::BTN_RIGHT) || 
+               inputManager.wasPressed(InputManager::BTN_DOWN)) {
+      if (savePromptSelection < 1) {
+        savePromptSelection++;
+        updateRequired = true;
+      }
+    } else if (inputManager.wasPressed(InputManager::BTN_CONFIRM)) {
+      if (savePromptSelection == 0) {
+        // User chose "Yes" - save the password
+        WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+      }
+      // Move to connected screen
+      state = WifiScreenState::CONNECTED;
+      updateRequired = true;
+    } else if (inputManager.wasPressed(InputManager::BTN_BACK)) {
+      // Skip saving, go to connected screen
+      state = WifiScreenState::CONNECTED;
+      updateRequired = true;
+    }
     return;
   }
 
@@ -321,6 +383,9 @@ void WifiScreen::render() const {
     case WifiScreenState::CONNECTED:
       renderConnected();
       break;
+    case WifiScreenState::SAVE_PROMPT:
+      renderSavePrompt();
+      break;
     case WifiScreenState::CONNECTION_FAILED:
       renderConnectionFailed();
       break;
@@ -367,14 +432,19 @@ void WifiScreen::renderNetworkList() const {
 
       // Draw network name (truncate if too long)
       std::string displayName = network.ssid;
-      if (displayName.length() > 18) {
-        displayName = displayName.substr(0, 15) + "...";
+      if (displayName.length() > 16) {
+        displayName = displayName.substr(0, 13) + "...";
       }
       renderer.drawText(UI_FONT_ID, 20, networkY, displayName.c_str());
 
       // Draw signal strength indicator
       std::string signalStr = getSignalStrengthIndicator(network.rssi);
-      renderer.drawText(UI_FONT_ID, pageWidth - 80, networkY, signalStr.c_str());
+      renderer.drawText(UI_FONT_ID, pageWidth - 90, networkY, signalStr.c_str());
+
+      // Draw saved indicator (checkmark) for networks with saved passwords
+      if (network.hasSavedPassword) {
+        renderer.drawText(UI_FONT_ID, pageWidth - 50, networkY, "+");
+      }
 
       // Draw lock icon for encrypted networks
       if (network.isEncrypted) {
@@ -397,7 +467,7 @@ void WifiScreen::renderNetworkList() const {
   }
 
   // Draw help text
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 30, "OK: Connect | BACK: Exit | * = Encrypted");
+  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 30, "OK: Connect | * = Encrypted | + = Saved");
 }
 
 void WifiScreen::renderPasswordEntry() const {
@@ -459,6 +529,46 @@ void WifiScreen::renderConnected() const {
   renderer.drawCenteredText(UI_FONT_ID, top + 70, webInfo.c_str(), true, REGULAR);
 
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "Press any button to continue", true, REGULAR);
+}
+
+void WifiScreen::renderSavePrompt() const {
+  const auto pageWidth = GfxRenderer::getScreenWidth();
+  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto height = renderer.getLineHeight(UI_FONT_ID);
+  const auto top = (pageHeight - height * 3) / 2;
+
+  renderer.drawCenteredText(READER_FONT_ID, top - 40, "Connected!", true, BOLD);
+
+  std::string ssidInfo = "Network: " + selectedSSID;
+  if (ssidInfo.length() > 28) {
+    ssidInfo = ssidInfo.substr(0, 25) + "...";
+  }
+  renderer.drawCenteredText(UI_FONT_ID, top, ssidInfo.c_str(), true, REGULAR);
+
+  renderer.drawCenteredText(UI_FONT_ID, top + 40, "Save password for next time?", true, REGULAR);
+
+  // Draw Yes/No buttons
+  const int buttonY = top + 80;
+  const int buttonWidth = 60;
+  const int buttonSpacing = 30;
+  const int totalWidth = buttonWidth * 2 + buttonSpacing;
+  const int startX = (pageWidth - totalWidth) / 2;
+
+  // Draw "Yes" button
+  if (savePromptSelection == 0) {
+    renderer.drawText(UI_FONT_ID, startX, buttonY, "[Yes]");
+  } else {
+    renderer.drawText(UI_FONT_ID, startX + 4, buttonY, "Yes");
+  }
+
+  // Draw "No" button
+  if (savePromptSelection == 1) {
+    renderer.drawText(UI_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, "[No]");
+  } else {
+    renderer.drawText(UI_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, "No");
+  }
+
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm", true, REGULAR);
 }
 
 void WifiScreen::renderConnectionFailed() const {

@@ -17,6 +17,7 @@ struct WifiNetworkInfo {
   std::string ssid;
   int32_t rssi;
   bool isEncrypted;
+  bool hasSavedPassword;  // Whether we have saved credentials for this network
 };
 
 // WiFi screen states
@@ -26,6 +27,7 @@ enum class WifiScreenState {
   PASSWORD_ENTRY,     // Entering password for selected network
   CONNECTING,         // Attempting to connect
   CONNECTED,          // Successfully connected, showing IP
+  SAVE_PROMPT,        // Asking user if they want to save the password
   CONNECTION_FAILED   // Connection failed
 };
 
@@ -49,6 +51,15 @@ class WifiScreen final : public Screen {
   std::string connectedIP;
   std::string connectionError;
 
+  // Password to potentially save (from keyboard or saved credentials)
+  std::string enteredPassword;
+  
+  // Whether network was connected using a saved password (skip save prompt)
+  bool usedSavedPassword = false;
+  
+  // Save prompt selection (0 = Yes, 1 = No)
+  int savePromptSelection = 0;
+
   // Connection timeout
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
   unsigned long connectionStartTime = 0;
@@ -60,6 +71,7 @@ class WifiScreen final : public Screen {
   void renderPasswordEntry() const;
   void renderConnecting() const;
   void renderConnected() const;
+  void renderSavePrompt() const;
   void renderConnectionFailed() const;
 
   void startWifiScan();
