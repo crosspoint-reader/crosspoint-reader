@@ -170,9 +170,7 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 
 uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
-size_t GfxRenderer::getBufferSize() {
-  return EInkDisplay::BUFFER_SIZE;
-}
+size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
 
 void GfxRenderer::grayscaleRevert() const { einkDisplay.grayscaleRevert(); }
 
@@ -192,7 +190,7 @@ void GfxRenderer::storeBwBuffer() {
     free(bwBuffer);
   }
 
-  bwBuffer = static_cast<uint8_t *>(malloc(EInkDisplay::BUFFER_SIZE));
+  bwBuffer = static_cast<uint8_t*>(malloc(EInkDisplay::BUFFER_SIZE));
   memcpy(bwBuffer, einkDisplay.getFrameBuffer(), EInkDisplay::BUFFER_SIZE);
 }
 
