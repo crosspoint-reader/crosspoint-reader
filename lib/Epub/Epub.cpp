@@ -148,6 +148,18 @@ bool Epub::load() {
     return false;
   }
 
+  // determine size of spine items
+  size_t spineItemsCount = getSpineItemsCount();
+  size_t spineItemsSize = 0;
+  for (size_t i = 0; i < spineItemsCount; i++) {
+      std::string spineItem = getSpineItem(i);
+      size_t s = 0;
+      getItemSize(spineItem, &s);
+      spineItemsSize += s;
+      cumulativeSpineItemSize.emplace_back(spineItemsSize);
+  }
+  Serial.printf("[%lu] [EBP] Book size: %u\n", millis(), spineItemsSize);
+
   Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
 
   return true;
@@ -254,6 +266,8 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
 }
 
 int Epub::getSpineItemsCount() const { return spine.size(); }
+
+size_t Epub::getCumulativeSpineItemSize(const int spineIndex) const { return cumulativeSpineItemSize.at(spineIndex); }
 
 std::string& Epub::getSpineItem(const int spineIndex) {
   if (spineIndex < 0 || spineIndex >= spine.size()) {
