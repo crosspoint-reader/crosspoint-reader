@@ -317,15 +317,13 @@ int Epub::getTocIndexForSpineIndex(const int spineIndex) const {
   return -1;
 }
 
-size_t Epub::getBookSize() const {
-  return getCumulativeSpineItemSize(getSpineItemsCount() - 1);
-}
+size_t Epub::getBookSize() const { return getCumulativeSpineItemSize(getSpineItemsCount() - 1); }
 
 // Calculate progress in book
-uint8_t Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead){
-    size_t prevChapterSize = getCumulativeSpineItemSize(currentSpineIndex - 1);
-    size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
-    size_t bookSize = getBookSize();
-    size_t sectionProgSize = currentSpineRead * curChapterSize;
-    return round(static_cast<float>(prevChapterSize + sectionProgSize) / bookSize * 100.0);
+uint8_t Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) {
+  size_t prevChapterSize = getCumulativeSpineItemSize(currentSpineIndex - 1);
+  size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
+  size_t bookSize = getBookSize();
+  size_t sectionProgSize = currentSpineRead * curChapterSize;
+  return round(static_cast<float>(prevChapterSize + sectionProgSize) / bookSize * 100.0);
 }
