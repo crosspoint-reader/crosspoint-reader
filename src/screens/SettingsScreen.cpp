@@ -48,7 +48,7 @@ void SettingsScreen::onExit() {
 void SettingsScreen::handleInput() {
   // Handle actions with early return
   if (inputManager.wasPressed(InputManager::BTN_CONFIRM)) {
-    toggleCurrentSetting();
+    activateCurrentSetting();
     updateRequired = true;
     return;
   }
