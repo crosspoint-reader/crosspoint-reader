@@ -17,6 +17,25 @@ static const char* HIDDEN_ITEMS[] = {
 };
 static const size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
 
+// Helper function to escape HTML special characters to prevent XSS
+static String escapeHtml(const String& input) {
+  String output;
+  output.reserve(input.length() * 1.1);  // Pre-allocate with some extra space
+  
+  for (size_t i = 0; i < input.length(); i++) {
+    char c = input.charAt(i);
+    switch (c) {
+      case '&':  output += "&amp;";  break;
+      case '<':  output += "&lt;";   break;
+      case '>':  output += "&gt;";   break;
+      case '"':  output += "&quot;"; break;
+      case '\'': output += "&#39;";  break;
+      default:   output += c;        break;
+    }
+  }
+  return output;
+}
+
 // HTML page template
 static const char* HTML_PAGE = R"rawliteral(
 <!DOCTYPE html>
@@ -707,8 +726,8 @@ void CrossPointWebServer::handleFileList() {
   
   // Get message from query string if present
   if (server->hasArg("msg")) {
-    String msg = server->arg("msg");
-    String msgType = server->hasArg("type") ? server->arg("type") : "success";
+    String msg = escapeHtml(server->arg("msg"));
+    String msgType = server->hasArg("type") ? escapeHtml(server->arg("type")) : "success";
     html += "<div class=\"message " + msgType + "\">" + msg + "</div>";
   }
   
