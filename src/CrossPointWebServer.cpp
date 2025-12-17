@@ -511,6 +511,63 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
     .folder-btn:hover {
       background-color: #d68910;
     }
+    /* Delete button styles */
+    .delete-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: #95a5a6;
+      transition: all 0.15s;
+    }
+    .delete-btn:hover {
+      background-color: #fee;
+      color: #e74c3c;
+    }
+    .actions-col {
+      width: 60px;
+      text-align: center;
+    }
+    /* Delete modal */
+    .delete-warning {
+      color: #e74c3c;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    .delete-item-name {
+      font-weight: 600;
+      color: #2c3e50;
+      word-break: break-all;
+    }
+    .delete-btn-confirm {
+      background-color: #e74c3c;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+    }
+    .delete-btn-confirm:hover {
+      background-color: #c0392b;
+    }
+    .delete-btn-cancel {
+      background-color: #95a5a6;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+      margin-top: 10px;
+    }
+    .delete-btn-cancel:hover {
+      background-color: #7f8c8d;
+    }
   </style>
 </head>
 <body>
@@ -553,6 +610,23 @@ static const char* FILES_PAGE_FOOTER = R"rawliteral(
         <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
         <input type="text" id="folderName" class="folder-input" placeholder="Folder name...">
         <button class="folder-btn" onclick="createFolder()">Create Folder</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+      <h3>🗑️ Delete Item</h3>
+      <div class="folder-form">
+        <p class="delete-warning">⚠️ This action cannot be undone!</p>
+        <p class="file-info">Are you sure you want to delete:</p>
+        <p class="delete-item-name" id="deleteItemName"></p>
+        <input type="hidden" id="deleteItemPath">
+        <input type="hidden" id="deleteItemType">
+        <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
+        <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
       </div>
     </div>
   </div>
@@ -727,6 +801,46 @@ static const char* FILES_PAGE_FOOTER = R"rawliteral(
       
       xhr.send(formData);
     }
+    
+    // Delete functions
+    function openDeleteModal(name, path, isFolder) {
+      document.getElementById('deleteItemName').textContent = (isFolder ? '📁 ' : '📄 ') + name;
+      document.getElementById('deleteItemPath').value = path;
+      document.getElementById('deleteItemType').value = isFolder ? 'folder' : 'file';
+      document.getElementById('deleteModal').classList.add('open');
+    }
+    
+    function closeDeleteModal() {
+      document.getElementById('deleteModal').classList.remove('open');
+    }
+    
+    function confirmDelete() {
+      const path = document.getElementById('deleteItemPath').value;
+      const itemType = document.getElementById('deleteItemType').value;
+      
+      const formData = new FormData();
+      formData.append('path', path);
+      formData.append('type', itemType);
+      
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/delete', true);
+      
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          window.location.reload();
+        } else {
+          alert('Failed to delete: ' + xhr.responseText);
+          closeDeleteModal();
+        }
+      };
+      
+      xhr.onerror = function() {
+        alert('Failed to delete - network error');
+        closeDeleteModal();
+      };
+      
+      xhr.send(formData);
+    }
   </script>
 </body>
 </html>
@@ -768,6 +882,9 @@ void CrossPointWebServer::begin() {
   
   // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this]() { handleCreateFolder(); });
+  
+  // Delete file/folder endpoint
+  server->on("/delete", HTTP_POST, [this]() { handleDelete(); });
   
   server->onNotFound([this]() { handleNotFound(); });
 
@@ -1023,7 +1140,7 @@ void CrossPointWebServer::handleFileList() {
     html += "<div class=\"no-files\">This folder is empty</div>";
   } else {
     html += "<table class=\"file-table\">";
-    html += "<tr><th>Name</th><th>Type</th><th>Size</th></tr>";
+    html += "<tr><th>Name</th><th>Type</th><th>Size</th><th class=\"actions-col\">Actions</th></tr>";
     
     // Sort files: folders first, then epub files, then other files, alphabetically within each group
     std::sort(files.begin(), files.end(), [](const FileInfo& a, const FileInfo& b) {
@@ -1058,9 +1175,15 @@ void CrossPointWebServer::handleFileList() {
         
         html += "<tr class=\"" + rowClass + "\">";
         html += "<td><span class=\"file-icon\">" + icon + "</span>";
-        html += "<a href=\"/files?path=" + folderPath + "\" class=\"folder-link\">" + file.name + "</a>" + badge + "</td>";
+        html += "<a href=\"/files?path=" + folderPath + "\" class=\"folder-link\">" + escapeHtml(file.name) + "</a>" + badge + "</td>";
         html += "<td>" + typeStr + "</td>";
         html += "<td>" + sizeStr + "</td>";
+        // Escape quotes for JavaScript string
+        String escapedName = file.name;
+        escapedName.replace("'", "\\'");
+        String escapedPath = folderPath;
+        escapedPath.replace("'", "\\'");
+        html += "<td class=\"actions-col\"><button class=\"delete-btn\" onclick=\"openDeleteModal('" + escapedName + "', '" + escapedPath + "', true)\" title=\"Delete folder\">🗑️</button></td>";
         html += "</tr>";
       } else {
         rowClass = file.isEpub ? "epub-file" : "";
@@ -1071,10 +1194,21 @@ void CrossPointWebServer::handleFileList() {
         typeStr = ext;
         sizeStr = formatFileSize(file.size);
         
+        // Build file path for delete
+        String filePath = currentPath;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += file.name;
+        
         html += "<tr class=\"" + rowClass + "\">";
-        html += "<td><span class=\"file-icon\">" + icon + "</span>" + file.name + badge + "</td>";
+        html += "<td><span class=\"file-icon\">" + icon + "</span>" + escapeHtml(file.name) + badge + "</td>";
         html += "<td>" + typeStr + "</td>";
         html += "<td>" + sizeStr + "</td>";
+        // Escape quotes for JavaScript string
+        String escapedName = file.name;
+        escapedName.replace("'", "\\'");
+        String escapedPath = filePath;
+        escapedPath.replace("'", "\\'");
+        html += "<td class=\"actions-col\"><button class=\"delete-btn\" onclick=\"openDeleteModal('" + escapedName + "', '" + escapedPath + "', false)\" title=\"Delete file\">🗑️</button></td>";
         html += "</tr>";
       }
     }
@@ -1244,5 +1378,87 @@ void CrossPointWebServer::handleCreateFolder() {
   } else {
     Serial.printf("[%lu] [WEB] Failed to create folder: %s\n", millis(), folderPath.c_str());
     server->send(500, "text/plain", "Failed to create folder");
+  }
+}
+
+void CrossPointWebServer::handleDelete() {
+  // Get path from form data
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+  
+  String itemPath = server->arg("path");
+  String itemType = server->hasArg("type") ? server->arg("type") : "file";
+  
+  // Validate path
+  if (itemPath.isEmpty() || itemPath == "/") {
+    server->send(400, "text/plain", "Cannot delete root directory");
+    return;
+  }
+  
+  // Ensure path starts with /
+  if (!itemPath.startsWith("/")) {
+    itemPath = "/" + itemPath;
+  }
+  
+  // Security check: prevent deletion of protected items
+  String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+  
+  // Check if item starts with a dot (hidden/system file)
+  if (itemName.startsWith(".")) {
+    Serial.printf("[%lu] [WEB] Delete rejected - hidden/system item: %s\n", millis(), itemPath.c_str());
+    server->send(403, "text/plain", "Cannot delete system files");
+    return;
+  }
+  
+  // Check against explicitly protected items
+  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+    if (itemName.equals(HIDDEN_ITEMS[i])) {
+      Serial.printf("[%lu] [WEB] Delete rejected - protected item: %s\n", millis(), itemPath.c_str());
+      server->send(403, "text/plain", "Cannot delete protected items");
+      return;
+    }
+  }
+  
+  // Check if item exists
+  if (!SD.exists(itemPath.c_str())) {
+    Serial.printf("[%lu] [WEB] Delete failed - item not found: %s\n", millis(), itemPath.c_str());
+    server->send(404, "text/plain", "Item not found");
+    return;
+  }
+  
+  Serial.printf("[%lu] [WEB] Attempting to delete %s: %s\n", millis(), itemType.c_str(), itemPath.c_str());
+  
+  bool success = false;
+  
+  if (itemType == "folder") {
+    // For folders, try to remove (will fail if not empty)
+    File dir = SD.open(itemPath.c_str());
+    if (dir && dir.isDirectory()) {
+      // Check if folder is empty
+      File entry = dir.openNextFile();
+      if (entry) {
+        // Folder is not empty
+        entry.close();
+        dir.close();
+        Serial.printf("[%lu] [WEB] Delete failed - folder not empty: %s\n", millis(), itemPath.c_str());
+        server->send(400, "text/plain", "Folder is not empty. Delete contents first.");
+        return;
+      }
+      dir.close();
+    }
+    success = SD.rmdir(itemPath.c_str());
+  } else {
+    // For files, use remove
+    success = SD.remove(itemPath.c_str());
+  }
+  
+  if (success) {
+    Serial.printf("[%lu] [WEB] Successfully deleted: %s\n", millis(), itemPath.c_str());
+    server->send(200, "text/plain", "Deleted successfully");
+  } else {
+    Serial.printf("[%lu] [WEB] Failed to delete: %s\n", millis(), itemPath.c_str());
+    server->send(500, "text/plain", "Failed to delete item");
   }
 }

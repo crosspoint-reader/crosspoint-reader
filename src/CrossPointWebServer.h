@@ -51,6 +51,7 @@ class CrossPointWebServer {
   void handleUpload();
   void handleUploadPost();
   void handleCreateFolder();
+  void handleDelete();
 };
 
 // Global instance
