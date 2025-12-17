@@ -166,8 +166,7 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
     }
     h1 {
       color: #2c3e50;
-      border-bottom: 2px solid #3498db;
-      padding-bottom: 10px;
+      margin-bottom: 5px;
     }
     h2 {
       color: #34495e;
@@ -179,6 +178,41 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
       padding: 20px;
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #3498db;
+    }
+    .page-header-left {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .breadcrumb-inline {
+      color: #7f8c8d;
+      font-size: 1.1em;
+    }
+    .breadcrumb-inline a {
+      color: #3498db;
+      text-decoration: none;
+    }
+    .breadcrumb-inline a:hover {
+      text-decoration: underline;
+    }
+    .breadcrumb-inline .sep {
+      margin: 0 6px;
+      color: #bdc3c7;
+    }
+    .breadcrumb-inline .current {
+      color: #2c3e50;
+      font-weight: 500;
     }
     .nav-links {
       margin: 20px 0;
@@ -195,10 +229,118 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
     .nav-links a:hover {
       background-color: #2980b9;
     }
+    /* Add dropdown styles */
+    .add-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+    .add-btn {
+      background-color: #e67e22;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .add-btn:hover {
+      background-color: #d35400;
+    }
+    .add-btn .arrow {
+      font-size: 0.8em;
+      transition: transform 0.2s;
+    }
+    .add-dropdown.open .add-btn .arrow {
+      transform: rotate(180deg);
+    }
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 100%;
+      margin-top: 5px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      min-width: 200px;
+      z-index: 100;
+      overflow: hidden;
+    }
+    .add-dropdown.open .dropdown-menu {
+      display: block;
+    }
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-size: 1em;
+      color: #2c3e50;
+      transition: background-color 0.15s;
+    }
+    .dropdown-item:hover {
+      background-color: #f8f9fa;
+    }
+    .dropdown-item .icon {
+      font-size: 1.2em;
+    }
+    .dropdown-divider {
+      height: 1px;
+      background-color: #eee;
+      margin: 0;
+    }
+    /* Upload modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal {
+      background: white;
+      border-radius: 8px;
+      padding: 25px;
+      max-width: 450px;
+      width: 90%;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    .modal h3 {
+      margin: 0 0 15px 0;
+      color: #2c3e50;
+    }
+    .modal-close {
+      float: right;
+      background: none;
+      border: none;
+      font-size: 1.5em;
+      cursor: pointer;
+      color: #7f8c8d;
+      line-height: 1;
+    }
+    .modal-close:hover {
+      color: #2c3e50;
+    }
     .file-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 10px;
     }
     .file-table th, .file-table td {
       padding: 12px;
@@ -255,32 +397,12 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
       color: #3498db;
       text-decoration: underline;
     }
-    .breadcrumb {
-      padding: 10px 15px;
-      background-color: #f8f9fa;
-      border-radius: 4px;
-      margin-bottom: 15px;
-    }
-    .breadcrumb a {
-      color: #3498db;
-      text-decoration: none;
-    }
-    .breadcrumb a:hover {
-      text-decoration: underline;
-    }
-    .breadcrumb span {
-      color: #7f8c8d;
-      margin: 0 5px;
-    }
     .upload-form {
-      margin-top: 15px;
-      padding: 15px;
-      background-color: #f8f9fa;
-      border-radius: 4px;
-      border: 2px dashed #ddd;
+      margin-top: 10px;
     }
     .upload-form input[type="file"] {
       margin: 10px 0;
+      width: 100%;
     }
     .upload-btn {
       background-color: #27ae60;
@@ -290,6 +412,7 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
       border-radius: 4px;
       cursor: pointer;
       font-size: 1em;
+      width: 100%;
     }
     .upload-btn:hover {
       background-color: #219a52;
@@ -301,7 +424,7 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
     .file-info {
       color: #7f8c8d;
       font-size: 0.85em;
-      margin-top: 5px;
+      margin: 8px 0;
     }
     .no-files {
       text-align: center;
@@ -324,24 +447,21 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
       color: #721c24;
       border: 1px solid #f5c6cb;
     }
-    .summary {
+    .contents-header {
       display: flex;
       justify-content: space-between;
-      padding: 10px 0;
-      border-bottom: 2px solid #eee;
-      margin-bottom: 10px;
+      align-items: center;
+      margin-bottom: 12px;
     }
-    .summary-item {
-      text-align: center;
+    .contents-title {
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #34495e;
+      margin: 0;
     }
-    .summary-number {
-      font-size: 1.5em;
-      font-weight: bold;
-      color: #2c3e50;
-    }
-    .summary-label {
-      font-size: 0.85em;
+    .summary-inline {
       color: #7f8c8d;
+      font-size: 0.9em;
     }
     #progress-container {
       display: none;
@@ -367,16 +487,16 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
       color: #7f8c8d;
     }
     .folder-form {
-      display: flex;
-      gap: 10px;
-      margin-top: 15px;
+      margin-top: 10px;
     }
     .folder-input {
-      flex: 1;
+      width: 100%;
       padding: 10px;
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 1em;
+      margin-bottom: 10px;
+      box-sizing: border-box;
     }
     .folder-btn {
       background-color: #f39c12;
@@ -386,6 +506,7 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
       border-radius: 4px;
       cursor: pointer;
       font-size: 1em;
+      width: 100%;
     }
     .folder-btn:hover {
       background-color: #d68910;
@@ -393,8 +514,6 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
   </style>
 </head>
 <body>
-  <h1>📁 File Manager</h1>
-  
   <div class="nav-links">
     <a href="/">Home</a>
     <a href="/files">File Manager</a>
@@ -408,7 +527,89 @@ static const char* FILES_PAGE_FOOTER = R"rawliteral(
     </p>
   </div>
   
+  <!-- Upload Modal -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+      <h3>📤 Upload eBook</h3>
+      <div class="upload-form">
+        <p class="file-info">Select an .epub file to upload to <strong id="uploadPathDisplay"></strong></p>
+        <input type="file" id="fileInput" accept=".epub" onchange="validateFile()">
+        <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
+        <div id="progress-container">
+          <div id="progress-bar"><div id="progress-fill"></div></div>
+          <div id="progress-text"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- New Folder Modal -->
+  <div class="modal-overlay" id="folderModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeFolderModal()">&times;</button>
+      <h3>📁 New Folder</h3>
+      <div class="folder-form">
+        <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
+        <input type="text" id="folderName" class="folder-input" placeholder="Folder name...">
+        <button class="folder-btn" onclick="createFolder()">Create Folder</button>
+      </div>
+    </div>
+  </div>
+  
   <script>
+    // Dropdown toggle
+    function toggleDropdown() {
+      const dropdown = document.getElementById('addDropdown');
+      dropdown.classList.toggle('open');
+    }
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+      const dropdown = document.getElementById('addDropdown');
+      if (dropdown && !dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
+    
+    // Modal functions
+    function openUploadModal() {
+      const currentPath = document.getElementById('currentPath').value;
+      document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+      document.getElementById('uploadModal').classList.add('open');
+      document.getElementById('addDropdown').classList.remove('open');
+    }
+    
+    function closeUploadModal() {
+      document.getElementById('uploadModal').classList.remove('open');
+      document.getElementById('fileInput').value = '';
+      document.getElementById('uploadBtn').disabled = true;
+      document.getElementById('progress-container').style.display = 'none';
+      document.getElementById('progress-fill').style.width = '0%';
+      document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
+    }
+    
+    function openFolderModal() {
+      const currentPath = document.getElementById('currentPath').value;
+      document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+      document.getElementById('folderModal').classList.add('open');
+      document.getElementById('addDropdown').classList.remove('open');
+      document.getElementById('folderName').value = '';
+    }
+    
+    function closeFolderModal() {
+      document.getElementById('folderModal').classList.remove('open');
+    }
+    
+    // Close modals when clicking overlay
+    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+          overlay.classList.remove('open');
+        }
+      });
+    });
+    
     function validateFile() {
       const fileInput = document.getElementById('fileInput');
       const uploadBtn = document.getElementById('uploadBtn');
@@ -734,58 +935,7 @@ void CrossPointWebServer::handleFileList() {
   // Hidden input to store current path for JavaScript
   html += "<input type=\"hidden\" id=\"currentPath\" value=\"" + currentPath + "\">";
   
-  // Breadcrumb navigation
-  html += "<div class=\"card\">";
-  html += "<div class=\"breadcrumb\">";
-  html += "<a href=\"/files\">🏠 Root</a>";
-  
-  if (currentPath != "/") {
-    String pathParts = currentPath.substring(1); // Remove leading /
-    String buildPath = "";
-    int start = 0;
-    int end = pathParts.indexOf('/');
-    
-    while (start < pathParts.length()) {
-      String part;
-      if (end == -1) {
-        part = pathParts.substring(start);
-        buildPath += "/" + part;
-        html += "<span>/</span><strong>" + part + "</strong>";
-        break;
-      } else {
-        part = pathParts.substring(start, end);
-        buildPath += "/" + part;
-        html += "<span>/</span><a href=\"/files?path=" + buildPath + "\">" + part + "</a>";
-        start = end + 1;
-        end = pathParts.indexOf('/', start);
-      }
-    }
-  }
-  html += "</div>";
-  html += "</div>";
-  
-  // Upload form
-  html += "<div class=\"card\">";
-  html += "<h2>📤 Upload eBook to " + (currentPath == "/" ? "Root" : currentPath) + "</h2>";
-  html += "<div class=\"upload-form\">";
-  html += "<p><strong>Select an .epub file to upload:</strong></p>";
-  html += "<input type=\"file\" id=\"fileInput\" accept=\".epub\" onchange=\"validateFile()\">";
-  html += "<div class=\"file-info\">Only .epub files are accepted. File will be uploaded to: " + currentPath + "</div>";
-  html += "<button id=\"uploadBtn\" class=\"upload-btn\" onclick=\"uploadFile()\" disabled>Upload</button>";
-  html += "<div id=\"progress-container\">";
-  html += "<div id=\"progress-bar\"><div id=\"progress-fill\"></div></div>";
-  html += "<div id=\"progress-text\"></div>";
-  html += "</div>";
-  html += "</div>";
-  
-  // Create folder form
-  html += "<div class=\"folder-form\">";
-  html += "<input type=\"text\" id=\"folderName\" class=\"folder-input\" placeholder=\"New folder name...\">";
-  html += "<button class=\"folder-btn\" onclick=\"createFolder()\">📁 Create Folder</button>";
-  html += "</div>";
-  html += "</div>";
-  
-  // Scan files in current path
+  // Scan files in current path first (we need counts for the header)
   std::vector<FileInfo> files = scanFiles(currentPath.c_str());
   
   // Count items
@@ -801,16 +951,72 @@ void CrossPointWebServer::handleFileList() {
     }
   }
   
-  // File listing
-  html += "<div class=\"card\">";
-  html += "<h2>📁 Contents of " + (currentPath == "/" ? "Root" : currentPath) + "</h2>";
+  // Page header with inline breadcrumb and +Add dropdown
+  html += "<div class=\"page-header\">";
+  html += "<div class=\"page-header-left\">";
+  html += "<h1>📁 File Manager</h1>";
   
-  // Summary
-  html += "<div class=\"summary\">";
-  html += "<div class=\"summary-item\"><div class=\"summary-number\">" + String(folderCount) + "</div><div class=\"summary-label\">Folders</div></div>";
-  html += "<div class=\"summary-item\"><div class=\"summary-number\">" + String(files.size() - folderCount) + "</div><div class=\"summary-label\">Files</div></div>";
-  html += "<div class=\"summary-item\"><div class=\"summary-number\">" + String(epubCount) + "</div><div class=\"summary-label\">eBooks</div></div>";
-  html += "<div class=\"summary-item\"><div class=\"summary-number\">" + formatFileSize(totalSize) + "</div><div class=\"summary-label\">Total Size</div></div>";
+  // Inline breadcrumb
+  html += "<div class=\"breadcrumb-inline\">";
+  html += "<span class=\"sep\">/</span>";
+  
+  if (currentPath == "/") {
+    html += "<span class=\"current\">🏠</span>";
+  } else {
+    html += "<a href=\"/files\">🏠</a>";
+    String pathParts = currentPath.substring(1); // Remove leading /
+    String buildPath = "";
+    int start = 0;
+    int end = pathParts.indexOf('/');
+    
+    while (start < (int)pathParts.length()) {
+      String part;
+      if (end == -1) {
+        part = pathParts.substring(start);
+        buildPath += "/" + part;
+        html += "<span class=\"sep\">/</span><span class=\"current\">" + escapeHtml(part) + "</span>";
+        break;
+      } else {
+        part = pathParts.substring(start, end);
+        buildPath += "/" + part;
+        html += "<span class=\"sep\">/</span><a href=\"/files?path=" + buildPath + "\">" + escapeHtml(part) + "</a>";
+        start = end + 1;
+        end = pathParts.indexOf('/', start);
+      }
+    }
+  }
+  html += "</div>";
+  html += "</div>";
+  
+  // +Add dropdown button
+  html += "<div class=\"add-dropdown\" id=\"addDropdown\">";
+  html += "<button class=\"add-btn\" onclick=\"toggleDropdown()\">";
+  html += "+ Add <span class=\"arrow\">▼</span>";
+  html += "</button>";
+  html += "<div class=\"dropdown-menu\">";
+  html += "<button class=\"dropdown-item\" onclick=\"openUploadModal()\">";
+  html += "<span class=\"icon\">📤</span> Upload eBook";
+  html += "</button>";
+  html += "<div class=\"dropdown-divider\"></div>";
+  html += "<button class=\"dropdown-item\" onclick=\"openFolderModal()\">";
+  html += "<span class=\"icon\">📁</span> New Folder";
+  html += "</button>";
+  html += "</div>";
+  html += "</div>";
+  
+  html += "</div>"; // end page-header
+  
+  // Contents card with inline summary
+  html += "<div class=\"card\">";
+  
+  // Contents header with inline stats
+  html += "<div class=\"contents-header\">";
+  html += "<h2 class=\"contents-title\">Contents</h2>";
+  html += "<span class=\"summary-inline\">";
+  html += String(folderCount) + " folder" + (folderCount != 1 ? "s" : "") + ", ";
+  html += String(files.size() - folderCount) + " file" + ((files.size() - folderCount) != 1 ? "s" : "") + ", ";
+  html += formatFileSize(totalSize);
+  html += "</span>";
   html += "</div>";
   
   if (files.empty()) {
