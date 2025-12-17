@@ -17,7 +17,7 @@ class EpubReaderScreen final : public Screen {
   int nextPageNumber = 0;
   int pagesUntilFullRefresh = 0;
   bool updateRequired = false;
-  const std::function<void()> onGoHome;
+  const std::function<void()> onGoBack;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
@@ -27,8 +27,8 @@ class EpubReaderScreen final : public Screen {
 
  public:
   explicit EpubReaderScreen(GfxRenderer& renderer, InputManager& inputManager, std::unique_ptr<Epub> epub,
-                            const std::function<void()>& onGoHome)
-      : Screen(renderer, inputManager), epub(std::move(epub)), onGoHome(onGoHome) {}
+                            const std::function<void()>& onGoBack)
+      : Screen(renderer, inputManager), epub(std::move(epub)), onGoBack(onGoBack) {}
   void onEnter() override;
   void onExit() override;
   void handleInput() override;

@@ -21,6 +21,7 @@
 #include "screens/EpubReaderScreen.h"
 #include "screens/FileSelectionScreen.h"
 #include "screens/FullScreenMessageScreen.h"
+#include "screens/HomeScreen.h"
 #include "screens/SettingsScreen.h"
 #include "screens/SleepScreen.h"
 
@@ -150,6 +151,7 @@ void enterDeepSleep() {
 }
 
 void onGoHome();
+void onGoToFileSelection();
 void onSelectEpubFile(const std::string& path) {
   exitScreen();
   enterNewScreen(new FullScreenMessageScreen(renderer, inputManager, "Loading..."));
@@ -159,14 +161,19 @@ void onSelectEpubFile(const std::string& path) {
     appState.openEpubPath = path;
     appState.saveToFile();
     exitScreen();
-    enterNewScreen(new EpubReaderScreen(renderer, inputManager, std::move(epub), onGoHome));
+    enterNewScreen(new EpubReaderScreen(renderer, inputManager, std::move(epub), onGoToFileSelection));
   } else {
     exitScreen();
     enterNewScreen(
         new FullScreenMessageScreen(renderer, inputManager, "Failed to load epub", REGULAR, EInkDisplay::HALF_REFRESH));
     delay(2000);
-    onGoHome();
+    onGoToFileSelection();
   }
+}
+
+void onGoToFileSelection() {
+  exitScreen();
+  enterNewScreen(new FileSelectionScreen(renderer, inputManager, onSelectEpubFile, onGoHome));
 }
 
 void onGoToSettings() {
@@ -176,7 +183,7 @@ void onGoToSettings() {
 
 void onGoHome() {
   exitScreen();
-  enterNewScreen(new FileSelectionScreen(renderer, inputManager, onSelectEpubFile, onGoToSettings));
+  enterNewScreen(new HomeScreen(renderer, inputManager, onGoToFileSelection, onGoToSettings));
 }
 
 void setup() {
@@ -221,8 +228,7 @@ void setup() {
     }
   }
 
-  exitScreen();
-  enterNewScreen(new FileSelectionScreen(renderer, inputManager, onSelectEpubFile, onGoToSettings));
+  onGoHome();
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();

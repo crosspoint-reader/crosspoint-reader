@@ -98,8 +98,8 @@ void FileSelectionScreen::handleInput() {
       loadFiles();
       updateRequired = true;
     } else {
-      // At root level, go to settings
-      onSettingsOpen();
+      // At root level, go back home
+      onGoHome();
     }
   } else if (prevPressed) {
     selectorIndex = (selectorIndex + files.size() - 1) % files.size();
@@ -129,7 +129,7 @@ void FileSelectionScreen::render() const {
   renderer.drawCenteredText(READER_FONT_ID, 10, "CrossPoint Reader", true, BOLD);
 
   // Help text
-  renderer.drawText(SMALL_FONT_ID, 20, GfxRenderer::getScreenHeight() - 30, "Press BACK for Settings");
+  renderer.drawText(SMALL_FONT_ID, 20, GfxRenderer::getScreenHeight() - 30, "Press BACK for Home");
 
   if (files.empty()) {
     renderer.drawText(UI_FONT_ID, 20, 60, "No EPUBs found");

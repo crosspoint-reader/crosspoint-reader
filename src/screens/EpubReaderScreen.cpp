@@ -98,7 +98,7 @@ void EpubReaderScreen::handleInput() {
   }
 
   if (inputManager.wasPressed(InputManager::BTN_BACK)) {
-    onGoHome();
+    onGoBack();
     return;
   }
 
