@@ -10,6 +10,7 @@ struct FileInfo {
   String name;
   size_t size;
   bool isEpub;
+  bool isDirectory;
 };
 
 class CrossPointWebServer {
@@ -49,6 +50,7 @@ class CrossPointWebServer {
   void handleFileList();
   void handleUpload();
   void handleUploadPost();
+  void handleCreateFolder();
 };
 
 // Global instance

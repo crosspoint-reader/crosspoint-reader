@@ -9,6 +9,14 @@
 // Global instance
 CrossPointWebServer crossPointWebServer;
 
+// Folders/files to hide from the web interface file browser
+// Note: Items starting with "." are automatically hidden
+static const char* HIDDEN_ITEMS[] = {
+  "System Volume Information",
+  "XTCache"
+};
+static const size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+
 // HTML page template
 static const char* HTML_PAGE = R"rawliteral(
 <!DOCTYPE html>
@@ -192,6 +200,12 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
     .epub-file:hover {
       background-color: #d4edda !important;
     }
+    .folder-row {
+      background-color: #fff9e6 !important;
+    }
+    .folder-row:hover {
+      background-color: #fff3cd !important;
+    }
     .epub-badge {
       display: inline-block;
       padding: 2px 8px;
@@ -201,8 +215,43 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
       font-size: 0.75em;
       margin-left: 8px;
     }
+    .folder-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background-color: #f39c12;
+      color: white;
+      border-radius: 10px;
+      font-size: 0.75em;
+      margin-left: 8px;
+    }
     .file-icon {
       margin-right: 8px;
+    }
+    .folder-link {
+      color: #2c3e50;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .folder-link:hover {
+      color: #3498db;
+      text-decoration: underline;
+    }
+    .breadcrumb {
+      padding: 10px 15px;
+      background-color: #f8f9fa;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+    .breadcrumb a {
+      color: #3498db;
+      text-decoration: none;
+    }
+    .breadcrumb a:hover {
+      text-decoration: underline;
+    }
+    .breadcrumb span {
+      color: #7f8c8d;
+      margin: 0 5px;
     }
     .upload-form {
       margin-top: 15px;
@@ -298,6 +347,30 @@ static const char* FILES_PAGE_HEADER = R"rawliteral(
       font-size: 0.9em;
       color: #7f8c8d;
     }
+    .folder-form {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .folder-input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1em;
+    }
+    .folder-btn {
+      background-color: #f39c12;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    .folder-btn:hover {
+      background-color: #d68910;
+    }
   </style>
 </head>
 <body>
@@ -339,6 +412,7 @@ static const char* FILES_PAGE_FOOTER = R"rawliteral(
     function uploadFile() {
       const fileInput = document.getElementById('fileInput');
       const file = fileInput.files[0];
+      const currentPath = document.getElementById('currentPath').value;
       
       if (!file) {
         alert('Please select a file first!');
@@ -353,6 +427,7 @@ static const char* FILES_PAGE_FOOTER = R"rawliteral(
       
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('path', currentPath);
       
       const progressContainer = document.getElementById('progress-container');
       const progressFill = document.getElementById('progress-fill');
@@ -390,6 +465,44 @@ static const char* FILES_PAGE_FOOTER = R"rawliteral(
         progressText.textContent = 'Upload failed - network error';
         progressFill.style.backgroundColor = '#e74c3c';
         uploadBtn.disabled = false;
+      };
+      
+      xhr.send(formData);
+    }
+    
+    function createFolder() {
+      const folderName = document.getElementById('folderName').value.trim();
+      const currentPath = document.getElementById('currentPath').value;
+      
+      if (!folderName) {
+        alert('Please enter a folder name!');
+        return;
+      }
+      
+      // Validate folder name (no special characters except underscore and hyphen)
+      const validName = /^[a-zA-Z0-9_\-]+$/.test(folderName);
+      if (!validName) {
+        alert('Folder name can only contain letters, numbers, underscores, and hyphens.');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('name', folderName);
+      formData.append('path', currentPath);
+      
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/mkdir', true);
+      
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          window.location.reload();
+        } else {
+          alert('Failed to create folder: ' + xhr.responseText);
+        }
+      };
+      
+      xhr.onerror = function() {
+        alert('Failed to create folder - network error');
       };
       
       xhr.send(formData);
@@ -432,6 +545,9 @@ void CrossPointWebServer::begin() {
   
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this]() { handleUploadPost(); }, [this]() { handleUpload(); });
+  
+  // Create folder endpoint
+  server->on("/mkdir", HTTP_POST, [this]() { handleCreateFolder(); });
   
   server->onNotFound([this]() { handleNotFound(); });
 
@@ -516,19 +632,43 @@ std::vector<FileInfo> CrossPointWebServer::scanFiles(const char* path) {
   
   File file = root.openNextFile();
   while (file) {
-    if (!file.isDirectory()) {
+    String fileName = String(file.name());
+    
+    // Skip hidden items (starting with ".")
+    bool shouldHide = fileName.startsWith(".");
+    
+    // Check against explicitly hidden items list
+    if (!shouldHide) {
+      for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+        if (fileName.equals(HIDDEN_ITEMS[i])) {
+          shouldHide = true;
+          break;
+        }
+      }
+    }
+    
+    if (!shouldHide) {
       FileInfo info;
-      info.name = String(file.name());
-      info.size = file.size();
-      info.isEpub = isEpubFile(info.name);
+      info.name = fileName;
+      info.isDirectory = file.isDirectory();
+      
+      if (info.isDirectory) {
+        info.size = 0;
+        info.isEpub = false;
+      } else {
+        info.size = file.size();
+        info.isEpub = isEpubFile(info.name);
+      }
+      
       files.push_back(info);
     }
+    
     file.close();
     file = root.openNextFile();
   }
   root.close();
   
-  Serial.printf("[%lu] [WEB] Found %d files\n", millis(), files.size());
+  Serial.printf("[%lu] [WEB] Found %d items (files and folders)\n", millis(), files.size());
   return files;
 }
 
@@ -551,6 +691,20 @@ bool CrossPointWebServer::isEpubFile(const String& filename) {
 void CrossPointWebServer::handleFileList() {
   String html = FILES_PAGE_HEADER;
   
+  // Get current path from query string (default to root)
+  String currentPath = "/";
+  if (server->hasArg("path")) {
+    currentPath = server->arg("path");
+    // Ensure path starts with /
+    if (!currentPath.startsWith("/")) {
+      currentPath = "/" + currentPath;
+    }
+    // Remove trailing slash unless it's root
+    if (currentPath.length() > 1 && currentPath.endsWith("/")) {
+      currentPath = currentPath.substring(0, currentPath.length() - 1);
+    }
+  }
+  
   // Get message from query string if present
   if (server->hasArg("msg")) {
     String msg = server->arg("msg");
@@ -558,67 +712,146 @@ void CrossPointWebServer::handleFileList() {
     html += "<div class=\"message " + msgType + "\">" + msg + "</div>";
   }
   
+  // Hidden input to store current path for JavaScript
+  html += "<input type=\"hidden\" id=\"currentPath\" value=\"" + currentPath + "\">";
+  
+  // Breadcrumb navigation
+  html += "<div class=\"card\">";
+  html += "<div class=\"breadcrumb\">";
+  html += "<a href=\"/files\">🏠 Root</a>";
+  
+  if (currentPath != "/") {
+    String pathParts = currentPath.substring(1); // Remove leading /
+    String buildPath = "";
+    int start = 0;
+    int end = pathParts.indexOf('/');
+    
+    while (start < pathParts.length()) {
+      String part;
+      if (end == -1) {
+        part = pathParts.substring(start);
+        buildPath += "/" + part;
+        html += "<span>/</span><strong>" + part + "</strong>";
+        break;
+      } else {
+        part = pathParts.substring(start, end);
+        buildPath += "/" + part;
+        html += "<span>/</span><a href=\"/files?path=" + buildPath + "\">" + part + "</a>";
+        start = end + 1;
+        end = pathParts.indexOf('/', start);
+      }
+    }
+  }
+  html += "</div>";
+  html += "</div>";
+  
   // Upload form
   html += "<div class=\"card\">";
-  html += "<h2>📤 Upload eBook</h2>";
+  html += "<h2>📤 Upload eBook to " + (currentPath == "/" ? "Root" : currentPath) + "</h2>";
   html += "<div class=\"upload-form\">";
   html += "<p><strong>Select an .epub file to upload:</strong></p>";
   html += "<input type=\"file\" id=\"fileInput\" accept=\".epub\" onchange=\"validateFile()\">";
-  html += "<div class=\"file-info\">Only .epub files are accepted</div>";
+  html += "<div class=\"file-info\">Only .epub files are accepted. File will be uploaded to: " + currentPath + "</div>";
   html += "<button id=\"uploadBtn\" class=\"upload-btn\" onclick=\"uploadFile()\" disabled>Upload</button>";
   html += "<div id=\"progress-container\">";
   html += "<div id=\"progress-bar\"><div id=\"progress-fill\"></div></div>";
   html += "<div id=\"progress-text\"></div>";
   html += "</div>";
   html += "</div>";
+  
+  // Create folder form
+  html += "<div class=\"folder-form\">";
+  html += "<input type=\"text\" id=\"folderName\" class=\"folder-input\" placeholder=\"New folder name...\">";
+  html += "<button class=\"folder-btn\" onclick=\"createFolder()\">📁 Create Folder</button>";
+  html += "</div>";
   html += "</div>";
   
-  // Scan files
-  std::vector<FileInfo> files = scanFiles("/");
+  // Scan files in current path
+  std::vector<FileInfo> files = scanFiles(currentPath.c_str());
   
-  // Count epub files
+  // Count items
   int epubCount = 0;
+  int folderCount = 0;
   size_t totalSize = 0;
   for (const auto& file : files) {
-    if (file.isEpub) epubCount++;
-    totalSize += file.size;
+    if (file.isDirectory) {
+      folderCount++;
+    } else {
+      if (file.isEpub) epubCount++;
+      totalSize += file.size;
+    }
   }
   
   // File listing
   html += "<div class=\"card\">";
-  html += "<h2>📁 Files on SD Card</h2>";
+  html += "<h2>📁 Contents of " + (currentPath == "/" ? "Root" : currentPath) + "</h2>";
   
   // Summary
   html += "<div class=\"summary\">";
-  html += "<div class=\"summary-item\"><div class=\"summary-number\">" + String(files.size()) + "</div><div class=\"summary-label\">Total Files</div></div>";
+  html += "<div class=\"summary-item\"><div class=\"summary-number\">" + String(folderCount) + "</div><div class=\"summary-label\">Folders</div></div>";
+  html += "<div class=\"summary-item\"><div class=\"summary-number\">" + String(files.size() - folderCount) + "</div><div class=\"summary-label\">Files</div></div>";
   html += "<div class=\"summary-item\"><div class=\"summary-number\">" + String(epubCount) + "</div><div class=\"summary-label\">eBooks</div></div>";
   html += "<div class=\"summary-item\"><div class=\"summary-number\">" + formatFileSize(totalSize) + "</div><div class=\"summary-label\">Total Size</div></div>";
   html += "</div>";
   
   if (files.empty()) {
-    html += "<div class=\"no-files\">No files found on SD card</div>";
+    html += "<div class=\"no-files\">This folder is empty</div>";
   } else {
     html += "<table class=\"file-table\">";
-    html += "<tr><th>Filename</th><th>Type</th><th>Size</th></tr>";
+    html += "<tr><th>Name</th><th>Type</th><th>Size</th></tr>";
     
-    // Sort files: epub files first, then alphabetically
+    // Sort files: folders first, then epub files, then other files, alphabetically within each group
     std::sort(files.begin(), files.end(), [](const FileInfo& a, const FileInfo& b) {
-      if (a.isEpub != b.isEpub) return a.isEpub > b.isEpub;
+      // Folders come first
+      if (a.isDirectory != b.isDirectory) return a.isDirectory > b.isDirectory;
+      // Then sort by epub status (epubs first among files)
+      if (!a.isDirectory && !b.isDirectory) {
+        if (a.isEpub != b.isEpub) return a.isEpub > b.isEpub;
+      }
+      // Then alphabetically
       return a.name < b.name;
     });
     
     for (const auto& file : files) {
-      String rowClass = file.isEpub ? "epub-file" : "";
-      String icon = file.isEpub ? "📗" : "📄";
-      String badge = file.isEpub ? "<span class=\"epub-badge\">EPUB</span>" : "";
-      String ext = file.name.substring(file.name.lastIndexOf('.') + 1);
-      ext.toUpperCase();
+      String rowClass;
+      String icon;
+      String badge;
+      String typeStr;
+      String sizeStr;
       
-      html += "<tr class=\"" + rowClass + "\">";
-      html += "<td><span class=\"file-icon\">" + icon + "</span>" + file.name + badge + "</td>";
-      html += "<td>" + ext + "</td>";
-      html += "<td>" + formatFileSize(file.size) + "</td>";
-      html += "</tr>";
+      if (file.isDirectory) {
+        rowClass = "folder-row";
+        icon = "📁";
+        badge = "<span class=\"folder-badge\">FOLDER</span>";
+        typeStr = "Folder";
+        sizeStr = "-";
+        
+        // Build the path to this folder
+        String folderPath = currentPath;
+        if (!folderPath.endsWith("/")) folderPath += "/";
+        folderPath += file.name;
+        
+        html += "<tr class=\"" + rowClass + "\">";
+        html += "<td><span class=\"file-icon\">" + icon + "</span>";
+        html += "<a href=\"/files?path=" + folderPath + "\" class=\"folder-link\">" + file.name + "</a>" + badge + "</td>";
+        html += "<td>" + typeStr + "</td>";
+        html += "<td>" + sizeStr + "</td>";
+        html += "</tr>";
+      } else {
+        rowClass = file.isEpub ? "epub-file" : "";
+        icon = file.isEpub ? "📗" : "📄";
+        badge = file.isEpub ? "<span class=\"epub-badge\">EPUB</span>" : "";
+        String ext = file.name.substring(file.name.lastIndexOf('.') + 1);
+        ext.toUpperCase();
+        typeStr = ext;
+        sizeStr = formatFileSize(file.size);
+        
+        html += "<tr class=\"" + rowClass + "\">";
+        html += "<td><span class=\"file-icon\">" + icon + "</span>" + file.name + badge + "</td>";
+        html += "<td>" + typeStr + "</td>";
+        html += "<td>" + sizeStr + "</td>";
+        html += "</tr>";
+      }
     }
     
     html += "</table>";
@@ -629,12 +862,13 @@ void CrossPointWebServer::handleFileList() {
   html += FILES_PAGE_FOOTER;
   
   server->send(200, "text/html", html);
-  Serial.printf("[%lu] [WEB] Served file listing page\n", millis());
+  Serial.printf("[%lu] [WEB] Served file listing page for path: %s\n", millis(), currentPath.c_str());
 }
 
 // Static variables for upload handling
 static File uploadFile;
 static String uploadFileName;
+static String uploadPath = "/";
 static size_t uploadSize = 0;
 static bool uploadSuccess = false;
 static String uploadError = "";
@@ -648,7 +882,22 @@ void CrossPointWebServer::handleUpload() {
     uploadSuccess = false;
     uploadError = "";
     
-    Serial.printf("[%lu] [WEB] Upload start: %s\n", millis(), uploadFileName.c_str());
+    // Get upload path from form data (defaults to root if not specified)
+    if (server->hasArg("path")) {
+      uploadPath = server->arg("path");
+      // Ensure path starts with /
+      if (!uploadPath.startsWith("/")) {
+        uploadPath = "/" + uploadPath;
+      }
+      // Remove trailing slash unless it's root
+      if (uploadPath.length() > 1 && uploadPath.endsWith("/")) {
+        uploadPath = uploadPath.substring(0, uploadPath.length() - 1);
+      }
+    } else {
+      uploadPath = "/";
+    }
+    
+    Serial.printf("[%lu] [WEB] Upload start: %s to path: %s\n", millis(), uploadFileName.c_str(), uploadPath.c_str());
     
     // Validate file extension
     if (!isEpubFile(uploadFileName)) {
@@ -658,7 +907,9 @@ void CrossPointWebServer::handleUpload() {
     }
     
     // Create file path
-    String filePath = "/" + uploadFileName;
+    String filePath = uploadPath;
+    if (!filePath.endsWith("/")) filePath += "/";
+    filePath += uploadFileName;
     
     // Check if file already exists
     if (SD.exists(filePath.c_str())) {
@@ -702,7 +953,9 @@ void CrossPointWebServer::handleUpload() {
     if (uploadFile) {
       uploadFile.close();
       // Try to delete the incomplete file
-      String filePath = "/" + uploadFileName;
+      String filePath = uploadPath;
+      if (!filePath.endsWith("/")) filePath += "/";
+      filePath += uploadFileName;
       SD.remove(filePath.c_str());
     }
     uploadError = "Upload aborted";
@@ -716,5 +969,55 @@ void CrossPointWebServer::handleUploadPost() {
   } else {
     String error = uploadError.isEmpty() ? "Unknown error during upload" : uploadError;
     server->send(400, "text/plain", error);
+  }
+}
+
+void CrossPointWebServer::handleCreateFolder() {
+  // Get folder name from form data
+  if (!server->hasArg("name")) {
+    server->send(400, "text/plain", "Missing folder name");
+    return;
+  }
+  
+  String folderName = server->arg("name");
+  
+  // Validate folder name
+  if (folderName.isEmpty()) {
+    server->send(400, "text/plain", "Folder name cannot be empty");
+    return;
+  }
+  
+  // Get parent path
+  String parentPath = "/";
+  if (server->hasArg("path")) {
+    parentPath = server->arg("path");
+    if (!parentPath.startsWith("/")) {
+      parentPath = "/" + parentPath;
+    }
+    if (parentPath.length() > 1 && parentPath.endsWith("/")) {
+      parentPath = parentPath.substring(0, parentPath.length() - 1);
+    }
+  }
+  
+  // Build full folder path
+  String folderPath = parentPath;
+  if (!folderPath.endsWith("/")) folderPath += "/";
+  folderPath += folderName;
+  
+  Serial.printf("[%lu] [WEB] Creating folder: %s\n", millis(), folderPath.c_str());
+  
+  // Check if already exists
+  if (SD.exists(folderPath.c_str())) {
+    server->send(400, "text/plain", "Folder already exists");
+    return;
+  }
+  
+  // Create the folder
+  if (SD.mkdir(folderPath.c_str())) {
+    Serial.printf("[%lu] [WEB] Folder created successfully: %s\n", millis(), folderPath.c_str());
+    server->send(200, "text/plain", "Folder created: " + folderName);
+  } else {
+    Serial.printf("[%lu] [WEB] Failed to create folder: %s\n", millis(), folderPath.c_str());
+    server->send(500, "text/plain", "Failed to create folder");
   }
 }
