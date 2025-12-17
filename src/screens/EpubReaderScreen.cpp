@@ -31,7 +31,6 @@ void EpubReaderScreen::onEnter() {
 
   epub->setupCacheDir();
 
-  // TODO: Move this to a state object
   if (SD.exists((epub->getCachePath() + "/progress.bin").c_str())) {
     File f = SD.open((epub->getCachePath() + "/progress.bin").c_str());
     uint8_t data[4];
@@ -210,20 +209,20 @@ void EpubReaderScreen::renderScreen() {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       {
+        renderer.grayscaleRevert();
+
         const int textWidth = renderer.getTextWidth(READER_FONT_ID, "Indexing...");
         constexpr int margin = 20;
-        const int x = (GfxRenderer::getScreenWidth() - textWidth - margin * 2) / 2;
-        constexpr int y = 50;
-        const int w = textWidth + margin * 2;
-        const int h = renderer.getLineHeight(READER_FONT_ID) + margin * 2;
-        renderer.grayscaleRevert();
-        uint8_t* fb1 = renderer.getFrameBuffer();
-        renderer.swapBuffers();
-        memcpy(fb1, renderer.getFrameBuffer(), EInkDisplay::BUFFER_SIZE);
-        renderer.fillRect(x, y, w, h, 0);
+        // Round all coordinates to 8 pixel boundaries
+        const int x = ((GfxRenderer::getScreenWidth() - textWidth - margin * 2) / 2 + 7) / 8 * 8;
+        constexpr int y = 56;
+        const int w = (textWidth + margin * 2 + 7) / 8 * 8;
+        const int h = (renderer.getLineHeight(READER_FONT_ID) + margin * 2 + 7) / 8 * 8;
+        renderer.fillRect(x, y, w, h, false);
         renderer.drawText(READER_FONT_ID, x + margin, y + margin, "Indexing...");
         renderer.drawRect(x + 5, y + 5, w - 10, h - 10);
-        renderer.displayBuffer();
+        // EXPERIMENTAL: Still suffers from ghosting
+        renderer.displayWindow(x, y, w, h);
         pagesUntilFullRefresh = 0;
       }
 
@@ -297,6 +296,9 @@ void EpubReaderScreen::renderContents(std::unique_ptr<Page> page) {
     pagesUntilFullRefresh--;
   }
 
+  // Save bw buffer to reset buffer state after grayscale data sync
+  renderer.storeBwBuffer();
+
   // grayscale rendering
   // TODO: Only do this if font supports it
   {
@@ -315,6 +317,9 @@ void EpubReaderScreen::renderContents(std::unique_ptr<Page> page) {
     renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
   }
+
+  // restore the bw data
+  renderer.restoreBwBuffer();
 }
 
 void EpubReaderScreen::renderStatusBar() const {

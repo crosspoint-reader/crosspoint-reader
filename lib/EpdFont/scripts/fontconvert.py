@@ -54,7 +54,7 @@ intervals = [
     # (0x0370, 0x03FF),
     ### Cyrillic ###
     # Russian, Ukrainian, Bulgarian, etc.
-    # (0x0400, 0x04FF),
+    (0x0400, 0x04FF),
     ### Math Symbols (common subset) ###
     # General math operators
     (0x2200, 0x22FF),

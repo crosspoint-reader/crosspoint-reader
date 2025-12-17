@@ -10,11 +10,18 @@ class GfxRenderer {
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
 
  private:
+  static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
+  static constexpr size_t BW_BUFFER_NUM_CHUNKS = EInkDisplay::BUFFER_SIZE / BW_BUFFER_CHUNK_SIZE;
+  static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == EInkDisplay::BUFFER_SIZE,
+                "BW buffer chunking does not line up with display buffer size");
+
   EInkDisplay& einkDisplay;
   RenderMode renderMode;
+  uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontStyle style) const;
+  void freeBwBufferChunks();
 
  public:
   explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW) {}
@@ -27,6 +34,8 @@ class GfxRenderer {
   static int getScreenWidth();
   static int getScreenHeight();
   void displayBuffer(EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH) const;
+  // EXPERIMENTAL: Windowed update - display only a rectangular region (portrait coordinates)
+  void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
 
@@ -49,9 +58,11 @@ class GfxRenderer {
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;
+  void storeBwBuffer();
+  void restoreBwBuffer();
 
   // Low level functions
   uint8_t* getFrameBuffer() const;
-  void swapBuffers() const;
+  static size_t getBufferSize();
   void grayscaleRevert() const;
 };

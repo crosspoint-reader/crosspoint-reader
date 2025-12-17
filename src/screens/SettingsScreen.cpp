@@ -46,27 +46,24 @@ void SettingsScreen::onExit() {
 }
 
 void SettingsScreen::handleInput() {
-  // Check for Confirm button to toggle/activate setting
+  // Handle actions with early return
   if (inputManager.wasPressed(InputManager::BTN_CONFIRM)) {
-    activateCurrentSetting();
+    toggleCurrentSetting();
+    updateRequired = true;
     return;
   }
 
-  // Check for Back button to exit settings
   if (inputManager.wasPressed(InputManager::BTN_BACK)) {
-    // Save settings and exit
     SETTINGS.saveToFile();
     onGoHome();
     return;
   }
 
-  // Handle UP/DOWN navigation for multiple settings
+  // Handle navigation
   if (inputManager.wasPressed(InputManager::BTN_UP) || inputManager.wasPressed(InputManager::BTN_LEFT)) {
-    // Move selection up
-    if (selectedSettingIndex > 0) {
-      selectedSettingIndex--;
-      updateRequired = true;
-    }
+    // Move selection up (with wrap-around)
+    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount - 1);
+    updateRequired = true;
   } else if (inputManager.wasPressed(InputManager::BTN_DOWN) || inputManager.wasPressed(InputManager::BTN_RIGHT)) {
     // Move selection down
     if (selectedSettingIndex < settingsCount - 1) {

@@ -132,13 +132,19 @@ void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode) cons
   einkDisplay.displayBuffer(refreshMode);
 }
 
-// TODO: Support partial window update
-// void GfxRenderer::flushArea(const int x, const int y, const int width, const int height) const {
-//   const int rotatedX = y;
-//   const int rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
-//
-//   einkDisplay.displayBuffer(EInkDisplay::FAST_REFRESH, rotatedX, rotatedY, height, width);
-// }
+void GfxRenderer::displayWindow(const int x, const int y, const int width, const int height) const {
+  // Rotate coordinates from portrait (480x800) to landscape (800x480)
+  // Rotation: 90 degrees clockwise
+  // Portrait coordinates: (x, y) with dimensions (width, height)
+  // Landscape coordinates: (rotatedX, rotatedY) with dimensions (rotatedWidth, rotatedHeight)
+
+  const int rotatedX = y;
+  const int rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x - width + 1;
+  const int rotatedWidth = height;
+  const int rotatedHeight = width;
+
+  einkDisplay.displayWindow(rotatedX, rotatedY, rotatedWidth, rotatedHeight);
+}
 
 // Note: Internal driver treats screen in command orientation, this library treats in portrait orientation
 int GfxRenderer::getScreenWidth() { return EInkDisplay::DISPLAY_HEIGHT; }
@@ -164,7 +170,7 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 
 uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
-void GfxRenderer::swapBuffers() const { einkDisplay.swapBuffers(); }
+size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
 
 void GfxRenderer::grayscaleRevert() const { einkDisplay.grayscaleRevert(); }
 
@@ -173,6 +179,90 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { einkDisplay.copyGrayscaleLsb
 void GfxRenderer::copyGrayscaleMsbBuffers() const { einkDisplay.copyGrayscaleMsbBuffers(einkDisplay.getFrameBuffer()); }
 
 void GfxRenderer::displayGrayBuffer() const { einkDisplay.displayGrayBuffer(); }
+
+void GfxRenderer::freeBwBufferChunks() {
+  for (auto& bwBufferChunk : bwBufferChunks) {
+    if (bwBufferChunk) {
+      free(bwBufferChunk);
+      bwBufferChunk = nullptr;
+    }
+  }
+}
+
+/**
+ * This should be called before grayscale buffers are populated.
+ * A `restoreBwBuffer` call should always follow the grayscale render if this method was called.
+ * Uses chunked allocation to avoid needing 48KB of contiguous memory.
+ */
+void GfxRenderer::storeBwBuffer() {
+  const uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+
+  // Allocate and copy each chunk
+  for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
+    // Check if any chunks are already allocated
+    if (bwBufferChunks[i]) {
+      Serial.printf("[%lu] [GFX] !! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk\n",
+                    millis(), i);
+      free(bwBufferChunks[i]);
+      bwBufferChunks[i] = nullptr;
+    }
+
+    const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
+    bwBufferChunks[i] = static_cast<uint8_t*>(malloc(BW_BUFFER_CHUNK_SIZE));
+
+    if (!bwBufferChunks[i]) {
+      Serial.printf("[%lu] [GFX] !! Failed to allocate BW buffer chunk %zu (%zu bytes)\n", millis(), i,
+                    BW_BUFFER_CHUNK_SIZE);
+      // Free previously allocated chunks
+      freeBwBufferChunks();
+      return;
+    }
+
+    memcpy(bwBufferChunks[i], frameBuffer + offset, BW_BUFFER_CHUNK_SIZE);
+  }
+
+  Serial.printf("[%lu] [GFX] Stored BW buffer in %zu chunks (%zu bytes each)\n", millis(), BW_BUFFER_NUM_CHUNKS,
+                BW_BUFFER_CHUNK_SIZE);
+}
+
+/**
+ * This can only be called if `storeBwBuffer` was called prior to the grayscale render.
+ * It should be called to restore the BW buffer state after grayscale rendering is complete.
+ * Uses chunked restoration to match chunked storage.
+ */
+void GfxRenderer::restoreBwBuffer() {
+  // Check if any all chunks are allocated
+  bool missingChunks = false;
+  for (const auto& bwBufferChunk : bwBufferChunks) {
+    if (!bwBufferChunk) {
+      missingChunks = true;
+      break;
+    }
+  }
+
+  if (missingChunks) {
+    freeBwBufferChunks();
+    return;
+  }
+
+  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
+    // Check if chunk is missing
+    if (!bwBufferChunks[i]) {
+      Serial.printf("[%lu] [GFX] !! BW buffer chunks not stored - this is likely a bug\n", millis());
+      freeBwBufferChunks();
+      return;
+    }
+
+    const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
+    memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
+  }
+
+  einkDisplay.cleanupGrayscaleBuffers(frameBuffer);
+
+  freeBwBufferChunks();
+  Serial.printf("[%lu] [GFX] Restored and freed BW buffer chunks\n", millis());
+}
 
 void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
                              const bool pixelState, const EpdFontStyle style) const {
