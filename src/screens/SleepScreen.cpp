@@ -3,11 +3,71 @@
 #include <GfxRenderer.h>
 #include <SD.h>
 #include <Arduino.h>
+#include <cstdint>
 
 #include "CrossPointSettings.h"
 #include "config.h"
 #include "images/CrossLarge.h"
 
+void convertBmpToBWdisplayData(uint8_t* bmpData,
+    int width, int height, uint8_t* displayImage){
+    // Convert BMP data to 1bpp format for e-ink display
+    // Implementation details depend on the specific BMP format and display requirements
+
+    // Static lookup table for bit masks (better performance)
+    static const uint8_t bitMasks[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+
+    // For 1bpp images where width is divisible by 8, we can use a highly optimized approach
+    const int bytesPerSrcRow = width / 8;
+    const int bytesPerRow = (height + 7) / 8;  // use heigth due to 90deg rotation
+
+    int bmpRowSize = width / 8; // 1 bit per pixel, assuming width is divisible by 8
+
+    // Process each source row
+    for (int y = 0; y < height; y++) {
+      // Calculate source row (BMPs are normally stored bottom-to-top)
+      int srcRow = height-1-y;
+
+      // In 90-degree rotation, source Y becomes destination X
+      int destX = y;
+      int destByteX = destX / 8;
+      int destBitInByte = destX & 0x07; // Fast mod 8
+      uint8_t destBitMask = bitMasks[destBitInByte];
+
+      // Get pointer to this row's data
+      uint8_t* srcRowData = bmpData + (srcRow * bmpRowSize);
+
+      // Process all bytes in this row
+      for (int xByte = 0; xByte < bytesPerSrcRow; xByte++) {
+        uint8_t srcByte = srcRowData[xByte];
+
+        // Skip processing if byte is all white
+        if (srcByte == 0xFF) continue;
+
+        // For bytes that are either all black or have a simple pattern, optimize
+        if (srcByte == 0x00) {
+          // All 8 pixels are black - use fast path
+          for (int bit = 0; bit < 8; bit++) {
+            int srcX = (xByte * 8) + bit;
+            int destY = width - 1 - srcX;
+            int destByteIdx = (destY * bytesPerRow) + destByteX;
+            displayImage[destByteIdx] &= ~destBitMask;
+          }
+        } else {
+          // Process individual bits for mixed bytes
+          for (int bit = 0; bit < 8; bit++) {
+            // Only process if this bit is black (0)
+            if ((srcByte & bitMasks[bit]) == 0) {
+              int srcX = (xByte * 8) + bit;
+              int destY = width - 1 - srcX;
+              int destByteIdx = (destY * bytesPerRow) + destByteX;
+              displayImage[destByteIdx] &= ~destBitMask;
+            }
+          }
+        }
+      }
+    }
+}
 // BMP file header structure
 #pragma pack(push, 1)
 struct BMPHeader {
@@ -59,16 +119,20 @@ uint8_t* loadBMP(const char* filename, int& width, int& height) {
   }
 
   // Check for supported bit depths
-  if (header.bitsPerPixel != 1 && header.bitsPerPixel != 24) {
+  if (header.bitsPerPixel != 1){ //} && header.bitsPerPixel != 24) {
     Serial.printf("[%lu] [SleepScreen] Unsupported bit depth: %d\n", millis(), header.bitsPerPixel);
+    bmpFile.close();
+    return nullptr;
+  }
+  if (header.height < 0){ //} && header.bitsPerPixel != 24) {
+    Serial.printf("[%lu] [SleepScreen] Unsupported negative height\n", millis());
     bmpFile.close();
     return nullptr;
   }
 
   // Get image dimensions
   width = header.width;
-  height = (header.height < 0) ? -header.height : header.height; // Handle top-down BMPs
-  bool topDown = (header.height < 0);
+  height = header.height;
 
   Serial.printf("[%lu] [SleepScreen] BMP dimensions: %dx%d, %d bits/pixel\n", millis(), width, height, header.bitsPerPixel);
 
@@ -94,13 +158,6 @@ uint8_t* loadBMP(const char* filename, int& width, int& height) {
   // Initialize to all white (0xFF = all bits set to 1)
   memset(displayImage, 0xFF, bufferSize);
 
-  // Calculate BMP file row size (with dimensions divisible by 4 assumption)
-  int bmpRowSize;
-  if (header.bitsPerPixel == 1) {
-    bmpRowSize = width / 8; // 1 bit per pixel, assuming width is divisible by 8
-  } else { // 24-bit
-    bmpRowSize = width * 3; // 3 bytes per pixel (RGB), no padding needed with width divisible by 4
-  }
 
   // With 4-byte divisibility assertion, no padding calculations are needed
 
@@ -109,7 +166,7 @@ uint8_t* loadBMP(const char* filename, int& width, int& height) {
     Serial.printf("[%lu] [SleepScreen] Image dimensions not divisible by 4: %dx%d\n", millis(), width, height);
     // Continue anyway - we're assuming divisibility
   }
-  
+
   // Verify BMP width is divisible by 8 for 1bpp images (for byte alignment)
   if (header.bitsPerPixel == 1 && width % 8 != 0) {
     Serial.printf("[%lu] [SleepScreen] Warning: 1bpp BMP width not divisible by 8: %d\n", millis(), width);
@@ -118,114 +175,68 @@ uint8_t* loadBMP(const char* filename, int& width, int& height) {
   // Optimized direct handling for 1bpp BMPs
   if (header.bitsPerPixel == 1) {
     // Calculate total file size needed for reading the whole bitmap at once
-    const int totalBitmapSize = bmpRowSize * height;
-    
+    const int totalBitmapSize = width * height / 8;
+
     // Allocate a buffer for the entire bitmap
     uint8_t* bmpData = (uint8_t*)malloc(totalBitmapSize);
     if (!bmpData) {
-      Serial.printf("[%lu] [SleepScreen] Failed to allocate bitmap buffer (%d bytes)\n", 
+      Serial.printf("[%lu] [SleepScreen] Failed to allocate bitmap buffer (%d bytes)\n",
                    millis(), totalBitmapSize);
       free(displayImage);
       bmpFile.close();
       return nullptr;
     }
-    
+
     // Read the entire bitmap data at once (efficient bulk loading)
     bmpFile.seek(header.dataOffset);
     bmpFile.read(bmpData, totalBitmapSize);
-    
-    // Static lookup table for bit masks (better performance)
-    static const uint8_t bitMasks[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
-    
-    // For 1bpp images where width is divisible by 8, we can use a highly optimized approach
-    const int bytesPerSrcRow = width / 8;
-    
-    // Process each source row
-    for (int y = 0; y < height; y++) {
-      // Calculate source row (BMPs are normally stored bottom-to-top)
-      int srcRow = topDown ? y : (height - 1 - y);
-      
-      // In 90-degree rotation, source Y becomes destination X
-      int destX = y;
-      int destByteX = destX / 8;
-      int destBitInByte = destX & 0x07; // Fast mod 8
-      uint8_t destBitMask = bitMasks[destBitInByte];
-      
-      // Get pointer to this row's data
-      uint8_t* srcRowData = bmpData + (srcRow * bmpRowSize);
-      
-      // Process all bytes in this row
-      for (int xByte = 0; xByte < bytesPerSrcRow; xByte++) {
-        uint8_t srcByte = srcRowData[xByte];
-        
-        // Skip processing if byte is all white
-        if (srcByte == 0xFF) continue;
-        
-        // For bytes that are either all black or have a simple pattern, optimize
-        if (srcByte == 0x00) {
-          // All 8 pixels are black - use fast path
-          for (int bit = 0; bit < 8; bit++) {
-            int srcX = (xByte * 8) + bit;
-            int destY = width - 1 - srcX;
-            int destByteIdx = (destY * bytesPerRow) + destByteX;
-            displayImage[destByteIdx] &= ~destBitMask;
-          }
-        } else {
-          // Process individual bits for mixed bytes
-          for (int bit = 0; bit < 8; bit++) {
-            // Only process if this bit is black (0)
-            if ((srcByte & bitMasks[bit]) == 0) {
-              int srcX = (xByte * 8) + bit;
-              int destY = width - 1 - srcX;
-              int destByteIdx = (destY * bytesPerRow) + destByteX;
-              displayImage[destByteIdx] &= ~destBitMask;
-            }
-          }
-        }
-      }
-    }
-    
+
+    convertBmpToBWdisplayData(bmpData, width, height,displayImage);
     // Clean up
     free(bmpData);
-  } else {
+  }
+  else {
     // Handle 24-bit BMPs with bulk loading approach for better performance
-    const int totalBitmapSize = bmpRowSize * height;
+    const int totalBitmapSize = 3 * width * height;
     uint8_t* bmpData = (uint8_t*)malloc(totalBitmapSize);
-    
+
+    // Calculate BMP file row size (with dimensions divisible by 4 assumption)
+    int bmpRowSize = width * 3; // 3 bytes per pixel (RGB), no padding needed with width divisible by 4
+
     if (!bmpData) {
       Serial.printf("[%lu] [SleepScreen] Failed to allocate bitmap buffer\n", millis());
       free(displayImage);
       bmpFile.close();
       return nullptr;
     }
-    
+
     // Read the entire bitmap data at once
     bmpFile.seek(header.dataOffset);
     bmpFile.read(bmpData, totalBitmapSize);
-    
+
     // Static lookup table for bit masks
     static const uint8_t bitMasks[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
-    
+
     // For color images, optimize with batch processing
     // Process in chunks of rows to improve cache locality
     const int CHUNK_SIZE = 8; // Process 8 rows at a time
-    
+
     for (int chunkY = 0; chunkY < height; chunkY += CHUNK_SIZE) {
       const int rowsInChunk = min(CHUNK_SIZE, height - chunkY);
-      
+
       // Process a chunk of rows
       for (int yOffset = 0; yOffset < rowsInChunk; yOffset++) {
         int y = chunkY + yOffset;
-        
+
         // Calculate source row (BMPs are normally stored bottom-to-top)
-        int bmpRow = topDown ? y : (height - 1 - y);
-        
+        int bmpRow = height - 1 - y;
+
         // In 90-degree rotation, source Y becomes destination X
         int destX = y;
         int destByteX = destX / 8;
         int destBitInByte = destX & 0x07; // Fast mod 8
         uint8_t destBitMask = bitMasks[destBitInByte];
-        
+
         // Get pointer to this row in the bitmap data
         uint8_t* rowData = bmpData + (bmpRow * bmpRowSize);
 
@@ -233,36 +244,36 @@ uint8_t* loadBMP(const char* filename, int& width, int& height) {
         for (int x = 0; x < width; x++) {
           // For 24-bit BMPs, convert RGB to grayscale
           int byteIndex = x * 3;
-          
+
           // Fast grayscale approximation - R*0.299 + G*0.587 + B*0.114
           // Using bit-shifts for faster integer math: (r*76 + g*150 + b*30) >> 8
           uint8_t blue = rowData[byteIndex];
           uint8_t green = rowData[byteIndex + 1];
           uint8_t red = rowData[byteIndex + 2];
-          
+
           // This is faster than division and gives nearly identical results
           uint16_t gray = ((red * 76) + (green * 150) + (blue * 30)) >> 8;
-          
+
           // Skip white pixels
           if (gray >= 128) continue;
-          
+
           // Apply 90 degree clockwise rotation: (x,y) -> (y, width-1-x)
           int destY = width - 1 - x;
           int destByteIdx = destY * bytesPerRow + destByteX;
-          
+
           // Set to black
           displayImage[destByteIdx] &= ~destBitMask;
         }
       }
     }
-    
+
     // Clean up
     free(bmpData);
   }
   bmpFile.close();
 
   const unsigned long elapsedTime = millis() - startTime;
-  Serial.printf("[%lu] [SleepScreen] Successfully loaded BMP: %dx%d in %lu ms\n", 
+  Serial.printf("[%lu] [SleepScreen] Successfully loaded BMP: %dx%d in %lu ms\n",
       millis(), destWidth, destHeight, elapsedTime);
   return displayImage;
 }
@@ -279,7 +290,7 @@ void SleepScreen::onEnter() {
   uint8_t* imageData = nullptr;
 
   // Try different possible paths
-  const char* bmpPaths[] = {"sleep.bmp", "/sleep.bmp", "/SD/sleep.bmp"};
+  const char* bmpPaths[] = {"/sleep24bpp.bmp", "/sleep.bmp"};
 
   // Try loading from different paths
   for (const char* path : bmpPaths) {
