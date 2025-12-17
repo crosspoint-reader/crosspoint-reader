@@ -60,36 +60,6 @@ bool hasOnlyAlphabetic(const std::vector<CodepointInfo>& cps) {
   return true;
 }
 
-std::vector<size_t> fallbackBreakIndexes(const std::vector<CodepointInfo>& cps) {
-  std::vector<size_t> indexes;
-  if (cps.size() < MIN_PREFIX_CP + MIN_SUFFIX_CP) {
-    return indexes;
-  }
-
-  for (size_t i = MIN_PREFIX_CP; i + MIN_SUFFIX_CP <= cps.size(); ++i) {
-    const uint32_t prev = cps[i - 1].value;
-    const uint32_t curr = cps[i].value;
-
-    if (!isAlphabetic(prev) || !isAlphabetic(curr)) {
-      continue;
-    }
-
-    const bool prevVowel = isVowel(prev);
-    const bool currVowel = isVowel(curr);
-    const bool prevConsonant = !prevVowel;
-    const bool currConsonant = !currVowel;
-
-    const bool breakable =
-        (prevVowel && currConsonant) || (prevConsonant && currConsonant) || (prevConsonant && currVowel);
-
-    if (breakable) {
-      indexes.push_back(i);
-    }
-  }
-
-  return indexes;
-}
-
 std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps) {
   if (cps.size() < MIN_PREFIX_CP + MIN_SUFFIX_CP) {
     return {};
@@ -98,12 +68,10 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps) {
   const Script script = detectScript(cps);
   if (const auto* hyphenator = hyphenatorForScript(script)) {
     auto indexes = hyphenator->breakIndexes(cps);
-    if (!indexes.empty()) {
-      return indexes;
-    }
+    return indexes;
   }
 
-  return fallbackBreakIndexes(cps);
+  return {};
 }
 
 size_t byteOffsetForIndex(const std::vector<CodepointInfo>& cps, const size_t index) {
