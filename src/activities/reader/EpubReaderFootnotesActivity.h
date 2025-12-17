@@ -7,15 +7,20 @@
 #include "../Activity.h"
 
 class FootnotesData {
- private:
-  FootnoteEntry entries[32];
+private:
+  FootnoteEntry entries[16];
   int count;
 
- public:
-  FootnotesData() : count(0) {}
+public:
+  FootnotesData() : count(0) {
+    for (int i = 0; i < 16; i++) {
+      entries[i].number[0] = '\0';
+      entries[i].href[0] = '\0';
+    }
+  }
 
   void addFootnote(const char* number, const char* href) {
-    if (count < 32) {
+    if (count < 16 && number && href) {
       strncpy(entries[count].number, number, 2);
       entries[count].number[2] = '\0';
       strncpy(entries[count].href, href, 63);
@@ -24,7 +29,13 @@ class FootnotesData {
     }
   }
 
-  void clear() { count = 0; }
+  void clear() {
+    count = 0;
+    for (int i = 0; i < 16; i++) {
+      entries[i].number[0] = '\0';
+      entries[i].href[0] = '\0';
+    }
+  }
 
   int getCount() const { return count; }
 
@@ -42,7 +53,7 @@ class EpubReaderFootnotesActivity final : public Activity {
   const std::function<void(const char*)> onSelectFootnote;
   int selectedIndex;
 
- public:
+public:
   EpubReaderFootnotesActivity(GfxRenderer& renderer, InputManager& inputManager, const FootnotesData& footnotes,
                               const std::function<void()>& onGoBack,
                               const std::function<void(const char*)>& onSelectFootnote)
@@ -56,6 +67,6 @@ class EpubReaderFootnotesActivity final : public Activity {
   void onExit() override;
   void loop() override;
 
- private:
+private:
   void render();
 };

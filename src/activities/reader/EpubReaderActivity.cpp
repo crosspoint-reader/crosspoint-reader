@@ -46,7 +46,6 @@ void EpubReaderActivity::onEnter() {
     nextPageNumber = data[2] + (data[3] << 8);
     Serial.printf("[%lu] [ERS] Loaded cache: %d, %d\n", millis(), currentSpineIndex, nextPageNumber);
     f.close();
-    f.close();
   }
 
   // Trigger first update
@@ -322,11 +321,16 @@ void EpubReaderActivity::renderScreen() {
     return renderScreen();
   }
 
+  Serial.printf("[%lu] [ERS] Page loaded: %d elements, %d footnotes\n",
+                millis(), p->elementCount, p->footnoteCount);
+
   // Copy footnotes from page to currentPageFootnotes
   currentPageFootnotes.clear();
-  for (int i = 0; i < p->footnoteCount && i < 16; i++) {
+  int maxFootnotes = (p->footnoteCount < 16) ? p->footnoteCount : 16;
+
+  for (int i = 0; i < maxFootnotes; i++) {
     FootnoteEntry* footnote = p->getFootnote(i);
-    if (footnote) {
+    if (footnote && footnote->href[0] != '\0') {
       currentPageFootnotes.addFootnote(footnote->number, footnote->href);
     }
   }
