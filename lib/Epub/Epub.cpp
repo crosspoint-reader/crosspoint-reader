@@ -417,8 +417,8 @@ int Epub::findVirtualSpineIndex(const std::string& filename) const {
 size_t Epub::getBookSize() const { return getCumulativeSpineItemSize(getSpineItemsCount() - 1); }
 
 // Calculate progress in book
-uint8_t Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
-  size_t prevChapterSize = getCumulativeSpineItemSize(currentSpineIndex - 1);
+uint8_t Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) {
+  size_t prevChapterSize = (currentSpineIndex >= 1) ? getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
   size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
   size_t bookSize = getBookSize();
   size_t sectionProgSize = currentSpineRead * curChapterSize;
