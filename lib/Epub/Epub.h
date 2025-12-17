@@ -20,6 +20,8 @@ class Epub {
   std::string filepath;
   // the spine of the EPUB file
   std::vector<std::pair<std::string, std::string>> spine;
+  // the file size of the spine items (proxy to book progress)
+  std::vector<size_t> cumulativeSpineItemSize;
   // the toc of the EPUB file
   std::vector<EpubTocEntry> toc;
   // the base path for items in the EPUB file
@@ -51,8 +53,12 @@ class Epub {
   bool getItemSize(const std::string& itemHref, size_t* size) const;
   std::string& getSpineItem(int spineIndex);
   int getSpineItemsCount() const;
-  EpubTocEntry& getTocItem(int tocTndex);
+  size_t getCumulativeSpineItemSize(const int spineIndex) const;
+  EpubTocEntry& getTocItem(int tocIndex);
   int getTocItemsCount() const;
   int getSpineIndexForTocIndex(int tocIndex) const;
   int getTocIndexForSpineIndex(int spineIndex) const;
+
+  size_t getBookSize() const;
+  uint8_t calculateProgress(const int currentSpineIndex, const float currentSpineRead);
 };

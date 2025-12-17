@@ -148,6 +148,18 @@ bool Epub::load() {
     return false;
   }
 
+  // determine size of spine items
+  size_t spineItemsCount = getSpineItemsCount();
+  size_t spineItemsSize = 0;
+  for (size_t i = 0; i < spineItemsCount; i++) {
+    std::string spineItem = getSpineItem(i);
+    size_t s = 0;
+    getItemSize(spineItem, &s);
+    spineItemsSize += s;
+    cumulativeSpineItemSize.emplace_back(spineItemsSize);
+  }
+  Serial.printf("[%lu] [EBP] Book size: %u\n", millis(), spineItemsSize);
+
   Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
 
   return true;
@@ -255,6 +267,8 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
 
 int Epub::getSpineItemsCount() const { return spine.size(); }
 
+size_t Epub::getCumulativeSpineItemSize(const int spineIndex) const { return cumulativeSpineItemSize.at(spineIndex); }
+
 std::string& Epub::getSpineItem(const int spineIndex) {
   if (spineIndex < 0 || spineIndex >= spine.size()) {
     Serial.printf("[%lu] [EBP] getSpineItem index:%d is out of range\n", millis(), spineIndex);
@@ -301,4 +315,15 @@ int Epub::getTocIndexForSpineIndex(const int spineIndex) const {
 
   Serial.printf("[%lu] [EBP] TOC item not found\n", millis());
   return -1;
+}
+
+size_t Epub::getBookSize() const { return getCumulativeSpineItemSize(getSpineItemsCount() - 1); }
+
+// Calculate progress in book
+uint8_t Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) {
+  size_t prevChapterSize = getCumulativeSpineItemSize(currentSpineIndex - 1);
+  size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
+  size_t bookSize = getBookSize();
+  size_t sectionProgSize = currentSpineRead * curChapterSize;
+  return round(static_cast<float>(prevChapterSize + sectionProgSize) / bookSize * 100.0);
 }
