@@ -1,4 +1,4 @@
-#include "SettingsScreen.h"
+#include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
 
@@ -7,16 +7,16 @@
 
 // Define the static settings list
 
-const SettingInfo SettingsScreen::settingsList[SettingsScreen::settingsCount] = {
+const SettingInfo SettingsActivity::settingsList[settingsCount] = {
     {"White Sleep Screen", &CrossPointSettings::whiteSleepScreen},
     {"Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing}};
 
-void SettingsScreen::taskTrampoline(void* param) {
-  auto* self = static_cast<SettingsScreen*>(param);
+void SettingsActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<SettingsActivity*>(param);
   self->displayTaskLoop();
 }
 
-void SettingsScreen::onEnter() {
+void SettingsActivity::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
 
   // Reset selection to first item
@@ -25,7 +25,7 @@ void SettingsScreen::onEnter() {
   // Trigger first update
   updateRequired = true;
 
-  xTaskCreate(&SettingsScreen::taskTrampoline, "SettingsScreenTask",
+  xTaskCreate(&SettingsActivity::taskTrampoline, "SettingsActivityTask",
               2048,               // Stack size
               this,               // Parameters
               1,                  // Priority
@@ -33,7 +33,7 @@ void SettingsScreen::onEnter() {
   );
 }
 
-void SettingsScreen::onExit() {
+void SettingsActivity::onExit() {
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
@@ -44,7 +44,7 @@ void SettingsScreen::onExit() {
   renderingMutex = nullptr;
 }
 
-void SettingsScreen::handleInput() {
+void SettingsActivity::loop() {
   // Handle actions with early return
   if (inputManager.wasPressed(InputManager::BTN_CONFIRM)) {
     toggleCurrentSetting();
@@ -70,7 +70,7 @@ void SettingsScreen::handleInput() {
   }
 }
 
-void SettingsScreen::toggleCurrentSetting() {
+void SettingsActivity::toggleCurrentSetting() {
   // Validate index
   if (selectedSettingIndex < 0 || selectedSettingIndex >= settingsCount) {
     return;
@@ -84,7 +84,7 @@ void SettingsScreen::toggleCurrentSetting() {
   SETTINGS.saveToFile();
 }
 
-void SettingsScreen::displayTaskLoop() {
+void SettingsActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
       updateRequired = false;
@@ -96,7 +96,7 @@ void SettingsScreen::displayTaskLoop() {
   }
 }
 
-void SettingsScreen::render() const {
+void SettingsActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = GfxRenderer::getScreenWidth();

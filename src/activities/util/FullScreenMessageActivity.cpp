@@ -1,10 +1,10 @@
-#include "FullScreenMessageScreen.h"
+#include "FullScreenMessageActivity.h"
 
 #include <GfxRenderer.h>
 
 #include "config.h"
 
-void FullScreenMessageScreen::onEnter() {
+void FullScreenMessageActivity::onEnter() {
   const auto height = renderer.getLineHeight(UI_FONT_ID);
   const auto top = (GfxRenderer::getScreenHeight() - height) / 2;
 

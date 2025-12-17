@@ -1,4 +1,4 @@
-#include "EpubReaderScreen.h"
+#include "EpubReaderActivity.h"
 
 #include <Epub/Page.h>
 #include <GfxRenderer.h>
@@ -6,23 +6,25 @@
 
 #include "Battery.h"
 #include "CrossPointSettings.h"
-#include "EpubReaderChapterSelectionScreen.h"
+#include "EpubReaderChapterSelectionActivity.h"
 #include "config.h"
 
-constexpr int PAGES_PER_REFRESH = 15;
-constexpr unsigned long SKIP_CHAPTER_MS = 700;
+namespace {
+constexpr int pagesPerRefresh = 15;
+constexpr unsigned long skipChapterMs = 700;
 constexpr float lineCompression = 0.95f;
 constexpr int marginTop = 8;
 constexpr int marginRight = 10;
 constexpr int marginBottom = 22;
 constexpr int marginLeft = 10;
+}  // namespace
 
-void EpubReaderScreen::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderScreen*>(param);
+void EpubReaderActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<EpubReaderActivity*>(param);
   self->displayTaskLoop();
 }
 
-void EpubReaderScreen::onEnter() {
+void EpubReaderActivity::onEnter() {
   if (!epub) {
     return;
   }
@@ -44,7 +46,7 @@ void EpubReaderScreen::onEnter() {
   // Trigger first update
   updateRequired = true;
 
-  xTaskCreate(&EpubReaderScreen::taskTrampoline, "EpubReaderScreenTask",
+  xTaskCreate(&EpubReaderActivity::taskTrampoline, "EpubReaderActivityTask",
               8192,               // Stack size
               this,               // Parameters
               1,                  // Priority
@@ -52,7 +54,7 @@ void EpubReaderScreen::onEnter() {
   );
 }
 
-void EpubReaderScreen::onExit() {
+void EpubReaderActivity::onExit() {
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
@@ -65,22 +67,22 @@ void EpubReaderScreen::onExit() {
   epub.reset();
 }
 
-void EpubReaderScreen::handleInput() {
-  // Pass input responsibility to sub screen if exists
-  if (subScreen) {
-    subScreen->handleInput();
+void EpubReaderActivity::loop() {
+  // Pass input responsibility to sub activity if exists
+  if (subAcitivity) {
+    subAcitivity->loop();
     return;
   }
 
-  // Enter chapter selection screen
+  // Enter chapter selection activity
   if (inputManager.wasPressed(InputManager::BTN_CONFIRM)) {
-    // Don't start screen transition while rendering
+    // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    subScreen.reset(new EpubReaderChapterSelectionScreen(
+    subAcitivity.reset(new EpubReaderChapterSelectionActivity(
         this->renderer, this->inputManager, epub, currentSpineIndex,
         [this] {
-          subScreen->onExit();
-          subScreen.reset();
+          subAcitivity->onExit();
+          subAcitivity.reset();
           updateRequired = true;
         },
         [this](const int newSpineIndex) {
@@ -89,11 +91,11 @@ void EpubReaderScreen::handleInput() {
             nextPageNumber = 0;
             section.reset();
           }
-          subScreen->onExit();
-          subScreen.reset();
+          subAcitivity->onExit();
+          subAcitivity.reset();
           updateRequired = true;
         }));
-    subScreen->onEnter();
+    subAcitivity->onEnter();
     xSemaphoreGive(renderingMutex);
   }
 
@@ -119,7 +121,7 @@ void EpubReaderScreen::handleInput() {
     return;
   }
 
-  const bool skipChapter = inputManager.getHeldTime() > SKIP_CHAPTER_MS;
+  const bool skipChapter = inputManager.getHeldTime() > skipChapterMs;
 
   if (skipChapter) {
     // We don't want to delete the section mid-render, so grab the semaphore
@@ -165,7 +167,7 @@ void EpubReaderScreen::handleInput() {
   }
 }
 
-void EpubReaderScreen::displayTaskLoop() {
+void EpubReaderActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
       updateRequired = false;
@@ -178,7 +180,7 @@ void EpubReaderScreen::displayTaskLoop() {
 }
 
 // TODO: Failure handling
-void EpubReaderScreen::renderScreen() {
+void EpubReaderActivity::renderScreen() {
   if (!epub) {
     return;
   }
@@ -285,12 +287,12 @@ void EpubReaderScreen::renderScreen() {
   f.close();
 }
 
-void EpubReaderScreen::renderContents(std::unique_ptr<Page> page) {
+void EpubReaderActivity::renderContents(std::unique_ptr<Page> page) {
   page->render(renderer, READER_FONT_ID);
   renderStatusBar();
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
-    pagesUntilFullRefresh = PAGES_PER_REFRESH;
+    pagesUntilFullRefresh = pagesPerRefresh;
   } else {
     renderer.displayBuffer();
     pagesUntilFullRefresh--;
@@ -322,7 +324,7 @@ void EpubReaderScreen::renderContents(std::unique_ptr<Page> page) {
   renderer.restoreBwBuffer();
 }
 
-void EpubReaderScreen::renderStatusBar() const {
+void EpubReaderActivity::renderStatusBar() const {
   constexpr auto textY = 776;
   // Right aligned text for progress counter
   const std::string progress = std::to_string(section->currentPage + 1) + " / " + std::to_string(section->pageCount);

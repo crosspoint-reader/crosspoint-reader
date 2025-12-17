@@ -1,16 +1,16 @@
-#include "HomeScreen.h"
+#include "HomeActivity.h"
 
 #include <GfxRenderer.h>
 #include <SD.h>
 
 #include "config.h"
 
-void HomeScreen::taskTrampoline(void* param) {
-  auto* self = static_cast<HomeScreen*>(param);
+void HomeActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<HomeActivity*>(param);
   self->displayTaskLoop();
 }
 
-void HomeScreen::onEnter() {
+void HomeActivity::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
 
   selectorIndex = 0;
@@ -18,7 +18,7 @@ void HomeScreen::onEnter() {
   // Trigger first update
   updateRequired = true;
 
-  xTaskCreate(&HomeScreen::taskTrampoline, "HomeScreenTask",
+  xTaskCreate(&HomeActivity::taskTrampoline, "HomeActivityTask",
               2048,               // Stack size
               this,               // Parameters
               1,                  // Priority
@@ -26,7 +26,7 @@ void HomeScreen::onEnter() {
   );
 }
 
-void HomeScreen::onExit() {
+void HomeActivity::onExit() {
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
@@ -37,7 +37,7 @@ void HomeScreen::onExit() {
   renderingMutex = nullptr;
 }
 
-void HomeScreen::handleInput() {
+void HomeActivity::loop() {
   const bool prevPressed =
       inputManager.wasPressed(InputManager::BTN_UP) || inputManager.wasPressed(InputManager::BTN_LEFT);
   const bool nextPressed =
@@ -58,7 +58,7 @@ void HomeScreen::handleInput() {
   }
 }
 
-void HomeScreen::displayTaskLoop() {
+void HomeActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
       updateRequired = false;
@@ -70,7 +70,7 @@ void HomeScreen::displayTaskLoop() {
   }
 }
 
-void HomeScreen::render() const {
+void HomeActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = GfxRenderer::getScreenWidth();

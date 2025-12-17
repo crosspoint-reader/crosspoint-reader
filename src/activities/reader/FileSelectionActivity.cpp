@@ -1,4 +1,4 @@
-#include "FileSelectionScreen.h"
+#include "FileSelectionActivity.h"
 
 #include <GfxRenderer.h>
 #include <SD.h>
@@ -15,12 +15,12 @@ void sortFileList(std::vector<std::string>& strs) {
   });
 }
 
-void FileSelectionScreen::taskTrampoline(void* param) {
-  auto* self = static_cast<FileSelectionScreen*>(param);
+void FileSelectionActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<FileSelectionActivity*>(param);
   self->displayTaskLoop();
 }
 
-void FileSelectionScreen::loadFiles() {
+void FileSelectionActivity::loadFiles() {
   files.clear();
   selectorIndex = 0;
   auto root = SD.open(basepath.c_str());
@@ -42,7 +42,7 @@ void FileSelectionScreen::loadFiles() {
   sortFileList(files);
 }
 
-void FileSelectionScreen::onEnter() {
+void FileSelectionActivity::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
 
   basepath = "/";
@@ -52,7 +52,7 @@ void FileSelectionScreen::onEnter() {
   // Trigger first update
   updateRequired = true;
 
-  xTaskCreate(&FileSelectionScreen::taskTrampoline, "FileSelectionScreenTask",
+  xTaskCreate(&FileSelectionActivity::taskTrampoline, "FileSelectionActivityTask",
               2048,               // Stack size
               this,               // Parameters
               1,                  // Priority
@@ -60,7 +60,7 @@ void FileSelectionScreen::onEnter() {
   );
 }
 
-void FileSelectionScreen::onExit() {
+void FileSelectionActivity::onExit() {
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
@@ -72,7 +72,7 @@ void FileSelectionScreen::onExit() {
   files.clear();
 }
 
-void FileSelectionScreen::handleInput() {
+void FileSelectionActivity::loop() {
   const bool prevPressed =
       inputManager.wasPressed(InputManager::BTN_UP) || inputManager.wasPressed(InputManager::BTN_LEFT);
   const bool nextPressed =
@@ -110,7 +110,7 @@ void FileSelectionScreen::handleInput() {
   }
 }
 
-void FileSelectionScreen::displayTaskLoop() {
+void FileSelectionActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
       updateRequired = false;
@@ -122,7 +122,7 @@ void FileSelectionScreen::displayTaskLoop() {
   }
 }
 
-void FileSelectionScreen::render() const {
+void FileSelectionActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = GfxRenderer::getScreenWidth();

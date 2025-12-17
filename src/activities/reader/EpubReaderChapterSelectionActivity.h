@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "Screen.h"
+#include "../Activity.h"
 
-class EpubReaderChapterSelectionScreen final : public Screen {
+class EpubReaderChapterSelectionActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
@@ -23,16 +23,16 @@ class EpubReaderChapterSelectionScreen final : public Screen {
   void renderScreen();
 
  public:
-  explicit EpubReaderChapterSelectionScreen(GfxRenderer& renderer, InputManager& inputManager,
-                                            const std::shared_ptr<Epub>& epub, const int currentSpineIndex,
-                                            const std::function<void()>& onGoBack,
-                                            const std::function<void(int newSpineIndex)>& onSelectSpineIndex)
-      : Screen(renderer, inputManager),
+  explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, InputManager& inputManager,
+                                              const std::shared_ptr<Epub>& epub, const int currentSpineIndex,
+                                              const std::function<void()>& onGoBack,
+                                              const std::function<void(int newSpineIndex)>& onSelectSpineIndex)
+      : Activity(renderer, inputManager),
         epub(epub),
         currentSpineIndex(currentSpineIndex),
         onGoBack(onGoBack),
         onSelectSpineIndex(onSelectSpineIndex) {}
   void onEnter() override;
   void onExit() override;
-  void handleInput() override;
+  void loop() override;
 };

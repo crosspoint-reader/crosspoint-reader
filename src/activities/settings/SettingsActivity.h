@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "Screen.h"
+#include "../Activity.h"
 
 class CrossPointSettings;
 
@@ -17,7 +17,7 @@ struct SettingInfo {
   uint8_t CrossPointSettings::* valuePtr;  // Pointer to member in CrossPointSettings
 };
 
-class SettingsScreen final : public Screen {
+class SettingsActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
@@ -34,9 +34,9 @@ class SettingsScreen final : public Screen {
   void toggleCurrentSetting();
 
  public:
-  explicit SettingsScreen(GfxRenderer& renderer, InputManager& inputManager, const std::function<void()>& onGoHome)
-      : Screen(renderer, inputManager), onGoHome(onGoHome) {}
+  explicit SettingsActivity(GfxRenderer& renderer, InputManager& inputManager, const std::function<void()>& onGoHome)
+      : Activity(renderer, inputManager), onGoHome(onGoHome) {}
   void onEnter() override;
   void onExit() override;
-  void handleInput() override;
+  void loop() override;
 };

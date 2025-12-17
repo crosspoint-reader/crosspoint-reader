@@ -1,4 +1,4 @@
-#include "EpubReaderChapterSelectionScreen.h"
+#include "EpubReaderChapterSelectionActivity.h"
 
 #include <GfxRenderer.h>
 #include <SD.h>
@@ -8,12 +8,12 @@
 constexpr int PAGE_ITEMS = 24;
 constexpr int SKIP_PAGE_MS = 700;
 
-void EpubReaderChapterSelectionScreen::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderChapterSelectionScreen*>(param);
+void EpubReaderChapterSelectionActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<EpubReaderChapterSelectionActivity*>(param);
   self->displayTaskLoop();
 }
 
-void EpubReaderChapterSelectionScreen::onEnter() {
+void EpubReaderChapterSelectionActivity::onEnter() {
   if (!epub) {
     return;
   }
@@ -23,7 +23,7 @@ void EpubReaderChapterSelectionScreen::onEnter() {
 
   // Trigger first update
   updateRequired = true;
-  xTaskCreate(&EpubReaderChapterSelectionScreen::taskTrampoline, "EpubReaderChapterSelectionScreenTask",
+  xTaskCreate(&EpubReaderChapterSelectionActivity::taskTrampoline, "EpubReaderChapterSelectionActivityTask",
               2048,               // Stack size
               this,               // Parameters
               1,                  // Priority
@@ -31,7 +31,7 @@ void EpubReaderChapterSelectionScreen::onEnter() {
   );
 }
 
-void EpubReaderChapterSelectionScreen::onExit() {
+void EpubReaderChapterSelectionActivity::onExit() {
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
@@ -42,7 +42,7 @@ void EpubReaderChapterSelectionScreen::onExit() {
   renderingMutex = nullptr;
 }
 
-void EpubReaderChapterSelectionScreen::handleInput() {
+void EpubReaderChapterSelectionActivity::loop() {
   const bool prevReleased =
       inputManager.wasReleased(InputManager::BTN_UP) || inputManager.wasReleased(InputManager::BTN_LEFT);
   const bool nextReleased =
@@ -72,7 +72,7 @@ void EpubReaderChapterSelectionScreen::handleInput() {
   }
 }
 
-void EpubReaderChapterSelectionScreen::displayTaskLoop() {
+void EpubReaderChapterSelectionActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
       updateRequired = false;
@@ -84,7 +84,7 @@ void EpubReaderChapterSelectionScreen::displayTaskLoop() {
   }
 }
 
-void EpubReaderChapterSelectionScreen::renderScreen() {
+void EpubReaderChapterSelectionActivity::renderScreen() {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

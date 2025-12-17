@@ -5,9 +5,9 @@
 
 #include <functional>
 
-#include "Screen.h"
+#include "../Activity.h"
 
-class HomeScreen final : public Screen {
+class HomeActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   int selectorIndex = 0;
@@ -22,10 +22,10 @@ class HomeScreen final : public Screen {
   void render() const;
 
  public:
-  explicit HomeScreen(GfxRenderer& renderer, InputManager& inputManager,
-                      const std::function<void()>& onFileSelectionOpen, const std::function<void()>& onSettingsOpen)
-      : Screen(renderer, inputManager), onFileSelectionOpen(onFileSelectionOpen), onSettingsOpen(onSettingsOpen) {}
+  explicit HomeActivity(GfxRenderer& renderer, InputManager& inputManager,
+                        const std::function<void()>& onFileSelectionOpen, const std::function<void()>& onSettingsOpen)
+      : Activity(renderer, inputManager), onFileSelectionOpen(onFileSelectionOpen), onSettingsOpen(onSettingsOpen) {}
   void onEnter() override;
   void onExit() override;
-  void handleInput() override;
+  void loop() override;
 };
