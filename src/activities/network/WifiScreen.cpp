@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <WiFi.h>
+
 #include <map>
 
 #include "CrossPointWebServer.h"
@@ -98,16 +99,16 @@ void WifiScreen::processWifiScanResults() {
   // Scan complete, process results
   // Use a map to deduplicate networks by SSID, keeping the strongest signal
   std::map<std::string, WifiNetworkInfo> uniqueNetworks;
-  
+
   for (int i = 0; i < scanResult; i++) {
     std::string ssid = WiFi.SSID(i).c_str();
     int32_t rssi = WiFi.RSSI(i);
-    
+
     // Skip hidden networks (empty SSID)
     if (ssid.empty()) {
       continue;
     }
-    
+
     // Check if we've already seen this SSID
     auto it = uniqueNetworks.find(ssid);
     if (it == uniqueNetworks.end() || rssi > it->second.rssi) {
@@ -120,7 +121,7 @@ void WifiScreen::processWifiScanResults() {
       uniqueNetworks[ssid] = network;
     }
   }
-  
+
   // Convert map to vector
   networks.clear();
   for (const auto& pair : uniqueNetworks) {
