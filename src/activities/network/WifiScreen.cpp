@@ -48,24 +48,37 @@ void WifiScreen::onEnter() {
 }
 
 void WifiScreen::onExit() {
+  Serial.printf("[%lu] [WIFI] [MEM] Free heap at onExit start: %d bytes\n", millis(), ESP.getFreeHeap());
+  
   // Stop any ongoing WiFi scan
   WiFi.scanDelete();
+  Serial.printf("[%lu] [WIFI] [MEM] Free heap after scanDelete: %d bytes\n", millis(), ESP.getFreeHeap());
 
   // Stop the web server to free memory
   crossPointWebServer.stop();
+  Serial.printf("[%lu] [WIFI] [MEM] Free heap after webserver stop: %d bytes\n", millis(), ESP.getFreeHeap());
 
   // Disconnect WiFi to free memory
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
+  Serial.printf("[%lu] [WIFI] [MEM] Free heap after WiFi disconnect: %d bytes\n", millis(), ESP.getFreeHeap());
 
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  // Delete the display task
   if (displayTaskHandle) {
     vTaskDelete(displayTaskHandle);
     displayTaskHandle = nullptr;
   }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
+  
+  // Small delay to ensure task is fully deleted before cleaning up mutex
+  vTaskDelay(10 / portTICK_PERIOD_MS);
+  
+  // Now safe to delete the mutex
+  if (renderingMutex) {
+    vSemaphoreDelete(renderingMutex);
+    renderingMutex = nullptr;
+  }
+  
+  Serial.printf("[%lu] [WIFI] [MEM] Free heap at onExit end: %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
 void WifiScreen::startWifiScan() {

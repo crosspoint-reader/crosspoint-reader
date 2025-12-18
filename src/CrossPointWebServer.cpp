@@ -68,8 +68,11 @@ void CrossPointWebServer::begin() {
     return;
   }
 
+  Serial.printf("[%lu] [WEB] [MEM] Free heap before begin: %d bytes\n", millis(), ESP.getFreeHeap());
+  
   Serial.printf("[%lu] [WEB] Creating web server on port %d...\n", millis(), port);
   server = new WebServer(port);
+  Serial.printf("[%lu] [WEB] [MEM] Free heap after WebServer allocation: %d bytes\n", millis(), ESP.getFreeHeap());
 
   if (!server) {
     Serial.printf("[%lu] [WEB] Failed to create WebServer!\n", millis());
@@ -92,12 +95,14 @@ void CrossPointWebServer::begin() {
   server->on("/delete", HTTP_POST, [this]() { handleDelete(); });
 
   server->onNotFound([this]() { handleNotFound(); });
+  Serial.printf("[%lu] [WEB] [MEM] Free heap after route setup: %d bytes\n", millis(), ESP.getFreeHeap());
 
   server->begin();
   running = true;
 
   Serial.printf("[%lu] [WEB] Web server started on port %d\n", millis(), port);
   Serial.printf("[%lu] [WEB] Access at http://%s/\n", millis(), WiFi.localIP().toString().c_str());
+  Serial.printf("[%lu] [WEB] [MEM] Free heap after server.begin(): %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
 void CrossPointWebServer::stop() {
@@ -105,12 +110,21 @@ void CrossPointWebServer::stop() {
     return;
   }
 
+  Serial.printf("[%lu] [WEB] [MEM] Free heap before stop: %d bytes\n", millis(), ESP.getFreeHeap());
+  
   server->stop();
+  Serial.printf("[%lu] [WEB] [MEM] Free heap after server->stop(): %d bytes\n", millis(), ESP.getFreeHeap());
+  
   delete server;
   server = nullptr;
   running = false;
 
   Serial.printf("[%lu] [WEB] Web server stopped\n", millis());
+  Serial.printf("[%lu] [WEB] [MEM] Free heap after delete server: %d bytes\n", millis(), ESP.getFreeHeap());
+  
+  // Note: Static upload variables (uploadFileName, uploadPath, uploadError) are declared
+  // later in the file and will be cleared when they go out of scope or on next upload
+  Serial.printf("[%lu] [WEB] [MEM] Free heap final: %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
 void CrossPointWebServer::handleClient() {
