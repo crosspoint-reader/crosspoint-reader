@@ -3,3 +3,4 @@
 .DS_Store
 .vscode
 lib/EpdFont/fontsrc
+*.generated.h

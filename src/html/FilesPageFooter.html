@@ -1,0 +1,267 @@
+   <div class="card">
+    <p style="text-align: center; color: #95a5a6; margin: 0;">
+      CrossPoint E-Reader • Open Source
+    </p>
+  </div>
+  
+  <!-- Upload Modal -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+      <h3>📤 Upload eBook</h3>
+      <div class="upload-form">
+        <p class="file-info">Select an .epub file to upload to <strong id="uploadPathDisplay"></strong></p>
+        <input type="file" id="fileInput" accept=".epub" onchange="validateFile()">
+        <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
+        <div id="progress-container">
+          <div id="progress-bar"><div id="progress-fill"></div></div>
+          <div id="progress-text"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- New Folder Modal -->
+  <div class="modal-overlay" id="folderModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeFolderModal()">&times;</button>
+      <h3>📁 New Folder</h3>
+      <div class="folder-form">
+        <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
+        <input type="text" id="folderName" class="folder-input" placeholder="Folder name...">
+        <button class="folder-btn" onclick="createFolder()">Create Folder</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+      <h3>🗑️ Delete Item</h3>
+      <div class="folder-form">
+        <p class="delete-warning">⚠️ This action cannot be undone!</p>
+        <p class="file-info">Are you sure you want to delete:</p>
+        <p class="delete-item-name" id="deleteItemName"></p>
+        <input type="hidden" id="deleteItemPath">
+        <input type="hidden" id="deleteItemType">
+        <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
+        <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Dropdown toggle
+    function toggleDropdown() {
+      const dropdown = document.getElementById('addDropdown');
+      dropdown.classList.toggle('open');
+    }
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+      const dropdown = document.getElementById('addDropdown');
+      if (dropdown && !dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
+    
+    // Modal functions
+    function openUploadModal() {
+      const currentPath = document.getElementById('currentPath').value;
+      document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+      document.getElementById('uploadModal').classList.add('open');
+      document.getElementById('addDropdown').classList.remove('open');
+    }
+    
+    function closeUploadModal() {
+      document.getElementById('uploadModal').classList.remove('open');
+      document.getElementById('fileInput').value = '';
+      document.getElementById('uploadBtn').disabled = true;
+      document.getElementById('progress-container').style.display = 'none';
+      document.getElementById('progress-fill').style.width = '0%';
+      document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
+    }
+    
+    function openFolderModal() {
+      const currentPath = document.getElementById('currentPath').value;
+      document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+      document.getElementById('folderModal').classList.add('open');
+      document.getElementById('addDropdown').classList.remove('open');
+      document.getElementById('folderName').value = '';
+    }
+    
+    function closeFolderModal() {
+      document.getElementById('folderModal').classList.remove('open');
+    }
+    
+    // Close modals when clicking overlay
+    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+          overlay.classList.remove('open');
+        }
+      });
+    });
+    
+    function validateFile() {
+      const fileInput = document.getElementById('fileInput');
+      const uploadBtn = document.getElementById('uploadBtn');
+      const file = fileInput.files[0];
+      
+      if (file) {
+        const fileName = file.name.toLowerCase();
+        if (!fileName.endsWith('.epub')) {
+          alert('Only .epub files are allowed!');
+          fileInput.value = '';
+          uploadBtn.disabled = true;
+          return;
+        }
+        uploadBtn.disabled = false;
+      } else {
+        uploadBtn.disabled = true;
+      }
+    }
+    
+    function uploadFile() {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+      const currentPath = document.getElementById('currentPath').value;
+      
+      if (!file) {
+        alert('Please select a file first!');
+        return;
+      }
+      
+      const fileName = file.name.toLowerCase();
+      if (!fileName.endsWith('.epub')) {
+        alert('Only .epub files are allowed!');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const progressContainer = document.getElementById('progress-container');
+      const progressFill = document.getElementById('progress-fill');
+      const progressText = document.getElementById('progress-text');
+      const uploadBtn = document.getElementById('uploadBtn');
+      
+      progressContainer.style.display = 'block';
+      uploadBtn.disabled = true;
+      
+      const xhr = new XMLHttpRequest();
+      // Include path as query parameter since multipart form data doesn't make
+      // form fields available until after file upload completes
+      xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
+      
+      xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          progressFill.style.width = percent + '%';
+          progressText.textContent = 'Uploading: ' + percent + '%';
+        }
+      };
+      
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          progressText.textContent = 'Upload complete!';
+          setTimeout(function() {
+            window.location.reload();
+          }, 1000);
+        } else {
+          progressText.textContent = 'Upload failed: ' + xhr.responseText;
+          progressFill.style.backgroundColor = '#e74c3c';
+          uploadBtn.disabled = false;
+        }
+      };
+      
+      xhr.onerror = function() {
+        progressText.textContent = 'Upload failed - network error';
+        progressFill.style.backgroundColor = '#e74c3c';
+        uploadBtn.disabled = false;
+      };
+      
+      xhr.send(formData);
+    }
+    
+    function createFolder() {
+      const folderName = document.getElementById('folderName').value.trim();
+      const currentPath = document.getElementById('currentPath').value;
+      
+      if (!folderName) {
+        alert('Please enter a folder name!');
+        return;
+      }
+      
+      // Validate folder name (no special characters except underscore and hyphen)
+      const validName = /^[a-zA-Z0-9_\-]+$/.test(folderName);
+      if (!validName) {
+        alert('Folder name can only contain letters, numbers, underscores, and hyphens.');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('name', folderName);
+      formData.append('path', currentPath);
+      
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/mkdir', true);
+      
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          window.location.reload();
+        } else {
+          alert('Failed to create folder: ' + xhr.responseText);
+        }
+      };
+      
+      xhr.onerror = function() {
+        alert('Failed to create folder - network error');
+      };
+      
+      xhr.send(formData);
+    }
+    
+    // Delete functions
+    function openDeleteModal(name, path, isFolder) {
+      document.getElementById('deleteItemName').textContent = (isFolder ? '📁 ' : '📄 ') + name;
+      document.getElementById('deleteItemPath').value = path;
+      document.getElementById('deleteItemType').value = isFolder ? 'folder' : 'file';
+      document.getElementById('deleteModal').classList.add('open');
+    }
+    
+    function closeDeleteModal() {
+      document.getElementById('deleteModal').classList.remove('open');
+    }
+    
+    function confirmDelete() {
+      const path = document.getElementById('deleteItemPath').value;
+      const itemType = document.getElementById('deleteItemType').value;
+      
+      const formData = new FormData();
+      formData.append('path', path);
+      formData.append('type', itemType);
+      
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/delete', true);
+      
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          window.location.reload();
+        } else {
+          alert('Failed to delete: ' + xhr.responseText);
+          closeDeleteModal();
+        }
+      };
+      
+      xhr.onerror = function() {
+        alert('Failed to delete - network error');
+        closeDeleteModal();
+      };
+      
+      xhr.send(formData);
+    }
+  </script>
+</body>
+</html>

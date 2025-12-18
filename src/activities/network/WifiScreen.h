@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "OnScreenKeyboard.h"
 #include "../Activity.h"
+#include "OnScreenKeyboard.h"
 
 // Structure to hold WiFi network information
 struct WifiNetworkInfo {
