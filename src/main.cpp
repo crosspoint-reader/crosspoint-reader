@@ -202,7 +202,20 @@ void setup() {
 }
 
 void loop() {
-  delay(10);
+  static unsigned long lastLoopTime = 0;
+  static unsigned long maxLoopDuration = 0;
+  static unsigned long lastHandleClientTime = 0;
+  
+  unsigned long loopStartTime = millis();
+  unsigned long timeSinceLastLoop = loopStartTime - lastLoopTime;
+  
+  // Reduce delay when webserver is running to allow faster handleClient() calls
+  // This is critical for upload performance and preventing TCP timeouts
+  if (crossPointWebServer.isRunning()) {
+    delay(1);  // Minimal delay to prevent tight loop
+  } else {
+    delay(10);  // Normal delay when webserver not active
+  }
 
   static unsigned long lastMemPrint = 0;
   if (Serial && millis() - lastMemPrint >= 10000) {
@@ -232,12 +245,34 @@ void loop() {
     return;
   }
 
+  unsigned long activityStartTime = millis();
   if (currentActivity) {
     currentActivity->loop();
   }
+  unsigned long activityDuration = millis() - activityStartTime;
 
   // Handle web server requests if running
   if (crossPointWebServer.isRunning()) {
+    unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
+    
+    // Log if there's a significant gap between handleClient calls (>100ms)
+    if (lastHandleClientTime > 0 && timeSinceLastHandleClient > 100) {
+      Serial.printf("[%lu] [LOOP] WARNING: %lu ms gap since last handleClient (activity took %lu ms)\n",
+                   millis(), timeSinceLastHandleClient, activityDuration);
+    }
+    
     crossPointWebServer.handleClient();
+    lastHandleClientTime = millis();
   }
+  
+  unsigned long loopDuration = millis() - loopStartTime;
+  if (loopDuration > maxLoopDuration) {
+    maxLoopDuration = loopDuration;
+    if (maxLoopDuration > 50) {
+      Serial.printf("[%lu] [LOOP] New max loop duration: %lu ms (activity: %lu ms)\n",
+                   millis(), maxLoopDuration, activityDuration);
+    }
+  }
+  
+  lastLoopTime = loopStartTime;
 }

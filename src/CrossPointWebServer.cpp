@@ -449,6 +449,10 @@ static bool uploadSuccess = false;
 static String uploadError = "";
 
 void CrossPointWebServer::handleUpload() {
+  static unsigned long lastWriteTime = 0;
+  static unsigned long uploadStartTime = 0;
+  static size_t lastLoggedSize = 0;
+  
   HTTPUpload& upload = server->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
@@ -456,6 +460,9 @@ void CrossPointWebServer::handleUpload() {
     uploadSize = 0;
     uploadSuccess = false;
     uploadError = "";
+    uploadStartTime = millis();
+    lastWriteTime = millis();
+    lastLoggedSize = 0;
 
     // Get upload path from query parameter (defaults to root if not specified)
     // Note: We use query parameter instead of form data because multipart form
@@ -474,12 +481,13 @@ void CrossPointWebServer::handleUpload() {
       uploadPath = "/";
     }
 
-    Serial.printf("[%lu] [WEB] Upload start: %s to path: %s\n", millis(), uploadFileName.c_str(), uploadPath.c_str());
+    Serial.printf("[%lu] [WEB] [UPLOAD] START: %s to path: %s\n", millis(), uploadFileName.c_str(), uploadPath.c_str());
+    Serial.printf("[%lu] [WEB] [UPLOAD] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
 
     // Validate file extension
     if (!isEpubFile(uploadFileName)) {
       uploadError = "Only .epub files are allowed";
-      Serial.printf("[%lu] [WEB] Upload rejected - not an epub file\n", millis());
+      Serial.printf("[%lu] [WEB] [UPLOAD] REJECTED - not an epub file\n", millis());
       return;
     }
 
@@ -490,7 +498,7 @@ void CrossPointWebServer::handleUpload() {
 
     // Check if file already exists
     if (SD.exists(filePath.c_str())) {
-      Serial.printf("[%lu] [WEB] Overwriting existing file: %s\n", millis(), filePath.c_str());
+      Serial.printf("[%lu] [WEB] [UPLOAD] Overwriting existing file: %s\n", millis(), filePath.c_str());
       SD.remove(filePath.c_str());
     }
 
@@ -498,20 +506,36 @@ void CrossPointWebServer::handleUpload() {
     uploadFile = SD.open(filePath.c_str(), FILE_WRITE);
     if (!uploadFile) {
       uploadError = "Failed to create file on SD card";
-      Serial.printf("[%lu] [WEB] Failed to create file: %s\n", millis(), filePath.c_str());
+      Serial.printf("[%lu] [WEB] [UPLOAD] FAILED to create file: %s\n", millis(), filePath.c_str());
       return;
     }
 
-    Serial.printf("[%lu] [WEB] File created: %s\n", millis(), filePath.c_str());
+    Serial.printf("[%lu] [WEB] [UPLOAD] File created successfully: %s\n", millis(), filePath.c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (uploadFile && uploadError.isEmpty()) {
+      unsigned long writeStartTime = millis();
       size_t written = uploadFile.write(upload.buf, upload.currentSize);
+      unsigned long writeEndTime = millis();
+      unsigned long writeDuration = writeEndTime - writeStartTime;
+      
       if (written != upload.currentSize) {
         uploadError = "Failed to write to SD card - disk may be full";
         uploadFile.close();
-        Serial.printf("[%lu] [WEB] Write error - expected %d, wrote %d\n", millis(), upload.currentSize, written);
+        Serial.printf("[%lu] [WEB] [UPLOAD] WRITE ERROR - expected %d, wrote %d\n", millis(), upload.currentSize, written);
       } else {
         uploadSize += written;
+        
+        // Log progress every 50KB or if write took >100ms
+        if (uploadSize - lastLoggedSize >= 51200 || writeDuration > 100) {
+          unsigned long timeSinceStart = millis() - uploadStartTime;
+          unsigned long timeSinceLastWrite = millis() - lastWriteTime;
+          float kbps = (uploadSize / 1024.0) / (timeSinceStart / 1000.0);
+          
+          Serial.printf("[%lu] [WEB] [UPLOAD] Progress: %d bytes (%.1f KB), %.1f KB/s, write took %lu ms, gap since last: %lu ms\n",
+                       millis(), uploadSize, uploadSize / 1024.0, kbps, writeDuration, timeSinceLastWrite);
+          lastLoggedSize = uploadSize;
+        }
+        lastWriteTime = millis();
       }
     }
   } else if (upload.status == UPLOAD_FILE_END) {
