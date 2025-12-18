@@ -6,9 +6,9 @@
 #include <algorithm>
 
 #include "config.h"
-#include "html/HomePageHtml.generated.h"
-#include "html/FilesPageHeaderHtml.generated.h"
 #include "html/FilesPageFooterHtml.generated.h"
+#include "html/FilesPageHeaderHtml.generated.h"
+#include "html/HomePageHtml.generated.h"
 
 // Global instance
 CrossPointWebServer crossPointWebServer;
