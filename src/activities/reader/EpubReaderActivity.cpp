@@ -211,8 +211,6 @@ void EpubReaderActivity::renderScreen() {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       {
-        renderer.grayscaleRevert();
-
         const int textWidth = renderer.getTextWidth(READER_FONT_ID, "Indexing...");
         constexpr int margin = 20;
         // Round all coordinates to 8 pixel boundaries
@@ -220,11 +218,10 @@ void EpubReaderActivity::renderScreen() {
         constexpr int y = 56;
         const int w = (textWidth + margin * 2 + 7) / 8 * 8;
         const int h = (renderer.getLineHeight(READER_FONT_ID) + margin * 2 + 7) / 8 * 8;
-        renderer.fillRect(x, y, w, h, false);
+        renderer.clearScreen();
         renderer.drawText(READER_FONT_ID, x + margin, y + margin, "Indexing...");
         renderer.drawRect(x + 5, y + 5, w - 10, h - 10);
-        // EXPERIMENTAL: Still suffers from ghosting
-        renderer.displayWindow(x, y, w, h);
+        renderer.displayBuffer();
         pagesUntilFullRefresh = 0;
       }
 

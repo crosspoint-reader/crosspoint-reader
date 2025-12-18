@@ -176,7 +176,7 @@ for i_start, i_end in intervals:
                 px = 0
 
         if is2Bit:
-            # 0 = white, 15 black, 8+ dark grey, 7- light grey
+            # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
             # Downsample to 2-bit bitmap
             pixels2b = []
             px = 0
@@ -187,11 +187,11 @@ for i_start, i_end in intervals:
                     bm = pixels4g[y * pitch + (x // 2)]
                     bm = (bm >> ((x % 2) * 4)) & 0xF
 
-                    if bm == 15:
+                    if bm >= 12:
                         px += 3
                     elif bm >= 8:
                         px += 2
-                    elif bm > 0:
+                    elif bm >= 4:
                         px += 1
 
                     if (y * bitmap.width + x) % 4 == 3:
@@ -211,7 +211,7 @@ for i_start, i_end in intervals:
             #     print(line)
             # print('')
         else:
-            # Downsample to 1-bit bitmap - treat any non-zero as black
+            # Downsample to 1-bit bitmap - treat any 2+ as black
             pixelsbw = []
             px = 0
             pitch = (bitmap.width // 2) + (bitmap.width % 2)
@@ -219,7 +219,7 @@ for i_start, i_end in intervals:
                 for x in range(bitmap.width):
                     px = px << 1
                     bm = pixels4g[y * pitch + (x // 2)]
-                    px += 1 if ((x & 1) == 0 and bm & 0xF > 0) or ((x & 1) == 1 and bm & 0xF0 > 0) else 0
+                    px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
 
                     if (y * bitmap.width + x) % 8 == 7:
                         pixelsbw.append(px)

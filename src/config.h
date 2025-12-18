@@ -9,7 +9,7 @@
  *    "./lib/EpdFont/builtinFonts/bookerly_italic_2b.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define READER_FONT_ID 828106571
+#define READER_FONT_ID 1818981670
 
 /**
  * Generated with:
@@ -18,7 +18,7 @@
  *    "./lib/EpdFont/builtinFonts/ubuntu_bold_10.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define UI_FONT_ID -56235187
+#define UI_FONT_ID (-1619831379)
 
 /**
  * Generated with:
@@ -26,4 +26,4 @@
  *    "./lib/EpdFont/builtinFonts/pixelarial14.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define SMALL_FONT_ID -1952330053
+#define SMALL_FONT_ID (-139796914)
