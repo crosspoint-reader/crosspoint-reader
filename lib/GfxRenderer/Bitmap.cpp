@@ -99,18 +99,15 @@ BmpReaderError Bitmap::parseHeaders() {
 
   if (width <= 0 || height <= 0) return BmpReaderError::BadDimensions;
 
-  // Palette for 8-bit indexed images
-  for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);  // default grayscale ramp
+  // Pre-calculate Row Bytes to avoid doing this every row
+  rowBytes = (width * bpp + 31) / 32 * 4;
+
+  for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
   if (colorsUsed > 0) {
     for (uint32_t i = 0; i < colorsUsed; i++) {
-      const int b = file.read();
-      const int g = file.read();
-      const int r = file.read();
-      file.seek(1, SeekCur);  // reserved
-      const auto bb = static_cast<uint8_t>(b < 0 ? 0 : b);
-      const auto gg = static_cast<uint8_t>(g < 0 ? 0 : g);
-      const auto rr = static_cast<uint8_t>(r < 0 ? 0 : r);
-      paletteLum[i] = static_cast<uint8_t>((77u * rr + 150u * gg + 29u * bb) >> 8);
+      uint8_t rgb[4];
+      file.read(rgb, 4);  // Read B, G, R, Reserved in one go
+      paletteLum[i] = (77u * rgb[2] + 150u * rgb[1] + 29u * rgb[0]) >> 8;
     }
   }
 
@@ -122,72 +119,64 @@ BmpReaderError Bitmap::parseHeaders() {
 }
 
 // packed 2bpp output, 0 = black, 1 = dark gray, 2 = light gray, 3 = white
-BmpReaderError Bitmap::readRow(uint8_t* data, const size_t dataLen, size_t* read) const {
-  // Validate data is long enough to hold a row worth of data
-  const size_t outputBytes = (width + 3) / 4;
-  if (dataLen < outputBytes) {
-    *read = 0;
-    return BmpReaderError::BufferTooSmall;
-  }
+BmpReaderError Bitmap::readRow(uint8_t* data, uint8_t* rowBuffer) const {
+  // Note: rowBuffer should be pre-allocated by the caller to size 'rowBytes'
+  if (file.read(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
 
-  // setup data to be all black
-  memset(data, 0x00, outputBytes);
+  uint8_t* outPtr = data;
+  uint8_t currentOutByte = 0;
+  int bitShift = 6;
 
-  const size_t rowBytes = (width * bpp + 31) / 32 * 4;
-  const auto rowBuffer = static_cast<uint8_t*>(malloc(rowBytes));
-  if (!rowBuffer) {
-    *read = 0;
-    return BmpReaderError::OomRowBuffer;
-  }
-
-  if (file.read(rowBuffer, rowBytes) != rowBytes) {
-    free(rowBuffer);
-    *read = 0;
-    return BmpReaderError::ShortReadRow;
-  }
-
-  for (int bmpX = 0; bmpX < width; bmpX++) {
-    uint8_t lum;
-    if (bpp == 1) {
-      const uint8_t byte = rowBuffer[bmpX / 8];
-      const uint8_t bit = 7 - (bmpX % 8);
-      const bool bitSet = (byte >> bit) & 0x01;
-      // In 1bpp BMPs, palette index 0 is conventionally black and index 1 is white.
-      lum = bitSet ? 0xFF : 0x00;
-    } else if (bpp == 2) {
-      const uint8_t byte = rowBuffer[bmpX / 4];
-      const uint8_t twobit = 6 - ((bmpX * 2) % 8);
-      const uint8_t val = (byte >> twobit) & 0x3;
-      lum = paletteLum[val];
-    } else if (bpp == 8) {
-      const uint8_t idx = rowBuffer[bmpX];
-      lum = paletteLum[idx];
+  // Helper lambda to pack 2bpp color into the output stream
+  auto packPixel = [&](uint8_t lum) {
+    uint8_t color = (lum >> 6);  // Simple 2-bit reduction: 0-255 -> 0-3
+    currentOutByte |= (color << bitShift);
+    if (bitShift == 0) {
+      *outPtr++ = currentOutByte;
+      currentOutByte = 0;
+      bitShift = 6;
     } else {
-      // 24 / 32
-      const uint8_t* px = &rowBuffer[bmpX * bpp / 8];
-      const uint8_t b = px[0];
-      const uint8_t g = px[1];
-      const uint8_t r = px[2];
-
-      lum = static_cast<uint8_t>((77u * r + 150u * g + 29u * b) >> 8);
+      bitShift -= 2;
     }
+  };
 
-    uint8_t color;
-    if (lum >= 192) {
-      color = 0x3;  // white
-    } else if (lum >= 128) {
-      color = 0x2;  // light gray
-    } else if (lum >= 64) {
-      color = 0x1;  // dark gray
-    } else {
-      color = 0x0;  // black
+  switch (bpp) {
+    case 8: {
+      for (int x = 0; x < width; x++) {
+        packPixel(paletteLum[rowBuffer[x]]);
+      }
+      break;
     }
-
-    data[bmpX / 4] |= (color << (6 - ((bmpX % 4) * 2)));
+    case 24: {
+      const uint8_t* p = rowBuffer;
+      for (int x = 0; x < width; x++) {
+        uint8_t lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+        packPixel(lum);
+        p += 3;
+      }
+      break;
+    }
+    case 1: {
+      for (int x = 0; x < width; x++) {
+        uint8_t lum = (rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 0xFF : 0x00;
+        packPixel(lum);
+      }
+      break;
+    }
+    case 32: {
+      const uint8_t* p = rowBuffer;
+      for (int x = 0; x < width; x++) {
+        uint8_t lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+        packPixel(lum);
+        p += 4;
+      }
+      break;
+    }
   }
 
-  free(rowBuffer);
-  *read = outputBytes;
+  // Flush remaining bits if width is not a multiple of 4
+  if (bitShift != 6) *outPtr = currentOutByte;
+
   return BmpReaderError::Ok;
 }
 

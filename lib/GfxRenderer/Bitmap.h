@@ -27,14 +27,15 @@ class Bitmap {
  public:
   static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(File& file) : file(file) {};
+  explicit Bitmap(File& file) : file(file) {}
   BmpReaderError parseHeaders();
-  BmpReaderError readRow(uint8_t* data, size_t dataLen, size_t* read) const;
+  BmpReaderError readRow(uint8_t* data, uint8_t* rowBuffer) const;
   BmpReaderError rewindToData() const;
   int getWidth() const { return width; }
   int getHeight() const { return height; }
   bool isTopDown() const { return topDown; }
   bool hasGreyscale() const { return bpp > 1; }
+  int getRowBytes() const { return rowBytes; }
 
  private:
   static uint16_t readLE16(File& f);
@@ -46,5 +47,6 @@ class Bitmap {
   bool topDown = false;
   uint32_t bfOffBits = 0;
   uint16_t bpp = 0;
+  int rowBytes = 0;
   uint8_t paletteLum[256] = {};
 };
