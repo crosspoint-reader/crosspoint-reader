@@ -1,6 +1,7 @@
 #pragma once
 #include "../Activity.h"
-#include "SD.h"
+
+class Bitmap;
 
 class SleepActivity final : public Activity {
  public:
@@ -8,6 +9,6 @@ class SleepActivity final : public Activity {
   void onEnter() override;
 
  private:
-  void renderDefaultSleepScreen();
-  void renderCustomSleepScreen(File& file);
+  void renderDefaultSleepScreen() const;
+  void renderCustomSleepScreen(const Bitmap& bitmap) const;
 };

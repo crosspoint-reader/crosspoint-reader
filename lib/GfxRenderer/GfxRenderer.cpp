@@ -2,8 +2,6 @@
 
 #include <Utf8.h>
 
-#include "BmpReader.h"
-
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
@@ -121,35 +119,67 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   einkDisplay.drawImage(bitmap, y, x, height, width);
 }
 
-bool GfxRenderer::drawFullScreenBmp(File& file) {
-  if (!file) {
-    Serial.printf("[%lu] [GFX] drawFullScreenBmp: invalid file\n", millis());
-    return false;
+void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
+                             const int maxHeight) const {
+  float scale = 1.0f;
+  bool isScaled = false;
+  if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
+    scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
+    isScaled = true;
+  }
+  if (maxHeight > 0 && bitmap.getHeight() > maxHeight) {
+    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
+    isScaled = true;
   }
 
-  file.seek(0);  // Ensure we're at the start of the file
+  const uint8_t outputRowSize = (bitmap.getWidth() + 3) / 4;
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
 
-  MonoBitmap bmp;
-  auto err = BmpReader::read(file, bmp);
+  for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
+    // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
+    // Screen's (0, 0) is the top-left corner.
+    int screenY = y + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
+    if (isScaled) {
+      screenY = std::floor(screenY * scale);
+    }
+    if (screenY >= getScreenHeight()) {
+      break;
+    }
 
-  if (err != BmpReaderError::Ok) {
-    Serial.printf("[%lu] [GFX] BMP convert failed: %s\n", millis(), BmpReader::errorToString(err));
-    return false;
+    size_t readBytes;
+    if (bitmap.readRow(outputRow, outputRowSize, &readBytes) != BmpReaderError::Ok) {
+      free(outputRow);
+      return;
+    }
+
+    if (readBytes != outputRowSize) {
+      Serial.printf("[%lu] [GFX] Failed to read BMP row data, got: %d, expected: %d\n", millis(), readBytes,
+                    outputRowSize);
+      break;
+    }
+
+    for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
+      int screenX = x + bmpX;
+      if (isScaled) {
+        screenX = std::floor(screenX * scale);
+      }
+      if (screenX >= getScreenWidth()) {
+        break;
+      }
+
+      const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+
+      if (renderMode == BW && val < 3) {
+        drawPixel(screenX, screenY);
+      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+        drawPixel(screenX, screenY, false);
+      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+        drawPixel(screenX, screenY, false);
+      }
+    }
   }
 
-  // Hard requirement: must match panel exactly
-  if (bmp.width != EInkDisplay::DISPLAY_WIDTH || bmp.height != EInkDisplay::DISPLAY_HEIGHT) {
-    Serial.printf("[%lu] [GFX] drawFullScreenBmp: rotated BMP size %dx%d does not match panel %dx%d\n", millis(),
-                  bmp.width, bmp.height, EInkDisplay::DISPLAY_WIDTH, EInkDisplay::DISPLAY_HEIGHT);
-    BmpReader::freeMonoBitmap(bmp);
-    return false;
-  }
-
-  // Full-screen blit
-  einkDisplay.drawImage(bmp.data, 0, 0, bmp.width, bmp.height);
-
-  BmpReader::freeMonoBitmap(bmp);
-  return true;
+  free(outputRow);
 }
 
 void GfxRenderer::clearScreen(const uint8_t color) const { einkDisplay.clearScreen(color); }
