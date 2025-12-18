@@ -9,7 +9,8 @@
 
 const SettingInfo SettingsActivity::settingsList[settingsCount] = {
     {"White Sleep Screen", &CrossPointSettings::whiteSleepScreen},
-    {"Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing}};
+    {"Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing},
+    {"Short Power Button Click", &CrossPointSettings::shortPwrBtn}};
 
 void SettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<SettingsActivity*>(param);

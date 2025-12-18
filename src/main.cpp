@@ -57,11 +57,6 @@ EpdFont ubuntu10Font(&ubuntu_10);
 EpdFont ubuntuBold10Font(&ubuntu_bold_10);
 EpdFontFamily ubuntuFontFamily(&ubuntu10Font, &ubuntuBold10Font);
 
-// Power button timing
-// Time required to confirm boot from sleep
-constexpr unsigned long POWER_BUTTON_WAKEUP_MS = 500;
-// Time required to enter sleep mode
-constexpr unsigned long POWER_BUTTON_SLEEP_MS = 500;
 // Auto-sleep timeout (10 minutes of inactivity)
 constexpr unsigned long AUTO_SLEEP_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -79,7 +74,8 @@ void enterNewActivity(Activity* activity) {
 
 // Verify long press on wake-up from deep sleep
 void verifyWakeupLongPress() {
-  // Give the user up to 1000ms to start holding the power button, and must hold for POWER_BUTTON_WAKEUP_MS
+  // Give the user up to 1000ms to start holding the power button, and must hold for SETTINGS.getPowerButtonDuration()
+
   const auto start = millis();
   bool abort = false;
 
@@ -90,12 +86,16 @@ void verifyWakeupLongPress() {
     inputManager.update();
   }
 
+  // Return immediately if power button duration is less than 100ms
+  if (SETTINGS.getPowerButtonDuration() < 100) return;
+
   if (inputManager.isPressed(InputManager::BTN_POWER)) {
     do {
-      delay(50);
+      delay(10);
       inputManager.update();
-    } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() < POWER_BUTTON_WAKEUP_MS);
-    abort = inputManager.getHeldTime() < POWER_BUTTON_WAKEUP_MS;
+    } while (inputManager.isPressed(InputManager::BTN_POWER) &&
+             inputManager.getHeldTime() < SETTINGS.getPowerButtonDuration());
+    abort = inputManager.getHeldTime() < SETTINGS.getPowerButtonDuration();
   } else {
     abort = true;
   }
@@ -121,7 +121,7 @@ void enterDeepSleep() {
   exitActivity();
   enterNewActivity(new SleepActivity(renderer, inputManager));
 
-  Serial.printf("[%lu] [   ] Power button released after a long press. Entering deep sleep.\n", millis());
+  Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
   delay(1000);  // Allow Serial buffer to empty and display to update
 
   // Enable Wakeup on LOW (button press)
@@ -156,7 +156,7 @@ void setup() {
   Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
 
   inputManager.begin();
-  verifyWakeupLongPress();
+  // verifyWakeupLongPress();
 
   // Initialize pins
   pinMode(BAT_GPIO0, INPUT);
@@ -216,7 +216,8 @@ void loop() {
     return;
   }
 
-  if (inputManager.wasReleased(InputManager::BTN_POWER) && inputManager.getHeldTime() > POWER_BUTTON_WAKEUP_MS) {
+  if (inputManager.wasReleased(InputManager::BTN_POWER) &&
+      inputManager.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;

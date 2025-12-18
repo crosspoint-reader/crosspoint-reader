@@ -25,7 +25,7 @@ class SettingsActivity final : public Activity {
   const std::function<void()> onGoHome;
 
   // Static settings list
-  static constexpr int settingsCount = 2;  // Number of settings
+  static constexpr int settingsCount = 3;  // Number of settings
   static const SettingInfo settingsList[settingsCount];
 
   static void taskTrampoline(void* param);
