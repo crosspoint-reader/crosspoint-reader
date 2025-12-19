@@ -107,19 +107,30 @@ void CrossPointWebServer::begin() {
 
 void CrossPointWebServer::stop() {
   if (!running || !server) {
+    Serial.printf("[%lu] [WEB] stop() called but already stopped (running=%d, server=%p)\n", millis(), running, server);
     return;
   }
 
+  Serial.printf("[%lu] [WEB] STOP INITIATED - setting running=false first\n", millis());
+  running = false;  // Set this FIRST to prevent handleClient from using server
+  
   Serial.printf("[%lu] [WEB] [MEM] Free heap before stop: %d bytes\n", millis(), ESP.getFreeHeap());
+
+  // Add delay to allow any in-flight handleClient() calls to complete
+  delay(100);
+  Serial.printf("[%lu] [WEB] Waited 100ms for handleClient to finish\n", millis());
 
   server->stop();
   Serial.printf("[%lu] [WEB] [MEM] Free heap after server->stop(): %d bytes\n", millis(), ESP.getFreeHeap());
 
+  // Add another delay before deletion to ensure server->stop() completes
+  delay(50);
+  Serial.printf("[%lu] [WEB] Waited 50ms before deleting server\n", millis());
+
   delete server;
   server = nullptr;
-  running = false;
 
-  Serial.printf("[%lu] [WEB] Web server stopped\n", millis());
+  Serial.printf("[%lu] [WEB] Web server stopped and deleted\n", millis());
   Serial.printf("[%lu] [WEB] [MEM] Free heap after delete server: %d bytes\n", millis(), ESP.getFreeHeap());
 
   // Note: Static upload variables (uploadFileName, uploadPath, uploadError) are declared
@@ -129,14 +140,25 @@ void CrossPointWebServer::stop() {
 
 void CrossPointWebServer::handleClient() {
   static unsigned long lastDebugPrint = 0;
-  if (running && server) {
-    // Print debug every 10 seconds to confirm handleClient is being called
-    if (millis() - lastDebugPrint > 10000) {
-      Serial.printf("[%lu] [WEB] handleClient active, server running on port %d\n", millis(), port);
-      lastDebugPrint = millis();
-    }
-    server->handleClient();
+  
+  // Check running flag FIRST before accessing server
+  if (!running) {
+    return;
   }
+  
+  // Double-check server pointer is valid
+  if (!server) {
+    Serial.printf("[%lu] [WEB] WARNING: handleClient called with null server!\n", millis());
+    return;
+  }
+  
+  // Print debug every 10 seconds to confirm handleClient is being called
+  if (millis() - lastDebugPrint > 10000) {
+    Serial.printf("[%lu] [WEB] handleClient active, server running on port %d\n", millis(), port);
+    lastDebugPrint = millis();
+  }
+  
+  server->handleClient();
 }
 
 void CrossPointWebServer::handleRoot() {
@@ -452,6 +474,12 @@ void CrossPointWebServer::handleUpload() {
   static unsigned long lastWriteTime = 0;
   static unsigned long uploadStartTime = 0;
   static size_t lastLoggedSize = 0;
+
+  // Safety check: ensure server is still valid
+  if (!running || !server) {
+    Serial.printf("[%lu] [WEB] [UPLOAD] ERROR: handleUpload called but server not running!\n", millis());
+    return;
+  }
 
   HTTPUpload& upload = server->upload();
 

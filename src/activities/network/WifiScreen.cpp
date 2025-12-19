@@ -48,37 +48,59 @@ void WifiScreen::onEnter() {
 }
 
 void WifiScreen::onExit() {
+  Serial.printf("[%lu] [WIFI] ========== onExit START ==========\n", millis());
   Serial.printf("[%lu] [WIFI] [MEM] Free heap at onExit start: %d bytes\n", millis(), ESP.getFreeHeap());
 
   // Stop any ongoing WiFi scan
+  Serial.printf("[%lu] [WIFI] Deleting WiFi scan...\n", millis());
   WiFi.scanDelete();
   Serial.printf("[%lu] [WIFI] [MEM] Free heap after scanDelete: %d bytes\n", millis(), ESP.getFreeHeap());
 
-  // Stop the web server to free memory
+  // CRITICAL: Stop the web server FIRST to prevent new packets from being queued
+  Serial.printf("[%lu] [WIFI] Stopping web server...\n", millis());
   crossPointWebServer.stop();
-  Serial.printf("[%lu] [WIFI] [MEM] Free heap after webserver stop: %d bytes\n", millis(), ESP.getFreeHeap());
+  Serial.printf("[%lu] [WIFI] Web server stopped successfully\n", millis());
+  Serial.printf("[%lu] [WIFI] [MEM] Free heap after webserver stop: %d bytes\n", millis());
 
-  // Disconnect WiFi to free memory
-  WiFi.disconnect(true);
+  // CRITICAL: Wait for LWIP stack to flush any pending packets
+  // The crash occurs because WiFi.disconnect() tears down the interface while
+  // packets are still queued in the LWIP stack (ethernet.c, etharp.c, wlanif.c)
+  Serial.printf("[%lu] [WIFI] Waiting 500ms for network stack to flush pending packets...\n", millis());
+  delay(500);
+
+  // Disconnect WiFi gracefully - use disconnect(false) first to send disconnect frame
+  Serial.printf("[%lu] [WIFI] Disconnecting WiFi (graceful)...\n", millis());
+  WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
+  delay(100);  // Allow disconnect frame to be sent
+  
+  Serial.printf("[%lu] [WIFI] Setting WiFi mode OFF...\n", millis());
   WiFi.mode(WIFI_OFF);
+  delay(100);  // Allow WiFi hardware to fully power down
+  
   Serial.printf("[%lu] [WIFI] [MEM] Free heap after WiFi disconnect: %d bytes\n", millis(), ESP.getFreeHeap());
 
   // Delete the display task
+  Serial.printf("[%lu] [WIFI] Deleting display task...\n", millis());
   if (displayTaskHandle) {
     vTaskDelete(displayTaskHandle);
     displayTaskHandle = nullptr;
+    Serial.printf("[%lu] [WIFI] Display task deleted\n", millis());
   }
 
   // Small delay to ensure task is fully deleted before cleaning up mutex
+  Serial.printf("[%lu] [WIFI] Waiting for task cleanup...\n", millis());
   vTaskDelay(10 / portTICK_PERIOD_MS);
 
   // Now safe to delete the mutex
+  Serial.printf("[%lu] [WIFI] Deleting mutex...\n", millis());
   if (renderingMutex) {
     vSemaphoreDelete(renderingMutex);
     renderingMutex = nullptr;
+    Serial.printf("[%lu] [WIFI] Mutex deleted\n", millis());
   }
 
   Serial.printf("[%lu] [WIFI] [MEM] Free heap at onExit end: %d bytes\n", millis(), ESP.getFreeHeap());
+  Serial.printf("[%lu] [WIFI] ========== onExit COMPLETE ==========\n", millis());
 }
 
 void WifiScreen::startWifiScan() {
