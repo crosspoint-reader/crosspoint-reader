@@ -79,11 +79,10 @@ void SleepActivity::onEnter() {
 void SleepActivity::renderPopup(const char* message) const {
   const int textWidth = renderer.getTextWidth(READER_FONT_ID, message);
   constexpr int margin = 20;
-  // Round all coordinates to 8 pixel boundaries
-  const int x = ((GfxRenderer::getScreenWidth() - textWidth - margin * 2) / 2 + 7) / 8 * 8;
+  const int x = (GfxRenderer::getScreenWidth() - textWidth - margin * 2) / 2;
   constexpr int y = 117;
-  const int w = (textWidth + margin * 2 + 7) / 8 * 8;
-  const int h = (renderer.getLineHeight(READER_FONT_ID) + margin * 2 + 7) / 8 * 8;
+  const int w = textWidth + margin * 2;
+  const int h = renderer.getLineHeight(READER_FONT_ID) + margin * 2;
   // renderer.clearScreen();
   renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
   renderer.drawText(READER_FONT_ID, x + margin, y + margin, message);
