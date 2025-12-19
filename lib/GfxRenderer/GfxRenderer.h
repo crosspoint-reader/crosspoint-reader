@@ -2,8 +2,11 @@
 
 #include <EInkDisplay.h>
 #include <EpdFontFamily.h>
+#include <FS.h>
 
 #include <map>
+
+#include "Bitmap.h"
 
 class GfxRenderer {
  public:
@@ -45,6 +48,7 @@ class GfxRenderer {
   void drawRect(int x, int y, int width, int height, bool state = true) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
+  void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
 
   // Text
   int getTextWidth(int fontId, const char* text, EpdFontStyle style = REGULAR) const;

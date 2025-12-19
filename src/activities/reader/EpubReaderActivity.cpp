@@ -33,13 +33,14 @@ void EpubReaderActivity::onEnter() {
 
   epub->setupCacheDir();
 
-  if (SD.exists((epub->getCachePath() + "/progress.bin").c_str())) {
-    File f = SD.open((epub->getCachePath() + "/progress.bin").c_str());
+  File f = SD.open((epub->getCachePath() + "/progress.bin").c_str());
+  if (f) {
     uint8_t data[4];
-    f.read(data, 4);
-    currentSpineIndex = data[0] + (data[1] << 8);
-    nextPageNumber = data[2] + (data[3] << 8);
-    Serial.printf("[%lu] [ERS] Loaded cache: %d, %d\n", millis(), currentSpineIndex, nextPageNumber);
+    if (f.read(data, 4) == 4) {
+      currentSpineIndex = data[0] + (data[1] << 8);
+      nextPageNumber = data[2] + (data[3] << 8);
+      Serial.printf("[%lu] [ERS] Loaded cache: %d, %d\n", millis(), currentSpineIndex, nextPageNumber);
+    }
     f.close();
   }
 
@@ -211,20 +212,16 @@ void EpubReaderActivity::renderScreen() {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       {
-        renderer.grayscaleRevert();
-
         const int textWidth = renderer.getTextWidth(READER_FONT_ID, "Indexing...");
         constexpr int margin = 20;
-        // Round all coordinates to 8 pixel boundaries
-        const int x = ((GfxRenderer::getScreenWidth() - textWidth - margin * 2) / 2 + 7) / 8 * 8;
-        constexpr int y = 56;
-        const int w = (textWidth + margin * 2 + 7) / 8 * 8;
-        const int h = (renderer.getLineHeight(READER_FONT_ID) + margin * 2 + 7) / 8 * 8;
+        const int x = (GfxRenderer::getScreenWidth() - textWidth - margin * 2) / 2;
+        constexpr int y = 50;
+        const int w = textWidth + margin * 2;
+        const int h = renderer.getLineHeight(READER_FONT_ID) + margin * 2;
         renderer.fillRect(x, y, w, h, false);
         renderer.drawText(READER_FONT_ID, x + margin, y + margin, "Indexing...");
         renderer.drawRect(x + 5, y + 5, w - 10, h - 10);
-        // EXPERIMENTAL: Still suffers from ghosting
-        renderer.displayWindow(x, y, w, h);
+        renderer.displayBuffer();
         pagesUntilFullRefresh = 0;
       }
 
@@ -385,7 +382,7 @@ void EpubReaderActivity::renderStatusBar() const {
     const auto tocItem = epub->getTocItem(tocIndex);
     title = tocItem.title;
     titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-    while (titleWidth > availableTextWidth) {
+    while (titleWidth > availableTextWidth && title.length() > 11) {
       title = title.substr(0, title.length() - 8) + "...";
       titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     }
