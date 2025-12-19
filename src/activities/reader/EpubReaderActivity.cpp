@@ -207,7 +207,7 @@ void EpubReaderActivity::renderScreen() {
     Serial.printf("[%lu] [ERS] Loading file: %s, index: %d\n", millis(), filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
     if (!section->loadCacheMetadata(READER_FONT_ID, lineCompression, marginTop, marginRight, marginBottom, marginLeft,
-                    SETTINGS.extraParagraphSpacing, SETTINGS.hyphenationEnabled)) {
+                                    SETTINGS.extraParagraphSpacing, SETTINGS.hyphenationEnabled)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       {
@@ -227,7 +227,7 @@ void EpubReaderActivity::renderScreen() {
 
       section->setupCacheDir();
       if (!section->persistPageDataToSD(READER_FONT_ID, lineCompression, marginTop, marginRight, marginBottom,
-                    marginLeft, SETTINGS.extraParagraphSpacing, SETTINGS.hyphenationEnabled)) {
+                                        marginLeft, SETTINGS.extraParagraphSpacing, SETTINGS.hyphenationEnabled)) {
         Serial.printf("[%lu] [ERS] Failed to persist page data to SD\n", millis());
         section.reset();
         return;

@@ -82,7 +82,7 @@ bool Section::loadCacheMetadata(const int fontId, const float lineCompression, c
 
     if (fontId != fileFontId || lineCompression != fileLineCompression || marginTop != fileMarginTop ||
         marginRight != fileMarginRight || marginBottom != fileMarginBottom || marginLeft != fileMarginLeft ||
-      extraParagraphSpacing != fileExtraParagraphSpacing || hyphenationEnabled != fileHyphenationEnabled) {
+        extraParagraphSpacing != fileExtraParagraphSpacing || hyphenationEnabled != fileHyphenationEnabled) {
       inputFile.close();
       Serial.printf("[%lu] [SCT] Deserialization failed: Parameters do not match\n", millis());
       clearCache();
