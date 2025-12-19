@@ -119,6 +119,66 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   einkDisplay.drawImage(bitmap, y, x, height, width);
 }
 
+void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
+                             const int maxHeight) const {
+  float scale = 1.0f;
+  bool isScaled = false;
+  if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
+    scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
+    isScaled = true;
+  }
+  if (maxHeight > 0 && bitmap.getHeight() > maxHeight) {
+    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
+    isScaled = true;
+  }
+
+  const uint8_t outputRowSize = (bitmap.getWidth() + 3) / 4;
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
+  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+
+  for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
+    // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
+    // Screen's (0, 0) is the top-left corner.
+    int screenY = y + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
+    if (isScaled) {
+      screenY = std::floor(screenY * scale);
+    }
+    if (screenY >= getScreenHeight()) {
+      break;
+    }
+
+    if (bitmap.readRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+      Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
+      free(outputRow);
+      free(rowBytes);
+      return;
+    }
+
+    for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
+      int screenX = x + bmpX;
+      if (isScaled) {
+        screenX = std::floor(screenX * scale);
+      }
+      if (screenX >= getScreenWidth()) {
+        break;
+      }
+
+      const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+
+      if (renderMode == BW && val < 3) {
+        drawPixel(screenX, screenY);
+      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+        drawPixel(screenX, screenY, false);
+      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+        drawPixel(screenX, screenY, false);
+      }
+    }
+  }
+
+  free(outputRow);
+  free(rowBytes);
+}
+
 void GfxRenderer::clearScreen(const uint8_t color) const { einkDisplay.clearScreen(color); }
 
 void GfxRenderer::invertScreen() const {
