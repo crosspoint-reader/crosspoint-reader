@@ -8,8 +8,9 @@
 // Define the static settings list
 
 const SettingInfo SettingsActivity::settingsList[settingsCount] = {
-    {"White Sleep Screen", &CrossPointSettings::whiteSleepScreen},
-    {"Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing}};
+  {"White Sleep Screen", &CrossPointSettings::whiteSleepScreen},
+  {"Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing},
+  {"Hyphenation", &CrossPointSettings::hyphenationEnabled}};
 
 void SettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<SettingsActivity*>(param);

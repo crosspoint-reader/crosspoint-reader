@@ -17,10 +17,12 @@ class ParsedText {
   std::list<EpdFontStyle> wordStyles;
   TextBlock::BLOCK_STYLE style;
   bool extraParagraphSpacing;
+  bool hyphenationEnabled;
 
  public:
-  explicit ParsedText(const TextBlock::BLOCK_STYLE style, const bool extraParagraphSpacing)
-      : style(style), extraParagraphSpacing(extraParagraphSpacing) {}
+  explicit ParsedText(const TextBlock::BLOCK_STYLE style, const bool extraParagraphSpacing,
+                      const bool hyphenationEnabled)
+      : style(style), extraParagraphSpacing(extraParagraphSpacing), hyphenationEnabled(hyphenationEnabled) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontStyle fontStyle);

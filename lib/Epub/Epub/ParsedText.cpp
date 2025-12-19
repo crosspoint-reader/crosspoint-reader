@@ -36,6 +36,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   const int spaceWidth = renderer.getSpaceWidth(fontId);
   // Maintain classic prose indenting when extra paragraph spacing is disabled.
   const bool allowIndent = !extraParagraphSpacing && (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN);
+  const bool allowHyphenation = hyphenationEnabled;
   const int indentWidth = allowIndent ? renderer.getTextWidth(fontId, "m", REGULAR) : 0;
   const int firstLinePageWidth = allowIndent ? std::max(pageWidth - indentWidth, 0) : pageWidth;
   auto pageWidthForLine = [&](const bool isFirstLine) -> int { return isFirstLine ? firstLinePageWidth : pageWidth; };
@@ -153,7 +154,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       continue;
     }
 
-    if (lineWordCount > 0 && availableWidth > 0) {
+    if (allowHyphenation && lineWordCount > 0 && availableWidth > 0) {
       // Try hyphenating the next word so the current line stays compact.
       HyphenationResult split;
       if (Hyphenator::splitWord(renderer, fontId, *wordIt, *styleIt, availableWidth, &split, false)) {

@@ -36,6 +36,7 @@ class ChapterHtmlSlimParser {
   int marginBottom;
   int marginLeft;
   bool extraParagraphSpacing;
+  bool hyphenationEnabled;
 
   void startNewTextBlock(TextBlock::BLOCK_STYLE style);
   void makePages();
@@ -48,6 +49,7 @@ class ChapterHtmlSlimParser {
   explicit ChapterHtmlSlimParser(const char* filepath, GfxRenderer& renderer, const int fontId,
                                  const float lineCompression, const int marginTop, const int marginRight,
                                  const int marginBottom, const int marginLeft, const bool extraParagraphSpacing,
+                                 const bool hyphenationEnabled,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn)
       : filepath(filepath),
         renderer(renderer),
@@ -58,6 +60,7 @@ class ChapterHtmlSlimParser {
         marginBottom(marginBottom),
         marginLeft(marginLeft),
         extraParagraphSpacing(extraParagraphSpacing),
+        hyphenationEnabled(hyphenationEnabled),
         completePageFn(completePageFn) {}
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();

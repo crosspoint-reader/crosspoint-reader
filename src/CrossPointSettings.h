@@ -20,6 +20,7 @@ class CrossPointSettings {
 
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  uint8_t hyphenationEnabled = 1;
 
   ~CrossPointSettings() = default;
 
