@@ -62,6 +62,10 @@ long ZipFile::getDataOffset(const mz_zip_archive_file_stat& fileStat) const {
   const uint64_t fileOffset = fileStat.m_local_header_ofs;
 
   FILE* file = fopen(filePath.c_str(), "r");
+  if (!file) {
+    Serial.printf("[%lu] [ZIP] Failed to open file for reading local header\n", millis());
+    return -1;
+  }
   fseek(file, fileOffset, SEEK_SET);
   const size_t read = fread(pLocalHeader, 1, localHeaderSize, file);
   fclose(file);
@@ -104,6 +108,10 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
   }
 
   FILE* file = fopen(filePath.c_str(), "rb");
+  if (!file) {
+    Serial.printf("[%lu] [ZIP] Failed to open file for reading\n", millis());
+    return nullptr;
+  }
   fseek(file, fileOffset, SEEK_SET);
 
   const auto deflatedDataSize = static_cast<size_t>(fileStat.m_comp_size);
@@ -175,6 +183,10 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
   }
 
   FILE* file = fopen(filePath.c_str(), "rb");
+  if (!file) {
+    Serial.printf("[%lu] [ZIP] Failed to open file for streaming\n", millis());
+    return false;
+  }
   fseek(file, fileOffset, SEEK_SET);
 
   const auto deflatedDataSize = static_cast<size_t>(fileStat.m_comp_size);
