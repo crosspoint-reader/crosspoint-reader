@@ -40,7 +40,7 @@ enum class WifiSelectionState {
  * - Allow selection and launch KeyboardEntryActivity for password if needed
  * - Save the password if requested
  * - Call onComplete callback when connected or cancelled
- * 
+ *
  * The onComplete callback receives true if connected successfully, false if cancelled.
  */
 class WifiSelectionActivity final : public Activity {
@@ -97,12 +97,12 @@ class WifiSelectionActivity final : public Activity {
 
  public:
   explicit WifiSelectionActivity(GfxRenderer& renderer, InputManager& inputManager,
-                                  const std::function<void(bool connected)>& onComplete)
+                                 const std::function<void(bool connected)>& onComplete)
       : Activity(renderer, inputManager), onComplete(onComplete) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  
+
   // Get the IP address after successful connection
   const std::string& getConnectedIP() const { return connectedIP; }
 };

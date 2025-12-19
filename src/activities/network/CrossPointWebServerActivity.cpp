@@ -37,9 +37,8 @@ void CrossPointWebServerActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   Serial.printf("[%lu] [WEBACT] Launching WifiSelectionActivity...\n", millis());
-  wifiSelection.reset(new WifiSelectionActivity(renderer, inputManager, [this](bool connected) {
-    onWifiSelectionComplete(connected);
-  }));
+  wifiSelection.reset(new WifiSelectionActivity(renderer, inputManager,
+                                                [this](bool connected) { onWifiSelectionComplete(connected); }));
   wifiSelection->onEnter();
 }
 
@@ -67,12 +66,12 @@ void CrossPointWebServerActivity::onExit() {
   // Disconnect WiFi gracefully
   Serial.printf("[%lu] [WEBACT] Disconnecting WiFi (graceful)...\n", millis());
   WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
-  delay(100);  // Allow disconnect frame to be sent
-  
+  delay(100);              // Allow disconnect frame to be sent
+
   Serial.printf("[%lu] [WEBACT] Setting WiFi mode OFF...\n", millis());
   WiFi.mode(WIFI_OFF);
   delay(100);  // Allow WiFi hardware to fully power down
-  
+
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap after WiFi disconnect: %d bytes\n", millis(), ESP.getFreeHeap());
 
   // Acquire mutex before deleting task
@@ -104,7 +103,7 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(bool connected) {
     // Get connection info before exiting subactivity
     connectedIP = wifiSelection->getConnectedIP();
     connectedSSID = WiFi.SSID().c_str();
-    
+
     // Exit the wifi selection subactivity
     wifiSelection->onExit();
     wifiSelection.reset();
@@ -119,13 +118,13 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(bool connected) {
 
 void CrossPointWebServerActivity::startWebServer() {
   Serial.printf("[%lu] [WEBACT] Starting web server...\n", millis());
-  
+
   crossPointWebServer.begin();
-  
+
   if (crossPointWebServer.isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;
     Serial.printf("[%lu] [WEBACT] Web server started successfully\n", millis());
-    
+
     // Force an immediate render since we're transitioning from a subactivity
     // that had its own rendering task. We need to make sure our display is shown.
     xSemaphoreTake(renderingMutex, portMAX_DELAY);

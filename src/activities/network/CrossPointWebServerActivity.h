@@ -12,9 +12,9 @@
 
 // Web server activity states
 enum class WebServerActivityState {
-  WIFI_SELECTION,    // WiFi selection subactivity is active
-  SERVER_RUNNING,    // Web server is running and handling requests
-  SHUTTING_DOWN      // Shutting down server and WiFi
+  WIFI_SELECTION,  // WiFi selection subactivity is active
+  SERVER_RUNNING,  // Web server is running and handling requests
+  SHUTTING_DOWN    // Shutting down server and WiFi
 };
 
 /**
@@ -38,7 +38,7 @@ class CrossPointWebServerActivity final : public Activity {
   // Server status
   std::string connectedIP;
   std::string connectedSSID;
-  
+
   // Performance monitoring
   unsigned long lastHandleClientTime = 0;
 
@@ -53,7 +53,7 @@ class CrossPointWebServerActivity final : public Activity {
 
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, InputManager& inputManager,
-                                        const std::function<void()>& onGoBack)
+                                       const std::function<void()>& onGoBack)
       : Activity(renderer, inputManager), onGoBack(onGoBack) {}
   void onEnter() override;
   void onExit() override;

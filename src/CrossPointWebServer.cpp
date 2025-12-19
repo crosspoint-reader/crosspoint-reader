@@ -113,7 +113,7 @@ void CrossPointWebServer::stop() {
 
   Serial.printf("[%lu] [WEB] STOP INITIATED - setting running=false first\n", millis());
   running = false;  // Set this FIRST to prevent handleClient from using server
-  
+
   Serial.printf("[%lu] [WEB] [MEM] Free heap before stop: %d bytes\n", millis(), ESP.getFreeHeap());
 
   // Add delay to allow any in-flight handleClient() calls to complete
@@ -140,24 +140,24 @@ void CrossPointWebServer::stop() {
 
 void CrossPointWebServer::handleClient() {
   static unsigned long lastDebugPrint = 0;
-  
+
   // Check running flag FIRST before accessing server
   if (!running) {
     return;
   }
-  
+
   // Double-check server pointer is valid
   if (!server) {
     Serial.printf("[%lu] [WEB] WARNING: handleClient called with null server!\n", millis());
     return;
   }
-  
+
   // Print debug every 10 seconds to confirm handleClient is being called
   if (millis() - lastDebugPrint > 10000) {
     Serial.printf("[%lu] [WEB] handleClient active, server running on port %d\n", millis(), port);
     lastDebugPrint = millis();
   }
-  
+
   server->handleClient();
 }
 

@@ -10,15 +10,12 @@ const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
 
 // Keyboard layouts - uppercase/symbols
 const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"",
-                                                                     "ZXCVBNM<>?", "^  _____<OK"};
+                                                                    "ZXCVBNM<>?", "^  _____<OK"};
 
-KeyboardEntryActivity::KeyboardEntryActivity(GfxRenderer& renderer, InputManager& inputManager, const std::string& title,
-                                             const std::string& initialText, size_t maxLength, bool isPassword)
-    : Activity(renderer, inputManager),
-      title(title),
-      text(initialText),
-      maxLength(maxLength),
-      isPassword(isPassword) {}
+KeyboardEntryActivity::KeyboardEntryActivity(GfxRenderer& renderer, InputManager& inputManager,
+                                             const std::string& title, const std::string& initialText, size_t maxLength,
+                                             bool isPassword)
+    : Activity(renderer, inputManager), title(title), text(initialText), maxLength(maxLength), isPassword(isPassword) {}
 
 void KeyboardEntryActivity::setText(const std::string& newText) {
   text = newText;
