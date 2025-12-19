@@ -19,14 +19,25 @@ void ParsedText::addWord(std::string word, const EpdFontStyle fontStyle) {
 
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const int horizontalMargin,
-                                       const std::function<void(std::shared_ptr<TextBlock>)>& processLine) {
+                                       const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                                       const bool includeLastLine) {
   if (words.empty()) {
     return;
   }
 
-  const size_t totalWordCount = words.size();
   const int pageWidth = renderer.getScreenWidth() - horizontalMargin;
   const int spaceWidth = renderer.getSpaceWidth(fontId);
+  const auto wordWidths = calculateWordWidths(renderer, fontId);
+  const auto lineBreakIndices = computeLineBreaks(pageWidth, spaceWidth, wordWidths);
+  const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
+
+  for (size_t i = 0; i < lineCount; ++i) {
+    extractLine(i, pageWidth, spaceWidth, wordWidths, lineBreakIndices, processLine);
+  }
+}
+
+std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int fontId) {
+  const size_t totalWordCount = words.size();
 
   std::vector<uint16_t> wordWidths;
   wordWidths.reserve(totalWordCount);
@@ -46,6 +57,13 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     std::advance(wordsIt, 1);
     std::advance(wordStylesIt, 1);
   }
+
+  return wordWidths;
+}
+
+std::vector<size_t> ParsedText::computeLineBreaks(const int pageWidth, const int spaceWidth,
+                                                  const std::vector<uint16_t>& wordWidths) const {
+  const size_t totalWordCount = words.size();
 
   // DP table to store the minimum badness (cost) of lines starting at index i
   std::vector<int> dp(totalWordCount);
@@ -106,66 +124,59 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     currentWordIndex = nextBreakIndex;
   }
 
-  // Initialize iterators for consumption
-  auto wordStartIt = words.begin();
-  auto wordStyleStartIt = wordStyles.begin();
-  size_t wordWidthIndex = 0;
+  return lineBreakIndices;
+}
 
-  size_t lastBreakAt = 0;
-  for (const size_t lineBreak : lineBreakIndices) {
-    const size_t lineWordCount = lineBreak - lastBreakAt;
+void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const int spaceWidth,
+                             const std::vector<uint16_t>& wordWidths, const std::vector<size_t>& lineBreakIndices,
+                             const std::function<void(std::shared_ptr<TextBlock>)>& processLine) {
+  const size_t lineBreak = lineBreakIndices[breakIndex];
+  const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
+  const size_t lineWordCount = lineBreak - lastBreakAt;
 
-    // Calculate end iterators for the range to splice
-    auto wordEndIt = wordStartIt;
-    auto wordStyleEndIt = wordStyleStartIt;
-    std::advance(wordEndIt, lineWordCount);
-    std::advance(wordStyleEndIt, lineWordCount);
-
-    // Calculate total word width for this line
-    int lineWordWidthSum = 0;
-    for (size_t i = 0; i < lineWordCount; ++i) {
-      lineWordWidthSum += wordWidths[wordWidthIndex + i];
-    }
-
-    // Calculate spacing
-    int spareSpace = pageWidth - lineWordWidthSum;
-
-    int spacing = spaceWidth;
-    const bool isLastLine = lineBreak == totalWordCount;
-
-    if (style == TextBlock::JUSTIFIED && !isLastLine && lineWordCount >= 2) {
-      spacing = spareSpace / (lineWordCount - 1);
-    }
-
-    // Calculate initial x position
-    uint16_t xpos = 0;
-    if (style == TextBlock::RIGHT_ALIGN) {
-      xpos = spareSpace - (lineWordCount - 1) * spaceWidth;
-    } else if (style == TextBlock::CENTER_ALIGN) {
-      xpos = (spareSpace - (lineWordCount - 1) * spaceWidth) / 2;
-    }
-
-    // Pre-calculate X positions for words
-    std::list<uint16_t> lineXPos;
-    for (size_t i = 0; i < lineWordCount; ++i) {
-      const uint16_t currentWordWidth = wordWidths[wordWidthIndex + i];
-      lineXPos.push_back(xpos);
-      xpos += currentWordWidth + spacing;
-    }
-
-    // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
-    std::list<std::string> lineWords;
-    lineWords.splice(lineWords.begin(), words, wordStartIt, wordEndIt);
-    std::list<EpdFontStyle> lineWordStyles;
-    lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyleStartIt, wordStyleEndIt);
-
-    processLine(
-        std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style));
-
-    // Update pointers/indices for the next line
-    wordStartIt = wordEndIt;
-    wordStyleStartIt = wordStyleEndIt;
-    wordWidthIndex += lineWordCount;
-    lastBreakAt = lineBreak;
+  // Calculate total word width for this line
+  int lineWordWidthSum = 0;
+  for (size_t i = lastBreakAt; i < lineBreak; i++) {
+    lineWordWidthSum += wordWidths[i];
   }
+
+  // Calculate spacing
+  const int spareSpace = pageWidth - lineWordWidthSum;
+
+  int spacing = spaceWidth;
+  const bool isLastLine = lineBreak == words.size();
+
+  if (style == TextBlock::JUSTIFIED && !isLastLine && lineWordCount >= 2) {
+    spacing = spareSpace / (lineWordCount - 1);
+  }
+
+  // Calculate initial x position
+  uint16_t xpos = 0;
+  if (style == TextBlock::RIGHT_ALIGN) {
+    xpos = spareSpace - (lineWordCount - 1) * spaceWidth;
+  } else if (style == TextBlock::CENTER_ALIGN) {
+    xpos = (spareSpace - (lineWordCount - 1) * spaceWidth) / 2;
+  }
+
+  // Pre-calculate X positions for words
+  std::list<uint16_t> lineXPos;
+  for (size_t i = lastBreakAt; i < lineBreak; i++) {
+    const uint16_t currentWordWidth = wordWidths[i];
+    lineXPos.push_back(xpos);
+    xpos += currentWordWidth + spacing;
+  }
+
+  // Iterators always start at the beginning as we are moving content with splice below
+  auto wordEndIt = words.begin();
+  auto wordStyleEndIt = wordStyles.begin();
+  std::advance(wordEndIt, lineWordCount);
+  std::advance(wordStyleEndIt, lineWordCount);
+
+  // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
+  std::list<std::string> lineWords;
+  lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
+  std::list<EpdFontStyle> lineWordStyles;
+  lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
+
+  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style));
 }

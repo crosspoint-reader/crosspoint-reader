@@ -143,6 +143,17 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
+
+  // If we have > 750 words buffered up, perform the layout and consume out all but the last line
+  // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
+  // memory.
+  // Spotted when reading Intermezzo, there are some really long text blocks in there.
+  if (self->currentTextBlock->size() > 750) {
+    Serial.printf("[%lu] [EHP] Text block too long, splitting into multiple pages\n", millis());
+    self->currentTextBlock->layoutAndExtractLines(
+        self->renderer, self->fontId, self->marginLeft + self->marginRight,
+        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+  }
 }
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
