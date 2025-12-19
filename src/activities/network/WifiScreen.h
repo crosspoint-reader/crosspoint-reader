@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "../Activity.h"
-#include "OnScreenKeyboard.h"
+#include "../util/KeyboardEntryActivity.h"
 
 // Structure to hold WiFi network information
 struct WifiNetworkInfo {
@@ -46,7 +46,7 @@ class WifiScreen final : public Activity {
   bool selectedRequiresPassword = false;
 
   // On-screen keyboard for password entry
-  std::unique_ptr<OnScreenKeyboard> keyboard;
+  std::unique_ptr<KeyboardEntryActivity> keyboard;
 
   // Connection result
   std::string connectedIP;

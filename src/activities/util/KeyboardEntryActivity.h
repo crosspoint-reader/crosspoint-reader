@@ -5,18 +5,20 @@
 #include <functional>
 #include <string>
 
+#include "../Activity.h"
+
 /**
- * Reusable on-screen keyboard component for text input.
- * Can be embedded in any screen that needs text entry.
+ * Reusable keyboard entry activity for text input.
+ * Can be started from any activity that needs text entry.
  *
  * Usage:
- *   1. Create an OnScreenKeyboard instance
- *   2. Call render() to draw the keyboard
- *   3. Call handleInput() to process button presses
- *   4. When isComplete() returns true, get the result from getText()
- *   5. Call isCancelled() to check if user cancelled input
+ *   1. Create a KeyboardEntryActivity instance
+ *   2. Set callbacks with setOnComplete() and setOnCancel()
+ *   3. Call onEnter() to start the activity
+ *   4. Call loop() in your main loop
+ *   5. When complete or cancelled, callbacks will be invoked
  */
-class OnScreenKeyboard {
+class KeyboardEntryActivity : public Activity {
  public:
   // Callback types
   using OnCompleteCallback = std::function<void(const std::string&)>;
@@ -31,20 +33,20 @@ class OnScreenKeyboard {
    * @param maxLength Maximum length of input text (0 for unlimited)
    * @param isPassword If true, display asterisks instead of actual characters
    */
-  OnScreenKeyboard(GfxRenderer& renderer, InputManager& inputManager, const std::string& title = "Enter Text",
-                   const std::string& initialText = "", size_t maxLength = 0, bool isPassword = false);
+  KeyboardEntryActivity(GfxRenderer& renderer, InputManager& inputManager, const std::string& title = "Enter Text",
+                        const std::string& initialText = "", size_t maxLength = 0, bool isPassword = false);
 
   /**
-   * Handle button input. Call this in your screen's handleInput().
+   * Handle button input. Call this in your main loop.
    * @return true if input was handled, false otherwise
    */
   bool handleInput();
 
   /**
    * Render the keyboard at the specified Y position.
-   * @param startY Y-coordinate where keyboard rendering starts
+   * @param startY Y-coordinate where keyboard rendering starts (default 10)
    */
-  void render(int startY) const;
+  void render(int startY = 10) const;
 
   /**
    * Get the current text entered by the user.
@@ -81,10 +83,12 @@ class OnScreenKeyboard {
    */
   void setOnCancel(OnCancelCallback callback) { onCancel = callback; }
 
- private:
-  GfxRenderer& renderer;
-  InputManager& inputManager;
+  // Activity overrides
+  void onEnter() override;
+  void onExit() override;
+  void loop() override;
 
+ private:
   std::string title;
   std::string text;
   size_t maxLength;

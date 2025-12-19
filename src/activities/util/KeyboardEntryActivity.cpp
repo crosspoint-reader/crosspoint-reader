@@ -1,34 +1,33 @@
-#include "OnScreenKeyboard.h"
+#include "KeyboardEntryActivity.h"
 
-#include "config.h"
+#include "../../config.h"
 
 // Keyboard layouts - lowercase
-const char* const OnScreenKeyboard::keyboard[NUM_ROWS] = {
+const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
     "`1234567890-=", "qwertyuiop[]\\", "asdfghjkl;'", "zxcvbnm,./",
     "^  _____<OK"  // ^ = shift, _ = space, < = backspace, OK = done
 };
 
 // Keyboard layouts - uppercase/symbols
-const char* const OnScreenKeyboard::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"",
-                                                               "ZXCVBNM<>?", "^  _____<OK"};
+const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"",
+                                                                     "ZXCVBNM<>?", "^  _____<OK"};
 
-OnScreenKeyboard::OnScreenKeyboard(GfxRenderer& renderer, InputManager& inputManager, const std::string& title,
-                                   const std::string& initialText, size_t maxLength, bool isPassword)
-    : renderer(renderer),
-      inputManager(inputManager),
+KeyboardEntryActivity::KeyboardEntryActivity(GfxRenderer& renderer, InputManager& inputManager, const std::string& title,
+                                             const std::string& initialText, size_t maxLength, bool isPassword)
+    : Activity(renderer, inputManager),
       title(title),
       text(initialText),
       maxLength(maxLength),
       isPassword(isPassword) {}
 
-void OnScreenKeyboard::setText(const std::string& newText) {
+void KeyboardEntryActivity::setText(const std::string& newText) {
   text = newText;
   if (maxLength > 0 && text.length() > maxLength) {
     text = text.substr(0, maxLength);
   }
 }
 
-void OnScreenKeyboard::reset(const std::string& newTitle, const std::string& newInitialText) {
+void KeyboardEntryActivity::reset(const std::string& newTitle, const std::string& newInitialText) {
   if (!newTitle.empty()) {
     title = newTitle;
   }
@@ -40,7 +39,22 @@ void OnScreenKeyboard::reset(const std::string& newTitle, const std::string& new
   cancelled = false;
 }
 
-int OnScreenKeyboard::getRowLength(int row) const {
+void KeyboardEntryActivity::onEnter() {
+  // Reset state when entering the activity
+  complete = false;
+  cancelled = false;
+}
+
+void KeyboardEntryActivity::onExit() {
+  // Clean up if needed
+}
+
+void KeyboardEntryActivity::loop() {
+  handleInput();
+  render(10);
+}
+
+int KeyboardEntryActivity::getRowLength(int row) const {
   if (row < 0 || row >= NUM_ROWS) return 0;
 
   // Return actual length of each row based on keyboard layout
@@ -60,7 +74,7 @@ int OnScreenKeyboard::getRowLength(int row) const {
   }
 }
 
-char OnScreenKeyboard::getSelectedChar() const {
+char KeyboardEntryActivity::getSelectedChar() const {
   const char* const* layout = shiftActive ? keyboardShift : keyboard;
 
   if (selectedRow < 0 || selectedRow >= NUM_ROWS) return '\0';
@@ -69,7 +83,7 @@ char OnScreenKeyboard::getSelectedChar() const {
   return layout[selectedRow][selectedCol];
 }
 
-void OnScreenKeyboard::handleKeyPress() {
+void KeyboardEntryActivity::handleKeyPress() {
   // Handle special row (bottom row with shift, space, backspace, done)
   if (selectedRow == SHIFT_ROW) {
     if (selectedCol == SHIFT_COL) {
@@ -117,7 +131,7 @@ void OnScreenKeyboard::handleKeyPress() {
   }
 }
 
-bool OnScreenKeyboard::handleInput() {
+bool KeyboardEntryActivity::handleInput() {
   if (complete || cancelled) {
     return false;
   }
@@ -179,7 +193,7 @@ bool OnScreenKeyboard::handleInput() {
   return handled;
 }
 
-void OnScreenKeyboard::render(int startY) const {
+void KeyboardEntryActivity::render(int startY) const {
   const auto pageWidth = GfxRenderer::getScreenWidth();
 
   // Draw title

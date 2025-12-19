@@ -199,11 +199,11 @@ void WifiScreen::selectNetwork(int index) {
   if (selectedRequiresPassword) {
     // Show password entry
     state = WifiScreenState::PASSWORD_ENTRY;
-    keyboard.reset(new OnScreenKeyboard(renderer, inputManager, "Enter WiFi Password",
-                                        "",    // No initial text
-                                        64,    // Max password length
-                                        false  // Show password by default (hard keyboard to use)
-                                        ));
+    keyboard.reset(new KeyboardEntryActivity(renderer, inputManager, "Enter WiFi Password",
+                                             "",    // No initial text
+                                             64,    // Max password length
+                                             false  // Show password by default (hard keyboard to use)
+                                             ));
     updateRequired = true;
   } else {
     // Connect directly for open networks
