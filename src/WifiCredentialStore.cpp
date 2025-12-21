@@ -111,12 +111,12 @@ bool WifiCredentialStore::loadFromFile() {
 
 bool WifiCredentialStore::addCredential(const std::string& ssid, const std::string& password) {
   // Check if this SSID already exists and update it
-  for (auto& cred : credentials) {
-    if (cred.ssid == ssid) {
-      cred.password = password;
-      Serial.printf("[%lu] [WCS] Updated credentials for: %s\n", millis(), ssid.c_str());
-      return saveToFile();
-    }
+  const auto cred = find_if(credentials.begin(), credentials.end(),
+                            [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; });
+  if (cred != credentials.end()) {
+    cred->password = password;
+    Serial.printf("[%lu] [WCS] Updated credentials for: %s\n", millis(), ssid.c_str());
+    return saveToFile();
   }
 
   // Check if we've reached the limit
@@ -132,22 +132,24 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
 }
 
 bool WifiCredentialStore::removeCredential(const std::string& ssid) {
-  for (auto it = credentials.begin(); it != credentials.end(); ++it) {
-    if (it->ssid == ssid) {
-      credentials.erase(it);
-      Serial.printf("[%lu] [WCS] Removed credentials for: %s\n", millis(), ssid.c_str());
-      return saveToFile();
-    }
+  const auto cred = find_if(credentials.begin(), credentials.end(),
+                            [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; });
+  if (cred != credentials.end()) {
+    credentials.erase(cred);
+    Serial.printf("[%lu] [WCS] Removed credentials for: %s\n", millis(), ssid.c_str());
+    return saveToFile();
   }
   return false;  // Not found
 }
 
 const WifiCredential* WifiCredentialStore::findCredential(const std::string& ssid) const {
-  for (const auto& cred : credentials) {
-    if (cred.ssid == ssid) {
-      return &cred;
-    }
+  const auto cred = find_if(credentials.begin(), credentials.end(),
+                            [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; });
+
+  if (cred != credentials.end()) {
+    return &*cred;
   }
+
   return nullptr;
 }
 

@@ -383,9 +383,7 @@ void CrossPointWebServer::handleFileList() {
       // Folders come first
       if (a.isDirectory != b.isDirectory) return a.isDirectory > b.isDirectory;
       // Then sort by epub status (epubs first among files)
-      if (!a.isDirectory && !b.isDirectory) {
-        if (a.isEpub != b.isEpub) return a.isEpub > b.isEpub;
-      }
+      if (a.isEpub != b.isEpub) return a.isEpub > b.isEpub;
       // Then alphabetically
       return a.name < b.name;
     });

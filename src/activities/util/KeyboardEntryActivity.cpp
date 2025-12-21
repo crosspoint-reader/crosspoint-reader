@@ -20,7 +20,7 @@ KeyboardEntryActivity::KeyboardEntryActivity(GfxRenderer& renderer, InputManager
 void KeyboardEntryActivity::setText(const std::string& newText) {
   text = newText;
   if (maxLength > 0 && text.length() > maxLength) {
-    text = text.substr(0, maxLength);
+    text.resize(maxLength);
   }
 }
 

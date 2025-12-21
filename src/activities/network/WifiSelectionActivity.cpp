@@ -138,6 +138,7 @@ void WifiSelectionActivity::processWifiScanResults() {
   // Convert map to vector
   networks.clear();
   for (const auto& pair : uniqueNetworks) {
+    // cppcheck-suppress useStlAlgorithm
     networks.push_back(pair.second);
   }
 
@@ -334,11 +335,10 @@ void WifiSelectionActivity::loop() {
         // User chose "Yes" - forget the network
         WIFI_STORE.removeCredential(selectedSSID);
         // Update the network list to reflect the change
-        for (auto& network : networks) {
-          if (network.ssid == selectedSSID) {
-            network.hasSavedPassword = false;
-            break;
-          }
+        const auto network = find_if(networks.begin(), networks.end(),
+                                     [this](const WifiNetworkInfo& net) { return net.ssid == selectedSSID; });
+        if (network != networks.end()) {
+          network->hasSavedPassword = false;
         }
       }
       // Go back to network list
@@ -468,8 +468,8 @@ void WifiSelectionActivity::render() const {
 }
 
 void WifiSelectionActivity::renderNetworkList() const {
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
   renderer.drawCenteredText(READER_FONT_ID, 10, "WiFi Networks", true, BOLD);
@@ -506,7 +506,7 @@ void WifiSelectionActivity::renderNetworkList() const {
       // Draw network name (truncate if too long)
       std::string displayName = network.ssid;
       if (displayName.length() > 16) {
-        displayName = displayName.substr(0, 13) + "...";
+        displayName.replace(13, displayName.length() - 13, "...");
       }
       renderer.drawText(UI_FONT_ID, 20, networkY, displayName.c_str());
 
@@ -544,15 +544,13 @@ void WifiSelectionActivity::renderNetworkList() const {
 }
 
 void WifiSelectionActivity::renderPasswordEntry() const {
-  const auto pageHeight = GfxRenderer::getScreenHeight();
-
   // Draw header
   renderer.drawCenteredText(READER_FONT_ID, 5, "WiFi Password", true, BOLD);
 
   // Draw network name with good spacing from header
   std::string networkInfo = "Network: " + selectedSSID;
   if (networkInfo.length() > 30) {
-    networkInfo = networkInfo.substr(0, 27) + "...";
+    networkInfo.replace(27, networkInfo.length() - 27, "...");
   }
   renderer.drawCenteredText(UI_FONT_ID, 38, networkInfo.c_str(), true, REGULAR);
 
@@ -563,7 +561,7 @@ void WifiSelectionActivity::renderPasswordEntry() const {
 }
 
 void WifiSelectionActivity::renderConnecting() const {
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageHeight = renderer.getScreenHeight();
   const auto height = renderer.getLineHeight(UI_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
@@ -574,15 +572,14 @@ void WifiSelectionActivity::renderConnecting() const {
 
     std::string ssidInfo = "to " + selectedSSID;
     if (ssidInfo.length() > 25) {
-      ssidInfo = ssidInfo.substr(0, 22) + "...";
+      ssidInfo.replace(22, ssidInfo.length() - 22, "...");
     }
     renderer.drawCenteredText(UI_FONT_ID, top, ssidInfo.c_str(), true, REGULAR);
   }
 }
 
 void WifiSelectionActivity::renderConnected() const {
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageHeight = renderer.getScreenHeight();
   const auto height = renderer.getLineHeight(UI_FONT_ID);
   const auto top = (pageHeight - height * 4) / 2;
 
@@ -590,7 +587,7 @@ void WifiSelectionActivity::renderConnected() const {
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
-    ssidInfo = ssidInfo.substr(0, 25) + "...";
+    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
   renderer.drawCenteredText(UI_FONT_ID, top + 10, ssidInfo.c_str(), true, REGULAR);
 
@@ -601,8 +598,8 @@ void WifiSelectionActivity::renderConnected() const {
 }
 
 void WifiSelectionActivity::renderSavePrompt() const {
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
   const auto height = renderer.getLineHeight(UI_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
@@ -610,7 +607,7 @@ void WifiSelectionActivity::renderSavePrompt() const {
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
-    ssidInfo = ssidInfo.substr(0, 25) + "...";
+    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
   renderer.drawCenteredText(UI_FONT_ID, top, ssidInfo.c_str(), true, REGULAR);
 
@@ -641,7 +638,7 @@ void WifiSelectionActivity::renderSavePrompt() const {
 }
 
 void WifiSelectionActivity::renderConnectionFailed() const {
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageHeight = renderer.getScreenHeight();
   const auto height = renderer.getLineHeight(UI_FONT_ID);
   const auto top = (pageHeight - height * 2) / 2;
 
@@ -651,8 +648,8 @@ void WifiSelectionActivity::renderConnectionFailed() const {
 }
 
 void WifiSelectionActivity::renderForgetPrompt() const {
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
   const auto height = renderer.getLineHeight(UI_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
@@ -660,7 +657,7 @@ void WifiSelectionActivity::renderForgetPrompt() const {
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
-    ssidInfo = ssidInfo.substr(0, 25) + "...";
+    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
   renderer.drawCenteredText(UI_FONT_ID, top, ssidInfo.c_str(), true, REGULAR);
 

@@ -34,7 +34,7 @@ jobs:
           sudo apt-get install -y clang-format-21
 
       - name: Run cppcheck
-        run: pio check --fail-on-defect medium --fail-on-defect high
+        run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 
       - name: Run clang-format
         run: PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix && git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)

@@ -5,7 +5,6 @@
 #include <InputManager.h>
 #include <SD.h>
 #include <SPI.h>
-#include <WiFi.h>
 #include <builtinFonts/bookerly_2b.h>
 #include <builtinFonts/bookerly_bold_2b.h>
 #include <builtinFonts/bookerly_bold_italic_2b.h>
@@ -203,19 +202,17 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lastLoopTime = 0;
   static unsigned long maxLoopDuration = 0;
-
-  unsigned long loopStartTime = millis();
-
+  const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
+
+  inputManager.update();
+
   if (Serial && millis() - lastMemPrint >= 10000) {
     Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
                   ESP.getHeapSize(), ESP.getMinFreeHeap());
     lastMemPrint = millis();
   }
-
-  inputManager.update();
 
   // Check for any user activity (button press or release)
   static unsigned long lastActivityTime = millis();
@@ -237,13 +234,13 @@ void loop() {
     return;
   }
 
-  unsigned long activityStartTime = millis();
+  const unsigned long activityStartTime = millis();
   if (currentActivity) {
     currentActivity->loop();
   }
-  unsigned long activityDuration = millis() - activityStartTime;
+  const unsigned long activityDuration = millis() - activityStartTime;
 
-  unsigned long loopDuration = millis() - loopStartTime;
+  const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {
     maxLoopDuration = loopDuration;
     if (maxLoopDuration > 50) {
@@ -251,8 +248,6 @@ void loop() {
                     activityDuration);
     }
   }
-
-  lastLoopTime = loopStartTime;
 
   // Add delay at the end of the loop to prevent tight spinning
   // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response

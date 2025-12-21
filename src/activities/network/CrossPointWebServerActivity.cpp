@@ -217,8 +217,7 @@ void CrossPointWebServerActivity::render() const {
 }
 
 void CrossPointWebServerActivity::renderServerRunning() const {
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageHeight = renderer.getScreenHeight();
   const auto height = renderer.getLineHeight(UI_FONT_ID);
   const auto top = (pageHeight - height * 5) / 2;
 
@@ -226,7 +225,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
   std::string ssidInfo = "Network: " + connectedSSID;
   if (ssidInfo.length() > 28) {
-    ssidInfo = ssidInfo.substr(0, 25) + "...";
+    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
   renderer.drawCenteredText(UI_FONT_ID, top + 10, ssidInfo.c_str(), true, REGULAR);
 

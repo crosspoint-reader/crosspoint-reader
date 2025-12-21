@@ -93,7 +93,7 @@ void FileSelectionActivity::loop() {
     }
   } else if (inputManager.wasPressed(InputManager::BTN_BACK)) {
     if (basepath != "/") {
-      basepath = basepath.substr(0, basepath.rfind('/'));
+      basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
       if (basepath.empty()) basepath = "/";
       loadFiles();
       updateRequired = true;
