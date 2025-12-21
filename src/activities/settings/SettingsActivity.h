@@ -12,13 +12,14 @@
 
 class CrossPointSettings;
 
-enum class SettingType { TOGGLE };
+enum class SettingType { TOGGLE, ENUM };
 
 // Structure to hold setting information
 struct SettingInfo {
   const char* name;                        // Display name of the setting
   SettingType type;                        // Type of setting
-  uint8_t CrossPointSettings::* valuePtr;  // Pointer to member in CrossPointSettings (for TOGGLE)
+  uint8_t CrossPointSettings::* valuePtr;  // Pointer to member in CrossPointSettings (for TOGGLE/ENUM)
+  std::vector<std::string> enumValues;
 };
 
 class SettingsActivity final : public Activity {
@@ -27,10 +28,6 @@ class SettingsActivity final : public Activity {
   bool updateRequired = false;
   int selectedSettingIndex = 0;  // Currently selected setting
   const std::function<void()> onGoHome;
-
-  // Static settings list
-  static constexpr int settingsCount = 3;  // Number of settings
-  static const SettingInfo settingsList[settingsCount];
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
