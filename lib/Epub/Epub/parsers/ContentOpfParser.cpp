@@ -4,7 +4,7 @@
 #include <ZipFile.h>
 
 namespace {
-constexpr const char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
+constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 }
 
 bool ContentOpfParser::setup() {
@@ -20,12 +20,11 @@ bool ContentOpfParser::setup() {
   return true;
 }
 
-bool ContentOpfParser::teardown() {
+ContentOpfParser::~ContentOpfParser() {
   if (parser) {
     XML_ParserFree(parser);
     parser = nullptr;
   }
-  return true;
 }
 
 size_t ContentOpfParser::write(const uint8_t data) { return write(&data, 1); }

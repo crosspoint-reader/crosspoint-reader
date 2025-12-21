@@ -34,9 +34,9 @@ class ContentOpfParser final : public Print {
 
   explicit ContentOpfParser(const std::string& baseContentPath, const size_t xmlSize)
       : baseContentPath(baseContentPath), remainingSize(xmlSize) {}
+  ~ContentOpfParser() override;
 
   bool setup();
-  bool teardown();
 
   size_t write(uint8_t) override;
   size_t write(const uint8_t* buffer, size_t size) override;

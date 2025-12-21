@@ -14,12 +14,11 @@ bool ContainerParser::setup() {
   return true;
 }
 
-bool ContainerParser::teardown() {
+ContainerParser::~ContainerParser() {
   if (parser) {
     XML_ParserFree(parser);
     parser = nullptr;
   }
-  return true;
 }
 
 size_t ContainerParser::write(const uint8_t data) { return write(&data, 1); }

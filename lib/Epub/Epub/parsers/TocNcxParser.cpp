@@ -1,5 +1,6 @@
 #include "TocNcxParser.h"
 
+#include <Esp.h>
 #include <HardwareSerial.h>
 
 bool TocNcxParser::setup() {
@@ -15,12 +16,11 @@ bool TocNcxParser::setup() {
   return true;
 }
 
-bool TocNcxParser::teardown() {
+TocNcxParser::~TocNcxParser() {
   if (parser) {
     XML_ParserFree(parser);
     parser = nullptr;
   }
-  return true;
 }
 
 size_t TocNcxParser::write(const uint8_t data) { return write(&data, 1); }

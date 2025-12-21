@@ -30,24 +30,22 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   // Stream read (reusing your existing stream logic)
   if (!readItemContentsToStream(containerPath, containerParser, 512)) {
     Serial.printf("[%lu] [EBP] Could not read META-INF/container.xml\n", millis());
-    containerParser.teardown();
     return false;
   }
 
   // Extract the result
   if (containerParser.fullPath.empty()) {
     Serial.printf("[%lu] [EBP] Could not find valid rootfile in container.xml\n", millis());
-    containerParser.teardown();
     return false;
   }
 
   *contentOpfFile = std::move(containerParser.fullPath);
-
-  containerParser.teardown();
   return true;
 }
 
 bool Epub::parseContentOpf(const std::string& contentOpfFilePath) {
+  Serial.printf("[%lu] [EBP] Parsing content.opf: %s\n", millis(), contentOpfFilePath.c_str());
+
   size_t contentOpfSize;
   if (!getItemSize(contentOpfFilePath, &contentOpfSize)) {
     Serial.printf("[%lu] [EBP] Could not get size of content.opf\n", millis());
@@ -63,7 +61,6 @@ bool Epub::parseContentOpf(const std::string& contentOpfFilePath) {
 
   if (!readItemContentsToStream(contentOpfFilePath, opfParser, 1024)) {
     Serial.printf("[%lu] [EBP] Could not read content.opf\n", millis());
-    opfParser.teardown();
     return false;
   }
 
@@ -84,8 +81,6 @@ bool Epub::parseContentOpf(const std::string& contentOpfFilePath) {
   }
 
   Serial.printf("[%lu] [EBP] Successfully parsed content.opf\n", millis());
-
-  opfParser.teardown();
   return true;
 }
 
@@ -95,6 +90,8 @@ bool Epub::parseTocNcxFile() {
     Serial.printf("[%lu] [EBP] No ncx file specified\n", millis());
     return false;
   }
+
+  Serial.printf("[%lu] [EBP] Parsing toc ncx file: %s\n", millis(), tocNcxItem.c_str());
 
   size_t tocSize;
   if (!getItemSize(tocNcxItem, &tocSize)) {
@@ -111,15 +108,12 @@ bool Epub::parseTocNcxFile() {
 
   if (!readItemContentsToStream(tocNcxItem, ncxParser, 1024)) {
     Serial.printf("[%lu] [EBP] Could not read toc ncx stream\n", millis());
-    ncxParser.teardown();
     return false;
   }
 
   this->toc = std::move(ncxParser.toc);
 
   Serial.printf("[%lu] [EBP] Parsed %d TOC items\n", millis(), this->toc.size());
-
-  ncxParser.teardown();
   return true;
 }
 
