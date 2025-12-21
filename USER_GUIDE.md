@@ -73,7 +73,7 @@ You can customize the sleep screen by placing custom images in specific location
 
 > [!TIP]
 > For best results:
-> - use uncompressed BMP files with 24-bit color depth
+> - Use uncompressed BMP files with 24-bit color depth
 > - Use a resolution of 480x800 pixels to match the device's screen resolution.
 
 ---
