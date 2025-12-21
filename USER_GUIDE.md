@@ -59,7 +59,11 @@ See the [webserver docs](./docs/webserver.md) for more information on how to con
 ### 3.5 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
-- **White Sleep Screen**: Whether to use the white screen or black (inverted) default sleep screen
+- **Sleep Screen**: Which sleep screen to display when the device sleeps, options are:
+  - "Dark" (default) - The default dark sleep screen
+  - "Light" - The same default sleep screen, on a white background
+  - "Custom" - Custom images from the SD card, see [3.6 Sleep Screen](#36-sleep-screen) below for more information
+  - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
 - **Extra Paragraph Spacing**: If enabled, vertical space will be added between paragraphs in the book, if disabled,
   paragraphs will not have vertical space between them, but will have first word indentation.
 - **Short Power Button Click**: Whether to trigger the power button on a short press or a long press.
@@ -69,7 +73,12 @@ The Settings screen allows you to configure the device's behavior. There are a f
 You can customize the sleep screen by placing custom images in specific locations on the SD card:
 
 - **Single Image:** Place a file named `sleep.bmp` in the root directory.
-- **Multiple Images:** Create a `sleep` directory in the root of the SD card and place any number of `.bmp` images inside. If images are found in this directory, they will take priority over the `sleep.png` file, and one will be randomly selected each time the device sleeps.
+- **Multiple Images:** Create a `sleep` directory in the root of the SD card and place any number of `.bmp` images
+  inside. If images are found in this directory, they will take priority over the `sleep.png` file, and one will be
+  randomly selected each time the device sleeps.
+
+> [!NOTE]
+> You'll need to set the **Sleep Screen** setting to **Custom** in order to use these images.
 
 > [!TIP]
 > For best results:
