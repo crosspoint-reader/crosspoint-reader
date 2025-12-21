@@ -513,13 +513,6 @@ void CrossPointWebServer::handleUpload() {
     Serial.printf("[%lu] [WEB] [UPLOAD] START: %s to path: %s\n", millis(), uploadFileName.c_str(), uploadPath.c_str());
     Serial.printf("[%lu] [WEB] [UPLOAD] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
 
-    // Validate file extension
-    if (!isEpubFile(uploadFileName)) {
-      uploadError = "Only .epub files are allowed";
-      Serial.printf("[%lu] [WEB] [UPLOAD] REJECTED - not an epub file\n", millis());
-      return;
-    }
-
     // Create file path
     String filePath = uploadPath;
     if (!filePath.endsWith("/")) filePath += "/";
