@@ -155,7 +155,7 @@ void XMLCALL TocNcxParser::endElement(void* userData, const XML_Char* name) {
       }
 
       // Push to vector
-      self->toc.emplace_back(self->currentLabel, href, anchor, self->currentDepth);
+      self->toc.push_back({ std::move(self->currentLabel), std::move(href), std::move(anchor), self->currentDepth });
 
       // Clear them so we don't re-add them if there are weird XML structures
       self->currentLabel.clear();

@@ -93,23 +93,41 @@ bool Epub::parseTocNcxFile() {
 
   Serial.printf("[%lu] [EBP] Parsing toc ncx file: %s\n", millis(), tocNcxItem.c_str());
 
-  size_t tocSize;
-  if (!getItemSize(tocNcxItem, &tocSize)) {
-    Serial.printf("[%lu] [EBP] Could not get size of toc ncx\n", millis());
-    return false;
-  }
+  const auto tmpNcxPath = getCachePath() + "/toc.ncx";
+  File tempNcxFile = SD.open(tmpNcxPath.c_str(), FILE_WRITE);
+  readItemContentsToStream(tocNcxItem, tempNcxFile, 1024);
+  tempNcxFile.close();
+  tempNcxFile = SD.open(tmpNcxPath.c_str(), FILE_READ);
+  const auto ncxSize = tempNcxFile.size();
 
-  TocNcxParser ncxParser(contentBasePath, tocSize);
+  TocNcxParser ncxParser(contentBasePath, ncxSize);
 
   if (!ncxParser.setup()) {
     Serial.printf("[%lu] [EBP] Could not setup toc ncx parser\n", millis());
     return false;
   }
 
-  if (!readItemContentsToStream(tocNcxItem, ncxParser, 1024)) {
-    Serial.printf("[%lu] [EBP] Could not read toc ncx stream\n", millis());
+  const auto ncxBuffer = static_cast<uint8_t *>(malloc(1024));
+  if (!ncxBuffer) {
+    Serial.printf("[%lu] [EBP] Could not allocate memory for toc ncx parser\n", millis());
     return false;
   }
+
+  while (tempNcxFile.available()) {
+    const auto readSize = tempNcxFile.read(ncxBuffer, 1024);
+    const auto processedSize = ncxParser.write(ncxBuffer, readSize);
+
+    if (processedSize != readSize) {
+      Serial.printf("[%lu] [EBP] Could not process all toc ncx data\n", millis());
+      free(ncxBuffer);
+      tempNcxFile.close();
+      return false;
+    }
+  }
+
+  free(ncxBuffer);
+  tempNcxFile.close();
+  SD.remove(tmpNcxPath.c_str());
 
   this->toc = std::move(ncxParser.toc);
 
@@ -293,7 +311,7 @@ std::string& Epub::getSpineItem(const int spineIndex) {
 }
 
 EpubTocEntry& Epub::getTocItem(const int tocTndex) {
-  static EpubTocEntry emptyEntry("", "", "", 0);
+  static EpubTocEntry emptyEntry = {};
   if (toc.empty()) {
     Serial.printf("[%lu] [EBP] getTocItem called but toc is empty\n", millis());
     return emptyEntry;

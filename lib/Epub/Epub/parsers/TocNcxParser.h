@@ -17,7 +17,7 @@ class TocNcxParser final : public Print {
 
   std::string currentLabel;
   std::string currentSrc;
-  size_t currentDepth = 0;
+  uint8_t currentDepth = 0;
 
   static void startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void characterData(void* userData, const XML_Char* s, int len);
