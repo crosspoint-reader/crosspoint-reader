@@ -5,8 +5,10 @@
 
 #include "config.h"
 
+namespace {
 constexpr int PAGE_ITEMS = 24;
 constexpr int SKIP_PAGE_MS = 700;
+}  // namespace
 
 void EpubReaderChapterSelectionActivity::taskTrampoline(void* param) {
   auto* self = static_cast<EpubReaderChapterSelectionActivity*>(param);
