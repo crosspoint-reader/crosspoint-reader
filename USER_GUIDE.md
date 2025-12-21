@@ -64,6 +64,18 @@ The Settings screen allows you to configure the device's behavior. There are a f
   paragraphs will not have vertical space between them, but will have first word indentation.
 - **Short Power Button Click**: Whether to trigger the power button on a short press or a long press.
 
+### 3.6 Sleep Screen
+
+You can customize the sleep screen by placing custom images in specific locations on the SD card:
+
+- **Single Image:** Place a file named `sleep.bmp` in the root directory.
+- **Multiple Images:** Create a `sleep` directory in the root of the SD card and place any number of `.bmp` images inside. If images are found in this directory, they will take priority over the `sleep.png` file, and one will be randomly selected each time the device sleeps.
+
+> [!TIP]
+> For best results:
+> - use uncompressed BMP files with 24-bit color depth
+> - Use a resolution of 480x800 pixels to match the device's screen resolution.
+
 ---
 
 ## 4. Reading Mode
