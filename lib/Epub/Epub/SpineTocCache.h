@@ -2,7 +2,6 @@
 
 #include <SD.h>
 
-#include <fstream>
 #include <string>
 
 class SpineTocCache {
@@ -13,7 +12,7 @@ class SpineTocCache {
     int16_t tocIndex;
 
     SpineEntry() : cumulativeSize(0), tocIndex(-1) {}
-    SpineEntry(std::string href, size_t cumulativeSize, int16_t tocIndex)
+    SpineEntry(std::string href, const size_t cumulativeSize, const int16_t tocIndex)
         : href(std::move(href)), cumulativeSize(cumulativeSize), tocIndex(tocIndex) {}
   };
 
@@ -25,7 +24,7 @@ class SpineTocCache {
     int16_t spineIndex;
 
     TocEntry() : level(0), spineIndex(-1) {}
-    TocEntry(std::string title, std::string href, std::string anchor, uint8_t level, int16_t spineIndex)
+    TocEntry(std::string title, std::string href, std::string anchor, const uint8_t level, const int16_t spineIndex)
         : title(std::move(title)),
           href(std::move(href)),
           anchor(std::move(anchor)),
@@ -46,8 +45,8 @@ class SpineTocCache {
 
   void writeSpineEntry(File& file, const SpineEntry& entry) const;
   void writeTocEntry(File& file, const TocEntry& entry) const;
-  SpineEntry readSpineEntry(std::ifstream& is) const;
-  TocEntry readTocEntry(std::ifstream& is) const;
+  SpineEntry readSpineEntry(File& file) const;
+  TocEntry readTocEntry(File& file) const;
 
  public:
   explicit SpineTocCache(std::string cachePath)
@@ -61,12 +60,12 @@ class SpineTocCache {
   bool endWrite();
 
   // Post-processing to update mappings and sizes
-  bool updateMappingsAndSizes(const std::string& epubPath) const;
+  bool updateMappingsAndSizes(const std::string& epubPath);
 
   // Reading phase (read mode)
   bool load();
-  SpineEntry getSpineEntry(int index) const;
-  TocEntry getTocEntry(int index) const;
+  SpineEntry getSpineEntry(int index);
+  TocEntry getTocEntry(int index);
   int getSpineCount() const;
   int getTocCount() const;
   bool isLoaded() const;
