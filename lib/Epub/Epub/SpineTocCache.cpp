@@ -7,45 +7,13 @@
 
 #include <vector>
 
+#include "FsHelpers.h"
+
 namespace {
 constexpr uint8_t SPINE_TOC_CACHE_VERSION = 1;
-
-// TODO: Centralize this?
-std::string normalisePath(const std::string& path) {
-  std::vector<std::string> components;
-  std::string component;
-
-  for (const auto c : path) {
-    if (c == '/') {
-      if (!component.empty()) {
-        if (component == "..") {
-          if (!components.empty()) {
-            components.pop_back();
-          }
-        } else {
-          components.push_back(component);
-        }
-        component.clear();
-      }
-    } else {
-      component += c;
-    }
-  }
-
-  if (!component.empty()) {
-    components.push_back(component);
-  }
-
-  std::string result;
-  for (const auto& c : components) {
-    if (!result.empty()) {
-      result += "/";
-    }
-    result += c;
-  }
-
-  return result;
-}
+constexpr char spineTocMetaBinFile[] = "/spine_toc_meta.bin";
+constexpr char spineBinFile[] = "/spine.bin";
+constexpr char tocBinFile[] = "/toc.bin";
 }  // namespace
 
 bool SpineTocCache::beginWrite() {
@@ -56,7 +24,7 @@ bool SpineTocCache::beginWrite() {
   Serial.printf("[%lu] [STC] Beginning write to cache path: %s\n", millis(), cachePath.c_str());
 
   // Open spine file for writing
-  const std::string spineFilePath = cachePath + "/spine.bin";
+  const std::string spineFilePath = cachePath + spineBinFile;
   Serial.printf("[%lu] [STC] Opening spine file: %s\n", millis(), spineFilePath.c_str());
   spineFile = SD.open(spineFilePath.c_str(), FILE_WRITE, true);
   if (!spineFile) {
@@ -65,7 +33,7 @@ bool SpineTocCache::beginWrite() {
   }
 
   // Open TOC file for writing
-  const std::string tocFilePath = cachePath + "/toc.bin";
+  const std::string tocFilePath = cachePath + tocBinFile;
   Serial.printf("[%lu] [STC] Opening toc file: %s\n", millis(), tocFilePath.c_str());
   tocFile = SD.open(tocFilePath.c_str(), FILE_WRITE, true);
   if (!tocFile) {
@@ -78,24 +46,18 @@ bool SpineTocCache::beginWrite() {
   return true;
 }
 
-void SpineTocCache::writeString(File& file, const std::string& s) const {
-  const auto len = static_cast<uint32_t>(s.size());
-  file.write(reinterpret_cast<const uint8_t*>(&len), sizeof(len));
-  file.write(reinterpret_cast<const uint8_t*>(s.data()), len);
-}
-
 void SpineTocCache::writeSpineEntry(File& file, const SpineEntry& entry) const {
-  writeString(file, entry.href);
-  file.write(reinterpret_cast<const uint8_t*>(&entry.cumulativeSize), sizeof(entry.cumulativeSize));
-  file.write(reinterpret_cast<const uint8_t*>(&entry.tocIndex), sizeof(entry.tocIndex));
+  serialization::writeString(file, entry.href);
+  serialization::writePod(file, entry.cumulativeSize);
+  serialization::writePod(file, entry.tocIndex);
 }
 
 void SpineTocCache::writeTocEntry(File& file, const TocEntry& entry) const {
-  writeString(file, entry.title);
-  writeString(file, entry.href);
-  writeString(file, entry.anchor);
-  file.write(&entry.level, 1);
-  file.write(reinterpret_cast<const uint8_t*>(&entry.spineIndex), sizeof(entry.spineIndex));
+  serialization::writeString(file, entry.title);
+  serialization::writeString(file, entry.href);
+  serialization::writeString(file, entry.anchor);
+  serialization::writePod(file, entry.level);
+  serialization::writePod(file, entry.spineIndex);
 }
 
 void SpineTocCache::addSpineEntry(const std::string& href) {
@@ -131,15 +93,15 @@ bool SpineTocCache::endWrite() {
   tocFile.close();
 
   // Write metadata files with counts
-  const auto spineMetaPath = cachePath + "/spine_meta.bin";
-  File metaFile = SD.open(spineMetaPath.c_str(), FILE_WRITE, true);
+  const auto spineTocMetaPath = cachePath + spineTocMetaBinFile;
+  File metaFile = SD.open(spineTocMetaPath.c_str(), FILE_WRITE, true);
   if (!metaFile) {
     Serial.printf("[%lu] [STC] Failed to write spine metadata\n", millis());
     return false;
   }
-  metaFile.write(&SPINE_TOC_CACHE_VERSION, 1);
-  metaFile.write(reinterpret_cast<const uint8_t*>(&spineCount), sizeof(spineCount));
-  metaFile.write(reinterpret_cast<const uint8_t*>(&tocCount), sizeof(tocCount));
+  serialization::writePod(metaFile, SPINE_TOC_CACHE_VERSION);
+  serialization::writePod(metaFile, spineCount);
+  serialization::writePod(metaFile, tocCount);
   metaFile.close();
 
   buildMode = false;
@@ -147,28 +109,21 @@ bool SpineTocCache::endWrite() {
   return true;
 }
 
-void SpineTocCache::readString(std::ifstream& is, std::string& s) const {
-  uint32_t len;
-  is.read(reinterpret_cast<char*>(&len), sizeof(len));
-  s.resize(len);
-  is.read(&s[0], len);
-}
-
 SpineTocCache::SpineEntry SpineTocCache::readSpineEntry(std::ifstream& is) const {
   SpineEntry entry;
-  readString(is, entry.href);
-  is.read(reinterpret_cast<char*>(&entry.cumulativeSize), sizeof(entry.cumulativeSize));
-  is.read(reinterpret_cast<char*>(&entry.tocIndex), sizeof(entry.tocIndex));
+  serialization::readString(is, entry.href);
+  serialization::readPod(is, entry.cumulativeSize);
+  serialization::readPod(is, entry.tocIndex);
   return entry;
 }
 
 SpineTocCache::TocEntry SpineTocCache::readTocEntry(std::ifstream& is) const {
   TocEntry entry;
-  readString(is, entry.title);
-  readString(is, entry.href);
-  readString(is, entry.anchor);
-  is.read(reinterpret_cast<char*>(&entry.level), 1);
-  is.read(reinterpret_cast<char*>(&entry.spineIndex), sizeof(entry.spineIndex));
+  serialization::readString(is, entry.title);
+  serialization::readString(is, entry.href);
+  serialization::readString(is, entry.anchor);
+  serialization::readPod(is, entry.level);
+  serialization::readPod(is, entry.spineIndex);
   return entry;
 }
 
@@ -186,7 +141,7 @@ bool SpineTocCache::updateMappingsAndSizes(const std::string& epubPath) const {
 
   // Read spine entries
   {
-    const auto spineFilePath = "/sd" + cachePath + "/spine.bin";
+    const auto spineFilePath = "/sd" + cachePath + spineBinFile;
     std::ifstream spineStream(spineFilePath.c_str(), std::ios::binary);
     if (!spineStream) {
       Serial.printf("[%lu] [STC] Failed to open spine file for reading\n", millis());
@@ -201,7 +156,7 @@ bool SpineTocCache::updateMappingsAndSizes(const std::string& epubPath) const {
 
   // Read TOC entries
   {
-    const auto tocFilePath = "/sd" + cachePath + "/toc.bin";
+    const auto tocFilePath = "/sd" + cachePath + tocBinFile;
     std::ifstream tocStream(tocFilePath.c_str(), std::ios::binary);
     if (!tocStream) {
       Serial.printf("[%lu] [STC] Failed to open toc file for reading\n", millis());
@@ -220,7 +175,7 @@ bool SpineTocCache::updateMappingsAndSizes(const std::string& epubPath) const {
 
   for (int i = 0; i < spineCount; i++) {
     size_t itemSize = 0;
-    const std::string path = normalisePath(spineEntries[i].href);
+    const std::string path = FsHelpers::normalisePath(spineEntries[i].href);
     if (zip.getInflatedFileSize(path.c_str(), &itemSize)) {
       cumSize += itemSize;
       spineEntries[i].cumulativeSize = cumSize;
@@ -231,21 +186,12 @@ bool SpineTocCache::updateMappingsAndSizes(const std::string& epubPath) const {
 
   Serial.printf("[%lu] [STC] Book size: %lu\n", millis(), cumSize);
 
-  // Compute spine → TOC mappings
+  // Compute spine <-> TOC mappings
   for (int i = 0; i < spineCount; i++) {
     for (int j = 0; j < tocCount; j++) {
       if (tocEntries[j].href == spineEntries[i].href) {
         spineEntries[i].tocIndex = static_cast<int16_t>(j);
-        break;
-      }
-    }
-  }
-
-  // Compute TOC → spine mappings
-  for (int i = 0; i < tocCount; i++) {
-    for (int j = 0; j < spineCount; j++) {
-      if (spineEntries[j].href == tocEntries[i].href) {
-        tocEntries[i].spineIndex = static_cast<int16_t>(j);
+        tocEntries[j].spineIndex = static_cast<int16_t>(i);
         break;
       }
     }
@@ -253,7 +199,7 @@ bool SpineTocCache::updateMappingsAndSizes(const std::string& epubPath) const {
 
   // Rewrite spine file with updated data
   {
-    const auto spineFilePath = cachePath + "/spine.bin";
+    const auto spineFilePath = cachePath + spineBinFile;
     File spineFile = SD.open(spineFilePath.c_str(), FILE_WRITE, true);
     if (!spineFile) {
       Serial.printf("[%lu] [STC] Failed to reopen spine file for writing\n", millis());
@@ -268,7 +214,7 @@ bool SpineTocCache::updateMappingsAndSizes(const std::string& epubPath) const {
 
   // Rewrite TOC file with updated data
   {
-    const auto tocFilePath = cachePath + "/toc.bin";
+    const auto tocFilePath = cachePath + tocBinFile;
     File tocFile = SD.open(tocFilePath.c_str(), FILE_WRITE, true);
     if (!tocFile) {
       Serial.printf("[%lu] [STC] Failed to reopen toc file for writing\n", millis());
@@ -293,20 +239,20 @@ bool SpineTocCache::updateMappingsAndSizes(const std::string& epubPath) const {
 
 bool SpineTocCache::load() {
   // Load metadata
-  const auto metaPath = cachePath + "/spine_meta.bin";
-  if (!SD.exists(metaPath.c_str())) {
-    Serial.printf("[%lu] [STC] Cache metadata does not exist: %s\n", millis(), metaPath.c_str());
+  const auto spineTocMetaPath = cachePath + spineTocMetaBinFile;
+  if (!SD.exists(spineTocMetaPath.c_str())) {
+    Serial.printf("[%lu] [STC] Cache metadata does not exist: %s\n", millis(), spineTocMetaPath.c_str());
     return false;
   }
 
-  File metaFile = SD.open(metaPath.c_str(), FILE_READ);
+  File metaFile = SD.open(spineTocMetaPath.c_str(), FILE_READ);
   if (!metaFile) {
     Serial.printf("[%lu] [STC] Failed to open cache metadata\n", millis());
     return false;
   }
 
   uint8_t version;
-  metaFile.read(&version, 1);
+  serialization::readPod(metaFile, version);
   if (version != SPINE_TOC_CACHE_VERSION) {
     Serial.printf("[%lu] [STC] Cache version mismatch: expected %d, got %d\n", millis(), SPINE_TOC_CACHE_VERSION,
                   version);
@@ -314,8 +260,9 @@ bool SpineTocCache::load() {
     return false;
   }
 
-  metaFile.read(reinterpret_cast<uint8_t*>(&spineCount), sizeof(spineCount));
-  metaFile.read(reinterpret_cast<uint8_t*>(&tocCount), sizeof(tocCount));
+  serialization::readPod(metaFile, spineCount);
+  serialization::readPod(metaFile, tocCount);
+  // TODO: Add LUT to back of meta file
   metaFile.close();
 
   loaded = true;
@@ -334,7 +281,7 @@ SpineTocCache::SpineEntry SpineTocCache::getSpineEntry(const int index) const {
     return SpineEntry();
   }
 
-  const auto spineFilePath = "/sd" + cachePath + "/spine.bin";
+  const auto spineFilePath = "/sd" + cachePath + spineBinFile;
   std::ifstream spineStream(spineFilePath.c_str(), std::ios::binary);
   if (!spineStream) {
     Serial.printf("[%lu] [STC] Failed to open spine file for reading entry\n", millis());
@@ -363,7 +310,7 @@ SpineTocCache::TocEntry SpineTocCache::getTocEntry(const int index) const {
     return TocEntry();
   }
 
-  const auto tocFilePath = "/sd" + cachePath + "/toc.bin";
+  const auto tocFilePath = "/sd" + cachePath + tocBinFile;
   std::ifstream tocStream(tocFilePath.c_str(), std::ios::binary);
   if (!tocStream) {
     Serial.printf("[%lu] [STC] Failed to open toc file for reading entry\n", millis());

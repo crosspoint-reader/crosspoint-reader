@@ -44,8 +44,6 @@ class SpineTocCache {
   File spineFile;
   File tocFile;
 
-  void writeString(File& file, const std::string& s) const;
-  void readString(std::ifstream& is, std::string& s) const;
   void writeSpineEntry(File& file, const SpineEntry& entry) const;
   void writeTocEntry(File& file, const TocEntry& entry) const;
   SpineEntry readSpineEntry(std::ifstream& is) const;

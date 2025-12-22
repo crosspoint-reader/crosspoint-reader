@@ -149,21 +149,22 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   // NOTE: This relies on spine appearing after item manifest
-  if (self->state == IN_SPINE && (strcmp(name, "itemref") == 0 || strcmp(name, "opf:itemref") == 0)) {
-    for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "idref") == 0) {
-        const std::string idref = atts[i + 1];
-        // Resolve the idref to href using items map
-        if (self->items.count(idref) > 0) {
-          const std::string& href = self->items.at(idref);
-          if (self->cache) {
+  // Only run the spine parsing if there's a cache to add it to
+  if (self->cache) {
+    if (self->state == IN_SPINE && (strcmp(name, "itemref") == 0 || strcmp(name, "opf:itemref") == 0)) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "idref") == 0) {
+          const std::string idref = atts[i + 1];
+          // Resolve the idref to href using items map
+          if (self->items.count(idref) > 0) {
+            const std::string& href = self->items.at(idref);
             self->cache->addSpineEntry(href);
           }
+          break;
         }
-        break;
       }
+      return;
     }
-    return;
   }
 }
 

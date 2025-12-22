@@ -1,6 +1,7 @@
 #include "FsHelpers.h"
 
 #include <SD.h>
+#include <vector>
 
 bool FsHelpers::removeDir(const char* path) {
   // 1. Open the directory
@@ -33,4 +34,40 @@ bool FsHelpers::removeDir(const char* path) {
   }
 
   return SD.rmdir(path);
+}
+
+std::string FsHelpers::normalisePath(const std::string& path) {
+  std::vector<std::string> components;
+  std::string component;
+
+  for (const auto c : path) {
+    if (c == '/') {
+      if (!component.empty()) {
+        if (component == "..") {
+          if (!components.empty()) {
+            components.pop_back();
+          }
+        } else {
+          components.push_back(component);
+        }
+        component.clear();
+      }
+    } else {
+      component += c;
+    }
+  }
+
+  if (!component.empty()) {
+    components.push_back(component);
+  }
+
+  std::string result;
+  for (const auto& c : components) {
+    if (!result.empty()) {
+      result += "/";
+    }
+    result += c;
+  }
+
+  return result;
 }

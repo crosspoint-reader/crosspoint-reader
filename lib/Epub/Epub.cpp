@@ -44,7 +44,15 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   return true;
 }
 
-bool Epub::parseContentOpf(const std::string& contentOpfFilePath) {
+bool Epub::parseContentOpf(bool useCache) {
+  std::string contentOpfFilePath;
+  if (!findContentOpfFile(&contentOpfFilePath)) {
+    Serial.printf("[%lu] [EBP] Could not find content.opf in zip\n", millis());
+    return false;
+  }
+
+  contentBasePath = contentOpfFilePath.substr(0, contentOpfFilePath.find_last_of('/') + 1);
+
   Serial.printf("[%lu] [EBP] Parsing content.opf: %s\n", millis(), contentOpfFilePath.c_str());
 
   size_t contentOpfSize;
@@ -53,7 +61,7 @@ bool Epub::parseContentOpf(const std::string& contentOpfFilePath) {
     return false;
   }
 
-  ContentOpfParser opfParser(getBasePath(), contentOpfSize, spineTocCache.get());
+  ContentOpfParser opfParser(getBasePath(), contentOpfSize, useCache ? spineTocCache.get() : nullptr);
 
   if (!opfParser.setup()) {
     Serial.printf("[%lu] [EBP] Could not setup content.opf parser\n", millis());
@@ -140,36 +148,9 @@ bool Epub::load() {
     Serial.printf("[%lu] [EBP] Loaded spine/TOC from cache\n", millis());
 
     // Still need to parse content.opf for title and cover
-    // TODO: Should this data go in the cache?
-    std::string contentOpfFilePath;
-    if (!findContentOpfFile(&contentOpfFilePath)) {
-      Serial.printf("[%lu] [EBP] Could not find content.opf in zip\n", millis());
+    if (!parseContentOpf(false)) {
+      Serial.printf("[%lu] [EBP] Could not parse content.opf\n", millis());
       return false;
-    }
-
-    contentBasePath = contentOpfFilePath.substr(0, contentOpfFilePath.find_last_of('/') + 1);
-
-    // Parse content.opf but without cache (we already have it)
-    size_t contentOpfSize;
-    if (!getItemSize(contentOpfFilePath, &contentOpfSize)) {
-      Serial.printf("[%lu] [EBP] Could not get size of content.opf\n", millis());
-      return false;
-    }
-
-    ContentOpfParser opfParser(getBasePath(), contentOpfSize, nullptr);
-    if (!opfParser.setup()) {
-      Serial.printf("[%lu] [EBP] Could not setup content.opf parser\n", millis());
-      return false;
-    }
-
-    if (!readItemContentsToStream(contentOpfFilePath, opfParser, 1024)) {
-      Serial.printf("[%lu] [EBP] Could not read content.opf\n", millis());
-      return false;
-    }
-
-    title = opfParser.title;
-    if (!opfParser.coverItemId.empty() && opfParser.items.count(opfParser.coverItemId) > 0) {
-      coverImageItem = opfParser.items.at(opfParser.coverItemId);
     }
 
     Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
@@ -178,38 +159,21 @@ bool Epub::load() {
 
   // Cache doesn't exist or is invalid, build it
   Serial.printf("[%lu] [EBP] Cache not found, building spine/TOC cache\n", millis());
-
-  std::string contentOpfFilePath;
-  if (!findContentOpfFile(&contentOpfFilePath)) {
-    Serial.printf("[%lu] [EBP] Could not find content.opf in zip\n", millis());
-    return false;
-  }
-
-  Serial.printf("[%lu] [EBP] Found content.opf at: %s\n", millis(), contentOpfFilePath.c_str());
-
-  contentBasePath = contentOpfFilePath.substr(0, contentOpfFilePath.find_last_of('/') + 1);
-
-  // Ensure cache directory exists
   setupCacheDir();
-
-  Serial.printf("[%lu] [EBP] Cache path: %s\n", millis(), cachePath.c_str());
 
   // Begin building cache - stream entries to disk immediately
   if (!spineTocCache->beginWrite()) {
     Serial.printf("[%lu] [EBP] Could not begin writing cache\n", millis());
     return false;
   }
-
-  if (!parseContentOpf(contentOpfFilePath)) {
+  if (!parseContentOpf(true)) {
     Serial.printf("[%lu] [EBP] Could not parse content.opf\n", millis());
     return false;
   }
-
   if (!parseTocNcxFile()) {
     Serial.printf("[%lu] [EBP] Could not parse toc\n", millis());
     return false;
   }
-
   // Close the cache files
   if (!spineTocCache->endWrite()) {
     Serial.printf("[%lu] [EBP] Could not end writing cache\n", millis());
@@ -230,7 +194,6 @@ bool Epub::load() {
   }
 
   Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
-
   return true;
 }
 
@@ -309,45 +272,9 @@ bool Epub::generateCoverBmp() const {
   return false;
 }
 
-std::string normalisePath(const std::string& path) {
-  std::vector<std::string> components;
-  std::string component;
-
-  for (const auto c : path) {
-    if (c == '/') {
-      if (!component.empty()) {
-        if (component == "..") {
-          if (!components.empty()) {
-            components.pop_back();
-          }
-        } else {
-          components.push_back(component);
-        }
-        component.clear();
-      }
-    } else {
-      component += c;
-    }
-  }
-
-  if (!component.empty()) {
-    components.push_back(component);
-  }
-
-  std::string result;
-  for (const auto& c : components) {
-    if (!result.empty()) {
-      result += "/";
-    }
-    result += c;
-  }
-
-  return result;
-}
-
 uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
   const ZipFile zip("/sd" + filepath);
-  const std::string path = normalisePath(itemHref);
+  const std::string path = FsHelpers::normalisePath(itemHref);
 
   const auto content = zip.readFileToMemory(path.c_str(), size, trailingNullByte);
   if (!content) {
@@ -360,7 +287,7 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 
 bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize) const {
   const ZipFile zip("/sd" + filepath);
-  const std::string path = normalisePath(itemHref);
+  const std::string path = FsHelpers::normalisePath(itemHref);
 
   return zip.readFileToStream(path.c_str(), out, chunkSize);
 }
@@ -371,7 +298,7 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
 }
 
 bool Epub::getItemSize(const ZipFile& zip, const std::string& itemHref, size_t* size) {
-  const std::string path = normalisePath(itemHref);
+  const std::string path = FsHelpers::normalisePath(itemHref);
   return zip.getInflatedFileSize(path.c_str(), size);
 }
 
@@ -387,10 +314,12 @@ size_t Epub::getCumulativeSpineItemSize(const int spineIndex) const {
     Serial.printf("[%lu] [EBP] getCumulativeSpineItemSize called but cache not loaded\n", millis());
     return 0;
   }
+
   if (spineIndex < 0 || spineIndex >= spineTocCache->getSpineCount()) {
     Serial.printf("[%lu] [EBP] getCumulativeSpineItemSize index:%d is out of range\n", millis(), spineIndex);
     return 0;
   }
+
   return spineTocCache->getSpineEntry(spineIndex).cumulativeSize;
 }
 
@@ -399,6 +328,7 @@ std::string Epub::getSpineHref(const int spineIndex) const {
     Serial.printf("[%lu] [EBP] getSpineItem called but cache not loaded\n", millis());
     return "";
   }
+
   if (spineIndex < 0 || spineIndex >= spineTocCache->getSpineCount()) {
     Serial.printf("[%lu] [EBP] getSpineItem index:%d is out of range\n", millis(), spineIndex);
     return spineTocCache->getSpineEntry(0).href;
@@ -425,6 +355,7 @@ int Epub::getTocItemsCount() const {
   if (!spineTocCache || !spineTocCache->isLoaded()) {
     return 0;
   }
+
   return spineTocCache->getTocCount();
 }
 
@@ -434,6 +365,7 @@ int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
     Serial.printf("[%lu] [EBP] getSpineIndexForTocIndex called but cache not loaded\n", millis());
     return 0;
   }
+
   if (tocIndex < 0 || tocIndex >= spineTocCache->getTocCount()) {
     Serial.printf("[%lu] [EBP] getSpineIndexForTocIndex: tocIndex %d out of range\n", millis(), tocIndex);
     return 0;
@@ -444,6 +376,7 @@ int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
     Serial.printf("[%lu] [EBP] Section not found for TOC index %d\n", millis(), tocIndex);
     return 0;
   }
+
   return spineIndex;
 }
 

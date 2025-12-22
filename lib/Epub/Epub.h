@@ -27,7 +27,7 @@ class Epub {
   std::unique_ptr<SpineTocCache> spineTocCache;
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
-  bool parseContentOpf(const std::string& contentOpfFilePath);
+  bool parseContentOpf(bool useCache);
   bool parseTocNcxFile() const;
   static bool getItemSize(const ZipFile& zip, const std::string& itemHref, size_t* size);
 
