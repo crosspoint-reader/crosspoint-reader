@@ -16,6 +16,8 @@ bool ContainerParser::setup() {
 
 ContainerParser::~ContainerParser() {
   if (parser) {
+    XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+    XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
     XML_ParserFree(parser);
     parser = nullptr;
   }

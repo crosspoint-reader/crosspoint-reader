@@ -214,10 +214,6 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     return false;
   }
 
-  XML_SetUserData(parser, this);
-  XML_SetElementHandler(parser, startElement, endElement);
-  XML_SetCharacterDataHandler(parser, characterData);
-
   FILE* file = fopen(filepath, "r");
   if (!file) {
     Serial.printf("[%lu] [EHP] Couldn't open file %s\n", millis(), filepath);
@@ -225,10 +221,17 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     return false;
   }
 
+  XML_SetUserData(parser, this);
+  XML_SetElementHandler(parser, startElement, endElement);
+  XML_SetCharacterDataHandler(parser, characterData);
+
   do {
     void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
       Serial.printf("[%lu] [EHP] Couldn't allocate memory for buffer\n", millis());
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
       XML_ParserFree(parser);
       fclose(file);
       return false;
@@ -238,6 +241,9 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
     if (ferror(file)) {
       Serial.printf("[%lu] [EHP] File read error\n", millis());
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
       XML_ParserFree(parser);
       fclose(file);
       return false;
@@ -248,12 +254,18 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
       Serial.printf("[%lu] [EHP] Parse error at line %lu:\n%s\n", millis(), XML_GetCurrentLineNumber(parser),
                     XML_ErrorString(XML_GetErrorCode(parser)));
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
       XML_ParserFree(parser);
       fclose(file);
       return false;
     }
   } while (!done);
 
+  XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+  XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+  XML_SetCharacterDataHandler(parser, nullptr);
   XML_ParserFree(parser);
   fclose(file);
 
