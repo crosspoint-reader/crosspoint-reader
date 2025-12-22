@@ -18,8 +18,13 @@ class CrossPointSettings {
   // Should match with SettingsActivity text
   enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3 };
 
+  // Status bar display type enum
+  enum STATUS_BAR_MODE { NONE = 0, BATTERY = 1, PROGRESS = 2, FULL = 3 };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Status bar settings
+  uint8_t statusBar = FULL;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   // Duration of the power button press
