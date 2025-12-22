@@ -2,12 +2,14 @@
 
 #include <GfxRenderer.h>
 #include <SD.h>
+#include <InputManager.h>
 
 #include "config.h"
 #include "../../images/FolderIcon.h"
+#include "../util/Window.h"
 
 namespace {
-constexpr int PAGE_ITEMS = 12;
+constexpr int PAGE_ITEMS = 9;
 constexpr int SKIP_PAGE_MS = 700;
 constexpr int TILE_W = 135;
 constexpr int TILE_H = 200;
@@ -15,6 +17,8 @@ constexpr int TILE_PADDING = 5;
 constexpr int THUMB_W = 90;
 constexpr int THUMB_H = 120;
 constexpr int TILE_TEXT_H = 60;
+constexpr int gridLeftOffset = 45;
+constexpr int gridTopOffset = 125;
 }  // namespace
 
 inline int min(const int a, const int b) { return a < b ? a : b; }
@@ -37,6 +41,8 @@ void GridBrowserActivity::taskTrampoline(void* param) {
 void GridBrowserActivity::loadFiles() {
   files.clear();
   selectorIndex = 0;
+  previousSelectorIndex = -1;
+  page = 0;
   auto root = SD.open(basepath.c_str());
   for (File file = root.openNextFile(); file; file = root.openNextFile()) {
     const std::string filename = std::string(file.name());
@@ -49,7 +55,7 @@ void GridBrowserActivity::loadFiles() {
       files.emplace_back(FileInfo{ filename, filename, F_DIRECTORY });
     } else {
       FileType type = F_FILE;
-      size_t dot = filename.find_last_of('.');
+      size_t dot = filename.find_first_of('.');
       std::string basename = filename;
       if (dot != std::string::npos) {
         std::string ext = filename.substr(dot);
@@ -58,7 +64,7 @@ void GridBrowserActivity::loadFiles() {
         for (char &c : ext) c = (char)tolower(c);
         if (ext == ".epub") {
           type = F_EPUB;
-        } else if (ext == ".bmp") {
+        } else if (ext == ".thumb.bmp") {
           type = F_BMP;
         }
       }
@@ -78,12 +84,13 @@ void GridBrowserActivity::onEnter() {
   Serial.printf("Enter grid\n");
   renderingMutex = xSemaphoreCreateMutex();
   
-  basepath = "/Dev/Thumbs";
+  basepath = "/";
   loadFiles();
   selectorIndex = 0;
+  page = 0;
   
-  // Trigger first update
-  updateRequired = true;
+  // Trigger first render
+  renderRequired = true;
   
   xTaskCreate(&GridBrowserActivity::taskTrampoline, "GridFileBrowserTask",
               8192,               // Stack size
@@ -111,6 +118,7 @@ void GridBrowserActivity::loop() {
   const bool prevReleased = inputManager.wasReleased(InputManager::BTN_UP) || inputManager.wasReleased(InputManager::BTN_LEFT);
   const bool nextReleased = inputManager.wasReleased(InputManager::BTN_DOWN) || inputManager.wasReleased(InputManager::BTN_RIGHT);
   const bool skipPage = inputManager.getHeldTime() > SKIP_PAGE_MS;
+  const int selected = selectorIndex + page * PAGE_ITEMS;
 
   if (inputManager.wasPressed(InputManager::BTN_CONFIRM)) {
     if (files.empty()) {
@@ -120,57 +128,77 @@ void GridBrowserActivity::loop() {
     if (basepath.back() != '/') {
       basepath += "/";
     }
-    if (files[selectorIndex].type == F_DIRECTORY) {
+    if (files[selected].type == F_DIRECTORY) {
       // open subfolder
-      basepath += files[selectorIndex].name;
+      basepath += files[selected].name;
       loadFiles();
-      updateRequired = true;
+      renderRequired = true;
     } else {
-      onSelect(basepath + files[selectorIndex].name);
+      onSelect(basepath + files[selected].name);
     }
   } else if (inputManager.wasPressed(InputManager::BTN_BACK)) {
     if (basepath != "/") {
       basepath = basepath.substr(0, basepath.rfind('/'));
       if (basepath.empty()) basepath = "/";
       loadFiles();
-      updateRequired = true;
+      renderRequired = true;
     } else {
       // At root level, go back home
       onGoHome();
     }
   } else if (prevReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / PAGE_ITEMS - 1) * PAGE_ITEMS + files.size()) % files.size();
+    previousSelectorIndex = selectorIndex;
+    if (selectorIndex == 0 || skipPage) {
+      if (page > 0) {
+        page--;
+        selectorIndex = 0;
+        previousSelectorIndex = -1;
+        renderRequired = true;
+      }
     } else {
-      selectorIndex = (selectorIndex + files.size() - 1) % files.size();
+      selectorIndex--;
+      updateRequired = true;
     }
-    updateRequired = true;
   } else if (nextReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / PAGE_ITEMS + 1) * PAGE_ITEMS) % files.size();
+    previousSelectorIndex = selectorIndex;
+    if (selectorIndex == min(PAGE_ITEMS, files.size() - page * PAGE_ITEMS) - 1 || skipPage) {
+      if (page < files.size() / PAGE_ITEMS) {
+        page++;
+        selectorIndex = 0;
+        previousSelectorIndex = -1;
+        renderRequired = true;
+      }
     } else {
-      selectorIndex = (selectorIndex + 1) % files.size();
+      selectorIndex++;
+      updateRequired = true;
     }
-    updateRequired = true;
   }
 }
 
 void GridBrowserActivity::displayTaskLoop() {
   while (true) {
-    if (updateRequired) {
+    if (renderRequired) {
+      renderRequired = false;
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      render(true);
+      xSemaphoreGive(renderingMutex);
+    } else if (updateRequired) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
+      // update(true);
+      render(false);
       xSemaphoreGive(renderingMutex);
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 
-void GridBrowserActivity::render() const {
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  renderer.clearScreen();
+void GridBrowserActivity::render(bool clear) const {
+  if (clear) {
+    renderer.clearScreen();
+    auto folderName = basepath == "/" ? "SD card" : basepath.substr(basepath.rfind('/') + 1).c_str();
+    drawFullscreenWindowFrame(renderer, folderName);
+  }
   bool hasGeyscaleBitmaps = false;
   
   if (!files.empty()) {
@@ -184,20 +212,17 @@ void GridBrowserActivity::render() const {
         }
       }
 
-      const int16_t iconOffsetX = (TILE_W - FOLDERICON_WIDTH) / 2;
-      const int16_t iconOffsetY = (TILE_H - TILE_TEXT_H - FOLDERICON_HEIGHT) / 2;
-      const int16_t thumbOffsetX = (TILE_W - THUMB_W) / 2;
-      const int16_t thumbOffsetY = (TILE_H - TILE_TEXT_H - THUMB_H) / 2;
-      for (size_t i = 0; i < min(PAGE_ITEMS, files.size()); i++) {
-        const auto file = files[i];
+      for (size_t i = 0; i < min(PAGE_ITEMS, files.size() - page * PAGE_ITEMS); i++) {
+        const auto file = files[i + page * PAGE_ITEMS];
         
-        const int16_t tileX = 45 + i % 3 * TILE_W;
-        const int16_t tileY = 115 + i / 3 * TILE_H;
+        const int16_t tileX = gridLeftOffset + i % 3 * TILE_W;
+        const int16_t tileY = gridTopOffset + i / 3 * TILE_H;
 
         if (pass == 0) {
-          Serial.printf("Rendering file %s at (%d, %d)\n", file.name.c_str(), tileX, tileY);
           if (file.type == F_DIRECTORY) {
-            renderer.drawImage(FolderIcon, tileX + iconOffsetX, tileY + iconOffsetY, FOLDERICON_WIDTH, FOLDERICON_HEIGHT);
+            constexpr int iconOffsetX = (TILE_W - FOLDERICON_WIDTH) / 2;
+            constexpr int iconOffsetY = (TILE_H - TILE_TEXT_H - FOLDERICON_HEIGHT) / 2;
+            renderer.drawIcon(FolderIcon, tileX + iconOffsetX, tileY + iconOffsetY, FOLDERICON_WIDTH, FOLDERICON_HEIGHT);
           }
         }
 
@@ -209,19 +234,24 @@ void GridBrowserActivity::render() const {
               if (bitmap.hasGreyscale()) {
                 hasGeyscaleBitmaps = true;
               }
+              constexpr int thumbOffsetX = (TILE_W - THUMB_W) / 2;
+              constexpr int thumbOffsetY = (TILE_H - TILE_TEXT_H - THUMB_H) / 2;
               renderer.drawBitmap(bitmap, tileX + thumbOffsetX, tileY + thumbOffsetY, THUMB_W, THUMB_H);
             }
           }
         }
         
         if (pass == 0) {
-          renderer.drawTextInBox(UI_FONT_ID, tileX + TILE_PADDING, tileY + TILE_H - TILE_TEXT_H, TILE_W - 2 * TILE_PADDING, TILE_TEXT_H, file.basename.c_str(), 1); // i != selectorIndex
+          renderer.drawTextInBox(UI_FONT_ID, tileX + TILE_PADDING, tileY + TILE_H - TILE_TEXT_H, TILE_W - 2 * TILE_PADDING, TILE_TEXT_H, file.basename.c_str(), true);
         }
       }
 
       if (pass == 0) {
-        renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
-        if (!hasGeyscaleBitmaps) {
+        update(false);
+        renderer.displayBuffer();
+        if (hasGeyscaleBitmaps) {
+          renderer.storeBwBuffer();
+        } else {
           // we can skip grayscale passes if no bitmaps use it
           break;
         }
@@ -231,7 +261,21 @@ void GridBrowserActivity::render() const {
         renderer.copyGrayscaleMsbBuffers();
         renderer.displayGrayBuffer();
         renderer.setRenderMode(GfxRenderer::BW);
+        renderer.restoreBwBuffer();
       }
     }
   }
 } 
+
+void GridBrowserActivity::drawSelectionRectangle(int tileIndex, bool black) const {
+  renderer.drawRoundedRect(gridLeftOffset + tileIndex % 3 * TILE_W, gridTopOffset + tileIndex / 3 * TILE_H, TILE_W, TILE_H, 2, 5, black);
+}
+
+void GridBrowserActivity::update(bool render) const {
+  // Redraw only changed tiles
+  // renderer.clearScreen();
+  if (previousSelectorIndex >= 0) {
+    drawSelectionRectangle(previousSelectorIndex, false);
+  }
+  drawSelectionRectangle(selectorIndex, true);
+}

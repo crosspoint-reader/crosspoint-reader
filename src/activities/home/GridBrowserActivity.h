@@ -29,14 +29,19 @@ class GridBrowserActivity final : public Activity {
   std::string basepath = "/";
   std::vector<FileInfo> files;
   int selectorIndex = 0;
+  int previousSelectorIndex = -1;
+  int page;
   bool updateRequired = false;
+  bool renderRequired = false;
   const std::function<void(const std::string&)> onSelect;
   const std::function<void()> onGoHome;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
-  void render() const;
+  void render(bool clear) const;
+  void update(bool render) const;
   void loadFiles();
+  void drawSelectionRectangle(int tileIndex, bool black) const;
 
  public:
   explicit GridBrowserActivity(GfxRenderer& renderer, InputManager& inputManager,
