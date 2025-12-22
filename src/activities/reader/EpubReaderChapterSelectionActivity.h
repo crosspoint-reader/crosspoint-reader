@@ -18,6 +18,10 @@ class EpubReaderChapterSelectionActivity final : public Activity {
   const std::function<void()> onGoBack;
   const std::function<void(int newSpineIndex)> onSelectSpineIndex;
 
+  // Number of items that fit on a page, derived from logical screen height.
+  // This adapts automatically when switching between portrait and landscape.
+  int getPageItems() const;
+
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void renderScreen();
