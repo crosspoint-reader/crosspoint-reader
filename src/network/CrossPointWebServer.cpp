@@ -68,7 +68,6 @@ void CrossPointWebServer::begin() {
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_ANY, [this] { handleUploadPost(); }, [this] { handleUpload(); });
 
-
   // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
 
@@ -419,7 +418,7 @@ void CrossPointWebServer::handleUploadPost() const {
     }
     return;
   }
-  
+
   server->send(405, "text/plain", "Method Not Allowed");
 }
 
@@ -481,7 +480,6 @@ void CrossPointWebServer::handleDelete() const {
   }
 
   if (server->method() == HTTP_POST) {
-
     // Get path from form data
     if (!server->hasArg("path")) {
       server->send(400, "text/plain", "Missing path");
