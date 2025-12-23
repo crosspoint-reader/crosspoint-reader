@@ -166,6 +166,7 @@ void CrossPointWebServer::handleStatus() const {
   json += "\"freeHeap\":" + String(ESP.getFreeHeap()) + ",";
   json += "\"uptime\":" + String(millis() / 1000);
   json += "}";
+
   server->send(200, "application/json", json);
 }
 
