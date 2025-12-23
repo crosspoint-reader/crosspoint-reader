@@ -166,6 +166,7 @@ void CrossPointWebServer::handleStatus() const {
   json += "\"uptime\":" + String(millis() / 1000);
   json += "}";
 
+  server->sendHeader("Access-Control-Allow-Origin", "*");
   server->send(200, "application/json", json);
 }
 
@@ -246,6 +247,7 @@ void CrossPointWebServer::handleFileListData() const {
     }
   }
 
+  server->sendHeader("Access-Control-Allow-Origin", "*");
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
   server->sendContent("[");
