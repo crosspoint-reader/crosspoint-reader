@@ -580,7 +580,7 @@ void WifiSelectionActivity::renderConnecting() const {
   if (state == WifiSelectionState::SCANNING) {
     renderer.drawCenteredText(UI_FONT_ID, top, "Scanning...", true, REGULAR);
   } else {
-    renderer.drawCenteredText(READER_FONT_ID, top - 30, "Connecting...", true, BOLD);
+    renderer.drawCenteredText(READER_FONT_ID, top - 40, "Connecting...", true, BOLD);
 
     std::string ssidInfo = "to " + selectedSSID;
     if (ssidInfo.length() > 25) {
