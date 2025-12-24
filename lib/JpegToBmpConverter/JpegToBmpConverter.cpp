@@ -182,6 +182,9 @@ bool JpegToBmpConverter::jpegFileToBmpStream(File& jpegFile, Print& bmpOut) {
       }
 
       // Process MCU block into MCU row buffer
+      // MCUs are composed of 8x8 blocks. For 16x16 MCUs, there are four 8x8 blocks:
+      // Block layout for 16x16 MCU:  [0, 64]  (top row of blocks)
+      //                              [128, 192] (bottom row of blocks)
       for (int blockY = 0; blockY < mcuPixelHeight; blockY++) {
         for (int blockX = 0; blockX < mcuPixelWidth; blockX++) {
           const int pixelX = mcuX * mcuPixelWidth + blockX;
@@ -191,16 +194,27 @@ bool JpegToBmpConverter::jpegFileToBmpStream(File& jpegFile, Print& bmpOut) {
             continue;
           }
 
+          // Calculate which 8x8 block and position within that block
+          const int block8x8Col = blockX / 8;  // 0 or 1 for 16-wide MCU
+          const int block8x8Row = blockY / 8;  // 0 or 1 for 16-tall MCU
+          const int pixelInBlockX = blockX % 8;
+          const int pixelInBlockY = blockY % 8;
+
+          // Calculate byte offset: each 8x8 block is 64 bytes
+          // Blocks are arranged: [0, 64], [128, 192]
+          const int blockOffset = (block8x8Row * (mcuPixelWidth / 8) + block8x8Col) * 64;
+          const int mcuIndex = blockOffset + pixelInBlockY * 8 + pixelInBlockX;
+
           // Get grayscale value
           uint8_t gray;
           if (imageInfo.m_comps == 1) {
             // Grayscale image
-            gray = imageInfo.m_pMCUBufR[blockY * mcuPixelWidth + blockX];
+            gray = imageInfo.m_pMCUBufR[mcuIndex];
           } else {
             // RGB image - convert to grayscale
-            const uint8_t r = imageInfo.m_pMCUBufR[blockY * mcuPixelWidth + blockX];
-            const uint8_t g = imageInfo.m_pMCUBufG[blockY * mcuPixelWidth + blockX];
-            const uint8_t b = imageInfo.m_pMCUBufB[blockY * mcuPixelWidth + blockX];
+            const uint8_t r = imageInfo.m_pMCUBufR[mcuIndex];
+            const uint8_t g = imageInfo.m_pMCUBufG[mcuIndex];
+            const uint8_t b = imageInfo.m_pMCUBufB[mcuIndex];
             // Luminance formula: Y = 0.299*R + 0.587*G + 0.114*B
             // Using integer approximation: (30*R + 59*G + 11*B) / 100
             gray = (r * 30 + g * 59 + b * 11) / 100;
