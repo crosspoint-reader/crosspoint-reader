@@ -16,20 +16,20 @@ struct JpegReadContext {
 // ============================================================================
 // IMAGE PROCESSING OPTIONS - Toggle these to test different configurations
 // ============================================================================
-constexpr bool USE_8BIT_OUTPUT = false;    // true: 8-bit grayscale (no quantization), false: 2-bit (4 levels)
+constexpr bool USE_8BIT_OUTPUT = false;  // true: 8-bit grayscale (no quantization), false: 2-bit (4 levels)
 // Dithering method selection (only one should be true, or all false for simple quantization):
-constexpr bool USE_ATKINSON = true;        // Atkinson dithering (cleaner than F-S, less error diffusion)
-constexpr bool USE_FLOYD_STEINBERG = false;// Floyd-Steinberg error diffusion (can cause "worm" artifacts)
-constexpr bool USE_NOISE_DITHERING = false;// Hash-based noise dithering (good for downsampling)
+constexpr bool USE_ATKINSON = true;          // Atkinson dithering (cleaner than F-S, less error diffusion)
+constexpr bool USE_FLOYD_STEINBERG = false;  // Floyd-Steinberg error diffusion (can cause "worm" artifacts)
+constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering (good for downsampling)
 // Brightness/Contrast adjustments:
-constexpr bool USE_BRIGHTNESS = true;      // true: apply brightness/gamma adjustments
-constexpr int BRIGHTNESS_BOOST = 10;       // Brightness offset (0-50)
-constexpr bool GAMMA_CORRECTION = true;    // Gamma curve (brightens midtones)
-constexpr float CONTRAST_FACTOR = 1.15f;   // Contrast multiplier (1.0 = no change, >1 = more contrast)
+constexpr bool USE_BRIGHTNESS = true;     // true: apply brightness/gamma adjustments
+constexpr int BRIGHTNESS_BOOST = 10;      // Brightness offset (0-50)
+constexpr bool GAMMA_CORRECTION = true;   // Gamma curve (brightens midtones)
+constexpr float CONTRAST_FACTOR = 1.15f;  // Contrast multiplier (1.0 = no change, >1 = more contrast)
 // Pre-resize to target display size (CRITICAL: avoids dithering artifacts from post-downsampling)
-constexpr bool USE_PRESCALE = true;        // true: scale image to target size before dithering
-constexpr int TARGET_MAX_WIDTH = 480;      // Max width for cover images (portrait display width)
-constexpr int TARGET_MAX_HEIGHT = 800;     // Max height for cover images (portrait display height)
+constexpr bool USE_PRESCALE = true;     // true: scale image to target size before dithering
+constexpr int TARGET_MAX_WIDTH = 480;   // Max width for cover images (portrait display width)
+constexpr int TARGET_MAX_HEIGHT = 800;  // Max height for cover images (portrait display height)
 // ============================================================================
 
 // Integer approximation of gamma correction (brightens midtones)
@@ -162,12 +162,12 @@ class AtkinsonDitherer {
     int error = (adjusted - quantizedValue) >> 3;  // error/8
 
     // Distribute 1/8 to each of 6 neighbors
-    errorRow0[x + 3] += error;      // Right
-    errorRow0[x + 4] += error;      // Right+1
-    errorRow1[x + 1] += error;      // Bottom-left
-    errorRow1[x + 2] += error;      // Bottom
-    errorRow1[x + 3] += error;      // Bottom-right
-    errorRow2[x + 2] += error;      // Two rows down
+    errorRow0[x + 3] += error;  // Right
+    errorRow0[x + 4] += error;  // Right+1
+    errorRow1[x + 1] += error;  // Bottom-left
+    errorRow1[x + 2] += error;  // Bottom
+    errorRow1[x + 3] += error;  // Bottom-right
+    errorRow2[x + 2] += error;  // Two rows down
 
     return quantized;
   }
@@ -204,7 +204,7 @@ class AtkinsonDitherer {
 class FloydSteinbergDitherer {
  public:
   FloydSteinbergDitherer(int width) : width(width), rowCount(0) {
-    errorCurRow = new int16_t[width + 2]();   // +2 for boundary handling
+    errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
     errorNextRow = new int16_t[width + 2]();
   }
 
@@ -328,8 +328,8 @@ void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
   bmpOut.write('B');
   bmpOut.write('M');
   write32(bmpOut, fileSize);
-  write32(bmpOut, 0);                        // Reserved
-  write32(bmpOut, 14 + 40 + paletteSize);    // Offset to pixel data
+  write32(bmpOut, 0);                      // Reserved
+  write32(bmpOut, 14 + 40 + paletteSize);  // Offset to pixel data
 
   // DIB Header (BITMAPINFOHEADER - 40 bytes)
   write32(bmpOut, 40);
@@ -339,10 +339,10 @@ void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
   write16(bmpOut, 8);              // Bits per pixel (8 bits)
   write32(bmpOut, 0);              // BI_RGB (no compression)
   write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);           // xPixelsPerMeter (72 DPI)
-  write32(bmpOut, 2835);           // yPixelsPerMeter (72 DPI)
-  write32(bmpOut, 256);            // colorsUsed
-  write32(bmpOut, 256);            // colorsImportant
+  write32(bmpOut, 2835);  // xPixelsPerMeter (72 DPI)
+  write32(bmpOut, 2835);  // yPixelsPerMeter (72 DPI)
+  write32(bmpOut, 256);   // colorsUsed
+  write32(bmpOut, 256);   // colorsImportant
 
   // Color Palette (256 grayscale entries x 4 bytes = 1024 bytes)
   for (int i = 0; i < 256; i++) {
@@ -481,9 +481,8 @@ bool JpegToBmpConverter::jpegFileToBmpStream(File& jpegFile, Print& bmpOut) {
     scaleY_fp = (static_cast<uint32_t>(imageInfo.m_height) << 16) / outHeight;
     needsScaling = true;
 
-    Serial.printf("[%lu] [JPG] Pre-scaling %dx%d -> %dx%d (fit to %dx%d)\n", millis(),
-                  imageInfo.m_width, imageInfo.m_height, outWidth, outHeight,
-                  TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT);
+    Serial.printf("[%lu] [JPG] Pre-scaling %dx%d -> %dx%d (fit to %dx%d)\n", millis(), imageInfo.m_width,
+                  imageInfo.m_height, outWidth, outHeight, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT);
   }
 
   // Write BMP header with output dimensions
@@ -538,15 +537,15 @@ bool JpegToBmpConverter::jpegFileToBmpStream(File& jpegFile, Print& bmpOut) {
   // For scaling: accumulate source rows into scaled output rows
   // We need to track which source Y maps to which output Y
   // Using fixed-point: srcY_fp = outY * scaleY_fp (gives source Y in 16.16 format)
-  uint32_t* rowAccum = nullptr;      // Accumulator for each output X (32-bit for larger sums)
-  uint16_t* rowCount = nullptr;      // Count of source pixels accumulated per output X
-  int currentOutY = 0;               // Current output row being accumulated
-  uint32_t nextOutY_srcStart = 0;    // Source Y where next output row starts (16.16 fixed point)
+  uint32_t* rowAccum = nullptr;    // Accumulator for each output X (32-bit for larger sums)
+  uint16_t* rowCount = nullptr;    // Count of source pixels accumulated per output X
+  int currentOutY = 0;             // Current output row being accumulated
+  uint32_t nextOutY_srcStart = 0;  // Source Y where next output row starts (16.16 fixed point)
 
   if (needsScaling) {
     rowAccum = new uint32_t[outWidth]();
     rowCount = new uint16_t[outWidth]();
-    nextOutY_srcStart = scaleY_fp;   // First boundary is at scaleY_fp (source Y for outY=1)
+    nextOutY_srcStart = scaleY_fp;  // First boundary is at scaleY_fp (source Y for outY=1)
   }
 
   // Process MCUs row-by-row and write to BMP as we go (top-down)
@@ -633,8 +632,10 @@ bool JpegToBmpConverter::jpegFileToBmpStream(File& jpegFile, Print& bmpOut) {
             const int bitOffset = 6 - ((x * 2) % 8);
             rowBuffer[byteIndex] |= (twoBit << bitOffset);
           }
-          if (atkinsonDitherer) atkinsonDitherer->nextRow();
-          else if (fsDitherer) fsDitherer->nextRow();
+          if (atkinsonDitherer)
+            atkinsonDitherer->nextRow();
+          else if (fsDitherer)
+            fsDitherer->nextRow();
         }
         bmpOut.write(rowBuffer, bytesPerRow);
       } else {
@@ -694,8 +695,10 @@ bool JpegToBmpConverter::jpegFileToBmpStream(File& jpegFile, Print& bmpOut) {
               const int bitOffset = 6 - ((x * 2) % 8);
               rowBuffer[byteIndex] |= (twoBit << bitOffset);
             }
-            if (atkinsonDitherer) atkinsonDitherer->nextRow();
-            else if (fsDitherer) fsDitherer->nextRow();
+            if (atkinsonDitherer)
+              atkinsonDitherer->nextRow();
+            else if (fsDitherer)
+              fsDitherer->nextRow();
           }
 
           bmpOut.write(rowBuffer, bytesPerRow);

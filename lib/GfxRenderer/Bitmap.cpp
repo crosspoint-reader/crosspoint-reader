@@ -8,12 +8,12 @@
 // ============================================================================
 // Note: For cover images, dithering is done in JpegToBmpConverter.cpp
 // This file handles BMP reading - use simple quantization to avoid double-dithering
-constexpr bool USE_FLOYD_STEINBERG = false;// Disabled - dithering done at JPEG conversion
-constexpr bool USE_NOISE_DITHERING = false;// Hash-based noise dithering
+constexpr bool USE_FLOYD_STEINBERG = false;  // Disabled - dithering done at JPEG conversion
+constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering
 // Brightness adjustments:
-constexpr bool USE_BRIGHTNESS = false;     // true: apply brightness/gamma adjustments
-constexpr int BRIGHTNESS_BOOST = 20;       // Brightness offset (0-50), only if USE_BRIGHTNESS=true
-constexpr bool GAMMA_CORRECTION = false;   // Gamma curve, only if USE_BRIGHTNESS=true
+constexpr bool USE_BRIGHTNESS = false;    // true: apply brightness/gamma adjustments
+constexpr int BRIGHTNESS_BOOST = 20;      // Brightness offset (0-50), only if USE_BRIGHTNESS=true
+constexpr bool GAMMA_CORRECTION = false;  // Gamma curve, only if USE_BRIGHTNESS=true
 // ============================================================================
 
 // Integer approximation of gamma correction (brightens midtones)
@@ -71,7 +71,8 @@ static inline uint8_t quantize(int gray, int x, int y) {
 
 // Floyd-Steinberg quantization with error diffusion and serpentine scanning
 // Returns 2-bit value (0-3) and updates error buffers
-static inline uint8_t quantizeFloydSteinberg(int gray, int x, int width, int16_t* errorCurRow, int16_t* errorNextRow, bool reverseDir) {
+static inline uint8_t quantizeFloydSteinberg(int gray, int x, int width, int16_t* errorCurRow, int16_t* errorNextRow,
+                                             bool reverseDir) {
   // Add accumulated error to this pixel
   int adjusted = gray + errorCurRow[x + 1];
 
@@ -102,16 +103,16 @@ static inline uint8_t quantizeFloydSteinberg(int gray, int x, int width, int16_t
   // Distribute error to neighbors (serpentine: direction-aware)
   if (!reverseDir) {
     // Left to right
-    errorCurRow[x + 2] += (error * 7) >> 4;      // Right: 7/16
-    errorNextRow[x] += (error * 3) >> 4;         // Bottom-left: 3/16
-    errorNextRow[x + 1] += (error * 5) >> 4;     // Bottom: 5/16
-    errorNextRow[x + 2] += (error) >> 4;         // Bottom-right: 1/16
+    errorCurRow[x + 2] += (error * 7) >> 4;   // Right: 7/16
+    errorNextRow[x] += (error * 3) >> 4;      // Bottom-left: 3/16
+    errorNextRow[x + 1] += (error * 5) >> 4;  // Bottom: 5/16
+    errorNextRow[x + 2] += (error) >> 4;      // Bottom-right: 1/16
   } else {
     // Right to left (mirrored)
-    errorCurRow[x] += (error * 7) >> 4;          // Left: 7/16
-    errorNextRow[x + 2] += (error * 3) >> 4;     // Bottom-right: 3/16
-    errorNextRow[x + 1] += (error * 5) >> 4;     // Bottom: 5/16
-    errorNextRow[x] += (error) >> 4;             // Bottom-left: 1/16
+    errorCurRow[x] += (error * 7) >> 4;       // Left: 7/16
+    errorNextRow[x + 2] += (error * 3) >> 4;  // Bottom-right: 3/16
+    errorNextRow[x + 1] += (error * 5) >> 4;  // Bottom: 5/16
+    errorNextRow[x] += (error) >> 4;          // Bottom-left: 1/16
   }
 
   return quantized;
@@ -247,7 +248,7 @@ BmpReaderError Bitmap::parseHeaders() {
   if (USE_FLOYD_STEINBERG) {
     delete[] errorCurRow;
     delete[] errorNextRow;
-    errorCurRow = new int16_t[width + 2]();   // +2 for boundary handling
+    errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
     errorNextRow = new int16_t[width + 2]();
     lastRowY = -1;
   }
