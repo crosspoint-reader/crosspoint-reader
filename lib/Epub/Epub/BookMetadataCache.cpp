@@ -260,6 +260,10 @@ bool BookMetadataCache::load() {
   serialization::readPod(bookFile, spineCount);
   serialization::readPod(bookFile, tocCount);
 
+  serialization::readString(bookFile, coreMetadata.title);
+  serialization::readString(bookFile, coreMetadata.author);
+  serialization::readString(bookFile, coreMetadata.coverItemHref);
+
   loaded = true;
   Serial.printf("[%lu] [BMC] Loaded cache data: %d spine, %d TOC entries\n", millis(), spineCount, tocCount);
   return true;
