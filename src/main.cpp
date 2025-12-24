@@ -186,7 +186,8 @@ void setup() {
   SPI.begin(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, EPD_CS);
 
   // SD Card Initialization
-  if (!SD.begin(SD_SPI_CS, SPI, SPI_FQ)) {
+  // We need 6 open files concurrently when parsing a new chapter
+  if (!SD.begin(SD_SPI_CS, SPI, SPI_FQ, "/sd", 6)) {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
     setupDisplayAndFonts();
     exitActivity();

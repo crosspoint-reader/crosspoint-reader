@@ -29,7 +29,7 @@ void EpubReaderChapterSelectionActivity::onEnter() {
   // Trigger first update
   updateRequired = true;
   xTaskCreate(&EpubReaderChapterSelectionActivity::taskTrampoline, "EpubReaderChapterSelectionActivityTask",
-              2048,               // Stack size
+              4096,               // Stack size
               this,               // Parameters
               1,                  // Priority
               &displayTaskHandle  // Task handle

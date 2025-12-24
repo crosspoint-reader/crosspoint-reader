@@ -1,11 +1,10 @@
 #pragma once
 #include <Print.h>
+#include <expat.h>
 
 #include <string>
-#include <vector>
 
-#include "Epub/EpubTocEntry.h"
-#include "expat.h"
+class BookMetadataCache;
 
 class TocNcxParser final : public Print {
   enum ParserState { START, IN_NCX, IN_NAV_MAP, IN_NAV_POINT, IN_NAV_LABEL, IN_NAV_LABEL_TEXT, IN_CONTENT };
@@ -14,6 +13,7 @@ class TocNcxParser final : public Print {
   size_t remainingSize;
   XML_Parser parser = nullptr;
   ParserState state = START;
+  BookMetadataCache* cache;
 
   std::string currentLabel;
   std::string currentSrc;
@@ -24,10 +24,8 @@ class TocNcxParser final : public Print {
   static void endElement(void* userData, const XML_Char* name);
 
  public:
-  std::vector<EpubTocEntry> toc;
-
-  explicit TocNcxParser(const std::string& baseContentPath, const size_t xmlSize)
-      : baseContentPath(baseContentPath), remainingSize(xmlSize) {}
+  explicit TocNcxParser(const std::string& baseContentPath, const size_t xmlSize, BookMetadataCache* cache)
+      : baseContentPath(baseContentPath), remainingSize(xmlSize), cache(cache) {}
   ~TocNcxParser() override;
 
   bool setup();

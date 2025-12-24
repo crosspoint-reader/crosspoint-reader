@@ -1,7 +1,8 @@
 #include "TocNcxParser.h"
 
-#include <Esp.h>
 #include <HardwareSerial.h>
+
+#include "../BookMetadataCache.h"
 
 bool TocNcxParser::setup() {
   parser = XML_ParserCreate(nullptr);
@@ -167,8 +168,9 @@ void XMLCALL TocNcxParser::endElement(void* userData, const XML_Char* name) {
         href = href.substr(0, pos);
       }
 
-      // Push to vector
-      self->toc.push_back({std::move(self->currentLabel), std::move(href), std::move(anchor), self->currentDepth});
+      if (self->cache) {
+        self->cache->createTocEntry(self->currentLabel, href, anchor, self->currentDepth);
+      }
 
       // Clear them so we don't re-add them if there are weird XML structures
       self->currentLabel.clear();

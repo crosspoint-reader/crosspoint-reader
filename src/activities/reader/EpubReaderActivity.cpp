@@ -212,7 +212,7 @@ void EpubReaderActivity::renderScreen() {
   }
 
   if (!section) {
-    const auto filepath = epub->getSpineItem(currentSpineIndex);
+    const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     Serial.printf("[%lu] [ERS] Loading file: %s, index: %d\n", millis(), filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
     if (!section->loadCacheMetadata(READER_FONT_ID, lineCompression, marginTop, marginRight, marginBottom, marginLeft,

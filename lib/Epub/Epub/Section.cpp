@@ -116,8 +116,7 @@ bool Section::clearCache() const {
 bool Section::persistPageDataToSD(const int fontId, const float lineCompression, const int marginTop,
                                   const int marginRight, const int marginBottom, const int marginLeft,
                                   const bool extraParagraphSpacing) {
-  const auto localPath = epub->getSpineItem(spineIndex);
-
+  const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
   File tmpHtml;
   if (!FsHelpers::openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
