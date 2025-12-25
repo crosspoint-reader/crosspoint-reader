@@ -57,9 +57,53 @@ bool isCyrillicVowel(uint32_t cp) {
 
 bool isCyrillicConsonant(const uint32_t cp) { return isCyrillicLetter(cp) && !isCyrillicVowel(cp); }
 
-bool isAlphabetic(const uint32_t cp) { return isLatinLetter(cp) || isCyrillicLetter(cp); }
+bool isAlphabetic(const uint32_t cp) { return isLatinLetter(cp) || isCyrillicLetter(cp) || isPunctuation(cp); }
 
 bool isVowel(const uint32_t cp) { return isLatinVowel(cp) || isCyrillicVowel(cp); }
+
+bool isPunctuation(const uint32_t cp) {
+  switch (cp) {
+    case '.':
+    case ',':
+    case '!':
+    case '?':
+    case ';':
+    case ':':
+    case '"':
+    case '\'':
+    case ')':
+    case '(':
+    case '«':
+    case '»':
+    case '‘':
+    case '’':
+    case '“':
+    case '”':
+    case '—':
+    case '-':
+    case '–':
+    case '―':
+    case '[':
+    case ']':
+    case '{':
+    case '}':
+    case '/':
+    case 0x2019:  // ’
+    case 0x201D:  // ”
+    case 0x00BB:  // »
+    case 0x203A:  // ›
+    case 0x2026:  // …
+      return true;
+    default:
+      return false;
+  }
+}
+
+void trimTrailingPunctuation(std::vector<CodepointInfo>& cps) {
+  while (!cps.empty() && isPunctuation(cps.back().value)) {
+    cps.pop_back();
+  }
+}
 
 Script detectScript(const std::vector<CodepointInfo>& cps) {
   bool hasLatin = false;

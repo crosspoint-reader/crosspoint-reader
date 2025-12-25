@@ -94,6 +94,7 @@ std::vector<size_t> Hyphenator::breakOffsets(const std::string& word, const bool
   }
 
   auto cps = collectCodepoints(word);
+  trimTrailingPunctuation(cps);
   if (cps.size() < MIN_PREFIX_CP + MIN_SUFFIX_CP) {
     return byteOffsets;
   }
