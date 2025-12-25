@@ -166,9 +166,13 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
   auto runDp = [&](std::vector<size_t>& lineBreaks) {
     const size_t totalWordCount = wordWidths.size();
-
+ 
+    // DP table to store the minimum badness (cost) of lines starting at index i
     std::vector<int> dp(totalWordCount);
+    // 'ans[i]' stores the index 'j' of the *last word* in the optimal line starting at 'i'
     std::vector<size_t> ans(totalWordCount);
+
+    // Base Case
 
     dp[totalWordCount - 1] = 0;
     ans[totalWordCount - 1] = totalWordCount - 1;
@@ -178,6 +182,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
       dp[i] = MAX_COST;
 
       for (size_t j = i; j < totalWordCount; ++j) {
+        // Current line length: previous width + space + current word width
         currlen += wordWidths[j] + spaceWidth;
 
         if (currlen > pageWidth) {
@@ -200,13 +205,14 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
           cost = 0;
         } else {
           const int remainingSpace = pageWidth - currlen;
+          // Use long long for the square to prevent overflow
           const long long cost_ll = static_cast<long long>(remainingSpace) * remainingSpace + dp[j + 1];
           cost = cost_ll > MAX_COST ? MAX_COST : static_cast<int>(cost_ll);
         }
 
         if (cost < dp[i]) {
           dp[i] = cost;
-          ans[i] = j;
+          ans[i] = j; // j is the index of the last word in this optimal line
         }
       }
     }
@@ -222,6 +228,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     }
   };
 
+  // Stores the index of the word that starts the next line (last_word_index + 1)
   std::vector<size_t> lineBreakIndices;
 
   while (true) {
@@ -307,19 +314,22 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
+  // Calculate total word width for this line
   int lineWordWidthSum = 0;
-  for (size_t idx = lastBreakAt; idx < lineBreak; ++idx) {
-    lineWordWidthSum += wordWidths[idx];
+  for (size_t i = lastBreakAt; i < lineBreak; i++) {
+    lineWordWidthSum += wordWidths[i];
   }
-  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
 
+  // Calculate spacing
   const int spareSpace = pageWidth - lineWordWidthSum;
 
   int spacing = spaceWidth;
+  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
   if (style == TextBlock::JUSTIFIED && !isLastLine && lineWordCount >= 2) {
     spacing = spareSpace / (lineWordCount - 1);
   }
 
+  // Calculate initial x position
   uint16_t xpos = 0;
   if (style == TextBlock::RIGHT_ALIGN) {
     xpos = spareSpace - (lineWordCount - 1) * spaceWidth;
@@ -327,6 +337,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     xpos = (spareSpace - (lineWordCount - 1) * spaceWidth) / 2;
   }
 
+  // Pre-calculate X positions for words
   std::list<uint16_t> lineXPos;
   for (size_t i = lastBreakAt; i < lineBreak; i++) {
     const uint16_t currentWordWidth = wordWidths[i];
@@ -334,11 +345,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     xpos += currentWordWidth + spacing;
   }
 
+  // Iterators always start at the beginning as we are moving content with splice below
   auto wordEndIt = words.begin();
   auto wordStyleEndIt = wordStyles.begin();
   std::advance(wordEndIt, lineWordCount);
   std::advance(wordStyleEndIt, lineWordCount);
 
+  // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
   std::list<EpdFontStyle> lineWordStyles;
