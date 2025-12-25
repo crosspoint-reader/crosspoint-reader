@@ -46,8 +46,8 @@ void ReaderActivity::onGoToFileSelection() {
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   exitActivity();
-  enterNewActivity(new EpubReaderActivity(renderer, inputManager, std::move(epub), [this] { onGoToFileSelection(); },
-                                          [this] { onGoBack(); }));
+  enterNewActivity(new EpubReaderActivity(
+      renderer, inputManager, std::move(epub), [this] { onGoToFileSelection(); }, [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onEnter() {

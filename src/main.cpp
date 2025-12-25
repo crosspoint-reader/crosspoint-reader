@@ -156,8 +156,8 @@ void onGoToSettings() {
 
 void onGoHome() {
   exitActivity();
-  enterNewActivity(
-      new HomeActivity(renderer, inputManager, onContinueReading, onGoToReaderHome, onGoToSettings, onGoToFileTransfer));
+  enterNewActivity(new HomeActivity(renderer, inputManager, onContinueReading, onGoToReaderHome, onGoToSettings,
+                                    onGoToFileTransfer));
 }
 
 void setupDisplayAndFonts() {
