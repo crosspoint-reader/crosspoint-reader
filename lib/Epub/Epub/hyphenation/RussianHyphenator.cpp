@@ -1,17 +1,33 @@
 #include "RussianHyphenator.h"
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 namespace {
 
-bool isSoftOrHardSign(const uint32_t cp) { return cp == 0x044C || cp == 0x042C || cp == 0x044A || cp == 0x042A; }
+// Checks if the codepoint is the Cyrillic soft sign (ь).
+bool isSoftSign(uint32_t cp) { return toLowerCyrillic(cp) == 0x044C; }
 
+// Checks if the codepoint is the Cyrillic hard sign (ъ).
+bool isHardSign(uint32_t cp) { return toLowerCyrillic(cp) == 0x044A; }
+
+// Checks if the codepoint is either the Cyrillic soft sign (ь) or hard sign (ъ).
+bool isSoftOrHardSign(uint32_t cp) { return isSoftSign(cp) || isHardSign(cp); }
+
+// Checks if the codepoint is the Cyrillic short i (й).
+bool isCyrillicShortI(uint32_t cp) { return toLowerCyrillic(cp) == 0x0439; }
+
+// Checks if the codepoint is the Cyrillic yeru (ы).
+bool isCyrillicYeru(uint32_t cp) { return toLowerCyrillic(cp) == 0x044B; }
+
+// Checks if the codepoint is a Russian prefix consonant that can start certain clusters.
 bool isRussianPrefixConsonant(uint32_t cp) {
   cp = toLowerCyrillic(cp);
   return cp == 0x0432 || cp == 0x0437 || cp == 0x0441;  // в, з, с
 }
 
+// Checks if the codepoint is a Russian sibilant consonant.
 bool isRussianSibilant(uint32_t cp) {
   cp = toLowerCyrillic(cp);
   switch (cp) {
@@ -28,6 +44,7 @@ bool isRussianSibilant(uint32_t cp) {
   }
 }
 
+// Checks if the codepoint is a Russian stop consonant.
 bool isRussianStop(uint32_t cp) {
   cp = toLowerCyrillic(cp);
   switch (cp) {
@@ -43,6 +60,7 @@ bool isRussianStop(uint32_t cp) {
   }
 }
 
+// Checks the sonority rank of a Russian consonant for syllable onset validation.
 int russianSonority(uint32_t cp) {
   cp = toLowerCyrillic(cp);
   switch (cp) {
@@ -112,6 +130,46 @@ bool russianClusterIsValidOnset(const std::vector<CodepointInfo>& cps, const siz
   return true;
 }
 
+// Identifies splits within double consonant clusters.
+size_t doubleConsonantSplit(const std::vector<CodepointInfo>& cps, const size_t clusterStart, const size_t clusterEnd) {
+  for (size_t i = clusterStart; i + 1 < clusterEnd; ++i) {
+    const auto left = cps[i].value;
+    const auto right = cps[i + 1].value;
+    if (isCyrillicConsonant(left) && toLowerCyrillic(left) == toLowerCyrillic(right) && !isSoftOrHardSign(right)) {
+      return i + 1;
+    }
+  }
+  return std::numeric_limits<size_t>::max();
+}
+
+// Prevents breaks that would create forbidden suffixes.
+bool beginsWithForbiddenSuffix(const std::vector<CodepointInfo>& cps, const size_t index) {
+  if (index >= cps.size()) {
+    return true;
+  }
+  const auto cp = cps[index].value;
+  return isSoftOrHardSign(cp) || isCyrillicShortI(cp) || isCyrillicYeru(cp);
+}
+
+// Validates whether a hyphenation break is allowed at the specified index.
+bool russianBreakAllowed(const std::vector<CodepointInfo>& cps, const size_t breakIndex) {
+  if (breakIndex == 0 || breakIndex >= cps.size()) {
+    return false;
+  }
+
+  const size_t prefixLen = breakIndex;
+  const size_t suffixLen = cps.size() - breakIndex;
+  if (prefixLen < 2 || suffixLen < 2) {
+    return false;
+  }
+
+  if (beginsWithForbiddenSuffix(cps, breakIndex)) {
+    return false;
+  }
+
+  return true;
+}
+
 // Chooses the longest valid onset contained within the inter-vowel cluster.
 size_t russianOnsetLength(const std::vector<CodepointInfo>& cps, const size_t clusterStart, const size_t clusterEnd) {
   const size_t clusterLen = clusterEnd - clusterStart;
@@ -164,7 +222,8 @@ std::vector<size_t> russianBreakIndexes(const std::vector<CodepointInfo>& cps) {
     const size_t rightVowel = vowelPositions[v + 1];
 
     if (rightVowel - leftVowel == 1) {
-      if (rightVowel >= MIN_PREFIX_CP && cps.size() - rightVowel >= MIN_SUFFIX_CP && !nextToSoftSign(cps, rightVowel)) {
+      if (rightVowel >= MIN_PREFIX_CP && cps.size() - rightVowel >= MIN_SUFFIX_CP && !nextToSoftSign(cps, rightVowel) &&
+          russianBreakAllowed(cps, rightVowel)) {
         indexes.push_back(rightVowel);
       }
       continue;
@@ -172,13 +231,27 @@ std::vector<size_t> russianBreakIndexes(const std::vector<CodepointInfo>& cps) {
 
     const size_t clusterStart = leftVowel + 1;
     const size_t clusterEnd = rightVowel;
-    const size_t onsetLen = russianOnsetLength(cps, clusterStart, clusterEnd);
-    size_t breakIndex = clusterEnd - onsetLen;
+
+    size_t breakIndex = std::numeric_limits<size_t>::max();
+    if (const auto split = doubleConsonantSplit(cps, clusterStart, clusterEnd);
+        split != std::numeric_limits<size_t>::max()) {
+      breakIndex = split;
+    } else {
+      const size_t onsetLen = russianOnsetLength(cps, clusterStart, clusterEnd);
+      breakIndex = clusterEnd - onsetLen;
+    }
+
+    if (breakIndex == std::numeric_limits<size_t>::max()) {
+      continue;
+    }
 
     if (breakIndex < MIN_PREFIX_CP || cps.size() - breakIndex < MIN_SUFFIX_CP) {
       continue;
     }
     if (nextToSoftSign(cps, breakIndex)) {
+      continue;
+    }
+    if (!russianBreakAllowed(cps, breakIndex)) {
       continue;
     }
     indexes.push_back(breakIndex);

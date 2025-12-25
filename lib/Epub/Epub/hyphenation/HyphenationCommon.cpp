@@ -57,7 +57,7 @@ bool isCyrillicVowel(uint32_t cp) {
 
 bool isCyrillicConsonant(const uint32_t cp) { return isCyrillicLetter(cp) && !isCyrillicVowel(cp); }
 
-bool isAlphabetic(const uint32_t cp) { return isLatinLetter(cp) || isCyrillicLetter(cp) || isPunctuation(cp); }
+bool isAlphabetic(const uint32_t cp) { return isLatinLetter(cp) || isCyrillicLetter(cp); }
 
 bool isVowel(const uint32_t cp) { return isLatinVowel(cp) || isCyrillicVowel(cp); }
 
@@ -73,20 +73,17 @@ bool isPunctuation(const uint32_t cp) {
     case '\'':
     case ')':
     case '(':
-    case '«':
-    case '»':
-    case '‘':
-    case '’':
-    case '“':
-    case '”':
+    case 0x00AB:  // «
+    case 0x00BB:  // »
+    case 0x2018:  // ‘
+    case 0x2019:  // ’
+    case 0x201C:  // “
+    case 0x201D:  // ”
     case '[':
     case ']':
     case '{':
     case '}':
     case '/':
-    case 0x2019:  // ’
-    case 0x201D:  // ”
-    case 0x00BB:  // »
     case 0x203A:  // ›
     case 0x2026:  // …
       return true;

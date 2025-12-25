@@ -11,7 +11,7 @@ struct CodepointInfo {
 
 enum class Script { Latin, Cyrillic, Mixed };
 
-constexpr size_t MIN_PREFIX_CP = 3;
+constexpr size_t MIN_PREFIX_CP = 2;
 constexpr size_t MIN_SUFFIX_CP = 2;
 
 uint32_t toLowerLatin(uint32_t cp);
