@@ -7,11 +7,13 @@ class Epub;
 
 class ReaderActivity final : public ActivityWithSubactivity {
   std::string initialEpubPath;
+  std::string currentEpubPath;  // Track current book path for navigation
   const std::function<void()> onGoBack;
   static std::unique_ptr<Epub> loadEpub(const std::string& path);
 
+  static std::string extractFolderPath(const std::string& filePath);
   void onSelectEpubFile(const std::string& path);
-  void onGoToFileSelection();
+  void onGoToFileSelection(const std::string& fromEpubPath = "");
   void onGoToEpubReader(std::unique_ptr<Epub> epub);
 
  public:

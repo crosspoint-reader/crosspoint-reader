@@ -553,11 +553,12 @@ void WifiSelectionActivity::renderNetworkList() const {
     // Show network count
     char countStr[32];
     snprintf(countStr, sizeof(countStr), "%zu networks found", networks.size());
-    renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 45, countStr);
+    renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 90, countStr);
   }
 
   // Draw help text
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 30, "OK: Connect | * = Encrypted | + = Saved");
+  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 75, "* = Encrypted | + = Saved");
+  renderer.drawButtonHints(UI_FONT_ID, "« Back", "Connect", "", "");
 }
 
 void WifiSelectionActivity::renderPasswordEntry() const {

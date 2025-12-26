@@ -14,6 +14,7 @@
 namespace {
 constexpr int pagesPerRefresh = 15;
 constexpr unsigned long skipChapterMs = 700;
+constexpr unsigned long goHomeMs = 1000;
 constexpr float lineCompression = 0.95f;
 constexpr int marginTop = 8;
 constexpr int marginRight = 10;
@@ -108,7 +109,14 @@ void EpubReaderActivity::loop() {
     xSemaphoreGive(renderingMutex);
   }
 
-  if (inputManager.wasPressed(InputManager::BTN_BACK)) {
+  // Long press BACK (1s+) goes directly to home
+  if (inputManager.isPressed(InputManager::BTN_BACK) && inputManager.getHeldTime() >= goHomeMs) {
+    onGoHome();
+    return;
+  }
+
+  // Short press BACK goes to file selection
+  if (inputManager.wasReleased(InputManager::BTN_BACK) && inputManager.getHeldTime() < goHomeMs) {
     onGoBack();
     return;
   }

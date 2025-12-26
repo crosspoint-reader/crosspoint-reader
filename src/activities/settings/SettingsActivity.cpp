@@ -169,7 +169,7 @@ void SettingsActivity::render() const {
   }
 
   // Draw help text
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 30, "Press OK to toggle, BACK to save & exit");
+  renderer.drawButtonHints(UI_FONT_ID, "« Save", "Toggle", "", "");
   renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
                     pageHeight - 30, CROSSPOINT_VERSION);
 

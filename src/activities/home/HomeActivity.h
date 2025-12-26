@@ -12,6 +12,8 @@ class HomeActivity final : public Activity {
   SemaphoreHandle_t renderingMutex = nullptr;
   int selectorIndex = 0;
   bool updateRequired = false;
+  bool hasContinueReading = false;
+  const std::function<void()> onContinueReading;
   const std::function<void()> onReaderOpen;
   const std::function<void()> onSettingsOpen;
   const std::function<void()> onFileTransferOpen;
@@ -19,11 +21,14 @@ class HomeActivity final : public Activity {
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void render() const;
+  int getMenuItemCount() const;
 
  public:
-  explicit HomeActivity(GfxRenderer& renderer, InputManager& inputManager, const std::function<void()>& onReaderOpen,
+  explicit HomeActivity(GfxRenderer& renderer, InputManager& inputManager,
+                        const std::function<void()>& onContinueReading, const std::function<void()>& onReaderOpen,
                         const std::function<void()>& onSettingsOpen, const std::function<void()>& onFileTransferOpen)
       : Activity("Home", renderer, inputManager),
+        onContinueReading(onContinueReading),
         onReaderOpen(onReaderOpen),
         onSettingsOpen(onSettingsOpen),
         onFileTransferOpen(onFileTransferOpen) {}

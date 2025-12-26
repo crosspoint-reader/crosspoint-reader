@@ -7,6 +7,14 @@
 #include "FileSelectionActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 
+std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
+  const auto lastSlash = filePath.find_last_of('/');
+  if (lastSlash == std::string::npos || lastSlash == 0) {
+    return "/";
+  }
+  return filePath.substr(0, lastSlash);
+}
+
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!SD.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
@@ -23,6 +31,7 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
 }
 
 void ReaderActivity::onSelectEpubFile(const std::string& path) {
+  currentEpubPath = path;  // Track current book path
   exitActivity();
   enterNewActivity(new FullScreenMessageActivity(renderer, inputManager, "Loading..."));
 
@@ -38,25 +47,32 @@ void ReaderActivity::onSelectEpubFile(const std::string& path) {
   }
 }
 
-void ReaderActivity::onGoToFileSelection() {
+void ReaderActivity::onGoToFileSelection(const std::string& fromEpubPath) {
   exitActivity();
+  // If coming from a book, start in that book's folder; otherwise start from root
+  const auto initialPath = fromEpubPath.empty() ? "/" : extractFolderPath(fromEpubPath);
   enterNewActivity(new FileSelectionActivity(
-      renderer, inputManager, [this](const std::string& path) { onSelectEpubFile(path); }, onGoBack));
+      renderer, inputManager, [this](const std::string& path) { onSelectEpubFile(path); }, onGoBack, initialPath));
 }
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
+  const auto epubPath = epub->getPath();
+  currentEpubPath = epubPath;
   exitActivity();
-  enterNewActivity(new EpubReaderActivity(renderer, inputManager, std::move(epub), [this] { onGoToFileSelection(); }));
+  enterNewActivity(new EpubReaderActivity(
+      renderer, inputManager, std::move(epub), [this, epubPath] { onGoToFileSelection(epubPath); },
+      [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   if (initialEpubPath.empty()) {
-    onGoToFileSelection();
+    onGoToFileSelection();  // Start from root when entering via Browse
     return;
   }
 
+  currentEpubPath = initialEpubPath;
   auto epub = loadEpub(initialEpubPath);
   if (!epub) {
     onGoBack();

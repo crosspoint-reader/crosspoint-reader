@@ -9,6 +9,7 @@
 namespace {
 constexpr int PAGE_ITEMS = 23;
 constexpr int SKIP_PAGE_MS = 700;
+constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
 
 void sortFileList(std::vector<std::string>& strs) {
@@ -53,7 +54,7 @@ void FileSelectionActivity::onEnter() {
 
   renderingMutex = xSemaphoreCreateMutex();
 
-  basepath = "/";
+  // basepath is set via constructor parameter (defaults to "/" if not specified)
   loadFiles();
   selectorIndex = 0;
 
@@ -83,6 +84,16 @@ void FileSelectionActivity::onExit() {
 }
 
 void FileSelectionActivity::loop() {
+  // Long press BACK (1s+) goes to root folder
+  if (inputManager.isPressed(InputManager::BTN_BACK) && inputManager.getHeldTime() >= GO_HOME_MS) {
+    if (basepath != "/") {
+      basepath = "/";
+      loadFiles();
+      updateRequired = true;
+    }
+    return;
+  }
+
   const bool prevReleased =
       inputManager.wasReleased(InputManager::BTN_UP) || inputManager.wasReleased(InputManager::BTN_LEFT);
   const bool nextReleased =
@@ -103,15 +114,17 @@ void FileSelectionActivity::loop() {
     } else {
       onSelect(basepath + files[selectorIndex]);
     }
-  } else if (inputManager.wasPressed(InputManager::BTN_BACK)) {
-    if (basepath != "/") {
-      basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-      if (basepath.empty()) basepath = "/";
-      loadFiles();
-      updateRequired = true;
-    } else {
-      // At root level, go back home
-      onGoHome();
+  } else if (inputManager.wasReleased(InputManager::BTN_BACK)) {
+    // Short press: go up one directory, or go home if at root
+    if (inputManager.getHeldTime() < GO_HOME_MS) {
+      if (basepath != "/") {
+        basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+        if (basepath.empty()) basepath = "/";
+        loadFiles();
+        updateRequired = true;
+      } else {
+        onGoHome();
+      }
     }
   } else if (prevReleased) {
     if (skipPage) {
@@ -149,7 +162,7 @@ void FileSelectionActivity::render() const {
   renderer.drawCenteredText(READER_FONT_ID, 10, "Books", true, BOLD);
 
   // Help text
-  renderer.drawText(SMALL_FONT_ID, 20, GfxRenderer::getScreenHeight() - 30, "Press BACK for Home");
+  renderer.drawButtonHints(UI_FONT_ID, "« Home", "", "", "");
 
   if (files.empty()) {
     renderer.drawText(UI_FONT_ID, 20, 60, "No EPUBs found");

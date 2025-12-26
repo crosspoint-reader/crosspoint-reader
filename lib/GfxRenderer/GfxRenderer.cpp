@@ -239,6 +239,28 @@ int GfxRenderer::getLineHeight(const int fontId) const {
   return fontMap.at(fontId).getData(REGULAR)->advanceY;
 }
 
+void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
+                                  const char* btn4) const {
+  const int pageHeight = getScreenHeight();
+  constexpr int buttonWidth = 106;
+  constexpr int buttonHeight = 40;
+  constexpr int buttonY = 40;     // Distance from bottom
+  constexpr int textYOffset = 5;  // Distance from top of button to text baseline
+  constexpr int buttonPositions[] = {25, 130, 245, 350};
+  const char* labels[] = {btn1, btn2, btn3, btn4};
+
+  for (int i = 0; i < 4; i++) {
+    // Only draw if the label is non-empty
+    if (labels[i] != nullptr && labels[i][0] != '\0') {
+      const int x = buttonPositions[i];
+      drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
+      const int textWidth = getTextWidth(fontId, labels[i]);
+      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+      drawText(fontId, textX, pageHeight - buttonY + textYOffset, labels[i]);
+    }
+  }
+}
+
 uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }

@@ -122,7 +122,7 @@ void NetworkModeSelectionActivity::render() const {
   }
 
   // Draw help text at bottom
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "Press OK to select, BACK to cancel", true, REGULAR);
+  renderer.drawButtonHints(UI_FONT_ID, "« Back", "Select", "", "");
 
   renderer.displayBuffer();
 }
