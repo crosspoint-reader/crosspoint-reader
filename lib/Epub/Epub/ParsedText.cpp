@@ -106,6 +106,18 @@ std::vector<size_t> ParsedText::computeLineBreaks(const int pageWidth, const int
         ans[i] = j;  // j is the index of the last word in this optimal line
       }
     }
+
+    // Handle oversized word: if no valid configuration found, force single-word line
+    // This prevents cascade failure where one oversized word breaks all preceding words
+    if (dp[i] == MAX_COST) {
+      ans[i] = i;  // Just this word on its own line
+      // Inherit cost from next word to allow subsequent words to find valid configurations
+      if (i + 1 < static_cast<int>(totalWordCount)) {
+        dp[i] = dp[i + 1];
+      } else {
+        dp[i] = 0;
+      }
+    }
   }
 
   // Stores the index of the word that starts the next line (last_word_index + 1)
