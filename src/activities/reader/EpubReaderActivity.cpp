@@ -342,16 +342,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page) {
 void EpubReaderActivity::renderStatusBar() const {
   // determine visible status bar elements
   const bool showProgress = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
-  const bool showBattery = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS || SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
-  const bool showChapterTitle = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS || SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
+  const bool showBattery = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS ||
+                           SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
+  const bool showChapterTitle = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS ||
+                                SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
 
   // height variable shared by all elements
   constexpr auto textY = 776;
-
-  // Left aligned battery icon and percentage
-  const uint16_t percentage = battery.readPercentage();
-  const auto percentageText = std::to_string(percentage) + "%";
-  const auto percentageTextWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+  int percentageTextWidth = 0;
+  int progressTextWidth = 0;
 
   if (showProgress) {
     // Calculate progress in book
@@ -360,13 +359,17 @@ void EpubReaderActivity::renderStatusBar() const {
 
     // Right aligned text for progress counter
     const std::string progress = std::to_string(section->currentPage + 1) + "/" + std::to_string(section->pageCount) +
-                                "  " + std::to_string(bookProgress) + "%";
-    const auto progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progress.c_str());
+                                 "  " + std::to_string(bookProgress) + "%";
+    progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progress.c_str());
     renderer.drawText(SMALL_FONT_ID, GfxRenderer::getScreenWidth() - marginRight - progressTextWidth, textY,
                       progress.c_str());
   }
-  
+
   if (showBattery) {
+    // Left aligned battery icon and percentage
+    const uint16_t percentage = battery.readPercentage();
+    const auto percentageText = std::to_string(percentage) + "%";
+    percentageTextWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
     renderer.drawText(SMALL_FONT_ID, 20 + marginLeft, textY, percentageText.c_str());
 
     // 1 column on left, 2 columns on right, 5 columns of battery body
@@ -393,9 +396,7 @@ void EpubReaderActivity::renderStatusBar() const {
       filledWidth = batteryWidth - 5;  // Ensure we don't overflow
     }
     renderer.fillRect(x + 1, y + 1, filledWidth, batteryHeight - 2);
-
   }
-
 
   if (showChapterTitle) {
     // Centered chatper title text
