@@ -3,7 +3,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <InputManager.h>
-#include <SD.h>
+#include <SDCardManager.h>
 #include <SPI.h>
 #include <builtinFonts/bookerly_2b.h>
 #include <builtinFonts/bookerly_bold_2b.h>
@@ -25,22 +25,23 @@
 #include "activities/util/FullScreenMessageActivity.h"
 #include "config.h"
 
+#include <esp_sleep.h>
+#include <driver/rtc_io.h>
+
 #define SPI_FQ 40000000
-// Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
-#define EPD_SCLK 8   // SPI Clock
-#define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
-#define EPD_CS 21    // Chip Select
-#define EPD_DC 4     // Data/Command
-#define EPD_RST 5    // Reset
-#define EPD_BUSY 6   // Busy
+// Display SPI pins (custom pins for MinRead hardware)
+#define EPD_SCLK 13  // SPI Clock
+#define EPD_MOSI 14  // SPI MOSI (Master Out Slave In)
+#define EPD_CS 12    // Chip Select
+#define EPD_DC 11    // Data/Command
+#define EPD_RST 10   // Reset
+#define EPD_BUSY 9   // Busy
 
 #define UART0_RXD 20  // Used for USB connection detection
 
-#define SD_SPI_CS 12
-#define SD_SPI_MISO 7
-
 EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 InputManager inputManager;
+SDCardManager sdCardManager;
 GfxRenderer renderer(einkDisplay);
 Activity* currentActivity;
 
@@ -108,7 +109,10 @@ void verifyWakeupLongPress() {
   if (abort) {
     // Button released too early. Returning to sleep.
     // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+    // Enable pull-up resistor for RTC GPIO
+    rtc_gpio_pullup_en((gpio_num_t)InputManager::PIN_CONFIRM);
+    // Configure wakeup on HIGH level (button released with pull-up)
+    esp_sleep_enable_ext1_wakeup(1ULL << InputManager::PIN_CONFIRM, ESP_EXT1_WAKEUP_ANY_HIGH);
     esp_deep_sleep_start();
   }
 }
@@ -129,9 +133,12 @@ void enterDeepSleep() {
   einkDisplay.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
   // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
   waitForPowerRelease();
+  // Enable pull-up resistor for RTC GPIO
+  rtc_gpio_pullup_en((gpio_num_t)InputManager::PIN_CONFIRM);
+  // Configure wakeup on HIGH level (button released with pull-up)
+  esp_sleep_enable_ext1_wakeup(1ULL << InputManager::PIN_CONFIRM, ESP_EXT1_WAKEUP_ANY_HIGH);
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
@@ -184,12 +191,11 @@ void setup() {
   // Initialize pins
   pinMode(BAT_GPIO0, INPUT);
 
-  // Initialize SPI with custom pins
-  SPI.begin(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, EPD_CS);
+  // Initialize SPI for display (SD card now uses SDMMC, not SPI)
+  SPI.begin(EPD_SCLK, -1, EPD_MOSI, EPD_CS);  // MISO not needed for display-only SPI
 
-  // SD Card Initialization
-  // We need 6 open files concurrently when parsing a new chapter
-  if (!SD.begin(SD_SPI_CS, SPI, SPI_FQ, "/sd", 6)) {
+  // SD Card Initialization using SDMMC
+  if (!sdCardManager.begin()) {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
     setupDisplayAndFonts();
     exitActivity();
