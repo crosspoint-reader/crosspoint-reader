@@ -5,19 +5,19 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
-#include "../Activity.h"
+#include "activities/ActivityWithSubactivity.h"
 
-class EpubReaderActivity final : public Activity {
+class EpubReaderActivity final : public ActivityWithSubactivity {
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
-  std::unique_ptr<Activity> subAcitivity = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   int pagesUntilFullRefresh = 0;
   bool updateRequired = false;
   const std::function<void()> onGoBack;
+  const std::function<void()> onGoHome;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
@@ -27,8 +27,11 @@ class EpubReaderActivity final : public Activity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, InputManager& inputManager, std::unique_ptr<Epub> epub,
-                              const std::function<void()>& onGoBack)
-      : Activity(renderer, inputManager), epub(std::move(epub)), onGoBack(onGoBack) {}
+                              const std::function<void()>& onGoBack, const std::function<void()>& onGoHome)
+      : ActivityWithSubactivity("EpubReader", renderer, inputManager),
+        epub(std::move(epub)),
+        onGoBack(onGoBack),
+        onGoHome(onGoHome) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

@@ -15,9 +15,10 @@ class GfxRenderer;
 #define MAX_WORD_SIZE 200
 
 class ChapterHtmlSlimParser {
-  const char* filepath;
+  const std::string& filepath;
   GfxRenderer& renderer;
   std::function<void(std::unique_ptr<Page>)> completePageFn;
+  std::function<void(int)> progressFn;  // Progress callback (0-100)
   int depth = 0;
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
@@ -45,10 +46,11 @@ class ChapterHtmlSlimParser {
   static void XMLCALL endElement(void* userData, const XML_Char* name);
 
  public:
-  explicit ChapterHtmlSlimParser(const char* filepath, GfxRenderer& renderer, const int fontId,
+  explicit ChapterHtmlSlimParser(const std::string& filepath, GfxRenderer& renderer, const int fontId,
                                  const float lineCompression, const int marginTop, const int marginRight,
                                  const int marginBottom, const int marginLeft, const bool extraParagraphSpacing,
-                                 const std::function<void(std::unique_ptr<Page>)>& completePageFn)
+                                 const std::function<void(std::unique_ptr<Page>)>& completePageFn,
+                                 const std::function<void(int)>& progressFn = nullptr)
       : filepath(filepath),
         renderer(renderer),
         fontId(fontId),
@@ -58,7 +60,8 @@ class ChapterHtmlSlimParser {
         marginBottom(marginBottom),
         marginLeft(marginLeft),
         extraParagraphSpacing(extraParagraphSpacing),
-        completePageFn(completePageFn) {}
+        completePageFn(completePageFn),
+        progressFn(progressFn) {}
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);

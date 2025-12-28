@@ -164,9 +164,18 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     isScaled = true;
   }
 
-  const uint8_t outputRowSize = (bitmap.getWidth() + 3) / 4;
+  // Calculate output row size (2 bits per pixel, packed into bytes)
+  // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
+  const int outputRowSize = (bitmap.getWidth() + 3) / 4;
   auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+
+  if (!outputRow || !rowBytes) {
+    Serial.printf("[%lu] [GFX] !! Failed to allocate BMP row buffers\n", millis());
+    free(outputRow);
+    free(rowBytes);
+    return;
+  }
 
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
@@ -179,7 +188,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       break;
     }
 
-    if (bitmap.readRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+    if (bitmap.readRow(outputRow, rowBytes, bmpY) != BmpReaderError::Ok) {
       Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
       free(outputRow);
       free(rowBytes);
@@ -215,6 +224,10 @@ void GfxRenderer::clearScreen(const uint8_t color) const { einkDisplay.clearScre
 
 void GfxRenderer::invertScreen() const {
   uint8_t* buffer = einkDisplay.getFrameBuffer();
+  if (!buffer) {
+    Serial.printf("[%lu] [GFX] !! No framebuffer in invertScreen\n", millis());
+    return;
+  }
   for (int i = 0; i < EInkDisplay::BUFFER_SIZE; i++) {
     buffer[i] = ~buffer[i];
   }
@@ -293,6 +306,28 @@ int GfxRenderer::getLineHeight(const int fontId) const {
   return fontMap.at(fontId).getData(REGULAR)->advanceY;
 }
 
+void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
+                                  const char* btn4) const {
+  const int pageHeight = getScreenHeight();
+  constexpr int buttonWidth = 106;
+  constexpr int buttonHeight = 40;
+  constexpr int buttonY = 40;     // Distance from bottom
+  constexpr int textYOffset = 5;  // Distance from top of button to text baseline
+  constexpr int buttonPositions[] = {25, 130, 245, 350};
+  const char* labels[] = {btn1, btn2, btn3, btn4};
+
+  for (int i = 0; i < 4; i++) {
+    // Only draw if the label is non-empty
+    if (labels[i] != nullptr && labels[i][0] != '\0') {
+      const int x = buttonPositions[i];
+      drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
+      const int textWidth = getTextWidth(fontId, labels[i]);
+      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+      drawText(fontId, textX, pageHeight - buttonY + textYOffset, labels[i]);
+    }
+  }
+}
+
 uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
@@ -321,6 +356,10 @@ void GfxRenderer::freeBwBufferChunks() {
  */
 void GfxRenderer::storeBwBuffer() {
   const uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer) {
+    Serial.printf("[%lu] [GFX] !! No framebuffer in storeBwBuffer\n", millis());
+    return;
+  }
 
   // Allocate and copy each chunk
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
@@ -371,6 +410,12 @@ void GfxRenderer::restoreBwBuffer() {
   }
 
   uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer) {
+    Serial.printf("[%lu] [GFX] !! No framebuffer in restoreBwBuffer\n", millis());
+    freeBwBufferChunks();
+    return;
+  }
+
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if chunk is missing
     if (!bwBufferChunks[i]) {

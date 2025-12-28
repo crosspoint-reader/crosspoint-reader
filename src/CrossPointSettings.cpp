@@ -1,11 +1,9 @@
 #include "CrossPointSettings.h"
 
+#include <FsHelpers.h>
 #include <HardwareSerial.h>
 #include <SD.h>
 #include <Serialization.h>
-
-#include <cstdint>
-#include <fstream>
 
 // Initialize the static instance
 CrossPointSettings CrossPointSettings::instance;
@@ -13,20 +11,25 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 5;
-constexpr char SETTINGS_FILE[] = "/sd/.crosspoint/settings.bin";
+constexpr uint8_t SETTINGS_COUNT = 6;
+constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
 bool CrossPointSettings::saveToFile() const {
   // Make sure the directory exists
   SD.mkdir("/.crosspoint");
 
-  std::ofstream outputFile(SETTINGS_FILE);
+  File outputFile;
+  if (!FsHelpers::openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
+    return false;
+  }
+
   serialization::writePod(outputFile, SETTINGS_FILE_VERSION);
   serialization::writePod(outputFile, SETTINGS_COUNT);
-  serialization::writePod(outputFile, whiteSleepScreen);
+  serialization::writePod(outputFile, sleepScreen);
   serialization::writePod(outputFile, extraParagraphSpacing);
   serialization::writePod(outputFile, shortPwrBtn);
+  serialization::writePod(outputFile, statusBar);
   serialization::writePod(outputFile, landscapeReading);
   serialization::writePod(outputFile, landscapeFlipped);
   outputFile.close();
@@ -36,12 +39,10 @@ bool CrossPointSettings::saveToFile() const {
 }
 
 bool CrossPointSettings::loadFromFile() {
-  if (!SD.exists(SETTINGS_FILE + 3)) {  // +3 to skip "/sd" prefix
-    Serial.printf("[%lu] [CPS] Settings file does not exist, using defaults\n", millis());
+  File inputFile;
+  if (!FsHelpers::openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
     return false;
   }
-
-  std::ifstream inputFile(SETTINGS_FILE);
 
   uint8_t version;
   serialization::readPod(inputFile, version);
@@ -57,11 +58,13 @@ bool CrossPointSettings::loadFromFile() {
   // load settings that exist (support older files with fewer fields)
   uint8_t settingsRead = 0;
   do {
-    serialization::readPod(inputFile, whiteSleepScreen);
+    serialization::readPod(inputFile, sleepScreen);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, extraParagraphSpacing);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, shortPwrBtn);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBar);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, landscapeReading);
     if (++settingsRead >= fileSettingsCount) break;

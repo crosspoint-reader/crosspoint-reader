@@ -16,6 +16,9 @@ class FullScreenMessageActivity final : public Activity {
   explicit FullScreenMessageActivity(GfxRenderer& renderer, InputManager& inputManager, std::string text,
                                      const EpdFontStyle style = REGULAR,
                                      const EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH)
-      : Activity(renderer, inputManager), text(std::move(text)), style(style), refreshMode(refreshMode) {}
+      : Activity("FullScreenMessage", renderer, inputManager),
+        text(std::move(text)),
+        style(style),
+        refreshMode(refreshMode) {}
   void onEnter() override;
 };

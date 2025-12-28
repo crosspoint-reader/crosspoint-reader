@@ -10,8 +10,8 @@ class ActivityWithSubactivity : public Activity {
   void enterNewActivity(Activity* activity);
 
  public:
-  explicit ActivityWithSubactivity(GfxRenderer& renderer, InputManager& inputManager)
-      : Activity(renderer, inputManager) {}
+  explicit ActivityWithSubactivity(std::string name, GfxRenderer& renderer, InputManager& inputManager)
+      : Activity(std::move(name), renderer, inputManager) {}
   void loop() override;
   void onExit() override;
 };

@@ -6,6 +6,8 @@
 #include "images/CrossLarge.h"
 
 void BootActivity::onEnter() {
+  Activity::onEnter();
+
   const auto pageWidth = GfxRenderer::getScreenWidth();
   const auto pageHeight = GfxRenderer::getScreenHeight();
 

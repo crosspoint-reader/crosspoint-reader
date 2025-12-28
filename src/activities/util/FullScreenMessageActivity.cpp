@@ -5,6 +5,8 @@
 #include "config.h"
 
 void FullScreenMessageActivity::onEnter() {
+  Activity::onEnter();
+
   const auto height = renderer.getLineHeight(UI_FONT_ID);
   const auto top = (GfxRenderer::getScreenHeight() - height) / 2;
 

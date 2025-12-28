@@ -1,21 +1,26 @@
 #include "HomeActivity.h"
 
 #include <GfxRenderer.h>
+#include <InputManager.h>
 #include <SD.h>
 
+#include "CrossPointState.h"
 #include "config.h"
-
-namespace {
-constexpr int menuItemCount = 3;
-}
 
 void HomeActivity::taskTrampoline(void* param) {
   auto* self = static_cast<HomeActivity*>(param);
   self->displayTaskLoop();
 }
 
+int HomeActivity::getMenuItemCount() const { return hasContinueReading ? 4 : 3; }
+
 void HomeActivity::onEnter() {
+  Activity::onEnter();
+
   renderingMutex = xSemaphoreCreateMutex();
+
+  // Check if we have a book to continue reading
+  hasContinueReading = !APP_STATE.openEpubPath.empty() && SD.exists(APP_STATE.openEpubPath.c_str());
 
   selectorIndex = 0;
 
@@ -31,6 +36,8 @@ void HomeActivity::onEnter() {
 }
 
 void HomeActivity::onExit() {
+  Activity::onExit();
+
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
@@ -47,19 +54,35 @@ void HomeActivity::loop() {
   const bool nextPressed =
       inputManager.wasPressed(InputManager::BTN_DOWN) || inputManager.wasPressed(InputManager::BTN_RIGHT);
 
+  const int menuCount = getMenuItemCount();
+
   if (inputManager.wasPressed(InputManager::BTN_CONFIRM)) {
-    if (selectorIndex == 0) {
-      onReaderOpen();
-    } else if (selectorIndex == 1) {
-      onFileTransferOpen();
-    } else if (selectorIndex == 2) {
-      onSettingsOpen();
+    if (hasContinueReading) {
+      // Menu: Continue Reading, Browse, File transfer, Settings
+      if (selectorIndex == 0) {
+        onContinueReading();
+      } else if (selectorIndex == 1) {
+        onReaderOpen();
+      } else if (selectorIndex == 2) {
+        onFileTransferOpen();
+      } else if (selectorIndex == 3) {
+        onSettingsOpen();
+      }
+    } else {
+      // Menu: Browse, File transfer, Settings
+      if (selectorIndex == 0) {
+        onReaderOpen();
+      } else if (selectorIndex == 1) {
+        onFileTransferOpen();
+      } else if (selectorIndex == 2) {
+        onSettingsOpen();
+      }
     }
   } else if (prevPressed) {
-    selectorIndex = (selectorIndex + menuItemCount - 1) % menuItemCount;
+    selectorIndex = (selectorIndex + menuCount - 1) % menuCount;
     updateRequired = true;
   } else if (nextPressed) {
-    selectorIndex = (selectorIndex + 1) % menuItemCount;
+    selectorIndex = (selectorIndex + 1) % menuCount;
     updateRequired = true;
   }
 }
@@ -79,28 +102,48 @@ void HomeActivity::displayTaskLoop() {
 void HomeActivity::render() const {
   renderer.clearScreen();
 
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageWidth = renderer.getScreenWidth();
   renderer.drawCenteredText(READER_FONT_ID, 10, "CrossPoint Reader", true, BOLD);
 
   // Draw selection
   renderer.fillRect(0, 60 + selectorIndex * 30 + 2, pageWidth - 1, 30);
-  renderer.drawText(UI_FONT_ID, 20, 60, "Read", selectorIndex != 0);
-  renderer.drawText(UI_FONT_ID, 20, 90, "File transfer", selectorIndex != 1);
-  renderer.drawText(UI_FONT_ID, 20, 120, "Settings", selectorIndex != 2);
 
-  renderer.drawRect(25, pageHeight - 40, 106, 40);
-  renderer.drawText(UI_FONT_ID, 25 + (105 - renderer.getTextWidth(UI_FONT_ID, "Back")) / 2, pageHeight - 35, "Back");
+  int menuY = 60;
+  int menuIndex = 0;
 
-  renderer.drawRect(130, pageHeight - 40, 106, 40);
-  renderer.drawText(UI_FONT_ID, 130 + (105 - renderer.getTextWidth(UI_FONT_ID, "Confirm")) / 2, pageHeight - 35,
-                    "Confirm");
+  if (hasContinueReading) {
+    // Extract filename from path for display
+    std::string bookName = APP_STATE.openEpubPath;
+    const size_t lastSlash = bookName.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+      bookName = bookName.substr(lastSlash + 1);
+    }
+    // Remove .epub extension
+    if (bookName.length() > 5 && bookName.substr(bookName.length() - 5) == ".epub") {
+      bookName.resize(bookName.length() - 5);
+    }
+    // Truncate if too long
+    if (bookName.length() > 25) {
+      bookName.resize(22);
+      bookName += "...";
+    }
+    std::string continueLabel = "Continue: " + bookName;
+    renderer.drawText(UI_FONT_ID, 20, menuY, continueLabel.c_str(), selectorIndex != menuIndex);
+    menuY += 30;
+    menuIndex++;
+  }
 
-  renderer.drawRect(245, pageHeight - 40, 106, 40);
-  renderer.drawText(UI_FONT_ID, 245 + (105 - renderer.getTextWidth(UI_FONT_ID, "Left")) / 2, pageHeight - 35, "Left");
+  renderer.drawText(UI_FONT_ID, 20, menuY, "Browse", selectorIndex != menuIndex);
+  menuY += 30;
+  menuIndex++;
 
-  renderer.drawRect(350, pageHeight - 40, 106, 40);
-  renderer.drawText(UI_FONT_ID, 350 + (105 - renderer.getTextWidth(UI_FONT_ID, "Right")) / 2, pageHeight - 35, "Right");
+  renderer.drawText(UI_FONT_ID, 20, menuY, "File transfer", selectorIndex != menuIndex);
+  menuY += 30;
+  menuIndex++;
+
+  renderer.drawText(UI_FONT_ID, 20, menuY, "Settings", selectorIndex != menuIndex);
+
+  renderer.drawButtonHints(UI_FONT_ID, "Back", "Confirm", "Left", "Right");
 
   renderer.displayBuffer();
 }

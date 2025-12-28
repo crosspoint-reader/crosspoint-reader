@@ -27,31 +27,28 @@ bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t*
   return true;
 }
 
-bool ZipFile::loadFileStat(const char* filename, mz_zip_archive_file_stat* fileStat) const {
-  mz_zip_archive zipArchive = {};
-  const bool status = mz_zip_reader_init_file(&zipArchive, filePath.c_str(), 0);
+ZipFile::ZipFile(std::string filePath) : filePath(std::move(filePath)) {
+  const bool status = mz_zip_reader_init_file(&zipArchive, this->filePath.c_str(), 0);
 
   if (!status) {
-    Serial.printf("[%lu] [ZIP] mz_zip_reader_init_file() failed! Error: %s\n", millis(),
+    Serial.printf("[%lu] [ZIP] mz_zip_reader_init_file() failed for %s! Error: %s\n", millis(), this->filePath.c_str(),
                   mz_zip_get_error_string(zipArchive.m_last_error));
-    return false;
   }
+}
 
+bool ZipFile::loadFileStat(const char* filename, mz_zip_archive_file_stat* fileStat) const {
   // find the file
   mz_uint32 fileIndex = 0;
   if (!mz_zip_reader_locate_file_v2(&zipArchive, filename, nullptr, 0, &fileIndex)) {
     Serial.printf("[%lu] [ZIP] Could not find file %s\n", millis(), filename);
-    mz_zip_reader_end(&zipArchive);
     return false;
   }
 
   if (!mz_zip_reader_file_stat(&zipArchive, fileIndex, fileStat)) {
     Serial.printf("[%lu] [ZIP] mz_zip_reader_file_stat() failed! Error: %s\n", millis(),
                   mz_zip_get_error_string(zipArchive.m_last_error));
-    mz_zip_reader_end(&zipArchive);
     return false;
   }
-  mz_zip_reader_end(&zipArchive);
   return true;
 }
 
@@ -118,6 +115,11 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
   const auto inflatedDataSize = static_cast<size_t>(fileStat.m_uncomp_size);
   const auto dataSize = trailingNullByte ? inflatedDataSize + 1 : inflatedDataSize;
   const auto data = static_cast<uint8_t*>(malloc(dataSize));
+  if (data == nullptr) {
+    Serial.printf("[%lu] [ZIP] Failed to allocate memory for output buffer (%zu bytes)\n", millis(), dataSize);
+    fclose(file);
+    return nullptr;
+  }
 
   if (fileStat.m_method == MZ_NO_COMPRESSION) {
     // no deflation, just read content

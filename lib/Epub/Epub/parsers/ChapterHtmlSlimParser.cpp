@@ -1,5 +1,6 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 #include <expat.h>
@@ -10,13 +11,16 @@
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 
-const char* BLOCK_TAGS[] = {"p", "li", "div", "br"};
+// Minimum file size (in bytes) to show progress bar - smaller chapters don't benefit from it
+constexpr size_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB
+
+const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
 constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
 
-const char* BOLD_TAGS[] = {"b"};
+const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr int NUM_BOLD_TAGS = sizeof(BOLD_TAGS) / sizeof(BOLD_TAGS[0]);
 
-const char* ITALIC_TAGS[] = {"i"};
+const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
 
 const char* IMAGE_TAGS[] = {"img"};
@@ -143,6 +147,17 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
+
+  // If we have > 750 words buffered up, perform the layout and consume out all but the last line
+  // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
+  // memory.
+  // Spotted when reading Intermezzo, there are some really long text blocks in there.
+  if (self->currentTextBlock->size() > 750) {
+    Serial.printf("[%lu] [EHP] Text block too long, splitting into multiple pages\n", millis());
+    self->currentTextBlock->layoutAndExtractLines(
+        self->renderer, self->fontId, self->marginLeft + self->marginRight,
+        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+  }
 }
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
@@ -203,48 +218,75 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     return false;
   }
 
-  XML_SetUserData(parser, this);
-  XML_SetElementHandler(parser, startElement, endElement);
-  XML_SetCharacterDataHandler(parser, characterData);
-
-  FILE* file = fopen(filepath, "r");
-  if (!file) {
-    Serial.printf("[%lu] [EHP] Couldn't open file %s\n", millis(), filepath);
+  File file;
+  if (!FsHelpers::openFileForRead("EHP", filepath, file)) {
     XML_ParserFree(parser);
     return false;
   }
+
+  // Get file size for progress calculation
+  const size_t totalSize = file.size();
+  size_t bytesRead = 0;
+  int lastProgress = -1;
+
+  XML_SetUserData(parser, this);
+  XML_SetElementHandler(parser, startElement, endElement);
+  XML_SetCharacterDataHandler(parser, characterData);
 
   do {
     void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
       Serial.printf("[%lu] [EHP] Couldn't allocate memory for buffer\n", millis());
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
       XML_ParserFree(parser);
-      fclose(file);
+      file.close();
       return false;
     }
 
-    const size_t len = fread(buf, 1, 1024, file);
+    const size_t len = file.read(static_cast<uint8_t*>(buf), 1024);
 
-    if (ferror(file)) {
+    if (len == 0) {
       Serial.printf("[%lu] [EHP] File read error\n", millis());
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
       XML_ParserFree(parser);
-      fclose(file);
+      file.close();
       return false;
     }
 
-    done = feof(file);
+    // Update progress (call every 10% change to avoid too frequent updates)
+    // Only show progress for larger chapters where rendering overhead is worth it
+    bytesRead += len;
+    if (progressFn && totalSize >= MIN_SIZE_FOR_PROGRESS) {
+      const int progress = static_cast<int>((bytesRead * 100) / totalSize);
+      if (lastProgress / 10 != progress / 10) {
+        lastProgress = progress;
+        progressFn(progress);
+      }
+    }
+
+    done = file.available() == 0;
 
     if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
       Serial.printf("[%lu] [EHP] Parse error at line %lu:\n%s\n", millis(), XML_GetCurrentLineNumber(parser),
                     XML_ErrorString(XML_GetErrorCode(parser)));
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
       XML_ParserFree(parser);
-      fclose(file);
+      file.close();
       return false;
     }
   } while (!done);
 
+  XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+  XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+  XML_SetCharacterDataHandler(parser, nullptr);
   XML_ParserFree(parser);
-  fclose(file);
+  file.close();
 
   // Process last page if there is still text
   if (currentTextBlock) {

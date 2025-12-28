@@ -2,6 +2,8 @@
 
 #include <HardwareSerial.h>
 
+#include "../BookMetadataCache.h"
+
 bool TocNcxParser::setup() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
@@ -15,12 +17,14 @@ bool TocNcxParser::setup() {
   return true;
 }
 
-bool TocNcxParser::teardown() {
+TocNcxParser::~TocNcxParser() {
   if (parser) {
+    XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+    XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+    XML_SetCharacterDataHandler(parser, nullptr);
     XML_ParserFree(parser);
     parser = nullptr;
   }
-  return true;
 }
 
 size_t TocNcxParser::write(const uint8_t data) { return write(&data, 1); }
@@ -35,6 +39,11 @@ size_t TocNcxParser::write(const uint8_t* buffer, const size_t size) {
     void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
       Serial.printf("[%lu] [TOC] Couldn't allocate memory for buffer\n", millis());
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
+      XML_ParserFree(parser);
+      parser = nullptr;
       return 0;
     }
 
@@ -44,6 +53,11 @@ size_t TocNcxParser::write(const uint8_t* buffer, const size_t size) {
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
       Serial.printf("[%lu] [TOC] Parse error at line %lu: %s\n", millis(), XML_GetCurrentLineNumber(parser),
                     XML_ErrorString(XML_GetErrorCode(parser)));
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
+      XML_ParserFree(parser);
+      parser = nullptr;
       return 0;
     }
 
@@ -154,8 +168,9 @@ void XMLCALL TocNcxParser::endElement(void* userData, const XML_Char* name) {
         href = href.substr(0, pos);
       }
 
-      // Push to vector
-      self->toc.emplace_back(self->currentLabel, href, anchor, self->currentDepth);
+      if (self->cache) {
+        self->cache->createTocEntry(self->currentLabel, href, anchor, self->currentDepth);
+      }
 
       // Clear them so we don't re-add them if there are weird XML structures
       self->currentLabel.clear();

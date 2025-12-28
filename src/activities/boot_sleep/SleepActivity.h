@@ -5,11 +5,14 @@ class Bitmap;
 
 class SleepActivity final : public Activity {
  public:
-  explicit SleepActivity(GfxRenderer& renderer, InputManager& inputManager) : Activity(renderer, inputManager) {}
+  explicit SleepActivity(GfxRenderer& renderer, InputManager& inputManager)
+      : Activity("Sleep", renderer, inputManager) {}
   void onEnter() override;
 
  private:
-  void renderDefaultSleepScreen() const;
-  void renderCustomSleepScreen(const Bitmap& bitmap) const;
   void renderPopup(const char* message) const;
+  void renderDefaultSleepScreen() const;
+  void renderCustomSleepScreen() const;
+  void renderCoverSleepScreen() const;
+  void renderBitmapSleepScreen(const Bitmap& bitmap) const;
 };

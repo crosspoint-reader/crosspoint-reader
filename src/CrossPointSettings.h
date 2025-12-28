@@ -15,8 +15,16 @@ class CrossPointSettings {
   CrossPointSettings(const CrossPointSettings&) = delete;
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
+  // Should match with SettingsActivity text
+  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3 };
+
+  // Status bar display type enum
+  enum STATUS_BAR_MODE { NONE = 0, NO_PROGRESS = 1, FULL = 2 };
+
   // Sleep screen settings
-  uint8_t whiteSleepScreen = 0;
+  uint8_t sleepScreen = DARK;
+  // Status bar settings
+  uint8_t statusBar = FULL;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   // Duration of the power button press

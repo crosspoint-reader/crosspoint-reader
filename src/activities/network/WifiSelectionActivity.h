@@ -9,8 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "../Activity.h"
-#include "../util/KeyboardEntryActivity.h"
+#include "activities/ActivityWithSubactivity.h"
 
 // Structure to hold WiFi network information
 struct WifiNetworkInfo {
@@ -43,7 +42,7 @@ enum class WifiSelectionState {
  *
  * The onComplete callback receives true if connected successfully, false if cancelled.
  */
-class WifiSelectionActivity final : public Activity {
+class WifiSelectionActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
@@ -55,9 +54,6 @@ class WifiSelectionActivity final : public Activity {
   // Selected network for connection
   std::string selectedSSID;
   bool selectedRequiresPassword = false;
-
-  // On-screen keyboard for password entry
-  std::unique_ptr<KeyboardEntryActivity> keyboard;
 
   // Connection result
   std::string connectedIP;
@@ -98,7 +94,7 @@ class WifiSelectionActivity final : public Activity {
  public:
   explicit WifiSelectionActivity(GfxRenderer& renderer, InputManager& inputManager,
                                  const std::function<void(bool connected)>& onComplete)
-      : Activity(renderer, inputManager), onComplete(onComplete) {}
+      : ActivityWithSubactivity("WifiSelection", renderer, inputManager), onComplete(onComplete) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

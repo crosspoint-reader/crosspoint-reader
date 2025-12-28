@@ -2,8 +2,6 @@
 
 #include <WebServer.h>
 
-#include <functional>
-#include <string>
 #include <vector>
 
 // Structure to hold file information
@@ -26,7 +24,7 @@ class CrossPointWebServer {
   void stop();
 
   // Call this periodically to handle client requests
-  void handleClient();
+  void handleClient() const;
 
   // Check if server is running
   bool isRunning() const { return running; }
@@ -35,22 +33,24 @@ class CrossPointWebServer {
   uint16_t getPort() const { return port; }
 
  private:
-  WebServer* server = nullptr;
+  std::unique_ptr<WebServer> server = nullptr;
   bool running = false;
+  bool apMode = false;  // true when running in AP mode, false for STA mode
   uint16_t port = 80;
 
   // File scanning
-  std::vector<FileInfo> scanFiles(const char* path = "/");
-  String formatFileSize(size_t bytes);
-  bool isEpubFile(const String& filename);
+  void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;
+  String formatFileSize(size_t bytes) const;
+  bool isEpubFile(const String& filename) const;
 
   // Request handlers
-  void handleRoot();
-  void handleNotFound();
-  void handleStatus();
-  void handleFileList();
-  void handleUpload();
-  void handleUploadPost();
-  void handleCreateFolder();
-  void handleDelete();
+  void handleRoot() const;
+  void handleNotFound() const;
+  void handleStatus() const;
+  void handleFileList() const;
+  void handleFileListData() const;
+  void handleUpload() const;
+  void handleUploadPost() const;
+  void handleCreateFolder() const;
+  void handleDelete() const;
 };

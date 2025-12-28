@@ -15,6 +15,7 @@ enum class BmpReaderError : uint8_t {
   UnsupportedCompression,
 
   BadDimensions,
+  ImageTooLarge,
   PaletteTooLarge,
 
   SeekPixelDataFailed,
@@ -28,8 +29,9 @@ class Bitmap {
   static const char* errorToString(BmpReaderError err);
 
   explicit Bitmap(File& file) : file(file) {}
+  ~Bitmap();
   BmpReaderError parseHeaders();
-  BmpReaderError readRow(uint8_t* data, uint8_t* rowBuffer) const;
+  BmpReaderError readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) const;
   BmpReaderError rewindToData() const;
   int getWidth() const { return width; }
   int getHeight() const { return height; }
@@ -49,4 +51,9 @@ class Bitmap {
   uint16_t bpp = 0;
   int rowBytes = 0;
   uint8_t paletteLum[256] = {};
+
+  // Floyd-Steinberg dithering state (mutable for const methods)
+  mutable int16_t* errorCurRow = nullptr;
+  mutable int16_t* errorNextRow = nullptr;
+  mutable int lastRowY = -1;  // Track row progression for error propagation
 };

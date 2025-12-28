@@ -9,21 +9,21 @@ constexpr uint8_t PAGE_FILE_VERSION = 3;
 
 void PageLine::render(GfxRenderer& renderer, const int fontId) { block->render(renderer, fontId, xPos, yPos); }
 
-void PageLine::serialize(std::ostream& os) {
-  serialization::writePod(os, xPos);
-  serialization::writePod(os, yPos);
+void PageLine::serialize(File& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
 
   // serialize TextBlock pointed to by PageLine
-  block->serialize(os);
+  block->serialize(file);
 }
 
-std::unique_ptr<PageLine> PageLine::deserialize(std::istream& is) {
+std::unique_ptr<PageLine> PageLine::deserialize(File& file) {
   int16_t xPos;
   int16_t yPos;
-  serialization::readPod(is, xPos);
-  serialization::readPod(is, yPos);
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
 
-  auto tb = TextBlock::deserialize(is);
+  auto tb = TextBlock::deserialize(file);
   return std::unique_ptr<PageLine>(new PageLine(std::move(tb), xPos, yPos));
 }
 
@@ -33,22 +33,22 @@ void Page::render(GfxRenderer& renderer, const int fontId) const {
   }
 }
 
-void Page::serialize(std::ostream& os) const {
-  serialization::writePod(os, PAGE_FILE_VERSION);
+void Page::serialize(File& file) const {
+  serialization::writePod(file, PAGE_FILE_VERSION);
 
   const uint32_t count = elements.size();
-  serialization::writePod(os, count);
+  serialization::writePod(file, count);
 
   for (const auto& el : elements) {
     // Only PageLine exists currently
-    serialization::writePod(os, static_cast<uint8_t>(TAG_PageLine));
-    el->serialize(os);
+    serialization::writePod(file, static_cast<uint8_t>(TAG_PageLine));
+    el->serialize(file);
   }
 }
 
-std::unique_ptr<Page> Page::deserialize(std::istream& is) {
+std::unique_ptr<Page> Page::deserialize(File& file) {
   uint8_t version;
-  serialization::readPod(is, version);
+  serialization::readPod(file, version);
   if (version != PAGE_FILE_VERSION) {
     Serial.printf("[%lu] [PGE] Deserialization failed: Unknown version %u\n", millis(), version);
     return nullptr;
@@ -57,14 +57,14 @@ std::unique_ptr<Page> Page::deserialize(std::istream& is) {
   auto page = std::unique_ptr<Page>(new Page());
 
   uint32_t count;
-  serialization::readPod(is, count);
+  serialization::readPod(file, count);
 
   for (uint32_t i = 0; i < count; i++) {
     uint8_t tag;
-    serialization::readPod(is, tag);
+    serialization::readPod(file, tag);
 
     if (tag == TAG_PageLine) {
-      auto pl = PageLine::deserialize(is);
+      auto pl = PageLine::deserialize(file);
       page->elements.push_back(std::move(pl));
     } else {
       Serial.printf("[%lu] [PGE] Deserialization failed: Unknown tag %u\n", millis(), tag);

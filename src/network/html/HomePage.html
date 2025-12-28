@@ -83,7 +83,7 @@
       <h2>Device Status</h2>
       <div class="info-row">
         <span class="label">Version</span>
-        <span class="value">%VERSION%</span>
+        <span class="value" id="version"></span>
       </div>
       <div class="info-row">
         <span class="label">WiFi Status</span>
@@ -91,11 +91,11 @@
       </div>
       <div class="info-row">
         <span class="label">IP Address</span>
-        <span class="value">%IP_ADDRESS%</span>
+        <span class="value" id="ip-address"></span>
       </div>
       <div class="info-row">
         <span class="label">Free Memory</span>
-        <span class="value">%FREE_HEAP% bytes</span>
+        <span class="value" id="free-heap"></span>
       </div>
     </div>
 
@@ -104,5 +104,26 @@
         CrossPoint E-Reader • Open Source
       </p>
     </div>
+  <script>
+    async function fetchStatus() {
+      try {
+        const response = await fetch('/api/status');
+        if (!response.ok) {
+          throw new Error('Failed to fetch status: ' + response.status + ' ' + response.statusText);
+        }
+        const data = await response.json();
+        document.getElementById('version').textContent = data.version || 'N/A';
+        document.getElementById('ip-address').textContent = data.ip || 'N/A';
+        document.getElementById('free-heap').textContent = data.freeHeap
+          ? data.freeHeap.toLocaleString() + ' bytes'
+          : 'N/A';
+      } catch (error) {
+        console.error('Error fetching status:', error);
+      }
+    }
+
+    // Fetch status on page load
+    window.onload = fetchStatus;
+  </script>
   </body>
 </html>

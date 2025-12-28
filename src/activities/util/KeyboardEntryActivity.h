@@ -1,9 +1,13 @@
 #pragma once
 #include <GfxRenderer.h>
 #include <InputManager.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 
 #include <functional>
 #include <string>
+#include <utility>
 
 #include "../Activity.h"
 
@@ -30,58 +34,24 @@ class KeyboardEntryActivity : public Activity {
    * @param inputManager Reference to InputManager for handling input
    * @param title Title to display above the keyboard
    * @param initialText Initial text to show in the input field
+   * @param startY Y position to start rendering the keyboard
    * @param maxLength Maximum length of input text (0 for unlimited)
    * @param isPassword If true, display asterisks instead of actual characters
+   * @param onComplete Callback invoked when input is complete
+   * @param onCancel Callback invoked when input is cancelled
    */
-  KeyboardEntryActivity(GfxRenderer& renderer, InputManager& inputManager, const std::string& title = "Enter Text",
-                        const std::string& initialText = "", size_t maxLength = 0, bool isPassword = false);
-
-  /**
-   * Handle button input. Call this in your main loop.
-   * @return true if input was handled, false otherwise
-   */
-  bool handleInput();
-
-  /**
-   * Render the keyboard at the specified Y position.
-   * @param startY Y-coordinate where keyboard rendering starts (default 10)
-   */
-  void render(int startY = 10) const;
-
-  /**
-   * Get the current text entered by the user.
-   */
-  const std::string& getText() const { return text; }
-
-  /**
-   * Set the current text.
-   */
-  void setText(const std::string& newText);
-
-  /**
-   * Check if the user has completed text entry (pressed OK on Done).
-   */
-  bool isComplete() const { return complete; }
-
-  /**
-   * Check if the user has cancelled text entry.
-   */
-  bool isCancelled() const { return cancelled; }
-
-  /**
-   * Reset the keyboard state for reuse.
-   */
-  void reset(const std::string& newTitle = "", const std::string& newInitialText = "");
-
-  /**
-   * Set callback for when input is complete.
-   */
-  void setOnComplete(OnCompleteCallback callback) { onComplete = callback; }
-
-  /**
-   * Set callback for when input is cancelled.
-   */
-  void setOnCancel(OnCancelCallback callback) { onCancel = callback; }
+  explicit KeyboardEntryActivity(GfxRenderer& renderer, InputManager& inputManager, std::string title = "Enter Text",
+                                 std::string initialText = "", const int startY = 10, const size_t maxLength = 0,
+                                 const bool isPassword = false, OnCompleteCallback onComplete = nullptr,
+                                 OnCancelCallback onCancel = nullptr)
+      : Activity("KeyboardEntry", renderer, inputManager),
+        title(std::move(title)),
+        text(std::move(initialText)),
+        startY(startY),
+        maxLength(maxLength),
+        isPassword(isPassword),
+        onComplete(std::move(onComplete)),
+        onCancel(std::move(onCancel)) {}
 
   // Activity overrides
   void onEnter() override;
@@ -90,16 +60,18 @@ class KeyboardEntryActivity : public Activity {
 
  private:
   std::string title;
+  int startY;
   std::string text;
   size_t maxLength;
   bool isPassword;
+  TaskHandle_t displayTaskHandle = nullptr;
+  SemaphoreHandle_t renderingMutex = nullptr;
+  bool updateRequired = false;
 
   // Keyboard state
   int selectedRow = 0;
   int selectedCol = 0;
   bool shiftActive = false;
-  bool complete = false;
-  bool cancelled = false;
 
   // Callbacks
   OnCompleteCallback onComplete;
@@ -112,16 +84,17 @@ class KeyboardEntryActivity : public Activity {
   static const char* const keyboardShift[NUM_ROWS];
 
   // Special key positions (bottom row)
-  static constexpr int SHIFT_ROW = 4;
+  static constexpr int SPECIAL_ROW = 4;
   static constexpr int SHIFT_COL = 0;
-  static constexpr int SPACE_ROW = 4;
   static constexpr int SPACE_COL = 2;
-  static constexpr int BACKSPACE_ROW = 4;
   static constexpr int BACKSPACE_COL = 7;
-  static constexpr int DONE_ROW = 4;
   static constexpr int DONE_COL = 9;
 
+  static void taskTrampoline(void* param);
+  [[noreturn]] void displayTaskLoop();
   char getSelectedChar() const;
   void handleKeyPress();
   int getRowLength(int row) const;
+  void render() const;
+  void renderItemWithSelector(int x, int y, const char* item, bool isSelected) const;
 };

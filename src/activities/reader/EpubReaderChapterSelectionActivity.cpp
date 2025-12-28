@@ -1,12 +1,15 @@
 #include "EpubReaderChapterSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <InputManager.h>
 #include <SD.h>
 
 #include "config.h"
 
+namespace {
 // Time threshold for treating a long press as a page-up/page-down
 constexpr int SKIP_PAGE_MS = 700;
+}  // namespace
 
 int EpubReaderChapterSelectionActivity::getPageItems() const {
   // Layout constants used in renderScreen
@@ -30,6 +33,8 @@ void EpubReaderChapterSelectionActivity::taskTrampoline(void* param) {
 }
 
 void EpubReaderChapterSelectionActivity::onEnter() {
+  Activity::onEnter();
+
   if (!epub) {
     return;
   }
@@ -40,7 +45,7 @@ void EpubReaderChapterSelectionActivity::onEnter() {
   // Trigger first update
   updateRequired = true;
   xTaskCreate(&EpubReaderChapterSelectionActivity::taskTrampoline, "EpubReaderChapterSelectionActivityTask",
-              2048,               // Stack size
+              4096,               // Stack size
               this,               // Parameters
               1,                  // Priority
               &displayTaskHandle  // Task handle
@@ -48,6 +53,8 @@ void EpubReaderChapterSelectionActivity::onEnter() {
 }
 
 void EpubReaderChapterSelectionActivity::onExit() {
+  Activity::onExit();
+
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
@@ -67,9 +74,9 @@ void EpubReaderChapterSelectionActivity::loop() {
   const bool skipPage = inputManager.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = getPageItems();
 
-  if (inputManager.wasPressed(InputManager::BTN_CONFIRM)) {
+  if (inputManager.wasReleased(InputManager::BTN_CONFIRM)) {
     onSelectSpineIndex(selectorIndex);
-  } else if (inputManager.wasPressed(InputManager::BTN_BACK)) {
+  } else if (inputManager.wasReleased(InputManager::BTN_BACK)) {
     onGoBack();
   } else if (prevReleased) {
     if (skipPage) {

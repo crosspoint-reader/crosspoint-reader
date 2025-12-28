@@ -1,4 +1,6 @@
 #pragma once
+#include <FS.h>
+
 #include <utility>
 #include <vector>
 
@@ -16,7 +18,7 @@ class PageElement {
   explicit PageElement(const int16_t xPos, const int16_t yPos) : xPos(xPos), yPos(yPos) {}
   virtual ~PageElement() = default;
   virtual void render(GfxRenderer& renderer, int fontId) = 0;
-  virtual void serialize(std::ostream& os) = 0;
+  virtual void serialize(File& file) = 0;
 };
 
 // a line from a block element
@@ -27,8 +29,8 @@ class PageLine final : public PageElement {
   PageLine(std::shared_ptr<TextBlock> block, const int16_t xPos, const int16_t yPos)
       : PageElement(xPos, yPos), block(std::move(block)) {}
   void render(GfxRenderer& renderer, int fontId) override;
-  void serialize(std::ostream& os) override;
-  static std::unique_ptr<PageLine> deserialize(std::istream& is);
+  void serialize(File& file) override;
+  static std::unique_ptr<PageLine> deserialize(File& file);
 };
 
 class Page {
@@ -36,6 +38,6 @@ class Page {
   // the list of block index and line numbers on this page
   std::vector<std::shared_ptr<PageElement>> elements;
   void render(GfxRenderer& renderer, int fontId) const;
-  void serialize(std::ostream& os) const;
-  static std::unique_ptr<Page> deserialize(std::istream& is);
+  void serialize(File& file) const;
+  static std::unique_ptr<Page> deserialize(File& file);
 };

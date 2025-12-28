@@ -31,7 +31,7 @@ class EpubReaderChapterSelectionActivity final : public Activity {
                                               const std::shared_ptr<Epub>& epub, const int currentSpineIndex,
                                               const std::function<void()>& onGoBack,
                                               const std::function<void(int newSpineIndex)>& onSelectSpineIndex)
-      : Activity(renderer, inputManager),
+      : Activity("EpubReaderChapterSelection", renderer, inputManager),
         epub(epub),
         currentSpineIndex(currentSpineIndex),
         onGoBack(onGoBack),

@@ -1,16 +1,47 @@
 #include "SleepActivity.h"
 
+#include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <SD.h>
 
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "SD.h"
+#include "CrossPointState.h"
 #include "config.h"
 #include "images/CrossLarge.h"
 
 void SleepActivity::onEnter() {
+  Activity::onEnter();
   renderPopup("Entering Sleep...");
+
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
+    return renderCustomSleepScreen();
+  }
+
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER) {
+    return renderCoverSleepScreen();
+  }
+
+  renderDefaultSleepScreen();
+}
+
+void SleepActivity::renderPopup(const char* message) const {
+  const int textWidth = renderer.getTextWidth(READER_FONT_ID, message);
+  constexpr int margin = 20;
+  const int x = (renderer.getScreenWidth() - textWidth - margin * 2) / 2;
+  constexpr int y = 117;
+  const int w = textWidth + margin * 2;
+  const int h = renderer.getLineHeight(READER_FONT_ID) + margin * 2;
+  // renderer.clearScreen();
+  renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
+  renderer.drawText(READER_FONT_ID, x + margin, y + margin, message);
+  renderer.drawRect(x + 5, y + 5, w - 10, h - 10);
+  renderer.displayBuffer();
+}
+
+void SleepActivity::renderCustomSleepScreen() const {
   // Check if we have a /sleep directory
   auto dir = SD.open("/sleep");
   if (dir && dir.isDirectory()) {
@@ -28,31 +59,31 @@ void SleepActivity::onEnter() {
       }
 
       if (filename.substr(filename.length() - 4) != ".bmp") {
-        Serial.printf("[%lu] [Slp] Skipping non-.bmp file name: %s\n", millis(), file.name());
+        Serial.printf("[%lu] [SLP] Skipping non-.bmp file name: %s\n", millis(), file.name());
         file.close();
         continue;
       }
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        Serial.printf("[%lu] [Slp] Skipping invalid BMP file: %s\n", millis(), file.name());
+        Serial.printf("[%lu] [SLP] Skipping invalid BMP file: %s\n", millis(), file.name());
         file.close();
         continue;
       }
       files.emplace_back(filename);
       file.close();
     }
-    int numFiles = files.size();
+    const auto numFiles = files.size();
     if (numFiles > 0) {
       // Generate a random number between 1 and numFiles
-      int randomFileIndex = random(numFiles);
-      auto filename = "/sleep/" + files[randomFileIndex];
-      auto file = SD.open(filename.c_str());
-      if (file) {
-        Serial.printf("[%lu] [Slp] Randomly loading: /sleep/%s\n", millis(), files[randomFileIndex].c_str());
+      const auto randomFileIndex = random(numFiles);
+      const auto filename = "/sleep/" + files[randomFileIndex];
+      File file;
+      if (FsHelpers::openFileForRead("SLP", filename, file)) {
+        Serial.printf("[%lu] [SLP] Randomly loading: /sleep/%s\n", millis(), files[randomFileIndex].c_str());
         delay(100);
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderCustomSleepScreen(bitmap);
+          renderBitmapSleepScreen(bitmap);
           dir.close();
           return;
         }
@@ -63,12 +94,12 @@ void SleepActivity::onEnter() {
 
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
-  auto file = SD.open("/sleep.bmp");
-  if (file) {
+  File file;
+  if (FsHelpers::openFileForRead("SLP", "/sleep.bmp", file)) {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      Serial.printf("[%lu] [Slp] Loading: /sleep.bmp\n", millis());
-      renderCustomSleepScreen(bitmap);
+      Serial.printf("[%lu] [SLP] Loading: /sleep.bmp\n", millis());
+      renderBitmapSleepScreen(bitmap);
       return;
     }
   }
@@ -76,41 +107,27 @@ void SleepActivity::onEnter() {
   renderDefaultSleepScreen();
 }
 
-void SleepActivity::renderPopup(const char* message) const {
-  const int textWidth = renderer.getTextWidth(READER_FONT_ID, message);
-  constexpr int margin = 20;
-  const int x = (GfxRenderer::getScreenWidth() - textWidth - margin * 2) / 2;
-  constexpr int y = 117;
-  const int w = textWidth + margin * 2;
-  const int h = renderer.getLineHeight(READER_FONT_ID) + margin * 2;
-  // renderer.clearScreen();
-  renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
-  renderer.drawText(READER_FONT_ID, x + margin, y + margin, message);
-  renderer.drawRect(x + 5, y + 5, w - 10, h - 10);
-  renderer.displayBuffer();
-}
-
 void SleepActivity::renderDefaultSleepScreen() const {
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
   renderer.drawImage(CrossLarge, (pageWidth - 128) / 2, (pageHeight - 128) / 2, 128, 128);
   renderer.drawCenteredText(UI_FONT_ID, pageHeight / 2 + 70, "CrossPoint", true, BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "SLEEPING");
 
-  // Apply white screen if enabled in settings
-  if (!SETTINGS.whiteSleepScreen) {
+  // Make sleep screen dark unless light is selected in settings
+  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
     renderer.invertScreen();
   }
 
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderCustomSleepScreen(const Bitmap& bitmap) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   int x, y;
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
 
   if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
     // image will scale, make sure placement is right
@@ -152,4 +169,32 @@ void SleepActivity::renderCustomSleepScreen(const Bitmap& bitmap) const {
     renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
   }
+}
+
+void SleepActivity::renderCoverSleepScreen() const {
+  if (APP_STATE.openEpubPath.empty()) {
+    return renderDefaultSleepScreen();
+  }
+
+  Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
+  if (!lastEpub.load()) {
+    Serial.println("[SLP] Failed to load last epub");
+    return renderDefaultSleepScreen();
+  }
+
+  if (!lastEpub.generateCoverBmp()) {
+    Serial.println("[SLP] Failed to generate cover bmp");
+    return renderDefaultSleepScreen();
+  }
+
+  File file;
+  if (FsHelpers::openFileForRead("SLP", lastEpub.getCoverBmpPath(), file)) {
+    Bitmap bitmap(file);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      renderBitmapSleepScreen(bitmap);
+      return;
+    }
+  }
+
+  renderDefaultSleepScreen();
 }

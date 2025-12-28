@@ -5,7 +5,6 @@
 #include <InputManager.h>
 #include <SD.h>
 #include <SPI.h>
-#include <WiFi.h>
 #include <builtinFonts/bookerly_2b.h>
 #include <builtinFonts/bookerly_bold_2b.h>
 #include <builtinFonts/bookerly_bold_italic_2b.h>
@@ -61,6 +60,9 @@ EpdFontFamily ubuntuFontFamily(&ubuntu10Font, &ubuntuBold10Font);
 
 // Auto-sleep timeout (10 minutes of inactivity)
 constexpr unsigned long AUTO_SLEEP_TIMEOUT_MS = 10 * 60 * 1000;
+// measurement of power button press duration calibration value
+unsigned long t1 = 0;
+unsigned long t2 = 0;
 
 void exitActivity() {
   if (currentActivity) {
@@ -80,6 +82,10 @@ void verifyWakeupLongPress() {
   // Give the user up to 1000ms to start holding the power button, and must hold for SETTINGS.getPowerButtonDuration()
   const auto start = millis();
   bool abort = false;
+  // It takes us some time to wake up from deep sleep, so we need to subtract that from the duration
+  uint16_t calibration = 25;
+  uint16_t calibratedPressDuration =
+      (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
 
   inputManager.update();
   // Verify the user has actually pressed
@@ -88,13 +94,13 @@ void verifyWakeupLongPress() {
     inputManager.update();
   }
 
+  t2 = millis();
   if (inputManager.isPressed(InputManager::BTN_POWER)) {
     do {
       delay(10);
       inputManager.update();
-    } while (inputManager.isPressed(InputManager::BTN_POWER) &&
-             inputManager.getHeldTime() < SETTINGS.getPowerButtonDuration());
-    abort = inputManager.getHeldTime() < SETTINGS.getPowerButtonDuration();
+    } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() < calibratedPressDuration);
+    abort = inputManager.getHeldTime() < calibratedPressDuration;
   } else {
     abort = true;
   }
@@ -120,14 +126,12 @@ void enterDeepSleep() {
   exitActivity();
   enterNewActivity(new SleepActivity(renderer, inputManager));
 
-  Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
-  delay(1000);  // Allow Serial buffer to empty and display to update
-
-  // Enable Wakeup on LOW (button press)
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-
   einkDisplay.deepSleep();
-
+  Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
+  Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
+  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
+  waitForPowerRelease();
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
@@ -138,6 +142,7 @@ void onGoToReader(const std::string& initialEpubPath) {
   enterNewActivity(new ReaderActivity(renderer, inputManager, initialEpubPath, onGoHome));
 }
 void onGoToReaderHome() { onGoToReader(std::string()); }
+void onContinueReading() { onGoToReader(APP_STATE.openEpubPath); }
 
 void onGoToFileTransfer() {
   exitActivity();
@@ -151,11 +156,27 @@ void onGoToSettings() {
 
 void onGoHome() {
   exitActivity();
-  enterNewActivity(new HomeActivity(renderer, inputManager, onGoToReaderHome, onGoToSettings, onGoToFileTransfer));
+  enterNewActivity(new HomeActivity(renderer, inputManager, onContinueReading, onGoToReaderHome, onGoToSettings,
+                                    onGoToFileTransfer));
+}
+
+void setupDisplayAndFonts() {
+  einkDisplay.begin();
+  Serial.printf("[%lu] [   ] Display initialized\n", millis());
+  renderer.insertFont(READER_FONT_ID, bookerlyFontFamily);
+  renderer.insertFont(UI_FONT_ID, ubuntuFontFamily);
+  renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 
 void setup() {
-  Serial.begin(115200);
+  t1 = millis();
+
+  // Only start serial if USB connected
+  pinMode(UART0_RXD, INPUT);
+  if (digitalRead(UART0_RXD) == HIGH) {
+    Serial.begin(115200);
+  }
 
   Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
 
@@ -167,8 +188,10 @@ void setup() {
   SPI.begin(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, EPD_CS);
 
   // SD Card Initialization
-  if (!SD.begin(SD_SPI_CS, SPI, SPI_FQ)) {
+  // We need 6 open files concurrently when parsing a new chapter
+  if (!SD.begin(SD_SPI_CS, SPI, SPI_FQ, "/sd", 6)) {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
+    setupDisplayAndFonts();
     exitActivity();
     enterNewActivity(new FullScreenMessageActivity(renderer, inputManager, "SD card error", BOLD));
     return;
@@ -179,14 +202,7 @@ void setup() {
   // verify power button press duration after we've read settings.
   verifyWakeupLongPress();
 
-  // Initialize display
-  einkDisplay.begin();
-  Serial.printf("[%lu] [   ] Display initialized\n", millis());
-
-  renderer.insertFont(READER_FONT_ID, bookerlyFontFamily);
-  renderer.insertFont(UI_FONT_ID, ubuntuFontFamily);
-  renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
-  Serial.printf("[%lu] [   ] Fonts setup\n", millis());
+  setupDisplayAndFonts();
 
   exitActivity();
   enterNewActivity(new BootActivity(renderer, inputManager));
@@ -195,7 +211,11 @@ void setup() {
   if (APP_STATE.openEpubPath.empty()) {
     onGoHome();
   } else {
-    onGoToReader(APP_STATE.openEpubPath);
+    // Clear app state to avoid getting into a boot loop if the epub doesn't load
+    const auto path = APP_STATE.openEpubPath;
+    APP_STATE.openEpubPath = "";
+    APP_STATE.saveToFile();
+    onGoToReader(path);
   }
 
   // Ensure we're not still holding the power button before leaving setup
@@ -203,19 +223,17 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lastLoopTime = 0;
   static unsigned long maxLoopDuration = 0;
-
-  unsigned long loopStartTime = millis();
-
+  const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
+
+  inputManager.update();
+
   if (Serial && millis() - lastMemPrint >= 10000) {
     Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
                   ESP.getHeapSize(), ESP.getMinFreeHeap());
     lastMemPrint = millis();
   }
-
-  inputManager.update();
 
   // Check for any user activity (button press or release)
   static unsigned long lastActivityTime = millis();
@@ -230,20 +248,20 @@ void loop() {
     return;
   }
 
-  if (inputManager.wasReleased(InputManager::BTN_POWER) &&
+  if (inputManager.isPressed(InputManager::BTN_POWER) &&
       inputManager.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }
 
-  unsigned long activityStartTime = millis();
+  const unsigned long activityStartTime = millis();
   if (currentActivity) {
     currentActivity->loop();
   }
-  unsigned long activityDuration = millis() - activityStartTime;
+  const unsigned long activityDuration = millis() - activityStartTime;
 
-  unsigned long loopDuration = millis() - loopStartTime;
+  const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {
     maxLoopDuration = loopDuration;
     if (maxLoopDuration > 50) {
@@ -251,8 +269,6 @@ void loop() {
                     activityDuration);
     }
   }
-
-  lastLoopTime = loopStartTime;
 
   // Add delay at the end of the loop to prevent tight spinning
   // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response

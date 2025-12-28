@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CrossPoint Reader - Files</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Oxygen, Ubuntu, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 5px;
+    }
+    h2 {
+      color: #34495e;
+      margin-top: 0;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 15px 0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #3498db;
+    }
+    .page-header-left {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .breadcrumb-inline {
+      color: #7f8c8d;
+      font-size: 1.1em;
+    }
+    .breadcrumb-inline a {
+      color: #3498db;
+      text-decoration: none;
+    }
+    .breadcrumb-inline a:hover {
+      text-decoration: underline;
+    }
+    .breadcrumb-inline .sep {
+      margin: 0 6px;
+      color: #bdc3c7;
+    }
+    .breadcrumb-inline .current {
+      color: #2c3e50;
+      font-weight: 500;
+    }
+    .nav-links {
+      margin: 20px 0;
+    }
+    .nav-links a {
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: #3498db;
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    .nav-links a:hover {
+      background-color: #2980b9;
+    }
+    /* Action buttons */
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    .action-btn {
+      color: white;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95em;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .upload-action-btn {
+      background-color: #27ae60;
+    }
+    .upload-action-btn:hover {
+      background-color: #219a52;
+    }
+    .folder-action-btn {
+      background-color: #f39c12;
+    }
+    .folder-action-btn:hover {
+      background-color: #d68910;
+    }
+    /* Upload modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 200;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal {
+      background: white;
+      border-radius: 8px;
+      padding: 25px;
+      max-width: 450px;
+      width: 90%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    .modal h3 {
+      margin: 0 0 15px 0;
+      color: #2c3e50;
+    }
+    .modal-close {
+      float: right;
+      background: none;
+      border: none;
+      font-size: 1.5em;
+      cursor: pointer;
+      color: #7f8c8d;
+      line-height: 1;
+    }
+    .modal-close:hover {
+      color: #2c3e50;
+    }
+    .file-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .file-table th,
+    .file-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    .file-table th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+      color: #7f8c8d;
+    }
+    .file-table tr:hover {
+      background-color: #f8f9fa;
+    }
+    .epub-file {
+      background-color: #e8f6e9 !important;
+    }
+    .epub-file:hover {
+      background-color: #d4edda !important;
+    }
+    .folder-row {
+      background-color: #fff9e6 !important;
+    }
+    .folder-row:hover {
+      background-color: #fff3cd !important;
+    }
+    .epub-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background-color: #27ae60;
+      color: white;
+      border-radius: 10px;
+      font-size: 0.75em;
+      margin-left: 8px;
+    }
+    .folder-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background-color: #f39c12;
+      color: white;
+      border-radius: 10px;
+      font-size: 0.75em;
+      margin-left: 8px;
+    }
+    .file-icon {
+      margin-right: 8px;
+    }
+    .folder-link {
+      color: #2c3e50;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .folder-link:hover {
+      color: #3498db;
+      text-decoration: underline;
+    }
+    .upload-form {
+      margin-top: 10px;
+    }
+    .upload-form input[type="file"] {
+      margin: 10px 0;
+      width: 100%;
+    }
+    .upload-btn {
+      background-color: #27ae60;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+    }
+    .upload-btn:hover {
+      background-color: #219a52;
+    }
+    .upload-btn:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+    }
+    .file-info {
+      color: #7f8c8d;
+      font-size: 0.85em;
+      margin: 8px 0;
+    }
+    .no-files {
+      text-align: center;
+      color: #95a5a6;
+      padding: 40px;
+      font-style: italic;
+    }
+    .message {
+      padding: 15px;
+      border-radius: 4px;
+      margin: 15px 0;
+    }
+    .message.success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .message.error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .contents-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .contents-title {
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #34495e;
+      margin: 0;
+    }
+    .summary-inline {
+      color: #7f8c8d;
+      font-size: 0.9em;
+    }
+    #progress-container {
+      display: none;
+      margin-top: 10px;
+    }
+    #progress-bar {
+      width: 100%;
+      height: 20px;
+      background-color: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%;
+      background-color: #27ae60;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    #progress-text {
+      text-align: center;
+      margin-top: 5px;
+      font-size: 0.9em;
+      color: #7f8c8d;
+    }
+    .folder-form {
+      margin-top: 10px;
+    }
+    .folder-input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1em;
+      margin-bottom: 10px;
+      box-sizing: border-box;
+    }
+    .folder-btn {
+      background-color: #f39c12;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+    }
+    .folder-btn:hover {
+      background-color: #d68910;
+    }
+    /* Delete button styles */
+    .delete-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: #95a5a6;
+      transition: all 0.15s;
+    }
+    .delete-btn:hover {
+      background-color: #fee;
+      color: #e74c3c;
+    }
+    .actions-col {
+      width: 60px;
+      text-align: center;
+    }
+    /* Delete modal */
+    .delete-warning {
+      color: #e74c3c;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    .delete-item-name {
+      font-weight: 600;
+      color: #2c3e50;
+      word-break: break-all;
+    }
+    .delete-btn-confirm {
+      background-color: #e74c3c;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+    }
+    .delete-btn-confirm:hover {
+      background-color: #c0392b;
+    }
+    .delete-btn-cancel {
+      background-color: #95a5a6;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+      margin-top: 10px;
+    }
+    .delete-btn-cancel:hover {
+      background-color: #7f8c8d;
+    }
+    .loader-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0;
+    }
+    .loader {
+      width: 48px;
+      height: 48px;
+      border: 5px solid #AAA;
+      border-bottom-color: transparent;
+      border-radius: 50%;
+      display: inline-block;
+      box-sizing: border-box;
+      animation: rotation 1s linear infinite;
+    }
+    @keyframes rotation {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    /* Mobile responsive styles */
+    @media (max-width: 600px) {
+      body {
+        padding: 10px;
+        font-size: 14px;
+      }
+      .card {
+        padding: 12px;
+        margin: 10px 0;
+      }
+      .page-header {
+        gap: 10px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+      }
+      .page-header-left {
+        gap: 8px;
+      }
+      h1 {
+        font-size: 1.3em;
+      }
+      .breadcrumb-inline {
+        font-size: 0.95em;
+      }
+      .nav-links a {
+        padding: 8px 12px;
+        margin-right: 6px;
+        font-size: 0.9em;
+      }
+      .action-buttons {
+        gap: 6px;
+      }
+      .action-btn {
+        padding: 8px 10px;
+        font-size: 0.85em;
+      }
+      .file-table th,
+      .file-table td {
+        padding: 8px 6px;
+        font-size: 0.9em;
+      }
+      .file-table th {
+        font-size: 0.85em;
+      }
+      .file-icon {
+        margin-right: 4px;
+      }
+      .epub-badge,
+      .folder-badge {
+        padding: 2px 5px;
+        font-size: 0.65em;
+        margin-left: 4px;
+      }
+      .contents-header {
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .contents-title {
+        font-size: 1em;
+      }
+      .summary-inline {
+        font-size: 0.8em;
+      }
+      .modal {
+        padding: 15px;
+      }
+      .modal h3 {
+        font-size: 1.1em;
+      }
+      .actions-col {
+        width: 40px;
+      }
+      .delete-btn {
+        font-size: 1em;
+        padding: 2px 4px;
+      }
+      .no-files {
+        padding: 20px;
+        font-size: 0.9em;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="nav-links">
+  <a href="/">Home</a>
+  <a href="/files">File Manager</a>
+</div>
+
+<div class="page-header">
+  <div class="page-header-left">
+    <h1>📁 File Manager</h1>
+    <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
+  </div>
+
+  <div class="action-buttons">
+    <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
+    <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="contents-header">
+    <h2 class="contents-title">Contents</h2>
+    <span class="summary-inline" id="folder-summary"></span>
+  </div>
+
+  <div id="file-table">
+    <div class="loader-container">
+      <span class="loader"></span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <p style="text-align: center; color: #95a5a6; margin: 0;">
+    CrossPoint E-Reader • Open Source
+  </p>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+    <h3>📤 Upload file</h3>
+    <div class="upload-form">
+      <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
+      <input type="file" id="fileInput" onchange="validateFile()">
+      <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
+      <div id="progress-container">
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="progress-text"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Folder Modal -->
+<div class="modal-overlay" id="folderModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeFolderModal()">&times;</button>
+    <h3>📁 New Folder</h3>
+    <div class="folder-form">
+      <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
+      <input type="text" id="folderName" class="folder-input" placeholder="Folder name...">
+      <button class="folder-btn" onclick="createFolder()">Create Folder</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+    <h3>🗑️ Delete Item</h3>
+    <div class="folder-form">
+      <p class="delete-warning">⚠️ This action cannot be undone!</p>
+      <p class="file-info">Are you sure you want to delete:</p>
+      <p class="delete-item-name" id="deleteItemName"></p>
+      <input type="hidden" id="deleteItemPath">
+      <input type="hidden" id="deleteItemType">
+      <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
+      <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // get current path from query parameter
+  const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+
+  function escapeHtml(unsafe) {
+    return unsafe
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toLocaleString() + ' ' + sizes[i];
+  }
+
+  async function hydrate() {
+    // Close modals when clicking overlay
+    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+          overlay.classList.remove('open');
+        }
+      });
+    });
+
+    const breadcrumbs = document.getElementById('directory-breadcrumbs');
+    const fileTable = document.getElementById('file-table');
+
+    let breadcrumbContent = '<span class="sep">/</span>';
+    if (currentPath === '/') {
+      breadcrumbContent += '<span class="current">🏠</span>';
+    } else {
+      breadcrumbContent += '<a href="/files">🏠</a>';
+      const pathSegments = currentPath.split('/');
+      pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
+        breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
+      });
+      breadcrumbContent += '<span class="sep">/</span>';
+      breadcrumbContent += '<span class="current">' + escapeHtml(pathSegments[pathSegments.length - 1]) + '</span>';
+    }
+    breadcrumbs.innerHTML = breadcrumbContent;
+
+    let files = [];
+    try {
+      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath));
+      if (!response.ok) {
+        throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
+      }
+      files = await response.json();
+    } catch (e) {
+      console.error(e);
+      fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
+      return;
+    }
+
+    let folderCount = 0;
+    let totalSize = 0;
+    files.forEach(file => {
+      if (file.isDirectory) folderCount++;
+      totalSize += file.size;
+    });
+
+    document.getElementById('folder-summary').innerHTML = `${folderCount} folders, ${files.length - folderCount} files, ${formatFileSize(totalSize)}`;
+
+    if (files.length === 0) {
+      fileTable.innerHTML = '<div class="no-files">This folder is empty</div>';
+    } else {
+      let fileTableContent = '<table class="file-table">';
+      fileTableContent += '<tr><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
+
+      const sortedFiles = files.sort((a, b) => {
+        // Directories first, then epub files, then other files, alphabetically within each group
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        if (a.isEpub && !b.isEpub) return -1;
+        if (!a.isEpub && b.isEpub) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      sortedFiles.forEach(file => {
+        if (file.isDirectory) {
+          let folderPath = currentPath;
+          if (!folderPath.endsWith("/")) folderPath += "/";
+          folderPath += file.name;
+
+          fileTableContent += '<tr class="folder-row">';
+          fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a><span class="folder-badge">FOLDER</span></td>`;
+          fileTableContent += '<td>Folder</td>';
+          fileTableContent += '<td>-</td>';
+          fileTableContent += `<td class="actions-col"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></td>`;
+          fileTableContent += '</tr>';
+        } else {
+          let filePath = currentPath;
+          if (!filePath.endsWith("/")) filePath += "/";
+          filePath += file.name;
+
+          fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
+          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>${escapeHtml(file.name)}`;
+          if (file.isEpub) fileTableContent += '<span class="epub-badge">EPUB</span>';
+          fileTableContent += '</td>';
+          fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
+          fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
+          fileTableContent += `<td class="actions-col"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button></td>`;
+          fileTableContent += '</tr>';
+        }
+      });
+
+      fileTableContent += '</table>';
+      fileTable.innerHTML = fileTableContent;
+    }
+  }
+
+  // Modal functions
+  function openUploadModal() {
+    document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    document.getElementById('uploadModal').classList.add('open');
+  }
+
+  function closeUploadModal() {
+    document.getElementById('uploadModal').classList.remove('open');
+    document.getElementById('fileInput').value = '';
+    document.getElementById('uploadBtn').disabled = true;
+    document.getElementById('progress-container').style.display = 'none';
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
+  }
+
+  function openFolderModal() {
+    document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    document.getElementById('folderModal').classList.add('open');
+    document.getElementById('folderName').value = '';
+  }
+
+  function closeFolderModal() {
+    document.getElementById('folderModal').classList.remove('open');
+  }
+
+  function validateFile() {
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const file = fileInput.files[0];
+    uploadBtn.disabled = !file;
+  }
+
+  function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+
+    if (!file) {
+      alert('Please select a file first!');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const progressContainer = document.getElementById('progress-container');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    progressContainer.style.display = 'block';
+    uploadBtn.disabled = true;
+
+    const xhr = new XMLHttpRequest();
+    // Include path as query parameter since multipart form data doesn't make
+    // form fields available until after file upload completes
+    xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
+
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable) {
+        const percent = Math.round((e.loaded / e.total) * 100);
+        progressFill.style.width = percent + '%';
+        progressText.textContent = 'Uploading: ' + percent + '%';
+      }
+    };
+
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        progressText.textContent = 'Upload complete!';
+        setTimeout(function() {
+          window.location.reload();
+        }, 1000);
+      } else {
+        progressText.textContent = 'Upload failed: ' + xhr.responseText;
+        progressFill.style.backgroundColor = '#e74c3c';
+        uploadBtn.disabled = false;
+      }
+    };
+
+    xhr.onerror = function() {
+      progressText.textContent = 'Upload failed - network error';
+      progressFill.style.backgroundColor = '#e74c3c';
+      uploadBtn.disabled = false;
+    };
+
+    xhr.send(formData);
+  }
+
+  function createFolder() {
+    const folderName = document.getElementById('folderName').value.trim();
+
+    if (!folderName) {
+      alert('Please enter a folder name!');
+      return;
+    }
+
+    // Validate folder name (no special characters except underscore and hyphen)
+    const validName = /^[a-zA-Z0-9_\-]+$/.test(folderName);
+    if (!validName) {
+      alert('Folder name can only contain letters, numbers, underscores, and hyphens.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', folderName);
+    formData.append('path', currentPath);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/mkdir', true);
+
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        window.location.reload();
+      } else {
+        alert('Failed to create folder: ' + xhr.responseText);
+      }
+    };
+
+    xhr.onerror = function() {
+      alert('Failed to create folder - network error');
+    };
+
+    xhr.send(formData);
+  }
+
+  // Delete functions
+  function openDeleteModal(name, path, isFolder) {
+    document.getElementById('deleteItemName').textContent = (isFolder ? '📁 ' : '📄 ') + name;
+    document.getElementById('deleteItemPath').value = path;
+    document.getElementById('deleteItemType').value = isFolder ? 'folder' : 'file';
+    document.getElementById('deleteModal').classList.add('open');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('open');
+  }
+
+  function confirmDelete() {
+    const path = document.getElementById('deleteItemPath').value;
+    const itemType = document.getElementById('deleteItemType').value;
+
+    const formData = new FormData();
+    formData.append('path', path);
+    formData.append('type', itemType);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/delete', true);
+
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        window.location.reload();
+      } else {
+        alert('Failed to delete: ' + xhr.responseText);
+        closeDeleteModal();
+      }
+    };
+
+    xhr.onerror = function() {
+      alert('Failed to delete - network error');
+      closeDeleteModal();
+    };
+
+    xhr.send(formData);
+  }
+
+  hydrate();
+</script>
+</body>
+</html>

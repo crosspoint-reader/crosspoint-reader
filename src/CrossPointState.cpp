@@ -1,20 +1,22 @@
 #include "CrossPointState.h"
 
+#include <FsHelpers.h>
 #include <HardwareSerial.h>
-#include <SD.h>
 #include <Serialization.h>
-
-#include <fstream>
 
 namespace {
 constexpr uint8_t STATE_FILE_VERSION = 1;
-constexpr char STATE_FILE[] = "/sd/.crosspoint/state.bin";
+constexpr char STATE_FILE[] = "/.crosspoint/state.bin";
 }  // namespace
 
 CrossPointState CrossPointState::instance;
 
 bool CrossPointState::saveToFile() const {
-  std::ofstream outputFile(STATE_FILE);
+  File outputFile;
+  if (!FsHelpers::openFileForWrite("CPS", STATE_FILE, outputFile)) {
+    return false;
+  }
+
   serialization::writePod(outputFile, STATE_FILE_VERSION);
   serialization::writeString(outputFile, openEpubPath);
   outputFile.close();
@@ -22,7 +24,10 @@ bool CrossPointState::saveToFile() const {
 }
 
 bool CrossPointState::loadFromFile() {
-  std::ifstream inputFile(STATE_FILE);
+  File inputFile;
+  if (!FsHelpers::openFileForRead("CPS", STATE_FILE, inputFile)) {
+    return false;
+  }
 
   uint8_t version;
   serialization::readPod(inputFile, version);

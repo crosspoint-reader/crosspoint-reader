@@ -18,4 +18,7 @@ void ActivityWithSubactivity::loop() {
   }
 }
 
-void ActivityWithSubactivity::onExit() { exitActivity(); }
+void ActivityWithSubactivity::onExit() {
+  Activity::onExit();
+  exitActivity();
+}
