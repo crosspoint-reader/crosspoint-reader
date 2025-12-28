@@ -26,11 +26,9 @@ class GfxRenderer {
   static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == EInkDisplay::BUFFER_SIZE,
                 "BW buffer chunking does not line up with display buffer size");
 
-  // Orientation used for all rendering operations
-  Orientation orientation;
-
   EInkDisplay& einkDisplay;
   RenderMode renderMode;
+  Orientation orientation;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
@@ -39,7 +37,7 @@ class GfxRenderer {
   void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
 
  public:
-  explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW) {}
+  explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW), orientation(Portrait) {}
   ~GfxRenderer() = default;
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
