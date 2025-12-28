@@ -43,10 +43,15 @@ void FileSelectionActivity::loadFiles() {
     } else if (filename.length() >= 5 && filename.substr(filename.length() - 5) == ".epub") {
       files.emplace_back(filename);
     } else if (filename.length() >= 4) {
-      // Check for XTC format extensions (.xtc, .xtg, .xth)
-      std::string ext = filename.substr(filename.length() - 4);
-      if (ext == ".xtc" || ext == ".xtg" || ext == ".xth") {
+      // Check for XTC format extensions (.xtc, .xtch)
+      std::string ext4 = filename.substr(filename.length() - 4);
+      if (ext4 == ".xtc") {
         files.emplace_back(filename);
+      } else if (filename.length() >= 5) {
+        std::string ext5 = filename.substr(filename.length() - 5);
+        if (ext5 == ".xtch") {
+          files.emplace_back(filename);
+        }
       }
     }
     file.close();

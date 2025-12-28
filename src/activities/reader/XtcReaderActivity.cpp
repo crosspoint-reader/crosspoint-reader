@@ -150,9 +150,17 @@ void XtcReaderActivity::renderScreen() {
 void XtcReaderActivity::renderPage() {
   const uint16_t pageWidth = xtc->getPageWidth();
   const uint16_t pageHeight = xtc->getPageHeight();
+  const uint8_t bitDepth = xtc->getBitDepth();
 
-  // Calculate buffer size for one page (XTC is always 1-bit monochrome)
-  const size_t pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
+  // Calculate buffer size for one page
+  // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
+  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
+  size_t pageBufferSize;
+  if (bitDepth == 2) {
+    pageBufferSize = ((static_cast<size_t>(pageWidth) * pageHeight + 7) / 8) * 2;
+  } else {
+    pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
+  }
 
   // Allocate page buffer
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
@@ -179,29 +187,62 @@ void XtcReaderActivity::renderPage() {
   renderer.clearScreen();
 
   // Copy page bitmap using GfxRenderer's drawPixel
-  // XTC stores 1-bit packed data in portrait (480x800) format
-  const size_t srcRowBytes = (pageWidth + 7) / 8;  // 60 bytes for 480 width
-
-  // XTC pages are pre-rendered with status bar included, so render full page
+  // XTC/XTCH pages are pre-rendered with status bar included, so render full page
   const uint16_t maxSrcY = pageHeight;
 
-  for (uint16_t srcY = 0; srcY < maxSrcY; srcY++) {
-    const size_t srcRowStart = srcY * srcRowBytes;
+  if (bitDepth == 2) {
+    // XTH 2-bit mode: Two bit planes, column-major order
+    // - Columns scanned right to left (x = width-1 down to 0)
+    // - 8 vertical pixels per byte (MSB = topmost pixel in group)
+    // - First plane: Bit1, Second plane: Bit2
+    // - Pixel value = (bit1 << 1) | bit2
+    // - Grayscale: 0=White, 1=Dark Grey, 2=Light Grey, 3=Black
 
-    for (uint16_t srcX = 0; srcX < pageWidth; srcX++) {
-      // Read source pixel (MSB first, bit 7 = leftmost pixel)
-      const size_t srcByte = srcRowStart + srcX / 8;
-      const size_t srcBit = 7 - (srcX % 8);
-      const bool isBlack = !((pageBuffer[srcByte] >> srcBit) & 1);  // XTC: 0 = black, 1 = white
+    const size_t planeSize = (static_cast<size_t>(pageWidth) * pageHeight + 7) / 8;
+    const uint8_t* plane1 = pageBuffer;              // Bit1 plane
+    const uint8_t* plane2 = pageBuffer + planeSize;  // Bit2 plane
+    const size_t colBytes = (pageHeight + 7) / 8;    // Bytes per column (100 for 800 height)
 
-      // Use GfxRenderer's drawPixel with logical portrait coordinates
-      // drawPixel(x, y, state) where state=true draws black
-      if (isBlack) {
-        renderer.drawPixel(srcX, srcY, true);
+    for (uint16_t y = 0; y < pageHeight; y++) {
+      for (uint16_t x = 0; x < pageWidth; x++) {
+        // Column-major, right to left: column index = (width - 1 - x)
+        const size_t colIndex = pageWidth - 1 - x;
+        const size_t byteInCol = y / 8;
+        const size_t bitInByte = 7 - (y % 8);  // MSB = topmost pixel
+
+        const size_t byteOffset = colIndex * colBytes + byteInCol;
+        const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
+        const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
+        const uint8_t pixelValue = (bit1 << 1) | bit2;
+
+        // Threshold: 0=White, 1,2,3=Dark (for best text contrast)
+        const bool isBlack = (pixelValue >= 1);
+
+        if (isBlack) {
+          renderer.drawPixel(x, y, true);
+        }
       }
-      // White pixels are already cleared by clearScreen()
+    }
+  } else {
+    // 1-bit mode: 8 pixels per byte, MSB first
+    const size_t srcRowBytes = (pageWidth + 7) / 8;  // 60 bytes for 480 width
+
+    for (uint16_t srcY = 0; srcY < maxSrcY; srcY++) {
+      const size_t srcRowStart = srcY * srcRowBytes;
+
+      for (uint16_t srcX = 0; srcX < pageWidth; srcX++) {
+        // Read source pixel (MSB first, bit 7 = leftmost pixel)
+        const size_t srcByte = srcRowStart + srcX / 8;
+        const size_t srcBit = 7 - (srcX % 8);
+        const bool isBlack = !((pageBuffer[srcByte] >> srcBit) & 1);  // XTC: 0 = black, 1 = white
+
+        if (isBlack) {
+          renderer.drawPixel(srcX, srcY, true);
+        }
+      }
     }
   }
+  // White pixels are already cleared by clearScreen()
 
   free(pageBuffer);
 
@@ -216,7 +257,8 @@ void XtcReaderActivity::renderPage() {
     pagesUntilFullRefresh--;
   }
 
-  Serial.printf("[%lu] [XTR] Rendered page %lu/%lu\n", millis(), currentPage + 1, xtc->getPageCount());
+  Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (%u-bit)\n", millis(), currentPage + 1, xtc->getPageCount(),
+                bitDepth);
 }
 
 void XtcReaderActivity::saveProgress() const {

@@ -19,8 +19,13 @@ std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
 
 bool ReaderActivity::isXtcFile(const std::string& path) {
   if (path.length() < 4) return false;
-  std::string ext = path.substr(path.length() - 4);
-  return (ext == ".xtc" || ext == ".xtg" || ext == ".xth");
+  std::string ext4 = path.substr(path.length() - 4);
+  if (ext4 == ".xtc") return true;
+  if (path.length() >= 5) {
+    std::string ext5 = path.substr(path.length() - 5);
+    if (ext5 == ".xtch") return true;
+  }
+  return false;
 }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {

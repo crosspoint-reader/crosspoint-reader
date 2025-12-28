@@ -115,8 +115,18 @@ bool Xtc::generateCoverBmp() const {
     return false;
   }
 
-  // Allocate buffer for page data (XTC is always 1-bit monochrome)
-  const size_t bitmapSize = ((pageInfo.width + 7) / 8) * pageInfo.height;
+  // Get bit depth
+  const uint8_t bitDepth = parser->getBitDepth();
+
+  // Allocate buffer for page data
+  // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
+  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
+  size_t bitmapSize;
+  if (bitDepth == 2) {
+    bitmapSize = ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) * 2;
+  } else {
+    bitmapSize = ((pageInfo.width + 7) / 8) * pageInfo.height;
+  }
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(bitmapSize));
   if (!pageBuffer) {
     Serial.printf("[%lu] [XTC] Failed to allocate page buffer (%lu bytes)\n", millis(), bitmapSize);
@@ -187,19 +197,77 @@ bool Xtc::generateCoverBmp() const {
   coverBmp.write(white, 4);
 
   // Write bitmap data
-  // XTC stores data as packed bits, same as BMP 1-bit format
-  // But we need to ensure proper row alignment (4-byte boundary)
-  const size_t srcRowSize = (pageInfo.width + 7) / 8;  // Source row size
+  // BMP requires 4-byte row alignment
+  const size_t dstRowSize = (pageInfo.width + 7) / 8;  // 1-bit destination row size
 
-  for (uint16_t y = 0; y < pageInfo.height; y++) {
-    // Write source row
-    coverBmp.write(pageBuffer + y * srcRowSize, srcRowSize);
+  if (bitDepth == 2) {
+    // XTH 2-bit mode: Two bit planes, column-major order
+    // - Columns scanned right to left (x = width-1 down to 0)
+    // - 8 vertical pixels per byte (MSB = topmost pixel in group)
+    // - First plane: Bit1, Second plane: Bit2
+    // - Pixel value = (bit1 << 1) | bit2
+    const size_t planeSize = (static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8;
+    const uint8_t* plane1 = pageBuffer;                 // Bit1 plane
+    const uint8_t* plane2 = pageBuffer + planeSize;     // Bit2 plane
+    const size_t colBytes = (pageInfo.height + 7) / 8;  // Bytes per column
 
-    // Pad to 4-byte boundary
-    uint8_t padding[4] = {0, 0, 0, 0};
-    size_t paddingSize = rowSize - srcRowSize;
-    if (paddingSize > 0) {
-      coverBmp.write(padding, paddingSize);
+    // Allocate a row buffer for 1-bit output
+    uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(dstRowSize));
+    if (!rowBuffer) {
+      free(pageBuffer);
+      coverBmp.close();
+      return false;
+    }
+
+    for (uint16_t y = 0; y < pageInfo.height; y++) {
+      memset(rowBuffer, 0xFF, dstRowSize);  // Start with all white
+
+      for (uint16_t x = 0; x < pageInfo.width; x++) {
+        // Column-major, right to left: column index = (width - 1 - x)
+        const size_t colIndex = pageInfo.width - 1 - x;
+        const size_t byteInCol = y / 8;
+        const size_t bitInByte = 7 - (y % 8);  // MSB = topmost pixel
+
+        const size_t byteOffset = colIndex * colBytes + byteInCol;
+        const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
+        const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
+        const uint8_t pixelValue = (bit1 << 1) | bit2;
+
+        // Threshold: 0=white (1); 1,2,3=black (0)
+        if (pixelValue >= 1) {
+          // Set bit to 0 (black) in BMP format
+          const size_t dstByte = x / 8;
+          const size_t dstBit = 7 - (x % 8);
+          rowBuffer[dstByte] &= ~(1 << dstBit);
+        }
+      }
+
+      // Write converted row
+      coverBmp.write(rowBuffer, dstRowSize);
+
+      // Pad to 4-byte boundary
+      uint8_t padding[4] = {0, 0, 0, 0};
+      size_t paddingSize = rowSize - dstRowSize;
+      if (paddingSize > 0) {
+        coverBmp.write(padding, paddingSize);
+      }
+    }
+
+    free(rowBuffer);
+  } else {
+    // 1-bit source: write directly with proper padding
+    const size_t srcRowSize = (pageInfo.width + 7) / 8;
+
+    for (uint16_t y = 0; y < pageInfo.height; y++) {
+      // Write source row
+      coverBmp.write(pageBuffer + y * srcRowSize, srcRowSize);
+
+      // Pad to 4-byte boundary
+      uint8_t padding[4] = {0, 0, 0, 0};
+      size_t paddingSize = rowSize - srcRowSize;
+      if (paddingSize > 0) {
+        coverBmp.write(padding, paddingSize);
+      }
     }
   }
 
@@ -229,6 +297,13 @@ uint16_t Xtc::getPageHeight() const {
     return 0;
   }
   return parser->getHeight();
+}
+
+uint8_t Xtc::getBitDepth() const {
+  if (!loaded || !parser) {
+    return 1;  // Default to 1-bit
+  }
+  return parser->getBitDepth();
 }
 
 size_t Xtc::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) const {
