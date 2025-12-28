@@ -106,7 +106,7 @@ void HomeActivity::render() const {
   renderer.drawCenteredText(READER_FONT_ID, 10, "CrossPoint Reader", true, BOLD);
 
   // Draw selection
-  renderer.fillRect(0, 60 + selectorIndex * 30 + 2, pageWidth - 1, 30);
+  renderer.fillRect(0, 60 + selectorIndex * 30 - 2, pageWidth - 1, 30);
 
   int menuY = 60;
   int menuIndex = 0;

@@ -116,7 +116,7 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
   renderer.drawCenteredText(READER_FONT_ID, 10, "Select Chapter", true, BOLD);
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 + 2, pageWidth - 1, 30);
+  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 - 2, pageWidth - 1, 30);
   for (int i = pageStartIndex; i < epub->getSpineItemsCount() && i < pageStartIndex + pageItems; i++) {
     const int tocIndex = epub->getTocIndexForSpineIndex(i);
     if (tocIndex == -1) {
