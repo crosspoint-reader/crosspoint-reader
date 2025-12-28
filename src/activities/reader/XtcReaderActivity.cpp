@@ -236,29 +236,33 @@ void XtcReaderActivity::renderPage() {
       }
     }
 
-    // Display BW first with half refresh (clean base for grayscale overlay)
-    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    // Display BW with conditional refresh based on pagesUntilFullRefresh
+    if (pagesUntilFullRefresh <= 1) {
+      renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    } else {
+      renderer.displayBuffer();
+    }
 
     // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
-    // README: "mark the **dark** grays pixels with `1`"
+    // In LUT: 0 bit = apply gray effect, 1 bit = untouched
     renderer.clearScreen(0x00);
     for (uint16_t y = 0; y < pageHeight; y++) {
       for (uint16_t x = 0; x < pageWidth; x++) {
         if (getPixelValue(x, y) == 1) {  // Dark grey only
-          renderer.drawPixel(x, y, true);
+          renderer.drawPixel(x, y, false);
         }
       }
     }
     renderer.copyGrayscaleLsbBuffers();
 
     // Pass 3: MSB buffer - mark LIGHT AND DARK gray (XTH value 1 or 2)
-    // README: "mark the **light and dark** grays pixels with `1`"
+    // In LUT: 0 bit = apply gray effect, 1 bit = untouched
     renderer.clearScreen(0x00);
     for (uint16_t y = 0; y < pageHeight; y++) {
       for (uint16_t x = 0; x < pageWidth; x++) {
         const uint8_t pv = getPixelValue(x, y);
         if (pv == 1 || pv == 2) {  // Dark grey or Light grey
-          renderer.drawPixel(x, y, true);
+          renderer.drawPixel(x, y, false);
         }
       }
     }
@@ -277,8 +281,11 @@ void XtcReaderActivity::renderPage() {
       }
     }
 
-    // Reset refresh counter (grayscale display is a full refresh)
-    pagesUntilFullRefresh = pagesPerRefresh;
+    // Cleanup grayscale buffers with current frame buffer
+    renderer.cleanupGrayscaleWithFrameBuffer();
+
+    // Decrement refresh counter
+    pagesUntilFullRefresh--;
 
     free(pageBuffer);
 

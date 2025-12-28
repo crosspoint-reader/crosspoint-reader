@@ -369,6 +369,17 @@ void GfxRenderer::restoreBwBuffer() {
   Serial.printf("[%lu] [GFX] Restored and freed BW buffer chunks\n", millis());
 }
 
+/**
+ * Cleanup grayscale buffers using the current frame buffer.
+ * Use this when BW buffer was re-rendered instead of stored/restored.
+ */
+void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
+  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  if (frameBuffer) {
+    einkDisplay.cleanupGrayscaleBuffers(frameBuffer);
+  }
+}
+
 void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
                              const bool pixelState, const EpdFontStyle style) const {
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);

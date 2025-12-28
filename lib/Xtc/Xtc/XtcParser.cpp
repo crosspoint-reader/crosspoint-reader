@@ -7,6 +7,7 @@
 
 #include "XtcParser.h"
 
+#include <FsHelpers.h>
 #include <HardwareSerial.h>
 
 #include <cstring>
@@ -31,9 +32,7 @@ XtcError XtcParser::open(const char* filepath) {
   }
 
   // Open file
-  m_file = SD.open(filepath, FILE_READ);
-  if (!m_file) {
-    Serial.printf("[%lu] [XTC] Failed to open file: %s\n", millis(), filepath);
+  if (!FsHelpers::openFileForRead("XTC", filepath, m_file)) {
     m_lastError = XtcError::FILE_NOT_FOUND;
     return m_lastError;
   }
