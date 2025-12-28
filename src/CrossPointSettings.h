@@ -29,6 +29,9 @@ class CrossPointSettings {
   uint8_t extraParagraphSpacing = 1;
   // Duration of the power button press
   uint8_t shortPwrBtn = 0;
+  // UI Theme
+  enum UI_THEME { LIST = 0, GRID = 1 };
+  uint8_t uiTheme = GRID;
 
   ~CrossPointSettings() = default;
 

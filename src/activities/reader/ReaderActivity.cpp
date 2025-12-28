@@ -5,7 +5,9 @@
 #include "Epub.h"
 #include "EpubReaderActivity.h"
 #include "FileSelectionActivity.h"
+#include "../home/GridBrowserActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "../../CrossPointSettings.h"
 
 std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
   const auto lastSlash = filePath.find_last_of('/');
@@ -51,8 +53,13 @@ void ReaderActivity::onGoToFileSelection(const std::string& fromEpubPath) {
   exitActivity();
   // If coming from a book, start in that book's folder; otherwise start from root
   const auto initialPath = fromEpubPath.empty() ? "/" : extractFolderPath(fromEpubPath);
-  enterNewActivity(new FileSelectionActivity(
-      renderer, inputManager, [this](const std::string& path) { onSelectEpubFile(path); }, onGoBack, initialPath));
+  if (SETTINGS.uiTheme == CrossPointSettings::GRID) {
+    enterNewActivity(new GridBrowserActivity(
+        renderer, inputManager, [this](const std::string& path) { onSelectEpubFile(path); }, onGoBack, initialPath));
+  } else {
+    enterNewActivity(new FileSelectionActivity(
+        renderer, inputManager, [this](const std::string& path) { onSelectEpubFile(path); }, onGoBack, initialPath));
+  }
 }
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {

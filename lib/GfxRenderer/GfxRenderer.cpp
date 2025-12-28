@@ -80,6 +80,74 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 }
 
+void GfxRenderer::drawTextInBox(const int fontId, const int x, const int y, const int w, const int h, const char* text, const bool centered, const bool black, const EpdFontStyle style) const {
+  const int lineHeight = getLineHeight(fontId);
+  const int spaceWidth = getSpaceWidth(fontId);
+  int xpos = x;
+  int ypos = y + lineHeight;
+  if (centered) {
+    int textWidth = getTextWidth(fontId, text, style);
+    if (textWidth < w) {
+      // Center if text on single line
+      xpos = x + (w - textWidth) / 2;
+    }
+  }
+
+  // cannot draw a NULL / empty string
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  if (fontMap.count(fontId) == 0) {
+    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    return;
+  }
+  const auto font = fontMap.at(fontId);
+
+  // no printable characters
+  if (!font.hasPrintableChars(text, style)) {
+    return;
+  }
+
+  uint32_t cp;
+  int ellipsisWidth = 0;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    const int charWidth = getTextWidth(fontId, reinterpret_cast<const char*>(&cp), style);
+    if (xpos + charWidth + ellipsisWidth > x + w) {
+      if (ellipsisWidth > 0) {
+        // Draw ellipsis and exit
+        int dotX = xpos;
+        renderChar(font, '.', &dotX, &ypos, black, style);
+        dotX += spaceWidth/3;
+        renderChar(font, '.', &dotX, &ypos, black, style);
+        dotX += spaceWidth/3;
+        renderChar(font, '.', &dotX, &ypos, black, style);
+        break;
+      } else {
+        // TODO center when more than one line
+        // if (centered) {
+        //   int textWidth = getTextWidth(fontId, text, style);
+        //   if (textWidth < w) {
+        //     xpos = x + (w - textWidth) / 2;
+        //   }
+        // }
+        xpos = x;
+        ypos += lineHeight;
+        if (h > 0 && ypos - y > h) {
+          // Overflowing box height
+          break;
+        }
+        if (h > 0 && ypos + lineHeight - y > h) {
+          // Last line, prepare ellipsis
+          ellipsisWidth = spaceWidth * 4;
+        }
+      }
+    }
+
+    renderChar(font, cp, &xpos, &ypos, black, style);
+  }
+}
+
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
   if (x1 == x2) {
     if (y2 < y1) {
@@ -101,11 +169,79 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
   }
 }
 
+void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const int lineWidth, const bool state) const {
+  for (int i = 0; i < lineWidth; i++) {
+    drawLine(x1, y1 + i, x2, y2 + i, state);
+  }
+}
+
 void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const bool state) const {
   drawLine(x, y, x + width - 1, y, state);
   drawLine(x + width - 1, y, x + width - 1, y + height - 1, state);
   drawLine(x + width - 1, y + height - 1, x, y + height - 1, state);
   drawLine(x, y, x, y + height - 1, state);
+}
+
+// Border is inside the rectangle
+void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const int lineWidth, const bool state) const {
+  for (int i = 0; i < lineWidth; i++) {
+    drawLine(x + i, y + i, x + width - i, y + i, state);
+    drawLine(x + width - i, y + i, x + width - i, y + height - i, state);
+    drawLine(x + width - i, y + height - i, x + i, y + height - i, state);
+    drawLine(x + i, y + height - i, x + i, y + i, state);
+  }
+}
+
+void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir, const int lineWidth, const bool state) const {
+  const int stroke = std::min(lineWidth, maxRadius);
+  const int innerRadius = std::max(maxRadius - stroke, 0);
+  const int outerRadiusSq = maxRadius * maxRadius;
+  const int innerRadiusSq = innerRadius * innerRadius;
+  for (int dy = 0; dy <= maxRadius; ++dy) {
+    for (int dx = 0; dx <= maxRadius; ++dx) {
+      const int distSq = dx * dx + dy * dy;
+      if (distSq > outerRadiusSq || distSq < innerRadiusSq) {
+        continue;
+      }
+      const int px = cx + xDir * dx;
+      const int py = cy + yDir * dy;
+      drawPixel(px, py, state);
+    }
+  }
+};
+
+// Border is inside the rectangle, rounded corners
+void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, const int lineWidth, const int cornerRadius, const bool state) const {
+  if (lineWidth <= 0 || width <= 0 || height <= 0) {
+    return;
+  }
+
+  const int maxRadius = std::min({cornerRadius, width / 2, height / 2});
+  if (maxRadius <= 0) {
+    drawRect(x, y, width, height, lineWidth, state);
+    return;
+  }
+
+  const int stroke = std::min(lineWidth, maxRadius);  
+  const int right = x + width - 1;
+  const int bottom = y + height - 1;
+
+  const int horizontalWidth = width - 2 * maxRadius;
+  if (horizontalWidth > 0) {
+    fillRect(x + maxRadius, y, horizontalWidth, stroke, state);
+    fillRect(x + maxRadius, bottom - stroke + 1, horizontalWidth, stroke, state);
+  }
+
+  const int verticalHeight = height - 2 * maxRadius;
+  if (verticalHeight > 0) {
+    fillRect(x, y + maxRadius, stroke, verticalHeight, state);
+    fillRect(right - stroke + 1, y + maxRadius, stroke, verticalHeight, state);
+  }
+
+  drawArc(maxRadius, x + maxRadius, y + maxRadius, -1, -1, lineWidth, state);         // TL
+  drawArc(maxRadius, right - maxRadius, y + maxRadius, 1, -1, lineWidth, state);      // TR
+  drawArc(maxRadius, right - maxRadius, bottom - maxRadius, 1, 1, lineWidth, state);  // BR
+  drawArc(maxRadius, x + maxRadius, bottom - maxRadius, -1, 1, lineWidth, state);     // BL
 }
 
 void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
@@ -117,6 +253,10 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   // Flip X and Y for portrait mode
   einkDisplay.drawImage(bitmap, y, x, height, width);
+}
+
+void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
+  einkDisplay.drawImage(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth,

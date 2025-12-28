@@ -16,6 +16,7 @@ const SettingInfo settingsList[settingsCount] = {
     {"Status Bar", SettingType::ENUM, &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}},
     {"Extra Paragraph Spacing", SettingType::TOGGLE, &CrossPointSettings::extraParagraphSpacing, {}},
     {"Short Power Button Click", SettingType::TOGGLE, &CrossPointSettings::shortPwrBtn, {}},
+    {"UI Theme", SettingType::ENUM, &CrossPointSettings::uiTheme, {"List", "Grid"}},
     {"Check for updates", SettingType::ACTION, nullptr, {}},
 };
 }  // namespace

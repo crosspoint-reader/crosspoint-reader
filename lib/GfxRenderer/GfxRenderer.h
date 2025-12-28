@@ -45,15 +45,21 @@ class GfxRenderer {
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
+  void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state = true) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;
+  void drawRect(int x, int y, int width, int height, int lineWidth, bool state) const;
+  void drawArc(int maxRadius, int cx, int cy, int xDir, int yDir, int lineWidth, bool state) const;
+  void drawRoundedRect(int x, int y, int width, int height, int lineWidth, int cornerRadius, bool state) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
+  void drawIcon(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
 
   // Text
   int getTextWidth(int fontId, const char* text, EpdFontStyle style = REGULAR) const;
   void drawCenteredText(int fontId, int y, const char* text, bool black = true, EpdFontStyle style = REGULAR) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true, EpdFontStyle style = REGULAR) const;
+  void drawTextInBox(int fontId, int x, int y, int w, int h, const char* text, bool centered, bool black = true, EpdFontStyle style = REGULAR) const;
   int getSpaceWidth(int fontId) const;
   int getLineHeight(int fontId) const;
 
