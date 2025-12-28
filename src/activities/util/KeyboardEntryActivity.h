@@ -116,16 +116,14 @@ class KeyboardEntryActivity : public Activity {
   static const char* const keyboardShift[NUM_ROWS];
 
   // Special key positions (bottom row)
-  static constexpr int SHIFT_ROW = 4;
+  static constexpr int SPECIAL_ROW = 4;
   static constexpr int SHIFT_COL = 0;
-  static constexpr int SPACE_ROW = 4;
   static constexpr int SPACE_COL = 2;
-  static constexpr int BACKSPACE_ROW = 4;
   static constexpr int BACKSPACE_COL = 7;
-  static constexpr int DONE_ROW = 4;
   static constexpr int DONE_COL = 9;
 
   char getSelectedChar() const;
   void handleKeyPress();
   int getRowLength(int row) const;
+  void renderItemWithSelector(int x, int y, const char* item, bool isSelected) const;
 };
