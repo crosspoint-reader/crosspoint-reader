@@ -42,6 +42,11 @@ class GfxRenderer {
   explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW) {}
   ~GfxRenderer() = default;
 
+  static constexpr int VIEWABLE_MARGIN_TOP = 9;
+  static constexpr int VIEWABLE_MARGIN_RIGHT = 3;
+  static constexpr int VIEWABLE_MARGIN_BOTTOM = 3;
+  static constexpr int VIEWABLE_MARGIN_LEFT = 3;
+
   // Setup
   void insertFont(int fontId, EpdFontFamily font);
 
@@ -88,4 +93,5 @@ class GfxRenderer {
   uint8_t* getFrameBuffer() const;
   static size_t getBufferSize();
   void grayscaleRevert() const;
+  void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
 };
