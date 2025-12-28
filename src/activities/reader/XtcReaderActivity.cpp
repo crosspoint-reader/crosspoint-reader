@@ -239,8 +239,10 @@ void XtcReaderActivity::renderPage() {
     // Display BW with conditional refresh based on pagesUntilFullRefresh
     if (pagesUntilFullRefresh <= 1) {
       renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+      pagesUntilFullRefresh = pagesPerRefresh;
     } else {
       renderer.displayBuffer();
+      pagesUntilFullRefresh--;
     }
 
     // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
@@ -283,9 +285,6 @@ void XtcReaderActivity::renderPage() {
 
     // Cleanup grayscale buffers with current frame buffer
     renderer.cleanupGrayscaleWithFrameBuffer();
-
-    // Decrement refresh counter
-    pagesUntilFullRefresh--;
 
     free(pageBuffer);
 
