@@ -7,7 +7,9 @@ namespace {
 constexpr uint8_t PAGE_FILE_VERSION = 3;
 }
 
-void PageLine::render(GfxRenderer& renderer, const int fontId) { block->render(renderer, fontId, xPos, yPos); }
+void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
+}
 
 void PageLine::serialize(File& file) {
   serialization::writePod(file, xPos);
@@ -27,9 +29,9 @@ std::unique_ptr<PageLine> PageLine::deserialize(File& file) {
   return std::unique_ptr<PageLine>(new PageLine(std::move(tb), xPos, yPos));
 }
 
-void Page::render(GfxRenderer& renderer, const int fontId) const {
+void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
   for (auto& element : elements) {
-    element->render(renderer, fontId);
+    element->render(renderer, fontId, xOffset, yOffset);
   }
 }
 

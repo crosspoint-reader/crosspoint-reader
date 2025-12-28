@@ -244,9 +244,12 @@ void EpubReaderActivity::renderScreen() {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     Serial.printf("[%lu] [ERS] Loading file: %s, index: %d\n", millis(), filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
-    if (!section->loadCacheMetadata(READER_FONT_ID, lineCompression, marginTop, marginRight, marginBottom, marginLeft,
-                                    SETTINGS.extraParagraphSpacing, renderer.getScreenWidth(),
-                                    renderer.getScreenHeight())) {
+
+    const auto viewportWidth = renderer.getScreenWidth() - marginLeft - marginRight;
+    const auto viewportHeight = renderer.getScreenHeight() - marginTop - marginBottom;
+
+    if (!section->loadCacheMetadata(READER_FONT_ID, lineCompression, SETTINGS.extraParagraphSpacing, viewportWidth,
+                                    viewportHeight)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       // Progress bar dimensions
@@ -292,9 +295,8 @@ void EpubReaderActivity::renderScreen() {
         renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
       };
 
-      if (!section->persistPageDataToSD(READER_FONT_ID, lineCompression, marginTop, marginRight, marginBottom,
-                                        marginLeft, SETTINGS.extraParagraphSpacing, renderer.getScreenWidth(),
-                                        renderer.getScreenHeight(), progressSetup, progressCallback)) {
+      if (!section->persistPageDataToSD(READER_FONT_ID, lineCompression, SETTINGS.extraParagraphSpacing, viewportWidth,
+                                        viewportHeight, progressSetup, progressCallback)) {
         Serial.printf("[%lu] [ERS] Failed to persist page data to SD\n", millis());
         section.reset();
         return;
@@ -354,7 +356,7 @@ void EpubReaderActivity::renderScreen() {
 }
 
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page) {
-  page->render(renderer, READER_FONT_ID);
+  page->render(renderer, READER_FONT_ID, marginLeft, marginTop);
   renderStatusBar();
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
@@ -372,13 +374,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page) {
   {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    page->render(renderer, READER_FONT_ID);
+    page->render(renderer, READER_FONT_ID, marginLeft, marginTop);
     renderer.copyGrayscaleLsbBuffers();
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    page->render(renderer, READER_FONT_ID);
+    page->render(renderer, READER_FONT_ID, marginLeft, marginTop);
     renderer.copyGrayscaleMsbBuffers();
 
     // display grayscale part

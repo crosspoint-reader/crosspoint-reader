@@ -155,7 +155,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   if (self->currentTextBlock->size() > 750) {
     Serial.printf("[%lu] [EHP] Text block too long, splitting into multiple pages\n", millis());
     self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, self->marginLeft + self->marginRight,
+        self->renderer, self->fontId, self->viewportWidth,
         [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
   }
 }
@@ -301,15 +301,14 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
-  const int pageHeight = renderer.getScreenHeight() - marginTop - marginBottom;
 
-  if (currentPageNextY + lineHeight > pageHeight) {
+  if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage));
     currentPage.reset(new Page());
-    currentPageNextY = marginTop;
+    currentPageNextY = 0;
   }
 
-  currentPage->elements.push_back(std::make_shared<PageLine>(line, marginLeft, currentPageNextY));
+  currentPage->elements.push_back(std::make_shared<PageLine>(line, 0, currentPageNextY));
   currentPageNextY += lineHeight;
 }
 
@@ -321,12 +320,12 @@ void ChapterHtmlSlimParser::makePages() {
 
   if (!currentPage) {
     currentPage.reset(new Page());
-    currentPageNextY = marginTop;
+    currentPageNextY = 0;
   }
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
   currentTextBlock->layoutAndExtractLines(
-      renderer, fontId, marginLeft + marginRight,
+      renderer, fontId, viewportWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
   // Extra paragraph spacing if enabled
   if (extraParagraphSpacing) {

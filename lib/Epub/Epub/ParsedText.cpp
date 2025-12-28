@@ -18,14 +18,14 @@ void ParsedText::addWord(std::string word, const EpdFontStyle fontStyle) {
 }
 
 // Consumes data to minimize memory usage
-void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const int horizontalMargin,
+void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const int viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                                        const bool includeLastLine) {
   if (words.empty()) {
     return;
   }
 
-  const int pageWidth = renderer.getScreenWidth() - horizontalMargin;
+  const int pageWidth = viewportWidth;
   const int spaceWidth = renderer.getSpaceWidth(fontId);
   const auto wordWidths = calculateWordWidths(renderer, fontId);
   const auto lineBreakIndices = computeLineBreaks(pageWidth, spaceWidth, wordWidths);

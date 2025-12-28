@@ -34,7 +34,7 @@ class ParsedText {
   TextBlock::BLOCK_STYLE getStyle() const { return style; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
-  void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, int horizontalMargin,
+  void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, int viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);
 };

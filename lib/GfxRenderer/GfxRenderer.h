@@ -36,7 +36,7 @@ class GfxRenderer {
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontStyle style) const;
   void freeBwBufferChunks();
-  void rotateCoordinates(int x, int y, int *rotatedX, int *rotatedY) const;
+  void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
 
  public:
   explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW) {}
