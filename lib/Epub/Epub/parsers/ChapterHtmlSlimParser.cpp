@@ -301,7 +301,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
-  const int pageHeight = GfxRenderer::getScreenHeight() - marginTop - marginBottom;
+  const int pageHeight = renderer.getScreenHeight() - marginTop - marginBottom;
 
   if (currentPageNextY + lineHeight > pageHeight) {
     completePageFn(std::move(currentPage));

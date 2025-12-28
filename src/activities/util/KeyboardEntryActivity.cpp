@@ -235,7 +235,7 @@ void KeyboardEntryActivity::loop() {
 }
 
 void KeyboardEntryActivity::render() const {
-  const auto pageWidth = GfxRenderer::getScreenWidth();
+  const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
 
@@ -329,7 +329,7 @@ void KeyboardEntryActivity::render() const {
   }
 
   // Draw help text at absolute bottom of screen (consistent with other screens)
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageHeight = renderer.getScreenHeight();
   renderer.drawText(SMALL_FONT_ID, 10, pageHeight - 30, "Navigate: D-pad | Select: OK | Cancel: BACK");
   renderer.displayBuffer();
 }

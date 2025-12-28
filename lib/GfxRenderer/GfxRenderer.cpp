@@ -2,9 +2,6 @@
 
 #include <Utf8.h>
 
-// Default to portrait orientation for all callers
-GfxRenderer::Orientation GfxRenderer::orientation = GfxRenderer::Orientation::Portrait;
-
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
@@ -262,7 +259,7 @@ void GfxRenderer::displayWindow(const int x, const int y, const int width, const
 }
 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
-int GfxRenderer::getScreenWidth() {
+int GfxRenderer::getScreenWidth() const {
   switch (orientation) {
     case Orientation::Portrait:
       // 480px wide in portrait logical coordinates
@@ -275,7 +272,7 @@ int GfxRenderer::getScreenWidth() {
   return EInkDisplay::DISPLAY_HEIGHT;
 }
 
-int GfxRenderer::getScreenHeight() {
+int GfxRenderer::getScreenHeight() const {
   switch (orientation) {
     case Orientation::Portrait:
       // 800px tall in portrait logical coordinates

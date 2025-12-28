@@ -16,7 +16,7 @@ int EpubReaderChapterSelectionActivity::getPageItems() const {
   constexpr int startY = 60;
   constexpr int lineHeight = 30;
 
-  const int screenHeight = GfxRenderer::getScreenHeight();
+  const int screenHeight = renderer.getScreenHeight();
   const int availableHeight = screenHeight - startY;
   int items = availableHeight / lineHeight;
 

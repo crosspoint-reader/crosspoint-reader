@@ -141,8 +141,8 @@ void SettingsActivity::displayTaskLoop() {
 void SettingsActivity::render() const {
   renderer.clearScreen();
 
-  const auto pageWidth = GfxRenderer::getScreenWidth();
-  const auto pageHeight = GfxRenderer::getScreenHeight();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
   renderer.drawCenteredText(READER_FONT_ID, 10, "Settings", true, BOLD);

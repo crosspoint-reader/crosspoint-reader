@@ -25,8 +25,8 @@ class GfxRenderer {
   static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == EInkDisplay::BUFFER_SIZE,
                 "BW buffer chunking does not line up with display buffer size");
 
-  // Global orientation used for all rendering operations
-  static Orientation orientation;
+  // Orientation used for all rendering operations
+  Orientation orientation;
 
   EInkDisplay& einkDisplay;
   RenderMode renderMode;
@@ -44,12 +44,12 @@ class GfxRenderer {
   void insertFont(int fontId, EpdFontFamily font);
 
   // Orientation control (affects logical width/height and coordinate transforms)
-  static void setOrientation(Orientation o) { orientation = o; }
-  static Orientation getOrientation() { return orientation; }
+  void setOrientation(const Orientation o) { orientation = o; }
+  Orientation getOrientation() const { return orientation; }
 
   // Screen ops
-  static int getScreenWidth();
-  static int getScreenHeight();
+  int getScreenWidth() const;
+  int getScreenHeight() const;
   void displayBuffer(EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH) const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   void displayWindow(int x, int y, int width, int height) const;
