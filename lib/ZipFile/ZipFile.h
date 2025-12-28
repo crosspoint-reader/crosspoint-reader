@@ -1,25 +1,44 @@
 #pragma once
-#include <Print.h>
+#include <FS.h>
 
-#include <memory>
+#include <map>
 #include <string>
 
-#include "miniz.h"
-
 class ZipFile {
-  std::string filePath;
-  std::unique_ptr<mz_zip_archive> zipArchivePtr;
-  bool loadFileStat(const char* filename, mz_zip_archive_file_stat* fileStat);
-  long getDataOffset(const mz_zip_archive_file_stat& fileStat) const;
+ public:
+  struct FileStatSlim {
+    uint16_t method;             // Compression method
+    uint32_t compressedSize;     // Compressed size
+    uint32_t uncompressedSize;   // Uncompressed size
+    uint32_t localHeaderOffset;  // Offset of local file header
+  };
+
+  struct ZipDetails {
+    uint32_t centralDirOffset;
+    uint16_t totalEntries;
+    bool isSet;
+  };
+
+ private:
+  const std::string& filePath;
+  File file;
+  ZipDetails zipDetails = {0, 0, false};
+  std::map<std::string, uint32_t> localHeaderOffsets;
+  bool loadLocalHeaderOffset(const char* filename, uint32_t* localHeaderOffset);
+
+  bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
+  long getDataOffset(const FileStatSlim& fileStat);
+  bool loadZipDetails();
 
  public:
-  explicit ZipFile(std::string filePath) : filePath(std::move(filePath)) {}
+  explicit ZipFile(const std::string& filePath) : filePath(filePath) {}
   ~ZipFile() = default;
   // Zip file can be opened and closed by hand in order to allow for quick calculation of inflated file size
   // It is NOT recommended to pre-open it for any kind of inflation due to memory constraints
-  bool isOpen() const { return zipArchivePtr != nullptr; }
+  bool isOpen() const { return !!file; }
   bool open();
   bool close();
+  bool loadAllLocalHeaderOffsets();
   bool getInflatedFileSize(const char* filename, size_t* size);
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed

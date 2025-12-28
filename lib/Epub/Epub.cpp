@@ -320,7 +320,7 @@ bool Epub::generateCoverBmp() const {
 uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
 
-  const auto content = ZipFile("/sd" + filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
+  const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
   if (!content) {
     Serial.printf("[%lu] [EBP] Failed to read item %s\n", millis(), path.c_str());
     return nullptr;
@@ -331,12 +331,12 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 
 bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile("/sd" + filepath).readFileToStream(path.c_str(), out, chunkSize);
+  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile("/sd" + filepath).getInflatedFileSize(path.c_str(), size);
+  return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
 }
 
 int Epub::getSpineItemsCount() const {

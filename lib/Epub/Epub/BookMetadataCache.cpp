@@ -122,13 +122,21 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // LUTs complete
   // Loop through spines from spine file matching up TOC indexes, calculating cumulative size and writing to book.bin
 
-  ZipFile zip("/sd" + epubPath);
+  ZipFile zip(epubPath);
   // Pre-open zip file to speed up size calculations
   if (!zip.open()) {
     Serial.printf("[%lu] [BMC] Could not open EPUB zip for size calculations\n", millis());
     bookFile.close();
     spineFile.close();
     tocFile.close();
+    return false;
+  }
+  if (!zip.loadAllLocalHeaderOffsets()) {
+    Serial.printf("[%lu] [BMC] Could not load zip local header offsets for size calculations\n", millis());
+    bookFile.close();
+    spineFile.close();
+    tocFile.close();
+    zip.close();
     return false;
   }
   size_t cumSize = 0;
