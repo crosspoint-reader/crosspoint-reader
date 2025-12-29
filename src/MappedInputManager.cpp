@@ -1,11 +1,12 @@
 #include "MappedInputManager.h"
 
 decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button button) const {
-  const auto layout = static_cast<CrossPointSettings::FRONT_BUTTON_LAYOUT>(SETTINGS.frontButtonLayout);
+  const auto frontLayout = static_cast<CrossPointSettings::FRONT_BUTTON_LAYOUT>(SETTINGS.frontButtonLayout);
+  const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
 
   switch (button) {
     case Button::Back:
-      switch (layout) {
+      switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
           return InputManager::BTN_LEFT;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
@@ -13,7 +14,7 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
           return InputManager::BTN_BACK;
       }
     case Button::Confirm:
-      switch (layout) {
+      switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
           return InputManager::BTN_RIGHT;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
@@ -21,7 +22,7 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
           return InputManager::BTN_CONFIRM;
       }
     case Button::Left:
-      switch (layout) {
+      switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
           return InputManager::BTN_BACK;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
@@ -29,7 +30,7 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
           return InputManager::BTN_LEFT;
       }
     case Button::Right:
-      switch (layout) {
+      switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
           return InputManager::BTN_CONFIRM;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
@@ -43,9 +44,21 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
     case Button::Power:
       return InputManager::BTN_POWER;
     case Button::PageBack:
-      return InputManager::BTN_UP;
+      switch (sideLayout) {
+        case CrossPointSettings::NEXT_PREV:
+          return InputManager::BTN_DOWN;
+        case CrossPointSettings::PREV_NEXT:
+        default:
+          return InputManager::BTN_UP;
+      }
     case Button::PageForward:
-      return InputManager::BTN_DOWN;
+      switch (sideLayout) {
+        case CrossPointSettings::NEXT_PREV:
+          return InputManager::BTN_UP;
+        case CrossPointSettings::PREV_NEXT:
+        default:
+          return InputManager::BTN_DOWN;
+      }
   }
 
   return InputManager::BTN_BACK;

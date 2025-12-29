@@ -33,6 +33,11 @@ class CrossPointSettings {
   // Swapped: Left, Right, Back, Confirm
   enum FRONT_BUTTON_LAYOUT { BACK_CONFIRM_LEFT_RIGHT = 0, LEFT_RIGHT_BACK_CONFIRM = 1 };
 
+  // Side button layout options
+  // Default: Previous, Next
+  // Swapped: Next, Previous
+  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1 };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Status bar settings
@@ -46,6 +51,8 @@ class CrossPointSettings {
   uint8_t orientation = PORTRAIT;
   // Front button layout
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
+  // Side button layout
+  uint8_t sideButtonLayout = PREV_NEXT;
 
   ~CrossPointSettings() = default;
 
