@@ -3,7 +3,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <InputManager.h>
-#include <SD.h>
+#include <SDCardManager.h>
 #include <SPI.h>
 #include <builtinFonts/bookerly_2b.h>
 #include <builtinFonts/bookerly_bold_2b.h>
@@ -37,7 +37,6 @@
 
 #define UART0_RXD 20  // Used for USB connection detection
 
-#define SD_SPI_CS 12
 #define SD_SPI_MISO 7
 
 EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
@@ -191,7 +190,7 @@ void setup() {
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
-  if (!SD.begin(SD_SPI_CS, SPI, SPI_FQ, "/sd", 6)) {
+  if (!SdMan.begin()) {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
     setupDisplayAndFonts();
     exitActivity();

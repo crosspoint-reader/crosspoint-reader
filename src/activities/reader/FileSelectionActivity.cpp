@@ -1,9 +1,9 @@
 #include "FileSelectionActivity.h"
 
 #include <GfxRenderer.h>
-#include <InputManager.h>
-#include <SD.h>
+#include <SDCardManager.h>
 
+#include "MappedInputManager.h"
 #include "config.h"
 
 namespace {
@@ -30,17 +30,19 @@ void FileSelectionActivity::taskTrampoline(void* param) {
 void FileSelectionActivity::loadFiles() {
   files.clear();
   selectorIndex = 0;
-  auto root = SD.open(basepath.c_str());
-  for (File file = root.openNextFile(); file; file = root.openNextFile()) {
-    auto filename = std::string(file.name());
-    if (filename[0] == '.') {
+  auto root = SdMan.open(basepath.c_str());
+  char name[128];
+  for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
+    file.getName(name, sizeof(name));
+    if (name[0] == '.') {
       file.close();
       continue;
     }
 
     if (file.isDirectory()) {
-      files.emplace_back(filename + "/");
+      files.emplace_back(std::string(name) + "/");
     } else {
+      auto filename = std::string(name);
       std::string ext4 = filename.length() >= 4 ? filename.substr(filename.length() - 4) : "";
       std::string ext5 = filename.length() >= 5 ? filename.substr(filename.length() - 5) : "";
       if (ext5 == ".epub" || ext5 == ".xtch" || ext4 == ".xtc") {

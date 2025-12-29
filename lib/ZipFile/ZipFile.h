@@ -1,5 +1,5 @@
 #pragma once
-#include <FS.h>
+#include <SdFat.h>
 
 #include <string>
 #include <unordered_map>
@@ -21,7 +21,7 @@ class ZipFile {
 
  private:
   const std::string& filePath;
-  File file;
+  FsFile file;
   ZipDetails zipDetails = {0, 0, false};
   std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
 

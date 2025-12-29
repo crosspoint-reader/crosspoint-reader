@@ -1,6 +1,6 @@
 #pragma once
 
-#include <FS.h>
+#include <SdFat.h>
 
 enum class BmpReaderError : uint8_t {
   Ok = 0,
@@ -28,7 +28,7 @@ class Bitmap {
  public:
   static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(File& file) : file(file) {}
+  explicit Bitmap(FsFile& file) : file(file) {}
   ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) const;
@@ -40,10 +40,10 @@ class Bitmap {
   int getRowBytes() const { return rowBytes; }
 
  private:
-  static uint16_t readLE16(File& f);
-  static uint32_t readLE32(File& f);
+  static uint16_t readLE16(FsFile& f);
+  static uint32_t readLE32(FsFile& f);
 
-  File& file;
+  FsFile& file;
   int width = 0;
   int height = 0;
   bool topDown = false;

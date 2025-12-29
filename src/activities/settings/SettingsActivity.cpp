@@ -1,9 +1,9 @@
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
-#include <InputManager.h>
 
 #include "CrossPointSettings.h"
+#include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "config.h"
 

@@ -1,7 +1,5 @@
 #include "ReaderActivity.h"
 
-#include <SD.h>
-
 #include "Epub.h"
 #include "EpubReaderActivity.h"
 #include "FileSelectionActivity.h"
@@ -29,7 +27,7 @@ bool ReaderActivity::isXtcFile(const std::string& path) {
 }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
-  if (!SD.exists(path.c_str())) {
+  if (!SdMan.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }
@@ -44,7 +42,7 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
 }
 
 std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
-  if (!SD.exists(path.c_str())) {
+  if (!SdMan.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }

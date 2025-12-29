@@ -12,7 +12,7 @@ class Section {
   const int spineIndex;
   GfxRenderer& renderer;
   std::string filePath;
-  File file;
+  FsFile file;
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, int viewportWidth,
                               int viewportHeight);

@@ -1,7 +1,7 @@
 #include "CrossPointState.h"
 
-#include <FsHelpers.h>
 #include <HardwareSerial.h>
+#include <SDCardManager.h>
 #include <Serialization.h>
 
 namespace {
@@ -12,8 +12,8 @@ constexpr char STATE_FILE[] = "/.crosspoint/state.bin";
 CrossPointState CrossPointState::instance;
 
 bool CrossPointState::saveToFile() const {
-  File outputFile;
-  if (!FsHelpers::openFileForWrite("CPS", STATE_FILE, outputFile)) {
+  FsFile outputFile;
+  if (!SdMan.openFileForWrite("CPS", STATE_FILE, outputFile)) {
     return false;
   }
 
@@ -24,8 +24,8 @@ bool CrossPointState::saveToFile() const {
 }
 
 bool CrossPointState::loadFromFile() {
-  File inputFile;
-  if (!FsHelpers::openFileForRead("CPS", STATE_FILE, inputFile)) {
+  FsFile inputFile;
+  if (!SdMan.openFileForRead("CPS", STATE_FILE, inputFile)) {
     return false;
   }
 

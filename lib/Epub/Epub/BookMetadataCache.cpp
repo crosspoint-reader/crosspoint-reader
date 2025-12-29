@@ -1,7 +1,6 @@
 #include "BookMetadataCache.h"
 
 #include <HardwareSerial.h>
-#include <SD.h>
 #include <Serialization.h>
 #include <ZipFile.h>
 
@@ -30,7 +29,7 @@ bool BookMetadataCache::beginContentOpfPass() {
   Serial.printf("[%lu] [BMC] Beginning content opf pass\n", millis());
 
   // Open spine file for writing
-  return FsHelpers::openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile);
+  return SdMan.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile);
 }
 
 bool BookMetadataCache::endContentOpfPass() {
@@ -42,10 +41,10 @@ bool BookMetadataCache::beginTocPass() {
   Serial.printf("[%lu] [BMC] Beginning toc pass\n", millis());
 
   // Open spine file for reading
-  if (!FsHelpers::openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
+  if (!SdMan.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
   }
-  if (!FsHelpers::openFileForWrite("BMC", cachePath + tmpTocBinFile, tocFile)) {
+  if (!SdMan.openFileForWrite("BMC", cachePath + tmpTocBinFile, tocFile)) {
     spineFile.close();
     return false;
   }
@@ -71,16 +70,16 @@ bool BookMetadataCache::endWrite() {
 
 bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata) {
   // Open all three files, writing to meta, reading from spine and toc
-  if (!FsHelpers::openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
+  if (!SdMan.openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
   }
 
-  if (!FsHelpers::openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
+  if (!SdMan.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     bookFile.close();
     return false;
   }
 
-  if (!FsHelpers::openFileForRead("BMC", cachePath + tmpTocBinFile, tocFile)) {
+  if (!SdMan.openFileForRead("BMC", cachePath + tmpTocBinFile, tocFile)) {
     bookFile.close();
     spineFile.close();
     return false;
@@ -195,16 +194,16 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 }
 
 bool BookMetadataCache::cleanupTmpFiles() const {
-  if (SD.exists((cachePath + tmpSpineBinFile).c_str())) {
-    SD.remove((cachePath + tmpSpineBinFile).c_str());
+  if (SdMan.exists((cachePath + tmpSpineBinFile).c_str())) {
+    SdMan.remove((cachePath + tmpSpineBinFile).c_str());
   }
-  if (SD.exists((cachePath + tmpTocBinFile).c_str())) {
-    SD.remove((cachePath + tmpTocBinFile).c_str());
+  if (SdMan.exists((cachePath + tmpTocBinFile).c_str())) {
+    SdMan.remove((cachePath + tmpTocBinFile).c_str());
   }
   return true;
 }
 
-size_t BookMetadataCache::writeSpineEntry(File& file, const SpineEntry& entry) const {
+size_t BookMetadataCache::writeSpineEntry(FsFile& file, const SpineEntry& entry) const {
   const auto pos = file.position();
   serialization::writeString(file, entry.href);
   serialization::writePod(file, entry.cumulativeSize);
@@ -212,7 +211,7 @@ size_t BookMetadataCache::writeSpineEntry(File& file, const SpineEntry& entry) c
   return pos;
 }
 
-size_t BookMetadataCache::writeTocEntry(File& file, const TocEntry& entry) const {
+size_t BookMetadataCache::writeTocEntry(FsFile& file, const TocEntry& entry) const {
   const auto pos = file.position();
   serialization::writeString(file, entry.title);
   serialization::writeString(file, entry.href);
@@ -267,7 +266,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 /* ============= READING / LOADING FUNCTIONS ================ */
 
 bool BookMetadataCache::load() {
-  if (!FsHelpers::openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
+  if (!SdMan.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
   }
 
@@ -330,7 +329,7 @@ BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
   return readTocEntry(bookFile);
 }
 
-BookMetadataCache::SpineEntry BookMetadataCache::readSpineEntry(File& file) const {
+BookMetadataCache::SpineEntry BookMetadataCache::readSpineEntry(FsFile& file) const {
   SpineEntry entry;
   serialization::readString(file, entry.href);
   serialization::readPod(file, entry.cumulativeSize);
@@ -338,7 +337,7 @@ BookMetadataCache::SpineEntry BookMetadataCache::readSpineEntry(File& file) cons
   return entry;
 }
 
-BookMetadataCache::TocEntry BookMetadataCache::readTocEntry(File& file) const {
+BookMetadataCache::TocEntry BookMetadataCache::readTocEntry(FsFile& file) const {
   TocEntry entry;
   serialization::readString(file, entry.title);
   serialization::readString(file, entry.href);

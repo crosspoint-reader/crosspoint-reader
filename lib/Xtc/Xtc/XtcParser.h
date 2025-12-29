@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <SD.h>
+#include <SdFat.h>
 
 #include <functional>
 #include <memory>
@@ -77,7 +77,7 @@ class XtcParser {
   XtcError getLastError() const { return m_lastError; }
 
  private:
-  File m_file;
+  FsFile m_file;
   bool m_isOpen;
   XtcHeader m_header;
   std::vector<PageInfo> m_pageTable;

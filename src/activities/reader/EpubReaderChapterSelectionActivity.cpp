@@ -1,9 +1,8 @@
 #include "EpubReaderChapterSelectionActivity.h"
 
 #include <GfxRenderer.h>
-#include <InputManager.h>
-#include <SD.h>
 
+#include "MappedInputManager.h"
 #include "config.h"
 
 namespace {

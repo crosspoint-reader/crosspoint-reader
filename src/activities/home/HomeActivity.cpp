@@ -1,10 +1,10 @@
 #include "HomeActivity.h"
 
 #include <GfxRenderer.h>
-#include <InputManager.h>
-#include <SD.h>
+#include <SDCardManager.h>
 
 #include "CrossPointState.h"
+#include "MappedInputManager.h"
 #include "config.h"
 
 void HomeActivity::taskTrampoline(void* param) {
@@ -20,7 +20,7 @@ void HomeActivity::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
 
   // Check if we have a book to continue reading
-  hasContinueReading = !APP_STATE.openEpubPath.empty() && SD.exists(APP_STATE.openEpubPath.c_str());
+  hasContinueReading = !APP_STATE.openEpubPath.empty() && SdMan.exists(APP_STATE.openEpubPath.c_str());
 
   selectorIndex = 0;
 

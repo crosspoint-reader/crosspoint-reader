@@ -24,7 +24,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   }
 }
 
-bool TextBlock::serialize(File& file) const {
+bool TextBlock::serialize(FsFile& file) const {
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
     Serial.printf("[%lu] [TXB] Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", millis(),
                   words.size(), wordXpos.size(), wordStyles.size());
@@ -43,7 +43,7 @@ bool TextBlock::serialize(File& file) const {
   return true;
 }
 
-std::unique_ptr<TextBlock> TextBlock::deserialize(File& file) {
+std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   uint32_t wc;
   std::list<std::string> words;
   std::list<uint16_t> wordXpos;

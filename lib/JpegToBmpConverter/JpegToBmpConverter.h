@@ -1,7 +1,7 @@
 #pragma once
 
-#include <FS.h>
-
+class FsFile;
+class Print;
 class ZipFile;
 
 class JpegToBmpConverter {
@@ -11,5 +11,5 @@ class JpegToBmpConverter {
                                         unsigned char* pBytes_actually_read, void* pCallback_data);
 
  public:
-  static bool jpegFileToBmpStream(File& jpegFile, Print& bmpOut);
+  static bool jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut);
 };

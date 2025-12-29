@@ -1,5 +1,7 @@
 #include "JpegToBmpConverter.h"
 
+#include <HardwareSerial.h>
+#include <SdFat.h>
 #include <picojpeg.h>
 
 #include <cstdio>
@@ -7,7 +9,7 @@
 
 // Context structure for picojpeg callback
 struct JpegReadContext {
-  File& file;
+  FsFile& file;
   uint8_t buffer[512];
   size_t bufferPos;
   size_t bufferFilled;
@@ -426,7 +428,7 @@ unsigned char JpegToBmpConverter::jpegReadCallback(unsigned char* pBuf, const un
 }
 
 // Core function: Convert JPEG file to 2-bit BMP
-bool JpegToBmpConverter::jpegFileToBmpStream(File& jpegFile, Print& bmpOut) {
+bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
   Serial.printf("[%lu] [JPG] Converting JPEG to BMP\n", millis());
 
   // Setup context for picojpeg callback

@@ -2,7 +2,6 @@
 
 #include <EInkDisplay.h>
 #include <EpdFontFamily.h>
-#include <FS.h>
 
 #include <map>
 

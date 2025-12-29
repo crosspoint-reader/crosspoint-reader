@@ -7,7 +7,7 @@ void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
 
-bool PageLine::serialize(File& file) {
+bool PageLine::serialize(FsFile& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
 
@@ -15,7 +15,7 @@ bool PageLine::serialize(File& file) {
   return block->serialize(file);
 }
 
-std::unique_ptr<PageLine> PageLine::deserialize(File& file) {
+std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
   int16_t xPos;
   int16_t yPos;
   serialization::readPod(file, xPos);
@@ -31,7 +31,7 @@ void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, co
   }
 }
 
-bool Page::serialize(File& file) const {
+bool Page::serialize(FsFile& file) const {
   const uint32_t count = elements.size();
   serialization::writePod(file, count);
 
@@ -46,7 +46,7 @@ bool Page::serialize(File& file) const {
   return true;
 }
 
-std::unique_ptr<Page> Page::deserialize(File& file) {
+std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   auto page = std::unique_ptr<Page>(new Page());
 
   uint32_t count;

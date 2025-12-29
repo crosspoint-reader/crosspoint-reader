@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SD.h>
+#include <SDCardManager.h>
 
 #include <string>
 
@@ -46,15 +46,15 @@ class BookMetadataCache {
   bool loaded;
   bool buildMode;
 
-  File bookFile;
+  FsFile bookFile;
   // Temp file handles during build
-  File spineFile;
-  File tocFile;
+  FsFile spineFile;
+  FsFile tocFile;
 
-  size_t writeSpineEntry(File& file, const SpineEntry& entry) const;
-  size_t writeTocEntry(File& file, const TocEntry& entry) const;
-  SpineEntry readSpineEntry(File& file) const;
-  TocEntry readTocEntry(File& file) const;
+  size_t writeSpineEntry(FsFile& file, const SpineEntry& entry) const;
+  size_t writeTocEntry(FsFile& file, const TocEntry& entry) const;
+  SpineEntry readSpineEntry(FsFile& file) const;
+  TocEntry readTocEntry(FsFile& file) const;
 
  public:
   BookMetadata coreMetadata;

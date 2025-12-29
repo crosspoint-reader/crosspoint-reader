@@ -1,9 +1,9 @@
 #include "OtaUpdateActivity.h"
 
 #include <GfxRenderer.h>
-#include <InputManager.h>
 #include <WiFi.h>
 
+#include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "config.h"
 #include "network/OtaUpdater.h"

@@ -5,8 +5,7 @@
 #include <string>
 #include <utility>
 
-#include "../MappedInputManager.h"
-
+class MappedInputManager;
 class GfxRenderer;
 
 class Activity {

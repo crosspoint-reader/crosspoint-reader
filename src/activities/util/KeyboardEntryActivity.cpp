@@ -1,6 +1,7 @@
 #include "KeyboardEntryActivity.h"
 
 #include "../../config.h"
+#include "MappedInputManager.h"
 
 // Keyboard layouts - lowercase
 const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {

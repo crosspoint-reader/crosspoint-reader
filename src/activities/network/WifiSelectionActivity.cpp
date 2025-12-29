@@ -5,6 +5,7 @@
 
 #include <map>
 
+#include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "config.h"

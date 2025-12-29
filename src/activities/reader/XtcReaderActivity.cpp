@@ -9,10 +9,10 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <InputManager.h>
+#include <SDCardManager.h>
 
-#include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "MappedInputManager.h"
 #include "config.h"
 
 namespace {
@@ -330,8 +330,8 @@ void XtcReaderActivity::renderPage() {
 }
 
 void XtcReaderActivity::saveProgress() const {
-  File f;
-  if (FsHelpers::openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
+  FsFile f;
+  if (SdMan.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;
@@ -343,8 +343,8 @@ void XtcReaderActivity::saveProgress() const {
 }
 
 void XtcReaderActivity::loadProgress() {
-  File f;
-  if (FsHelpers::openFileForRead("XTR", xtc->getCachePath() + "/progress.bin", f)) {
+  FsFile f;
+  if (SdMan.openFileForRead("XTR", xtc->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
       currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);

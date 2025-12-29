@@ -1,8 +1,8 @@
 #include "NetworkModeSelectionActivity.h"
 
 #include <GfxRenderer.h>
-#include <InputManager.h>
 
+#include "MappedInputManager.h"
 #include "config.h"
 
 namespace {

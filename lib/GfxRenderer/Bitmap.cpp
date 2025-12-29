@@ -123,7 +123,7 @@ Bitmap::~Bitmap() {
   delete[] errorNextRow;
 }
 
-uint16_t Bitmap::readLE16(File& f) {
+uint16_t Bitmap::readLE16(FsFile& f) {
   const int c0 = f.read();
   const int c1 = f.read();
   const auto b0 = static_cast<uint8_t>(c0 < 0 ? 0 : c0);
@@ -131,7 +131,7 @@ uint16_t Bitmap::readLE16(File& f) {
   return static_cast<uint16_t>(b0) | (static_cast<uint16_t>(b1) << 8);
 }
 
-uint32_t Bitmap::readLE32(File& f) {
+uint32_t Bitmap::readLE32(FsFile& f) {
   const int c0 = f.read();
   const int c1 = f.read();
   const int c2 = f.read();
@@ -192,7 +192,7 @@ BmpReaderError Bitmap::parseHeaders() {
   const uint16_t bfType = readLE16(file);
   if (bfType != 0x4D42) return BmpReaderError::NotBMP;
 
-  file.seek(8, SeekCur);
+  file.seekCur(8);
   bfOffBits = readLE32(file);
 
   // --- DIB HEADER ---
@@ -214,10 +214,10 @@ BmpReaderError Bitmap::parseHeaders() {
   // Allow BI_RGB (0) for all, and BI_BITFIELDS (3) for 32bpp which is common for BGRA masks.
   if (!(comp == 0 || (bpp == 32 && comp == 3))) return BmpReaderError::UnsupportedCompression;
 
-  file.seek(12, SeekCur);  // biSizeImage, biXPelsPerMeter, biYPelsPerMeter
+  file.seekCur(12);  // biSizeImage, biXPelsPerMeter, biYPelsPerMeter
   const uint32_t colorsUsed = readLE32(file);
   if (colorsUsed > 256u) return BmpReaderError::PaletteTooLarge;
-  file.seek(4, SeekCur);  // biClrImportant
+  file.seekCur(4);  // biClrImportant
 
   if (width <= 0 || height <= 0) return BmpReaderError::BadDimensions;
 

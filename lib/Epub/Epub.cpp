@@ -3,7 +3,7 @@
 #include <FsHelpers.h>
 #include <HardwareSerial.h>
 #include <JpegToBmpConverter.h>
-#include <SD.h>
+#include <SDCardManager.h>
 #include <ZipFile.h>
 
 #include "Epub/parsers/ContainerParser.h"
@@ -94,13 +94,13 @@ bool Epub::parseTocNcxFile() const {
   Serial.printf("[%lu] [EBP] Parsing toc ncx file: %s\n", millis(), tocNcxItem.c_str());
 
   const auto tmpNcxPath = getCachePath() + "/toc.ncx";
-  File tempNcxFile;
-  if (!FsHelpers::openFileForWrite("EBP", tmpNcxPath, tempNcxFile)) {
+  FsFile tempNcxFile;
+  if (!SdMan.openFileForWrite("EBP", tmpNcxPath, tempNcxFile)) {
     return false;
   }
   readItemContentsToStream(tocNcxItem, tempNcxFile, 1024);
   tempNcxFile.close();
-  if (!FsHelpers::openFileForRead("EBP", tmpNcxPath, tempNcxFile)) {
+  if (!SdMan.openFileForRead("EBP", tmpNcxPath, tempNcxFile)) {
     return false;
   }
   const auto ncxSize = tempNcxFile.size();
@@ -132,7 +132,7 @@ bool Epub::parseTocNcxFile() const {
 
   free(ncxBuffer);
   tempNcxFile.close();
-  SD.remove(tmpNcxPath.c_str());
+  SdMan.remove(tmpNcxPath.c_str());
 
   Serial.printf("[%lu] [EBP] Parsed TOC items\n", millis());
   return true;
@@ -218,12 +218,12 @@ bool Epub::load() {
 }
 
 bool Epub::clearCache() const {
-  if (!SD.exists(cachePath.c_str())) {
+  if (!SdMan.exists(cachePath.c_str())) {
     Serial.printf("[%lu] [EPB] Cache does not exist, no action needed\n", millis());
     return true;
   }
 
-  if (!FsHelpers::removeDir(cachePath.c_str())) {
+  if (!SdMan.removeDir(cachePath.c_str())) {
     Serial.printf("[%lu] [EPB] Failed to clear cache\n", millis());
     return false;
   }
@@ -233,17 +233,11 @@ bool Epub::clearCache() const {
 }
 
 void Epub::setupCacheDir() const {
-  if (SD.exists(cachePath.c_str())) {
+  if (SdMan.exists(cachePath.c_str())) {
     return;
   }
 
-  // Loop over each segment of the cache path and create directories as needed
-  for (size_t i = 1; i < cachePath.length(); i++) {
-    if (cachePath[i] == '/') {
-      SD.mkdir(cachePath.substr(0, i).c_str());
-    }
-  }
-  SD.mkdir(cachePath.c_str());
+  SdMan.mkdir(cachePath.c_str());
 }
 
 const std::string& Epub::getCachePath() const { return cachePath; }
@@ -263,7 +257,7 @@ std::string Epub::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
 bool Epub::generateCoverBmp() const {
   // Already generated, return true
-  if (SD.exists(getCoverBmpPath().c_str())) {
+  if (SdMan.exists(getCoverBmpPath().c_str())) {
     return true;
   }
 
@@ -283,30 +277,30 @@ bool Epub::generateCoverBmp() const {
     Serial.printf("[%lu] [EBP] Generating BMP from JPG cover image\n", millis());
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
-    File coverJpg;
-    if (!FsHelpers::openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
+    FsFile coverJpg;
+    if (!SdMan.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
     readItemContentsToStream(coverImageHref, coverJpg, 1024);
     coverJpg.close();
 
-    if (!FsHelpers::openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
+    if (!SdMan.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
 
-    File coverBmp;
-    if (!FsHelpers::openFileForWrite("EBP", getCoverBmpPath(), coverBmp)) {
+    FsFile coverBmp;
+    if (!SdMan.openFileForWrite("EBP", getCoverBmpPath(), coverBmp)) {
       coverJpg.close();
       return false;
     }
     const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
     coverJpg.close();
     coverBmp.close();
-    SD.remove(coverJpgTempPath.c_str());
+    SdMan.remove(coverJpgTempPath.c_str());
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate BMP from JPG cover image\n", millis());
-      SD.remove(getCoverBmpPath().c_str());
+      SdMan.remove(getCoverBmpPath().c_str());
     }
     Serial.printf("[%lu] [EBP] Generated BMP from JPG cover image, success: %s\n", millis(), success ? "yes" : "no");
     return success;

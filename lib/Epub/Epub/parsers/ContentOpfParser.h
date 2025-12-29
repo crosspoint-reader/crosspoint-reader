@@ -22,7 +22,7 @@ class ContentOpfParser final : public Print {
   XML_Parser parser = nullptr;
   ParserState state = START;
   BookMetadataCache* cache;
-  File tempItemStore;
+  FsFile tempItemStore;
   std::string coverItemId;
 
   static void startElement(void* userData, const XML_Char* name, const XML_Char** atts);

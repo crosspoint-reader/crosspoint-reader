@@ -1,7 +1,7 @@
 #include "ZipFile.h"
 
-#include <FsHelpers.h>
 #include <HardwareSerial.h>
+#include <SDCardManager.h>
 #include <miniz.h>
 
 bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t* outputBuf, const size_t inflatedSize) {
@@ -49,29 +49,29 @@ bool ZipFile::loadAllFileStatSlims() {
   fileStatSlimCache.reserve(zipDetails.totalEntries);
 
   while (file.available()) {
-    file.read(reinterpret_cast<uint8_t*>(&sig), 4);
+    file.read(&sig, 4);
     if (sig != 0x02014b50) break;  // End of list
 
     FileStatSlim fileStat = {};
 
-    file.seek(6, SeekCur);
-    file.read(reinterpret_cast<uint8_t*>(&fileStat.method), 2);
-    file.seek(8, SeekCur);
-    file.read(reinterpret_cast<uint8_t*>(&fileStat.compressedSize), 4);
-    file.read(reinterpret_cast<uint8_t*>(&fileStat.uncompressedSize), 4);
+    file.seekCur(6);
+    file.read(&fileStat.method, 2);
+    file.seekCur(8);
+    file.read(&fileStat.compressedSize, 4);
+    file.read(&fileStat.uncompressedSize, 4);
     uint16_t nameLen, m, k;
-    file.read(reinterpret_cast<uint8_t*>(&nameLen), 2);
-    file.read(reinterpret_cast<uint8_t*>(&m), 2);
-    file.read(reinterpret_cast<uint8_t*>(&k), 2);
-    file.seek(8, SeekCur);
-    file.read(reinterpret_cast<uint8_t*>(&fileStat.localHeaderOffset), 4);
-    file.read(reinterpret_cast<uint8_t*>(itemName), nameLen);
+    file.read(&nameLen, 2);
+    file.read(&m, 2);
+    file.read(&k, 2);
+    file.seekCur(8);
+    file.read(&fileStat.localHeaderOffset, 4);
+    file.read(itemName, nameLen);
     itemName[nameLen] = '\0';
 
     fileStatSlimCache.emplace(itemName, fileStat);
 
     // Skip the rest of this entry (extra field + comment)
-    file.seek(m + k, SeekCur);
+    file.seekCur(m + k);
   }
 
   if (!wasOpen) {
@@ -109,21 +109,21 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
   bool found = false;
 
   while (file.available()) {
-    file.read(reinterpret_cast<uint8_t*>(&sig), 4);
+    file.read(&sig, 4);
     if (sig != 0x02014b50) break;  // End of list
 
-    file.seek(6, SeekCur);
-    file.read(reinterpret_cast<uint8_t*>(&fileStat->method), 2);
-    file.seek(8, SeekCur);
-    file.read(reinterpret_cast<uint8_t*>(&fileStat->compressedSize), 4);
-    file.read(reinterpret_cast<uint8_t*>(&fileStat->uncompressedSize), 4);
+    file.seekCur(6);
+    file.read(&fileStat->method, 2);
+    file.seekCur(8);
+    file.read(&fileStat->compressedSize, 4);
+    file.read(&fileStat->uncompressedSize, 4);
     uint16_t nameLen, m, k;
-    file.read(reinterpret_cast<uint8_t*>(&nameLen), 2);
-    file.read(reinterpret_cast<uint8_t*>(&m), 2);
-    file.read(reinterpret_cast<uint8_t*>(&k), 2);
-    file.seek(8, SeekCur);
-    file.read(reinterpret_cast<uint8_t*>(&fileStat->localHeaderOffset), 4);
-    file.read(reinterpret_cast<uint8_t*>(itemName), nameLen);
+    file.read(&nameLen, 2);
+    file.read(&m, 2);
+    file.read(&k, 2);
+    file.seekCur(8);
+    file.read(&fileStat->localHeaderOffset, 4);
+    file.read(itemName, nameLen);
     itemName[nameLen] = '\0';
 
     if (strcmp(itemName, filename) == 0) {
@@ -132,7 +132,7 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
     }
 
     // Skip the rest of this entry (extra field + comment)
-    file.seek(m + k, SeekCur);
+    file.seekCur(m + k);
   }
 
   if (!wasOpen) {
@@ -243,7 +243,7 @@ bool ZipFile::loadZipDetails() {
 }
 
 bool ZipFile::open() {
-  if (!FsHelpers::openFileForRead("ZIP", filePath, file)) {
+  if (!SdMan.openFileForRead("ZIP", filePath, file)) {
     return false;
   }
   return true;

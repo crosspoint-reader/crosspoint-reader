@@ -1,8 +1,7 @@
 #include "CrossPointSettings.h"
 
-#include <FsHelpers.h>
 #include <HardwareSerial.h>
-#include <SD.h>
+#include <SDCardManager.h>
 #include <Serialization.h>
 
 // Initialize the static instance
@@ -17,10 +16,10 @@ constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 
 bool CrossPointSettings::saveToFile() const {
   // Make sure the directory exists
-  SD.mkdir("/.crosspoint");
+  SdMan.mkdir("/.crosspoint");
 
-  File outputFile;
-  if (!FsHelpers::openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
+  FsFile outputFile;
+  if (!SdMan.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
     return false;
   }
 
@@ -40,8 +39,8 @@ bool CrossPointSettings::saveToFile() const {
 }
 
 bool CrossPointSettings::loadFromFile() {
-  File inputFile;
-  if (!FsHelpers::openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
+  FsFile inputFile;
+  if (!SdMan.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
     return false;
   }
 

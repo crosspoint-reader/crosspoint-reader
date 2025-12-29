@@ -1,7 +1,6 @@
 #include "Section.h"
 
-#include <FsHelpers.h>
-#include <SD.h>
+#include <SDCardManager.h>
 #include <Serialization.h>
 
 #include "Page.h"
@@ -52,7 +51,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
 
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                               const int viewportWidth, const int viewportHeight) {
-  if (!FsHelpers::openFileForRead("SCT", filePath, file)) {
+  if (!SdMan.openFileForRead("SCT", filePath, file)) {
     return false;
   }
 
@@ -94,12 +93,12 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
 
 // Your updated class method (assuming you are using the 'SD' object, which is a wrapper for a specific filesystem)
 bool Section::clearCache() const {
-  if (!SD.exists(filePath.c_str())) {
+  if (!SdMan.exists(filePath.c_str())) {
     Serial.printf("[%lu] [SCT] Cache does not exist, no action needed\n", millis());
     return true;
   }
 
-  if (!SD.remove(filePath.c_str())) {
+  if (!SdMan.remove(filePath.c_str())) {
     Serial.printf("[%lu] [SCT] Failed to clear cache\n", millis());
     return false;
   }
@@ -126,12 +125,12 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     }
 
     // Remove any incomplete file from previous attempt before retrying
-    if (SD.exists(tmpHtmlPath.c_str())) {
-      SD.remove(tmpHtmlPath.c_str());
+    if (SdMan.exists(tmpHtmlPath.c_str())) {
+      SdMan.remove(tmpHtmlPath.c_str());
     }
 
-    File tmpHtml;
-    if (!FsHelpers::openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
+    FsFile tmpHtml;
+    if (!SdMan.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
       continue;
     }
     success = epub->readItemContentsToStream(localPath, tmpHtml, 1024);
@@ -139,8 +138,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     tmpHtml.close();
 
     // If streaming failed, remove the incomplete file immediately
-    if (!success && SD.exists(tmpHtmlPath.c_str())) {
-      SD.remove(tmpHtmlPath.c_str());
+    if (!success && SdMan.exists(tmpHtmlPath.c_str())) {
+      SdMan.remove(tmpHtmlPath.c_str());
       Serial.printf("[%lu] [SCT] Removed incomplete temp file after failed attempt\n", millis());
     }
   }
@@ -157,7 +156,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     progressSetupFn();
   }
 
-  if (!FsHelpers::openFileForWrite("SCT", filePath, file)) {
+  if (!SdMan.openFileForWrite("SCT", filePath, file)) {
     return false;
   }
   writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, viewportWidth, viewportHeight);
@@ -169,11 +168,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       progressFn);
   success = visitor.parseAndBuildPages();
 
-  SD.remove(tmpHtmlPath.c_str());
+  SdMan.remove(tmpHtmlPath.c_str());
   if (!success) {
     Serial.printf("[%lu] [SCT] Failed to parse XML and build pages\n", millis());
     file.close();
-    SD.remove(filePath.c_str());
+    SdMan.remove(filePath.c_str());
     return false;
   }
 
@@ -191,7 +190,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   if (hasFailedLutRecords) {
     Serial.printf("[%lu] [SCT] Failed to write LUT due to invalid page positions\n", millis());
     file.close();
-    SD.remove(filePath.c_str());
+    SdMan.remove(filePath.c_str());
     return false;
   }
 
@@ -204,7 +203,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 }
 
 std::unique_ptr<Page> Section::loadPageFromSectionFile() {
-  if (!FsHelpers::openFileForRead("SCT", filePath, file)) {
+  if (!SdMan.openFileForRead("SCT", filePath, file)) {
     return nullptr;
   }
 

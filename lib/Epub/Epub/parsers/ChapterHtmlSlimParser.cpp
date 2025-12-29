@@ -1,8 +1,8 @@
 #include "ChapterHtmlSlimParser.h"
 
-#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <SDCardManager.h>
 #include <expat.h>
 
 #include "../Page.h"
@@ -218,8 +218,8 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     return false;
   }
 
-  File file;
-  if (!FsHelpers::openFileForRead("EHP", filepath, file)) {
+  FsFile file;
+  if (!SdMan.openFileForRead("EHP", filepath, file)) {
     XML_ParserFree(parser);
     return false;
   }

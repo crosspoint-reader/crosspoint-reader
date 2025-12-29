@@ -3,12 +3,12 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
-#include <InputManager.h>
 #include <WiFi.h>
 #include <qrcode.h>
 
 #include <cstddef>
 
+#include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
 #include "WifiSelectionActivity.h"
 #include "config.h"
