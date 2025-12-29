@@ -24,7 +24,10 @@ const SettingInfo settingsList[settingsCount] = {
      SettingType::ENUM,
      &CrossPointSettings::frontButtonLayout,
      {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm"}},
-    {"Side Button Layout (reader)", SettingType::ENUM, &CrossPointSettings::sideButtonLayout, {"Prev, Next", "Next, Prev"}},
+    {"Side Button Layout (reader)",
+     SettingType::ENUM,
+     &CrossPointSettings::sideButtonLayout,
+     {"Prev, Next", "Next, Prev"}},
     {"Check for updates", SettingType::ACTION, nullptr, {}},
 };
 }  // namespace
