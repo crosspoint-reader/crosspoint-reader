@@ -14,6 +14,7 @@ class ContentOpfParser final : public Print {
     IN_BOOK_TITLE,
     IN_MANIFEST,
     IN_SPINE,
+    IN_GUIDE,
   };
 
   const std::string& cachePath;
