@@ -7,7 +7,7 @@ void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
 
-bool PageLine::serialize(File &file) {
+bool PageLine::serialize(File& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
 

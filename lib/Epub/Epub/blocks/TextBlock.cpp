@@ -24,7 +24,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   }
 }
 
-bool TextBlock::serialize(File &file) const {
+bool TextBlock::serialize(File& file) const {
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
     Serial.printf("[%lu] [TXB] Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", millis(),
                   words.size(), wordXpos.size(), wordStyles.size());
