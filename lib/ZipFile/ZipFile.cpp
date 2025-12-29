@@ -28,14 +28,13 @@ bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t*
   return true;
 }
 
-bool ZipFile::loadAllLocalHeaderOffsets() {
+bool ZipFile::loadAllFileStatSlims() {
   const bool wasOpen = isOpen();
   if (!wasOpen && !open()) {
     return false;
   }
 
   if (!loadZipDetails()) {
-    Serial.printf("[%lu] [ZIP] loadAllLocalHeaderOffsets failed to load zip details\n", millis());
     if (!wasOpen) {
       close();
     }
@@ -46,28 +45,30 @@ bool ZipFile::loadAllLocalHeaderOffsets() {
 
   uint32_t sig;
   char itemName[256];
-
-  localHeaderOffsets.clear();
-  localHeaderOffsets.reserve(zipDetails.totalEntries);
+  fileStatSlimCache.clear();
+  fileStatSlimCache.reserve(zipDetails.totalEntries);
 
   while (file.available()) {
     file.read(reinterpret_cast<uint8_t*>(&sig), 4);
     if (sig != 0x02014b50) break;  // End of list
 
-    file.seek(24, SeekCur);
+    FileStatSlim fileStat = {};
+
+    file.seek(6, SeekCur);
+    file.read(reinterpret_cast<uint8_t*>(&fileStat.method), 2);
+    file.seek(8, SeekCur);
+    file.read(reinterpret_cast<uint8_t*>(&fileStat.compressedSize), 4);
+    file.read(reinterpret_cast<uint8_t*>(&fileStat.uncompressedSize), 4);
     uint16_t nameLen, m, k;
     file.read(reinterpret_cast<uint8_t*>(&nameLen), 2);
     file.read(reinterpret_cast<uint8_t*>(&m), 2);
     file.read(reinterpret_cast<uint8_t*>(&k), 2);
-
-    uint32_t localHeaderOffset;
     file.seek(8, SeekCur);
-    file.read(reinterpret_cast<uint8_t*>(&localHeaderOffset), 4);
-
+    file.read(reinterpret_cast<uint8_t*>(&fileStat.localHeaderOffset), 4);
     file.read(reinterpret_cast<uint8_t*>(itemName), nameLen);
     itemName[nameLen] = '\0';
 
-    localHeaderOffsets.emplace(itemName, localHeaderOffset);
+    fileStatSlimCache.emplace(itemName, fileStat);
 
     // Skip the rest of this entry (extra field + comment)
     file.seek(m + k, SeekCur);
@@ -79,14 +80,13 @@ bool ZipFile::loadAllLocalHeaderOffsets() {
   return true;
 }
 
-bool ZipFile::loadLocalHeaderOffset(const char* filename, uint32_t* localHeaderOffset) {
-  // If we have saved any offset, assume they're all loaded
-  if (!localHeaderOffsets.empty()) {
-    if (localHeaderOffsets.count(filename) > 0) {
-      *localHeaderOffset = localHeaderOffsets.at(filename);
+bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
+  if (!fileStatSlimCache.empty()) {
+    const auto it = fileStatSlimCache.find(filename);
+    if (it != fileStatSlimCache.end()) {
+      *fileStat = it->second;
       return true;
     }
-
     return false;
   }
 
@@ -112,15 +112,17 @@ bool ZipFile::loadLocalHeaderOffset(const char* filename, uint32_t* localHeaderO
     file.read(reinterpret_cast<uint8_t*>(&sig), 4);
     if (sig != 0x02014b50) break;  // End of list
 
-    file.seek(24, SeekCur);
+    file.seek(6, SeekCur);
+    file.read(reinterpret_cast<uint8_t*>(&fileStat->method), 2);
+    file.seek(8, SeekCur);
+    file.read(reinterpret_cast<uint8_t*>(&fileStat->compressedSize), 4);
+    file.read(reinterpret_cast<uint8_t*>(&fileStat->uncompressedSize), 4);
     uint16_t nameLen, m, k;
     file.read(reinterpret_cast<uint8_t*>(&nameLen), 2);
     file.read(reinterpret_cast<uint8_t*>(&m), 2);
     file.read(reinterpret_cast<uint8_t*>(&k), 2);
-
     file.seek(8, SeekCur);
-    file.read(reinterpret_cast<uint8_t*>(localHeaderOffset), 4);
-
+    file.read(reinterpret_cast<uint8_t*>(&fileStat->localHeaderOffset), 4);
     file.read(reinterpret_cast<uint8_t*>(itemName), nameLen);
     itemName[nameLen] = '\0';
 
@@ -137,62 +139,6 @@ bool ZipFile::loadLocalHeaderOffset(const char* filename, uint32_t* localHeaderO
     close();
   }
   return found;
-}
-
-bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
-  const bool wasOpen = isOpen();
-  if (!wasOpen && !open()) {
-    return false;
-  }
-
-  if (!loadLocalHeaderOffset(filename, &fileStat->localHeaderOffset)) {
-    Serial.printf("[%lu] [ZIP] loadFileStatSlim could not find local header offset for file: %s\n", millis(), filename);
-    if (!wasOpen) {
-      close();
-    }
-    return false;
-  }
-
-  uint32_t sig;
-  file.seek(fileStat->localHeaderOffset);
-  file.read(reinterpret_cast<uint8_t*>(&sig), 4);
-  if (sig != 0x04034b50) {
-    Serial.printf("[%lu] [ZIP] Incorrect local file header\n", millis());
-    if (!wasOpen) {
-      close();
-    }
-    return false;
-  }
-
-  file.seek(4, SeekCur);  // Skip to method
-  if (file.read(reinterpret_cast<uint8_t*>(&fileStat->method), 2) != 2) {
-    Serial.printf("[%lu] [ZIP] Could not read compression method\n", millis());
-    if (!wasOpen) {
-      close();
-    }
-    return false;
-  }
-
-  file.seek(8, SeekCur);  // Skip to sizes
-  if (file.read(reinterpret_cast<uint8_t*>(&fileStat->compressedSize), 4) != 4) {
-    Serial.printf("[%lu] [ZIP] Could not read compressed size\n", millis());
-    if (!wasOpen) {
-      close();
-    }
-    return false;
-  }
-  if (file.read(reinterpret_cast<uint8_t*>(&fileStat->uncompressedSize), 4) != 4) {
-    Serial.printf("[%lu] [ZIP] Could not read uncompressed size\n", millis());
-    if (!wasOpen) {
-      close();
-    }
-    return false;
-  }
-
-  if (!wasOpen) {
-    close();
-  }
-  return true;
 }
 
 long ZipFile::getDataOffset(const FileStatSlim& fileStat) {

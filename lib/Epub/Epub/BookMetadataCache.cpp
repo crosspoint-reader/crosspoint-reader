@@ -134,7 +134,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // TODO: For large ZIPs loading the all localHeaderOffsets will crash.
   //       However not having them loaded is extremely slow. Need a better solution here.
   //       Perhaps only a cache of spine items or a better way to speedup lookups?
-  if (!zip.loadAllLocalHeaderOffsets()) {
+  if (!zip.loadAllFileStatSlims()) {
     Serial.printf("[%lu] [BMC] Could not load zip local header offsets for size calculations\n", millis());
     bookFile.close();
     spineFile.close();

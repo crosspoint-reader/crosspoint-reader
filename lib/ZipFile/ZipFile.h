@@ -23,8 +23,7 @@ class ZipFile {
   const std::string& filePath;
   File file;
   ZipDetails zipDetails = {0, 0, false};
-  std::unordered_map<std::string, uint32_t> localHeaderOffsets;
-  bool loadLocalHeaderOffset(const char* filename, uint32_t* localHeaderOffset);
+  std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
 
   bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
   long getDataOffset(const FileStatSlim& fileStat);
@@ -38,7 +37,7 @@ class ZipFile {
   bool isOpen() const { return !!file; }
   bool open();
   bool close();
-  bool loadAllLocalHeaderOffsets();
+  bool loadAllFileStatSlims();
   bool getInflatedFileSize(const char* filename, size_t* size);
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
