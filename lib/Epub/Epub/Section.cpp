@@ -18,8 +18,12 @@ size_t Section::onPageComplete(std::unique_ptr<Page> page) {
     Serial.printf("[%lu] [SCT] File not open for writing page %d\n", millis(), pageCount);
     return 0;
   }
+
   const auto position = file.position();
-  page->serialize(file);
+  if (!page->serialize(file)) {
+    Serial.printf("[%lu] [SCT] Failed to serialize page %d\n", millis(), pageCount);
+    return 0;
+  }
   Serial.printf("[%lu] [SCT] Page %d processed\n", millis(), pageCount);
 
   pageCount++;
@@ -174,10 +178,23 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   const auto lutOffset = file.position();
+  bool hasFailedLutRecords = false;
   // Write LUT
   for (const auto& pos : lut) {
+    if (pos == 0) {
+      hasFailedLutRecords = true;
+      break;
+    }
     serialization::writePod(file, pos);
   }
+
+  if (hasFailedLutRecords) {
+    Serial.printf("[%lu] [SCT] Failed to write LUT due to invalid page positions\n", millis());
+    file.close();
+    SD.remove(filePath.c_str());
+    return false;
+  }
+
   // Go back and write LUT offset
   file.seek(HEADER_SIZE - sizeof(size_t) - sizeof(pageCount));
   serialization::writePod(file, pageCount);

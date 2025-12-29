@@ -24,34 +24,33 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   }
 }
 
-void TextBlock::serialize(File& file) const {
-  // words
-  const uint32_t wc = words.size();
-  serialization::writePod(file, wc);
+bool TextBlock::serialize(File &file) const {
+  if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
+    Serial.printf("[%lu] [TXB] Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", millis(),
+                  words.size(), wordXpos.size(), wordStyles.size());
+    return false;
+  }
+
+  // Word data
+  serialization::writePod(file, static_cast<uint32_t>(words.size()));
   for (const auto& w : words) serialization::writeString(file, w);
-
-  // wordXpos
-  const uint32_t xc = wordXpos.size();
-  serialization::writePod(file, xc);
   for (auto x : wordXpos) serialization::writePod(file, x);
-
-  // wordStyles
-  const uint32_t sc = wordStyles.size();
-  serialization::writePod(file, sc);
   for (auto s : wordStyles) serialization::writePod(file, s);
 
-  // style
+  // Block style
   serialization::writePod(file, style);
+
+  return true;
 }
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(File& file) {
-  uint32_t wc, xc, sc;
+  uint32_t wc;
   std::list<std::string> words;
   std::list<uint16_t> wordXpos;
   std::list<EpdFontStyle> wordStyles;
   BLOCK_STYLE style;
 
-  // words
+  // Word count
   serialization::readPod(file, wc);
 
   // Sanity check: prevent allocation of unreasonably large lists (max 10000 words per block)
@@ -60,27 +59,15 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(File& file) {
     return nullptr;
   }
 
+  // Word data
   words.resize(wc);
+  wordXpos.resize(wc);
+  wordStyles.resize(wc);
   for (auto& w : words) serialization::readString(file, w);
-
-  // wordXpos
-  serialization::readPod(file, xc);
-  wordXpos.resize(xc);
   for (auto& x : wordXpos) serialization::readPod(file, x);
-
-  // wordStyles
-  serialization::readPod(file, sc);
-  wordStyles.resize(sc);
   for (auto& s : wordStyles) serialization::readPod(file, s);
 
-  // Validate data consistency: all three lists must have the same size
-  if (wc != xc || wc != sc) {
-    Serial.printf("[%lu] [TXB] Deserialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", millis(), wc,
-                  xc, sc);
-    return nullptr;
-  }
-
-  // style
+  // Block style
   serialization::readPod(file, style);
 
   return std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), style));

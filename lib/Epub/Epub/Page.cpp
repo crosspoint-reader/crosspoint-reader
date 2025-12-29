@@ -7,12 +7,12 @@ void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
 
-void PageLine::serialize(File& file) {
+bool PageLine::serialize(File &file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
 
   // serialize TextBlock pointed to by PageLine
-  block->serialize(file);
+  return block->serialize(file);
 }
 
 std::unique_ptr<PageLine> PageLine::deserialize(File& file) {
@@ -31,15 +31,19 @@ void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, co
   }
 }
 
-void Page::serialize(File& file) const {
+bool Page::serialize(File& file) const {
   const uint32_t count = elements.size();
   serialization::writePod(file, count);
 
   for (const auto& el : elements) {
     // Only PageLine exists currently
     serialization::writePod(file, static_cast<uint8_t>(TAG_PageLine));
-    el->serialize(file);
+    if (!el->serialize(file)) {
+      return false;
+    }
   }
+
+  return true;
 }
 
 std::unique_ptr<Page> Page::deserialize(File& file) {
