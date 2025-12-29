@@ -6,6 +6,7 @@
 
 bool FsHelpers::openFileForRead(const char* moduleName, const char* path, File& file) {
   if (!SD.exists(path)) {
+    Serial.printf("[%lu] [%s] File does not exist: %s\n", millis(), moduleName, path);
     return false;
   }
 
