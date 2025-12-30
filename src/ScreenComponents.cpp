@@ -17,7 +17,7 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   constexpr int batteryWidth = 15;
   constexpr int batteryHeight = 10;
   const int x = left;
-  const int y = top + 7;
+  const int y = top + 8;
 
   // Top line
   renderer.drawLine(x, y, x + batteryWidth - 4, y);

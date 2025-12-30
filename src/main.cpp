@@ -40,26 +40,30 @@ GfxRenderer renderer(einkDisplay);
 Activity* currentActivity;
 
 // Fonts
-EpdFont aleo12RegularFont(&aleo_12_regular);
-EpdFont aleo12BoldFont(&aleo_12_bold);
-EpdFont aleo12ItalicFont(&aleo_12_italic);
-EpdFont aleo12BoldItalicFont(&aleo_12_bolditalic);
-EpdFontFamily aleo12FontFamily(&aleo12RegularFont, &aleo12BoldFont, &aleo12ItalicFont, &aleo12BoldItalicFont);
-EpdFont aleo14RegularFont(&aleo_14_regular);
-EpdFont aleo14BoldFont(&aleo_14_bold);
-EpdFont aleo14ItalicFont(&aleo_14_italic);
-EpdFont aleo14BoldItalicFont(&aleo_14_bolditalic);
-EpdFontFamily aleo14FontFamily(&aleo14RegularFont, &aleo14BoldFont, &aleo14ItalicFont, &aleo14BoldItalicFont);
-EpdFont aleo16RegularFont(&aleo_16_regular);
-EpdFont aleo16BoldFont(&aleo_16_bold);
-EpdFont aleo16ItalicFont(&aleo_16_italic);
-EpdFont aleo16BoldItalicFont(&aleo_16_bolditalic);
-EpdFontFamily aleo16FontFamily(&aleo16RegularFont, &aleo16BoldFont, &aleo16ItalicFont, &aleo16BoldItalicFont);
-EpdFont aleo18RegularFont(&aleo_18_regular);
-EpdFont aleo18BoldFont(&aleo_18_bold);
-EpdFont aleo18ItalicFont(&aleo_18_italic);
-EpdFont aleo18BoldItalicFont(&aleo_18_bolditalic);
-EpdFontFamily aleo18FontFamily(&aleo18RegularFont, &aleo18BoldFont, &aleo18ItalicFont, &aleo18BoldItalicFont);
+EpdFont bookerly12RegularFont(&bookerly_12_regular);
+EpdFont bookerly12BoldFont(&bookerly_12_bold);
+EpdFont bookerly12ItalicFont(&bookerly_12_italic);
+EpdFont bookerly12BoldItalicFont(&bookerly_12_bolditalic);
+EpdFontFamily bookerly12FontFamily(&bookerly12RegularFont, &bookerly12BoldFont, &bookerly12ItalicFont,
+                                   &bookerly12BoldItalicFont);
+EpdFont bookerly14RegularFont(&bookerly_14_regular);
+EpdFont bookerly14BoldFont(&bookerly_14_bold);
+EpdFont bookerly14ItalicFont(&bookerly_14_italic);
+EpdFont bookerly14BoldItalicFont(&bookerly_14_bolditalic);
+EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
+                                   &bookerly14BoldItalicFont);
+EpdFont bookerly16RegularFont(&bookerly_16_regular);
+EpdFont bookerly16BoldFont(&bookerly_16_bold);
+EpdFont bookerly16ItalicFont(&bookerly_16_italic);
+EpdFont bookerly16BoldItalicFont(&bookerly_16_bolditalic);
+EpdFontFamily bookerly16FontFamily(&bookerly16RegularFont, &bookerly16BoldFont, &bookerly16ItalicFont,
+                                   &bookerly16BoldItalicFont);
+EpdFont bookerly18RegularFont(&bookerly_18_regular);
+EpdFont bookerly18BoldFont(&bookerly_18_bold);
+EpdFont bookerly18ItalicFont(&bookerly_18_italic);
+EpdFont bookerly18BoldItalicFont(&bookerly_18_bolditalic);
+EpdFontFamily bookerly18FontFamily(&bookerly18RegularFont, &bookerly18BoldFont, &bookerly18ItalicFont,
+                                   &bookerly18BoldItalicFont);
 
 EpdFont notosans12RegularFont(&notosans_12_regular);
 EpdFont notosans12BoldFont(&notosans_12_bold);
@@ -111,7 +115,7 @@ EpdFont opendyslexic14BoldItalicFont(&opendyslexic_14_bolditalic);
 EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic14BoldFont, &opendyslexic14ItalicFont,
                                        &opendyslexic14BoldItalicFont);
 
-EpdFont smallFont(&spacegrotesk);
+EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
 EpdFont ui10RegularFont(&ubuntu_10_regular);
@@ -227,10 +231,10 @@ void onGoHome() {
 void setupDisplayAndFonts() {
   einkDisplay.begin();
   Serial.printf("[%lu] [   ] Display initialized\n", millis());
-  renderer.insertFont(ALEO_12_FONT_ID, aleo12FontFamily);
-  renderer.insertFont(ALEO_14_FONT_ID, aleo14FontFamily);
-  renderer.insertFont(ALEO_16_FONT_ID, aleo16FontFamily);
-  renderer.insertFont(ALEO_18_FONT_ID, aleo18FontFamily);
+  renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
+  renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
+  renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
+  renderer.insertFont(BOOKERLY_18_FONT_ID, bookerly18FontFamily);
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);

@@ -92,7 +92,7 @@ bool CrossPointSettings::loadFromFile() {
 
 float CrossPointSettings::getReaderLineCompression() const {
   switch (fontFamily) {
-    case ALEO:
+    case BOOKERLY:
     default:
       switch (lineSpacing) {
         case TIGHT:
@@ -128,18 +128,18 @@ float CrossPointSettings::getReaderLineCompression() const {
 
 int CrossPointSettings::getReaderFontId() const {
   switch (fontFamily) {
-    case ALEO:
+    case BOOKERLY:
     default:
       switch (fontSize) {
         case SMALL:
-          return ALEO_12_FONT_ID;
+          return BOOKERLY_12_FONT_ID;
         case MEDIUM:
         default:
-          return ALEO_14_FONT_ID;
+          return BOOKERLY_14_FONT_ID;
         case LARGE:
-          return ALEO_16_FONT_ID;
+          return BOOKERLY_16_FONT_ID;
         case EXTRA_LARGE:
-          return ALEO_18_FONT_ID;
+          return BOOKERLY_18_FONT_ID;
       }
     case NOTOSANS:
       switch (fontSize) {

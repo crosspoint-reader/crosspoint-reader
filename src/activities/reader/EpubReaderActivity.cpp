@@ -421,7 +421,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
 
   // Position status bar near the bottom of the logical screen, regardless of orientation
   const auto screenHeight = renderer.getScreenHeight();
-  const auto textY = screenHeight - orientedMarginBottom - 2;
+  const auto textY = screenHeight - orientedMarginBottom - 4;
   int progressTextWidth = 0;
 
   if (showProgress) {
