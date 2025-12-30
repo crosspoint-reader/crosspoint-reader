@@ -85,12 +85,12 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     return false;
   }
 
-  constexpr size_t headerASize =
-      sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(size_t) + sizeof(spineCount) + sizeof(tocCount);
-  const size_t metadataSize =
+  constexpr uint32_t headerASize =
+      sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
+  const uint32_t metadataSize =
       metadata.title.size() + metadata.author.size() + metadata.coverItemHref.size() + sizeof(uint32_t) * 3;
-  const size_t lutSize = sizeof(size_t) * spineCount + sizeof(size_t) * tocCount;
-  const size_t lutOffset = headerASize + metadataSize;
+  const uint32_t lutSize = sizeof(uint32_t) * spineCount + sizeof(uint32_t) * tocCount;
+  const uint32_t lutOffset = headerASize + metadataSize;
 
   // Header A
   serialization::writePod(bookFile, BOOK_CACHE_VERSION);
@@ -105,7 +105,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // Loop through spine entries, writing LUT positions
   spineFile.seek(0);
   for (int i = 0; i < spineCount; i++) {
-    auto pos = spineFile.position();
+    uint32_t pos = spineFile.position();
     auto spineEntry = readSpineEntry(spineFile);
     serialization::writePod(bookFile, pos + lutOffset + lutSize);
   }
@@ -113,9 +113,9 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // Loop through toc entries, writing LUT positions
   tocFile.seek(0);
   for (int i = 0; i < tocCount; i++) {
-    auto pos = tocFile.position();
+    uint32_t pos = tocFile.position();
     auto tocEntry = readTocEntry(tocFile);
-    serialization::writePod(bookFile, pos + lutOffset + lutSize + spineFile.position());
+    serialization::writePod(bookFile, pos + lutOffset + lutSize + static_cast<uint32_t>(spineFile.position()));
   }
 
   // LUTs complete
@@ -141,7 +141,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     zip.close();
     return false;
   }
-  size_t cumSize = 0;
+  uint32_t cumSize = 0;
   spineFile.seek(0);
   for (int i = 0; i < spineCount; i++) {
     auto spineEntry = readSpineEntry(spineFile);
@@ -203,16 +203,16 @@ bool BookMetadataCache::cleanupTmpFiles() const {
   return true;
 }
 
-size_t BookMetadataCache::writeSpineEntry(FsFile& file, const SpineEntry& entry) const {
-  const auto pos = file.position();
+uint32_t BookMetadataCache::writeSpineEntry(FsFile& file, const SpineEntry& entry) const {
+  const uint32_t pos = file.position();
   serialization::writeString(file, entry.href);
   serialization::writePod(file, entry.cumulativeSize);
   serialization::writePod(file, entry.tocIndex);
   return pos;
 }
 
-size_t BookMetadataCache::writeTocEntry(FsFile& file, const TocEntry& entry) const {
-  const auto pos = file.position();
+uint32_t BookMetadataCache::writeTocEntry(FsFile& file, const TocEntry& entry) const {
+  const uint32_t pos = file.position();
   serialization::writeString(file, entry.title);
   serialization::writeString(file, entry.href);
   serialization::writeString(file, entry.anchor);
@@ -303,8 +303,8 @@ BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) 
   }
 
   // Seek to spine LUT item, read from LUT and get out data
-  bookFile.seek(lutOffset + sizeof(size_t) * index);
-  size_t spineEntryPos;
+  bookFile.seek(lutOffset + sizeof(uint32_t) * index);
+  uint32_t spineEntryPos;
   serialization::readPod(bookFile, spineEntryPos);
   bookFile.seek(spineEntryPos);
   return readSpineEntry(bookFile);
@@ -322,8 +322,8 @@ BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
   }
 
   // Seek to TOC LUT item, read from LUT and get out data
-  bookFile.seek(lutOffset + sizeof(size_t) * spineCount + sizeof(size_t) * index);
-  size_t tocEntryPos;
+  bookFile.seek(lutOffset + sizeof(uint32_t) * spineCount + sizeof(uint32_t) * index);
+  uint32_t tocEntryPos;
   serialization::readPod(bookFile, tocEntryPos);
   bookFile.seek(tocEntryPos);
   return readTocEntry(bookFile);

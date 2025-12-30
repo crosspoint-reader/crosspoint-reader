@@ -16,7 +16,7 @@ class Section {
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, int viewportWidth,
                               int viewportHeight);
-  size_t onPageComplete(std::unique_ptr<Page> page);
+  uint32_t onPageComplete(std::unique_ptr<Page> page);
 
  public:
   int pageCount = 0;
