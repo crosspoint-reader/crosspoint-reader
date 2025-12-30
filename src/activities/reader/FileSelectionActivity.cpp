@@ -165,7 +165,7 @@ void FileSelectionActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  renderer.drawCenteredText(UI_12_FONT_ID, 10, "Books", true, BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Books", true, BOLD);
 
   // Help text
   const auto labels = mappedInput.mapLabels("« Home", "Open", "", "");

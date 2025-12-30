@@ -103,7 +103,7 @@ void HomeActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  renderer.drawCenteredText(UI_12_FONT_ID, 10, "CrossPoint Reader", true, BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "CrossPoint Reader", true, BOLD);
 
   // Draw selection
   renderer.fillRect(0, 60 + selectorIndex * 30 - 2, pageWidth - 1, 30);

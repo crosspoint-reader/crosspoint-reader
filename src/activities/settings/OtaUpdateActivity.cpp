@@ -128,7 +128,7 @@ void OtaUpdateActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 10, "Update", true, BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Update", true, BOLD);
 
   if (state == CHECKING_FOR_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, 300, "Checking for update...", true, BOLD);
