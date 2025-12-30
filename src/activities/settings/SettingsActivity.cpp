@@ -28,7 +28,7 @@ const SettingInfo settingsList[settingsCount] = {
      SettingType::ENUM,
      &CrossPointSettings::sideButtonLayout,
      {"Prev, Next", "Next, Prev"}},
-    {"Reader Font Family", SettingType::ENUM, &CrossPointSettings::fontFamily, {"Aleo", "Open Dyslexic"}},
+    {"Reader Font Family", SettingType::ENUM, &CrossPointSettings::fontFamily, {"Aleo", "Noto Sans", "Open Dyslexic"}},
     {"Reader Font Size", SettingType::ENUM, &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}},
     {"Check for updates", SettingType::ACTION, nullptr, {}},
 };

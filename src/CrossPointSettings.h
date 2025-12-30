@@ -39,7 +39,7 @@ class CrossPointSettings {
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1 };
 
   // Font family options
-  enum FONT_FAMILY { ALEO = 0, OPENDYSLEXIC = 1 };
+  enum FONT_FAMILY { ALEO = 0, NOTOSANS = 1, OPENDYSLEXIC = 2 };
   // Font size options
   enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3 };
 
