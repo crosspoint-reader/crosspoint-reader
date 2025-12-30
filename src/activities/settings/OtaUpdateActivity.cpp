@@ -124,7 +124,6 @@ void OtaUpdateActivity::render() {
     lastUpdaterPercentage = static_cast<int>(updaterProgress * 100);
   }
 
-  const auto pageHeight = renderer.getScreenHeight();
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
@@ -141,13 +140,8 @@ void OtaUpdateActivity::render() {
     renderer.drawText(UI_10_FONT_ID, 20, 250, "Current Version: " CROSSPOINT_VERSION);
     renderer.drawText(UI_10_FONT_ID, 20, 270, ("New Version: " + updater.getLatestVersion()).c_str());
 
-    renderer.drawRect(25, pageHeight - 40, 106, 40);
-    renderer.drawText(UI_10_FONT_ID, 25 + (105 - renderer.getTextWidth(UI_10_FONT_ID, "Cancel")) / 2, pageHeight - 35,
-                      "Cancel");
-
-    renderer.drawRect(130, pageHeight - 40, 106, 40);
-    renderer.drawText(UI_10_FONT_ID, 130 + (105 - renderer.getTextWidth(UI_10_FONT_ID, "Update")) / 2, pageHeight - 35,
-                      "Update");
+    const auto labels = mappedInput.mapLabels("Cancel", "Update", "", "");
+    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
