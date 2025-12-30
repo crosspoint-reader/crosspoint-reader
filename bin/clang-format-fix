@@ -1,26 +1,19 @@
 #!/bin/bash
 
-# Configuration: Standard arguments for clang-format
-STYLE_ARGS="-style=file -i"
+GIT_LS_FILES_FLAGS=""
+if [[ "$1" == "-g" ]]; then
+  GIT_LS_FILES_FLAGS="--modified"
+fi
 
 # --- Main Logic ---
 
-if [[ "$1" == "-g" ]]; then
-    # Mode: Format all modified files (staged and unstaged)
+# Format all files (or only modified files if -g is passed)
 
-    # Use 'git ls-files' to get a list of all files with pending changes:
-    # --modified: files tracked by git that have been modified (staged or unstaged)
-    # --exclude-standard: ignores files in .gitignore
-    git ls-files --modified --exclude-standard \
-        | grep -E '\.(c|cpp|h|hpp)$' \
-        | xargs -r clang-format $STYLE_ARGS
-
-    # NOTE: We skip the 'git add' step from before.
-    # When running on unstaged files, 'clang-format -i' modifies them
-    # in the working directory, where they remain unstaged (M).
-
-else
-    # Executes original working command directly.
-    find src lib \( -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) -exec clang-format $STYLE_ARGS {} +
-
-fi
+# Use 'git ls-files' to get a list of all files tracked by git:
+# --modified: files tracked by git that have been modified (staged or unstaged)
+# --exclude-standard: ignores files in .gitignore
+# Additionally exclude files in 'lib/EpdFont/builtinFonts/' as they are script-generated.
+git ls-files  --exclude-standard ${GIT_LS_FILES_FLAGS} \
+    | grep -E '\.(c|cpp|h|hpp)$' \
+    | grep -v -E '^lib/EpdFont/builtinFonts/' \
+    | xargs -r clang-format -style=file -i
