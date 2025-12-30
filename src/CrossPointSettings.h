@@ -38,6 +38,11 @@ class CrossPointSettings {
   // Swapped: Next, Previous
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1 };
 
+  // Font family options
+  enum FONT_FAMILY { ALEO = 0, OPENDYSLEXIC = 1 };
+  // Font size options
+  enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3 };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Status bar settings
@@ -53,6 +58,10 @@ class CrossPointSettings {
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
   // Side button layout
   uint8_t sideButtonLayout = PREV_NEXT;
+  // Font family
+  uint8_t fontFamily = ALEO;
+  // Font size
+  uint8_t fontSize = MEDIUM;
 
   ~CrossPointSettings() = default;
 
@@ -60,6 +69,7 @@ class CrossPointSettings {
   static CrossPointSettings& getInstance() { return instance; }
 
   uint16_t getPowerButtonDuration() const { return shortPwrBtn ? 10 : 400; }
+  int getReaderFontId() const;
 
   bool saveToFile() const;
   bool loadFromFile();

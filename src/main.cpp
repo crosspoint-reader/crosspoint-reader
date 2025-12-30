@@ -5,15 +5,7 @@
 #include <InputManager.h>
 #include <SDCardManager.h>
 #include <SPI.h>
-#include <builtinFonts/aleo_14_bold.h>
-#include <builtinFonts/aleo_14_bolditalic.h>
-#include <builtinFonts/aleo_14_italic.h>
-#include <builtinFonts/aleo_14_regular.h>
-#include <builtinFonts/pixelarial14.h>
-#include <builtinFonts/ubuntu_10_regular.h>
-#include <builtinFonts/ubuntu_10_bold.h>
-#include <builtinFonts/ubuntu_12_regular.h>
-#include <builtinFonts/ubuntu_12_bold.h>
+#include <builtinFonts/all.h>
 
 #include "Battery.h"
 #include "CrossPointSettings.h"
@@ -48,11 +40,51 @@ GfxRenderer renderer(einkDisplay);
 Activity* currentActivity;
 
 // Fonts
+EpdFont aleo12RegularFont(&aleo_12_regular);
+EpdFont aleo12BoldFont(&aleo_12_bold);
+EpdFont aleo12ItalicFont(&aleo_12_italic);
+EpdFont aleo12BoldItalicFont(&aleo_12_bolditalic);
+EpdFontFamily aleo12FontFamily(&aleo12RegularFont, &aleo12BoldFont, &aleo12ItalicFont, &aleo12BoldItalicFont);
 EpdFont aleo14RegularFont(&aleo_14_regular);
 EpdFont aleo14BoldFont(&aleo_14_bold);
 EpdFont aleo14ItalicFont(&aleo_14_italic);
 EpdFont aleo14BoldItalicFont(&aleo_14_bolditalic);
 EpdFontFamily aleo14FontFamily(&aleo14RegularFont, &aleo14BoldFont, &aleo14ItalicFont, &aleo14BoldItalicFont);
+EpdFont aleo16RegularFont(&aleo_16_regular);
+EpdFont aleo16BoldFont(&aleo_16_bold);
+EpdFont aleo16ItalicFont(&aleo_16_italic);
+EpdFont aleo16BoldItalicFont(&aleo_16_bolditalic);
+EpdFontFamily aleo16FontFamily(&aleo16RegularFont, &aleo16BoldFont, &aleo16ItalicFont, &aleo16BoldItalicFont);
+EpdFont aleo18RegularFont(&aleo_18_regular);
+EpdFont aleo18BoldFont(&aleo_18_bold);
+EpdFont aleo18ItalicFont(&aleo_18_italic);
+EpdFont aleo18BoldItalicFont(&aleo_18_bolditalic);
+EpdFontFamily aleo18FontFamily(&aleo18RegularFont, &aleo18BoldFont, &aleo18ItalicFont, &aleo18BoldItalicFont);
+
+EpdFont opendyslexic8RegularFont(&opendyslexic_8_regular);
+EpdFont opendyslexic8BoldFont(&opendyslexic_8_bold);
+EpdFont opendyslexic8ItalicFont(&opendyslexic_8_italic);
+EpdFont opendyslexic8BoldItalicFont(&opendyslexic_8_bolditalic);
+EpdFontFamily opendyslexic8FontFamily(&opendyslexic8RegularFont, &opendyslexic8BoldFont, &opendyslexic8ItalicFont,
+                                      &opendyslexic8BoldItalicFont);
+EpdFont opendyslexic10RegularFont(&opendyslexic_10_regular);
+EpdFont opendyslexic10BoldFont(&opendyslexic_10_bold);
+EpdFont opendyslexic10ItalicFont(&opendyslexic_10_italic);
+EpdFont opendyslexic10BoldItalicFont(&opendyslexic_10_bolditalic);
+EpdFontFamily opendyslexic10FontFamily(&opendyslexic10RegularFont, &opendyslexic10BoldFont, &opendyslexic10ItalicFont,
+                                       &opendyslexic10BoldItalicFont);
+EpdFont opendyslexic12RegularFont(&opendyslexic_12_regular);
+EpdFont opendyslexic12BoldFont(&opendyslexic_12_bold);
+EpdFont opendyslexic12ItalicFont(&opendyslexic_12_italic);
+EpdFont opendyslexic12BoldItalicFont(&opendyslexic_12_bolditalic);
+EpdFontFamily opendyslexic12FontFamily(&opendyslexic12RegularFont, &opendyslexic12BoldFont, &opendyslexic12ItalicFont,
+                                       &opendyslexic12BoldItalicFont);
+EpdFont opendyslexic14RegularFont(&opendyslexic_14_regular);
+EpdFont opendyslexic14BoldFont(&opendyslexic_14_bold);
+EpdFont opendyslexic14ItalicFont(&opendyslexic_14_italic);
+EpdFont opendyslexic14BoldItalicFont(&opendyslexic_14_bolditalic);
+EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic14BoldFont, &opendyslexic14ItalicFont,
+                                       &opendyslexic14BoldItalicFont);
 
 EpdFont smallFont(&pixelarial14);
 EpdFontFamily smallFontFamily(&smallFont);
@@ -170,7 +202,14 @@ void onGoHome() {
 void setupDisplayAndFonts() {
   einkDisplay.begin();
   Serial.printf("[%lu] [   ] Display initialized\n", millis());
-  renderer.insertFont(READER_FONT_ID, aleo14FontFamily);
+  renderer.insertFont(ALEO_12_FONT_ID, aleo12FontFamily);
+  renderer.insertFont(ALEO_14_FONT_ID, aleo14FontFamily);
+  renderer.insertFont(ALEO_16_FONT_ID, aleo16FontFamily);
+  renderer.insertFont(ALEO_18_FONT_ID, aleo18FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_8_FONT_ID, opendyslexic8FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_10_FONT_ID, opendyslexic10FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
