@@ -5,11 +5,11 @@
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
-#include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "MappedInputManager.h"
+#include "ScreenComponents.h"
 #include "fontIds.h"
 
 namespace {
@@ -422,7 +422,6 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   // Position status bar near the bottom of the logical screen, regardless of orientation
   const auto screenHeight = renderer.getScreenHeight();
   const auto textY = screenHeight - orientedMarginBottom - 2;
-  int percentageTextWidth = 0;
   int progressTextWidth = 0;
 
   if (showProgress) {
@@ -439,42 +438,13 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   }
 
   if (showBattery) {
-    // Left aligned battery icon and percentage
-    const uint16_t percentage = battery.readPercentage();
-    const auto percentageText = std::to_string(percentage) + "%";
-    percentageTextWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-    renderer.drawText(SMALL_FONT_ID, 20 + orientedMarginLeft, textY, percentageText.c_str());
-
-    // 1 column on left, 2 columns on right, 5 columns of battery body
-    constexpr int batteryWidth = 15;
-    constexpr int batteryHeight = 10;
-    const int x = orientedMarginLeft;
-    const int y = screenHeight - orientedMarginBottom + 5;
-
-    // Top line
-    renderer.drawLine(x, y, x + batteryWidth - 4, y);
-    // Bottom line
-    renderer.drawLine(x, y + batteryHeight - 1, x + batteryWidth - 4, y + batteryHeight - 1);
-    // Left line
-    renderer.drawLine(x, y, x, y + batteryHeight - 1);
-    // Battery end
-    renderer.drawLine(x + batteryWidth - 4, y, x + batteryWidth - 4, y + batteryHeight - 1);
-    renderer.drawLine(x + batteryWidth - 3, y + 2, x + batteryWidth - 1, y + 2);
-    renderer.drawLine(x + batteryWidth - 3, y + batteryHeight - 3, x + batteryWidth - 1, y + batteryHeight - 3);
-    renderer.drawLine(x + batteryWidth - 1, y + 2, x + batteryWidth - 1, y + batteryHeight - 3);
-
-    // The +1 is to round up, so that we always fill at least one pixel
-    int filledWidth = percentage * (batteryWidth - 5) / 100 + 1;
-    if (filledWidth > batteryWidth - 5) {
-      filledWidth = batteryWidth - 5;  // Ensure we don't overflow
-    }
-    renderer.fillRect(x + 1, y + 1, filledWidth, batteryHeight - 2);
+    ScreenComponents::drawBattery(renderer, orientedMarginLeft, textY);
   }
 
   if (showChapterTitle) {
     // Centered chatper title text
     // Page width minus existing content with 30px padding on each side
-    const int titleMarginLeft = 20 + percentageTextWidth + 30 + orientedMarginLeft;
+    const int titleMarginLeft = 50 + 30 + orientedMarginLeft;  // 50px for battery
     const int titleMarginRight = progressTextWidth + 30 + orientedMarginRight;
     const int availableTextWidth = renderer.getScreenWidth() - titleMarginLeft - titleMarginRight;
     const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
