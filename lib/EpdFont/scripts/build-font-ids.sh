@@ -96,6 +96,6 @@ ruby -rdigest -e 'puts [
 
 echo "#define SMALL_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./pixelarial14.h",
+  "./spacegrotesk.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"

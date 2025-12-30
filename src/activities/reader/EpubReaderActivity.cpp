@@ -17,6 +17,7 @@ constexpr int pagesPerRefresh = 15;
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 constexpr float lineCompression = 0.95f;
+constexpr int topPadding = 5;
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 19;
 }  // namespace
@@ -243,6 +244,7 @@ void EpubReaderActivity::renderScreen() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
+  orientedMarginTop += topPadding;
   orientedMarginLeft += horizontalPadding;
   orientedMarginRight += horizontalPadding;
   orientedMarginBottom += statusBarMargin;
@@ -409,7 +411,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
 
   // Position status bar near the bottom of the logical screen, regardless of orientation
   const auto screenHeight = renderer.getScreenHeight();
-  const auto textY = screenHeight - orientedMarginBottom + 2;
+  const auto textY = screenHeight - orientedMarginBottom - 2;
   int percentageTextWidth = 0;
   int progressTextWidth = 0;
 

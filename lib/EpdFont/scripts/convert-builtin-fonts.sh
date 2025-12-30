@@ -40,3 +40,5 @@ for size in ${UI_FONT_SIZES[@]}; do
     echo "Generated $output_path"
   done
 done
+
+python fontconvert.py spacegrotesk 8 ../builtinFonts/source/SpaceGrotesk/SpaceGrotesk-Regular.ttf > ../builtinFonts/spacegrotesk.h
