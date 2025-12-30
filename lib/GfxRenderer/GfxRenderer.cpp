@@ -238,6 +238,17 @@ void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode) cons
   einkDisplay.displayBuffer(refreshMode);
 }
 
+std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
+                                       const EpdFontStyle style) const {
+  std::string item = text;
+  int itemWidth = getTextWidth(fontId, item.c_str(), style);
+  while (itemWidth > maxWidth && item.length() > 8) {
+    item.replace(item.length() - 5, 5, "...");
+    itemWidth = getTextWidth(fontId, item.c_str(), style);
+  }
+  return item;
+}
+
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
   switch (orientation) {

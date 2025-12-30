@@ -75,6 +75,7 @@ class GfxRenderer {
   int getSpaceWidth(int fontId) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
+  std::string truncatedText(const int fontId, const char* text, const int maxWidth, const EpdFontStyle style) const;
 
   // UI Components
   void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4) const;
