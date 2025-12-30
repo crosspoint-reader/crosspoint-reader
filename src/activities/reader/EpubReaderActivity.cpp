@@ -65,8 +65,8 @@ void EpubReaderActivity::onEnter() {
     }
     f.close();
   }
-  // TODO: Need a better condition to detect if we are opening for the first time. This will trigger if the book is
-  // re-opened at Chapter 0.
+  // We may want a better condition to detect if we are opening for the first time.
+  // This will trigger if the book is re-opened at Chapter 0.
   if (currentSpineIndex == 0) {
     int textSpineIndex = epub->getSpineIndexForTextReference();
     if (textSpineIndex != 0) {
