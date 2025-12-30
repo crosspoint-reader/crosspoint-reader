@@ -72,8 +72,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
 
   // Grab data from opfParser into epub
   bookMetadata.title = opfParser.title;
-  // TODO: Parse author
-  bookMetadata.author = "";
+  bookMetadata.author = opfParser.author;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
 
   if (!opfParser.tocNcxPath.empty()) {
@@ -251,6 +250,15 @@ const std::string& Epub::getTitle() const {
   }
 
   return bookMetadataCache->coreMetadata.title;
+}
+
+const std::string& Epub::getAuthor() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+
+  return bookMetadataCache->coreMetadata.author;
 }
 
 std::string Epub::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }

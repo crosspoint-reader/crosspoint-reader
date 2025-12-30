@@ -12,6 +12,7 @@ class ContentOpfParser final : public Print {
     IN_PACKAGE,
     IN_METADATA,
     IN_BOOK_TITLE,
+    IN_BOOK_AUTHOR,
     IN_MANIFEST,
     IN_SPINE,
   };
@@ -31,6 +32,7 @@ class ContentOpfParser final : public Print {
 
  public:
   std::string title;
+  std::string author;
   std::string tocNcxPath;
   std::string coverItemHref;
 
