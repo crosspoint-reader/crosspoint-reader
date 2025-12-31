@@ -18,7 +18,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle)
 }
 
 // Consumes data to minimize memory usage
-void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const int viewportWidth,
+void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                                        const bool includeLastLine) {
   if (words.empty()) {

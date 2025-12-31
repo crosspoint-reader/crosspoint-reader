@@ -8,7 +8,7 @@
 
 #include "Block.h"
 
-// represents a block of words in the html document
+// Represents a line of text on a page
 class TextBlock final : public Block {
  public:
   enum Style : uint8_t {
