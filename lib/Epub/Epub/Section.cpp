@@ -7,9 +7,9 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 7;
-constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(int) +
-                                 sizeof(int) + sizeof(int) + sizeof(uint32_t);
+constexpr uint8_t SECTION_FILE_VERSION = 8;
+constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint16_t) +
+                                 sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t);
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
@@ -30,7 +30,7 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
 }
 
 void Section::writeSectionFileHeader(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                     const int viewportWidth, const int viewportHeight) {
+                                     const uint16_t viewportWidth, const uint16_t viewportHeight) {
   if (!file) {
     Serial.printf("[%lu] [SCT] File not open for writing header\n", millis());
     return;
@@ -50,7 +50,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
 }
 
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                              const int viewportWidth, const int viewportHeight) {
+                              const uint16_t viewportWidth, const uint16_t viewportHeight) {
   if (!SdMan.openFileForRead("SCT", filePath, file)) {
     return false;
   }
@@ -66,7 +66,8 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
       return false;
     }
 
-    int fileFontId, fileViewportWidth, fileViewportHeight;
+    int fileFontId;
+    uint16_t fileViewportWidth, fileViewportHeight;
     float fileLineCompression;
     bool fileExtraParagraphSpacing;
     serialization::readPod(file, fileFontId);
@@ -108,7 +109,7 @@ bool Section::clearCache() const {
 }
 
 bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                const int viewportWidth, const int viewportHeight,
+                                const uint16_t viewportWidth, const uint16_t viewportHeight,
                                 const std::function<void()>& progressSetupFn,
                                 const std::function<void(int)>& progressFn) {
   constexpr uint32_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB

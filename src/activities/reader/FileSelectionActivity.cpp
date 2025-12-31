@@ -30,11 +30,19 @@ void FileSelectionActivity::taskTrampoline(void* param) {
 void FileSelectionActivity::loadFiles() {
   files.clear();
   selectorIndex = 0;
+
   auto root = SdMan.open(basepath.c_str());
+  if (!root || !root.isDirectory()) {
+    if (root) root.close();
+    return;
+  }
+
+  root.rewindDirectory();
+
   char name[128];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
-    if (name[0] == '.') {
+    if (name[0] == '.' || strcmp(name, "System Volume Information") == 0) {
       file.close();
       continue;
     }
@@ -165,7 +173,7 @@ void FileSelectionActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Books", true, BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Books", true, EpdFontFamily::BOLD);
 
   // Help text
   const auto labels = mappedInput.mapLabels("« Home", "Open", "", "");
@@ -180,12 +188,7 @@ void FileSelectionActivity::render() const {
   const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
   renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
   for (int i = pageStartIndex; i < files.size() && i < pageStartIndex + PAGE_ITEMS; i++) {
-    auto item = files[i];
-    int itemWidth = renderer.getTextWidth(UI_10_FONT_ID, item.c_str());
-    while (itemWidth > renderer.getScreenWidth() - 40 && item.length() > 8) {
-      item.replace(item.length() - 5, 5, "...");
-      itemWidth = renderer.getTextWidth(UI_10_FONT_ID, item.c_str());
-    }
+    auto item = renderer.truncatedText(UI_10_FONT_ID, files[i].c_str(), renderer.getScreenWidth() - 40);
     renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(), i != selectorIndex);
   }
 

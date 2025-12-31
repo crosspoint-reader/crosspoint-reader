@@ -68,8 +68,8 @@ void ReaderActivity::onSelectBookFile(const std::string& path) {
       onGoToXtcReader(std::move(xtc));
     } else {
       exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load XTC", REGULAR,
-                                                     EInkDisplay::HALF_REFRESH));
+      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load XTC",
+                                                     EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
       delay(2000);
       onGoToFileSelection();
     }
@@ -80,8 +80,8 @@ void ReaderActivity::onSelectBookFile(const std::string& path) {
       onGoToEpubReader(std::move(epub));
     } else {
       exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load epub", REGULAR,
-                                                     EInkDisplay::HALF_REFRESH));
+      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load epub",
+                                                     EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
       delay(2000);
       onGoToFileSelection();
     }

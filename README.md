@@ -33,11 +33,13 @@ This project is **not affiliated with Xteink**; it's built as a community projec
   - [x] Support nested folders
   - [ ] EPUB picker with cover art
 - [x] Custom sleep screen
-  - [ ] Cover sleep screen
+  - [x] Cover sleep screen
 - [x] Wifi book upload
-- [ ] Wifi OTA updates
-- [ ] Configurable font, layout, and display options
-- [ ] Screen rotation
+- [x] Wifi OTA updates
+- [x] Configurable font, layout, and display options
+  - [ ] User provided fonts
+  - [ ] Full UTF support
+- [x] Screen rotation
 
 See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint.
 

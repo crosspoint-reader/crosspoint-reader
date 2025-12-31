@@ -10,7 +10,7 @@
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
-void ParsedText::addWord(std::string word, const EpdFontStyle fontStyle) {
+void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
@@ -18,7 +18,7 @@ void ParsedText::addWord(std::string word, const EpdFontStyle fontStyle) {
 }
 
 // Consumes data to minimize memory usage
-void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const int viewportWidth,
+void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                                        const bool includeLastLine) {
   if (words.empty()) {
@@ -188,7 +188,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
-  std::list<EpdFontStyle> lineWordStyles;
+  std::list<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
 
   processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style));

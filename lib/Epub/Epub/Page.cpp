@@ -32,7 +32,7 @@ void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, co
 }
 
 bool Page::serialize(FsFile& file) const {
-  const uint32_t count = elements.size();
+  const uint16_t count = elements.size();
   serialization::writePod(file, count);
 
   for (const auto& el : elements) {
@@ -49,10 +49,10 @@ bool Page::serialize(FsFile& file) const {
 std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   auto page = std::unique_ptr<Page>(new Page());
 
-  uint32_t count;
+  uint16_t count;
   serialization::readPod(file, count);
 
-  for (uint32_t i = 0; i < count; i++) {
+  for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
     serialization::readPod(file, tag);
 

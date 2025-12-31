@@ -151,8 +151,8 @@ void verifyWakeupLongPress() {
   const auto start = millis();
   bool abort = false;
   // It takes us some time to wake up from deep sleep, so we need to subtract that from the duration
-  uint16_t calibration = 29;
-  uint16_t calibratedPressDuration =
+  constexpr uint16_t calibration = 29;
+  const uint16_t calibratedPressDuration =
       (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
 
   inputManager.update();
@@ -271,7 +271,7 @@ void setup() {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
     setupDisplayAndFonts();
     exitActivity();
-    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, "SD card error", BOLD));
+    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, "SD card error", EpdFontFamily::BOLD));
     return;
   }
 

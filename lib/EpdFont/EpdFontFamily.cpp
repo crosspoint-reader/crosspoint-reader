@@ -1,6 +1,6 @@
 #include "EpdFontFamily.h"
 
-const EpdFont* EpdFontFamily::getFont(const EpdFontStyle style) const {
+const EpdFont* EpdFontFamily::getFont(const Style style) const {
   if (style == BOLD && bold) {
     return bold;
   }
@@ -22,16 +22,16 @@ const EpdFont* EpdFontFamily::getFont(const EpdFontStyle style) const {
   return regular;
 }
 
-void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const EpdFontStyle style) const {
+void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const Style style) const {
   getFont(style)->getTextDimensions(string, w, h);
 }
 
-bool EpdFontFamily::hasPrintableChars(const char* string, const EpdFontStyle style) const {
+bool EpdFontFamily::hasPrintableChars(const char* string, const Style style) const {
   return getFont(style)->hasPrintableChars(string);
 }
 
-const EpdFontData* EpdFontFamily::getData(const EpdFontStyle style) const { return getFont(style)->data; }
+const EpdFontData* EpdFontFamily::getData(const Style style) const { return getFont(style)->data; }
 
-const EpdGlyph* EpdFontFamily::getGlyph(const uint32_t cp, const EpdFontStyle style) const {
+const EpdGlyph* EpdFontFamily::getGlyph(const uint32_t cp, const Style style) const {
   return getFont(style)->getGlyph(cp);
 };

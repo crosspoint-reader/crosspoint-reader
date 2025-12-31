@@ -42,7 +42,7 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
 }
 
 // start a new text block if needed
-void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::BLOCK_STYLE style) {
+void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style) {
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -116,13 +116,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     return;
   }
 
-  EpdFontStyle fontStyle = REGULAR;
+  EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
   if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth) {
-    fontStyle = BOLD_ITALIC;
+    fontStyle = EpdFontFamily::BOLD_ITALIC;
   } else if (self->boldUntilDepth < self->depth) {
-    fontStyle = BOLD;
+    fontStyle = EpdFontFamily::BOLD;
   } else if (self->italicUntilDepth < self->depth) {
-    fontStyle = ITALIC;
+    fontStyle = EpdFontFamily::ITALIC;
   }
 
   for (int i = 0; i < len; i++) {
@@ -172,13 +172,13 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
         matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) || self->depth == 1;
 
     if (shouldBreakText) {
-      EpdFontStyle fontStyle = REGULAR;
+      EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
       if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth) {
-        fontStyle = BOLD_ITALIC;
+        fontStyle = EpdFontFamily::BOLD_ITALIC;
       } else if (self->boldUntilDepth < self->depth) {
-        fontStyle = BOLD;
+        fontStyle = EpdFontFamily::BOLD;
       } else if (self->italicUntilDepth < self->depth) {
-        fontStyle = ITALIC;
+        fontStyle = EpdFontFamily::ITALIC;
       }
 
       self->partWordBuffer[self->partWordBufferIndex] = '\0';

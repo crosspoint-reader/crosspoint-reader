@@ -1,24 +1,24 @@
 #pragma once
 #include "EpdFont.h"
 
-enum EpdFontStyle { REGULAR, BOLD, ITALIC, BOLD_ITALIC };
-
 class EpdFontFamily {
+ public:
+  enum Style : uint8_t { REGULAR = 0, BOLD = 1, ITALIC = 2, BOLD_ITALIC = 3 };
+
+  explicit EpdFontFamily(const EpdFont* regular, const EpdFont* bold = nullptr, const EpdFont* italic = nullptr,
+                         const EpdFont* boldItalic = nullptr)
+      : regular(regular), bold(bold), italic(italic), boldItalic(boldItalic) {}
+  ~EpdFontFamily() = default;
+  void getTextDimensions(const char* string, int* w, int* h, Style style = REGULAR) const;
+  bool hasPrintableChars(const char* string, Style style = REGULAR) const;
+  const EpdFontData* getData(Style style = REGULAR) const;
+  const EpdGlyph* getGlyph(uint32_t cp, Style style = REGULAR) const;
+
+ private:
   const EpdFont* regular;
   const EpdFont* bold;
   const EpdFont* italic;
   const EpdFont* boldItalic;
 
-  const EpdFont* getFont(EpdFontStyle style) const;
-
- public:
-  explicit EpdFontFamily(const EpdFont* regular, const EpdFont* bold = nullptr, const EpdFont* italic = nullptr,
-                         const EpdFont* boldItalic = nullptr)
-      : regular(regular), bold(bold), italic(italic), boldItalic(boldItalic) {}
-  ~EpdFontFamily() = default;
-  void getTextDimensions(const char* string, int* w, int* h, EpdFontStyle style = REGULAR) const;
-  bool hasPrintableChars(const char* string, EpdFontStyle style = REGULAR) const;
-
-  const EpdFontData* getData(EpdFontStyle style = REGULAR) const;
-  const EpdGlyph* getGlyph(uint32_t cp, EpdFontStyle style = REGULAR) const;
+  const EpdFont* getFont(Style style) const;
 };
