@@ -11,12 +11,16 @@
 
 class Page;
 class GfxRenderer;
+class Epub;
 
 #define MAX_WORD_SIZE 200
 
 class ChapterHtmlSlimParser {
   const std::string& filepath;
   GfxRenderer& renderer;
+  Epub* epub;  // Pointer to epub for image extraction
+  int spineIndex;
+  int imageCounter = 0;  // Counter for naming cached images
   std::function<void(std::unique_ptr<Page>)> completePageFn;
   std::function<void(int)> progressFn;  // Progress callback (0-100)
   int depth = 0;
@@ -38,19 +42,24 @@ class ChapterHtmlSlimParser {
 
   void startNewTextBlock(TextBlock::BLOCK_STYLE style);
   void makePages();
+  void processImage(const char* src);
+  void addImageToPage(const std::string& cachePath, int width, int height);
+  std::string resolveImagePath(const char* src) const;
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
   static void XMLCALL endElement(void* userData, const XML_Char* name);
 
  public:
-  explicit ChapterHtmlSlimParser(const std::string& filepath, GfxRenderer& renderer, const int fontId,
-                                 const float lineCompression, const bool extraParagraphSpacing, const int viewportWidth,
-                                 const int viewportHeight,
+  explicit ChapterHtmlSlimParser(const std::string& filepath, GfxRenderer& renderer, Epub* epub, const int spineIndex,
+                                 const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+                                 const int viewportWidth, const int viewportHeight,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const std::function<void(int)>& progressFn = nullptr)
       : filepath(filepath),
         renderer(renderer),
+        epub(epub),
+        spineIndex(spineIndex),
         fontId(fontId),
         lineCompression(lineCompression),
         extraParagraphSpacing(extraParagraphSpacing),

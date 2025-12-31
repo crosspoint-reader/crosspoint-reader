@@ -1,11 +1,15 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <Bitmap.h>
+#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <JpegToBmpConverter.h>
 #include <SDCardManager.h>
 #include <expat.h>
 
 #include "../Page.h"
+#include "../blocks/ImageBlock.h"
 #include "../htmlEntities.h"
 
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
@@ -65,7 +69,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
-    // TODO: Start processing image tags
+    // Process image tag - extract src attribute
+    const char* src = nullptr;
+    if (atts != nullptr) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "src") == 0) {
+          src = atts[i + 1];
+          break;
+        }
+      }
+    }
+
+    if (src && self->epub) {
+      self->processImage(src);
+    }
+
+    // Skip content inside image tag
     self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
@@ -329,4 +348,191 @@ void ChapterHtmlSlimParser::makePages() {
   if (extraParagraphSpacing) {
     currentPageNextY += lineHeight / 2;
   }
+}
+
+std::string ChapterHtmlSlimParser::resolveImagePath(const char* src) const {
+  if (!src || !epub) {
+    return "";
+  }
+
+  std::string srcPath(src);
+
+  // If the path is absolute (starts with /), it's relative to the EPUB root
+  if (srcPath[0] == '/') {
+    return srcPath.substr(1);  // Remove leading slash
+  }
+
+  // Otherwise, resolve relative to the current chapter's directory
+  std::string basePath = epub->getBasePath();
+
+  // Simple path resolution - combine basePath with src
+  if (basePath.empty()) {
+    return srcPath;
+  }
+
+  // Ensure basePath ends with /
+  if (basePath.back() != '/') {
+    basePath += '/';
+  }
+
+  return basePath + srcPath;
+}
+
+void ChapterHtmlSlimParser::processImage(const char* src) {
+  if (!src || !epub) {
+    Serial.printf("[%lu] [IMG] Invalid image source or epub pointer\n", millis());
+    return;
+  }
+
+  // Flush any pending text before adding image
+  if (currentTextBlock && !currentTextBlock->isEmpty()) {
+    makePages();
+    currentTextBlock.reset(new ParsedText(TextBlock::JUSTIFIED, extraParagraphSpacing));
+  }
+
+  // Resolve the image path relative to the EPUB structure
+  std::string imagePath = resolveImagePath(src);
+  if (imagePath.empty()) {
+    Serial.printf("[%lu] [IMG] Failed to resolve image path: %s\n", millis(), src);
+    return;
+  }
+
+  // Generate cache path for this image
+  std::string cachePath = epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + "_img_" +
+                          std::to_string(imageCounter++) + ".bmp";
+
+  // Check if image is already cached
+  if (!SdMan.exists(cachePath.c_str())) {
+    // Determine file extension
+    bool isJpeg = false;
+    bool isBmp = false;
+    size_t dotPos = imagePath.rfind('.');
+    if (dotPos != std::string::npos) {
+      std::string ext = imagePath.substr(dotPos);
+      isJpeg = (ext == ".jpg" || ext == ".jpeg" || ext == ".JPG" || ext == ".JPEG");
+      isBmp = (ext == ".bmp" || ext == ".BMP");
+    }
+
+    if (isJpeg) {
+      // Extract JPEG and convert to BMP
+      std::string tempJpgPath = epub->getCachePath() + "/.temp_img.jpg";
+
+      FsFile tempJpg;
+      if (!SdMan.openFileForWrite("IMG", tempJpgPath.c_str(), tempJpg)) {
+        Serial.printf("[%lu] [IMG] Failed to create temp JPEG file\n", millis());
+        return;
+      }
+
+      if (!epub->readItemContentsToStream(imagePath, tempJpg, 1024)) {
+        Serial.printf("[%lu] [IMG] Failed to extract JPEG: %s\n", millis(), imagePath.c_str());
+        tempJpg.close();
+        SdMan.remove(tempJpgPath.c_str());
+        return;
+      }
+      tempJpg.close();
+
+      // Convert JPEG to BMP
+      if (!SdMan.openFileForRead("IMG", tempJpgPath.c_str(), tempJpg)) {
+        Serial.printf("[%lu] [IMG] Failed to reopen temp JPEG\n", millis());
+        SdMan.remove(tempJpgPath.c_str());
+        return;
+      }
+
+      FsFile bmpFile;
+      if (!SdMan.openFileForWrite("IMG", cachePath.c_str(), bmpFile)) {
+        Serial.printf("[%lu] [IMG] Failed to create BMP file\n", millis());
+        tempJpg.close();
+        SdMan.remove(tempJpgPath.c_str());
+        return;
+      }
+
+      bool success = JpegToBmpConverter::jpegFileToBmpStream(tempJpg, bmpFile);
+      tempJpg.close();
+      bmpFile.close();
+      SdMan.remove(tempJpgPath.c_str());
+
+      if (!success) {
+        Serial.printf("[%lu] [IMG] Failed to convert JPEG to BMP: %s\n", millis(), imagePath.c_str());
+        SdMan.remove(cachePath.c_str());
+        return;
+      }
+    } else if (isBmp) {
+      // Extract BMP directly
+      FsFile bmpFile;
+      if (!SdMan.openFileForWrite("IMG", cachePath.c_str(), bmpFile)) {
+        Serial.printf("[%lu] [IMG] Failed to create BMP file\n", millis());
+        return;
+      }
+
+      if (!epub->readItemContentsToStream(imagePath, bmpFile, 1024)) {
+        Serial.printf("[%lu] [IMG] Failed to extract BMP: %s\n", millis(), imagePath.c_str());
+        bmpFile.close();
+        SdMan.remove(cachePath.c_str());
+        return;
+      }
+      bmpFile.close();
+    } else {
+      // Unsupported format
+      Serial.printf("[%lu] [IMG] Unsupported image format (not JPEG or BMP): %s\n", millis(), imagePath.c_str());
+      return;
+    }
+  }
+
+  // Read image dimensions
+  FsFile imageFile;
+  if (!SdMan.openFileForRead("IMG", cachePath.c_str(), imageFile)) {
+    Serial.printf("[%lu] [IMG] Failed to open cached image: %s\n", millis(), cachePath.c_str());
+    return;
+  }
+
+  Bitmap bitmap(imageFile);
+  BmpReaderError err = bitmap.parseHeaders();
+  if (err != BmpReaderError::Ok) {
+    Serial.printf("[%lu] [IMG] Failed to parse BMP headers: %s\n", millis(), Bitmap::errorToString(err));
+    imageFile.close();
+    return;
+  }
+
+  int width = bitmap.getWidth();
+  int height = bitmap.getHeight();
+  imageFile.close();
+
+  // Add image to page
+  addImageToPage(cachePath, width, height);
+
+  Serial.printf("[%lu] [IMG] Successfully processed image: %s (%dx%d)\n", millis(), imagePath.c_str(), width, height);
+}
+
+void ChapterHtmlSlimParser::addImageToPage(const std::string& cachePath, int width, int height) {
+  // Calculate scaled dimensions to fit viewport
+  ImageBlock imageBlock(cachePath, width, height);
+  int scaledWidth, scaledHeight;
+  imageBlock.getScaledDimensions(viewportWidth, viewportHeight, &scaledWidth, &scaledHeight);
+
+  // Check if image fits on current page
+  if (currentPageNextY + scaledHeight > viewportHeight && currentPageNextY > 0) {
+    // Start new page for image
+    if (currentPage && !currentPage->elements.empty()) {
+      completePageFn(std::move(currentPage));
+    }
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
+  // Center image horizontally
+  int xPos = (viewportWidth - scaledWidth) / 2;
+  if (xPos < 0) xPos = 0;
+
+  // Add image to page
+  currentPage->elements.push_back(std::make_shared<PageImage>(cachePath, scaledWidth, scaledHeight, xPos, currentPageNextY));
+  currentPageNextY += scaledHeight;
+
+  // Add some spacing after image
+  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  currentPageNextY += lineHeight;
 }
