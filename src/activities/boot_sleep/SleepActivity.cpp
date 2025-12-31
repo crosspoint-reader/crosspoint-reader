@@ -5,8 +5,6 @@
 #include <SDCardManager.h>
 #include <Xtc.h>
 
-#include <vector>
-
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "fontIds.h"
