@@ -43,6 +43,7 @@ class CrossPointSettings {
   // Font size options
   enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3 };
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2 };
+  enum PARAGRAPH_ALIGNMENT { JUSTIFIED = 0, LEFT_ALIGN = 1, CENTER_ALIGN = 2, RIGHT_ALIGN = 3 };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
@@ -62,6 +63,7 @@ class CrossPointSettings {
   uint8_t fontFamily = BOOKERLY;
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
+  uint8_t paragraphAlignment = JUSTIFIED;
 
   ~CrossPointSettings() = default;
 

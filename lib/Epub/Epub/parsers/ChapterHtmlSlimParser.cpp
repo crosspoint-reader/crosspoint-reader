@@ -97,7 +97,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (strcmp(name, "br") == 0) {
       self->startNewTextBlock(self->currentTextBlock->getStyle());
     } else {
-      self->startNewTextBlock(TextBlock::JUSTIFIED);
+      self->startNewTextBlock((TextBlock::Style)self->paragraphAlignment);
     }
   } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
@@ -206,7 +206,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 }
 
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
-  startNewTextBlock(TextBlock::JUSTIFIED);
+  startNewTextBlock((TextBlock::Style)this->paragraphAlignment);
 
   const XML_Parser parser = XML_ParserCreate(nullptr);
   int done;
