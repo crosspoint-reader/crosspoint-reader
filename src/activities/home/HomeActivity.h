@@ -12,6 +12,7 @@ class HomeActivity final : public Activity {
   SemaphoreHandle_t renderingMutex = nullptr;
   int selectorIndex = 0;
   bool updateRequired = false;
+  mutable bool isFirstRender = true;
   bool hasContinueReading = false;
   std::string lastBookTitle;
   std::string lastBookAuthor;

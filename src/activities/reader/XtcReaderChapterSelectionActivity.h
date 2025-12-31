@@ -15,6 +15,7 @@ class XtcReaderChapterSelectionActivity final : public Activity {
   uint32_t currentPage = 0;
   int selectorIndex = 0;
   bool updateRequired = false;
+  mutable bool isFirstRender = true;
   const std::function<void()> onGoBack;
   const std::function<void(uint32_t newPage)> onSelectPage;
 

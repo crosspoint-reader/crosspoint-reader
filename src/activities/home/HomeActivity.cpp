@@ -18,6 +18,7 @@ int HomeActivity::getMenuItemCount() const { return hasContinueReading ? 4 : 3; 
 
 void HomeActivity::onEnter() {
   Activity::onEnter();
+  isFirstRender = true;
 
   renderingMutex = xSemaphoreCreateMutex();
 
@@ -318,5 +319,10 @@ void HomeActivity::render() const {
 
   ScreenComponents::drawBattery(renderer, margin, pageHeight - 68);
 
-  renderer.displayBuffer();
+  if (isFirstRender) {
+    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    isFirstRender = false;
+  } else {
+    renderer.displayBuffer();
+  }
 }

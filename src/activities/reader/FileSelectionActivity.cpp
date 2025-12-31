@@ -11,8 +11,8 @@ constexpr int PAGE_ITEMS = 20;
 constexpr int SKIP_PAGE_MS = 700;
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr int headerY = 16;
-constexpr int separatorY = 42;
-constexpr int listStartY = 54;
+constexpr int separatorY = 48;
+constexpr int listStartY = 60;
 constexpr int rowHeight = 28;
 constexpr int horizontalMargin = 16;
 }  // namespace
@@ -70,6 +70,7 @@ void FileSelectionActivity::loadFiles() {
 
 void FileSelectionActivity::onEnter() {
   Activity::onEnter();
+  lastRenderedPath.clear();  // Force HALF_REFRESH on first render
 
   renderingMutex = xSemaphoreCreateMutex();
 
@@ -107,8 +108,10 @@ void FileSelectionActivity::loop() {
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS) {
     if (basepath != "/") {
       basepath = "/";
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       loadFiles();
       updateRequired = true;
+      xSemaphoreGive(renderingMutex);
     }
     return;
   }
@@ -128,8 +131,10 @@ void FileSelectionActivity::loop() {
     if (basepath.back() != '/') basepath += "/";
     if (files[selectorIndex].back() == '/') {
       basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       loadFiles();
       updateRequired = true;
+      xSemaphoreGive(renderingMutex);
     } else {
       onSelect(basepath + files[selectorIndex]);
     }
@@ -139,8 +144,10 @@ void FileSelectionActivity::loop() {
       if (basepath != "/") {
         basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
         if (basepath.empty()) basepath = "/";
+        xSemaphoreTake(renderingMutex, portMAX_DELAY);
         loadFiles();
         updateRequired = true;
+        xSemaphoreGive(renderingMutex);
       } else {
         onGoHome();
       }
@@ -151,25 +158,29 @@ void FileSelectionActivity::loop() {
     } else {
       selectorIndex = (selectorIndex + files.size() - 1) % files.size();
     }
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
     updateRequired = true;
+    xSemaphoreGive(renderingMutex);
   } else if (nextReleased) {
     if (skipPage) {
       selectorIndex = ((selectorIndex / PAGE_ITEMS + 1) * PAGE_ITEMS) % files.size();
     } else {
       selectorIndex = (selectorIndex + 1) % files.size();
     }
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
     updateRequired = true;
+    xSemaphoreGive(renderingMutex);
   }
 }
 
 void FileSelectionActivity::displayTaskLoop() {
   while (true) {
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
     if (updateRequired) {
       updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       render();
-      xSemaphoreGive(renderingMutex);
     }
+    xSemaphoreGive(renderingMutex);
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
@@ -179,8 +190,11 @@ void FileSelectionActivity::render() const {
 
   const auto pageWidth = renderer.getScreenWidth();
 
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, headerY, "Books", true, EpdFontFamily::BOLD);
+  // Draw header with path
+  const std::string pathDisplay = basepath == "/" ? "Browse" : basepath;
+  const auto truncatedPath = renderer.truncatedText(UI_12_FONT_ID, pathDisplay.c_str(),
+                                                     pageWidth - horizontalMargin * 2, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, headerY, truncatedPath.c_str(), true, EpdFontFamily::BOLD);
 
   // Subtle separator line under header
   renderer.drawLine(horizontalMargin, separatorY, pageWidth - horizontalMargin, separatorY);
@@ -190,8 +204,16 @@ void FileSelectionActivity::render() const {
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (files.empty()) {
-    renderer.drawText(UI_10_FONT_ID, horizontalMargin + 4, listStartY, "No books found");
-    renderer.displayBuffer();
+    const int emptyY = listStartY + 40;
+    renderer.drawCenteredText(UI_10_FONT_ID, emptyY, "No files found");
+    renderer.drawCenteredText(SMALL_FONT_ID, emptyY + 24, "Supported: .epub, .xtc, .xtch");
+    // Use HALF_REFRESH when directory changed
+    if (basepath != lastRenderedPath) {
+      lastRenderedPath = basepath;
+      renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    } else {
+      renderer.displayBuffer();
+    }
     return;
   }
 
@@ -203,5 +225,11 @@ void FileSelectionActivity::render() const {
                       i != selectorIndex);
   }
 
-  renderer.displayBuffer();
+  // Use HALF_REFRESH when directory changed (basepath differs from last render)
+  if (basepath != lastRenderedPath) {
+    lastRenderedPath = basepath;
+    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+  } else {
+    renderer.displayBuffer();
+  }
 }

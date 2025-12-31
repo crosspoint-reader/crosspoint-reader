@@ -16,6 +16,7 @@ class FileSelectionActivity final : public Activity {
   std::vector<std::string> files;
   int selectorIndex = 0;
   bool updateRequired = false;
+  mutable std::string lastRenderedPath;
   const std::function<void(const std::string&)> onSelect;
   const std::function<void()> onGoHome;
 

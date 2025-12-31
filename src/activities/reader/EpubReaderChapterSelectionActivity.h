@@ -15,6 +15,7 @@ class EpubReaderChapterSelectionActivity final : public Activity {
   int currentSpineIndex = 0;
   int selectorIndex = 0;
   bool updateRequired = false;
+  mutable bool isFirstRender = true;
   const std::function<void()> onGoBack;
   const std::function<void(int newSpineIndex)> onSelectSpineIndex;
 

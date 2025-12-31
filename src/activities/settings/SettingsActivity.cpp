@@ -53,6 +53,7 @@ void SettingsActivity::taskTrampoline(void* param) {
 
 void SettingsActivity::onEnter() {
   Activity::onEnter();
+  isFirstRender = true;
 
   renderingMutex = xSemaphoreCreateMutex();
 
@@ -215,6 +216,11 @@ void SettingsActivity::render() const {
   const auto labels = mappedInput.mapLabels("« Save", "Toggle", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  // Always use standard refresh for settings screen
-  renderer.displayBuffer();
+  // Use HALF_REFRESH on first render to clear ghosting, then FAST_REFRESH
+  if (isFirstRender) {
+    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    isFirstRender = false;
+  } else {
+    renderer.displayBuffer();
+  }
 }

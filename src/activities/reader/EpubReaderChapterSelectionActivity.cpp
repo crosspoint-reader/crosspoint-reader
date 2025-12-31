@@ -34,6 +34,7 @@ void EpubReaderChapterSelectionActivity::taskTrampoline(void* param) {
 
 void EpubReaderChapterSelectionActivity::onEnter() {
   Activity::onEnter();
+  isFirstRender = true;
 
   if (!epub) {
     return;
@@ -139,9 +140,20 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
        tocIndex++) {
     auto item = epub->getTocItem(tocIndex);
     const int indentPx = (item.level - 1) * 12;
+    const auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(),
+                                                        pageWidth - horizontalMargin * 2 - 8 - indentPx);
     renderer.drawText(UI_10_FONT_ID, horizontalMargin + 4 + indentPx, listStartY + (tocIndex % pageItems) * rowHeight,
-                      item.title.c_str(), tocIndex != selectorIndex);
+                      truncatedTitle.c_str(), tocIndex != selectorIndex);
   }
 
-  renderer.displayBuffer();
+  // Draw button hints
+  const auto labels = mappedInput.mapLabels("« Back", "Go", "", "");
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (isFirstRender) {
+    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    isFirstRender = false;
+  } else {
+    renderer.displayBuffer();
+  }
 }

@@ -25,6 +25,7 @@ class SettingsActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
+  mutable bool isFirstRender = true;
   int selectedSettingIndex = 0;  // Currently selected setting
   const std::function<void()> onGoHome;
 

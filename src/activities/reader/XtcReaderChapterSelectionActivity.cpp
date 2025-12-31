@@ -43,6 +43,7 @@ void XtcReaderChapterSelectionActivity::taskTrampoline(void* param) {
 
 void XtcReaderChapterSelectionActivity::onEnter() {
   Activity::onEnter();
+  isFirstRender = true;
 
   if (!xtc) {
     return;
@@ -130,22 +131,49 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const int pageItems = getPageItems();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Select Chapter", true, EpdFontFamily::BOLD);
+
+  // Layout constants matching other screens
+  constexpr int headerY = 16;
+  constexpr int separatorY = 42;
+  constexpr int listStartY = 54;
+  constexpr int rowHeight = 28;
+  constexpr int horizontalMargin = 16;
+
+  // Draw header
+  renderer.drawCenteredText(UI_12_FONT_ID, headerY, "Chapters", true, EpdFontFamily::BOLD);
+
+  // Subtle separator line under header
+  renderer.drawLine(horizontalMargin, separatorY, pageWidth - horizontalMargin, separatorY);
 
   const auto& chapters = xtc->getChapters();
   if (chapters.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 120, "No chapters");
+    const int emptyY = listStartY + 40;
+    renderer.drawCenteredText(UI_10_FONT_ID, emptyY, "No chapters found");
     renderer.displayBuffer();
     return;
   }
 
+  // Draw selection highlight
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, listStartY + (selectorIndex % pageItems) * rowHeight - 2, pageWidth - 1, rowHeight);
+
+  // Draw chapter list
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
     const char* title = chapter.name.empty() ? "Unnamed" : chapter.name.c_str();
-    renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % pageItems) * 30, title, i != selectorIndex);
+    const auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, title, pageWidth - horizontalMargin * 2 - 8);
+    renderer.drawText(UI_10_FONT_ID, horizontalMargin + 4, listStartY + (i % pageItems) * rowHeight,
+                      truncatedTitle.c_str(), i != selectorIndex);
   }
 
-  renderer.displayBuffer();
+  // Draw button hints
+  const auto labels = mappedInput.mapLabels("« Back", "Go", "", "");
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (isFirstRender) {
+    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    isFirstRender = false;
+  } else {
+    renderer.displayBuffer();
+  }
 }
