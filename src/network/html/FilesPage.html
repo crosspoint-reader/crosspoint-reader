@@ -869,6 +869,8 @@ function uploadFile() {
     formData.append('file', file);
 
     const xhr = new XMLHttpRequest();
+    // Include path as query parameter since multipart form data doesn't make
+    // form fields available until after file upload completes
     xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
 
     progressFill.style.width = '0%';
