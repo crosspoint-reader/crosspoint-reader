@@ -13,8 +13,12 @@ class HomeActivity final : public Activity {
   int selectorIndex = 0;
   bool updateRequired = false;
   bool hasContinueReading = false;
+  bool hasCoverImage = false;
+  bool coverRendered = false;      // Track if cover has been rendered once
+  bool coverBufferStored = false;  // Track if cover buffer is stored
   std::string lastBookTitle;
   std::string lastBookAuthor;
+  std::string coverBmpPath;
   const std::function<void()> onContinueReading;
   const std::function<void()> onReaderOpen;
   const std::function<void()> onSettingsOpen;
@@ -22,7 +26,7 @@ class HomeActivity final : public Activity {
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
-  void render() const;
+  void render();
   int getMenuItemCount() const;
 
  public:

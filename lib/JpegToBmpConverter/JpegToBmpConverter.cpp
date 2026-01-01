@@ -356,7 +356,7 @@ void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
 }
 
 // Helper function: Write BMP header with 2-bit color depth
-void JpegToBmpConverter::writeBmpHeader(Print& bmpOut, const int width, const int height) {
+static void writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
   // Calculate row padding (each row must be multiple of 4 bytes)
   const int bytesPerRow = (width * 2 + 31) / 32 * 4;  // 2 bits per pixel, round up
   const int imageSize = bytesPerRow * height;
@@ -427,9 +427,10 @@ unsigned char JpegToBmpConverter::jpegReadCallback(unsigned char* pBuf, const un
   return 0;  // Success
 }
 
-// Core function: Convert JPEG file to 2-bit BMP
-bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
-  Serial.printf("[%lu] [JPG] Converting JPEG to BMP\n", millis());
+// Internal implementation with configurable target size
+bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bmpOut, int targetWidth,
+                                                     int targetHeight) {
+  Serial.printf("[%lu] [JPG] Converting JPEG to BMP (target: %dx%d)\n", millis(), targetWidth, targetHeight);
 
   // Setup context for picojpeg callback
   JpegReadContext context = {.file = jpegFile, .bufferPos = 0, .bufferFilled = 0};
@@ -464,10 +465,10 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
   uint32_t scaleY_fp = 65536;
   bool needsScaling = false;
 
-  if (USE_PRESCALE && (imageInfo.m_width > TARGET_MAX_WIDTH || imageInfo.m_height > TARGET_MAX_HEIGHT)) {
+  if (targetWidth > 0 && targetHeight > 0 && (imageInfo.m_width > targetWidth || imageInfo.m_height > targetHeight)) {
     // Calculate scale to fit within target dimensions while maintaining aspect ratio
-    const float scaleToFitWidth = static_cast<float>(TARGET_MAX_WIDTH) / imageInfo.m_width;
-    const float scaleToFitHeight = static_cast<float>(TARGET_MAX_HEIGHT) / imageInfo.m_height;
+    const float scaleToFitWidth = static_cast<float>(targetWidth) / imageInfo.m_width;
+    const float scaleToFitHeight = static_cast<float>(targetHeight) / imageInfo.m_height;
     const float scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
 
     outWidth = static_cast<int>(imageInfo.m_width * scale);
@@ -484,7 +485,7 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
     needsScaling = true;
 
     Serial.printf("[%lu] [JPG] Pre-scaling %dx%d -> %dx%d (fit to %dx%d)\n", millis(), imageInfo.m_width,
-                  imageInfo.m_height, outWidth, outHeight, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT);
+                  imageInfo.m_height, outWidth, outHeight, targetWidth, targetHeight);
   }
 
   // Write BMP header with output dimensions
@@ -493,7 +494,7 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
     writeBmpHeader8bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth + 3) / 4 * 4;
   } else {
-    writeBmpHeader(bmpOut, outWidth, outHeight);
+    writeBmpHeader2bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
@@ -735,4 +736,15 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
 
   Serial.printf("[%lu] [JPG] Successfully converted JPEG to BMP\n", millis());
   return true;
+}
+
+// Core function: Convert JPEG file to 2-bit BMP (uses default target size)
+bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT);
+}
+
+// Convert with custom target size (for thumbnails)
+bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
+                                                     int targetMaxHeight) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight);
 }

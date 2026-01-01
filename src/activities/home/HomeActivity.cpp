@@ -1,13 +1,50 @@
 #include "HomeActivity.h"
 
+#include <Bitmap.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
+#include <Xtc.h>
 
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
+
+namespace {
+// Check if path has XTC extension (.xtc or .xtch)
+bool isXtcFile(const std::string& path) {
+  if (path.length() < 4) return false;
+  std::string ext4 = path.substr(path.length() - 4);
+  if (ext4 == ".xtc") return true;
+  if (path.length() >= 5) {
+    std::string ext5 = path.substr(path.length() - 5);
+    if (ext5 == ".xtch") return true;
+  }
+  return false;
+}
+
+// UTF-8 safe string truncation - removes one character from the end
+// Returns the new size after removing one UTF-8 character
+size_t utf8RemoveLastChar(std::string& str) {
+  if (str.empty()) return 0;
+  size_t pos = str.size() - 1;
+  // Walk back to find the start of the last UTF-8 character
+  // UTF-8 continuation bytes start with 10xxxxxx (0x80-0xBF)
+  while (pos > 0 && (static_cast<unsigned char>(str[pos]) & 0xC0) == 0x80) {
+    --pos;
+  }
+  str.resize(pos);
+  return pos;
+}
+
+// Truncate string by removing N UTF-8 characters from the end
+void utf8TruncateChars(std::string& str, size_t numChars) {
+  for (size_t i = 0; i < numChars && !str.empty(); ++i) {
+    utf8RemoveLastChar(str);
+  }
+}
+}  // namespace
 
 void HomeActivity::taskTrampoline(void* param) {
   auto* self = static_cast<HomeActivity*>(param);
@@ -34,7 +71,7 @@ void HomeActivity::onEnter() {
 
     const std::string ext4 = lastBookTitle.length() >= 4 ? lastBookTitle.substr(lastBookTitle.length() - 4) : "";
     const std::string ext5 = lastBookTitle.length() >= 5 ? lastBookTitle.substr(lastBookTitle.length() - 5) : "";
-    // If epub, try to load the metadata for title/author
+    // If epub, try to load the metadata for title/author and cover
     if (ext5 == ".epub") {
       Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
       epub.load(false);
@@ -44,10 +81,30 @@ void HomeActivity::onEnter() {
       if (!epub.getAuthor().empty()) {
         lastBookAuthor = std::string(epub.getAuthor());
       }
-    } else if (ext5 == ".xtch") {
-      lastBookTitle.resize(lastBookTitle.length() - 5);
-    } else if (ext4 == ".xtc") {
-      lastBookTitle.resize(lastBookTitle.length() - 4);
+      // Try to generate thumbnail image for Continue Reading card
+      if (epub.generateThumbBmp()) {
+        coverBmpPath = epub.getThumbBmpPath();
+        hasCoverImage = true;
+      }
+    } else if (ext5 == ".xtch" || ext4 == ".xtc") {
+      // Handle XTC file
+      Xtc xtc(APP_STATE.openEpubPath, "/.crosspoint");
+      if (xtc.load()) {
+        if (!xtc.getTitle().empty()) {
+          lastBookTitle = std::string(xtc.getTitle());
+        }
+        // Try to generate thumbnail image for Continue Reading card
+        if (xtc.generateThumbBmp()) {
+          coverBmpPath = xtc.getThumbBmpPath();
+          hasCoverImage = true;
+        }
+      }
+      // Remove extension from title if we don't have metadata
+      if (lastBookTitle.length() >= 5 && ext5 == ".xtch") {
+        lastBookTitle.resize(lastBookTitle.length() - 5);
+      } else if (lastBookTitle.length() >= 4 && ext4 == ".xtc") {
+        lastBookTitle.resize(lastBookTitle.length() - 4);
+      }
     }
   }
 
@@ -57,7 +114,7 @@ void HomeActivity::onEnter() {
   updateRequired = true;
 
   xTaskCreate(&HomeActivity::taskTrampoline, "HomeActivityTask",
-              2048,               // Stack size
+              4096,               // Stack size (increased for cover image rendering)
               this,               // Parameters
               1,                  // Priority
               &displayTaskHandle  // Task handle
@@ -75,6 +132,12 @@ void HomeActivity::onExit() {
   }
   vSemaphoreDelete(renderingMutex);
   renderingMutex = nullptr;
+
+  // Free the stored cover buffer if any
+  if (coverBufferStored) {
+    renderer.freeStoredBwBuffer();
+    coverBufferStored = false;
+  }
 }
 
 void HomeActivity::loop() {
@@ -128,8 +191,12 @@ void HomeActivity::displayTaskLoop() {
   }
 }
 
-void HomeActivity::render() const {
-  renderer.clearScreen();
+void HomeActivity::render() {
+  // If we have a stored cover buffer, restore it instead of clearing
+  const bool bufferRestored = coverBufferStored && renderer.copyStoredBwBuffer();
+  if (!bufferRestored) {
+    renderer.clearScreen();
+  }
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -146,32 +213,92 @@ void HomeActivity::render() const {
 
   // Draw book card regardless, fill with message based on `hasContinueReading`
   {
-    if (bookSelected) {
-      renderer.fillRect(bookX, bookY, bookWidth, bookHeight);
-    } else {
-      renderer.drawRect(bookX, bookY, bookWidth, bookHeight);
+    // Draw cover image as background if available (inside the box)
+    // Only load from SD on first render, then use stored buffer
+    if (hasContinueReading && hasCoverImage && !coverBmpPath.empty() && !coverRendered) {
+      // First time: load cover from SD and store buffer
+      FsFile file;
+      if (SdMan.openFileForRead("HOME", coverBmpPath, file)) {
+        Bitmap bitmap(file);
+        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          // Calculate position to center image within the book card
+          int coverX, coverY;
+
+          if (bitmap.getWidth() > bookWidth || bitmap.getHeight() > bookHeight) {
+            const float imgRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+            const float boxRatio = static_cast<float>(bookWidth) / static_cast<float>(bookHeight);
+
+            if (imgRatio > boxRatio) {
+              coverX = bookX;
+              coverY = bookY + (bookHeight - static_cast<int>(bookWidth / imgRatio)) / 2;
+            } else {
+              coverX = bookX + (bookWidth - static_cast<int>(bookHeight * imgRatio)) / 2;
+              coverY = bookY;
+            }
+          } else {
+            coverX = bookX + (bookWidth - bitmap.getWidth()) / 2;
+            coverY = bookY + (bookHeight - bitmap.getHeight()) / 2;
+          }
+
+          // Draw the cover image centered within the book card
+          renderer.drawBitmap(bitmap, coverX, coverY, bookWidth, bookHeight);
+
+          // Draw border around the card
+          renderer.drawRect(bookX, bookY, bookWidth, bookHeight);
+
+          coverRendered = true;
+          // Store the buffer with cover image for fast navigation
+          coverBufferStored = renderer.storeBwBuffer();
+        }
+        file.close();
+      }
+    } else if (!bufferRestored && !coverRendered) {
+      // No cover image: draw border or fill
+      if (bookSelected) {
+        renderer.fillRect(bookX, bookY, bookWidth, bookHeight);
+      } else {
+        renderer.drawRect(bookX, bookY, bookWidth, bookHeight);
+      }
     }
 
-    // Bookmark icon in the top-right corner of the card
-    const int bookmarkWidth = bookWidth / 8;
-    const int bookmarkHeight = bookHeight / 5;
-    const int bookmarkX = bookX + bookWidth - bookmarkWidth - 8;
-    constexpr int bookmarkY = bookY + 1;
-
-    // Main bookmark body (solid)
-    renderer.fillRect(bookmarkX, bookmarkY, bookmarkWidth, bookmarkHeight, !bookSelected);
-
-    // Carve out an inverted triangle notch at the bottom center to create angled points
-    const int notchHeight = bookmarkHeight / 2;  // depth of the notch
-    for (int i = 0; i < notchHeight; ++i) {
-      const int y = bookmarkY + bookmarkHeight - 1 - i;
-      const int xStart = bookmarkX + i;
-      const int width = bookmarkWidth - 2 * i;
-      if (width <= 0) {
-        break;
+    // If buffer was restored, just draw selection border if needed
+    if (bufferRestored && bookSelected) {
+      renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
+      renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
+    } else if (!coverRendered) {
+      // No cover: draw border for non-cover case
+      renderer.drawRect(bookX, bookY, bookWidth, bookHeight);
+      if (bookSelected) {
+        renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
+        renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
       }
-      // Draw a horizontal strip in the opposite color to "cut" the notch
-      renderer.fillRect(xStart, y, width, 1, bookSelected);
+    }
+
+    // Bookmark icon in the top-right corner of the card (inside the box)
+    // Skip if buffer was restored (bookmark is already in the buffer)
+    if (!bufferRestored) {
+      const int bookmarkWidth = bookWidth / 8;
+      const int bookmarkHeight = bookHeight / 5;
+      const int bookmarkX = bookX + bookWidth - bookmarkWidth - 10;
+      const int bookmarkY = bookY + 5;
+
+      // Main bookmark body (solid) - white on cover, inverted on selection
+      const bool bookmarkWhite = coverRendered ? true : !bookSelected;
+      renderer.fillRect(bookmarkX, bookmarkY, bookmarkWidth, bookmarkHeight, bookmarkWhite);
+
+      // Carve out an inverted triangle notch at the bottom center to create angled points
+      const int notchHeight = bookmarkHeight / 2;  // depth of the notch
+      const bool notchColor = coverRendered ? false : bookSelected;
+      for (int i = 0; i < notchHeight; ++i) {
+        const int y = bookmarkY + bookmarkHeight - 1 - i;
+        const int xStart = bookmarkX + i;
+        const int width = bookmarkWidth - 2 * i;
+        if (width <= 0) {
+          break;
+        }
+        // Draw a horizontal strip in the opposite color to "cut" the notch
+        renderer.fillRect(xStart, y, width, 1, notchColor);
+      }
     }
   }
 
@@ -208,18 +335,25 @@ void HomeActivity::render() const {
         lines.back().append("...");
 
         while (!lines.back().empty() && renderer.getTextWidth(UI_12_FONT_ID, lines.back().c_str()) > maxLineWidth) {
-          lines.back().resize(lines.back().size() - 5);
+          // Remove "..." first, then remove one UTF-8 char, then add "..." back
+          lines.back().resize(lines.back().size() - 3);  // Remove "..."
+          utf8RemoveLastChar(lines.back());
           lines.back().append("...");
         }
         break;
       }
 
       int wordWidth = renderer.getTextWidth(UI_12_FONT_ID, i.c_str());
-      while (wordWidth > maxLineWidth && i.size() > 5) {
-        // Word itself is too long, trim it
-        i.resize(i.size() - 5);
-        i.append("...");
-        wordWidth = renderer.getTextWidth(UI_12_FONT_ID, i.c_str());
+      while (wordWidth > maxLineWidth && !i.empty()) {
+        // Word itself is too long, trim it (UTF-8 safe)
+        utf8RemoveLastChar(i);
+        // Check if we have room for ellipsis
+        std::string withEllipsis = i + "...";
+        wordWidth = renderer.getTextWidth(UI_12_FONT_ID, withEllipsis.c_str());
+        if (wordWidth <= maxLineWidth) {
+          i = withEllipsis;
+          break;
+        }
       }
 
       int newLineWidth = renderer.getTextWidth(UI_12_FONT_ID, currentLine.c_str());
@@ -251,24 +385,85 @@ void HomeActivity::render() const {
     // Vertically center the title block within the card
     int titleYStart = bookY + (bookHeight - totalTextHeight) / 2;
 
+    // If cover image was rendered, draw white box behind title and author
+    if (coverRendered) {
+      constexpr int boxPadding = 8;
+      // Calculate the max text width for the box
+      int maxTextWidth = 0;
+      for (const auto& line : lines) {
+        const int lineWidth = renderer.getTextWidth(UI_12_FONT_ID, line.c_str());
+        if (lineWidth > maxTextWidth) {
+          maxTextWidth = lineWidth;
+        }
+      }
+      if (!lastBookAuthor.empty()) {
+        std::string trimmedAuthor = lastBookAuthor;
+        while (renderer.getTextWidth(UI_10_FONT_ID, trimmedAuthor.c_str()) > maxLineWidth && !trimmedAuthor.empty()) {
+          utf8RemoveLastChar(trimmedAuthor);
+        }
+        if (renderer.getTextWidth(UI_10_FONT_ID, trimmedAuthor.c_str()) <
+            renderer.getTextWidth(UI_10_FONT_ID, lastBookAuthor.c_str())) {
+          trimmedAuthor.append("...");
+        }
+        const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, trimmedAuthor.c_str());
+        if (authorWidth > maxTextWidth) {
+          maxTextWidth = authorWidth;
+        }
+      }
+
+      const int boxWidth = maxTextWidth + boxPadding * 2;
+      const int boxHeight = totalTextHeight + boxPadding * 2;
+      const int boxX = (pageWidth - boxWidth) / 2;
+      const int boxY = titleYStart - boxPadding;
+
+      // Draw white filled box
+      renderer.fillRect(boxX, boxY, boxWidth, boxHeight, false);
+      // Draw black border around the box
+      renderer.drawRect(boxX, boxY, boxWidth, boxHeight, true);
+    }
+
     for (const auto& line : lines) {
-      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), !bookSelected);
+      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), !bookSelected || coverRendered);
       titleYStart += renderer.getLineHeight(UI_12_FONT_ID);
     }
 
     if (!lastBookAuthor.empty()) {
       titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
       std::string trimmedAuthor = lastBookAuthor;
-      // Trim author if too long
+      // Trim author if too long (UTF-8 safe)
+      bool wasTrimmed = false;
       while (renderer.getTextWidth(UI_10_FONT_ID, trimmedAuthor.c_str()) > maxLineWidth && !trimmedAuthor.empty()) {
-        trimmedAuthor.resize(trimmedAuthor.size() - 5);
+        utf8RemoveLastChar(trimmedAuthor);
+        wasTrimmed = true;
+      }
+      if (wasTrimmed && !trimmedAuthor.empty()) {
+        // Make room for ellipsis
+        while (renderer.getTextWidth(UI_10_FONT_ID, (trimmedAuthor + "...").c_str()) > maxLineWidth &&
+               !trimmedAuthor.empty()) {
+          utf8RemoveLastChar(trimmedAuthor);
+        }
         trimmedAuthor.append("...");
       }
-      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, trimmedAuthor.c_str(), !bookSelected);
+      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, trimmedAuthor.c_str(), !bookSelected || coverRendered);
     }
 
-    renderer.drawCenteredText(UI_10_FONT_ID, bookY + bookHeight - renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2,
-                              "Continue Reading", !bookSelected);
+    // "Continue Reading" label at the bottom
+    const int continueY = bookY + bookHeight - renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
+    if (coverRendered) {
+      // Draw white box behind "Continue Reading" text
+      const char* continueText = "Continue Reading";
+      const int continueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, continueText);
+      constexpr int continuePadding = 6;
+      const int continueBoxWidth = continueTextWidth + continuePadding * 2;
+      const int continueBoxHeight = renderer.getLineHeight(UI_10_FONT_ID) + continuePadding;
+      const int continueBoxX = (pageWidth - continueBoxWidth) / 2;
+      const int continueBoxY = continueY - continuePadding / 2;
+      renderer.fillRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, false);
+      renderer.drawRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, true);
+      renderer.drawCenteredText(UI_10_FONT_ID, continueY, continueText, true);
+    } else {
+      renderer.drawCenteredText(UI_10_FONT_ID, continueY, "Continue Reading", !bookSelected);
+    }
   } else {
     // No book to continue reading
     const int y =

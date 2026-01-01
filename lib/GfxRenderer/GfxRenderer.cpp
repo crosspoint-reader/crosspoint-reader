@@ -181,12 +181,13 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
     // Screen's (0, 0) is the top-left corner.
-    int screenY = y + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
-    if (isScaled) {
-      screenY = std::floor(screenY * scale);
-    }
+    const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
+    int screenY = y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale)) : bmpYOffset);
     if (screenY >= getScreenHeight()) {
       break;
+    }
+    if (screenY < 0) {
+      continue;
     }
 
     if (bitmap.readRow(outputRow, rowBytes, bmpY) != BmpReaderError::Ok) {
@@ -197,12 +198,12 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     }
 
     for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
-      int screenX = x + bmpX;
-      if (isScaled) {
-        screenX = std::floor(screenX * scale);
-      }
+      int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
       if (screenX >= getScreenWidth()) {
         break;
+      }
+      if (screenX < 0) {
+        continue;
       }
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
@@ -434,6 +435,61 @@ void GfxRenderer::restoreBwBuffer() {
   freeBwBufferChunks();
   Serial.printf("[%lu] [GFX] Restored and freed BW buffer chunks\n", millis());
 }
+
+bool GfxRenderer::copyStoredBwBuffer() {
+  // Check if all chunks are allocated
+  for (const auto& bwBufferChunk : bwBufferChunks) {
+    if (!bwBufferChunk) {
+      return false;
+    }
+  }
+
+  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer) {
+    return false;
+  }
+
+  for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
+    const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
+    memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
+  }
+
+  return true;
+}
+
+void GfxRenderer::freeStoredBwBuffer() { freeBwBufferChunks(); }
+
+/**
+ * Copy stored BW buffer to framebuffer without freeing the stored chunks.
+ * Use this when you want to restore the buffer but keep it for later reuse.
+ * Returns true if buffer was copied successfully.
+ */
+bool GfxRenderer::copyStoredBwBuffer() {
+  // Check if all chunks are allocated
+  for (const auto& bwBufferChunk : bwBufferChunks) {
+    if (!bwBufferChunk) {
+      return false;
+    }
+  }
+
+  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer) {
+    return false;
+  }
+
+  for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
+    const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
+    memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
+  }
+
+  return true;
+}
+
+/**
+ * Free the stored BW buffer chunks manually.
+ * Use this when you no longer need the stored buffer.
+ */
+void GfxRenderer::freeStoredBwBuffer() { freeBwBufferChunks(); }
 
 /**
  * Cleanup grayscale buffers using the current frame buffer.
