@@ -82,6 +82,15 @@ class GfxRenderer {
 
   // UI Components
   void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4) const;
+  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn) const;
+
+ private:
+  // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
+  void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
+                           EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  int getTextHeight(int fontId) const;
+
+ public:
 
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }

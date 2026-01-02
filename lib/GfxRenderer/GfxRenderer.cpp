@@ -327,6 +327,147 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
   }
 }
 
+void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, const char* bottomBtn) const {
+  const int screenWidth = getScreenWidth();
+  constexpr int buttonWidth = 40;   // Width on screen (height when rotated)
+  constexpr int buttonHeight = 80;  // Height on screen (width when rotated)
+  constexpr int buttonX = 5;        // Distance from right edge
+  // Position for the button group - buttons share a border so they're adjacent
+  constexpr int topButtonY = 320;  // Top button position
+
+  const char* labels[] = {topBtn, bottomBtn};
+
+  // Draw the shared border for both buttons as one unit
+  const int x = screenWidth - buttonX - buttonWidth;
+
+  // Draw top button outline (3 sides, bottom open)
+  if (topBtn != nullptr && topBtn[0] != '\0') {
+    drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);                  // Top
+    drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);                 // Left
+    drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);  // Right
+  }
+
+  // Draw shared middle border
+  if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
+    drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);  // Shared border
+  }
+
+  // Draw bottom button outline (3 sides, top is shared)
+  if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
+    drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);                 // Left
+    drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);  // Right
+    drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);  // Bottom
+  }
+
+  // Draw text for each button
+  for (int i = 0; i < 2; i++) {
+    if (labels[i] != nullptr && labels[i][0] != '\0') {
+      const int y = topButtonY + i * buttonHeight;
+
+      // Draw rotated text centered in the button
+      const int textWidth = getTextWidth(fontId, labels[i]);
+      const int textHeight = getTextHeight(fontId);
+
+      // Center the rotated text in the button
+      const int textX = x + (buttonWidth - textHeight) / 2;
+      const int textY = y + (buttonHeight + textWidth) / 2;
+
+      drawTextRotated90CW(fontId, textX, textY, labels[i]);
+    }
+  }
+}
+
+int GfxRenderer::getTextHeight(const int fontId) const {
+  if (fontMap.count(fontId) == 0) {
+    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    return 0;
+  }
+  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+}
+
+void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
+                                      const EpdFontFamily::Style style) const {
+  // Cannot draw a NULL / empty string
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  if (fontMap.count(fontId) == 0) {
+    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    return;
+  }
+  const auto font = fontMap.at(fontId);
+
+  // No printable characters
+  if (!font.hasPrintableChars(text, style)) {
+    return;
+  }
+
+  // For 90° clockwise rotation:
+  // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
+  // Text reads from bottom to top
+
+  int yPos = y;  // Current Y position (decreases as we draw characters)
+
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      glyph = font.getGlyph('?', style);
+    }
+    if (!glyph) {
+      continue;
+    }
+
+    const int is2Bit = font.getData(style)->is2Bit;
+    const uint32_t offset = glyph->dataOffset;
+    const uint8_t width = glyph->width;
+    const uint8_t height = glyph->height;
+    const int left = glyph->left;
+    const int top = glyph->top;
+
+    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
+
+    if (bitmap != nullptr) {
+      for (int glyphY = 0; glyphY < height; glyphY++) {
+        for (int glyphX = 0; glyphX < width; glyphX++) {
+          const int pixelPosition = glyphY * width + glyphX;
+
+          // 90° clockwise rotation transformation:
+          // screenX = x + (ascender - top + glyphY)
+          // screenY = yPos - (left + glyphX)
+          const int screenX = x + (font.getData(style)->ascender - top + glyphY);
+          const int screenY = yPos - left - glyphX;
+
+          if (is2Bit) {
+            const uint8_t byte = bitmap[pixelPosition / 4];
+            const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+            const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
+
+            if (renderMode == BW && bmpVal < 3) {
+              drawPixel(screenX, screenY, black);
+            } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+              drawPixel(screenX, screenY, false);
+            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+              drawPixel(screenX, screenY, false);
+            }
+          } else {
+            const uint8_t byte = bitmap[pixelPosition / 8];
+            const uint8_t bit_index = 7 - (pixelPosition % 8);
+
+            if ((byte >> bit_index) & 1) {
+              drawPixel(screenX, screenY, black);
+            }
+          }
+        }
+      }
+    }
+
+    // Move to next character position (going up, so decrease Y)
+    yPos -= glyph->advanceX;
+  }
+}
+
 uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
