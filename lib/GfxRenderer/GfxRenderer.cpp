@@ -342,8 +342,8 @@ void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, cons
 
   // Draw top button outline (3 sides, bottom open)
   if (topBtn != nullptr && topBtn[0] != '\0') {
-    drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);                  // Top
-    drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);                 // Left
+    drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);                                       // Top
+    drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);                                      // Left
     drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);  // Right
   }
 
@@ -354,8 +354,9 @@ void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, cons
 
   // Draw bottom button outline (3 sides, top is shared)
   if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-    drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);                 // Left
-    drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);  // Right
+    drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);  // Left
+    drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1,
+             topButtonY + 2 * buttonHeight - 1);                                                             // Right
     drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);  // Bottom
   }
 

@@ -91,7 +91,6 @@ class GfxRenderer {
   int getTextHeight(int fontId) const;
 
  public:
-
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   void copyGrayscaleLsbBuffers() const;
