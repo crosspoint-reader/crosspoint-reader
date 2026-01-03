@@ -1,18 +1,21 @@
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <WiFi.h>
 
 #include <cstring>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "activities/network/CalibreWirelessActivity.h"
+#include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "fontIds.h"
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 14;
+constexpr int settingsCount = 15;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     {"Sleep Screen", SettingType::ENUM, &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover"}},
@@ -43,6 +46,7 @@ const SettingInfo settingsList[settingsCount] = {
      {"Justify", "Left", "Center", "Right"}},
     {"Reader Side Margin", SettingType::ENUM, &CrossPointSettings::sideMargin, {"None", "Small", "Medium", "Large"}},
     {"Calibre Web URL", SettingType::ACTION, nullptr, {}},
+    {"Calibre Wireless Device", SettingType::TOGGLE, &CrossPointSettings::calibreWirelessEnabled, {}},
     {"Check for updates", SettingType::ACTION, nullptr, {}},
 };
 }  // namespace
@@ -131,6 +135,37 @@ void SettingsActivity::toggleCurrentSetting() {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+
+    // Special handling for Calibre Wireless Device - launch activity when toggled ON
+    if (std::string(setting.name) == "Calibre Wireless Device" && !currentValue) {
+      SETTINGS.saveToFile();
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      // Check WiFi connectivity first
+      if (WiFi.status() != WL_CONNECTED) {
+        enterNewActivity(new WifiSelectionActivity(renderer, mappedInput, [this](bool connected) {
+          exitActivity();
+          if (connected) {
+            enterNewActivity(new CalibreWirelessActivity(renderer, mappedInput, [this] {
+              exitActivity();
+              updateRequired = true;
+            }));
+          } else {
+            // WiFi connection failed/cancelled, turn off the setting
+            SETTINGS.calibreWirelessEnabled = 0;
+            SETTINGS.saveToFile();
+            updateRequired = true;
+          }
+        }));
+      } else {
+        enterNewActivity(new CalibreWirelessActivity(renderer, mappedInput, [this] {
+          exitActivity();
+          updateRequired = true;
+        }));
+      }
+      xSemaphoreGive(renderingMutex);
+      return;  // Don't save again at the end
+    }
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());

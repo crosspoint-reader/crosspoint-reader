@@ -68,6 +68,8 @@ class CrossPointSettings {
   uint8_t sideMargin = MARGIN_SMALL;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
+  // Calibre wireless device settings
+  uint8_t calibreWirelessEnabled = 0;
 
   ~CrossPointSettings() = default;
 
