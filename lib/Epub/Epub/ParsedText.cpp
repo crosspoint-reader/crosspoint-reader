@@ -1,6 +1,7 @@
 #include "ParsedText.h"
 
 #include <GfxRenderer.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cmath>
@@ -9,6 +10,7 @@
 #include <limits>
 #include <vector>
 
+#include "hyphenation/HyphenationCommon.h"
 #include "hyphenation/Hyphenator.h"
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
@@ -18,7 +20,37 @@ namespace {
 struct HyphenSplitDecision {
   size_t byteOffset;
   uint16_t prefixWidth;
+  bool appendHyphen;  // true when we must draw an extra hyphen after the prefix glyphs
 };
+
+// Verifies whether the substring ending at `offset` already contains a literal hyphen glyph, so we can avoid
+// drawing a duplicate hyphen when breaking the word.
+bool endsWithExplicitHyphen(const std::string& word, const size_t offset) {
+  if (offset == 0 || offset > word.size()) {
+    return false;
+  }
+
+  const unsigned char* base = reinterpret_cast<const unsigned char*>(word.data());
+  const unsigned char* ptr = base;
+  const unsigned char* target = base + offset;
+  const unsigned char* lastStart = nullptr;
+
+  while (ptr < target) {
+    lastStart = ptr;
+    utf8NextCodepoint(&ptr);
+    if (ptr > target) {
+      return false;
+    }
+  }
+
+  if (!lastStart || ptr != target) {
+    return false;
+  }
+
+  const unsigned char* tmp = lastStart;
+  const uint32_t cp = utf8NextCodepoint(&tmp);  // decode the codepoint immediately prior to the break
+  return isExplicitHyphen(cp);
+}
 
 bool chooseSplitForWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
                          const EpdFontStyle style, const int availableWidth, const bool includeFallback,
@@ -28,10 +60,6 @@ bool chooseSplitForWidth(const GfxRenderer& renderer, const int fontId, const st
   }
 
   const int hyphenWidth = renderer.getTextWidth(fontId, "-", style);
-  const int adjustedWidth = availableWidth - hyphenWidth;
-  if (adjustedWidth <= 0) {
-    return false;
-  }
 
   auto offsets = Hyphenator::breakOffsets(word, includeFallback);
   if (offsets.empty()) {
@@ -40,13 +68,20 @@ bool chooseSplitForWidth(const GfxRenderer& renderer, const int fontId, const st
 
   size_t chosenOffset = std::numeric_limits<size_t>::max();
   uint16_t chosenWidth = 0;
+  bool chosenAppendHyphen = true;
 
   for (const size_t offset : offsets) {
+    const bool needsInsertedHyphen = !endsWithExplicitHyphen(word, offset);
+    const int budget = availableWidth - (needsInsertedHyphen ? hyphenWidth : 0);
+    if (budget <= 0) {
+      continue;
+    }
     const std::string prefix = word.substr(0, offset);
     const int prefixWidth = renderer.getTextWidth(fontId, prefix.c_str(), style);
-    if (prefixWidth <= adjustedWidth) {
+    if (prefixWidth <= budget) {
       chosenOffset = offset;
-      chosenWidth = static_cast<uint16_t>(prefixWidth + hyphenWidth);
+      chosenWidth = static_cast<uint16_t>(prefixWidth + (needsInsertedHyphen ? hyphenWidth : 0));
+      chosenAppendHyphen = needsInsertedHyphen;
     } else {
       break;
     }
@@ -58,6 +93,7 @@ bool chooseSplitForWidth(const GfxRenderer& renderer, const int fontId, const st
 
   decision->byteOffset = chosenOffset;
   decision->prefixWidth = chosenWidth;
+  decision->appendHyphen = chosenAppendHyphen;
   return true;
 }
 
@@ -110,14 +146,17 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
     uint16_t width = renderer.getTextWidth(fontId, wordsIt->c_str(), *wordStylesIt);
 
     if (width > pageWidth) {
-      HyphenSplitDecision decision;
+      HyphenSplitDecision decision{};
       if (chooseSplitForWidth(renderer, fontId, *wordsIt, *wordStylesIt, pageWidth, true, &decision)) {
         const std::string originalWord = *wordsIt;
         const std::string tail = originalWord.substr(decision.byteOffset);
         if (tail.empty()) {
           continue;
         }
-        const std::string prefix = originalWord.substr(0, decision.byteOffset) + "-";
+        std::string prefix = originalWord.substr(0, decision.byteOffset);
+        if (decision.appendHyphen) {
+          prefix += "-";
+        }
 
         *wordsIt = prefix;
         auto nextWordIt = words.insert(std::next(wordsIt), tail);
@@ -235,7 +274,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
         }
 
         const int availableWidth = pageWidth - lineWidth - interWordSpace;
-        HyphenSplitDecision decision;
+        HyphenSplitDecision decision{};
         if (!chooseSplitForWidth(renderer, fontId, *wordNodeIt, *styleNodeIt, availableWidth, false, &decision)) {
           break;
         }
@@ -245,7 +284,10 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
         if (tail.empty()) {
           break;
         }
-        const std::string prefix = originalWord.substr(0, decision.byteOffset) + "-";
+        std::string prefix = originalWord.substr(0, decision.byteOffset);
+        if (decision.appendHyphen) {
+          prefix += "-";
+        }
 
         const EpdFontStyle styleForSplit = *styleNodeIt;
         *wordNodeIt = tail;

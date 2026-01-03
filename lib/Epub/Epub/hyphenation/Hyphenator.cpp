@@ -48,8 +48,6 @@ std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
   return cps;
 }
 
-bool isExplicitHyphen(const uint32_t cp) { return cp == '-' || cp == 0x2010; }
-
 std::vector<size_t> collectExplicitHyphenIndexes(const std::vector<CodepointInfo>& cps) {
   std::vector<size_t> indexes;
   for (size_t i = 0; i < cps.size(); ++i) {
@@ -72,6 +70,32 @@ std::vector<size_t> collectExplicitHyphenIndexes(const std::vector<CodepointInfo
     indexes.push_back(breakIndex);
   }
   return indexes;
+}
+
+bool isAsciiDigit(const uint32_t cp) { return cp >= '0' && cp <= '9'; }
+
+void trimTrailingFootnoteReference(std::vector<CodepointInfo>& cps) {
+  if (cps.size() < 3) {
+    return;
+  }
+  int closing = static_cast<int>(cps.size()) - 1;
+  if (cps[closing].value != ']') {
+    return;
+  }
+  int pos = closing - 1;
+  if (pos < 0 || !isAsciiDigit(cps[pos].value)) {
+    return;
+  }
+  while (pos >= 0 && isAsciiDigit(cps[pos].value)) {
+    --pos;
+  }
+  if (pos < 0 || cps[pos].value != '[') {
+    return;
+  }
+  if (closing - pos <= 1) {
+    return;
+  }
+  cps.erase(cps.begin() + pos, cps.end());
 }
 
 // Rejects words containing punctuation or digits unless forced.
@@ -120,11 +144,13 @@ std::vector<size_t> Hyphenator::breakOffsets(const std::string& word, const bool
 
   auto cps = collectCodepoints(word);
   trimSurroundingPunctuation(cps);
+  trimTrailingFootnoteReference(cps);
   if (cps.size() < MIN_PREFIX_CP + MIN_SUFFIX_CP) {
     return {};
   }
 
-  if (auto explicitIndexes = collectExplicitHyphenIndexes(cps); !explicitIndexes.empty()) {
+  auto explicitIndexes = collectExplicitHyphenIndexes(cps);
+  if (!explicitIndexes.empty()) {
     std::sort(explicitIndexes.begin(), explicitIndexes.end());
     explicitIndexes.erase(std::unique(explicitIndexes.begin(), explicitIndexes.end()), explicitIndexes.end());
     std::vector<size_t> byteOffsets;

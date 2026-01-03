@@ -28,6 +28,7 @@ bool isCyrillicConsonant(uint32_t cp);
 bool isAlphabetic(uint32_t cp);
 bool isVowel(uint32_t cp);
 bool isPunctuation(uint32_t cp);
+bool isExplicitHyphen(uint32_t cp);
 void trimSurroundingPunctuation(std::vector<CodepointInfo>& cps);
 
 Script detectScript(const std::vector<CodepointInfo>& cps);
