@@ -23,8 +23,8 @@ class OtaUpdater {
   size_t totalSize = 0;
 
   OtaUpdater() = default;
-  bool isUpdateNewer();
-  const std::string& getLatestVersion();
+  bool isUpdateNewer() const;
+  const std::string& getLatestVersion() const;
   OtaUpdaterError checkForUpdate();
   OtaUpdaterError installUpdate(const std::function<void(size_t, size_t)>& onProgress);
 };
