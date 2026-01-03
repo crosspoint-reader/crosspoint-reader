@@ -27,7 +27,8 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   renderer.drawLine(x, y + 1, x, y + batteryHeight - 2);
   // Battery end
   renderer.drawLine(x + batteryWidth - 2, y + 1, x + batteryWidth - 2, y + batteryHeight - 2);
-  renderer.drawLine(x + batteryWidth - 1, y + 3, x + batteryWidth - 1, y + batteryHeight - 4);
+  renderer.drawPixel(x + batteryWidth - 1, y + 3);
+  renderer.drawPixel(x + batteryWidth - 1, y + batteryHeight - 4);
   renderer.drawLine(x + batteryWidth - 0, y + 4, x + batteryWidth - 0, y + batteryHeight - 5);
 
   // The +1 is to round up, so that we always fill at least one pixel
