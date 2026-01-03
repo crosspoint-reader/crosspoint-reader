@@ -51,7 +51,6 @@ class CrossPointSettings {
   // E-ink refresh frequency (pages between full refreshes)
   enum REFRESH_FREQUENCY { REFRESH_1 = 0, REFRESH_5 = 1, REFRESH_10 = 2, REFRESH_15 = 3, REFRESH_30 = 4 };
 
-
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Status bar settings
@@ -94,7 +93,6 @@ class CrossPointSettings {
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
   int getReaderScreenMargin() const;
-
 };
 
 // Helper macro to access settings
