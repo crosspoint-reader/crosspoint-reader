@@ -7,7 +7,7 @@
 #include <memory>
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
-  const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure);
+  const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
   client->setInsecure();
   HTTPClient http;
 
@@ -33,7 +33,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                               ProgressCallback progress) {
-  const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure);
+  const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
   client->setInsecure();
   HTTPClient http;
 
