@@ -5,7 +5,9 @@
 #include <InputManager.h>
 #include <SDCardManager.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <cstring>
 
 #include "Battery.h"
 #include "CrossPointSettings.h"
@@ -13,11 +15,14 @@
 #include "MappedInputManager.h"
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
+#include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
+#include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "fontIds.h"
 
 #define SPI_FQ 40000000
@@ -222,10 +227,49 @@ void onGoToSettings() {
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
 }
 
+// Helper to launch browser after WiFi is connected
+void launchBrowserWithUrlCheck() {
+  // If no server URL configured, prompt for one first
+  if (strlen(SETTINGS.opdsServerUrl) == 0) {
+    enterNewActivity(new KeyboardEntryActivity(
+        renderer, mappedInputManager, "Calibre Web URL", "", 10, 127, false,
+        [](const std::string& url) {
+          strncpy(SETTINGS.opdsServerUrl, url.c_str(), sizeof(SETTINGS.opdsServerUrl) - 1);
+          SETTINGS.opdsServerUrl[sizeof(SETTINGS.opdsServerUrl) - 1] = '\0';
+          SETTINGS.saveToFile();
+          exitActivity();
+          enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
+        },
+        [] {
+          exitActivity();
+          onGoHome();
+        }));
+  } else {
+    enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
+  }
+}
+
+void onGoToBrowser() {
+  exitActivity();
+  // Check WiFi connectivity first
+  if (WiFi.status() != WL_CONNECTED) {
+    enterNewActivity(new WifiSelectionActivity(renderer, mappedInputManager, [](bool connected) {
+      exitActivity();
+      if (connected) {
+        launchBrowserWithUrlCheck();
+      } else {
+        onGoHome();
+      }
+    }));
+  } else {
+    launchBrowserWithUrlCheck();
+  }
+}
+
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToReaderHome, onGoToSettings,
-                                    onGoToFileTransfer));
+                                    onGoToFileTransfer, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {

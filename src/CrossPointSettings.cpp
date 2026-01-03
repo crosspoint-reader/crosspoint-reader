@@ -3,6 +3,7 @@
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
+#include <cstring>
 
 #include "fontIds.h"
 
@@ -12,7 +13,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 11;
+constexpr uint8_t SETTINGS_COUNT = 13;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -38,6 +39,8 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, fontSize);
   serialization::writePod(outputFile, lineSpacing);
   serialization::writePod(outputFile, paragraphAlignment);
+  serialization::writePod(outputFile, sideMargin);
+  serialization::writeString(outputFile, std::string(opdsServerUrl));
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -85,6 +88,15 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, lineSpacing);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, paragraphAlignment);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, sideMargin);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string urlStr;
+      serialization::readString(inputFile, urlStr);
+      strncpy(opdsServerUrl, urlStr.c_str(), sizeof(opdsServerUrl) - 1);
+      opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
+    }
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
@@ -168,5 +180,19 @@ int CrossPointSettings::getReaderFontId() const {
         case EXTRA_LARGE:
           return OPENDYSLEXIC_14_FONT_ID;
       }
+  }
+}
+
+int CrossPointSettings::getReaderSideMargin() const {
+  switch (sideMargin) {
+    case MARGIN_NONE:
+      return 0;
+    case MARGIN_SMALL:
+    default:
+      return 5;
+    case MARGIN_MEDIUM:
+      return 20;
+    case MARGIN_LARGE:
+      return 30;
   }
 }

@@ -17,7 +17,6 @@ constexpr int pagesPerRefresh = 15;
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 constexpr int topPadding = 5;
-constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 19;
 }  // namespace
 
@@ -254,8 +253,8 @@ void EpubReaderActivity::renderScreen() {
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
   orientedMarginTop += topPadding;
-  orientedMarginLeft += horizontalPadding;
-  orientedMarginRight += horizontalPadding;
+  orientedMarginLeft += SETTINGS.getReaderSideMargin();
+  orientedMarginRight += SETTINGS.getReaderSideMargin();
   orientedMarginBottom += statusBarMargin;
 
   if (!section) {
