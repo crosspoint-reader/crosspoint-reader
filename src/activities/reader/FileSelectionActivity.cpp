@@ -53,7 +53,7 @@ void FileSelectionActivity::loadFiles() {
       auto filename = std::string(name);
       std::string ext4 = filename.length() >= 4 ? filename.substr(filename.length() - 4) : "";
       std::string ext5 = filename.length() >= 5 ? filename.substr(filename.length() - 5) : "";
-      if (ext5 == ".epub" || ext5 == ".xtch" || ext4 == ".xtc") {
+      if (ext5 == ".epub" || ext5 == ".xtch" || ext4 == ".xtc" || ext4 == ".txt") {
         files.emplace_back(filename);
       }
     }
