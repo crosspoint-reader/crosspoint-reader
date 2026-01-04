@@ -383,7 +383,7 @@ bool Xtc::generateThumbBmp() const {
     return false;
   }
 
-  // Create thumbnail BMP file - use 2-bit format like EPUB covers
+  // Create thumbnail BMP file - use 1-bit format for fast home screen rendering (no gray passes)
   FsFile thumbBmp;
   if (!SdMan.openFileForWrite("XTC", getThumbBmpPath(), thumbBmp)) {
     Serial.printf("[%lu] [XTC] Failed to create thumb BMP file\n", millis());
@@ -391,10 +391,10 @@ bool Xtc::generateThumbBmp() const {
     return false;
   }
 
-  // Write 2-bit BMP header (same format as JpegToBmpConverter)
-  const uint32_t rowSize = (thumbWidth * 2 + 31) / 32 * 4;  // 2 bits per pixel, aligned
+  // Write 1-bit BMP header for fast home screen rendering
+  const uint32_t rowSize = (thumbWidth + 31) / 32 * 4;  // 1 bit per pixel, aligned to 4 bytes
   const uint32_t imageSize = rowSize * thumbHeight;
-  const uint32_t fileSize = 14 + 40 + 16 + imageSize;  // 16 bytes for 4-color palette
+  const uint32_t fileSize = 14 + 40 + 8 + imageSize;  // 8 bytes for 2-color palette
 
   // File header
   thumbBmp.write('B');
@@ -402,7 +402,7 @@ bool Xtc::generateThumbBmp() const {
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&fileSize), 4);
   uint32_t reserved = 0;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&reserved), 4);
-  uint32_t dataOffset = 14 + 40 + 16;  // 2-bit palette has 4 colors (16 bytes)
+  uint32_t dataOffset = 14 + 40 + 8;  // 1-bit palette has 2 colors (8 bytes)
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&dataOffset), 4);
 
   // DIB header
@@ -414,7 +414,7 @@ bool Xtc::generateThumbBmp() const {
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&heightVal), 4);
   uint16_t planes = 1;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&planes), 2);
-  uint16_t bitsPerPixel = 2;  // 2-bit for 4 grayscale levels
+  uint16_t bitsPerPixel = 1;  // 1-bit for black and white
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&bitsPerPixel), 2);
   uint32_t compression = 0;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&compression), 4);
@@ -423,22 +423,19 @@ bool Xtc::generateThumbBmp() const {
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&ppmX), 4);
   int32_t ppmY = 2835;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&ppmY), 4);
-  uint32_t colorsUsed = 4;
+  uint32_t colorsUsed = 2;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&colorsUsed), 4);
-  uint32_t colorsImportant = 4;
+  uint32_t colorsImportant = 2;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&colorsImportant), 4);
 
-  // Color palette (4 colors for 2-bit, same as JpegToBmpConverter)
-  uint8_t palette[16] = {
+  // Color palette (2 colors for 1-bit: black and white)
+  uint8_t palette[8] = {
       0x00, 0x00, 0x00, 0x00,  // Color 0: Black
-      0x55, 0x55, 0x55, 0x00,  // Color 1: Dark gray (85)
-      0xAA, 0xAA, 0xAA, 0x00,  // Color 2: Light gray (170)
-      0xFF, 0xFF, 0xFF, 0x00   // Color 3: White
+      0xFF, 0xFF, 0xFF, 0x00   // Color 1: White
   };
-  thumbBmp.write(palette, 16);
+  thumbBmp.write(palette, 8);
 
-  // Allocate row buffer for 2-bit output
-  const size_t dstRowSize = (thumbWidth * 2 + 7) / 8;
+  // Allocate row buffer for 1-bit output
   uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(rowSize));
   if (!rowBuffer) {
     free(pageBuffer);
@@ -457,7 +454,7 @@ bool Xtc::generateThumbBmp() const {
   const size_t srcRowBytes = (bitDepth == 1) ? ((pageInfo.width + 7) / 8) : 0;
 
   for (uint16_t dstY = 0; dstY < thumbHeight; dstY++) {
-    memset(rowBuffer, 0xFF, rowSize);  // Start with all white (color 3)
+    memset(rowBuffer, 0xFF, rowSize);  // Start with all white (bit 1)
 
     // Calculate source Y range with bounds checking
     uint32_t srcYStart = (static_cast<uint32_t>(dstY) * scaleInv_fp) >> 16;
@@ -519,28 +516,28 @@ bool Xtc::generateThumbBmp() const {
         }
       }
 
-      // Calculate average grayscale and quantize to 2-bit
+      // Calculate average grayscale and quantize to 1-bit with noise dithering
       uint8_t avgGray = (totalCount > 0) ? static_cast<uint8_t>(graySum / totalCount) : 255;
 
-      // Quantize to 4 levels (same thresholds as JpegToBmpConverter)
-      uint8_t twoBit;
-      if (avgGray < 43) {
-        twoBit = 0;  // Black
-      } else if (avgGray < 128) {
-        twoBit = 1;  // Dark gray
-      } else if (avgGray < 213) {
-        twoBit = 2;  // Light gray
-      } else {
-        twoBit = 3;  // White
-      }
+      // Hash-based noise dithering for 1-bit output
+      uint32_t hash = static_cast<uint32_t>(dstX) * 374761393u + static_cast<uint32_t>(dstY) * 668265263u;
+      hash = (hash ^ (hash >> 13)) * 1274126177u;
+      const int threshold = static_cast<int>(hash >> 24);  // 0-255
+      const int adjustedThreshold = 128 + ((threshold - 128) / 2);  // Range: 64-192
 
-      // Pack 2-bit value into row buffer (MSB first)
-      const size_t byteIndex = (dstX * 2) / 8;
-      const size_t bitOffset = 6 - ((dstX * 2) % 8);
+      // Quantize to 1-bit: 0=black, 1=white
+      uint8_t oneBit = (avgGray >= adjustedThreshold) ? 1 : 0;
+
+      // Pack 1-bit value into row buffer (MSB first, 8 pixels per byte)
+      const size_t byteIndex = dstX / 8;
+      const size_t bitOffset = 7 - (dstX % 8);
       // Bounds check for row buffer access
       if (byteIndex < rowSize) {
-        rowBuffer[byteIndex] &= ~(0x03 << bitOffset);   // Clear bits
-        rowBuffer[byteIndex] |= (twoBit << bitOffset);  // Set bits
+        if (oneBit) {
+          rowBuffer[byteIndex] |= (1 << bitOffset);   // Set bit for white
+        } else {
+          rowBuffer[byteIndex] &= ~(1 << bitOffset);  // Clear bit for black
+        }
       }
     }
 
