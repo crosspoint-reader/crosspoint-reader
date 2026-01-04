@@ -341,6 +341,21 @@
     .actions-col {
       width: 60px;
       text-align: center;
+      display: flex;
+    }
+    /* Edit button styles */
+    .edit-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: #95a5a6;
+      transition: all 0.15s;
+    }
+    .edit-btn:hover {
+      background-color: #fee;
     }
     /* Failed uploads banner */
     .failed-uploads-banner {
@@ -666,6 +681,21 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeEditModal()">&times;</button>
+    <h3>✏️ Edit</h3>
+    <div class="folder-form">
+      <input type="hidden" id="editItemType">
+      <label htmlFor="path-input" class="input-label">Path</label>
+      <select id="editItemPath" class="text-input" name="path" value="" />
+      <label htmlFor="name-input" class="file-info">Name</label>
+      <input id="editItemName" value="" autoFocus type="text" class="folder-input" placeholder="Name" />
+      <button class="folder-btn" onclick="confirmEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // get current path from query parameter
   let currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
@@ -779,6 +809,7 @@
               <td>Folder</td>
               <td>-</td>
               <td class="actions-col">
+                <button class="edit-btn" onclick="openEditModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Edit folder">✏️</button>
                 <button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button>
               </td>
             </tr>
@@ -797,6 +828,7 @@
               <td>${file.name.split('.').pop().toUpperCase()}</td>
               <td>${formatFileSize(file.size)}</td>
               <td class="actions-col">
+                <button class="edit-btn" onclick="openEditModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', true)" title="Edit folder">✏️</button>
                 <button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>
               </td>
             </tr>
@@ -1104,6 +1136,43 @@ function retryAllFailedUploads() {
     };
 
     xhr.send(formData);
+  }
+
+  // Edit functions
+  function openEditModal(name, path, isFolder) {
+    // document.getElementById('editItemName').textContent = (isFolder ? '📁 ' : '📄 ') + name;
+    document.getElementById('editItemName').value = name;
+    document.getElementById('editItemPath').value = path;
+    document.getElementById('editItemType').value = isFolder ? 'folder' : 'file';
+    document.getElementById('editModal').classList.add('open');
+  }
+
+  function closeEditModal() {
+    document.getElementById('editModal').classList.remove('open');
+  }
+
+  function confirmEdit() {
+    const editModal = document.querySelector("#editModal");
+    const path = editModal.querySelector('[name="path"]').value;
+    const newPath = editModal.querySelector('[name="newPath"]').value;
+
+    const formData = new FormData();
+    formData.append('path', path);
+    formData.append('new_path', newPath);
+
+    fetch('/api/move', {
+      method: 'POST',
+      body: formData,
+    }).then(res => {
+      if (res.status === 200) {
+        reloadContent();
+        closeDeleteModal();
+        return;
+      }
+      alert('Failed to edit: ' + xhr.responseText);
+    }).catch(err => {
+      alert('Failed to edit - network error');
+    })
   }
 
   hydrate();

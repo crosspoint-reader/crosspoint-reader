@@ -289,15 +289,16 @@ void setup() {
   enterNewActivity(new BootActivity(renderer, mappedInputManager));
 
   APP_STATE.loadFromFile();
-  if (APP_STATE.openEpubPath.empty()) {
-    onGoHome();
-  } else {
-    // Clear app state to avoid getting into a boot loop if the epub doesn't load
-    const auto path = APP_STATE.openEpubPath;
-    APP_STATE.openEpubPath = "";
-    APP_STATE.saveToFile();
-    onGoToReader(path);
-  }
+  onGoToFileTransfer();
+  // if (APP_STATE.openEpubPath.empty()) {
+  //   onGoHome();
+  // } else {
+  //   // Clear app state to avoid getting into a boot loop if the epub doesn't load
+  //   const auto path = APP_STATE.openEpubPath;
+  //   APP_STATE.openEpubPath = "";
+  //   APP_STATE.saveToFile();
+  //   onGoToReader(path);
+  // }
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
