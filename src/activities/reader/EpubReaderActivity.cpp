@@ -251,9 +251,9 @@ void EpubReaderActivity::renderScreen() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.getReaderScreenMargin();
-  orientedMarginLeft += SETTINGS.getReaderScreenMargin();
-  orientedMarginRight += SETTINGS.getReaderScreenMargin();
+  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginLeft += SETTINGS.screenMargin;
+  orientedMarginRight += SETTINGS.screenMargin;
   orientedMarginBottom += statusBarMargin;
 
   if (!section) {

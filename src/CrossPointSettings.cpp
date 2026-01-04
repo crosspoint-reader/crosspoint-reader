@@ -213,18 +213,3 @@ int CrossPointSettings::getReaderFontId() const {
       }
   }
 }
-
-int CrossPointSettings::getReaderScreenMargin() const {
-  switch (screenMargin) {
-    case SMALL:
-      return 5;
-    case MEDIUM:
-      return 10;
-    case LARGE:
-      return 20;
-    case EXTRA_LARGE:
-      return 40;
-    default:
-      return 5;
-  }
-}

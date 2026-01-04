@@ -76,7 +76,7 @@ class CrossPointSettings {
   uint8_t refreshFrequency = REFRESH_15;
 
   // Reader screen margin settings
-  uint8_t screenMargin = SMALL;
+  uint8_t screenMargin = 5;
 
   ~CrossPointSettings() = default;
 
