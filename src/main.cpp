@@ -5,7 +5,6 @@
 #include <InputManager.h>
 #include <SDCardManager.h>
 #include <SPI.h>
-#include <WiFi.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -23,7 +22,6 @@
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
-#include "activities/util/KeyboardEntryActivity.h"
 #include "fontIds.h"
 
 #define SPI_FQ 40000000

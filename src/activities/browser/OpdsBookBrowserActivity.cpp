@@ -51,6 +51,9 @@ void OpdsBookBrowserActivity::onEnter() {
 void OpdsBookBrowserActivity::onExit() {
   Activity::onExit();
 
+  // Turn off WiFi when exiting
+  WiFi.mode(WIFI_OFF);
+
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
     vTaskDelete(displayTaskHandle);

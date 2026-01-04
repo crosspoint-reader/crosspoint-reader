@@ -61,6 +61,9 @@ void CalibreWirelessActivity::onEnter() {
 void CalibreWirelessActivity::onExit() {
   Activity::onExit();
 
+  // Turn off WiFi when exiting
+  WiFi.mode(WIFI_OFF);
+
   // Stop UDP listening
   udp.stop();
 
