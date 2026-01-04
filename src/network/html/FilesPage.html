@@ -838,10 +838,17 @@
     <h3>📦 Move Selected Items</h3>
     <div class="folder-form">
       <p class="file-info">Select destination folder for <strong id="moveItemCount">0</strong> items:</p>
+      <div id="folderListLoading" style="display: none; text-align: center; padding: 20px; color: #7f8c8d;">
+        <div class="loader" style="width: 32px; height: 32px; border-width: 3px; margin: 0 auto 10px;"></div>
+        <div>Loading folders...</div>
+      </div>
+      <div id="folderListError" style="display: none; padding: 10px; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 4px; margin-bottom: 10px;">
+        Failed to load folder list. Please try again.
+      </div>
       <select id="folderSelect" class="folder-select">
         <option value="/">/  (Root)</option>
       </select>
-      <button class="rename-btn-submit" onclick="confirmMove()">Move Here</button>
+      <button class="rename-btn-submit" onclick="confirmMove()" id="moveConfirmBtn">Move Here</button>
       <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
     </div>
   </div>
@@ -1338,6 +1345,15 @@ function closeMoveModal() {
 
 async function buildFolderList() {
   const select = document.getElementById('folderSelect');
+  const loading = document.getElementById('folderListLoading');
+  const error = document.getElementById('folderListError');
+  const confirmBtn = document.getElementById('moveConfirmBtn');
+  
+  // Show loading, hide error, disable controls
+  loading.style.display = 'block';
+  error.style.display = 'none';
+  select.disabled = true;
+  confirmBtn.disabled = true;
   select.innerHTML = '<option value="/">/  (Root)</option>';
   
   try {
@@ -1360,8 +1376,18 @@ async function buildFolderList() {
     if (select.querySelector(`option[value="${currentPath}"]`)) {
       select.value = currentPath;
     }
+    
+    // Success - hide loading, enable controls
+    loading.style.display = 'none';
+    select.disabled = false;
+    confirmBtn.disabled = false;
   } catch (e) {
     console.error('Failed to load folders:', e);
+    // Error - hide loading, show error
+    loading.style.display = 'none';
+    error.style.display = 'block';
+    select.disabled = true;
+    confirmBtn.disabled = true;
   }
 }
 
