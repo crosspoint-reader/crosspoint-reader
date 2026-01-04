@@ -3,7 +3,8 @@
 #include <FsHelpers.h>
 #include <JpegToBmpConverter.h>
 
-Txt::Txt(std::string path, std::string cacheBasePath) : filepath(std::move(path)), cacheBasePath(std::move(cacheBasePath)) {
+Txt::Txt(std::string path, std::string cacheBasePath)
+    : filepath(std::move(path)), cacheBasePath(std::move(cacheBasePath)) {
   // Generate cache path from file path hash
   const size_t hash = std::hash<std::string>{}(filepath);
   cachePath = this->cacheBasePath + "/txt_" + std::to_string(hash);
@@ -112,8 +113,9 @@ bool Txt::generateCoverBmp() const {
 
   // Get file extension
   const size_t len = coverImagePath.length();
-  const bool isJpg = (len >= 4 && (coverImagePath.substr(len - 4) == ".jpg" || coverImagePath.substr(len - 4) == ".JPG")) ||
-                     (len >= 5 && (coverImagePath.substr(len - 5) == ".jpeg" || coverImagePath.substr(len - 5) == ".JPEG"));
+  const bool isJpg =
+      (len >= 4 && (coverImagePath.substr(len - 4) == ".jpg" || coverImagePath.substr(len - 4) == ".JPG")) ||
+      (len >= 5 && (coverImagePath.substr(len - 5) == ".jpeg" || coverImagePath.substr(len - 5) == ".JPEG"));
   const bool isBmp = len >= 4 && (coverImagePath.substr(len - 4) == ".bmp" || coverImagePath.substr(len - 4) == ".BMP");
 
   if (isBmp) {
