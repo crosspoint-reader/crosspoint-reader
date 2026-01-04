@@ -5,7 +5,7 @@
 #include <Serialization.h>
 
 namespace {
-constexpr uint8_t STATE_FILE_VERSION = 2;
+constexpr uint8_t STATE_FILE_VERSION = 3;
 constexpr char STATE_FILE[] = "/.crosspoint/state.bin";
 }  // namespace
 
@@ -20,6 +20,7 @@ bool CrossPointState::saveToFile() const {
   serialization::writePod(outputFile, STATE_FILE_VERSION);
   serialization::writeString(outputFile, openEpubPath);
   serialization::writeString(outputFile, lastBrowsedFolder);
+  serialization::writePod(outputFile, lastScheduledServerTime);
   outputFile.close();
   return true;
 }
@@ -35,11 +36,17 @@ bool CrossPointState::loadFromFile() {
   if (version == 1) {
     // Version 1: only had openEpubPath
     serialization::readString(inputFile, openEpubPath);
-    lastBrowsedFolder = "/";  // Default for old version
-  } else if (version == STATE_FILE_VERSION) {
+    lastScheduledServerTime = 0;
+  } else if (version == 2) {
     // Version 2: has openEpubPath and lastBrowsedFolder
     serialization::readString(inputFile, openEpubPath);
     serialization::readString(inputFile, lastBrowsedFolder);
+    lastScheduledServerTime = 0;
+  } else if (version == STATE_FILE_VERSION) {
+    // Version 3: has openEpubPath, lastBrowsedFolder, and lastScheduledServerTime
+    serialization::readString(inputFile, openEpubPath);
+    serialization::readString(inputFile, lastBrowsedFolder);
+    serialization::readPod(inputFile, lastScheduledServerTime);
   } else {
     Serial.printf("[%lu] [CPS] Deserialization failed: Unknown version %u\n", millis(), version);
     inputFile.close();

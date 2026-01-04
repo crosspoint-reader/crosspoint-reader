@@ -6,11 +6,12 @@
 #include "FolderPickerActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "ScheduleSettingsActivity.h"
 #include "fontIds.h"
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 17;
+constexpr int settingsCount = 18;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     {"Sleep Screen", SettingType::ENUM, &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover"}},
@@ -50,6 +51,7 @@ const SettingInfo settingsList[settingsCount] = {
      {"Root", "Custom", "Last Used"}},
     {"Choose Custom Folder", SettingType::ACTION, nullptr, {}},
     {"Bluetooth", SettingType::TOGGLE, &CrossPointSettings::bluetoothEnabled, {}},
+    {"File Transfer Schedule", SettingType::ACTION, nullptr, {}},
     {"Check for updates", SettingType::ACTION, nullptr, {}},
 };
 }  // namespace
@@ -166,6 +168,14 @@ void SettingsActivity::toggleCurrentSetting() {
             updateRequired = true;
           },
           "/"));  // Start from root directory
+      xSemaphoreGive(renderingMutex);
+    } else if (std::string(setting.name) == "File Transfer Schedule") {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new ScheduleSettingsActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
       xSemaphoreGive(renderingMutex);
     }
   } else {

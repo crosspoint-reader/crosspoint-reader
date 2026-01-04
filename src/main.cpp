@@ -16,7 +16,7 @@
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/home/HomeActivity.h"
-#include "activities/network/CrossPointWebServerActivity.h"
+#include "activities/network/FileTransferActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
@@ -220,7 +220,63 @@ void onGoToFileTransfer() {
     enterNewActivity(new BleFileTransferActivity(renderer, mappedInputManager, onGoHome));
   } else {
     Serial.printf("[%lu] [   ] Starting WiFi file transfer (Bluetooth disabled)\n", millis());
-    enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
+    enterNewActivity(new FileTransferActivity(renderer, mappedInputManager, onGoHome));
+  }
+}
+
+// Check if scheduled file transfer should be triggered
+void checkScheduledFileTransfer() {
+  // Only check if scheduling is enabled
+  if (!SETTINGS.scheduleEnabled) {
+    return;
+  }
+
+  // Don't start if Bluetooth is enabled (conflicts with WiFi)
+  if (SETTINGS.bluetoothEnabled) {
+    Serial.printf("[%lu] [SCH] Scheduled file transfer skipped - Bluetooth enabled\n", millis());
+    return;
+  }
+
+  const unsigned long currentTime = millis();
+  bool shouldStart = false;
+
+  if (SETTINGS.scheduleFrequency == 6) {
+    // Scheduled time mode - check if current hour matches scheduled hour
+    // Note: This is a simple check. For a real-time clock, you'd need an RTC module.
+    // Here we approximate based on uptime and assume device wakes at specific times.
+    // This is a placeholder - for production, integrate with an RTC or NTP time sync.
+    
+    // For now, we trigger on first wake if not already triggered today
+    // A proper implementation would need actual time tracking
+    const unsigned long timeSinceLastServer = currentTime - APP_STATE.lastScheduledServerTime;
+    const unsigned long oneDay = 24UL * 60UL * 60UL * 1000UL;
+    
+    if (APP_STATE.lastScheduledServerTime == 0 || timeSinceLastServer >= oneDay) {
+      shouldStart = true;
+      Serial.printf("[%lu] [SCH] Scheduled time mode - triggering (configured for %02d:00)\n",
+                    millis(), SETTINGS.scheduleHour);
+    }
+  } else {
+    // Interval mode
+    const unsigned long scheduleInterval = SETTINGS.getScheduleIntervalMs();
+    const unsigned long timeSinceLastServer = currentTime - APP_STATE.lastScheduledServerTime;
+
+    // Check if it's time to start the server
+    // On first boot, lastScheduledServerTime will be 0, so we check if it's been at least the interval
+    if (APP_STATE.lastScheduledServerTime == 0 || timeSinceLastServer >= scheduleInterval) {
+      shouldStart = true;
+      Serial.printf("[%lu] [SCH] Interval mode - triggering (interval: %lu ms, last: %lu ms ago)\n",
+                    millis(), scheduleInterval, timeSinceLastServer);
+    }
+  }
+
+  if (shouldStart) {
+    // Update the last scheduled server time
+    APP_STATE.lastScheduledServerTime = currentTime;
+    APP_STATE.saveToFile();
+    
+    // Start the file transfer activity
+    onGoToFileTransfer();
   }
 }
 
@@ -296,6 +352,10 @@ void setup() {
   enterNewActivity(new BootActivity(renderer, mappedInputManager));
 
   APP_STATE.loadFromFile();
+  
+  // Check if scheduled file transfer should be triggered
+  checkScheduledFileTransfer();
+  
   if (APP_STATE.openEpubPath.empty()) {
     onGoHome();
   } else {

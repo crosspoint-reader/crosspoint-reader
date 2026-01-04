@@ -77,6 +77,14 @@ class CrossPointSettings {
   // Default folder for file browser (enum index: 0=Root, 1=Custom, 2=Last Used)
   uint8_t defaultFolder = FOLDER_LAST_USED;  // Default to last used (current behavior)
 
+  // Schedule settings for auto-starting file transfer server
+  uint8_t scheduleEnabled = 0;       // 0=disabled, 1=enabled
+  uint8_t scheduleFrequency = 0;     // 0=1hr, 1=2hr, 2=3hr, 3=6hr, 4=12hr, 5=24hr, 6=Scheduled time
+  uint8_t scheduleProtocol = 0;      // 0=HTTP, 1=FTP
+  uint8_t scheduleNetworkMode = 0;   // 0=Join Network, 1=Create Hotspot
+  uint8_t scheduleHour = 0;          // 0-23: Hour of day for scheduled start (when scheduleFrequency=6)
+  uint8_t scheduleAutoShutdown = 2;  // 0=5min, 1=10min, 2=20min, 3=30min, 4=60min, 5=120min
+
   // Custom default folder path (used when defaultFolder == FOLDER_CUSTOM)
   std::string customDefaultFolder = "/books";
 
@@ -113,6 +121,33 @@ class CrossPointSettings {
     if (defaultFolder == FOLDER_ROOT) return "/";
     if (defaultFolder == FOLDER_CUSTOM) return customDefaultFolder.c_str();
     return "/";  // Fallback
+  }
+
+  unsigned long getScheduleIntervalMs() const {
+    // Map enum index to milliseconds: 0=1hr, 1=2hr, 2=3hr, 3=6hr, 4=12hr, 5=24hr, 6=Scheduled
+    constexpr unsigned long intervals[] = {
+        1UL * 60UL * 60UL * 1000UL,   // 0: 1 hour
+        2UL * 60UL * 60UL * 1000UL,   // 1: 2 hours
+        3UL * 60UL * 60UL * 1000UL,   // 2: 3 hours
+        6UL * 60UL * 60UL * 1000UL,   // 3: 6 hours
+        12UL * 60UL * 60UL * 1000UL,  // 4: 12 hours
+        24UL * 60UL * 60UL * 1000UL,  // 5: 24 hours
+        0UL                            // 6: Scheduled (use time-based check)
+    };
+    return (scheduleFrequency < 7) ? intervals[scheduleFrequency] : intervals[0];
+  }
+
+  unsigned long getAutoShutdownMs() const {
+    // Map enum index to milliseconds: 0=5min, 1=10min, 2=20min, 3=30min, 4=60min, 5=120min
+    constexpr unsigned long durations[] = {
+        5UL * 60UL * 1000UL,    // 0: 5 minutes
+        10UL * 60UL * 1000UL,   // 1: 10 minutes
+        20UL * 60UL * 1000UL,   // 2: 20 minutes (default)
+        30UL * 60UL * 1000UL,   // 3: 30 minutes
+        60UL * 60UL * 1000UL,   // 4: 60 minutes
+        120UL * 60UL * 1000UL   // 5: 120 minutes
+    };
+    return (scheduleAutoShutdown < 6) ? durations[scheduleAutoShutdown] : durations[2];
   }
 
   bool saveToFile() const;

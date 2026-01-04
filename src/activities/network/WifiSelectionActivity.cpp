@@ -61,7 +61,7 @@ void WifiSelectionActivity::onExit() {
   WiFi.scanDelete();
   Serial.printf("[%lu] [WIFI] [MEM] Free heap after scanDelete: %d bytes\n", millis(), ESP.getFreeHeap());
 
-  // Note: We do NOT disconnect WiFi here - the parent activity (CrossPointWebServerActivity)
+  // Note: We do NOT disconnect WiFi here - the parent activity (FileTransferActivity)
   // manages WiFi connection state. We just clean up the scan and task.
 
   // Acquire mutex before deleting task to ensure task isn't using it

@@ -1,4 +1,4 @@
-#include "CrossPointWebServerActivity.h"
+#include "FileTransferActivity.h"
 
 #include <DNSServer.h>
 #include <ESPmDNS.h>
@@ -29,12 +29,12 @@ DNSServer* dnsServer = nullptr;
 constexpr uint16_t DNS_PORT = 53;
 }  // namespace
 
-void CrossPointWebServerActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<CrossPointWebServerActivity*>(param);
+void FileTransferActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<FileTransferActivity*>(param);
   self->displayTaskLoop();
 }
 
-void CrossPointWebServerActivity::onEnter() {
+void FileTransferActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap at onEnter: %d bytes\n", millis(), ESP.getFreeHeap());
@@ -42,7 +42,7 @@ void CrossPointWebServerActivity::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
 
   // Reset state
-  state = WebServerActivityState::MODE_SELECTION;
+  state = FileTransferActivityState::MODE_SELECTION;
   networkMode = NetworkMode::JOIN_NETWORK;
   isApMode = false;
   connectedIP.clear();
@@ -50,7 +50,7 @@ void CrossPointWebServerActivity::onEnter() {
   lastHandleClientTime = 0;
   updateRequired = true;
 
-  xTaskCreate(&CrossPointWebServerActivity::taskTrampoline, "WebServerActivityTask",
+  xTaskCreate(&FileTransferActivity::taskTrampoline, "WebServerActivityTask",
               2048,               // Stack size
               this,               // Parameters
               1,                  // Priority
@@ -65,15 +65,16 @@ void CrossPointWebServerActivity::onEnter() {
       ));
 }
 
-void CrossPointWebServerActivity::onExit() {
+void FileTransferActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap at onExit start: %d bytes\n", millis(), ESP.getFreeHeap());
 
-  state = WebServerActivityState::SHUTTING_DOWN;
+  state = FileTransferActivityState::SHUTTING_DOWN;
 
-  // Stop the web server first (before disconnecting WiFi)
-  stopWebServer();
+  // Stop the file transfer servers first (before disconnecting WiFi)
+  stopHttpServer();
+  stopFtpServer();
 
   // Stop mDNS
   MDNS.end();
@@ -127,7 +128,7 @@ void CrossPointWebServerActivity::onExit() {
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap at onExit end: %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
-void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) {
+void FileTransferActivity::onNetworkModeSelected(const NetworkMode mode) {
   Serial.printf("[%lu] [WEBACT] Network mode selected: %s\n", millis(),
                 mode == NetworkMode::JOIN_NETWORK ? "Join Network" : "Create Hotspot");
 
@@ -146,24 +147,41 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   // Exit mode selection subactivity
   exitActivity();
 
-  if (mode == NetworkMode::JOIN_NETWORK) {
+  // Launch protocol selection subactivity
+  state = FileTransferActivityState::PROTOCOL_SELECTION;
+  Serial.printf("[%lu] [WEBACT] Launching ProtocolSelectionActivity...\n", millis());
+  enterNewActivity(new ProtocolSelectionActivity(
+      renderer, mappedInput, [this](const FileTransferProtocol protocol) { onProtocolSelected(protocol); },
+      [this]() { onGoBack(); }));
+}
+
+void FileTransferActivity::onProtocolSelected(const FileTransferProtocol protocol) {
+  Serial.printf("[%lu] [WEBACT] Protocol selected: %s\n", millis(),
+                protocol == FileTransferProtocol::HTTP ? "HTTP" : "FTP");
+
+  selectedProtocol = protocol;
+
+  // Exit protocol selection subactivity
+  exitActivity();
+
+  if (networkMode == NetworkMode::JOIN_NETWORK) {
     // STA mode - launch WiFi selection
     Serial.printf("[%lu] [WEBACT] Turning on WiFi (STA mode)...\n", millis());
     WiFi.mode(WIFI_STA);
 
-    state = WebServerActivityState::WIFI_SELECTION;
+    state = FileTransferActivityState::WIFI_SELECTION;
     Serial.printf("[%lu] [WEBACT] Launching WifiSelectionActivity...\n", millis());
     enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
                                                [this](const bool connected) { onWifiSelectionComplete(connected); }));
   } else {
     // AP mode - start access point
-    state = WebServerActivityState::AP_STARTING;
+    state = FileTransferActivityState::AP_STARTING;
     updateRequired = true;
     startAccessPoint();
   }
 }
 
-void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) {
+void FileTransferActivity::onWifiSelectionComplete(const bool connected) {
   Serial.printf("[%lu] [WEBACT] WifiSelectionActivity completed, connected=%d\n", millis(), connected);
 
   if (connected) {
@@ -179,19 +197,19 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
       Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), AP_HOSTNAME);
     }
 
-    // Start the web server
-    startWebServer();
+    // Start the file transfer server
+    startServer();
   } else {
     // User cancelled - go back to mode selection
     exitActivity();
-    state = WebServerActivityState::MODE_SELECTION;
+    state = FileTransferActivityState::MODE_SELECTION;
     enterNewActivity(new NetworkModeSelectionActivity(
         renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
         [this]() { onGoBack(); }));
   }
 }
 
-void CrossPointWebServerActivity::startAccessPoint() {
+void FileTransferActivity::startAccessPoint() {
   Serial.printf("[%lu] [WEBACT] Starting Access Point mode...\n", millis());
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap before AP start: %d bytes\n", millis(), ESP.getFreeHeap());
 
@@ -243,45 +261,78 @@ void CrossPointWebServerActivity::startAccessPoint() {
 
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap after AP start: %d bytes\n", millis(), ESP.getFreeHeap());
 
-  // Start the web server
-  startWebServer();
+  // Start the file transfer server
+  startServer();
 }
 
-void CrossPointWebServerActivity::startWebServer() {
-  Serial.printf("[%lu] [WEBACT] Starting web server...\n", millis());
+void FileTransferActivity::startServer() {
+  if (selectedProtocol == FileTransferProtocol::HTTP) {
+    Serial.printf("[%lu] [WEBACT] Starting HTTP server...\n", millis());
 
-  // Create the web server instance
-  webServer.reset(new CrossPointWebServer());
-  webServer->begin();
+    // Create the HTTP server instance
+    httpServer.reset(new CrossPointWebServer());
+    httpServer->begin();
 
-  if (webServer->isRunning()) {
-    state = WebServerActivityState::SERVER_RUNNING;
-    Serial.printf("[%lu] [WEBACT] Web server started successfully\n", millis());
+    if (httpServer->isRunning()) {
+      state = FileTransferActivityState::SERVER_RUNNING;
+      serverStartTime = millis();  // Track when server started
+      Serial.printf("[%lu] [WEBACT] HTTP server started successfully\n", millis());
 
-    // Force an immediate render since we're transitioning from a subactivity
-    // that had its own rendering task. We need to make sure our display is shown.
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    render();
-    xSemaphoreGive(renderingMutex);
-    Serial.printf("[%lu] [WEBACT] Rendered File Transfer screen\n", millis());
+      // Force an immediate render since we're transitioning from a subactivity
+      // that had its own rendering task. We need to make sure our display is shown.
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      render();
+      xSemaphoreGive(renderingMutex);
+      Serial.printf("[%lu] [WEBACT] Rendered File Transfer screen\n", millis());
+    } else {
+      Serial.printf("[%lu] [WEBACT] ERROR: Failed to start HTTP server!\n", millis());
+      httpServer.reset();
+      onGoBack();
+    }
   } else {
-    Serial.printf("[%lu] [WEBACT] ERROR: Failed to start web server!\n", millis());
-    webServer.reset();
-    // Go back on error
-    onGoBack();
+    Serial.printf("[%lu] [WEBACT] Starting FTP server...\n", millis());
+
+    // Create the FTP server instance
+    ftpServer.reset(new CrossPointFtpServer());
+    ftpServer->begin();
+
+    if (ftpServer->isRunning()) {
+      state = FileTransferActivityState::SERVER_RUNNING;
+      serverStartTime = millis();  // Track when server started
+      Serial.printf("[%lu] [WEBACT] FTP server started successfully\n", millis());
+
+      // Force an immediate render
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      render();
+      xSemaphoreGive(renderingMutex);
+      Serial.printf("[%lu] [WEBACT] Rendered File Transfer screen\n", millis());
+    } else {
+      Serial.printf("[%lu] [WEBACT] ERROR: Failed to start FTP server!\n", millis());
+      ftpServer.reset();
+      onGoBack();
+    }
   }
 }
 
-void CrossPointWebServerActivity::stopWebServer() {
-  if (webServer && webServer->isRunning()) {
-    Serial.printf("[%lu] [WEBACT] Stopping web server...\n", millis());
-    webServer->stop();
-    Serial.printf("[%lu] [WEBACT] Web server stopped\n", millis());
+void FileTransferActivity::stopHttpServer() {
+  if (httpServer && httpServer->isRunning()) {
+    Serial.printf("[%lu] [WEBACT] Stopping HTTP server...\n", millis());
+    httpServer->stop();
+    Serial.printf("[%lu] [WEBACT] HTTP server stopped\n", millis());
   }
-  webServer.reset();
+  httpServer.reset();
 }
 
-void CrossPointWebServerActivity::loop() {
+void FileTransferActivity::stopFtpServer() {
+  if (ftpServer && ftpServer->isRunning()) {
+    Serial.printf("[%lu] [WEBACT] Stopping FTP server...\n", millis());
+    ftpServer->stop();
+    Serial.printf("[%lu] [WEBACT] FTP server stopped\n", millis());
+  }
+  ftpServer.reset();
+}
+
+void FileTransferActivity::loop() {
   if (subActivity) {
     // Forward loop to subactivity
     subActivity->loop();
@@ -289,15 +340,18 @@ void CrossPointWebServerActivity::loop() {
   }
 
   // Handle different states
-  if (state == WebServerActivityState::SERVER_RUNNING) {
+  if (state == FileTransferActivityState::SERVER_RUNNING) {
     // Handle DNS requests for captive portal (AP mode only)
     if (isApMode && dnsServer) {
       dnsServer->processNextRequest();
     }
 
-    // Handle web server requests - call handleClient multiple times per loop
+    // Handle file transfer server requests - call handleClient multiple times per loop
     // to improve responsiveness and upload throughput
-    if (webServer && webServer->isRunning()) {
+    const bool httpRunning = httpServer && httpServer->isRunning();
+    const bool ftpRunning = ftpServer && ftpServer->isRunning();
+
+    if (httpRunning || ftpRunning) {
       const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
 
       // Log if there's a significant gap between handleClient calls (>100ms)
@@ -307,18 +361,34 @@ void CrossPointWebServerActivity::loop() {
       }
 
       // Call handleClient multiple times to process pending requests faster
-      // This is critical for upload performance - HTTP file uploads send data
+      // This is critical for upload performance - file uploads send data
       // in chunks and each handleClient() call processes incoming data
       // Reduced from 10 to 3 to prevent watchdog timer issues
       constexpr int HANDLE_CLIENT_ITERATIONS = 3;
-      for (int i = 0; i < HANDLE_CLIENT_ITERATIONS && webServer->isRunning(); i++) {
-        webServer->handleClient();
+      for (int i = 0; i < HANDLE_CLIENT_ITERATIONS; i++) {
+        if (httpRunning && httpServer->isRunning()) {
+          httpServer->handleClient();
+        } else if (ftpRunning && ftpServer->isRunning()) {
+          ftpServer->handleClient();
+        }
         // Feed the watchdog timer between iterations to prevent resets
         esp_task_wdt_reset();
         // Yield to other tasks to prevent starvation
         yield();
       }
       lastHandleClientTime = millis();
+    }
+
+    // Check auto-shutdown timer if schedule is enabled
+    if (SETTINGS.scheduleEnabled && serverStartTime > 0) {
+      const unsigned long serverUptime = millis() - serverStartTime;
+      const unsigned long shutdownTimeout = SETTINGS.getAutoShutdownMs();
+      
+      if (serverUptime >= shutdownTimeout) {
+        Serial.printf("[%lu] [WEBACT] Auto-shutdown triggered after %lu ms\n", millis(), serverUptime);
+        onGoBack();
+        return;
+      }
     }
 
     // Handle exit on Back button
@@ -329,7 +399,7 @@ void CrossPointWebServerActivity::loop() {
   }
 }
 
-void CrossPointWebServerActivity::displayTaskLoop() {
+void FileTransferActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
       updateRequired = false;
@@ -341,14 +411,14 @@ void CrossPointWebServerActivity::displayTaskLoop() {
   }
 }
 
-void CrossPointWebServerActivity::render() const {
+void FileTransferActivity::render() const {
   // Only render our own UI when server is running
   // Subactivities handle their own rendering
-  if (state == WebServerActivityState::SERVER_RUNNING) {
+  if (state == FileTransferActivityState::SERVER_RUNNING) {
     renderer.clearScreen();
     renderServerRunning();
     renderer.displayBuffer();
-  } else if (state == WebServerActivityState::AP_STARTING) {
+  } else if (state == FileTransferActivityState::AP_STARTING) {
     renderer.clearScreen();
     const auto pageHeight = renderer.getScreenHeight();
     renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, "Starting Hotspot...", true, BOLD);
@@ -378,11 +448,19 @@ void drawQRCode(const GfxRenderer& renderer, const int x, const int y, const std
   }
 }
 
-void CrossPointWebServerActivity::renderServerRunning() const {
+void FileTransferActivity::renderServerRunning() const {
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, BOLD);
+
+  if (selectedProtocol == FileTransferProtocol::HTTP) {
+    renderHttpServerRunning();
+  } else {
+    renderFtpServerRunning();
+  }
+}
+
+void FileTransferActivity::renderHttpServerRunning() const {
   // Use consistent line spacing
   constexpr int LINE_SPACING = 28;  // Space between lines
-
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, BOLD);
 
   if (isApMode) {
     // AP mode display - center the content block
@@ -440,6 +518,70 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     // Show QR code for URL
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
+  }
+
+  const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+void FileTransferActivity::renderFtpServerRunning() const {
+  // Use consistent line spacing
+  constexpr int LINE_SPACING = 28;  // Space between lines
+
+  if (isApMode) {
+    // AP mode display
+    int startY = 55;
+
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, "Hotspot Mode", true, BOLD);
+
+    std::string ssidInfo = "Network: " + connectedSSID;
+    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ssidInfo.c_str());
+
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, "Connect your device to this WiFi network");
+
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3,
+                              "or scan QR code with your phone to connect to WiFi.");
+    // Show QR code for WiFi
+    std::string wifiConfig = std::string("WIFI:T:WPA;S:") + connectedSSID + ";P:" + "" + ";;";
+    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
+
+    startY += 6 * 29 + 3 * LINE_SPACING;
+
+    // Show FTP server info
+    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, "FTP Server", true, BOLD);
+
+    std::string ftpInfo = "ftp://" + connectedIP + "/";
+    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 4, ftpInfo.c_str(), true, BOLD);
+
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "Connect with FTP client:");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "Username: crosspoint");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 7, "Password: reader");
+  } else {
+    // STA mode display
+    const int startY = 65;
+
+    std::string ssidInfo = "Network: " + connectedSSID;
+    if (ssidInfo.length() > 28) {
+      ssidInfo.replace(25, ssidInfo.length() - 25, "...");
+    }
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, ssidInfo.c_str());
+
+    std::string ipInfo = "IP Address: " + connectedIP;
+    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ipInfo.c_str());
+
+    // Show FTP server info
+    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 2, "FTP Server", true, BOLD);
+
+    std::string ftpInfo = "ftp://" + connectedIP + "/";
+    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, ftpInfo.c_str(), true, BOLD);
+
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Use FTP client to connect:");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "Username: crosspoint");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "Password: reader");
+
+    // Show QR code for FTP URL
+    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 8, ftpInfo);
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 7, "or scan QR code with your phone:");
   }
 
   const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
