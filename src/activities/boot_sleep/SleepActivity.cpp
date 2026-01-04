@@ -28,6 +28,10 @@ void SleepActivity::onEnter() {
   Activity::onEnter();
   renderPopup("Entering Sleep...");
 
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
+    return renderBlankSleepScreen();
+  }
+
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
     return renderCustomSleepScreen();
   }
@@ -233,4 +237,9 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   renderDefaultSleepScreen();
+}
+
+void SleepActivity::renderBlankSleepScreen() const {
+  renderer.clearScreen();
+  renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
