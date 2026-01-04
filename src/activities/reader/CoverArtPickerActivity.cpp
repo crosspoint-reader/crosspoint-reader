@@ -296,7 +296,11 @@ void CoverArtPickerActivity::drawCoverThumbnail(const std::string& filePath, int
 
   // Fallback: show filename with border
   renderer.drawRect(x + 20, y + 20, COVER_WIDTH - 40, COVER_HEIGHT - 60);
-  renderer.drawCenteredText(SMALL_FONT_ID, y + COVER_HEIGHT - 30, displayName.c_str(), true);
+
+  // Draw filename centered within the cell (not screen-wide)
+  const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, displayName.c_str());
+  const int textX = x + (COVER_WIDTH - textWidth) / 2;
+  renderer.drawText(SMALL_FONT_ID, textX, y + COVER_HEIGHT - 30, displayName.c_str(), true);
 }
 
 void CoverArtPickerActivity::render() const {

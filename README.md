@@ -40,7 +40,8 @@ This project is **not affiliated with Xteink**; it's built as a community projec
   - [ ] User provided fonts
   - [ ] Full UTF support
 - [x] Screen rotation
-- [x] Bluetooth LE Support
+- [ ] Bluetooth LE Support
+- [ ] FTP server support
 - [x] Adjustable sleep timer
 - [x] Set default folder
 
