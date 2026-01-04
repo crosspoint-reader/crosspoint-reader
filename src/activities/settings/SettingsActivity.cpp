@@ -124,6 +124,7 @@ void SettingsActivity::toggleCurrentSetting() {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+    // Decreasing would also be nice for large ranges I think but oh well can't have everything 
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     // Wrap to minValue if exceeding setting value boundary
     if (currentValue == setting.maxValue) {
