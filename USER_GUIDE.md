@@ -54,10 +54,20 @@ See [Reading Mode](#4-reading-mode) below for more information.
 
 ### 3.4 File Upload Screen
 
-The File Upload screen allows you to upload new e-books to the device. When you enter the screen, you'll be prompted with
-a WiFi selection dialog and then your X4 will start hosting a web server.
+The File Upload screen allows you to upload new e-books to the device. When you enter the screen, you'll be prompted to
+select between HTTP or FTP protocol, then choose whether to join an existing WiFi network or create a hotspot.
 
-See the [webserver docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
+**Authentication:** Both HTTP and FTP servers require authentication. The default credentials are:
+- **Username:** crosspoint
+- **Password:** reader
+
+You can customize these credentials in **Settings → Network Credentials**.
+
+See the [webserver docs](./docs/webserver.md) for more information on how to connect to the servers and upload files.
+
+**Scheduled Transfers:** You can configure the device to automatically start a file transfer server at specific times
+or intervals via **Settings → File Transfer Schedule**. The server will automatically shut down after the configured
+duration (default: 20 minutes).
 
 ### 3.5 Settings
 
@@ -90,6 +100,24 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Open Dyslexic" - Font designed for readers with dyslexia
 - **Reader Font Size**: Adjust the text size for reading, options are "Small", "Medium", "Large", or "X Large".
 - **Reader Line Spacing**: Adjust the spacing between lines, options are "Tight", "Normal", or "Wide".
+- **Bluetooth File Transfer**: Enable or disable Bluetooth file transfer capability (experimental).
+- **Use Cover Art Picker**: Show book covers in the file selection screen (experimental).
+- **Auto-Sleep Timeout**: Configure when the device automatically sleeps, options are 2, 5, 10, 15, 20, 30, 60 minutes, or "Never".
+- **Screen Refresh Interval**: Set how often to do a full screen refresh while reading (1, 3, 5, 10, 15, or 20 pages).
+- **Default Folder**: Choose which folder to show when opening the file browser:
+  - "Root" - Always start at the SD card root
+  - "Custom" - Start at a custom folder path
+  - "Last Used" (default) - Return to the last browsed folder
+- **File Transfer Schedule**: Configure automatic file transfer server startup:
+  - Enable/disable scheduled transfers
+  - Frequency: hourly intervals (1-24hr) or specific time of day
+  - Protocol: HTTP or FTP
+  - Network mode: Join existing WiFi or create hotspot
+  - Auto-shutdown: automatically stop server after 5-120 minutes
+- **Network Credentials**: Configure authentication credentials:
+  - FTP username and password
+  - HTTP username and password (for web interface)
+  - WiFi hotspot SSID and password
 - **Check for updates**: Check for firmware updates over WiFi.
 
 ### 3.6 Sleep Screen

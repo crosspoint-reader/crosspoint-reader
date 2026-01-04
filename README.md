@@ -34,12 +34,17 @@ This project is **not affiliated with Xteink**; it's built as a community projec
   - [ ] EPUB picker with cover art
 - [x] Custom sleep screen
   - [x] Cover sleep screen
-- [x] Wifi book upload
-- [x] Wifi OTA updates
+- [x] WiFi book upload
+  - [x] HTTP and FTP file transfer
+  - [x] Authentication (configurable credentials)
+  - [x] Scheduled automatic transfers
+  - [x] Auto-shutdown timer
+- [x] WiFi OTA updates
 - [x] Configurable font, layout, and display options
   - [ ] User provided fonts
   - [ ] Full UTF support
 - [x] Screen rotation
+- [x] Bluetooth file transfer (experimental)
 - [ ] Bluetooth LE Support
 - [x] FTP server support (simpler automated uploads from phone apps)
 - [x] Scheduled hotspot start/stop support
