@@ -56,6 +56,8 @@ intervals = [
     # Russian, Ukrainian, Bulgarian, etc.
     (0x0400, 0x04FF),
     ### Math Symbols (common subset) ###
+    # Superscripts and Subscripts
+    (0x2070, 0x209F),
     # General math operators
     (0x2200, 0x22FF),
     # Arrows
