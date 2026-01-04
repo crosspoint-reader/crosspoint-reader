@@ -41,7 +41,10 @@ This project is **not affiliated with Xteink**; it's built as a community projec
   - [ ] Full UTF support
 - [x] Screen rotation
 - [ ] Bluetooth LE Support
-- [ ] FTP server support
+- [x] FTP server support (simpler automated uploads from phone apps)
+- [x] Scheduled hotspot start/stop support
+- [ ] Inverted/Darkmode
+- [ ] Sleep wallpaper picker
 - [x] Adjustable sleep timer
 - [x] Set default folder
 
