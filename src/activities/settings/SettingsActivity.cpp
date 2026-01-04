@@ -3,13 +3,16 @@
 #include <GfxRenderer.h>
 
 #include "CrossPointSettings.h"
+#include "KOReaderAuthActivity.h"
+#include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "fontIds.h"
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 14;
+constexpr int settingsCount = 18;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     {"Sleep Screen", SettingType::ENUM, &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover"}},
@@ -46,8 +49,56 @@ const SettingInfo settingsList[settingsCount] = {
      SettingType::ENUM,
      &CrossPointSettings::refreshFrequency,
      {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}},
+    {"KOReader Username", SettingType::ACTION, nullptr, {}},
+    {"KOReader Password", SettingType::ACTION, nullptr, {}},
+    {"Authenticate KOReader", SettingType::ACTION, nullptr, {}},
     {"Check for updates", SettingType::ACTION, nullptr, {}},
 };
+
+// Check if a setting should be visible
+bool isSettingVisible(int index) {
+  // Hide "Authenticate KOReader" if credentials are not set
+  if (std::string(settingsList[index].name) == "Authenticate KOReader") {
+    return KOREADER_STORE.hasCredentials();
+  }
+  return true;
+}
+
+// Get visible settings count
+int getVisibleSettingsCount() {
+  int count = 0;
+  for (int i = 0; i < settingsCount; i++) {
+    if (isSettingVisible(i)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+// Convert visible index to actual settings index
+int visibleToActualIndex(int visibleIndex) {
+  int count = 0;
+  for (int i = 0; i < settingsCount; i++) {
+    if (isSettingVisible(i)) {
+      if (count == visibleIndex) {
+        return i;
+      }
+      count++;
+    }
+  }
+  return -1;
+}
+
+// Convert actual index to visible index
+int actualToVisibleIndex(int actualIndex) {
+  int count = 0;
+  for (int i = 0; i < actualIndex; i++) {
+    if (isSettingVisible(i)) {
+      count++;
+    }
+  }
+  return count;
+}
 }  // namespace
 
 void SettingsActivity::taskTrampoline(void* param) {
@@ -106,16 +157,17 @@ void SettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
+  // Handle navigation (using visible settings count)
+  const int visibleCount = getVisibleSettingsCount();
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     // Move selection up (with wrap-around)
-    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount - 1);
+    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (visibleCount - 1);
     updateRequired = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     // Move selection down
-    if (selectedSettingIndex < settingsCount - 1) {
+    if (selectedSettingIndex < visibleCount - 1) {
       selectedSettingIndex++;
       updateRequired = true;
     }
@@ -123,12 +175,13 @@ void SettingsActivity::loop() {
 }
 
 void SettingsActivity::toggleCurrentSetting() {
-  // Validate index
-  if (selectedSettingIndex < 0 || selectedSettingIndex >= settingsCount) {
+  // Convert visible index to actual index
+  const int actualIndex = visibleToActualIndex(selectedSettingIndex);
+  if (actualIndex < 0 || actualIndex >= settingsCount) {
     return;
   }
 
-  const auto& setting = settingsList[selectedSettingIndex];
+  const auto& setting = settingsList[actualIndex];
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
@@ -142,6 +195,54 @@ void SettingsActivity::toggleCurrentSetting() {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (std::string(setting.name) == "KOReader Username") {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new KeyboardEntryActivity(
+          renderer, mappedInput, "KOReader Username", KOREADER_STORE.getUsername(), 10,
+          64,     // maxLength
+          false,  // not password
+          [this](const std::string& username) {
+            KOREADER_STORE.setCredentials(username, KOREADER_STORE.getPassword());
+            KOREADER_STORE.saveToFile();
+            exitActivity();
+            updateRequired = true;
+          },
+          [this]() {
+            exitActivity();
+            updateRequired = true;
+          }));
+      xSemaphoreGive(renderingMutex);
+    } else if (std::string(setting.name) == "KOReader Password") {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new KeyboardEntryActivity(
+          renderer, mappedInput, "KOReader Password", KOREADER_STORE.getPassword(), 10,
+          64,     // maxLength
+          false,  // not password mode - show characters
+          [this](const std::string& password) {
+            KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), password);
+            KOREADER_STORE.saveToFile();
+            exitActivity();
+            updateRequired = true;
+          },
+          [this]() {
+            exitActivity();
+            updateRequired = true;
+          }));
+      xSemaphoreGive(renderingMutex);
+    } else if (std::string(setting.name) == "Authenticate KOReader") {
+      // Only allow if credentials are set
+      if (!KOREADER_STORE.hasCredentials()) {
+        return;
+      }
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new KOReaderAuthActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
@@ -177,15 +278,21 @@ void SettingsActivity::render() const {
   // Draw header
   renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true, EpdFontFamily::BOLD);
 
-  // Draw selection
+  // Draw selection highlight
   renderer.fillRect(0, 60 + selectedSettingIndex * 30 - 2, pageWidth - 1, 30);
 
-  // Draw all settings
+  // Draw only visible settings
+  int visibleIndex = 0;
   for (int i = 0; i < settingsCount; i++) {
-    const int settingY = 60 + i * 30;  // 30 pixels between settings
+    if (!isSettingVisible(i)) {
+      continue;
+    }
+
+    const int settingY = 60 + visibleIndex * 30;  // 30 pixels between settings
+    const bool isSelected = (visibleIndex == selectedSettingIndex);
 
     // Draw setting name
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, i != selectedSettingIndex);
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, !isSelected);
 
     // Draw value based on setting type
     std::string valueText = "";
@@ -195,9 +302,18 @@ void SettingsActivity::render() const {
     } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
       const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
       valueText = settingsList[i].enumValues[value];
+    } else if (settingsList[i].type == SettingType::ACTION) {
+      // Show status for KOReader settings
+      if (std::string(settingsList[i].name) == "KOReader Username") {
+        valueText = KOREADER_STORE.getUsername().empty() ? "[Not Set]" : "[Set]";
+      } else if (std::string(settingsList[i].name) == "KOReader Password") {
+        valueText = KOREADER_STORE.getPassword().empty() ? "[Not Set]" : "[Set]";
+      }
     }
     const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), i != selectedSettingIndex);
+    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), !isSelected);
+
+    visibleIndex++;
   }
 
   // Draw version text above button hints

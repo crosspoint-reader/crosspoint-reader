@@ -120,9 +120,11 @@ void EpubReaderActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    const int currentPage = section ? section->currentPage : 0;
+    const int totalPages = section ? section->pageCount : 0;
     exitActivity();
     enterNewActivity(new EpubReaderChapterSelectionActivity(
-        this->renderer, this->mappedInput, epub, currentSpineIndex,
+        this->renderer, this->mappedInput, epub, epub->getPath(), currentSpineIndex, currentPage, totalPages,
         [this] {
           exitActivity();
           updateRequired = true;
@@ -131,6 +133,16 @@ void EpubReaderActivity::loop() {
           if (currentSpineIndex != newSpineIndex) {
             currentSpineIndex = newSpineIndex;
             nextPageNumber = 0;
+            section.reset();
+          }
+          exitActivity();
+          updateRequired = true;
+        },
+        [this](const int newSpineIndex, const int newPage) {
+          // Handle sync position
+          if (currentSpineIndex != newSpineIndex || (section && section->currentPage != newPage)) {
+            currentSpineIndex = newSpineIndex;
+            nextPageNumber = newPage;
             section.reset();
           }
           exitActivity();
