@@ -36,6 +36,9 @@ class KOReaderSyncActivity final : public ActivityWithSubactivity {
         currentSpineIndex(currentSpineIndex),
         currentPage(currentPage),
         totalPagesInSpine(totalPagesInSpine),
+        remoteProgress{},
+        remotePosition{},
+        localProgress{},
         onCancel(std::move(onCancel)),
         onSyncComplete(std::move(onSyncComplete)) {}
 
