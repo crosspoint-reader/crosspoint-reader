@@ -885,7 +885,6 @@ function uploadFile() {
         progressText.textContent = 'All uploads complete!';
         setTimeout(() => {
           closeUploadModal();
-          // hydrate(); // Refresh file list instead of reloading
           reloadContent();
         }, 1000);
       } else {
@@ -899,7 +898,6 @@ function uploadFile() {
         setTimeout(() => {
           closeUploadModal();
           showFailedUploadsBanner();
-          // hydrate(); // Refresh file list to show successfully uploaded files
           reloadContent();
         }, 2000);
       }
