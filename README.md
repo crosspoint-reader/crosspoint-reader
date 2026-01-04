@@ -47,6 +47,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [ ] Sleep wallpaper picker
 - [x] Adjustable sleep timer
 - [x] Set default folder
+- [x] Custom credentials for Hotspot and FTP/HTTP access
 
 See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint.
 

@@ -88,6 +88,14 @@ class CrossPointSettings {
   // Custom default folder path (used when defaultFolder == FOLDER_CUSTOM)
   std::string customDefaultFolder = "/books";
 
+  // Network credentials
+  std::string ftpUsername = "crosspoint";
+  std::string ftpPassword = "reader";
+  std::string httpUsername = "crosspoint";
+  std::string httpPassword = "reader";
+  std::string apSsid = "CrossPoint-Reader";
+  std::string apPassword = "";  // Empty = open network
+
   ~CrossPointSettings() = default;
 
   // Get singleton instance

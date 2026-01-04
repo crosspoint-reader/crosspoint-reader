@@ -18,8 +18,6 @@
 
 namespace {
 // AP Mode configuration
-constexpr const char* AP_SSID = "CrossPoint-Reader";
-constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
 constexpr const char* AP_HOSTNAME = "crosspoint";
 constexpr uint8_t AP_CHANNEL = 1;
 constexpr uint8_t AP_MAX_CONNECTIONS = 4;
@@ -219,11 +217,11 @@ void FileTransferActivity::startAccessPoint() {
 
   // Start soft AP
   bool apStarted;
-  if (AP_PASSWORD && strlen(AP_PASSWORD) >= 8) {
-    apStarted = WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
+  if (!SETTINGS.apPassword.empty() && SETTINGS.apPassword.length() >= 8) {
+    apStarted = WiFi.softAP(SETTINGS.apSsid.c_str(), SETTINGS.apPassword.c_str(), AP_CHANNEL, false, AP_MAX_CONNECTIONS);
   } else {
-    // Open network (no password)
-    apStarted = WiFi.softAP(AP_SSID, nullptr, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
+    // Open network (no password or password too short)
+    apStarted = WiFi.softAP(SETTINGS.apSsid.c_str(), nullptr, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
   }
 
   if (!apStarted) {
@@ -239,10 +237,10 @@ void FileTransferActivity::startAccessPoint() {
   char ipStr[16];
   snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", apIP[0], apIP[1], apIP[2], apIP[3]);
   connectedIP = ipStr;
-  connectedSSID = AP_SSID;
+  connectedSSID = SETTINGS.apSsid;
 
   Serial.printf("[%lu] [WEBACT] Access Point started!\n", millis());
-  Serial.printf("[%lu] [WEBACT] SSID: %s\n", millis(), AP_SSID);
+  Serial.printf("[%lu] [WEBACT] SSID: %s\n", millis(), SETTINGS.apSsid.c_str());
   Serial.printf("[%lu] [WEBACT] IP: %s\n", millis(), connectedIP.c_str());
 
   // Start mDNS for hostname resolution
@@ -492,6 +490,13 @@ void FileTransferActivity::renderHttpServerRunning() const {
     // Show QR code for URL
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "or scan QR code with your phone:");
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 7, hostnameUrl);
+
+    // Show HTTP credentials at the bottom
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 14, "Browser will ask for credentials:");
+    std::string httpUserStr = "Username: " + SETTINGS.httpUsername;
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 15, httpUserStr.c_str());
+    std::string httpPassStr = "Password: " + SETTINGS.httpPassword;
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 16, httpPassStr.c_str());
   } else {
     // STA mode display (original behavior)
     const int startY = 65;
@@ -518,6 +523,13 @@ void FileTransferActivity::renderHttpServerRunning() const {
     // Show QR code for URL
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
+
+    // Show HTTP credentials
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 12, "Browser will ask for credentials:");
+    std::string httpUserStr = "Username: " + SETTINGS.httpUsername;
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 13, httpUserStr.c_str());
+    std::string httpPassStr = "Password: " + SETTINGS.httpPassword;
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 14, httpPassStr.c_str());
   }
 
   const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
@@ -542,7 +554,10 @@ void FileTransferActivity::renderFtpServerRunning() const {
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3,
                               "or scan QR code with your phone to connect to WiFi.");
     // Show QR code for WiFi
-    std::string wifiConfig = std::string("WIFI:T:WPA;S:") + connectedSSID + ";P:" + "" + ";;";
+    std::string wifiConfig = std::string("WIFI:T:") + 
+                             (SETTINGS.apPassword.empty() ? "" : "WPA") + 
+                             ";S:" + connectedSSID + 
+                             ";P:" + SETTINGS.apPassword + ";;";
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
 
     startY += 6 * 29 + 3 * LINE_SPACING;
@@ -554,8 +569,10 @@ void FileTransferActivity::renderFtpServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 4, ftpInfo.c_str(), true, BOLD);
 
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "Connect with FTP client:");
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "Username: crosspoint");
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 7, "Password: reader");
+    std::string ftpUserStr = "Username: " + SETTINGS.ftpUsername;
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, ftpUserStr.c_str());
+    std::string ftpPassStr = "Password: " + SETTINGS.ftpPassword;
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 7, ftpPassStr.c_str());
   } else {
     // STA mode display
     const int startY = 65;
@@ -576,8 +593,10 @@ void FileTransferActivity::renderFtpServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, ftpInfo.c_str(), true, BOLD);
 
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Use FTP client to connect:");
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "Username: crosspoint");
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "Password: reader");
+    std::string ftpUserStr = "Username: " + SETTINGS.ftpUsername;
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, ftpUserStr.c_str());
+    std::string ftpPassStr = "Password: " + SETTINGS.ftpPassword;
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, ftpPassStr.c_str());
 
     // Show QR code for FTP URL
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 8, ftpInfo);

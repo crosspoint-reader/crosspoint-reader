@@ -12,7 +12,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 22;
+constexpr uint8_t SETTINGS_COUNT = 28;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -49,6 +49,12 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, scheduleNetworkMode);
   serialization::writePod(outputFile, scheduleHour);
   serialization::writePod(outputFile, scheduleAutoShutdown);
+  serialization::writeString(outputFile, ftpUsername);
+  serialization::writeString(outputFile, ftpPassword);
+  serialization::writeString(outputFile, httpUsername);
+  serialization::writeString(outputFile, httpPassword);
+  serialization::writeString(outputFile, apSsid);
+  serialization::writeString(outputFile, apPassword);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -118,6 +124,18 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, scheduleHour);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, scheduleAutoShutdown);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readString(inputFile, ftpUsername);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readString(inputFile, ftpPassword);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readString(inputFile, httpUsername);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readString(inputFile, httpPassword);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readString(inputFile, apSsid);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readString(inputFile, apPassword);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

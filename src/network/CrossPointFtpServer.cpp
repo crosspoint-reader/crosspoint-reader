@@ -2,11 +2,7 @@
 
 #include <WiFi.h>
 
-namespace {
-// FTP server credentials
-constexpr const char* FTP_USERNAME = "crosspoint";
-constexpr const char* FTP_PASSWORD = "reader";
-}  // namespace
+#include "CrossPointSettings.h"
 
 CrossPointFtpServer::CrossPointFtpServer() {}
 
@@ -52,15 +48,15 @@ void CrossPointFtpServer::begin() {
   }
 
   // Initialize FTP server with credentials
-  ftpServer->begin(FTP_USERNAME, FTP_PASSWORD);
+  ftpServer->begin(SETTINGS.ftpUsername.c_str(), SETTINGS.ftpPassword.c_str());
   running = true;
 
   Serial.printf("[%lu] [FTP] FTP server started on port 21\n", millis());
   // Show the correct IP based on network mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
   Serial.printf("[%lu] [FTP] Access at ftp://%s/\n", millis(), ipAddr.c_str());
-  Serial.printf("[%lu] [FTP] Username: %s\n", millis(), FTP_USERNAME);
-  Serial.printf("[%lu] [FTP] Password: %s\n", millis(), FTP_PASSWORD);
+  Serial.printf("[%lu] [FTP] Username: %s\n", millis(), SETTINGS.ftpUsername.c_str());
+  Serial.printf("[%lu] [FTP] Password: %s\n", millis(), SETTINGS.ftpPassword.c_str());
   Serial.printf("[%lu] [FTP] [MEM] Free heap after server.begin(): %d bytes\n", millis(), ESP.getFreeHeap());
 }
 

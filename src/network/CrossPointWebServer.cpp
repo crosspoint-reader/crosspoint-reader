@@ -7,6 +7,7 @@
 
 #include <algorithm>
 
+#include "CrossPointSettings.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 
@@ -150,7 +151,17 @@ void CrossPointWebServer::handleClient() const {
   server->handleClient();
 }
 
+bool CrossPointWebServer::authenticate() const {
+  if (!server->authenticate(SETTINGS.httpUsername.c_str(), SETTINGS.httpPassword.c_str())) {
+    server->requestAuthentication();
+    Serial.printf("[%lu] [WEB] Authentication failed\n", millis());
+    return false;
+  }
+  return true;
+}
+
 void CrossPointWebServer::handleRoot() const {
+  if (!authenticate()) return;
   server->send(200, "text/html", HomePageHtml);
   Serial.printf("[%lu] [WEB] Served root page\n", millis());
 }
@@ -162,6 +173,7 @@ void CrossPointWebServer::handleNotFound() const {
 }
 
 void CrossPointWebServer::handleStatus() const {
+  if (!authenticate()) return;
   // Get correct IP based on AP vs STA mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
 
@@ -241,9 +253,13 @@ bool CrossPointWebServer::isEpubFile(const String& filename) const {
   return lower.endsWith(".epub");
 }
 
-void CrossPointWebServer::handleFileList() const { server->send(200, "text/html", FilesPageHtml); }
+void CrossPointWebServer::handleFileList() const { 
+  if (!authenticate()) return;
+  server->send(200, "text/html", FilesPageHtml); 
+}
 
 void CrossPointWebServer::handleFileListData() const {
+  if (!authenticate()) return;
   // Get current path from query string (default to root)
   String currentPath = "/";
   if (server->hasArg("path")) {
@@ -302,6 +318,9 @@ static bool uploadSuccess = false;
 static String uploadError = "";
 
 void CrossPointWebServer::handleUpload() const {
+  // Check authentication
+  if (!authenticate()) return;
+
   static unsigned long lastWriteTime = 0;
   static unsigned long uploadStartTime = 0;
   static size_t lastLoggedSize = 0;
@@ -416,6 +435,7 @@ void CrossPointWebServer::handleUpload() const {
 }
 
 void CrossPointWebServer::handleUploadPost() const {
+  if (!authenticate()) return;
   if (uploadSuccess) {
     server->send(200, "text/plain", "File uploaded successfully: " + uploadFileName);
   } else {
@@ -425,6 +445,7 @@ void CrossPointWebServer::handleUploadPost() const {
 }
 
 void CrossPointWebServer::handleCreateFolder() const {
+  if (!authenticate()) return;
   // Get folder name from form data
   if (!server->hasArg("name")) {
     server->send(400, "text/plain", "Missing folder name");
@@ -475,6 +496,7 @@ void CrossPointWebServer::handleCreateFolder() const {
 }
 
 void CrossPointWebServer::handleDelete() const {
+  if (!authenticate()) return;
   // Get path from form data
   if (!server->hasArg("path")) {
     server->send(400, "text/plain", "Missing path");
