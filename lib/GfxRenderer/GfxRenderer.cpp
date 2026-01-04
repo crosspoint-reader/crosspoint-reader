@@ -196,7 +196,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       break;
     }
 
-    if (bitmap.readRow(outputRow, rowBytes, bmpY) != BmpReaderError::Ok) {
+    if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
       free(outputRow);
       free(rowBytes);
