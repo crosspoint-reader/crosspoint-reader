@@ -41,13 +41,14 @@ void RecentBooksActivity::onEnter() {
 
   // Load book titles from recent books list
   bookTitles.clear();
+  bookPaths.clear();
   const auto& books = RECENT_BOOKS.getBooks();
   bookTitles.reserve(books.size());
+  bookPaths.reserve(books.size());
 
   for (const auto& path : books) {
     // Skip if file no longer exists
     if (!SdMan.exists(path.c_str())) {
-      bookTitles.emplace_back("[Missing]");
       continue;
     }
 
@@ -75,6 +76,7 @@ void RecentBooksActivity::onEnter() {
     }
 
     bookTitles.push_back(title);
+    bookPaths.push_back(path);
   }
 
   selectorIndex = 0;
@@ -102,6 +104,7 @@ void RecentBooksActivity::onExit() {
   vSemaphoreDelete(renderingMutex);
   renderingMutex = nullptr;
   bookTitles.clear();
+  bookPaths.clear();
 }
 
 void RecentBooksActivity::loop() {
@@ -112,12 +115,11 @@ void RecentBooksActivity::loop() {
 
   const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = getPageItems();
-  const int bookCount = RECENT_BOOKS.getCount();
+  const int bookCount = static_cast<int>(bookTitles.size());
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (bookCount > 0 && selectorIndex < bookCount) {
-      const auto& books = RECENT_BOOKS.getBooks();
-      onSelectBook(books[selectorIndex]);
+      onSelectBook(bookPaths[selectorIndex]);
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();
@@ -155,7 +157,7 @@ void RecentBooksActivity::render() const {
 
   const auto pageWidth = renderer.getScreenWidth();
   const int pageItems = getPageItems();
-  const int bookCount = RECENT_BOOKS.getCount();
+  const int bookCount = static_cast<int>(bookTitles.size());
 
   // Draw header
   renderer.drawCenteredText(UI_12_FONT_ID, 15, "Recent Books", true, EpdFontFamily::BOLD);

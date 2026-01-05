@@ -15,6 +15,7 @@ class RecentBooksActivity final : public Activity {
   int selectorIndex = 0;
   bool updateRequired = false;
   std::vector<std::string> bookTitles;  // Display titles for each book
+  std::vector<std::string> bookPaths;   // Paths for each visible book (excludes missing)
   const std::function<void()> onGoBack;
   const std::function<void(const std::string& path)> onSelectBook;
 
