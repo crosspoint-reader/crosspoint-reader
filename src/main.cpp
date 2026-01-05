@@ -252,6 +252,16 @@ void setupDisplayAndFonts() {
 void setup() {
   t1 = millis();
 
+  // Check heap integrity after potential static initialization issues.
+  // If corruption is found, we surface it to the display and stop.
+  if (!heap_caps_check_integrity_all(true)) {
+    Serial.println("!!! HEAP CORRUPTION DETECTED AT BOOT !!!");
+    setupDisplayAndFonts();
+    exitActivity();
+    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, "Heap corruption", EpdFontFamily::BOLD));
+    return;
+  }
+
   // Only start serial if USB connected
   pinMode(UART0_RXD, INPUT);
   if (digitalRead(UART0_RXD) == HIGH) {
