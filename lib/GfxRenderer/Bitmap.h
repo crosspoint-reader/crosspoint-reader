@@ -31,7 +31,7 @@ class Bitmap {
   explicit Bitmap(FsFile& file) : file(file) {}
   ~Bitmap();
   BmpReaderError parseHeaders();
-  BmpReaderError readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) const;
+  BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
   BmpReaderError rewindToData() const;
   int getWidth() const { return width; }
   int getHeight() const { return height; }
@@ -55,5 +55,5 @@ class Bitmap {
   // Floyd-Steinberg dithering state (mutable for const methods)
   mutable int16_t* errorCurRow = nullptr;
   mutable int16_t* errorNextRow = nullptr;
-  mutable int lastRowY = -1;  // Track row progression for error propagation
+  mutable int prevRowY = -1;  // Track row progression for error propagation
 };
