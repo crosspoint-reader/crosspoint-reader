@@ -15,6 +15,9 @@ constexpr uint8_t KOREADER_FILE_VERSION = 1;
 // KOReader credentials file path
 constexpr char KOREADER_FILE[] = "/.crosspoint/koreader.bin";
 
+// Default sync server URL
+constexpr char DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
+
 // Obfuscation key - "KOReader" in ASCII
 // This is NOT cryptographic security, just prevents casual file reading
 constexpr uint8_t OBFUSCATION_KEY[] = {0x4B, 0x4F, 0x52, 0x65, 0x61, 0x64, 0x65, 0x72};
@@ -48,6 +51,9 @@ bool KOReaderCredentialStore::saveToFile() const {
   obfuscate(obfuscatedPwd);
   serialization::writeString(file, obfuscatedPwd);
 
+  // Write server URL
+  serialization::writeString(file, serverUrl);
+
   file.close();
   Serial.printf("[%lu] [KRS] Saved KOReader credentials to file\n", millis());
   return true;
@@ -70,11 +76,26 @@ bool KOReaderCredentialStore::loadFromFile() {
   }
 
   // Read username
-  serialization::readString(file, username);
+  if (file.available()) {
+    serialization::readString(file, username);
+  } else {
+    username.clear();
+  }
 
   // Read and deobfuscate password
-  serialization::readString(file, password);
-  obfuscate(password);  // XOR is symmetric, so same function deobfuscates
+  if (file.available()) {
+    serialization::readString(file, password);
+    obfuscate(password);  // XOR is symmetric, so same function deobfuscates
+  } else {
+    password.clear();
+  }
+
+  // Read server URL
+  if (file.available()) {
+    serialization::readString(file, serverUrl);
+  } else {
+    serverUrl.clear();
+  }
 
   file.close();
   Serial.printf("[%lu] [KRS] Loaded KOReader credentials for user: %s\n", millis(), username.c_str());
@@ -108,4 +129,22 @@ void KOReaderCredentialStore::clearCredentials() {
   password.clear();
   saveToFile();
   Serial.printf("[%lu] [KRS] Cleared KOReader credentials\n", millis());
+}
+
+void KOReaderCredentialStore::setServerUrl(const std::string& url) {
+  serverUrl = url;
+  Serial.printf("[%lu] [KRS] Set server URL: %s\n", millis(), url.empty() ? "(default)" : url.c_str());
+}
+
+std::string KOReaderCredentialStore::getBaseUrl() const {
+  if (serverUrl.empty()) {
+    return DEFAULT_SERVER_URL;
+  }
+
+  // Normalize URL: add https:// if no protocol specified
+  if (serverUrl.find("://") == std::string::npos) {
+    return "https://" + serverUrl;
+  }
+
+  return serverUrl;
 }

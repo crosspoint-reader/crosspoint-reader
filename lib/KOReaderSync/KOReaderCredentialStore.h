@@ -11,6 +11,7 @@ class KOReaderCredentialStore {
   static KOReaderCredentialStore instance;
   std::string username;
   std::string password;
+  std::string serverUrl;  // Custom sync server URL (empty = default)
 
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
@@ -43,6 +44,13 @@ class KOReaderCredentialStore {
 
   // Clear credentials
   void clearCredentials();
+
+  // Server URL management
+  void setServerUrl(const std::string& url);
+  const std::string& getServerUrl() const { return serverUrl; }
+
+  // Get base URL for API calls (with https:// normalization, falls back to default)
+  std::string getBaseUrl() const;
 };
 
 // Helper macro to access credential store

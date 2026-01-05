@@ -11,8 +11,8 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 3;
-const char* menuNames[MENU_ITEMS] = {"Username", "Password", "Authenticate"};
+constexpr int MENU_ITEMS = 4;
+const char* menuNames[MENU_ITEMS] = {"Username", "Password", "Sync Server URL", "Authenticate"};
 }  // namespace
 
 void KOReaderSettingsActivity::taskTrampoline(void* param) {
@@ -112,6 +112,23 @@ void KOReaderSettingsActivity::handleSelection() {
           updateRequired = true;
         }));
   } else if (selectedIndex == 2) {
+    // Sync Server URL
+    exitActivity();
+    enterNewActivity(new KeyboardEntryActivity(
+        renderer, mappedInput, "Sync Server URL", KOREADER_STORE.getServerUrl(), 10,
+        128,    // maxLength - URLs can be long
+        false,  // not password
+        [this](const std::string& url) {
+          KOREADER_STORE.setServerUrl(url);
+          KOREADER_STORE.saveToFile();
+          exitActivity();
+          updateRequired = true;
+        },
+        [this]() {
+          exitActivity();
+          updateRequired = true;
+        }));
+  } else if (selectedIndex == 3) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -158,13 +175,15 @@ void KOReaderSettingsActivity::render() {
 
     renderer.drawText(UI_10_FONT_ID, 20, settingY, menuNames[i], !isSelected);
 
-    // Draw status for username/password
+    // Draw status for each item
     const char* status = "";
     if (i == 0) {
       status = KOREADER_STORE.getUsername().empty() ? "[Not Set]" : "[Set]";
     } else if (i == 1) {
       status = KOREADER_STORE.getPassword().empty() ? "[Not Set]" : "[Set]";
     } else if (i == 2) {
+      status = KOREADER_STORE.getServerUrl().empty() ? "[Not Set]" : "[Set]";
+    } else if (i == 3) {
       status = KOREADER_STORE.hasCredentials() ? "" : "[Set credentials first]";
     }
 

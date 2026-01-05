@@ -10,9 +10,6 @@
 #include "KOReaderCredentialStore.h"
 
 namespace {
-// Base URL for KOReader sync server
-constexpr char BASE_URL[] = "https://sync.koreader.rocks:443";
-
 // Device identifier for CrossPoint reader
 constexpr char DEVICE_NAME[] = "CrossPoint";
 constexpr char DEVICE_ID[] = "crosspoint-reader";
@@ -34,7 +31,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   client->setInsecure();
   HTTPClient http;
 
-  std::string url = std::string(BASE_URL) + "/users/auth";
+  std::string url = KOREADER_STORE.getBaseUrl() + "/users/auth";
   Serial.printf("[%lu] [KOSync] Authenticating: %s\n", millis(), url.c_str());
 
   http.begin(*client, url.c_str());
@@ -66,7 +63,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   client->setInsecure();
   HTTPClient http;
 
-  std::string url = std::string(BASE_URL) + "/syncs/progress/" + documentHash;
+  std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash;
   Serial.printf("[%lu] [KOSync] Getting progress: %s\n", millis(), url.c_str());
 
   http.begin(*client, url.c_str());
@@ -121,7 +118,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   client->setInsecure();
   HTTPClient http;
 
-  std::string url = std::string(BASE_URL) + "/syncs/progress";
+  std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress";
   Serial.printf("[%lu] [KOSync] Updating progress: %s\n", millis(), url.c_str());
 
   http.begin(*client, url.c_str());
