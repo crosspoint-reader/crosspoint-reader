@@ -6,6 +6,7 @@
 
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
 
@@ -14,7 +15,12 @@ void HomeActivity::taskTrampoline(void* param) {
   self->displayTaskLoop();
 }
 
-int HomeActivity::getMenuItemCount() const { return hasContinueReading ? 4 : 3; }
+int HomeActivity::getMenuItemCount() const {
+  int count = 3;  // Base: Browse, File transfer, Settings
+  if (hasContinueReading) count++;
+  if (hasRecentBooks) count++;
+  return count;
+}
 
 void HomeActivity::onEnter() {
   Activity::onEnter();
@@ -23,6 +29,9 @@ void HomeActivity::onEnter() {
 
   // Check if we have a book to continue reading
   hasContinueReading = !APP_STATE.openEpubPath.empty() && SdMan.exists(APP_STATE.openEpubPath.c_str());
+
+  // Check if we have more than one recent book
+  hasRecentBooks = RECENT_BOOKS.getCount() > 1;
 
   if (hasContinueReading) {
     // Extract filename from path for display
@@ -86,26 +95,29 @@ void HomeActivity::loop() {
   const int menuCount = getMenuItemCount();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (hasContinueReading) {
-      // Menu: Continue Reading, Browse, File transfer, Settings
-      if (selectorIndex == 0) {
-        onContinueReading();
-      } else if (selectorIndex == 1) {
-        onReaderOpen();
-      } else if (selectorIndex == 2) {
-        onFileTransferOpen();
-      } else if (selectorIndex == 3) {
-        onSettingsOpen();
-      }
-    } else {
-      // Menu: Browse, File transfer, Settings
-      if (selectorIndex == 0) {
-        onReaderOpen();
-      } else if (selectorIndex == 1) {
-        onFileTransferOpen();
-      } else if (selectorIndex == 2) {
-        onSettingsOpen();
-      }
+    // Menu order: [Continue Reading], [Recent Books], Browse, File transfer, Settings
+    // Calculate index offsets based on what's shown
+    int idx = selectorIndex;
+
+    if (hasContinueReading && idx == 0) {
+      onContinueReading();
+      return;
+    }
+    if (hasContinueReading) idx--;
+
+    if (hasRecentBooks && idx == 0) {
+      onRecentBooksOpen();
+      return;
+    }
+    if (hasRecentBooks) idx--;
+
+    // Now idx is 0-based for: Browse, File transfer, Settings
+    if (idx == 0) {
+      onReaderOpen();
+    } else if (idx == 1) {
+      onFileTransferOpen();
+    } else if (idx == 2) {
+      onSettingsOpen();
     }
   } else if (prevPressed) {
     selectorIndex = (selectorIndex + menuCount - 1) % menuCount;
@@ -277,11 +289,13 @@ void HomeActivity::render() const {
     renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), "Start reading below");
   }
 
-  // --- Bottom menu tiles (indices 1-3) ---
+  // --- Bottom menu tiles ---
+  // Menu tiles: [Recent books], Browse files, File transfer, Settings
+  const int menuTileCount = hasRecentBooks ? 4 : 3;
   const int menuTileWidth = pageWidth - 2 * margin;
   constexpr int menuTileHeight = 50;
   constexpr int menuSpacing = 10;
-  constexpr int totalMenuHeight = 3 * menuTileHeight + 2 * menuSpacing;
+  const int totalMenuHeight = menuTileCount * menuTileHeight + (menuTileCount - 1) * menuSpacing;
 
   int menuStartY = bookY + bookHeight + 20;
   // Ensure we don't collide with the bottom button legend
@@ -290,9 +304,8 @@ void HomeActivity::render() const {
     menuStartY = maxMenuStartY;
   }
 
-  for (int i = 0; i < 3; ++i) {
-    constexpr const char* items[3] = {"Browse files", "File transfer", "Settings"};
-    const int overallIndex = i + (getMenuItemCount() - 3);
+  for (int i = 0; i < menuTileCount; ++i) {
+    const int overallIndex = i + (getMenuItemCount() - menuTileCount);
     constexpr int tileX = margin;
     const int tileY = menuStartY + i * (menuTileHeight + menuSpacing);
     const bool selected = selectorIndex == overallIndex;
@@ -303,7 +316,16 @@ void HomeActivity::render() const {
       renderer.drawRect(tileX, tileY, menuTileWidth, menuTileHeight);
     }
 
-    const char* label = items[i];
+    // Determine label based on tile index and whether recent books is shown
+    const char* label;
+    if (hasRecentBooks) {
+      constexpr const char* itemsWithRecent[4] = {"Recent books", "Browse files", "File transfer", "Settings"};
+      label = itemsWithRecent[i];
+    } else {
+      constexpr const char* itemsNoRecent[3] = {"Browse files", "File transfer", "Settings"};
+      label = itemsNoRecent[i];
+    }
+
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
     const int textX = tileX + (menuTileWidth - textWidth) / 2;
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);

@@ -11,9 +11,11 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/home/HomeActivity.h"
+#include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
@@ -222,10 +224,16 @@ void onGoToSettings() {
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoHome();
+void onGoToRecentBooks() {
+  exitActivity();
+  enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+}
+
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToReaderHome, onGoToSettings,
-                                    onGoToFileTransfer));
+                                    onGoToFileTransfer, onGoToRecentBooks));
 }
 
 void setupDisplayAndFonts() {
@@ -289,6 +297,8 @@ void setup() {
   enterNewActivity(new BootActivity(renderer, mappedInputManager));
 
   APP_STATE.loadFromFile();
+  RECENT_BOOKS.loadFromFile();
+
   if (APP_STATE.openEpubPath.empty()) {
     onGoHome();
   } else {
