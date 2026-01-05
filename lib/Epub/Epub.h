@@ -12,8 +12,10 @@
 class ZipFile;
 
 class Epub {
-  // the ncx file
+  // the ncx file (EPUB 2)
   std::string tocNcxItem;
+  // the nav file (EPUB 3)
+  std::string tocNavItem;
   // where is the EPUBfile?
   std::string filepath;
   // the base path for items in the EPUB file
@@ -26,6 +28,7 @@ class Epub {
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata);
   bool parseTocNcxFile() const;
+  bool parseTocNavFile() const;
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {

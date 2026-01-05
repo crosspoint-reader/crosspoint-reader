@@ -8,6 +8,7 @@
 
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
+#include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
@@ -80,6 +81,10 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
     tocNcxItem = opfParser.tocNcxPath;
   }
 
+  if (!opfParser.tocNavPath.empty()) {
+    tocNavItem = opfParser.tocNavPath;
+  }
+
   Serial.printf("[%lu] [EBP] Successfully parsed content.opf\n", millis());
   return true;
 }
@@ -141,6 +146,60 @@ bool Epub::parseTocNcxFile() const {
   return true;
 }
 
+bool Epub::parseTocNavFile() const {
+  // the nav file should have been specified in the content.opf file (EPUB 3)
+  if (tocNavItem.empty()) {
+    Serial.printf("[%lu] [EBP] No nav file specified\n", millis());
+    return false;
+  }
+
+  Serial.printf("[%lu] [EBP] Parsing toc nav file: %s\n", millis(), tocNavItem.c_str());
+
+  const auto tmpNavPath = getCachePath() + "/toc.nav";
+  FsFile tempNavFile;
+  if (!SdMan.openFileForWrite("EBP", tmpNavPath, tempNavFile)) {
+    return false;
+  }
+  readItemContentsToStream(tocNavItem, tempNavFile, 1024);
+  tempNavFile.close();
+  if (!SdMan.openFileForRead("EBP", tmpNavPath, tempNavFile)) {
+    return false;
+  }
+  const auto navSize = tempNavFile.size();
+
+  TocNavParser navParser(contentBasePath, navSize, bookMetadataCache.get());
+
+  if (!navParser.setup()) {
+    Serial.printf("[%lu] [EBP] Could not setup toc nav parser\n", millis());
+    return false;
+  }
+
+  const auto navBuffer = static_cast<uint8_t*>(malloc(1024));
+  if (!navBuffer) {
+    Serial.printf("[%lu] [EBP] Could not allocate memory for toc nav parser\n", millis());
+    return false;
+  }
+
+  while (tempNavFile.available()) {
+    const auto readSize = tempNavFile.read(navBuffer, 1024);
+    const auto processedSize = navParser.write(navBuffer, readSize);
+
+    if (processedSize != readSize) {
+      Serial.printf("[%lu] [EBP] Could not process all toc nav data\n", millis());
+      free(navBuffer);
+      tempNavFile.close();
+      return false;
+    }
+  }
+
+  free(navBuffer);
+  tempNavFile.close();
+  SdMan.remove(tmpNavPath.c_str());
+
+  Serial.printf("[%lu] [EBP] Parsed TOC nav items\n", millis());
+  return true;
+}
+
 // load in the meta data for the epub file
 bool Epub::load(const bool buildIfMissing) {
   Serial.printf("[%lu] [EBP] Loading ePub: %s\n", millis(), filepath.c_str());
@@ -184,15 +243,31 @@ bool Epub::load(const bool buildIfMissing) {
     return false;
   }
 
-  // TOC Pass
+  // TOC Pass - try EPUB 3 nav first, fall back to NCX
   if (!bookMetadataCache->beginTocPass()) {
     Serial.printf("[%lu] [EBP] Could not begin writing toc pass\n", millis());
     return false;
   }
-  if (!parseTocNcxFile()) {
-    Serial.printf("[%lu] [EBP] Could not parse toc\n", millis());
-    return false;
+
+  bool tocParsed = false;
+
+  // Try EPUB 3 nav document first (preferred)
+  if (!tocNavItem.empty()) {
+    Serial.printf("[%lu] [EBP] Attempting to parse EPUB 3 nav document\n", millis());
+    tocParsed = parseTocNavFile();
   }
+
+  // Fall back to NCX if nav parsing failed or wasn't available
+  if (!tocParsed && !tocNcxItem.empty()) {
+    Serial.printf("[%lu] [EBP] Falling back to NCX TOC\n", millis());
+    tocParsed = parseTocNcxFile();
+  }
+
+  if (!tocParsed) {
+    Serial.printf("[%lu] [EBP] Warning: Could not parse any TOC format\n", millis());
+    // Continue anyway - book will work without TOC
+  }
+
   if (!bookMetadataCache->endTocPass()) {
     Serial.printf("[%lu] [EBP] Could not end writing toc pass\n", millis());
     return false;

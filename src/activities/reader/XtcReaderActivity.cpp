@@ -11,13 +11,13 @@
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
+#include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "XtcReaderChapterSelectionActivity.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int pagesPerRefresh = 15;
 constexpr unsigned long skipPageMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 }  // namespace
@@ -266,7 +266,7 @@ void XtcReaderActivity::renderPage() {
     // Display BW with conditional refresh based on pagesUntilFullRefresh
     if (pagesUntilFullRefresh <= 1) {
       renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
-      pagesUntilFullRefresh = pagesPerRefresh;
+      pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
     } else {
       renderer.displayBuffer();
       pagesUntilFullRefresh--;
@@ -346,7 +346,7 @@ void XtcReaderActivity::renderPage() {
   // Display with appropriate refresh
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
-    pagesUntilFullRefresh = pagesPerRefresh;
+    pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
     renderer.displayBuffer();
     pagesUntilFullRefresh--;

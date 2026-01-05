@@ -3,7 +3,6 @@
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <Update.h>
-#include <WiFiClientSecure.h>
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/daveallie/crosspoint-reader/releases/latest";
@@ -69,44 +68,41 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   return OK;
 }
 
-bool OtaUpdater::isUpdateNewer() {
+bool OtaUpdater::isUpdateNewer() const {
   if (!updateAvailable || latestVersion.empty() || latestVersion == CROSSPOINT_VERSION) {
     return false;
   }
 
+  int currentMajor, currentMinor, currentPatch;
+  int latestMajor, latestMinor, latestPatch;
+
+  const auto currentVersion = CROSSPOINT_VERSION;
+
   // semantic version check (only match on 3 segments)
-  const auto updateMajor = stoi(latestVersion.substr(0, latestVersion.find('.')));
-  const auto updateMinor = stoi(
-      latestVersion.substr(latestVersion.find('.') + 1, latestVersion.find_last_of('.') - latestVersion.find('.') - 1));
-  const auto updatePatch = stoi(latestVersion.substr(latestVersion.find_last_of('.') + 1));
+  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
+  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
 
-  std::string currentVersion = CROSSPOINT_VERSION;
-  const auto currentMajor = stoi(currentVersion.substr(0, currentVersion.find('.')));
-  const auto currentMinor = stoi(currentVersion.substr(
-      currentVersion.find('.') + 1, currentVersion.find_last_of('.') - currentVersion.find('.') - 1));
-  const auto currentPatch = stoi(currentVersion.substr(currentVersion.find_last_of('.') + 1));
+  /*
+   * Compare major versions.
+   * If they differ, return true if latest major version greater than current major version
+   * otherwise return false.
+   */
+  if (latestMajor != currentMajor) return latestMajor > currentMajor;
 
-  if (updateMajor > currentMajor) {
-    return true;
-  }
-  if (updateMajor < currentMajor) {
-    return false;
-  }
+  /*
+   * Compare minor versions.
+   * If they differ, return true if latest minor version greater than current minor version
+   * otherwise return false.
+   */
+  if (latestMinor != currentMinor) return latestMinor > currentMinor;
 
-  if (updateMinor > currentMinor) {
-    return true;
-  }
-  if (updateMinor < currentMinor) {
-    return false;
-  }
-
-  if (updatePatch > currentPatch) {
-    return true;
-  }
-  return false;
+  /*
+   * Check patch versions.
+   */
+  return latestPatch > currentPatch;
 }
 
-const std::string& OtaUpdater::getLatestVersion() { return latestVersion; }
+const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
 OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(const std::function<void(size_t, size_t)>& onProgress) {
   if (!isUpdateNewer()) {

@@ -447,7 +447,16 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
 
 void WifiSelectionActivity::displayTaskLoop() {
   while (true) {
+    // If a subactivity is active, yield CPU time but don't render
     if (subActivity) {
+      vTaskDelay(10 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
+    // from the keyboard subactivity back to the main activity
+    if (state == WifiSelectionState::PASSWORD_ENTRY) {
+      vTaskDelay(10 / portTICK_PERIOD_MS);
       continue;
     }
 

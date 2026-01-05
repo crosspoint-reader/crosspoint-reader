@@ -25,7 +25,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 
 ## Features & Usage
 
-- [x] EPUB parsing and rendering
+- [x] EPUB parsing and rendering (EPUB 2 and EPUB 3)
 - [ ] Image support within EPUB
 - [x] Saved reading position
 - [x] File explorer with file picker

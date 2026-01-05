@@ -97,7 +97,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (strcmp(name, "br") == 0) {
       self->startNewTextBlock(self->currentTextBlock->getStyle());
     } else {
-      self->startNewTextBlock(TextBlock::JUSTIFIED);
+      self->startNewTextBlock((TextBlock::Style)self->paragraphAlignment);
     }
   } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
@@ -135,6 +135,21 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
       // Skip the whitespace char
       continue;
+    }
+
+    // Skip soft-hyphen with UTF-8 representation (U+00AD) = 0xC2 0xAD
+    const XML_Char SHY_BYTE_1 = static_cast<XML_Char>(0xC2);
+    const XML_Char SHY_BYTE_2 = static_cast<XML_Char>(0xAD);
+    // 1. Check for the start of the 2-byte Soft Hyphen sequence
+    if (s[i] == SHY_BYTE_1) {
+      // 2. Check if the next byte exists AND if it completes the sequence
+      //    We must check i + 1 < len to prevent reading past the end of the buffer.
+      if ((i + 1 < len) && (s[i + 1] == SHY_BYTE_2)) {
+        // Sequence 0xC2 0xAD found!
+        // Skip the current byte (0xC2) and the next byte (0xAD)
+        i++;       // Increment 'i' one more time to skip the 0xAD byte
+        continue;  // Skip the rest of the loop and move to the next iteration
+      }
     }
 
     // If we're about to run out of space, then cut the word off and start a new one
@@ -206,7 +221,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 }
 
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
-  startNewTextBlock(TextBlock::JUSTIFIED);
+  startNewTextBlock((TextBlock::Style)this->paragraphAlignment);
 
   const XML_Parser parser = XML_ParserCreate(nullptr);
   int done;
