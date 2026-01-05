@@ -16,7 +16,8 @@ class CrossPointSettings {
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
   // Should match with SettingsActivity text
-  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3 };
+  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3, BLANK = 4 };
+  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1 };
 
   // Status bar display type enum
   enum STATUS_BAR_MODE { NONE = 0, NO_PROGRESS = 1, FULL = 2 };
@@ -53,6 +54,8 @@ class CrossPointSettings {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Sleep screen cover mode settings
+  uint8_t sleepScreenCoverMode = FIT;
   // Status bar settings
   uint8_t statusBar = FULL;
   // Text rendering settings
@@ -75,6 +78,9 @@ class CrossPointSettings {
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
 
+  // Reader screen margin settings
+  uint8_t screenMargin = 5;
+
   ~CrossPointSettings() = default;
 
   // Get singleton instance
@@ -89,6 +95,7 @@ class CrossPointSettings {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+  int getReaderScreenMargin() const;
 };
 
 // Helper macro to access settings

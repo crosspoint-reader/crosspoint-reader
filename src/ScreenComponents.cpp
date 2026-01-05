@@ -15,21 +15,21 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
 
   // 1 column on left, 2 columns on right, 5 columns of battery body
   constexpr int batteryWidth = 15;
-  constexpr int batteryHeight = 10;
+  constexpr int batteryHeight = 12;
   const int x = left;
-  const int y = top + 8;
+  const int y = top + 6;
 
   // Top line
-  renderer.drawLine(x, y, x + batteryWidth - 4, y);
+  renderer.drawLine(x + 1, y, x + batteryWidth - 3, y);
   // Bottom line
-  renderer.drawLine(x, y + batteryHeight - 1, x + batteryWidth - 4, y + batteryHeight - 1);
+  renderer.drawLine(x + 1, y + batteryHeight - 1, x + batteryWidth - 3, y + batteryHeight - 1);
   // Left line
-  renderer.drawLine(x, y, x, y + batteryHeight - 1);
+  renderer.drawLine(x, y + 1, x, y + batteryHeight - 2);
   // Battery end
-  renderer.drawLine(x + batteryWidth - 4, y, x + batteryWidth - 4, y + batteryHeight - 1);
-  renderer.drawLine(x + batteryWidth - 3, y + 2, x + batteryWidth - 1, y + 2);
-  renderer.drawLine(x + batteryWidth - 3, y + batteryHeight - 3, x + batteryWidth - 1, y + batteryHeight - 3);
-  renderer.drawLine(x + batteryWidth - 1, y + 2, x + batteryWidth - 1, y + batteryHeight - 3);
+  renderer.drawLine(x + batteryWidth - 2, y + 1, x + batteryWidth - 2, y + batteryHeight - 2);
+  renderer.drawPixel(x + batteryWidth - 1, y + 3);
+  renderer.drawPixel(x + batteryWidth - 1, y + batteryHeight - 4);
+  renderer.drawLine(x + batteryWidth - 0, y + 4, x + batteryWidth - 0, y + batteryHeight - 5);
 
   // The +1 is to round up, so that we always fill at least one pixel
   int filledWidth = percentage * (batteryWidth - 5) / 100 + 1;
@@ -37,5 +37,5 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
     filledWidth = batteryWidth - 5;  // Ensure we don't overflow
   }
 
-  renderer.fillRect(x + 1, y + 1, filledWidth, batteryHeight - 2);
+  renderer.fillRect(x + 2, y + 2, filledWidth, batteryHeight - 4);
 }
