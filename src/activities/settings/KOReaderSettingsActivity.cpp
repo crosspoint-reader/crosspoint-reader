@@ -131,8 +131,8 @@ void KOReaderSettingsActivity::handleSelection() {
   } else if (selectedIndex == 3) {
     // Document Matching - toggle between Filename and Binary
     const auto current = KOREADER_STORE.getMatchMethod();
-    const auto newMethod = (current == DocumentMatchMethod::FILENAME) ? DocumentMatchMethod::BINARY
-                                                                      : DocumentMatchMethod::FILENAME;
+    const auto newMethod =
+        (current == DocumentMatchMethod::FILENAME) ? DocumentMatchMethod::BINARY : DocumentMatchMethod::FILENAME;
     KOREADER_STORE.setMatchMethod(newMethod);
     KOREADER_STORE.saveToFile();
     updateRequired = true;
