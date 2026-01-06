@@ -38,9 +38,7 @@ struct SettingInfo {
     return {name, SettingType::ENUM, ptr, nullptr, std::move(values), {0, 0, 0}};
   }
 
-  static SettingInfo Action(const char* name) { 
-    return {name, SettingType::ACTION, nullptr, nullptr, {}, {0, 0, 0}}; 
-  }
+  static SettingInfo Action(const char* name) { return {name, SettingType::ACTION, nullptr, nullptr, {}, {0, 0, 0}}; }
 
   static SettingInfo Value(const char* name, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange) {
     return {name, SettingType::VALUE, ptr, nullptr, {}, valueRange};

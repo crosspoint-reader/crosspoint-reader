@@ -54,7 +54,14 @@ class CrossPointSettings {
   enum REFRESH_FREQUENCY { REFRESH_1 = 0, REFRESH_5 = 1, REFRESH_10 = 2, REFRESH_15 = 3, REFRESH_30 = 4 };
 
   // Hotspot scheduler settings
-  enum HOTSPOT_SHUTDOWN_TIME { SHUTDOWN_5_MIN = 0, SHUTDOWN_10_MIN = 1, SHUTDOWN_15_MIN = 2, SHUTDOWN_30_MIN = 3, SHUTDOWN_60_MIN = 4, SHUTDOWN_120_MIN = 5 };
+  enum HOTSPOT_SHUTDOWN_TIME {
+    SHUTDOWN_5_MIN = 0,
+    SHUTDOWN_10_MIN = 1,
+    SHUTDOWN_15_MIN = 2,
+    SHUTDOWN_30_MIN = 3,
+    SHUTDOWN_60_MIN = 4,
+    SHUTDOWN_120_MIN = 5
+  };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
@@ -84,9 +91,9 @@ class CrossPointSettings {
   // Screen margin setting (in pixels, default 0)
   uint8_t screenMargin = 0;
 
-  // Network credentials for FTP and HTTP servers
-  std::string ftpUsername = "crosspoint";
-  std::string ftpPassword = "reader";
+  // Network credentials for FTP and HTTP se               // 0 = disabled, 1 = enabled
+  uint8_t hotspotSchedulerHour = 12;                       // Hour (0-23)
+  uint8_t hotspotSchedulerMinute = 0;               
   std::string httpUsername = "crosspoint";
   std::string httpPassword = "reader";
 
