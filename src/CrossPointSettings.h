@@ -16,7 +16,7 @@ class CrossPointSettings {
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
   // Should match with SettingsActivity text
-  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3, BLANK = 4 };
+  enum SLEEP_SCREEN_MODE { DARK_LOGO = 0, LIGHT_LOGO = 1, CUSTOM = 2, COVER = 3, COVER_INV = 4, LIGHT_PAGE = 5, DARK_PAGE = 6, BLANK = 7 };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1 };
 
   // Status bar display type enum
@@ -53,7 +53,7 @@ class CrossPointSettings {
   enum REFRESH_FREQUENCY { REFRESH_1 = 0, REFRESH_5 = 1, REFRESH_10 = 2, REFRESH_15 = 3, REFRESH_30 = 4 };
 
   // Sleep screen settings
-  uint8_t sleepScreen = DARK;
+  uint8_t sleepScreen = DARK_LOGO;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Status bar settings
