@@ -179,9 +179,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                          viewportHeight, hyphenationEnabled);
   std::vector<uint32_t> lut = {};
 
-  ChapterHtmlSlimParser visitor(
-      tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, hyphenationEnabled, paragraphAlignment,
-      viewportWidth, viewportHeight,
+    ChapterHtmlSlimParser visitor(
+      tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+      viewportHeight, hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
       progressFn);
   success = visitor.parseAndBuildPages();
