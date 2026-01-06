@@ -29,7 +29,6 @@ void FileSelectionActivity::taskTrampoline(void* param) {
 
 void FileSelectionActivity::loadFiles() {
   files.clear();
-  selectorIndex = 0;
 
   auto root = SdMan.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
@@ -135,6 +134,11 @@ void FileSelectionActivity::loop() {
         basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
         if (basepath.empty()) basepath = "/";
         loadFiles();
+
+        auto pos = oldPath.find_last_of('/');
+        std::string dirName = oldPath.substr(pos + 1) + "/";
+        selectorIndex = findEntry(dirName);
+
         updateRequired = true;
       } else {
         onGoHome();
@@ -193,4 +197,11 @@ void FileSelectionActivity::render() const {
   }
 
   renderer.displayBuffer();
+}
+
+int FileSelectionActivity::findEntry(const std::string& name) const {
+  for (size_t i = 0; i < files.size(); i++)
+    if (files[i] == name) 
+      return i;
+  return 0;
 }
