@@ -12,7 +12,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 17;
+constexpr uint8_t SETTINGS_COUNT = 22;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -44,6 +44,11 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writeString(outputFile, ftpPassword);
   serialization::writeString(outputFile, httpUsername);
   serialization::writeString(outputFile, httpPassword);
+  serialization::writePod(outputFile, hotspotSchedulerEnabled);
+  serialization::writePod(outputFile, hotspotSchedulerHour);
+  serialization::writePod(outputFile, hotspotSchedulerMinute);
+  serialization::writePod(outputFile, hotspotSchedulerShutdownTime);
+  serialization::writePod(outputFile, screenMargin);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -103,6 +108,16 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readString(inputFile, httpUsername);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readString(inputFile, httpPassword);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, hotspotSchedulerEnabled);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, hotspotSchedulerHour);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, hotspotSchedulerMinute);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, hotspotSchedulerShutdownTime);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, screenMargin);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
@@ -218,5 +233,23 @@ int CrossPointSettings::getReaderFontId() const {
         case EXTRA_LARGE:
           return OPENDYSLEXIC_14_FONT_ID;
       }
+  }
+}
+unsigned int CrossPointSettings::getHotspotShutdownMinutes() const {
+  switch (hotspotSchedulerShutdownTime) {
+    case SHUTDOWN_5_MIN:
+      return 5;
+    case SHUTDOWN_10_MIN:
+      return 10;
+    case SHUTDOWN_15_MIN:
+      return 15;
+    case SHUTDOWN_30_MIN:
+      return 30;
+    case SHUTDOWN_60_MIN:
+      return 60;
+    case SHUTDOWN_120_MIN:
+      return 120;
+    default:
+      return 30;
   }
 }

@@ -75,10 +75,8 @@ void FileTransferActivity::onEnter() {
 
   // Launch protocol selection subactivity
   Serial.printf("[%lu] [FTACT] Launching ProtocolSelectionActivity...\n", millis());
-  enterNewActivity(new ProtocolSelectionActivity(renderer, mappedInput,
-                                                 [this](const FileTransferProtocol protocol) {
-                                                   onProtocolSelected(protocol);
-                                                 }));
+  enterNewActivity(new ProtocolSelectionActivity(
+      renderer, mappedInput, [this](const FileTransferProtocol protocol) { onProtocolSelected(protocol); }));
 }
 
 void FileTransferActivity::onExit() {
@@ -144,7 +142,8 @@ void FileTransferActivity::onExit() {
 }
 
 void FileTransferActivity::onProtocolSelected(const FileTransferProtocol protocol) {
-  Serial.printf("[%lu] [FTACT] Protocol selected: %s\n", millis(), protocol == FileTransferProtocol::HTTP ? "HTTP" : "FTP");
+  Serial.printf("[%lu] [FTACT] Protocol selected: %s\n", millis(),
+                protocol == FileTransferProtocol::HTTP ? "HTTP" : "FTP");
 
   selectedProtocol = protocol;
 

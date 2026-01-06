@@ -7,9 +7,7 @@
 
 #include "../CrossPointSettings.h"
 
-CrossPointFtpServer::~CrossPointFtpServer() {
-  stop();
-}
+CrossPointFtpServer::~CrossPointFtpServer() { stop(); }
 
 bool CrossPointFtpServer::begin() {
   if (isRunning) {

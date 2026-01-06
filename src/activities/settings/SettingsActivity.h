@@ -11,13 +11,13 @@
 
 class CrossPointSettings;
 
-enum class SettingType { TOGGLE, ENUM, ACTION, TEXT };
+enum class SettingType { TOGGLE, ENUM, ACTION, TEXT, VALUE };
 
 // Structure to hold setting information
 struct SettingInfo {
-  const char* name;                        // Display name of the setting
-  SettingType type;                        // Type of setting
-  uint8_t CrossPointSettings::* valuePtr;  // Pointer to member in CrossPointSettings (for TOGGLE/ENUM)
+  const char* name;                                  // Display name of the setting
+  SettingType type;                                  // Type of setting
+  uint8_t CrossPointSettings::* valuePtr;            // Pointer to member in CrossPointSettings (for TOGGLE/ENUM)
   std::string CrossPointSettings::* stringValuePtr;  // Pointer to string member (for TEXT)
   std::vector<std::string> enumValues;
 
@@ -31,17 +31,19 @@ struct SettingInfo {
 
   // Static constructors
   static SettingInfo Toggle(const char* name, uint8_t CrossPointSettings::* ptr) {
-    return {name, SettingType::TOGGLE, ptr};
+    return {name, SettingType::TOGGLE, ptr, nullptr, {}, {0, 0, 0}};
   }
 
   static SettingInfo Enum(const char* name, uint8_t CrossPointSettings::* ptr, std::vector<std::string> values) {
-    return {name, SettingType::ENUM, ptr, std::move(values)};
+    return {name, SettingType::ENUM, ptr, nullptr, std::move(values), {0, 0, 0}};
   }
 
-  static SettingInfo Action(const char* name) { return {name, SettingType::ACTION, nullptr}; }
+  static SettingInfo Action(const char* name) { 
+    return {name, SettingType::ACTION, nullptr, nullptr, {}, {0, 0, 0}}; 
+  }
 
   static SettingInfo Value(const char* name, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange) {
-    return {name, SettingType::VALUE, ptr, {}, valueRange};
+    return {name, SettingType::VALUE, ptr, nullptr, {}, valueRange};
   }
 };
 

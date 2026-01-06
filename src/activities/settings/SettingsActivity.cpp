@@ -13,7 +13,11 @@ namespace {
 constexpr int settingsCount = 16;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
-    {"Sleep Screen", SettingType::ENUM, &CrossPointSettings::sleepScreen, nullptr, {"Dark", "Light", "Custom", "Cover"}},
+    {"Sleep Screen",
+     SettingType::ENUM,
+     &CrossPointSettings::sleepScreen,
+     nullptr,
+     {"Dark", "Light", "Custom", "Cover"}},
     {"Status Bar", SettingType::ENUM, &CrossPointSettings::statusBar, nullptr, {"None", "No Progress", "Full"}},
     {"Extra Paragraph Spacing", SettingType::TOGGLE, &CrossPointSettings::extraParagraphSpacing, nullptr, {}},
     {"Short Power Button Click", SettingType::TOGGLE, &CrossPointSettings::shortPwrBtn, nullptr, {}},
@@ -37,7 +41,11 @@ const SettingInfo settingsList[settingsCount] = {
      &CrossPointSettings::fontFamily,
      nullptr,
      {"Bookerly", "Noto Sans", "Open Dyslexic"}},
-    {"Reader Font Size", SettingType::ENUM, &CrossPointSettings::fontSize, nullptr, {"Small", "Medium", "Large", "X Large"}},
+    {"Reader Font Size",
+     SettingType::ENUM,
+     &CrossPointSettings::fontSize,
+     nullptr,
+     {"Small", "Medium", "Large", "X Large"}},
     {"Reader Line Spacing", SettingType::ENUM, &CrossPointSettings::lineSpacing, nullptr, {"Tight", "Normal", "Wide"}},
     {"Reader Paragraph Alignment",
      SettingType::ENUM,
