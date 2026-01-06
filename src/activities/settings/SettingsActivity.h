@@ -11,13 +11,14 @@
 
 class CrossPointSettings;
 
-enum class SettingType { TOGGLE, ENUM, ACTION };
+enum class SettingType { TOGGLE, ENUM, ACTION, TEXT };
 
 // Structure to hold setting information
 struct SettingInfo {
   const char* name;                        // Display name of the setting
   SettingType type;                        // Type of setting
   uint8_t CrossPointSettings::* valuePtr;  // Pointer to member in CrossPointSettings (for TOGGLE/ENUM)
+  std::string CrossPointSettings::* stringValuePtr;  // Pointer to string member (for TEXT)
   std::vector<std::string> enumValues;
 };
 
