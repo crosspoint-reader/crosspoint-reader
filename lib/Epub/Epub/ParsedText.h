@@ -22,7 +22,7 @@ class ParsedText {
   void applyParagraphIndent();
   void ensureHyphenationFitsViewport(const GfxRenderer& renderer, int fontId, int viewportWidth);
   std::vector<std::string> hyphenateWordToFit(const std::string& word, const GfxRenderer& renderer, int fontId,
-                                             EpdFontFamily::Style style, int viewportWidth) const;
+                                              EpdFontFamily::Style style, int viewportWidth) const;
   std::vector<size_t> computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                                   int spaceWidth, std::vector<uint16_t>& wordWidths);
   bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,

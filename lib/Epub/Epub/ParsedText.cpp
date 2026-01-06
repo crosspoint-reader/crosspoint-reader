@@ -1,7 +1,6 @@
 #include "ParsedText.h"
 
 #include <GfxRenderer.h>
-#include "hyphenation/Hyphenator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -9,6 +8,8 @@
 #include <iterator>
 #include <limits>
 #include <vector>
+
+#include "hyphenation/Hyphenator.h"
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
@@ -154,8 +155,7 @@ void ParsedText::applyParagraphIndent() {
   words.front().insert(0, "\xe2\x80\x83");
 }
 
-void ParsedText::ensureHyphenationFitsViewport(const GfxRenderer& renderer, const int fontId,
-                                               const int viewportWidth) {
+void ParsedText::ensureHyphenationFitsViewport(const GfxRenderer& renderer, const int fontId, const int viewportWidth) {
   if (!hyphenationEnabled || viewportWidth <= 0) {
     return;
   }
