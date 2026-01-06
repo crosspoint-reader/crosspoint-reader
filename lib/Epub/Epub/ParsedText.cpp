@@ -177,7 +177,9 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       }
 
       const int availableWidth = pageWidth - lineWidth - spacing;
-      if (availableWidth > 0 && hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths)) {
+      const bool allowFallbackBreaks = isFirstWord;  // Only permit fallback splits when even the first word overflows
+      if (availableWidth > 0 &&
+          hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
         // Widths updated for the split word; retry with current index
         continue;
       }
@@ -199,7 +201,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
 
 // Splits words[wordIndex] into prefix+hyphen and remainder when a legal breakpoint fits the available width.
 bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availableWidth, const GfxRenderer& renderer,
-                                      const int fontId, std::vector<uint16_t>& wordWidths) {
+                                      const int fontId, std::vector<uint16_t>& wordWidths,
+                                      const bool allowFallbackBreaks) {
   if (availableWidth <= 0 || wordIndex >= words.size()) {
     return false;
   }
@@ -209,7 +212,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   std::advance(wordIt, wordIndex);
   std::advance(styleIt, wordIndex);
 
-  const auto breakOffsets = Hyphenator::breakOffsets(*wordIt, true);
+  const auto breakOffsets = Hyphenator::breakOffsets(*wordIt, allowFallbackBreaks);
   if (breakOffsets.empty()) {
     return false;
   }
