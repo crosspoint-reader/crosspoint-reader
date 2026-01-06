@@ -199,7 +199,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   return lineBreakIndices;
 }
 
-// Splits words[wordIndex] into prefix+hyphen and remainder when a legal breakpoint fits the available width.
+// Splits words[wordIndex] into prefix (adding a hyphen only when needed) and remainder when a legal breakpoint fits the
+// available width.
 bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availableWidth, const GfxRenderer& renderer,
                                       const int fontId, std::vector<uint16_t>& wordWidths,
                                       const bool allowFallbackBreaks) {
@@ -212,22 +213,27 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   std::advance(wordIt, wordIndex);
   std::advance(styleIt, wordIndex);
 
-  const auto breakOffsets = Hyphenator::breakOffsets(*wordIt, allowFallbackBreaks);
-  if (breakOffsets.empty()) {
+  const auto breakInfos = Hyphenator::breakOffsets(*wordIt, allowFallbackBreaks);
+  if (breakInfos.empty()) {
     return false;
   }
 
   const auto style = *styleIt;
   size_t chosenOffset = 0;
   int chosenWidth = -1;
+  bool chosenNeedsHyphen = true;
 
-  for (const size_t offset : breakOffsets) {
+  for (const auto& info : breakInfos) {
+    const size_t offset = info.byteOffset;
     if (offset == 0 || offset >= wordIt->size()) {
       continue;
     }
 
+    const bool needsHyphen = info.requiresInsertedHyphen;
     std::string prefix = wordIt->substr(0, offset);
-    prefix.push_back('-');
+    if (needsHyphen) {
+      prefix.push_back('-');
+    }
     const int prefixWidth = renderer.getTextWidth(fontId, prefix.c_str(), style);
     if (prefixWidth > availableWidth) {
       continue;
@@ -236,6 +242,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     if (prefixWidth > chosenWidth) {
       chosenWidth = prefixWidth;
       chosenOffset = offset;
+      chosenNeedsHyphen = needsHyphen;
     }
   }
 
@@ -245,7 +252,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   std::string remainder = wordIt->substr(chosenOffset);
   wordIt->resize(chosenOffset);
-  wordIt->push_back('-');
+  if (chosenNeedsHyphen) {
+    wordIt->push_back('-');
+  }
 
   auto insertWordIt = std::next(wordIt);
   auto insertStyleIt = std::next(styleIt);

@@ -135,9 +135,20 @@ size_t byteOffsetForIndex(const std::vector<CodepointInfo>& cps, const size_t in
   return cps[index].byteOffset;
 }
 
+std::vector<Hyphenator::BreakInfo> buildBreakInfoVector(const std::vector<size_t>& indexes,
+                                                        const std::vector<CodepointInfo>& cps,
+                                                        const bool requiresHyphen) {
+  std::vector<Hyphenator::BreakInfo> breaks;
+  breaks.reserve(indexes.size());
+  for (const size_t idx : indexes) {
+    breaks.push_back({byteOffsetForIndex(cps, idx), requiresHyphen});
+  }
+  return breaks;
+}
+
 }  // namespace
 
-std::vector<size_t> Hyphenator::breakOffsets(const std::string& word, const bool includeFallback) {
+std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& word, const bool includeFallback) {
   if (word.empty()) {
     return {};
   }
@@ -153,12 +164,7 @@ std::vector<size_t> Hyphenator::breakOffsets(const std::string& word, const bool
   if (!explicitIndexes.empty()) {
     std::sort(explicitIndexes.begin(), explicitIndexes.end());
     explicitIndexes.erase(std::unique(explicitIndexes.begin(), explicitIndexes.end()), explicitIndexes.end());
-    std::vector<size_t> byteOffsets;
-    byteOffsets.reserve(explicitIndexes.size());
-    for (const size_t idx : explicitIndexes) {
-      byteOffsets.push_back(byteOffsetForIndex(cps, idx));
-    }
-    return byteOffsets;
+    return buildBreakInfoVector(explicitIndexes, cps, false);
   }
 
   std::vector<size_t> indexes = hasOnlyAlphabetic(cps) ? collectBreakIndexes(cps) : std::vector<size_t>();
@@ -175,10 +181,5 @@ std::vector<size_t> Hyphenator::breakOffsets(const std::string& word, const bool
   std::sort(indexes.begin(), indexes.end());
   indexes.erase(std::unique(indexes.begin(), indexes.end()), indexes.end());
 
-  std::vector<size_t> byteOffsets;
-  byteOffsets.reserve(indexes.size());
-  for (const size_t idx : indexes) {
-    byteOffsets.push_back(byteOffsetForIndex(cps, idx));
-  }
-  return byteOffsets;
+  return buildBreakInfoVector(indexes, cps, true);
 }
