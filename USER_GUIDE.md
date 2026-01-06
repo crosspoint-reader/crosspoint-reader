@@ -63,10 +63,14 @@ See the [webserver docs](./docs/webserver.md) for more information on how to con
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
 - **Sleep Screen**: Which sleep screen to display when the device sleeps, options are:
-  - "Dark" (default) - The default dark sleep screen
-  - "Light" - The same default sleep screen, on a white background
+  - "Dark Logo" (default) - The default dark logo sleep screen
+  - "Light Logo" - The same default logo sleep screen, on a white background
   - "Custom" - Custom images from the SD card, see [Sleep Screen](#36-sleep-screen) below for more information
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
+  - "Inverted Cover" - The book cover image with inverted colors (Note: this is experimental and may not work as expected)
+  - "Light Page" - The last page read
+  - "Dark Page" - The last page read, on a dark background
+  - "None" - Blank screen
 - **Status Bar**: Configure the status bar displayed while reading, options are:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
