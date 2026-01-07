@@ -42,8 +42,7 @@
 // The EInkDisplay library is currently configured for SSD1677 (Original 800x480)
 // by default in its implementation.
 
-// EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
-EInkDisplay_UC8179 einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
+EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 InputManager inputManager;
 SDCardManager sdCardManager;
 GfxRenderer renderer(einkDisplay);
@@ -199,7 +198,7 @@ void setup() {
 
   // Initialize SPI for display (SD card now uses SDMMC, not SPI)
   // Matching GxEPD2: SCLK=13, MISO=8, MOSI=14, CS=12
-  SPI.begin(EPD_SCLK, 8, EPD_MOSI, EPD_CS);
+  SPI.begin(EPD_SCLK, 17, EPD_MOSI, EPD_CS);
 
   // SD Card Initialization using SDMMC
 
