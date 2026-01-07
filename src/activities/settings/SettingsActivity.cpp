@@ -13,7 +13,7 @@
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 17;
+constexpr int settingsCount = 18;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
