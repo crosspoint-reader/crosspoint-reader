@@ -6,7 +6,6 @@
 #include <expat.h>
 
 #include "../Page.h"
-#include "../htmlEntities.h"
 
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
@@ -130,7 +129,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
         self->partWordBuffer[self->partWordBufferIndex] = '\0';
-        self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)), fontStyle);
+        self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
         self->partWordBufferIndex = 0;
       }
       // Skip the whitespace char
@@ -155,7 +154,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     // If we're about to run out of space, then cut the word off and start a new one
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)), fontStyle);
+      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
       self->partWordBufferIndex = 0;
     }
 
@@ -197,7 +196,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       }
 
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)), fontStyle);
+      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
       self->partWordBufferIndex = 0;
     }
   }
