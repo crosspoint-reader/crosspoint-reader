@@ -56,6 +56,9 @@ The File Upload screen allows you to upload new e-books to the device. When you 
 
 See the [webserver docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
 
+> [!TIP]
+> Advanced users can also manage files programmatically or via the command line using `curl`. See the [webserver docs](./docs/webserver.md) for details.
+
 ### 3.5 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
