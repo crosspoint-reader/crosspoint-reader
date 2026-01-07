@@ -32,6 +32,37 @@ const LanguageHyphenator* hyphenatorForScript(const Script script) {
   return nullptr;
 }
 
+// Maps a BCP-47 language tag to a language-specific hyphenator.
+const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
+  if (langTag.empty()) return nullptr;
+
+  // Extract primary subtag and normalize to lowercase (e.g., "en-US" -> "en").
+  std::string primary;
+  primary.reserve(langTag.size());
+  for (char c : langTag) {
+    if (c == '-' || c == '_') break;
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    primary.push_back(c);
+  }
+  if (primary.empty()) return nullptr;
+
+  if (primary == "en") return &EnglishHyphenator::instance();
+  if (primary == "ru") return &RussianHyphenator::instance();
+  return nullptr;
+}
+
+// Preferred language hint; empty means "auto".
+std::string& preferredLanguage() {
+  static std::string lang;
+  return lang;
+}
+
+// Cached hyphenator instance for the current preferred language.
+const LanguageHyphenator*& cachedHyphenator() {
+  static const LanguageHyphenator* hyphenator = nullptr;
+  return hyphenator;
+}
+
 // Converts the UTF-8 word into codepoint metadata for downstream rules.
 std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
   std::vector<CodepointInfo> cps;
@@ -78,8 +109,8 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps) {
     return {};
   }
 
-  const Script script = detectScript(cps);
-  if (const auto* hyphenator = hyphenatorForScript(script)) {
+  // Use cached hyphenator to avoid repeated language lookups.
+  if (const auto* hyphenator = cachedHyphenator()) {
     auto indexes = hyphenator->breakIndexes(cps);
     return indexes;
   }
@@ -95,6 +126,7 @@ size_t byteOffsetForIndex(const std::vector<CodepointInfo>& cps, const size_t in
   return cps[index].byteOffset;
 }
 
+// Builds a vector of break information from explicit hyphen markers in the given codepoints.
 std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps) {
   std::vector<Hyphenator::BreakInfo> breaks;
   breaks.reserve(cps.size());
@@ -181,4 +213,9 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   }
 
   return breaks;
+}
+
+void Hyphenator::setPreferredLanguage(const std::string& lang) {
+  preferredLanguage() = lang;
+  cachedHyphenator() = hyphenatorForLanguage(lang);
 }

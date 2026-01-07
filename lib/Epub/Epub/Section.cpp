@@ -5,6 +5,7 @@
 
 #include "Page.h"
 #include "parsers/ChapterHtmlSlimParser.h"
+#include "hyphenation/Hyphenator.h"
 
 namespace {
 constexpr uint8_t SECTION_FILE_VERSION = 9;
@@ -186,6 +187,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       viewportHeight, hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
       progressFn);
+  Hyphenator::setPreferredLanguage(epub->getLanguage());
+  Serial.printf("[%lu] [SCT] Hyphenation language set to: %s\n", millis(), epub->getLanguage().c_str());
   success = visitor.parseAndBuildPages();
 
   SdMan.remove(tmpHtmlPath.c_str());

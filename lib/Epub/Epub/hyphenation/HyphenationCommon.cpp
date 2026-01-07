@@ -143,22 +143,3 @@ bool hasOnlyAlphabetic(const std::vector<CodepointInfo>& cps) {
   return true;
 }
 
-Script detectScript(const std::vector<CodepointInfo>& cps) {
-  bool hasLatin = false;
-  bool hasCyrillic = false;
-  for (const auto& info : cps) {
-    if (isLatinLetter(info.value)) {
-      hasLatin = true;
-    } else if (isCyrillicLetter(info.value)) {
-      hasCyrillic = true;
-    }
-  }
-
-  if (hasLatin && !hasCyrillic) {
-    return Script::Latin;
-  }
-  if (!hasLatin && hasCyrillic) {
-    return Script::Cyrillic;
-  }
-  return Script::Mixed;
-}

@@ -74,8 +74,15 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   // Grab data from opfParser into epub
   bookMetadata.title = opfParser.title;
   bookMetadata.author = opfParser.author;
+  bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
   bookMetadata.textReferenceHref = opfParser.textReferenceHref;
+
+  if (!bookMetadata.language.empty()) {
+    Serial.printf("[%lu] [EBP] OPF language: %s\n", millis(), bookMetadata.language.c_str());
+  } else {
+    Serial.printf("[%lu] [EBP] OPF language: <none>\n", millis());
+  }
 
   if (!opfParser.tocNcxPath.empty()) {
     tocNcxItem = opfParser.tocNcxPath;
@@ -343,6 +350,15 @@ const std::string& Epub::getAuthor() const {
   }
 
   return bookMetadataCache->coreMetadata.author;
+}
+
+const std::string& Epub::getLanguage() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+
+  return bookMetadataCache->coreMetadata.language;
 }
 
 std::string Epub::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }

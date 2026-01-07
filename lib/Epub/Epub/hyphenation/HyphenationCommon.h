@@ -35,4 +35,3 @@ bool isSoftHyphen(uint32_t cp);
 void trimSurroundingPunctuation(std::vector<CodepointInfo>& cps);
 bool hasOnlyAlphabetic(const std::vector<CodepointInfo>& cps);
 
-Script detectScript(const std::vector<CodepointInfo>& cps);
