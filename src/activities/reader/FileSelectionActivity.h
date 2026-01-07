@@ -14,7 +14,7 @@ class FileSelectionActivity final : public Activity {
   SemaphoreHandle_t renderingMutex = nullptr;
   std::string basepath = "/";
   std::vector<std::string> files;
-  int selectorIndex = 0;
+  size_t selectorIndex = 0;
   bool updateRequired = false;
   const std::function<void(const std::string&)> onSelect;
   const std::function<void()> onGoHome;
@@ -23,7 +23,8 @@ class FileSelectionActivity final : public Activity {
   [[noreturn]] void displayTaskLoop();
   void render() const;
   void loadFiles();
-  int findEntry(const std::string& name) const;
+
+  size_t findEntry(const std::string& name) const;
 
  public:
   explicit FileSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

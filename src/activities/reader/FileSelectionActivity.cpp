@@ -123,6 +123,7 @@ void FileSelectionActivity::loop() {
     if (files[selectorIndex].back() == '/') {
       basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
       loadFiles();
+      selectorIndex = 0;
       updateRequired = true;
     } else {
       onSelect(basepath + files[selectorIndex]);
@@ -137,8 +138,8 @@ void FileSelectionActivity::loop() {
         if (basepath.empty()) basepath = "/";
         loadFiles();
 
-        auto pos = oldPath.find_last_of('/');
-        std::string dirName = oldPath.substr(pos + 1) + "/";
+        const auto pos = oldPath.find_last_of('/');
+        const std::string dirName = oldPath.substr(pos + 1) + "/";
         selectorIndex = findEntry(dirName);
 
         updateRequired = true;
@@ -193,7 +194,7 @@ void FileSelectionActivity::render() const {
 
   const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
   renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
-  for (int i = pageStartIndex; i < files.size() && i < pageStartIndex + PAGE_ITEMS; i++) {
+  for (size_t i = pageStartIndex; i < files.size() && i < pageStartIndex + PAGE_ITEMS; i++) {
     auto item = renderer.truncatedText(UI_10_FONT_ID, files[i].c_str(), renderer.getScreenWidth() - 40);
     renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(), i != selectorIndex);
   }
@@ -201,7 +202,7 @@ void FileSelectionActivity::render() const {
   renderer.displayBuffer();
 }
 
-int FileSelectionActivity::findEntry(const std::string& name) const {
+size_t FileSelectionActivity::findEntry(const std::string& name) const {
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i;
   return 0;
