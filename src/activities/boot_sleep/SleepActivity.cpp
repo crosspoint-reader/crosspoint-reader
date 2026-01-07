@@ -9,20 +9,7 @@
 #include "CrossPointState.h"
 #include "fontIds.h"
 #include "images/CrossLarge.h"
-
-namespace {
-// Check if path has XTC extension (.xtc or .xtch)
-bool isXtcFile(const std::string& path) {
-  if (path.length() < 4) return false;
-  std::string ext4 = path.substr(path.length() - 4);
-  if (ext4 == ".xtc") return true;
-  if (path.length() >= 5) {
-    std::string ext5 = path.substr(path.length() - 5);
-    if (ext5 == ".xtch") return true;
-  }
-  return false;
-}
-}  // namespace
+#include "util/StringUtils.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -213,8 +200,8 @@ void SleepActivity::renderCoverSleepScreen() const {
 
   std::string coverBmpPath;
 
-  // Check if the current book is XTC or EPUB
-  if (isXtcFile(APP_STATE.openEpubPath)) {
+  if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
+      StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
     // Handle XTC file
     Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastXtc.load()) {
@@ -228,7 +215,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
-  } else {
+  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
     // Handle EPUB file
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastEpub.load()) {
@@ -242,6 +229,8 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastEpub.getCoverBmpPath();
+  } else {
+    return renderDefaultSleepScreen();
   }
 
   FsFile file;

@@ -582,7 +582,7 @@ void CalibreWirelessActivity::handleSendBook(const std::string& data) {
 
   // Sanitize and create full path
   currentFilename = "/" + StringUtils::sanitizeFilename(filename);
-  if (currentFilename.find(".epub") == std::string::npos) {
+  if (!StringUtils::checkFileExtension(currentFilename, ".epub")) {
     currentFilename += ".epub";
   }
   currentFileSize = length;

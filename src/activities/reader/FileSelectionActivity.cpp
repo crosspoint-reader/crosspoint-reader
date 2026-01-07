@@ -5,6 +5,7 @@
 
 #include "MappedInputManager.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
@@ -50,9 +51,8 @@ void FileSelectionActivity::loadFiles() {
       files.emplace_back(std::string(name) + "/");
     } else {
       auto filename = std::string(name);
-      std::string ext4 = filename.length() >= 4 ? filename.substr(filename.length() - 4) : "";
-      std::string ext5 = filename.length() >= 5 ? filename.substr(filename.length() - 5) : "";
-      if (ext5 == ".epub" || ext5 == ".xtch" || ext4 == ".xtc") {
+      if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
+          StringUtils::checkFileExtension(filename, ".xtc")) {
         files.emplace_back(filename);
       }
     }

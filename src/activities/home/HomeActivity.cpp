@@ -12,6 +12,7 @@
 #include "MappedInputManager.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 void HomeActivity::taskTrampoline(void* param) {
   auto* self = static_cast<HomeActivity*>(param);
@@ -44,10 +45,8 @@ void HomeActivity::onEnter() {
       lastBookTitle = lastBookTitle.substr(lastSlash + 1);
     }
 
-    const std::string ext4 = lastBookTitle.length() >= 4 ? lastBookTitle.substr(lastBookTitle.length() - 4) : "";
-    const std::string ext5 = lastBookTitle.length() >= 5 ? lastBookTitle.substr(lastBookTitle.length() - 5) : "";
     // If epub, try to load the metadata for title/author
-    if (ext5 == ".epub") {
+    if (StringUtils::checkFileExtension(lastBookTitle, ".epub")) {
       Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
       epub.load(false);
       if (!epub.getTitle().empty()) {
@@ -56,9 +55,9 @@ void HomeActivity::onEnter() {
       if (!epub.getAuthor().empty()) {
         lastBookAuthor = std::string(epub.getAuthor());
       }
-    } else if (ext5 == ".xtch") {
+    } else if (StringUtils::checkFileExtension(lastBookTitle, ".xtch")) {
       lastBookTitle.resize(lastBookTitle.length() - 5);
-    } else if (ext4 == ".xtc") {
+    } else if (StringUtils::checkFileExtension(lastBookTitle, ".xtc")) {
       lastBookTitle.resize(lastBookTitle.length() - 4);
     }
   }
