@@ -91,16 +91,16 @@ class CrossPointSettings {
   // Screen margin setting (in pixels, default 0)
   uint8_t screenMargin = 0;
 
-  // Network credentials for FTP and HTTP se               // 0 = disabled, 1 = enabled
-  uint8_t hotspotSchedulerHour = 12;                       // Hour (0-23)
-  uint8_t hotspotSchedulerMinute = 0;               
+  // Network credentials for FTP and HTTP servers
+  std::string ftpUsername = "crosspoint";
+  std::string ftpPassword = "reader";
   std::string httpUsername = "crosspoint";
   std::string httpPassword = "reader";
 
   // Hotspot scheduler settings
-  uint8_t hotspotSchedulerEnabled = 0;      // 0 = disabled, 1 = enabled
-  uint8_t hotspotSchedulerHour = 12;        // Hour (0-23)
-  uint8_t hotspotSchedulerMinute = 0;       // Minute (0-59)
+  uint8_t hotspotSchedulerEnabled = 0;                     // 0 = disabled, 1 = enabled
+  uint8_t hotspotSchedulerHour = 12;                       // Hour (0-23)
+  uint8_t hotspotSchedulerMinute = 0;                      // Minute (0-59)
   uint8_t hotspotSchedulerShutdownTime = SHUTDOWN_30_MIN;  // Default 30 minutes
 
   ~CrossPointSettings() = default;
