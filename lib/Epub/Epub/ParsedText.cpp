@@ -13,6 +13,42 @@
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
+namespace {
+
+// Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
+constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
+constexpr size_t SOFT_HYPHEN_BYTES = 2;
+
+bool containsSoftHyphen(const std::string& word) { return word.find(SOFT_HYPHEN_UTF8) != std::string::npos; }
+
+// Removes every soft hyphen in-place so rendered glyphs match measured widths.
+void stripSoftHyphensInPlace(std::string& word) {
+  size_t pos = 0;
+  while ((pos = word.find(SOFT_HYPHEN_UTF8, pos)) != std::string::npos) {
+    word.erase(pos, SOFT_HYPHEN_BYTES);
+  }
+}
+
+// Returns the rendered width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
+uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                          const EpdFontFamily::Style style, const bool appendHyphen = false) {
+  const bool hasSoftHyphen = containsSoftHyphen(word);
+  if (!hasSoftHyphen && !appendHyphen) {
+    return renderer.getTextWidth(fontId, word.c_str(), style);
+  }
+
+  std::string sanitized = word;
+  if (hasSoftHyphen) {
+    stripSoftHyphensInPlace(sanitized);
+  }
+  if (appendHyphen) {
+    sanitized.push_back('-');
+  }
+  return renderer.getTextWidth(fontId, sanitized.c_str(), style);
+}
+
+}  // namespace
+
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle) {
   if (word.empty()) return;
 
@@ -58,7 +94,7 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   auto wordStylesIt = wordStyles.begin();
 
   while (wordsIt != words.end()) {
-    wordWidths.push_back(renderer.getTextWidth(fontId, wordsIt->c_str(), *wordStylesIt));
+    wordWidths.push_back(measureWordWidth(renderer, fontId, *wordsIt, *wordStylesIt));
 
     std::advance(wordsIt, 1);
     std::advance(wordStylesIt, 1);
@@ -239,10 +275,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
     const bool needsHyphen = info.requiresInsertedHyphen;
     std::string prefix = wordIt->substr(0, offset);
-    if (needsHyphen) {
-      prefix.push_back('-');
-    }
-    const int prefixWidth = renderer.getTextWidth(fontId, prefix.c_str(), style);
+    const int prefixWidth = measureWordWidth(renderer, fontId, prefix, style, needsHyphen);
     if (prefixWidth > availableWidth) {
       continue;
     }
@@ -274,7 +307,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   // Update cached widths to reflect the new prefix/remainder pairing.
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
-  const uint16_t remainderWidth = renderer.getTextWidth(fontId, remainder.c_str(), style);
+  const uint16_t remainderWidth = measureWordWidth(renderer, fontId, remainder, style);
   wordWidths.insert(wordWidths.begin() + wordIndex + 1, remainderWidth);
   return true;
 }
@@ -329,6 +362,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
   std::list<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
+
+  for (auto& word : lineWords) {
+    if (containsSoftHyphen(word)) {
+      stripSoftHyphensInPlace(word);
+    }
+  }
 
   processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style));
 }

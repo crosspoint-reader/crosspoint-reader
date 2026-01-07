@@ -90,6 +90,8 @@ bool isPunctuation(const uint32_t cp) {
   }
 }
 
+bool isAsciiDigit(const uint32_t cp) { return cp >= '0' && cp <= '9'; }
+
 bool isExplicitHyphen(const uint32_t cp) {
   switch (cp) {
     case '-':
@@ -117,6 +119,8 @@ bool isExplicitHyphen(const uint32_t cp) {
   }
 }
 
+bool isSoftHyphen(const uint32_t cp) { return cp == 0x00AD; }
+
 void trimSurroundingPunctuation(std::vector<CodepointInfo>& cps) {
   while (!cps.empty() && isPunctuation(cps.front().value)) {
     cps.erase(cps.begin());
@@ -124,6 +128,19 @@ void trimSurroundingPunctuation(std::vector<CodepointInfo>& cps) {
   while (!cps.empty() && isPunctuation(cps.back().value)) {
     cps.pop_back();
   }
+}
+
+bool hasOnlyAlphabetic(const std::vector<CodepointInfo>& cps) {
+  if (cps.empty()) {
+    return false;
+  }
+
+  for (const auto& info : cps) {
+    if (!isAlphabetic(info.value)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 Script detectScript(const std::vector<CodepointInfo>& cps) {
