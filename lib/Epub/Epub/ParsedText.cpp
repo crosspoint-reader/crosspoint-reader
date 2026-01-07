@@ -179,11 +179,13 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
 
       // Word would overflow — try to split based on hyphenation points
       const int availableWidth = pageWidth - lineWidth - spacing;
-      const bool allowFallbackBreaks = isFirstWord;  // Permit soft hyphen tokens only when first word still overflows
+      const bool allowFallbackBreaks = isFirstWord;  // Permit fallback breaks only when first word one the line still overflows
       if (availableWidth > 0 &&
           hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
-        // widths vector updated for split prefix; re-evaluate same index
-        continue;
+        // Prefix now fits; append it to this line and immediately move to the next line
+        lineWidth += spacing + wordWidths[currentIndex];
+        currentIndex += 1;
+        break;
       }
 
       // Could not split: force at least one word per line to avoid infinite loop
