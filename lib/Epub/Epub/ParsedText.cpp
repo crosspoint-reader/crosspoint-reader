@@ -207,28 +207,29 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       const int spacing = isFirstWord ? 0 : spaceWidth;
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
+      // Word fits on current line
       if (lineWidth + candidateWidth <= pageWidth) {
         lineWidth += candidateWidth;
-        currentIndex += 1;
+        ++currentIndex;
         continue;
       }
 
       // Word would overflow — try to split based on hyphenation points
       const int availableWidth = pageWidth - lineWidth - spacing;
-      const bool allowFallbackBreaks =
-          isFirstWord;  // Permit fallback breaks only when first word one the line still overflows
+      const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
+
       if (availableWidth > 0 &&
           hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
-        // Prefix now fits; append it to this line and immediately move to the next line
+        // Prefix now fits; append it to this line and move to next line
         lineWidth += spacing + wordWidths[currentIndex];
-        currentIndex += 1;
+        ++currentIndex;
         break;
       }
 
       // Could not split: force at least one word per line to avoid infinite loop
       if (currentIndex == lineStart) {
         lineWidth += candidateWidth;
-        currentIndex += 1;
+        ++currentIndex;
       }
       break;
     }
@@ -249,19 +250,21 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     return false;
   }
 
-  // Position iterators at the target word and its style entry.
+  // Get iterators to target word and style.
   auto wordIt = words.begin();
   auto styleIt = wordStyles.begin();
   std::advance(wordIt, wordIndex);
   std::advance(styleIt, wordIndex);
 
+  const std::string& word = *wordIt;
+  const auto style = *styleIt;
+
   // Collect candidate breakpoints (byte offsets and hyphen requirements).
-  const auto breakInfos = Hyphenator::breakOffsets(*wordIt, allowFallbackBreaks);
+  const auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
   if (breakInfos.empty()) {
     return false;
   }
 
-  const auto style = *styleIt;
   size_t chosenOffset = 0;
   int chosenWidth = -1;
   bool chosenNeedsHyphen = true;
@@ -269,22 +272,19 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // Iterate over each legal breakpoint and retain the widest prefix that still fits.
   for (const auto& info : breakInfos) {
     const size_t offset = info.byteOffset;
-    if (offset == 0 || offset >= wordIt->size()) {
+    if (offset == 0 || offset >= word.size()) {
       continue;
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
-    std::string prefix = wordIt->substr(0, offset);
-    const int prefixWidth = measureWordWidth(renderer, fontId, prefix, style, needsHyphen);
-    if (prefixWidth > availableWidth) {
-      continue;
+    const int prefixWidth = measureWordWidth(renderer, fontId, word.substr(0, offset), style, needsHyphen);
+    if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
+      continue;  // Skip if too wide or not an improvement
     }
 
-    if (prefixWidth > chosenWidth) {
-      chosenWidth = prefixWidth;
-      chosenOffset = offset;
-      chosenNeedsHyphen = needsHyphen;
-    }
+    chosenWidth = prefixWidth;
+    chosenOffset = offset;
+    chosenNeedsHyphen = needsHyphen;
   }
 
   if (chosenWidth < 0) {
@@ -293,7 +293,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   }
 
   // Split the word at the selected breakpoint and append a hyphen if required.
-  std::string remainder = wordIt->substr(chosenOffset);
+  std::string remainder = word.substr(chosenOffset);
   wordIt->resize(chosenOffset);
   if (chosenNeedsHyphen) {
     wordIt->push_back('-');

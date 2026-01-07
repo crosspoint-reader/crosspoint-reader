@@ -25,7 +25,6 @@ bool isCyrillicVowel(uint32_t cp);
 bool isCyrillicConsonant(uint32_t cp);
 
 bool isAlphabetic(uint32_t cp);
-bool isVowel(uint32_t cp);
 bool isPunctuation(uint32_t cp);
 bool isAsciiDigit(uint32_t cp);
 bool isExplicitHyphen(uint32_t cp);

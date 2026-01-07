@@ -3,7 +3,6 @@
 #include <Utf8.h>
 
 #include <algorithm>
-#include <array>
 #include <vector>
 
 #include "EnglishHyphenator.h"
@@ -30,12 +29,6 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   if (primary == "en") return &EnglishHyphenator::instance();
   if (primary == "ru") return &RussianHyphenator::instance();
   return nullptr;
-}
-
-// Preferred language hint; empty means "auto".
-std::string& preferredLanguage() {
-  static std::string lang;
-  return lang;
 }
 
 // Cached hyphenator instance for the current preferred language.
@@ -86,67 +79,54 @@ void trimTrailingFootnoteReference(std::vector<CodepointInfo>& cps) {
 
 // Asks the language hyphenator for legal break positions inside the word.
 std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps) {
-  if (cps.size() < MIN_PREFIX_CP + MIN_SUFFIX_CP) {
-    return {};
-  }
-
   if (const auto* hyphenator = cachedHyphenator()) {
-    auto indexes = hyphenator->breakIndexes(cps);
-    return indexes;
+    return hyphenator->breakIndexes(cps);
   }
-
   return {};
 }
 
 // Maps a codepoint index back to its byte offset inside the source word.
 size_t byteOffsetForIndex(const std::vector<CodepointInfo>& cps, const size_t index) {
-  if (index >= cps.size()) {
-    return cps.empty() ? 0 : cps.back().byteOffset;
-  }
-  return cps[index].byteOffset;
+  return (index < cps.size()) ? cps[index].byteOffset : (cps.empty() ? 0 : cps.back().byteOffset);
 }
 
 // Builds a vector of break information from explicit hyphen markers in the given codepoints.
 std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps) {
   std::vector<Hyphenator::BreakInfo> breaks;
-  breaks.reserve(cps.size());
 
   // Scan every codepoint looking for explicit/soft hyphen markers that are surrounded by letters.
-  for (size_t i = 0; i < cps.size(); ++i) {
+  for (size_t i = 1; i + 1 < cps.size(); ++i) {
     const uint32_t cp = cps[i].value;
-    if (!isExplicitHyphen(cp) || i == 0 || i + 1 >= cps.size()) {
-      continue;  // Need at least one alphabetic character on both sides.
-    }
-    if (!isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {
+    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {
       continue;
     }
     // Offset points to the next codepoint so rendering starts after the hyphen marker.
-    breaks.push_back({byteOffsetForIndex(cps, i + 1), isSoftHyphen(cp)});
+    breaks.push_back({cps[i + 1].byteOffset, isSoftHyphen(cp)});
   }
 
   if (breaks.empty()) {
     return breaks;
   }
 
-  // Sort by byte offset so we can deduplicate sequential markers.
-  // Multiple dash codepoints can point to the same byte offset once punctuation is trimmed; sort before merging.
+  // Sort by byte offset so we can deduplicate sequential markers in-place.
   std::sort(breaks.begin(), breaks.end(), [](const Hyphenator::BreakInfo& lhs, const Hyphenator::BreakInfo& rhs) {
     return lhs.byteOffset < rhs.byteOffset;
   });
 
-  // Ensure we keep a single entry per break while retaining the "needs hyphen" flag when any marker requested it.
-  std::vector<Hyphenator::BreakInfo> deduped;
-  deduped.reserve(breaks.size());
-  for (const auto& entry : breaks) {
-    if (!deduped.empty() && deduped.back().byteOffset == entry.byteOffset) {
-      // Merge entries so that an explicit hyphen wins over a soft hyphen at the same offset.
-      deduped.back().requiresInsertedHyphen = deduped.back().requiresInsertedHyphen || entry.requiresInsertedHyphen;
+  // Deduplicate in-place: merge entries at same offset while retaining "needs hyphen" flag.
+  size_t writePos = 0;
+  for (size_t readPos = 1; readPos < breaks.size(); ++readPos) {
+    if (breaks[readPos].byteOffset == breaks[writePos].byteOffset) {
+      // Merge: explicit hyphen wins over soft hyphen at same offset.
+      breaks[writePos].requiresInsertedHyphen =
+          breaks[writePos].requiresInsertedHyphen || breaks[readPos].requiresInsertedHyphen;
     } else {
-      deduped.push_back(entry);
+      breaks[++writePos] = breaks[readPos];
     }
   }
+  breaks.resize(writePos + 1);
 
-  return deduped;
+  return breaks;
 }
 
 }  // namespace
@@ -170,21 +150,24 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     return explicitBreakInfos;
   }
 
-  // Ask language hyphenator for legal break points, optionally augment with naive fallback.
+  // Ask language hyphenator for legal break points.
   std::vector<size_t> indexes = hasOnlyAlphabetic(cps) ? collectBreakIndexes(cps) : std::vector<size_t>();
+
+  // Only add fallback breaks if needed and deduplicate if both language and fallback breaks exist.
   if (includeFallback) {
     for (size_t idx = MIN_PREFIX_CP; idx + MIN_SUFFIX_CP <= cps.size(); ++idx) {
       indexes.push_back(idx);
     }
+    // Only deduplicate if we have both language-specific and fallback breaks.
+    std::sort(indexes.begin(), indexes.end());
+    indexes.erase(std::unique(indexes.begin(), indexes.end()), indexes.end());
+  } else if (indexes.empty()) {
+    return {};
   }
 
   if (indexes.empty()) {
     return {};
   }
-
-  // Sort/deduplicate break indexes before converting them back to byte offsets.
-  std::sort(indexes.begin(), indexes.end());
-  indexes.erase(std::unique(indexes.begin(), indexes.end()), indexes.end());
 
   std::vector<Hyphenator::BreakInfo> breaks;
   breaks.reserve(indexes.size());
@@ -195,7 +178,4 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   return breaks;
 }
 
-void Hyphenator::setPreferredLanguage(const std::string& lang) {
-  preferredLanguage() = lang;
-  cachedHyphenator() = hyphenatorForLanguage(lang);
-}
+void Hyphenator::setPreferredLanguage(const std::string& lang) { cachedHyphenator() = hyphenatorForLanguage(lang); }

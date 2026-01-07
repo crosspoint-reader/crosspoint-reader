@@ -59,8 +59,6 @@ bool isCyrillicConsonant(const uint32_t cp) { return isCyrillicLetter(cp) && !is
 
 bool isAlphabetic(const uint32_t cp) { return isLatinLetter(cp) || isCyrillicLetter(cp); }
 
-bool isVowel(const uint32_t cp) { return isLatinVowel(cp) || isCyrillicVowel(cp); }
-
 bool isPunctuation(const uint32_t cp) {
   switch (cp) {
     case '.':
