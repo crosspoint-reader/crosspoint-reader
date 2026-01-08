@@ -82,6 +82,8 @@ class CrossPointSettings {
   uint8_t screenMargin = 5;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
+  // Selected sleep BMP filename (empty means random selection)
+  char selectedSleepBmp[256] = "";
 
   ~CrossPointSettings() = default;
 

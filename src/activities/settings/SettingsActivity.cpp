@@ -5,19 +5,23 @@
 
 #include <cstring>
 
+#include <SDCardManager.h>
+
 #include "CalibreSettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "SleepBmpSelectionActivity.h"
 #include "fontIds.h"
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 18;
+constexpr int settingsCount = 19;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
+    SettingInfo::Action("Select Sleep BMP"),
     SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}),
     SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
     SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing),
@@ -43,6 +47,40 @@ const SettingInfo settingsList[settingsCount] = {
     SettingInfo::Action("Check for updates")};
 }  // namespace
 
+namespace {
+bool checkSleepBmps() {
+  auto dir = SdMan.open("/sleep");
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return false;
+  }
+
+  dir.rewindDirectory();
+  char name[500];
+  bool foundBmp = false;
+  for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
+    if (file.isDirectory()) {
+      file.close();
+      continue;
+    }
+    file.getName(name, sizeof(name));
+    auto filename = std::string(name);
+    if (filename[0] == '.') {
+      file.close();
+      continue;
+    }
+
+    if (filename.length() >= 4 && filename.substr(filename.length() - 4) == ".bmp") {
+      foundBmp = true;
+    }
+    file.close();
+    if (foundBmp) break;
+  }
+  dir.close();
+  return foundBmp;
+}
+}  // namespace
+
 void SettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<SettingsActivity*>(param);
   self->displayTaskLoop();
@@ -52,10 +90,9 @@ void SettingsActivity::onEnter() {
   Activity::onEnter();
   renderingMutex = xSemaphoreCreateMutex();
 
-  // Reset selection to first item
-  selectedSettingIndex = 0;
+  hasSleepBmpsCached = checkSleepBmps();
 
-  // Trigger first update
+  selectedSettingIndex = 0;
   updateRequired = true;
 
   xTaskCreate(&SettingsActivity::taskTrampoline, "SettingsActivityTask",
@@ -99,26 +136,30 @@ void SettingsActivity::loop() {
   }
 
   // Handle navigation
+  const int visibleCount = hasSleepBmpsCached ? settingsCount : settingsCount - 1;
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     // Move selection up (with wrap-around)
-    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount - 1);
+    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (visibleCount - 1);
     updateRequired = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     // Move selection down (with wrap around)
-    selectedSettingIndex = (selectedSettingIndex < settingsCount - 1) ? (selectedSettingIndex + 1) : 0;
+    selectedSettingIndex = (selectedSettingIndex < visibleCount - 1) ? (selectedSettingIndex + 1) : 0;
     updateRequired = true;
   }
 }
 
 void SettingsActivity::toggleCurrentSetting() {
-  // Validate index
-  if (selectedSettingIndex < 0 || selectedSettingIndex >= settingsCount) {
+  int listIndex = selectedSettingIndex;
+  if (!hasSleepBmpsCached && selectedSettingIndex >= 2) {
+    listIndex = selectedSettingIndex + 1;
+  }
+  if (listIndex < 0 || listIndex >= settingsCount) {
     return;
   }
 
-  const auto& setting = settingsList[selectedSettingIndex];
+  const auto& setting = settingsList[listIndex];
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
@@ -149,6 +190,14 @@ void SettingsActivity::toggleCurrentSetting() {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Select Sleep BMP") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new SleepBmpSelectionActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
@@ -184,15 +233,21 @@ void SettingsActivity::render() const {
   // Draw header
   renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true, EpdFontFamily::BOLD);
 
+  const int visibleCount = hasSleepBmpsCached ? settingsCount : settingsCount - 1;
+
   // Draw selection
   renderer.fillRect(0, 60 + selectedSettingIndex * 30 - 2, pageWidth - 1, 30);
 
-  // Draw all settings
+  int visibleIndex = 0;
   for (int i = 0; i < settingsCount; i++) {
-    const int settingY = 60 + i * 30;  // 30 pixels between settings
+    if (i == 2 && !hasSleepBmpsCached) {
+      continue;
+    }
+
+    const int settingY = 60 + visibleIndex * 30;  // 30 pixels between settings
 
     // Draw setting name
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, i != selectedSettingIndex);
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, visibleIndex != selectedSettingIndex);
 
     // Draw value based on setting type
     std::string valueText = "";
@@ -204,9 +259,20 @@ void SettingsActivity::render() const {
       valueText = settingsList[i].enumValues[value];
     } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
       valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
+    } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Select Sleep BMP") == 0) {
+      if (SETTINGS.selectedSleepBmp[0] != '\0') {
+        valueText = SETTINGS.selectedSleepBmp;
+        if (valueText.length() > 20) {
+          valueText = valueText.substr(0, 17) + "...";
+        }
+      } else {
+        valueText = "Random";
+      }
     }
     const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), i != selectedSettingIndex);
+    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), visibleIndex != selectedSettingIndex);
+
+    visibleIndex++;
   }
 
   // Draw version text above button hints

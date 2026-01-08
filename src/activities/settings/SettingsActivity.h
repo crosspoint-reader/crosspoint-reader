@@ -49,6 +49,7 @@ class SettingsActivity final : public ActivityWithSubactivity {
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
   int selectedSettingIndex = 0;  // Currently selected setting
+  bool hasSleepBmpsCached = false;  // Cached result of sleep BMP check
   const std::function<void()> onGoHome;
 
   static void taskTrampoline(void* param);

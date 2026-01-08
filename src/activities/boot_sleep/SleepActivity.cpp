@@ -45,12 +45,28 @@ void SleepActivity::renderPopup(const char* message) const {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  // Check if we have a /sleep directory
   auto dir = SdMan.open("/sleep");
   if (dir && dir.isDirectory()) {
+    if (SETTINGS.selectedSleepBmp[0] != '\0') {
+      const std::string selectedFile = std::string(SETTINGS.selectedSleepBmp);
+      const std::string filename = "/sleep/" + selectedFile;
+      FsFile file;
+      if (SdMan.openFileForRead("SLP", filename, file)) {
+        Bitmap bitmap(file);
+        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          Serial.printf("[%lu] [SLP] Loading selected: /sleep/%s\n", millis(), selectedFile.c_str());
+          delay(100);
+          renderBitmapSleepScreen(bitmap);
+          dir.close();
+          return;
+        }
+        file.close();
+      }
+      Serial.printf("[%lu] [SLP] Selected BMP not found or invalid, falling back to random\n", millis());
+    }
+
     std::vector<std::string> files;
     char name[500];
-    // collect all valid BMP files
     for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
       if (file.isDirectory()) {
         file.close();
@@ -79,7 +95,6 @@ void SleepActivity::renderCustomSleepScreen() const {
     }
     const auto numFiles = files.size();
     if (numFiles > 0) {
-      // Generate a random number between 1 and numFiles
       const auto randomFileIndex = random(numFiles);
       const auto filename = "/sleep/" + files[randomFileIndex];
       FsFile file;
