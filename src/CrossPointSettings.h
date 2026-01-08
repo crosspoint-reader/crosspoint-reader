@@ -82,6 +82,8 @@ class CrossPointSettings {
   uint8_t screenMargin = 5;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
+  // Power button for forward page turn seetings
+  uint8_t pwrBtnTurn = 0;
 
   ~CrossPointSettings() = default;
 
