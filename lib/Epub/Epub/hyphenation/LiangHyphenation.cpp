@@ -164,8 +164,7 @@ EmbeddedAutomaton parseAutomaton(const SerializedHyphenationPatterns& patterns) 
   automaton.size = patterns.size;
   automaton.rootOffset = (static_cast<uint32_t>(patterns.data[0]) << 24) |
                          (static_cast<uint32_t>(patterns.data[1]) << 16) |
-                         (static_cast<uint32_t>(patterns.data[2]) << 8) |
-                         static_cast<uint32_t>(patterns.data[3]);
+                         (static_cast<uint32_t>(patterns.data[2]) << 8) | static_cast<uint32_t>(patterns.data[3]);
   if (automaton.rootOffset >= automaton.size) {
     automaton.data = nullptr;
     automaton.size = 0;
@@ -270,14 +269,13 @@ int32_t decodeDelta(const uint8_t* buf, uint8_t stride) {
   if (stride == 2) {
     return static_cast<int16_t>((static_cast<uint16_t>(buf[0]) << 8) | static_cast<uint16_t>(buf[1]));
   }
-  const int32_t unsignedVal = (static_cast<int32_t>(buf[0]) << 16) | (static_cast<int32_t>(buf[1]) << 8) |
-                              static_cast<int32_t>(buf[2]);
+  const int32_t unsignedVal =
+      (static_cast<int32_t>(buf[0]) << 16) | (static_cast<int32_t>(buf[1]) << 8) | static_cast<int32_t>(buf[2]);
   return unsignedVal - (1 << 23);
 }
 
 // Follow a single byte transition from `state`, decoding the child node on success.
-bool transition(const EmbeddedAutomaton& automaton, const AutomatonState& state, uint8_t letter,
-                AutomatonState& out) {
+bool transition(const EmbeddedAutomaton& automaton, const AutomatonState& state, uint8_t letter, AutomatonState& out) {
   if (!state.valid()) {
     return false;
   }

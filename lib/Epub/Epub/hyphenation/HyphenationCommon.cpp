@@ -1,5 +1,7 @@
 #include "HyphenationCommon.h"
 
+#include <Utf8.h>
+
 namespace {
 
 // Convert Latin uppercase letters (A-Z) to lowercase (a-z)
@@ -115,4 +117,43 @@ bool hasOnlyAlphabetic(const std::vector<CodepointInfo>& cps) {
     }
   }
   return true;
+}
+
+std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
+  std::vector<CodepointInfo> cps;
+  cps.reserve(word.size());
+
+  const unsigned char* base = reinterpret_cast<const unsigned char*>(word.c_str());
+  const unsigned char* ptr = base;
+  while (*ptr != 0) {
+    const unsigned char* current = ptr;
+    const uint32_t cp = utf8NextCodepoint(&ptr);
+    cps.push_back({cp, static_cast<size_t>(current - base)});
+  }
+
+  return cps;
+}
+
+void trimTrailingFootnoteReference(std::vector<CodepointInfo>& cps) {
+  if (cps.size() < 3) {
+    return;
+  }
+  int closing = static_cast<int>(cps.size()) - 1;
+  if (cps[closing].value != ']') {
+    return;
+  }
+  int pos = closing - 1;
+  if (pos < 0 || !isAsciiDigit(cps[pos].value)) {
+    return;
+  }
+  while (pos >= 0 && isAsciiDigit(cps[pos].value)) {
+    --pos;
+  }
+  if (pos < 0 || cps[pos].value != '[') {
+    return;
+  }
+  if (closing - pos <= 1) {
+    return;
+  }
+  cps.erase(cps.begin() + pos, cps.end());
 }

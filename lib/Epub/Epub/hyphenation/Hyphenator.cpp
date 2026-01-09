@@ -5,12 +5,8 @@
 #include <algorithm>
 #include <vector>
 
-#include "EnglishHyphenator.h"
-#include "FrenchHyphenator.h"
-#include "GermanHyphenator.h"
 #include "HyphenationCommon.h"
-#include "LanguageHyphenator.h"
-#include "RussianHyphenator.h"
+#include "LanguageRegistry.h"
 
 namespace {
 
@@ -28,57 +24,13 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   }
   if (primary.empty()) return nullptr;
 
-  if (primary == "en") return &EnglishHyphenator::instance();
-  if (primary == "fr") return &FrenchHyphenator::instance();
-  if (primary == "de") return &GermanHyphenator::instance();
-  if (primary == "ru") return &RussianHyphenator::instance();
-  return nullptr;
+  return getLanguageHyphenatorForPrimaryTag(primary);
 }
 
 // Cached hyphenator instance for the current preferred language.
 const LanguageHyphenator*& cachedHyphenator() {
   static const LanguageHyphenator* hyphenator = nullptr;
   return hyphenator;
-}
-
-// Converts the UTF-8 word into codepoint metadata for downstream rules.
-std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
-  std::vector<CodepointInfo> cps;
-  cps.reserve(word.size());
-
-  const unsigned char* base = reinterpret_cast<const unsigned char*>(word.c_str());
-  const unsigned char* ptr = base;
-  while (*ptr != 0) {
-    const unsigned char* current = ptr;
-    const uint32_t cp = utf8NextCodepoint(&ptr);
-    cps.push_back({cp, static_cast<size_t>(current - base)});
-  }
-
-  return cps;
-}
-
-void trimTrailingFootnoteReference(std::vector<CodepointInfo>& cps) {
-  if (cps.size() < 3) {
-    return;
-  }
-  int closing = static_cast<int>(cps.size()) - 1;
-  if (cps[closing].value != ']') {
-    return;
-  }
-  int pos = closing - 1;
-  if (pos < 0 || !isAsciiDigit(cps[pos].value)) {
-    return;
-  }
-  while (pos >= 0 && isAsciiDigit(cps[pos].value)) {
-    --pos;
-  }
-  if (pos < 0 || cps[pos].value != '[') {
-    return;
-  }
-  if (closing - pos <= 1) {
-    return;
-  }
-  cps.erase(cps.begin() + pos, cps.end());
 }
 
 // Asks the language hyphenator for legal break positions inside the word.
@@ -145,8 +97,8 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   trimSurroundingPunctuation(cps);
   trimTrailingFootnoteReference(cps);
   const auto* hyphenator = cachedHyphenator();
-  const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LanguageHyphenator::kDefaultMinPrefix;
-  const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LanguageHyphenator::kDefaultMinSuffix;
+  const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LiangWordConfig::kDefaultMinPrefix;
+  const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
   if (cps.size() < minPrefix + minSuffix) {
     return {};
   }
