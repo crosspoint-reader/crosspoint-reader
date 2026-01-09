@@ -26,7 +26,7 @@ CrossPointWebServer::CrossPointWebServer() {}
 CrossPointWebServer::~CrossPointWebServer() { stop(); }
 
 void CrossPointWebServer::begin() {
-  if (running) {
+  if (running.load(std::memory_order_acquire)) {
     Serial.printf("[%lu] [WEB] Web server already running\n", millis());
     return;
   }
@@ -51,13 +51,13 @@ void CrossPointWebServer::begin() {
   Serial.printf("[%lu] [WEB] Creating web server on port %d...\n", millis(), port);
   server.reset(new WebServer(port));
 
-  // Disable WiFi sleep to improve responsiveness and prevent 'unreachable' errors.
-  // This is critical for reliable web server operation on ESP32.
-  WiFi.setSleep(false);
+  // WiFi performance optimizations for maximum throughput
+  WiFi.setSleep(false);  // Disable WiFi sleep to improve responsiveness
 
-  // Note: WebServer class doesn't have setNoDelay() in the standard ESP32 library.
-  // We rely on disabling WiFi sleep for responsiveness.
+  // Set WiFi TX power to maximum for best signal and throughput
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Maximum power for ESP32-C3
 
+  Serial.printf("[%lu] [WEB] WiFi optimizations applied (sleep disabled, max TX power)\n", millis());
   Serial.printf("[%lu] [WEB] [MEM] Free heap after WebServer allocation: %d bytes\n", millis(), ESP.getFreeHeap());
 
   if (!server) {
@@ -86,7 +86,7 @@ void CrossPointWebServer::begin() {
   Serial.printf("[%lu] [WEB] [MEM] Free heap after route setup: %d bytes\n", millis(), ESP.getFreeHeap());
 
   server->begin();
-  running = true;
+  running.store(true, std::memory_order_release);
 
   Serial.printf("[%lu] [WEB] Web server started on port %d\n", millis(), port);
   // Show the correct IP based on network mode
@@ -96,14 +96,15 @@ void CrossPointWebServer::begin() {
 }
 
 void CrossPointWebServer::stop() {
-  if (!running || !server) {
-    Serial.printf("[%lu] [WEB] stop() called but already stopped (running=%d, server=%p)\n", millis(), running,
+  const bool wasRunning = running.load(std::memory_order_acquire);
+  if (!wasRunning || !server) {
+    Serial.printf("[%lu] [WEB] stop() called but already stopped (running=%d, server=%p)\n", millis(), wasRunning,
                   server.get());
     return;
   }
 
   Serial.printf("[%lu] [WEB] STOP INITIATED - setting running=false first\n", millis());
-  running = false;  // Set this FIRST to prevent handleClient from using server
+  running.store(false, std::memory_order_release);
 
   Serial.printf("[%lu] [WEB] [MEM] Free heap before stop: %d bytes\n", millis(), ESP.getFreeHeap());
 
@@ -111,33 +112,39 @@ void CrossPointWebServer::stop() {
   delay(100);
   Serial.printf("[%lu] [WEB] Waited 100ms for handleClient to finish\n", millis());
 
-  server->stop();
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after server->stop(): %d bytes\n", millis(), ESP.getFreeHeap());
+  // Lock mutex to ensure no handleClient() is currently accessing server
+  std::lock_guard<std::mutex> lock(serverMutex);
 
-  // Add another delay before deletion to ensure server->stop() completes
-  delay(50);
-  Serial.printf("[%lu] [WEB] Waited 50ms before deleting server\n", millis());
+  if (server) {
+    server->stop();
+    Serial.printf("[%lu] [WEB] [MEM] Free heap after server->stop(): %d bytes\n", millis(), ESP.getFreeHeap());
 
-  server.reset();
-  Serial.printf("[%lu] [WEB] Web server stopped and deleted\n", millis());
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after delete server: %d bytes\n", millis(), ESP.getFreeHeap());
+    // Add another delay before deletion to ensure server->stop() completes
+    delay(50);
+    Serial.printf("[%lu] [WEB] Waited 50ms before deleting server\n", millis());
 
-  // Note: Static upload variables (uploadFileName, uploadPath, uploadError) are declared
-  // later in the file and will be cleared when they go out of scope or on next upload
+    server.reset();
+    Serial.printf("[%lu] [WEB] Web server stopped and deleted\n", millis());
+    Serial.printf("[%lu] [WEB] [MEM] Free heap after delete server: %d bytes\n", millis(), ESP.getFreeHeap());
+  }
+
+  // Upload state is now instance variables and will be cleaned up automatically
   Serial.printf("[%lu] [WEB] [MEM] Free heap final: %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
 void CrossPointWebServer::handleClient() const {
   static unsigned long lastDebugPrint = 0;
 
-  // Check running flag FIRST before accessing server
-  if (!running) {
+  // Check running flag FIRST before accessing server (atomic read)
+  if (!running.load(std::memory_order_acquire)) {
     return;
   }
 
-  // Double-check server pointer is valid
+  // Lock mutex to safely access server pointer
+  std::lock_guard<std::mutex> lock(serverMutex);
+
+  // Double-check server pointer is valid while holding mutex
   if (!server) {
-    Serial.printf("[%lu] [WEB] WARNING: handleClient called with null server!\n", millis());
     return;
   }
 
@@ -261,22 +268,27 @@ void CrossPointWebServer::handleFileListData() const {
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
   server->sendContent("[");
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
 
-  scanFiles(currentPath.c_str(), [this, &output, &doc, seenFirst](const FileInfo& info) mutable {
+  scanFiles(currentPath.c_str(), [this, &doc, seenFirst](const FileInfo& info) mutable {
     doc.clear();
     doc["name"] = info.name;
     doc["size"] = info.size;
     doc["isDirectory"] = info.isDirectory;
     doc["isEpub"] = info.isEpub;
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      // JSON output truncated; skip this entry to avoid sending malformed JSON
-      Serial.printf("[%lu] [WEB] Skipping file entry with oversized JSON for name: %s\n", millis(), info.name.c_str());
+    // Calculate required size for JSON output
+    const size_t requiredSize = measureJson(doc) + 1;  // +1 for null terminator
+
+    // Dynamically allocate exact size needed (handles 500-char filenames safely)
+    std::unique_ptr<char[]> output(new char[requiredSize]);
+
+    const size_t written = serializeJson(doc, output.get(), requiredSize);
+    if (written >= requiredSize) {
+      // This should never happen with measureJson, but handle it anyway
+      Serial.printf("[%lu] [WEB] ERROR: JSON serialization failed for: %s (required: %d)\n", millis(),
+                    info.name.c_str(), requiredSize);
       return;
     }
 
@@ -285,7 +297,7 @@ void CrossPointWebServer::handleFileListData() const {
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
+    server->sendContent(output.get());
   });
   server->sendContent("]");
   // End of streamed response, empty chunk to signal client
@@ -293,21 +305,15 @@ void CrossPointWebServer::handleFileListData() const {
   Serial.printf("[%lu] [WEB] Served file listing page for path: %s\n", millis(), currentPath.c_str());
 }
 
-// Static variables for upload handling
-static FsFile uploadFile;
-static String uploadFileName;
-static String uploadPath = "/";
-static size_t uploadSize = 0;
-static bool uploadSuccess = false;
-static String uploadError = "";
+// Upload state is now instance variables in the class (see header)
+// with mutex protection for thread safety
 
 void CrossPointWebServer::handleUpload() const {
-  static unsigned long lastWriteTime = 0;
-  static unsigned long uploadStartTime = 0;
-  static size_t lastLoggedSize = 0;
+  // Lock upload mutex for thread-safe access to upload state
+  std::lock_guard<std::mutex> lock(uploadMutex);
 
   // Safety check: ensure server is still valid
-  if (!running || !server) {
+  if (!running.load(std::memory_order_acquire) || !server) {
     Serial.printf("[%lu] [WEB] [UPLOAD] ERROR: handleUpload called but server not running!\n", millis());
     return;
   }
@@ -315,10 +321,28 @@ void CrossPointWebServer::handleUpload() const {
   const HTTPUpload& upload = server->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
+    // Check heap before starting upload
+    const size_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < 50000) {  // Less than 50KB free
+      uploadError = "Insufficient memory for upload";
+      Serial.printf("[%lu] [WEB] [UPLOAD] REJECTED - low memory: %d bytes\n", millis(), freeHeap);
+      return;
+    }
+
+    // Pre-allocate String capacities to avoid reallocations during upload
+    uploadFileName.clear();
+    uploadFileName.reserve(upload.filename.length() + 16);
     uploadFileName = upload.filename;
+
+    uploadPath.clear();
+    uploadPath.reserve(256);  // Typical path length
+
     uploadSize = 0;
     uploadSuccess = false;
-    uploadError = "";
+
+    uploadError.clear();
+    uploadError.reserve(128);  // Pre-allocate error string capacity
+
     uploadStartTime = millis();
     lastWriteTime = millis();
     lastLoggedSize = 0;
@@ -341,10 +365,12 @@ void CrossPointWebServer::handleUpload() const {
     }
 
     Serial.printf("[%lu] [WEB] [UPLOAD] START: %s to path: %s\n", millis(), uploadFileName.c_str(), uploadPath.c_str());
-    Serial.printf("[%lu] [WEB] [UPLOAD] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
+    Serial.printf("[%lu] [WEB] [UPLOAD] Free heap: %d bytes\n", millis(), freeHeap);
 
-    // Create file path
-    String filePath = uploadPath;
+    // Build file path efficiently with pre-allocation
+    String filePath;
+    filePath.reserve(uploadPath.length() + uploadFileName.length() + 2);
+    filePath = uploadPath;
     if (!filePath.endsWith("/")) filePath += "/";
     filePath += uploadFileName;
 

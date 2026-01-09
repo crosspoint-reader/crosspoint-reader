@@ -48,7 +48,7 @@ void CrossPointWebServerActivity::onEnter() {
   updateRequired = true;
 
   xTaskCreate(&CrossPointWebServerActivity::taskTrampoline, "WebServerActivityTask",
-              2048,               // Stack size
+              6144,               // Stack size (increased from 2KB to 6KB for stability)
               this,               // Parameters
               1,                  // Priority
               &displayTaskHandle  // Task handle
@@ -147,6 +147,11 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     // AP mode - start access point
     state = WebServerActivityState::AP_STARTING;
     updateRequired = true;
+
+    // WiFi performance optimizations for AP mode
+    WiFi.setSleep(false);                      // Disable WiFi sleep
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);      // Maximum TX power for ESP32-C3
+
     startAccessPoint();
   }
 }
@@ -186,6 +191,12 @@ void CrossPointWebServerActivity::startAccessPoint() {
   // Configure and start the AP
   WiFi.mode(WIFI_AP);
   delay(100);
+
+  // WiFi performance optimizations for maximum throughput
+  WiFi.setSleep(false);                      // Disable WiFi sleep
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);      // Maximum TX power for ESP32-C3
+
+  Serial.printf("[%lu] [WEBACT] WiFi optimizations applied (sleep disabled, max TX power)\n", millis());
 
   // Start soft AP
   bool apStarted;
@@ -300,6 +311,15 @@ void CrossPointWebServerActivity::loop() {
       constexpr int HANDLE_CLIENT_ITERATIONS = 10;
       for (int i = 0; i < HANDLE_CLIENT_ITERATIONS && webServer->isRunning(); i++) {
         webServer->handleClient();
+
+        // CRITICAL: Yield to WiFi stack and other tasks between iterations
+        // This prevents WiFi stack starvation in STA mode and improves stability
+        yield();
+
+        // Add small delay every few iterations to reduce CPU pressure
+        if (i % 3 == 2) {
+          delay(1);  // 1ms delay every 3 iterations
+        }
       }
       lastHandleClientTime = millis();
     }
