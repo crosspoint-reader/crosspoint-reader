@@ -7,8 +7,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "Bitmap.h"
-#include "Dithering.h"
+#include "BitmapHelpers.h"
 
 // Context structure for picojpeg callback
 struct JpegReadContext {
@@ -356,7 +355,7 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
           }
         } else {
           for (int x = 0; x < outWidth; x++) {
-            const uint8_t gray = mcuRowBuffer[bufferY * imageInfo.m_width + x];
+            const uint8_t gray = adjustPixel(mcuRowBuffer[bufferY * imageInfo.m_width + x]);
             uint8_t twoBit;
             if (atkinsonDitherer) {
               twoBit = atkinsonDitherer->processPixel(gray, x);

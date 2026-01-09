@@ -8,141 +8,8 @@
 // ============================================================================
 // Note: For cover images, dithering is done in JpegToBmpConverter.cpp
 // This file handles BMP reading - use simple quantization to avoid double-dithering
-constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering
-// Brightness/Contrast adjustments:
-constexpr bool USE_BRIGHTNESS = false;    // true: apply brightness/gamma adjustments
-constexpr int BRIGHTNESS_BOOST = 10;      // Brightness offset (0-50)
-constexpr bool GAMMA_CORRECTION = false;  // Gamma curve (brightens midtones)
-constexpr float CONTRAST_FACTOR = 1.15f;  // Contrast multiplier (1.0 = no change, >1 = more contrast)
+constexpr bool USE_ATKINSON = true;  // Use Atkinson dithering instead of Floyd-Steinberg
 // ============================================================================
-
-// Integer approximation of gamma correction (brightens midtones)
-// Uses a simple curve: out = 255 * sqrt(in/255) ≈ sqrt(in * 255)
-static inline int applyGamma(int gray) {
-  if (!GAMMA_CORRECTION) return gray;
-  // Fast integer square root approximation for gamma ~0.5 (brightening)
-  // This brightens dark/mid tones while preserving highlights
-  const int product = gray * 255;
-  // Newton-Raphson integer sqrt (2 iterations for good accuracy)
-  int x = gray;
-  if (x > 0) {
-    x = (x + product / x) >> 1;
-    x = (x + product / x) >> 1;
-  }
-  return x > 255 ? 255 : x;
-}
-
-// Apply contrast adjustment around midpoint (128)
-// factor > 1.0 increases contrast, < 1.0 decreases
-static inline int applyContrast(int gray) {
-  // Integer-based contrast: (gray - 128) * factor + 128
-  // Using fixed-point: factor 1.15 ≈ 115/100
-  constexpr int factorNum = static_cast<int>(CONTRAST_FACTOR * 100);
-  int adjusted = ((gray - 128) * factorNum) / 100 + 128;
-  if (adjusted < 0) adjusted = 0;
-  if (adjusted > 255) adjusted = 255;
-  return adjusted;
-}
-// Combined brightness/contrast/gamma adjustment
-int adjustPixel(int gray) {
-  if (!USE_BRIGHTNESS) return gray;
-
-  // Order: contrast first, then brightness, then gamma
-  gray = applyContrast(gray);
-  gray += BRIGHTNESS_BOOST;
-  if (gray > 255) gray = 255;
-  if (gray < 0) gray = 0;
-  gray = applyGamma(gray);
-
-  return gray;
-}
-// Simple quantization without dithering - divide into 4 levels
-// The thresholds are fine-tuned to the X4 display
-uint8_t quantizeSimple(int gray) {
-  if (gray < 50) {
-    return 0;
-  } else if (gray < 70) {
-    return 1;
-  } else if (gray < 140) {
-    return 2;
-  } else {
-    return 3;
-  }
-}
-
-// Hash-based noise dithering - survives downsampling without moiré artifacts
-// Uses integer hash to generate pseudo-random threshold per pixel
-static inline uint8_t quantizeNoise(int gray, int x, int y) {
-  uint32_t hash = static_cast<uint32_t>(x) * 374761393u + static_cast<uint32_t>(y) * 668265263u;
-  hash = (hash ^ (hash >> 13)) * 1274126177u;
-  const int threshold = static_cast<int>(hash >> 24);
-
-  const int scaled = gray * 3;
-  if (scaled < 255) {
-    return (scaled + threshold >= 255) ? 1 : 0;
-  } else if (scaled < 510) {
-    return ((scaled - 255) + threshold >= 255) ? 2 : 1;
-  } else {
-    return ((scaled - 510) + threshold >= 255) ? 3 : 2;
-  }
-}
-
-// Main quantization function - selects between methods based on config
-uint8_t quantize(int gray, int x, int y) {
-  if (USE_NOISE_DITHERING) {
-    return quantizeNoise(gray, x, y);
-  } else {
-    return quantizeSimple(gray);
-  }
-}
-
-// Floyd-Steinberg quantization with error diffusion and serpentine scanning
-// Returns 2-bit value (0-3) and updates error buffers
-static inline uint8_t quantizeFloydSteinberg(int gray, int x, int width, int16_t* errorCurRow, int16_t* errorNextRow,
-                                             bool reverseDir) {
-  // Add accumulated error to this pixel
-  int adjusted = gray + errorCurRow[x + 1];
-  // Clamp to valid range
-  if (adjusted < 0) adjusted = 0;
-  if (adjusted > 255) adjusted = 255;
-
-  // Quantize to 4 levels (0, 85, 170, 255)
-  uint8_t quantized;
-  int quantizedValue;
-  if (adjusted < 30) {
-    quantized = 0;
-    quantizedValue = 15;
-  } else if (adjusted < 50) {
-    quantized = 1;
-    quantizedValue = 30;
-  } else if (adjusted < 140) {
-    quantized = 2;
-    quantizedValue = 80;
-  } else {
-    quantized = 3;
-    quantizedValue = 210;
-  }
-
-  // Calculate error
-  int error = adjusted - quantizedValue;
-
-  // Distribute error to neighbors (serpentine: direction-aware)
-  if (!reverseDir) {
-    // Left to right
-    errorCurRow[x + 2] += (error * 7) >> 4;   // Right: 7/16
-    errorNextRow[x] += (error * 3) >> 4;      // Bottom-left: 3/16
-    errorNextRow[x + 1] += (error * 5) >> 4;  // Bottom: 5/16
-    errorNextRow[x + 2] += (error) >> 4;      // Bottom-right: 1/16
-  } else {
-    // Right to left (mirrored)
-    errorCurRow[x] += (error * 7) >> 4;       // Left: 7/16
-    errorNextRow[x + 2] += (error * 3) >> 4;  // Bottom-right: 3/16
-    errorNextRow[x + 1] += (error * 5) >> 4;  // Bottom: 5/16
-    errorNextRow[x] += (error) >> 4;          // Bottom-left: 1/16
-  }
-
-  return quantized;
-}
 
 Bitmap::~Bitmap() {
   delete[] errorCurRow;
@@ -270,13 +137,14 @@ BmpReaderError Bitmap::parseHeaders() {
     return BmpReaderError::SeekPixelDataFailed;
   }
 
-  // Allocate Floyd-Steinberg error buffers if enabled
-  if (useFloydSteinberg) {
-    delete[] errorCurRow;
-    delete[] errorNextRow;
-    errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
-    errorNextRow = new int16_t[width + 2]();
-    prevRowY = -1;
+  // Create ditherer if enabled (only for 2-bit output)
+  // Use OUTPUT dimensions for dithering (after prescaling)
+  if (bpp > 2 && dithering) {
+    if (USE_ATKINSON) {
+      atkinsonDitherer = new AtkinsonDitherer(width);
+    } else {
+      fsDitherer = new FloydSteinbergDitherer(width);
+    }
   }
 
   return BmpReaderError::Ok;
@@ -287,17 +155,6 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   // Note: rowBuffer should be pre-allocated by the caller to size 'rowBytes'
   if (file.read(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
 
-  // Handle Floyd-Steinberg error buffer progression
-  const bool useFS = useFloydSteinberg && errorCurRow && errorNextRow;
-  if (useFS) {
-    if (prevRowY != -1) {
-      // Sequential access - swap buffers
-      int16_t* temp = errorCurRow;
-      errorCurRow = errorNextRow;
-      errorNextRow = temp;
-      memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
-    }
-  }
   prevRowY += 1;
 
   uint8_t* outPtr = data;
@@ -308,12 +165,18 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   // Helper lambda to pack 2bpp color into the output stream
   auto packPixel = [&](const uint8_t lum) {
     uint8_t color;
-    if (useFS) {
-      // Floyd-Steinberg error diffusion
-      color = quantizeFloydSteinberg(adjustPixel(lum), currentX, width, errorCurRow, errorNextRow, false);
+    if (atkinsonDitherer) {
+      color = atkinsonDitherer->processPixel(adjustPixel(lum), currentX);
+    } else if (fsDitherer) {
+      color = fsDitherer->processPixel(adjustPixel(lum), currentX, fsDitherer->isReverseRow());
     } else {
-      // Simple quantization or noise dithering
-      color = quantize(adjustPixel(lum), currentX, prevRowY);
+      if (bpp > 2) {
+        // Simple quantization or noise dithering
+        color = quantize(adjustPixel(lum), currentX, prevRowY);
+      } else {
+        // do not quantize 2bpp image
+        color = static_cast<uint8_t>(lum >> 6);
+      }
     }
     currentOutByte |= (color << bitShift);
     if (bitShift == 0) {
@@ -371,6 +234,11 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
       return BmpReaderError::UnsupportedBpp;
   }
 
+  if (atkinsonDitherer)
+    atkinsonDitherer->nextRow();
+  else if (fsDitherer)
+    fsDitherer->nextRow();
+
   // Flush remaining bits if width is not a multiple of 4
   if (bitShift != 6) *outPtr = currentOutByte;
 
@@ -382,12 +250,9 @@ BmpReaderError Bitmap::rewindToData() const {
     return BmpReaderError::SeekPixelDataFailed;
   }
 
-  // Reset Floyd-Steinberg error buffers when rewinding
-  if (useFloydSteinberg && errorCurRow && errorNextRow) {
-    memset(errorCurRow, 0, (width + 2) * sizeof(int16_t));
-    memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
-    prevRowY = -1;
-  }
+  // Reset dithering when rewinding
+  if (fsDitherer) fsDitherer->reset();
+  if (atkinsonDitherer) atkinsonDitherer->reset();
 
   return BmpReaderError::Ok;
 }
