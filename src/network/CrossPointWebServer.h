@@ -1,5 +1,6 @@
 #pragma once
 
+#include <SdFat.h>
 #include <WebServer.h>
 
 #include <atomic>
