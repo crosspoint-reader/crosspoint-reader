@@ -139,8 +139,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     Serial.printf("[%lu] [WEBACT] Turning on WiFi (STA mode)...\n", millis());
     WiFi.mode(WIFI_STA);
     delay(100);  // Allow WiFi hardware to initialize before proceeding
-    WiFi.setSleep(false);  // Disable WiFi sleep immediately to prevent crashes
-
+    
     state = WebServerActivityState::WIFI_SELECTION;
     Serial.printf("[%lu] [WEBACT] Launching WifiSelectionActivity...\n", millis());
     enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
