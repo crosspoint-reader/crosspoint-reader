@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "activities/ActivityWithSubactivity.h"
 
 class TxtReaderActivity final : public ActivityWithSubactivity {
@@ -26,6 +27,11 @@ class TxtReaderActivity final : public ActivityWithSubactivity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+
+  // Cached settings for cache validation (different fonts/margins require re-indexing)
+  int cachedFontId = 0;
+  int cachedScreenMargin = 0;
+  uint8_t cachedParagraphAlignment = CrossPointSettings::LEFT_ALIGN;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();

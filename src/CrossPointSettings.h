@@ -51,6 +51,9 @@ class CrossPointSettings {
   // E-ink refresh frequency (pages between full refreshes)
   enum REFRESH_FREQUENCY { REFRESH_1 = 0, REFRESH_5 = 1, REFRESH_10 = 2, REFRESH_15 = 3, REFRESH_30 = 4 };
 
+  // Screen margin options
+  enum SCREEN_MARGIN { MARGIN_0 = 0, MARGIN_5 = 1, MARGIN_10 = 2, MARGIN_15 = 3, MARGIN_20 = 4 };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Status bar settings
@@ -74,6 +77,8 @@ class CrossPointSettings {
   uint8_t sleepTimeout = SLEEP_10_MIN;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
+  // Screen margin setting (default 5px)
+  uint8_t screenMargin = MARGIN_5;
 
   ~CrossPointSettings() = default;
 
@@ -89,6 +94,7 @@ class CrossPointSettings {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+  int getScreenMargin() const;
 };
 
 // Helper macro to access settings

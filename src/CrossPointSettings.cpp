@@ -12,7 +12,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 13;
+constexpr uint8_t SETTINGS_COUNT = 14;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -40,6 +40,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, paragraphAlignment);
   serialization::writePod(outputFile, sleepTimeout);
   serialization::writePod(outputFile, refreshFrequency);
+  serialization::writePod(outputFile, screenMargin);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -91,6 +92,8 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, sleepTimeout);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, refreshFrequency);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, screenMargin);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
@@ -164,6 +167,22 @@ int CrossPointSettings::getRefreshFrequency() const {
       return 15;
     case REFRESH_30:
       return 30;
+  }
+}
+
+int CrossPointSettings::getScreenMargin() const {
+  switch (screenMargin) {
+    case MARGIN_0:
+      return 0;
+    case MARGIN_5:
+    default:
+      return 5;
+    case MARGIN_10:
+      return 10;
+    case MARGIN_15:
+      return 15;
+    case MARGIN_20:
+      return 20;
   }
 }
 
