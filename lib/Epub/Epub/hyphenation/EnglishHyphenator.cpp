@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "LiangHyphenation.h"
-#include "generated/hyph-en-us.trie.h"
+#include "generated/hyph-en.trie.h"
 
 const EnglishHyphenator& EnglishHyphenator::instance() {
   static EnglishHyphenator instance;

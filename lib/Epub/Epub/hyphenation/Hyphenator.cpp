@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "EnglishHyphenator.h"
+#include "FrenchHyphenator.h"
 #include "GermanHyphenator.h"
 #include "HyphenationCommon.h"
 #include "LanguageHyphenator.h"
@@ -28,6 +29,7 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   if (primary.empty()) return nullptr;
 
   if (primary == "en") return &EnglishHyphenator::instance();
+  if (primary == "fr") return &FrenchHyphenator::instance();
   if (primary == "de") return &GermanHyphenator::instance();
   if (primary == "ru") return &RussianHyphenator::instance();
   return nullptr;

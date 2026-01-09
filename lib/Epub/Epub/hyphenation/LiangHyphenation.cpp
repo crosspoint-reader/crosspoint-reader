@@ -1,288 +1,310 @@
 #include "LiangHyphenation.h"
 
 #include <algorithm>
-#include <limits>
 #include <vector>
+
+/*
+ * Liang hyphenation pipeline overview (Typst-style binary trie variant)
+ * --------------------------------------------------------------------
+ * 1.  Input normalization (buildAugmentedWord)
+ *     - Accepts a vector of CodepointInfo structs emitted by the EPUB text
+ *       parser. Each codepoint is validated with LiangWordConfig::isLetter so
+ *       we abort early on digits, punctuation, etc. If the word is valid we
+ *       build an "augmented" byte sequence: leading '.', lowercase UTF-8 bytes
+ *       for every letter, then a trailing '.'. While doing this we capture the
+ *       UTF-8 byte offset for each character and a reverse lookup table that
+ *       maps UTF-8 byte indexes back to codepoint indexes. This lets the rest
+ *       of the algorithm stay byte-oriented (matching the serialized automaton)
+ *       while still emitting hyphen positions in codepoint space.
+ *
+ * 2.  Automaton decoding
+ *     - SerializedHyphenationPatterns stores a contiguous blob generated from
+ *       Typst's binary tries. The first 4 bytes contain the root offset. Each
+ *       node packs transitions, variable-stride relative offsets to child
+ *       nodes, and an optional pointer into a shared "levels" list. We parse
+ *       that layout lazily via decodeState/transition, keeping everything in
+ *       flash memory; no heap allocations besides the stack-local AutomatonState
+ *       structs. getAutomaton caches parseAutomaton results per blob pointer so
+ *       multiple words hitting the same language only pay the cost once.
+ *
+ * 3.  Pattern application
+ *     - We walk the augmented bytes left-to-right. For each starting byte we
+ *       stream transitions through the trie, terminating when a transition
+ *       fails. Whenever a node exposes level data we expand the packed
+ *       "dist+level" bytes: `dist` is the delta (in UTF-8 bytes) from the
+ *       starting cursor and `level` is the Liang priority digit. Using the
+ *       byte→codepoint lookup we mark the corresponding index in `scores`.
+ *       Scores are only updated if the new level is higher, mirroring Liang's
+ *       "max digit wins" rule.
+ *
+ * 4.  Output filtering
+ *     - collectBreakIndexes converts odd-valued score entries back to codepoint
+ *       break positions while enforcing `minPrefix`/`minSuffix` constraints from
+ *       LiangWordConfig. The caller (language-specific hyphenators) can then
+ *       translate these indexes into renderer glyph offsets, page layout data,
+ *       etc.
+ *
+ * Keeping the entire algorithm small and deterministic is critical on the
+ * ESP32-C3: we avoid recursion, dynamic allocations per node, or copying the
+ * trie. All lookups stay within the generated blob, which lives in flash, and
+ * the working buffers (augmented bytes/scores) scale with the word length rather
+ * than the pattern corpus.
+ */
 
 namespace {
 
-// Holds the dotted, lower-case representation used by Liang along with the original character order
-// so we can traverse via Unicode scalars instead of raw UTF-8 bytes.
 struct AugmentedWord {
-  std::vector<uint32_t> chars;
+  std::vector<uint8_t> bytes;
+  std::vector<size_t> charByteOffsets;
+  std::vector<int32_t> byteToCharIndex;
 
-  bool empty() const { return chars.empty(); }
-  size_t charCount() const { return chars.size(); }
+  bool empty() const { return bytes.empty(); }
+  size_t charCount() const { return charByteOffsets.size(); }
 };
 
-// Adds a single character to the augmented word.
-void appendCharToAugmentedWord(uint32_t cp, AugmentedWord& word) { word.chars.push_back(cp); }
+// Encode a single Unicode codepoint into UTF-8 and append to the provided buffer.
+size_t encodeUtf8(uint32_t cp, std::vector<uint8_t>& out) {
+  if (cp <= 0x7Fu) {
+    out.push_back(static_cast<uint8_t>(cp));
+    return 1;
+  }
+  if (cp <= 0x7FFu) {
+    out.push_back(static_cast<uint8_t>(0xC0u | ((cp >> 6) & 0x1Fu)));
+    out.push_back(static_cast<uint8_t>(0x80u | (cp & 0x3Fu)));
+    return 2;
+  }
+  if (cp <= 0xFFFFu) {
+    out.push_back(static_cast<uint8_t>(0xE0u | ((cp >> 12) & 0x0Fu)));
+    out.push_back(static_cast<uint8_t>(0x80u | ((cp >> 6) & 0x3Fu)));
+    out.push_back(static_cast<uint8_t>(0x80u | (cp & 0x3Fu)));
+    return 3;
+  }
+  out.push_back(static_cast<uint8_t>(0xF0u | ((cp >> 18) & 0x07u)));
+  out.push_back(static_cast<uint8_t>(0x80u | ((cp >> 12) & 0x3Fu)));
+  out.push_back(static_cast<uint8_t>(0x80u | ((cp >> 6) & 0x3Fu)));
+  out.push_back(static_cast<uint8_t>(0x80u | (cp & 0x3Fu)));
+  return 4;
+}
 
-// Produces the dotted ('.' + lowercase word + '.') UTF-8 byte stream required by Liang.  Classic TeX
-// hyphenation logic prepends/appends '.' sentinels so that patterns like ".ab" may anchor to word
-// boundaries.  If any character in the candidate word fails the `isLetter` predicate we abort early
-// and return an empty structure, signaling the caller to skip hyphenation entirely.
+// Build the dotted, lowercase UTF-8 representation plus lookup tables.
 AugmentedWord buildAugmentedWord(const std::vector<CodepointInfo>& cps, const LiangWordConfig& config) {
   AugmentedWord word;
   if (cps.empty()) {
     return word;
   }
 
-  word.chars.reserve(cps.size() + 2);
+  word.bytes.reserve(cps.size() * 2 + 2);
+  word.charByteOffsets.reserve(cps.size() + 2);
 
-  appendCharToAugmentedWord('.', word);
+  word.charByteOffsets.push_back(0);
+  word.bytes.push_back('.');
+
   for (const auto& info : cps) {
     if (!config.isLetter(info.value)) {
-      word.chars.clear();
+      word.bytes.clear();
+      word.charByteOffsets.clear();
+      word.byteToCharIndex.clear();
       return word;
     }
-    appendCharToAugmentedWord(config.toLower(info.value), word);
+    word.charByteOffsets.push_back(word.bytes.size());
+    encodeUtf8(config.toLower(info.value), word.bytes);
   }
-  appendCharToAugmentedWord('.', word);
+
+  word.charByteOffsets.push_back(word.bytes.size());
+  word.bytes.push_back('.');
+
+  word.byteToCharIndex.assign(word.bytes.size(), -1);
+  for (size_t i = 0; i < word.charByteOffsets.size(); ++i) {
+    const size_t offset = word.charByteOffsets[i];
+    if (offset < word.byteToCharIndex.size()) {
+      word.byteToCharIndex[offset] = static_cast<int32_t>(i);
+    }
+  }
   return word;
 }
 
-// Compact header that prefixes every serialized trie blob and lets us locate
-// the individual sections without storing pointers in flash.
-struct SerializedTrieHeader {
-  uint32_t letterCount;
-  uint32_t nodeCount;
-  uint32_t edgeCount;
-  uint32_t valueBytes;
+// Decoded view of a single trie node pulled straight out of the serialized blob.
+// - transitions: contiguous list of next-byte values
+// - targets: packed relative offsets (1/2/3 bytes) for each transition
+// - levels: optional pointer into the global levels list with packed dist/level pairs
+struct AutomatonState {
+  const uint8_t* data = nullptr;
+  size_t size = 0;
+  size_t addr = 0;
+  uint8_t stride = 1;
+  size_t childCount = 0;
+  const uint8_t* transitions = nullptr;
+  const uint8_t* targets = nullptr;
+  const uint8_t* levels = nullptr;
+  size_t levelsLen = 0;
+
+  bool valid() const { return data != nullptr; }
 };
 
-constexpr size_t kNodeRecordSize = 7;
-constexpr uint32_t kNoValueOffset = 0x00FFFFFFu;
+// Lightweight descriptor for the entire embedded automaton.
+// The blob format is:
+//   [0..3]  - big-endian root offset
+//   [4....] - node heap containing variable-sized headers + transition data
+struct EmbeddedAutomaton {
+  const uint8_t* data = nullptr;
+  size_t size = 0;
+  uint32_t rootOffset = 0;
 
-// Lightweight view over the packed blob emitted by the generator script.
-struct SerializedTrieView {
-  const uint32_t* letters = nullptr;
-  const uint8_t* nodes = nullptr;
-  const uint8_t* edgeChildren = nullptr;
-  const uint8_t* edgeLetters = nullptr;
-  const uint8_t* values = nullptr;
-  uint32_t letterCount = 0;
-  uint32_t nodeCount = 0;
-  uint32_t edgeCount = 0;
-  uint32_t valueBytes = 0;
-  size_t edgeLetterBytes = 0;
-
-  static constexpr size_t kInvalidNodeIndex = std::numeric_limits<size_t>::max();
-  static constexpr uint32_t kInvalidLetterIndex = std::numeric_limits<uint32_t>::max();
+  bool valid() const { return data != nullptr && size >= 4 && rootOffset < size; }
 };
 
-// Splits the raw byte array into typed slices. We purposely keep this logic
-// very defensive: any malformed blob results in an empty view so the caller can
-// bail out quietly.
-SerializedTrieView parseSerializedTrie(const SerializedHyphenationPatterns& patterns) {
-  SerializedTrieView view;
-  if (!patterns.data || patterns.size < sizeof(SerializedTrieHeader)) {
-    return view;
+// Decode the serialized automaton header and root offset.
+EmbeddedAutomaton parseAutomaton(const SerializedHyphenationPatterns& patterns) {
+  EmbeddedAutomaton automaton;
+  if (!patterns.data || patterns.size < 4) {
+    return automaton;
   }
 
-  const auto* header = reinterpret_cast<const SerializedTrieHeader*>(patterns.data);
-  const uint8_t* cursor = patterns.data + sizeof(SerializedTrieHeader);
-  const uint8_t* end = patterns.data + patterns.size;
-
-  const auto requireBytes = [&](size_t bytes) { return bytes <= static_cast<size_t>(end - cursor); };
-
-  const size_t lettersBytes = static_cast<size_t>(header->letterCount) * sizeof(uint32_t);
-  if (!requireBytes(lettersBytes)) {
-    return SerializedTrieView{};
+  automaton.data = patterns.data;
+  automaton.size = patterns.size;
+  automaton.rootOffset = (static_cast<uint32_t>(patterns.data[0]) << 24) |
+                         (static_cast<uint32_t>(patterns.data[1]) << 16) |
+                         (static_cast<uint32_t>(patterns.data[2]) << 8) |
+                         static_cast<uint32_t>(patterns.data[3]);
+  if (automaton.rootOffset >= automaton.size) {
+    automaton.data = nullptr;
+    automaton.size = 0;
   }
-  view.letters = reinterpret_cast<const uint32_t*>(cursor);
-  cursor += lettersBytes;
-
-  const size_t nodesBytes = static_cast<size_t>(header->nodeCount) * kNodeRecordSize;
-  if (!requireBytes(nodesBytes)) {
-    return SerializedTrieView{};
-  }
-  view.nodes = cursor;
-  cursor += nodesBytes;
-
-  const size_t childBytes = static_cast<size_t>(header->edgeCount) * sizeof(uint16_t);
-  if (!requireBytes(childBytes)) {
-    return SerializedTrieView{};
-  }
-  view.edgeChildren = cursor;
-  cursor += childBytes;
-
-  const size_t letterBits = static_cast<size_t>(header->edgeCount) * 6;
-  const size_t letterBytes = (letterBits + 7) >> 3;
-  if (!requireBytes(letterBytes)) {
-    return SerializedTrieView{};
-  }
-  view.edgeLetters = cursor;
-  view.edgeLetterBytes = letterBytes;
-  cursor += letterBytes;
-
-  if (!requireBytes(header->valueBytes)) {
-    return SerializedTrieView{};
-  }
-  view.values = cursor;
-  view.valueBytes = header->valueBytes;
-
-  view.letterCount = header->letterCount;
-  view.nodeCount = header->nodeCount;
-  view.edgeCount = header->edgeCount;
-  return view;
+  return automaton;
 }
 
-// The serialized blobs live in PROGMEM, so parsing them repeatedly is cheap but
-// wasteful. Keep a tiny cache indexed by the descriptor address so every
-// language builds its view only once.
-const SerializedTrieView& getSerializedTrie(const SerializedHyphenationPatterns& patterns) {
+// Cache parsed automata per blob pointer to avoid reparsing.
+const EmbeddedAutomaton& getAutomaton(const SerializedHyphenationPatterns& patterns) {
   struct CacheEntry {
     const SerializedHyphenationPatterns* key;
-    SerializedTrieView view;
+    EmbeddedAutomaton automaton;
   };
   static std::vector<CacheEntry> cache;
 
   for (const auto& entry : cache) {
     if (entry.key == &patterns) {
-      return entry.view;
+      return entry.automaton;
     }
   }
 
-  cache.push_back({&patterns, parseSerializedTrie(patterns)});
-  return cache.back().view;
+  cache.push_back({&patterns, parseAutomaton(patterns)});
+  return cache.back().automaton;
 }
 
-uint16_t readUint16LE(const uint8_t* ptr) {
-  return static_cast<uint16_t>(ptr[0]) | static_cast<uint16_t>(static_cast<uint16_t>(ptr[1]) << 8);
-}
-
-uint32_t readUint24LE(const uint8_t* ptr) {
-  return static_cast<uint32_t>(ptr[0]) | (static_cast<uint32_t>(ptr[1]) << 8) | (static_cast<uint32_t>(ptr[2]) << 16);
-}
-
-// Edges store child indexes and letter indexes in separate, compact arrays. We
-// read the child from the 16-bit table and decode the 6-bit letter from the
-// bitstream, which packs two entries per 12 bits on average.
-uint8_t readEdgeLetterIndex(const SerializedTrieView& trie, const size_t edgeIndex) {
-  if (!trie.edgeLetters) {
-    return 0xFFu;
-  }
-  const size_t bitOffset = edgeIndex * 6;
-  const size_t byteOffset = bitOffset >> 3;
-  if (byteOffset >= trie.edgeLetterBytes) {
-    return 0xFFu;
-  }
-  const uint8_t bitShift = static_cast<uint8_t>(bitOffset & 0x07u);
-  uint32_t chunk = trie.edgeLetters[byteOffset];
-  if (byteOffset + 1 < trie.edgeLetterBytes) {
-    chunk |= static_cast<uint32_t>(trie.edgeLetters[byteOffset + 1]) << 8;
-  }
-  const uint8_t value = static_cast<uint8_t>((chunk >> bitShift) & 0x3Fu);
-  return value;
-}
-
-// Materialized view of a node record so call sites do not repeatedly poke into
-// the byte array.
-struct NodeFields {
-  uint16_t firstEdge;
-  uint8_t childCount;
-  uint32_t valueOffset;
-  uint8_t valueLength;
-};
-
-NodeFields loadNode(const SerializedTrieView& trie, const size_t nodeIndex) {
-  NodeFields fields{0, 0, kNoValueOffset, 0};
-  if (!trie.nodes || nodeIndex >= trie.nodeCount) {
-    return fields;
+// Interpret the node located at `addr`, returning transition metadata.
+AutomatonState decodeState(const EmbeddedAutomaton& automaton, size_t addr) {
+  AutomatonState state;
+  if (!automaton.valid() || addr >= automaton.size) {
+    return state;
   }
 
-  const uint8_t* entry = trie.nodes + nodeIndex * kNodeRecordSize;
-  fields.firstEdge = readUint16LE(entry);
-  fields.childCount = entry[2];
-  fields.valueOffset = readUint24LE(entry + 3);
-  fields.valueLength = entry[6];
-  return fields;
-}
+  const uint8_t* base = automaton.data + addr;
+  size_t remaining = automaton.size - addr;
+  size_t pos = 0;
 
-// Letter indexes are stored sorted, so a lower_bound gives us O(log n) lookups
-// without building auxiliary maps.
-uint32_t letterIndexForCodepoint(const SerializedTrieView& trie, const uint32_t cp) {
-  if (!trie.letters || trie.letterCount == 0) {
-    return SerializedTrieView::kInvalidLetterIndex;
+  const uint8_t header = base[pos++];
+  // Header layout (bits):
+  //   7        - hasLevels flag
+  //   6..5     - stride selector (0 -> 1 byte, otherwise 1|2|3)
+  //   4..0     - child count (5 bits), 31 == overflow -> extra byte
+  const bool hasLevels = (header >> 7) != 0;
+  uint8_t stride = static_cast<uint8_t>((header >> 5) & 0x03u);
+  if (stride == 0) {
+    stride = 1;
   }
-  const uint32_t* begin = trie.letters;
-  const uint32_t* end = begin + trie.letterCount;
-  const auto it = std::lower_bound(begin, end, cp);
-  if (it == end || *it != cp) {
-    return SerializedTrieView::kInvalidLetterIndex;
-  }
-  return static_cast<uint32_t>(it - begin);
-}
-
-// Walks the child edge slice described by the node record using binary search
-// on the inlined letter indexes. Returns kInvalidNodeIndex when the path ends.
-size_t findChild(const SerializedTrieView& trie, const size_t nodeIndex, const uint32_t letter) {
-  const uint32_t letterIndex = letterIndexForCodepoint(trie, letter);
-  if (letterIndex == SerializedTrieView::kInvalidLetterIndex) {
-    return SerializedTrieView::kInvalidNodeIndex;
-  }
-  if (!trie.edgeChildren || !trie.edgeLetters) {
-    return SerializedTrieView::kInvalidNodeIndex;
-  }
-
-  const NodeFields node = loadNode(trie, nodeIndex);
-  size_t low = 0;
-  size_t high = node.childCount;
-  while (low < high) {
-    const size_t mid = low + ((high - low) >> 1);
-    const size_t edgeIndex = static_cast<size_t>(node.firstEdge) + mid;
-    if (edgeIndex >= trie.edgeCount) {
-      return SerializedTrieView::kInvalidNodeIndex;
+  size_t childCount = static_cast<size_t>(header & 0x1Fu);
+  if (childCount == 31u) {
+    if (pos >= remaining) {
+      return AutomatonState{};
     }
-    const uint32_t entryLetterIndex = readEdgeLetterIndex(trie, edgeIndex);
-    if (entryLetterIndex == letterIndex) {
-      const uint8_t* childPtr = trie.edgeChildren + edgeIndex * sizeof(uint16_t);
-      return readUint16LE(childPtr);
-    }
-    if (entryLetterIndex < letterIndex) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
+    childCount = base[pos++];
   }
-  return SerializedTrieView::kInvalidNodeIndex;
+
+  const uint8_t* levelsPtr = nullptr;
+  size_t levelsLen = 0;
+  if (hasLevels) {
+    if (pos + 1 >= remaining) {
+      return AutomatonState{};
+    }
+    const uint8_t offsetHi = base[pos++];
+    const uint8_t offsetLoLen = base[pos++];
+    // The 12-bit offset (hi<<4 | top nibble) points into the blob-level levels list.
+    // The bottom nibble stores how many packed entries belong to this node.
+    const size_t offset = (static_cast<size_t>(offsetHi) << 4) | (offsetLoLen >> 4);
+    levelsLen = offsetLoLen & 0x0Fu;
+    if (offset + levelsLen > automaton.size) {
+      return AutomatonState{};
+    }
+    levelsPtr = automaton.data + offset;
+  }
+
+  if (pos + childCount > remaining) {
+    return AutomatonState{};
+  }
+  const uint8_t* transitions = base + pos;
+  pos += childCount;
+
+  const size_t targetsBytes = childCount * stride;
+  if (pos + targetsBytes > remaining) {
+    return AutomatonState{};
+  }
+  const uint8_t* targets = base + pos;
+
+  state.data = automaton.data;
+  state.size = automaton.size;
+  state.addr = addr;
+  state.stride = stride;
+  state.childCount = childCount;
+  state.transitions = transitions;
+  state.targets = targets;
+  state.levels = levelsPtr;
+  state.levelsLen = levelsLen;
+  return state;
 }
 
-// Merges the pattern's numeric priorities into the global score array (max per slot).
-void applyPatternValues(const SerializedTrieView& trie, const NodeFields& node, const size_t startCharIndex,
-                        std::vector<uint8_t>& scores) {
-  if (node.valueLength == 0 || node.valueOffset == kNoValueOffset || !trie.values ||
-      node.valueOffset >= trie.valueBytes) {
-    return;
+// Convert the packed stride-sized delta back into a signed offset.
+int32_t decodeDelta(const uint8_t* buf, uint8_t stride) {
+  if (stride == 1) {
+    return static_cast<int8_t>(buf[0]);
+  }
+  if (stride == 2) {
+    return static_cast<int16_t>((static_cast<uint16_t>(buf[0]) << 8) | static_cast<uint16_t>(buf[1]));
+  }
+  const int32_t unsignedVal = (static_cast<int32_t>(buf[0]) << 16) | (static_cast<int32_t>(buf[1]) << 8) |
+                              static_cast<int32_t>(buf[2]);
+  return unsignedVal - (1 << 23);
+}
+
+// Follow a single byte transition from `state`, decoding the child node on success.
+bool transition(const EmbeddedAutomaton& automaton, const AutomatonState& state, uint8_t letter,
+                AutomatonState& out) {
+  if (!state.valid()) {
+    return false;
   }
 
-  const size_t availableBytes = trie.valueBytes - node.valueOffset;
-  const size_t packedBytesNeeded = (static_cast<size_t>(node.valueLength) + 1) >> 1;
-  const size_t packedBytes = std::min<size_t>(packedBytesNeeded, availableBytes);
-  const uint8_t* packedValues = trie.values + node.valueOffset;
-  // Value digits remain nibble-encoded (two per byte) to keep flash usage low;
-  // expand back to single scores just before applying them.
-  for (size_t valueIdx = 0; valueIdx < node.valueLength; ++valueIdx) {
-    const size_t packedIndex = valueIdx >> 1;
-    if (packedIndex >= packedBytes) {
-      break;
+  // Children remain sorted by letter in the serialized blob, but the lists are
+  // short enough that a linear scan keeps code size down compared to binary search.
+  for (size_t idx = 0; idx < state.childCount; ++idx) {
+    if (state.transitions[idx] != letter) {
+      continue;
     }
-    const uint8_t packedByte = packedValues[packedIndex];
-    const uint8_t value =
-        (valueIdx & 1u) ? static_cast<uint8_t>((packedByte >> 4) & 0x0Fu) : static_cast<uint8_t>(packedByte & 0x0Fu);
-    const size_t scoreIdx = startCharIndex + valueIdx;
-    if (scoreIdx >= scores.size()) {
-      break;
+    const uint8_t* deltaPtr = state.targets + idx * state.stride;
+    const int32_t delta = decodeDelta(deltaPtr, state.stride);
+    // Deltas are relative to the current node's address, allowing us to keep all
+    // targets within 24 bits while still referencing further nodes in the blob.
+    const int64_t nextAddr = static_cast<int64_t>(state.addr) + delta;
+    if (nextAddr < 0 || static_cast<size_t>(nextAddr) >= automaton.size) {
+      return false;
     }
-    scores[scoreIdx] = std::max(scores[scoreIdx], value);
+    out = decodeState(automaton, static_cast<size_t>(nextAddr));
+    return out.valid();
   }
+  return false;
 }
 
 // Converts odd score positions back into codepoint indexes, honoring min prefix/suffix constraints.
-// By iterating over codepoint indexes rather than raw byte offsets we naturally support UTF-8 input
-// without bookkeeping gymnastics.  Each break corresponds to scores[breakIndex + 1] because of the
-// leading '.' sentinel emitted in buildAugmentedWord().
+// Each break corresponds to scores[breakIndex + 1] because of the leading '.' sentinel.
+// Convert odd score entries into hyphen positions while honoring prefix/suffix limits.
 std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, const std::vector<uint8_t>& scores,
                                         const size_t minPrefix, const size_t minSuffix) {
   std::vector<size_t> indexes;
@@ -301,7 +323,7 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
       continue;
     }
 
-    const size_t scoreIdx = breakIndex + 1;  // Account for leading '.' sentinel.
+    const size_t scoreIdx = breakIndex + 1;
     if (scoreIdx >= scores.size()) {
       break;
     }
@@ -316,41 +338,63 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
 
 }  // namespace
 
+// Entry point that runs the full Liang pipeline for a single word.
 std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
                                       const SerializedHyphenationPatterns& patterns, const LiangWordConfig& config) {
-  // Step 1: convert the input word into the dotted UTF-8 stream the Liang algorithm expects.  A return
-  // value of {} means the word contained something outside the language's alphabet and should be left
-  // untouched by hyphenation.
   const auto augmented = buildAugmentedWord(cps, config);
   if (augmented.empty()) {
     return {};
   }
 
-  // Step 2: run the augmented word through the trie-backed pattern table so we reuse common prefixes
-  // instead of rescanning the UTF-8 bytes for every substring.
-  const SerializedTrieView& trie = getSerializedTrie(patterns);
-  if (!trie.nodes || trie.nodeCount == 0) {
+  const EmbeddedAutomaton& automaton = getAutomaton(patterns);
+  if (!automaton.valid()) {
     return {};
   }
-  const size_t charCount = augmented.charCount();
-  std::vector<uint8_t> scores(charCount + 1, 0);
-  for (size_t charStart = 0; charStart < charCount; ++charStart) {
-    size_t currentNode = 0;  // Root node.
-    for (size_t cursor = charStart; cursor < charCount; ++cursor) {
-      const uint32_t letter = augmented.chars[cursor];
-      currentNode = findChild(trie, currentNode, letter);
-      if (currentNode == SerializedTrieView::kInvalidNodeIndex) {
+
+  const AutomatonState root = decodeState(automaton, automaton.rootOffset);
+  if (!root.valid()) {
+    return {};
+  }
+
+  std::vector<uint8_t> scores(augmented.charCount(), 0);
+
+  for (size_t charStart = 0; charStart < augmented.charByteOffsets.size(); ++charStart) {
+    size_t byteStart = augmented.charByteOffsets[charStart];
+    AutomatonState state = root;
+    for (size_t cursor = byteStart; cursor < augmented.bytes.size(); ++cursor) {
+      AutomatonState next;
+      if (!transition(automaton, state, augmented.bytes[cursor], next)) {
         break;
       }
+      state = next;
 
-      const NodeFields node = loadNode(trie, currentNode);
-      if (node.valueLength > 0 && node.valueOffset != kNoValueOffset) {
-        applyPatternValues(trie, node, charStart, scores);
+      if (state.levels && state.levelsLen > 0) {
+        size_t offset = 0;
+        for (size_t i = 0; i < state.levelsLen; ++i) {
+          const uint8_t packed = state.levels[i];
+          const size_t dist = static_cast<size_t>(packed / 10);
+          const uint8_t level = static_cast<uint8_t>(packed % 10);
+          offset += dist;
+          const size_t splitByte = byteStart + offset;
+          if (splitByte >= augmented.byteToCharIndex.size()) {
+            continue;
+          }
+          const int32_t boundary = augmented.byteToCharIndex[splitByte];
+          if (boundary < 0) {
+            continue;
+          }
+          if (boundary < 2 || boundary + 2 > static_cast<int32_t>(augmented.charCount())) {
+            continue;
+          }
+          const size_t idx = static_cast<size_t>(boundary);
+          if (idx >= scores.size()) {
+            continue;
+          }
+          scores[idx] = std::max(scores[idx], level);
+        }
       }
     }
   }
 
-  // Step 3: translate odd-numbered score positions back into codepoint indexes, enforcing per-language
-  // prefix/suffix minima so we do not produce visually awkward fragments.
   return collectBreakIndexes(cps, scores, config.minPrefix, config.minSuffix);
 }

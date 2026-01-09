@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "LiangHyphenation.h"
-#include "generated/hyph-ru-ru.trie.h"
+#include "generated/hyph-ru.trie.h"
 
 const RussianHyphenator& RussianHyphenator::instance() {
   static RussianHyphenator instance;
