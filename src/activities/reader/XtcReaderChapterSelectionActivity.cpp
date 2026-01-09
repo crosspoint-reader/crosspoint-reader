@@ -12,7 +12,7 @@ constexpr int SKIP_PAGE_MS = 700;
 int XtcReaderChapterSelectionActivity::getPageItems() const {
   constexpr int startY = 60;
   constexpr int lineHeight = 30;
-  
+
   const int screenHeight = renderer.getScreenHeight();
   const int endY = screenHeight - lineHeight;
 
