@@ -101,7 +101,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   // render a custom sleep screen instead of the default.
   FsFile file;
   if (SdMan.openFileForRead("SLP", "/sleep.bmp", file)) {
-    Bitmap bitmap(file, true, 0);
+    Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       Serial.printf("[%lu] [SLP] Loading: /sleep.bmp\n", millis());
       renderBitmapSleepScreen(bitmap);

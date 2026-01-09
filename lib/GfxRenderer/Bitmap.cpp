@@ -34,7 +34,19 @@ static inline uint8_t boostBrightness(int gray, uint8_t boost) {
   return gray;
 }
 // Simple quantization without dithering - just divide into 4 levels
-static inline uint8_t quantizeSimple(int gray) { return static_cast<uint8_t>(gray >> 6); }
+static inline uint8_t quantizeSimple(int gray) {
+  // return static_cast<uint8_t>(gray >> 6);
+
+  if (gray < 50) {
+    return 0;
+  } else if (gray < 70) {
+    return 1;
+  } else if (gray < 140) {
+    return 2;
+  } else {
+    return 3;
+  }
+}
 
 // Hash-based noise dithering - survives downsampling without moiré artifacts
 static inline uint8_t quantizeNoise(int gray, int x, int y) {
@@ -279,7 +291,6 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
                                      false);
     } else {
       // Simple quantization or noise dithering
-
       color = quantize(boostBrightness(lum, brightnessBoost), currentX, prevRowY);
     }
     currentOutByte |= (color << bitShift);
