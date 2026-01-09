@@ -1,0 +1,47 @@
+name: Manual Build Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: true
+        default: 'claude/fix-firmware-bug-fVdvb'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.branch }}
+          submodules: recursive
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build CrossPoint
+        run: pio run -e default
+
+      - name: Upload Firmware Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-firmware-${{ github.event.inputs.branch }}
+          path: |
+            .pio/build/default/bootloader.bin
+            .pio/build/default/firmware.bin
+            .pio/build/default/firmware.elf
+            .pio/build/default/partitions.bin
+          retention-days: 7

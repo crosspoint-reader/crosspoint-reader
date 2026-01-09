@@ -35,3 +35,14 @@ jobs:
 
       - name: Build CrossPoint
         run: pio run
+
+      - name: Upload Firmware Artifacts
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-pr-${{ github.event.pull_request.number }}
+          path: |
+            .pio/build/default/firmware.bin
+            .pio/build/default/bootloader.bin
+            .pio/build/default/partitions.bin
+          retention-days: 7

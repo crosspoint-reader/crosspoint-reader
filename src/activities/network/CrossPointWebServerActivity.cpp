@@ -187,6 +187,7 @@ void CrossPointWebServerActivity::startAccessPoint() {
   // Configure and start the AP
   WiFi.mode(WIFI_AP);
   delay(100);
+  WiFi.setSleep(false);  // Disable WiFi sleep immediately to prevent crashes
 
   // Start soft AP
   bool apStarted;
