@@ -13,7 +13,7 @@
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 20;
+constexpr int settingsCount = 18;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
@@ -35,8 +35,6 @@ const SettingInfo settingsList[settingsCount] = {
     SettingInfo::Value("Reader Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
     SettingInfo::Enum("Reader Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
                       {"Justify", "Left", "Center", "Right"}),
-    SettingInfo::Value("Reading Speed (WPM)", &CrossPointSettings::readingSpeedWpm, {150, 300, 5}),
-    SettingInfo::Toggle("Show Time Left In Chapter", &CrossPointSettings::showTimeLeftInChapter),
     SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
@@ -129,21 +127,14 @@ void SettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
-  } else if (setting.type == SettingType::VALUE && setting.valuePtr16 != nullptr) {
+  } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     // Decreasing would also be nice for large ranges I think but oh well can't have everything
-    const uint16_t currentValue = SETTINGS.*(setting.valuePtr16);
+    const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     // Wrap to minValue if exceeding setting value boundary
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
-      SETTINGS.*(setting.valuePtr16) = setting.valueRange.min;
+      SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
     } else {
-      SETTINGS.*(setting.valuePtr16) = currentValue + setting.valueRange.step;
-    }
-  } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    const uint16_t currentValue = SETTINGS.*(setting.valuePtr);
-    if (currentValue + setting.valueRange.step > setting.valueRange.max) {
-      SETTINGS.*(setting.valuePtr) = static_cast<uint8_t>(setting.valueRange.min);
-    } else {
-      SETTINGS.*(setting.valuePtr) = static_cast<uint8_t>(currentValue + setting.valueRange.step);
+      SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
     if (strcmp(setting.name, "Calibre Settings") == 0) {
@@ -211,8 +202,6 @@ void SettingsActivity::render() const {
     } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
       const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
       valueText = settingsList[i].enumValues[value];
-    } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr16 != nullptr) {
-      valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr16));
     } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
       valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
     }

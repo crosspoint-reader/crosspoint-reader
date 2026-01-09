@@ -12,9 +12,9 @@
 CrossPointSettings CrossPointSettings::instance;
 
 namespace {
-constexpr uint8_t SETTINGS_FILE_VERSION = 2;
+constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 19;
+constexpr uint8_t SETTINGS_COUNT = 17;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -46,8 +46,6 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, sleepScreenCoverMode);
   serialization::writeString(outputFile, std::string(opdsServerUrl));
   serialization::writePod(outputFile, textAntiAliasing);
-  serialization::writePod(outputFile, readingSpeedWpm);
-  serialization::writePod(outputFile, showTimeLeftInChapter);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -62,7 +60,7 @@ bool CrossPointSettings::loadFromFile() {
 
   uint8_t version;
   serialization::readPod(inputFile, version);
-  if (version != SETTINGS_FILE_VERSION && version != 1) {
+  if (version != SETTINGS_FILE_VERSION) {
     Serial.printf("[%lu] [CPS] Deserialization failed: Unknown version %u\n", millis(), version);
     inputFile.close();
     return false;
@@ -112,15 +110,6 @@ bool CrossPointSettings::loadFromFile() {
     }
     serialization::readPod(inputFile, textAntiAliasing);
     if (++settingsRead >= fileSettingsCount) break;
-    if (version == 1) {
-      uint8_t wpmV1;
-      serialization::readPod(inputFile, wpmV1);
-      readingSpeedWpm = wpmV1;
-    } else {
-      serialization::readPod(inputFile, readingSpeedWpm);
-    }
-    if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, showTimeLeftInChapter);
   } while (false);
 
   inputFile.close();

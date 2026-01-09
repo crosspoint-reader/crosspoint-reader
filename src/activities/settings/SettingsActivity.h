@@ -15,37 +15,32 @@ enum class SettingType { TOGGLE, ENUM, ACTION, VALUE };
 
 // Structure to hold setting information
 struct SettingInfo {
-  const char* name;                           // Display name of the setting
-  SettingType type;                           // Type of setting
-  uint8_t CrossPointSettings::* valuePtr;     // Pointer for 8-bit settings (TOGGLE/ENUM)
-  uint16_t CrossPointSettings::* valuePtr16;  // Pointer for 16-bit VALUE settings
+  const char* name;                        // Display name of the setting
+  SettingType type;                        // Type of setting
+  uint8_t CrossPointSettings::* valuePtr;  // Pointer to member in CrossPointSettings (for TOGGLE/ENUM/VALUE)
   std::vector<std::string> enumValues;
 
   struct ValueRange {
-    uint16_t min;
-    uint16_t max;
-    uint16_t step;
+    uint8_t min;
+    uint8_t max;
+    uint8_t step;
   };
   // Bounds/step for VALUE type settings
   ValueRange valueRange;
 
   // Static constructors
   static SettingInfo Toggle(const char* name, uint8_t CrossPointSettings::* ptr) {
-    return {name, SettingType::TOGGLE, ptr, nullptr};
+    return {name, SettingType::TOGGLE, ptr};
   }
 
   static SettingInfo Enum(const char* name, uint8_t CrossPointSettings::* ptr, std::vector<std::string> values) {
-    return {name, SettingType::ENUM, ptr, nullptr, std::move(values)};
+    return {name, SettingType::ENUM, ptr, std::move(values)};
   }
 
-  static SettingInfo Action(const char* name) { return {name, SettingType::ACTION, nullptr, nullptr}; }
-
-  static SettingInfo Value(const char* name, uint16_t CrossPointSettings::* ptr, const ValueRange valueRange) {
-    return {name, SettingType::VALUE, nullptr, ptr, {}, valueRange};
-  }
+  static SettingInfo Action(const char* name) { return {name, SettingType::ACTION, nullptr}; }
 
   static SettingInfo Value(const char* name, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange) {
-    return {name, SettingType::VALUE, ptr, nullptr, {}, valueRange};
+    return {name, SettingType::VALUE, ptr, {}, valueRange};
   }
 };
 

@@ -1,7 +1,6 @@
 #pragma once
 #include <functional>
 #include <memory>
-#include <vector>
 
 #include "Epub.h"
 
@@ -14,8 +13,6 @@ class Section {
   GfxRenderer& renderer;
   std::string filePath;
   FsFile file;
-  mutable std::vector<uint32_t> pageWordCounts;
-  mutable bool wordCountsLoaded = false;
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight);
@@ -39,7 +36,4 @@ class Section {
                          const std::function<void()>& progressSetupFn = nullptr,
                          const std::function<void(int)>& progressFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
-  std::unique_ptr<Page> loadPageAt(uint16_t pageIndex) const;
-  bool ensureWordCountsLoaded() const;
-  uint32_t getWordsLeftFrom(uint16_t pageIndex) const;
 };
