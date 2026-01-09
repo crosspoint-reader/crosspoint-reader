@@ -233,3 +233,64 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   file.close();
   return page;
 }
+
+std::unique_ptr<Page> Section::loadPageAt(const uint16_t pageIndex) const {
+  FsFile localFile;
+  if (!SdMan.openFileForRead("SCT", filePath, localFile)) {
+    return nullptr;
+  }
+
+  localFile.seek(HEADER_SIZE - sizeof(uint32_t));
+  uint32_t lutOffset;
+  serialization::readPod(localFile, lutOffset);
+  if (pageIndex >= pageCount) {
+    localFile.close();
+    return nullptr;
+  }
+
+  localFile.seek(lutOffset + sizeof(uint32_t) * pageIndex);
+  uint32_t pagePos;
+  serialization::readPod(localFile, pagePos);
+  localFile.seek(pagePos);
+
+  auto page = Page::deserialize(localFile);
+  localFile.close();
+  return page;
+}
+
+bool Section::ensureWordCountsLoaded() const {
+  if (wordCountsLoaded) {
+    return true;
+  }
+
+  pageWordCounts.clear();
+  pageWordCounts.reserve(pageCount);
+
+  for (uint16_t i = 0; i < pageCount; i++) {
+    auto page = loadPageAt(i);
+    if (!page) {
+      pageWordCounts.clear();
+      return false;
+    }
+    pageWordCounts.push_back(static_cast<uint32_t>(page->wordCount()));
+  }
+
+  wordCountsLoaded = true;
+  return true;
+}
+
+uint32_t Section::getWordsLeftFrom(const uint16_t pageIndex) const {
+  if (pageIndex >= pageCount) {
+    return 0;
+  }
+
+  if (!ensureWordCountsLoaded()) {
+    return 0;
+  }
+
+  uint32_t total = 0;
+  for (size_t i = pageIndex; i < pageWordCounts.size(); i++) {
+    total += pageWordCounts[i];
+  }
+  return total;
+}
