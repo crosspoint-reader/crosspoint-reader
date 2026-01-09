@@ -1,0 +1,128 @@
+#include "HttpDownloader.h"
+
+#include <HTTPClient.h>
+#include <HardwareSerial.h>
+#include <WiFiClientSecure.h>
+
+#include <memory>
+
+bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
+  const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
+  client->setInsecure();
+  HTTPClient http;
+
+  Serial.printf("[%lu] [HTTP] Fetching: %s\n", millis(), url.c_str());
+
+  http.begin(*client, url.c_str());
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+
+  const int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    Serial.printf("[%lu] [HTTP] Fetch failed: %d\n", millis(), httpCode);
+    http.end();
+    return false;
+  }
+
+  outContent = http.getString().c_str();
+  http.end();
+
+  Serial.printf("[%lu] [HTTP] Fetched %zu bytes\n", millis(), outContent.size());
+  return true;
+}
+
+HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
+                                                             ProgressCallback progress) {
+  const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
+  client->setInsecure();
+  HTTPClient http;
+
+  Serial.printf("[%lu] [HTTP] Downloading: %s\n", millis(), url.c_str());
+  Serial.printf("[%lu] [HTTP] Destination: %s\n", millis(), destPath.c_str());
+
+  http.begin(*client, url.c_str());
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+
+  const int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    Serial.printf("[%lu] [HTTP] Download failed: %d\n", millis(), httpCode);
+    http.end();
+    return HTTP_ERROR;
+  }
+
+  const size_t contentLength = http.getSize();
+  Serial.printf("[%lu] [HTTP] Content-Length: %zu\n", millis(), contentLength);
+
+  // Remove existing file if present
+  if (SdMan.exists(destPath.c_str())) {
+    SdMan.remove(destPath.c_str());
+  }
+
+  // Open file for writing
+  FsFile file;
+  if (!SdMan.openFileForWrite("HTTP", destPath.c_str(), file)) {
+    Serial.printf("[%lu] [HTTP] Failed to open file for writing\n", millis());
+    http.end();
+    return FILE_ERROR;
+  }
+
+  // Get the stream for chunked reading
+  WiFiClient* stream = http.getStreamPtr();
+  if (!stream) {
+    Serial.printf("[%lu] [HTTP] Failed to get stream\n", millis());
+    file.close();
+    SdMan.remove(destPath.c_str());
+    http.end();
+    return HTTP_ERROR;
+  }
+
+  // Download in chunks
+  uint8_t buffer[DOWNLOAD_CHUNK_SIZE];
+  size_t downloaded = 0;
+  const size_t total = contentLength > 0 ? contentLength : 0;
+
+  while (http.connected() && (contentLength == 0 || downloaded < contentLength)) {
+    const size_t available = stream->available();
+    if (available == 0) {
+      delay(1);
+      continue;
+    }
+
+    const size_t toRead = available < DOWNLOAD_CHUNK_SIZE ? available : DOWNLOAD_CHUNK_SIZE;
+    const size_t bytesRead = stream->readBytes(buffer, toRead);
+
+    if (bytesRead == 0) {
+      break;
+    }
+
+    const size_t written = file.write(buffer, bytesRead);
+    if (written != bytesRead) {
+      Serial.printf("[%lu] [HTTP] Write failed: wrote %zu of %zu bytes\n", millis(), written, bytesRead);
+      file.close();
+      SdMan.remove(destPath.c_str());
+      http.end();
+      return FILE_ERROR;
+    }
+
+    downloaded += bytesRead;
+
+    if (progress && total > 0) {
+      progress(downloaded, total);
+    }
+  }
+
+  file.close();
+  http.end();
+
+  Serial.printf("[%lu] [HTTP] Downloaded %zu bytes\n", millis(), downloaded);
+
+  // Verify download size if known
+  if (contentLength > 0 && downloaded != contentLength) {
+    Serial.printf("[%lu] [HTTP] Size mismatch: got %zu, expected %zu\n", millis(), downloaded, contentLength);
+    SdMan.remove(destPath.c_str());
+    return HTTP_ERROR;
+  }
+
+  return OK;
+}

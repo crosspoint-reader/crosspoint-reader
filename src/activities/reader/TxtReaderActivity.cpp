@@ -144,7 +144,7 @@ void TxtReaderActivity::initializeReader() {
 
   // Store current settings for cache validation
   cachedFontId = SETTINGS.getReaderFontId();
-  cachedScreenMargin = SETTINGS.getScreenMargin();
+  cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 
   // Calculate viewport dimensions
@@ -460,7 +460,7 @@ void TxtReaderActivity::renderPage() {
   renderer.storeBwBuffer();
 
   // Grayscale rendering pass (for anti-aliased fonts)
-  {
+  if (SETTINGS.textAntiAliasing) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderLines();

@@ -8,6 +8,7 @@
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "util/StringUtils.h"
 
 std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
   const auto lastSlash = filePath.find_last_of('/');
@@ -18,14 +19,7 @@ std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
 }
 
 bool ReaderActivity::isXtcFile(const std::string& path) {
-  if (path.length() < 4) return false;
-  std::string ext4 = path.substr(path.length() - 4);
-  if (ext4 == ".xtc") return true;
-  if (path.length() >= 5) {
-    std::string ext5 = path.substr(path.length() - 5);
-    if (ext5 == ".xtch") return true;
-  }
-  return false;
+  return StringUtils::checkFileExtension(path, ".xtc") || StringUtils::checkFileExtension(path, ".xtch");
 }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {

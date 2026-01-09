@@ -16,7 +16,8 @@ class CrossPointSettings {
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
   // Should match with SettingsActivity text
-  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3 };
+  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3, BLANK = 4 };
+  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1 };
 
   // Status bar display type enum
   enum STATUS_BAR_MODE { NONE = 0, NO_PROGRESS = 1, FULL = 2 };
@@ -51,15 +52,15 @@ class CrossPointSettings {
   // E-ink refresh frequency (pages between full refreshes)
   enum REFRESH_FREQUENCY { REFRESH_1 = 0, REFRESH_5 = 1, REFRESH_10 = 2, REFRESH_15 = 3, REFRESH_30 = 4 };
 
-  // Screen margin options
-  enum SCREEN_MARGIN { MARGIN_0 = 0, MARGIN_5 = 1, MARGIN_10 = 2, MARGIN_15 = 3, MARGIN_20 = 4 };
-
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Sleep screen cover mode settings
+  uint8_t sleepScreenCoverMode = FIT;
   // Status bar settings
   uint8_t statusBar = FULL;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  uint8_t textAntiAliasing = 1;
   // Duration of the power button press
   uint8_t shortPwrBtn = 0;
   // EPUB reading orientation settings
@@ -77,8 +78,10 @@ class CrossPointSettings {
   uint8_t sleepTimeout = SLEEP_10_MIN;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
-  // Screen margin setting (default 5px)
-  uint8_t screenMargin = MARGIN_5;
+  // Reader screen margin settings
+  uint8_t screenMargin = 5;
+  // OPDS browser settings
+  char opdsServerUrl[128] = "";
 
   ~CrossPointSettings() = default;
 
@@ -94,7 +97,6 @@ class CrossPointSettings {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
-  int getScreenMargin() const;
 };
 
 // Helper macro to access settings

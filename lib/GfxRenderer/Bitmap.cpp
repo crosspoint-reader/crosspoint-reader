@@ -250,34 +250,29 @@ BmpReaderError Bitmap::parseHeaders() {
     delete[] errorNextRow;
     errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
     errorNextRow = new int16_t[width + 2]();
-    lastRowY = -1;
+    prevRowY = -1;
   }
 
   return BmpReaderError::Ok;
 }
 
 // packed 2bpp output, 0 = black, 1 = dark gray, 2 = light gray, 3 = white
-BmpReaderError Bitmap::readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) const {
+BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   // Note: rowBuffer should be pre-allocated by the caller to size 'rowBytes'
   if (file.read(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
 
   // Handle Floyd-Steinberg error buffer progression
   const bool useFS = USE_FLOYD_STEINBERG && errorCurRow && errorNextRow;
   if (useFS) {
-    // Check if we need to advance to next row (or reset if jumping)
-    if (rowY != lastRowY + 1 && rowY != 0) {
-      // Non-sequential row access - reset error buffers
-      memset(errorCurRow, 0, (width + 2) * sizeof(int16_t));
-      memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
-    } else if (rowY > 0) {
+    if (prevRowY != -1) {
       // Sequential access - swap buffers
       int16_t* temp = errorCurRow;
       errorCurRow = errorNextRow;
       errorNextRow = temp;
       memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
     }
-    lastRowY = rowY;
   }
+  prevRowY += 1;
 
   uint8_t* outPtr = data;
   uint8_t currentOutByte = 0;
@@ -292,7 +287,7 @@ BmpReaderError Bitmap::readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) cons
       color = quantizeFloydSteinberg(lum, currentX, width, errorCurRow, errorNextRow, false);
     } else {
       // Simple quantization or noise dithering
-      color = quantize(lum, currentX, rowY);
+      color = quantize(lum, currentX, prevRowY);
     }
     currentOutByte |= (color << bitShift);
     if (bitShift == 0) {
@@ -365,7 +360,7 @@ BmpReaderError Bitmap::rewindToData() const {
   if (USE_FLOYD_STEINBERG && errorCurRow && errorNextRow) {
     memset(errorCurRow, 0, (width + 2) * sizeof(int16_t));
     memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
-    lastRowY = -1;
+    prevRowY = -1;
   }
 
   return BmpReaderError::Ok;

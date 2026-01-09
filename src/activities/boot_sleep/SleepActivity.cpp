@@ -10,31 +10,15 @@
 #include "CrossPointState.h"
 #include "fontIds.h"
 #include "images/CrossLarge.h"
-
-namespace {
-// Check if path has XTC extension (.xtc or .xtch)
-bool isXtcFile(const std::string& path) {
-  if (path.length() < 4) return false;
-  std::string ext4 = path.substr(path.length() - 4);
-  if (ext4 == ".xtc") return true;
-  if (path.length() >= 5) {
-    std::string ext5 = path.substr(path.length() - 5);
-    if (ext5 == ".xtch") return true;
-  }
-  return false;
-}
-
-// Check if path has TXT extension
-bool isTxtFile(const std::string& path) {
-  if (path.length() < 4) return false;
-  std::string ext4 = path.substr(path.length() - 4);
-  return ext4 == ".txt" || ext4 == ".TXT";
-}
-}  // namespace
+#include "util/StringUtils.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
   renderPopup("Entering Sleep...");
+
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
+    return renderBlankSleepScreen();
+  }
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
     return renderCustomSleepScreen();
@@ -66,7 +50,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   auto dir = SdMan.open("/sleep");
   if (dir && dir.isDirectory()) {
     std::vector<std::string> files;
-    char name[128];
+    char name[500];
     // collect all valid BMP files
     for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
       if (file.isDirectory()) {
@@ -150,20 +134,36 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  float cropX = 0, cropY = 0;
 
+  Serial.printf("[%lu] [SLP] bitmap %d x %d, screen %d x %d\n", millis(), bitmap.getWidth(), bitmap.getHeight(),
+                pageWidth, pageHeight);
   if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
     // image will scale, make sure placement is right
-    const float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+    float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
     const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
 
+    Serial.printf("[%lu] [SLP] bitmap ratio: %f, screen ratio: %f\n", millis(), ratio, screenRatio);
     if (ratio > screenRatio) {
       // image wider than viewport ratio, scaled down image needs to be centered vertically
+      if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
+        cropX = 1.0f - (screenRatio / ratio);
+        Serial.printf("[%lu] [SLP] Cropping bitmap x: %f\n", millis(), cropX);
+        ratio = (1.0f - cropX) * static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+      }
       x = 0;
-      y = (pageHeight - pageWidth / ratio) / 2;
+      y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
+      Serial.printf("[%lu] [SLP] Centering with ratio %f to y=%d\n", millis(), ratio, y);
     } else {
       // image taller than viewport ratio, scaled down image needs to be centered horizontally
-      x = (pageWidth - pageHeight * ratio) / 2;
+      if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
+        cropY = 1.0f - (ratio / screenRatio);
+        Serial.printf("[%lu] [SLP] Cropping bitmap y: %f\n", millis(), cropY);
+        ratio = static_cast<float>(bitmap.getWidth()) / ((1.0f - cropY) * static_cast<float>(bitmap.getHeight()));
+      }
+      x = std::round((pageWidth - pageHeight * ratio) / 2);
       y = 0;
+      Serial.printf("[%lu] [SLP] Centering with ratio %f to x=%d\n", millis(), ratio, x);
     }
   } else {
     // center the image
@@ -171,21 +171,22 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     y = (pageHeight - bitmap.getHeight()) / 2;
   }
 
+  Serial.printf("[%lu] [SLP] drawing to %d x %d\n", millis(), x, y);
   renderer.clearScreen();
-  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight);
+  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 
   if (bitmap.hasGreyscale()) {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight);
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight);
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer();
@@ -201,7 +202,8 @@ void SleepActivity::renderCoverSleepScreen() const {
   std::string coverBmpPath;
 
   // Check if the current book is XTC, TXT, or EPUB
-  if (isXtcFile(APP_STATE.openEpubPath)) {
+  if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
+      StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
     // Handle XTC file
     Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastXtc.load()) {
@@ -215,7 +217,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
-  } else if (isTxtFile(APP_STATE.openEpubPath)) {
+  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".txt")) {
     // Handle TXT file - looks for cover image in the same folder
     Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastTxt.load()) {
@@ -229,7 +231,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastTxt.getCoverBmpPath();
-  } else {
+  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
     // Handle EPUB file
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastEpub.load()) {
@@ -243,6 +245,8 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastEpub.getCoverBmpPath();
+  } else {
+    return renderDefaultSleepScreen();
   }
 
   FsFile file;
@@ -255,4 +259,9 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   renderDefaultSleepScreen();
+}
+
+void SleepActivity::renderBlankSleepScreen() const {
+  renderer.clearScreen();
+  renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }

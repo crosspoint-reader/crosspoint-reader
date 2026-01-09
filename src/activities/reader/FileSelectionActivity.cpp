@@ -5,6 +5,7 @@
 
 #include "MappedInputManager.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
@@ -29,7 +30,6 @@ void FileSelectionActivity::taskTrampoline(void* param) {
 
 void FileSelectionActivity::loadFiles() {
   files.clear();
-  selectorIndex = 0;
 
   auto root = SdMan.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
@@ -39,7 +39,7 @@ void FileSelectionActivity::loadFiles() {
 
   root.rewindDirectory();
 
-  char name[128];
+  char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
     if (name[0] == '.' || strcmp(name, "System Volume Information") == 0) {
@@ -51,9 +51,8 @@ void FileSelectionActivity::loadFiles() {
       files.emplace_back(std::string(name) + "/");
     } else {
       auto filename = std::string(name);
-      std::string ext4 = filename.length() >= 4 ? filename.substr(filename.length() - 4) : "";
-      std::string ext5 = filename.length() >= 5 ? filename.substr(filename.length() - 5) : "";
-      if (ext5 == ".epub" || ext5 == ".xtch" || ext4 == ".xtc" || ext4 == ".txt") {
+      if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
+          StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt")) {
         files.emplace_back(filename);
       }
     }
@@ -124,6 +123,7 @@ void FileSelectionActivity::loop() {
     if (files[selectorIndex].back() == '/') {
       basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
       loadFiles();
+      selectorIndex = 0;
       updateRequired = true;
     } else {
       onSelect(basepath + files[selectorIndex]);
@@ -132,9 +132,16 @@ void FileSelectionActivity::loop() {
     // Short press: go up one directory, or go home if at root
     if (mappedInput.getHeldTime() < GO_HOME_MS) {
       if (basepath != "/") {
+        const std::string oldPath = basepath;
+
         basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
         if (basepath.empty()) basepath = "/";
         loadFiles();
+
+        const auto pos = oldPath.find_last_of('/');
+        const std::string dirName = oldPath.substr(pos + 1) + "/";
+        selectorIndex = findEntry(dirName);
+
         updateRequired = true;
       } else {
         onGoHome();
@@ -187,10 +194,16 @@ void FileSelectionActivity::render() const {
 
   const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
   renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
-  for (int i = pageStartIndex; i < files.size() && i < pageStartIndex + PAGE_ITEMS; i++) {
+  for (size_t i = pageStartIndex; i < files.size() && i < pageStartIndex + PAGE_ITEMS; i++) {
     auto item = renderer.truncatedText(UI_10_FONT_ID, files[i].c_str(), renderer.getScreenWidth() - 40);
     renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(), i != selectorIndex);
   }
 
   renderer.displayBuffer();
+}
+
+size_t FileSelectionActivity::findEntry(const std::string& name) const {
+  for (size_t i = 0; i < files.size(); i++)
+    if (files[i] == name) return i;
+  return 0;
 }

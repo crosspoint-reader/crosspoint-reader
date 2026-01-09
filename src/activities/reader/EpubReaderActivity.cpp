@@ -16,8 +16,6 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
-constexpr int topPadding = 5;
-constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 19;
 }  // namespace
 
@@ -253,9 +251,9 @@ void EpubReaderActivity::renderScreen() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += topPadding;
-  orientedMarginLeft += horizontalPadding;
-  orientedMarginRight += horizontalPadding;
+  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginLeft += SETTINGS.screenMargin;
+  orientedMarginRight += SETTINGS.screenMargin;
   orientedMarginBottom += statusBarMargin;
 
   if (!section) {
@@ -390,7 +388,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   // grayscale rendering
   // TODO: Only do this if font supports it
-  {
+  if (SETTINGS.textAntiAliasing) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
@@ -439,7 +437,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   }
 
   if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft, textY);
+    ScreenComponents::drawBattery(renderer, orientedMarginLeft + 1, textY);
   }
 
   if (showChapterTitle) {

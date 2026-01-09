@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 
+#include <cstdint>
 #include <string>
 
 #include "Battery.h"
@@ -38,4 +39,27 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   }
 
   renderer.fillRect(x + 2, y + 2, filledWidth, batteryHeight - 4);
+}
+
+void ScreenComponents::drawProgressBar(const GfxRenderer& renderer, const int x, const int y, const int width,
+                                       const int height, const size_t current, const size_t total) {
+  if (total == 0) {
+    return;
+  }
+
+  // Use 64-bit arithmetic to avoid overflow for large files
+  const int percent = static_cast<int>((static_cast<uint64_t>(current) * 100) / total);
+
+  // Draw outline
+  renderer.drawRect(x, y, width, height);
+
+  // Draw filled portion
+  const int fillWidth = (width - 4) * percent / 100;
+  if (fillWidth > 0) {
+    renderer.fillRect(x + 2, y + 2, fillWidth, height - 4);
+  }
+
+  // Draw percentage text centered below bar
+  const std::string percentText = std::to_string(percent) + "%";
+  renderer.drawCenteredText(UI_10_FONT_ID, y + height + 15, percentText.c_str());
 }
