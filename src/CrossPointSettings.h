@@ -82,6 +82,8 @@ class CrossPointSettings {
   uint8_t screenMargin = 5;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
+  // Last used sleep screen index (for custom screens)
+  uint8_t lastUsedSleep = 0;
 
   ~CrossPointSettings() = default;
 

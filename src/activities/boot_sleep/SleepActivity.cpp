@@ -81,7 +81,11 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (numFiles > 0) {
       // Generate a random number between 1 and numFiles
       const auto randomFileIndex = random(numFiles);
-      const auto filename = "/sleep/" + files[randomFileIndex];
+      // If we re-generated the same index as the last sleep screen, use the next one (modulo the number of files we have)
+      const auto realFileIndex = randomFileIndex == SETTINGS.lastUsedSleep? randomFileIndex+1 % numFiles : randomFileIndex;
+      SETTINGS.lastUsedSleep = realFileIndex;
+      SETTINGS.saveToFile();
+      const auto filename = "/sleep/" + files[realFileIndex];
       FsFile file;
       if (SdMan.openFileForRead("SLP", filename, file)) {
         Serial.printf("[%lu] [SLP] Randomly loading: /sleep/%s\n", millis(), files[randomFileIndex].c_str());
