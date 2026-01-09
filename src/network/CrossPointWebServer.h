@@ -1,7 +1,10 @@
 #pragma once
 
+#include <SdFat.h>
 #include <WebServer.h>
 
+#include <atomic>
+#include <mutex>
 #include <vector>
 
 // Structure to hold file information
@@ -27,16 +30,29 @@ class CrossPointWebServer {
   void handleClient() const;
 
   // Check if server is running
-  bool isRunning() const { return running; }
+  bool isRunning() const { return running.load(std::memory_order_acquire); }
 
   // Get the port number
   uint16_t getPort() const { return port; }
 
  private:
   std::unique_ptr<WebServer> server = nullptr;
-  bool running = false;
-  bool apMode = false;  // true when running in AP mode, false for STA mode
+  std::atomic<bool> running{false};
+  mutable std::mutex serverMutex;  // Protects server pointer access
+  bool apMode = false;             // true when running in AP mode, false for STA mode
   uint16_t port = 80;
+
+  // Upload state (instance variables with mutex protection)
+  mutable std::mutex uploadMutex;
+  mutable FsFile uploadFile;
+  mutable String uploadFileName;
+  mutable String uploadPath;
+  mutable size_t uploadSize;
+  mutable bool uploadSuccess;
+  mutable String uploadError;
+  mutable unsigned long lastWriteTime;
+  mutable unsigned long uploadStartTime;
+  mutable size_t lastLoggedSize;
 
   // File scanning
   void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;
