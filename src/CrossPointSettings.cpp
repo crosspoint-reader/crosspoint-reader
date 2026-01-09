@@ -4,6 +4,8 @@
 #include <SDCardManager.h>
 #include <Serialization.h>
 
+#include <cstring>
+
 #include "fontIds.h"
 
 // Initialize the static instance
@@ -12,7 +14,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 10;
+constexpr uint8_t SETTINGS_COUNT = 17;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -37,6 +39,13 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, fontFamily);
   serialization::writePod(outputFile, fontSize);
   serialization::writePod(outputFile, lineSpacing);
+  serialization::writePod(outputFile, paragraphAlignment);
+  serialization::writePod(outputFile, sleepTimeout);
+  serialization::writePod(outputFile, refreshFrequency);
+  serialization::writePod(outputFile, screenMargin);
+  serialization::writePod(outputFile, sleepScreenCoverMode);
+  serialization::writeString(outputFile, std::string(opdsServerUrl));
+  serialization::writePod(outputFile, textAntiAliasing);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -83,6 +92,24 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, lineSpacing);
     if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, paragraphAlignment);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, sleepTimeout);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, refreshFrequency);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, screenMargin);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, sleepScreenCoverMode);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string urlStr;
+      serialization::readString(inputFile, urlStr);
+      strncpy(opdsServerUrl, urlStr.c_str(), sizeof(opdsServerUrl) - 1);
+      opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
+    }
+    serialization::readPod(inputFile, textAntiAliasing);
+    if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
   inputFile.close();
@@ -123,6 +150,38 @@ float CrossPointSettings::getReaderLineCompression() const {
         case WIDE:
           return 1.0f;
       }
+  }
+}
+
+unsigned long CrossPointSettings::getSleepTimeoutMs() const {
+  switch (sleepTimeout) {
+    case SLEEP_1_MIN:
+      return 1UL * 60 * 1000;
+    case SLEEP_5_MIN:
+      return 5UL * 60 * 1000;
+    case SLEEP_10_MIN:
+    default:
+      return 10UL * 60 * 1000;
+    case SLEEP_15_MIN:
+      return 15UL * 60 * 1000;
+    case SLEEP_30_MIN:
+      return 30UL * 60 * 1000;
+  }
+}
+
+int CrossPointSettings::getRefreshFrequency() const {
+  switch (refreshFrequency) {
+    case REFRESH_1:
+      return 1;
+    case REFRESH_5:
+      return 5;
+    case REFRESH_10:
+      return 10;
+    case REFRESH_15:
+    default:
+      return 15;
+    case REFRESH_30:
+      return 30;
   }
 }
 

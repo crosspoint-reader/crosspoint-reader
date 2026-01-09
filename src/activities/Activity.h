@@ -22,4 +22,5 @@ class Activity {
   virtual void onExit() { Serial.printf("[%lu] [ACT] Exiting activity: %s\n", millis(), name.c_str()); }
   virtual void loop() {}
   virtual bool skipLoopDelay() { return false; }
+  virtual bool preventAutoSleep() { return false; }
 };

@@ -66,7 +66,8 @@ class GfxRenderer {
   void drawRect(int x, int y, int width, int height, bool state = true) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
-  void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
+  void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
+                  float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 
@@ -84,7 +85,15 @@ class GfxRenderer {
 
   // UI Components
   void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4) const;
+  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn) const;
 
+ private:
+  // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
+  void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
+                           EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  int getTextHeight(int fontId) const;
+
+ public:
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   void copyGrayscaleLsbBuffers() const;

@@ -161,6 +161,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     std::string itemId;
     std::string href;
     std::string mediaType;
+    std::string properties;
 
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "id") == 0) {
@@ -169,6 +170,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         href = self->baseContentPath + atts[i + 1];
       } else if (strcmp(atts[i], "media-type") == 0) {
         mediaType = atts[i + 1];
+      } else if (strcmp(atts[i], "properties") == 0) {
+        properties = atts[i + 1];
       }
     }
 
@@ -186,6 +189,15 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       } else {
         Serial.printf("[%lu] [COF] Warning: Multiple NCX files found in manifest. Ignoring duplicate: %s\n", millis(),
                       href.c_str());
+      }
+    }
+
+    // EPUB 3: Check for nav document (properties contains "nav")
+    if (!properties.empty() && self->tocNavPath.empty()) {
+      // Properties is space-separated, check if "nav" is present as a word
+      if (properties == "nav" || properties.find("nav ") == 0 || properties.find(" nav") != std::string::npos) {
+        self->tocNavPath = href;
+        Serial.printf("[%lu] [COF] Found EPUB 3 nav document: %s\n", millis(), href.c_str());
       }
     }
     return;

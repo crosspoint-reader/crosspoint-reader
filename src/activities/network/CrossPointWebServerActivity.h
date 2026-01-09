@@ -70,4 +70,5 @@ class CrossPointWebServerActivity final : public ActivityWithSubactivity {
   void onExit() override;
   void loop() override;
   bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
+  bool preventAutoSleep() override { return webServer && webServer->isRunning(); }
 };

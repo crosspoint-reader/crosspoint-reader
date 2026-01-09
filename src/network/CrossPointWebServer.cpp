@@ -194,7 +194,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
   Serial.printf("[%lu] [WEB] Scanning files in: %s\n", millis(), path);
 
   FsFile file = root.openNextFile();
-  char name[128];
+  char name[500];
   while (file) {
     file.getName(name, sizeof(name));
     auto fileName = String(name);

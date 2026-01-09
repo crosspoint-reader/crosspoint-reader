@@ -16,7 +16,8 @@ class CrossPointSettings {
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
   // Should match with SettingsActivity text
-  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3 };
+  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3, BLANK = 4 };
+  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1 };
 
   // Status bar display type enum
   enum STATUS_BAR_MODE { NONE = 0, NO_PROGRESS = 1, FULL = 2 };
@@ -43,13 +44,23 @@ class CrossPointSettings {
   // Font size options
   enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3 };
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2 };
+  enum PARAGRAPH_ALIGNMENT { JUSTIFIED = 0, LEFT_ALIGN = 1, CENTER_ALIGN = 2, RIGHT_ALIGN = 3 };
+
+  // Auto-sleep timeout options (in minutes)
+  enum SLEEP_TIMEOUT { SLEEP_1_MIN = 0, SLEEP_5_MIN = 1, SLEEP_10_MIN = 2, SLEEP_15_MIN = 3, SLEEP_30_MIN = 4 };
+
+  // E-ink refresh frequency (pages between full refreshes)
+  enum REFRESH_FREQUENCY { REFRESH_1 = 0, REFRESH_5 = 1, REFRESH_10 = 2, REFRESH_15 = 3, REFRESH_30 = 4 };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Sleep screen cover mode settings
+  uint8_t sleepScreenCoverMode = FIT;
   // Status bar settings
   uint8_t statusBar = FULL;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  uint8_t textAntiAliasing = 1;
   // Duration of the power button press
   uint8_t shortPwrBtn = 0;
   // EPUB reading orientation settings
@@ -62,6 +73,15 @@ class CrossPointSettings {
   uint8_t fontFamily = BOOKERLY;
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
+  uint8_t paragraphAlignment = JUSTIFIED;
+  // Auto-sleep timeout setting (default 10 minutes)
+  uint8_t sleepTimeout = SLEEP_10_MIN;
+  // E-ink refresh frequency (default 15 pages)
+  uint8_t refreshFrequency = REFRESH_15;
+  // Reader screen margin settings
+  uint8_t screenMargin = 5;
+  // OPDS browser settings
+  char opdsServerUrl[128] = "";
 
   ~CrossPointSettings() = default;
 
@@ -75,6 +95,8 @@ class CrossPointSettings {
   bool loadFromFile();
 
   float getReaderLineCompression() const;
+  unsigned long getSleepTimeoutMs() const;
+  int getRefreshFrequency() const;
 };
 
 // Helper macro to access settings

@@ -6,24 +6,17 @@
 #include <SDCardManager.h>
 #include <Xtc.h>
 
+#include <cstring>
+#include <vector>
+
+#include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 namespace {
-// Check if path has XTC extension (.xtc or .xtch)
-bool isXtcFile(const std::string& path) {
-  if (path.length() < 4) return false;
-  std::string ext4 = path.substr(path.length() - 4);
-  if (ext4 == ".xtc") return true;
-  if (path.length() >= 5) {
-    std::string ext5 = path.substr(path.length() - 5);
-    if (ext5 == ".xtch") return true;
-  }
-  return false;
-}
-
 // UTF-8 safe string truncation - removes one character from the end
 // Returns the new size after removing one UTF-8 character
 size_t utf8RemoveLastChar(std::string& str) {
@@ -51,7 +44,12 @@ void HomeActivity::taskTrampoline(void* param) {
   self->displayTaskLoop();
 }
 
-int HomeActivity::getMenuItemCount() const { return hasContinueReading ? 4 : 3; }
+int HomeActivity::getMenuItemCount() const {
+  int count = 3;  // Browse files, File transfer, Settings
+  if (hasContinueReading) count++;
+  if (hasOpdsUrl) count++;
+  return count;
+}
 
 void HomeActivity::onEnter() {
   Activity::onEnter();
@@ -61,6 +59,9 @@ void HomeActivity::onEnter() {
   // Check if we have a book to continue reading
   hasContinueReading = !APP_STATE.openEpubPath.empty() && SdMan.exists(APP_STATE.openEpubPath.c_str());
 
+  // Check if OPDS browser URL is configured
+  hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
+
   if (hasContinueReading) {
     // Extract filename from path for display
     lastBookTitle = APP_STATE.openEpubPath;
@@ -69,10 +70,8 @@ void HomeActivity::onEnter() {
       lastBookTitle = lastBookTitle.substr(lastSlash + 1);
     }
 
-    const std::string ext4 = lastBookTitle.length() >= 4 ? lastBookTitle.substr(lastBookTitle.length() - 4) : "";
-    const std::string ext5 = lastBookTitle.length() >= 5 ? lastBookTitle.substr(lastBookTitle.length() - 5) : "";
     // If epub, try to load the metadata for title/author and cover
-    if (ext5 == ".epub") {
+    if (StringUtils::checkFileExtension(lastBookTitle, ".epub")) {
       Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
       epub.load(false);
       if (!epub.getTitle().empty()) {
@@ -86,7 +85,8 @@ void HomeActivity::onEnter() {
         coverBmpPath = epub.getThumbBmpPath();
         hasCoverImage = true;
       }
-    } else if (ext5 == ".xtch" || ext4 == ".xtc") {
+    } else if (StringUtils::checkFileExtension(lastBookTitle, ".xtch") ||
+               StringUtils::checkFileExtension(lastBookTitle, ".xtc")) {
       // Handle XTC file
       Xtc xtc(APP_STATE.openEpubPath, "/.crosspoint");
       if (xtc.load()) {
@@ -100,9 +100,9 @@ void HomeActivity::onEnter() {
         }
       }
       // Remove extension from title if we don't have metadata
-      if (lastBookTitle.length() >= 5 && ext5 == ".xtch") {
+      if (StringUtils::checkFileExtension(lastBookTitle, ".xtch")) {
         lastBookTitle.resize(lastBookTitle.length() - 5);
-      } else if (lastBookTitle.length() >= 4 && ext4 == ".xtc") {
+      } else if (StringUtils::checkFileExtension(lastBookTitle, ".xtc")) {
         lastBookTitle.resize(lastBookTitle.length() - 4);
       }
     }
@@ -188,26 +188,24 @@ void HomeActivity::loop() {
   const int menuCount = getMenuItemCount();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (hasContinueReading) {
-      // Menu: Continue Reading, Browse, File transfer, Settings
-      if (selectorIndex == 0) {
-        onContinueReading();
-      } else if (selectorIndex == 1) {
-        onReaderOpen();
-      } else if (selectorIndex == 2) {
-        onFileTransferOpen();
-      } else if (selectorIndex == 3) {
-        onSettingsOpen();
-      }
-    } else {
-      // Menu: Browse, File transfer, Settings
-      if (selectorIndex == 0) {
-        onReaderOpen();
-      } else if (selectorIndex == 1) {
-        onFileTransferOpen();
-      } else if (selectorIndex == 2) {
-        onSettingsOpen();
-      }
+    // Calculate dynamic indices based on which options are available
+    int idx = 0;
+    const int continueIdx = hasContinueReading ? idx++ : -1;
+    const int browseFilesIdx = idx++;
+    const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
+    const int fileTransferIdx = idx++;
+    const int settingsIdx = idx;
+
+    if (selectorIndex == continueIdx) {
+      onContinueReading();
+    } else if (selectorIndex == browseFilesIdx) {
+      onReaderOpen();
+    } else if (selectorIndex == opdsLibraryIdx) {
+      onOpdsBrowserOpen();
+    } else if (selectorIndex == fileTransferIdx) {
+      onFileTransferOpen();
+    } else if (selectorIndex == settingsIdx) {
+      onSettingsOpen();
     }
   } else if (prevPressed) {
     selectorIndex = (selectorIndex + menuCount - 1) % menuCount;
@@ -518,24 +516,31 @@ void HomeActivity::render() {
     renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), "Start reading below");
   }
 
-  // --- Bottom menu tiles (indices 1-3) ---
-  const int menuTileWidth = pageWidth - 2 * margin;
-  constexpr int menuTileHeight = 50;
-  constexpr int menuSpacing = 10;
-  constexpr int totalMenuHeight = 3 * menuTileHeight + 2 * menuSpacing;
+  // --- Bottom menu tiles ---
+  // Build menu items dynamically
+  std::vector<const char*> menuItems = {"Browse Files", "File Transfer", "Settings"};
+  if (hasOpdsUrl) {
+    // Insert Calibre Library after Browse Files
+    menuItems.insert(menuItems.begin() + 1, "Calibre Library");
+  }
 
-  int menuStartY = bookY + bookHeight + 20;
+  const int menuTileWidth = pageWidth - 2 * margin;
+  constexpr int menuTileHeight = 45;
+  constexpr int menuSpacing = 8;
+  const int totalMenuHeight =
+      static_cast<int>(menuItems.size()) * menuTileHeight + (static_cast<int>(menuItems.size()) - 1) * menuSpacing;
+
+  int menuStartY = bookY + bookHeight + 15;
   // Ensure we don't collide with the bottom button legend
   const int maxMenuStartY = pageHeight - bottomMargin - totalMenuHeight - margin;
   if (menuStartY > maxMenuStartY) {
     menuStartY = maxMenuStartY;
   }
 
-  for (int i = 0; i < 3; ++i) {
-    constexpr const char* items[3] = {"Browse files", "File transfer", "Settings"};
-    const int overallIndex = i + (getMenuItemCount() - 3);
+  for (size_t i = 0; i < menuItems.size(); ++i) {
+    const int overallIndex = static_cast<int>(i) + (hasContinueReading ? 1 : 0);
     constexpr int tileX = margin;
-    const int tileY = menuStartY + i * (menuTileHeight + menuSpacing);
+    const int tileY = menuStartY + static_cast<int>(i) * (menuTileHeight + menuSpacing);
     const bool selected = selectorIndex == overallIndex;
 
     if (selected) {
@@ -544,7 +549,7 @@ void HomeActivity::render() {
       renderer.drawRect(tileX, tileY, menuTileWidth, menuTileHeight);
     }
 
-    const char* label = items[i];
+    const char* label = menuItems[i];
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
     const int textX = tileX + (menuTileWidth - textWidth) / 2;
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
@@ -557,7 +562,8 @@ void HomeActivity::render() {
   const auto labels = mappedInput.mapLabels("", "Confirm", "Up", "Down");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  ScreenComponents::drawBattery(renderer, 20, pageHeight - 70);
+  const auto batteryX = pageWidth - 25 - renderer.getTextWidth(SMALL_FONT_ID, "100 %");
+  ScreenComponents::drawBattery(renderer, batteryX, 10);
 
   renderer.displayBuffer();
 }
