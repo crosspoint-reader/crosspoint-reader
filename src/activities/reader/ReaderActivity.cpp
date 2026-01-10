@@ -22,7 +22,7 @@ bool ReaderActivity::isXtcFile(const std::string& path) {
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!SdMan.exists(path.c_str())) {
-    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+    Serial.printf("[%lu] [   ] Le fichier n'existe pas: %s\n", millis(), path.c_str());
     return nullptr;
   }
 
@@ -31,13 +31,13 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
     return epub;
   }
 
-  Serial.printf("[%lu] [   ] Failed to load epub\n", millis());
+  Serial.printf("[%lu] [   ] Chargement de l'epub échoué\n", millis());
   return nullptr;
 }
 
 std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
   if (!SdMan.exists(path.c_str())) {
-    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+    Serial.printf("[%lu] [   ] Le fichier n'existe pas: %s\n", millis(), path.c_str());
     return nullptr;
   }
 
@@ -46,14 +46,14 @@ std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
     return xtc;
   }
 
-  Serial.printf("[%lu] [   ] Failed to load XTC\n", millis());
+  Serial.printf("[%lu] [   ] Chargement du XTC échoué\n", millis());
   return nullptr;
 }
 
 void ReaderActivity::onSelectBookFile(const std::string& path) {
   currentBookPath = path;  // Track current book path
   exitActivity();
-  enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Loading..."));
+  enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Chargement..."));
 
   if (isXtcFile(path)) {
     // Load XTC file
@@ -62,7 +62,7 @@ void ReaderActivity::onSelectBookFile(const std::string& path) {
       onGoToXtcReader(std::move(xtc));
     } else {
       exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load XTC",
+      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Chargement du XTC échoué",
                                                      EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
       delay(2000);
       onGoToFileSelection();
@@ -74,7 +74,7 @@ void ReaderActivity::onSelectBookFile(const std::string& path) {
       onGoToEpubReader(std::move(epub));
     } else {
       exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load epub",
+      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Chargement de l'epub échoué",
                                                      EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
       delay(2000);
       onGoToFileSelection();

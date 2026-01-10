@@ -17,12 +17,12 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();
 
   if (!success) {
-    Serial.printf("[%lu] [OTA] WiFi connection failed, exiting\n", millis());
+    Serial.printf("[%lu] [OTA] Connexion au WiFi a échouée, arrêt en cours\n", millis());
     goBack();
     return;
   }
 
-  Serial.printf("[%lu] [OTA] WiFi connected, checking for update\n", millis());
+  Serial.printf("[%lu] [OTA] WiFi connecté, recherche de mises à jour\n", millis());
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = CHECKING_FOR_UPDATE;
@@ -31,7 +31,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   vTaskDelay(10 / portTICK_PERIOD_MS);
   const auto res = updater.checkForUpdate();
   if (res != OtaUpdater::OK) {
-    Serial.printf("[%lu] [OTA] Update check failed: %d\n", millis(), res);
+    Serial.printf("[%lu] [OTA] Recherce de mises à jour échouée: %d\n", millis(), res);
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     state = FAILED;
     xSemaphoreGive(renderingMutex);
@@ -40,7 +40,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   }
 
   if (!updater.isUpdateNewer()) {
-    Serial.printf("[%lu] [OTA] No new update available\n", millis());
+    Serial.printf("[%lu] [OTA] Aucune nouvelle mise à jour disponible\n", millis());
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     state = NO_UPDATE;
     xSemaphoreGive(renderingMutex);
@@ -67,11 +67,11 @@ void OtaUpdateActivity::onEnter() {
   );
 
   // Turn on WiFi immediately
-  Serial.printf("[%lu] [OTA] Turning on WiFi...\n", millis());
+  Serial.printf("[%lu] [OTA] Activation du WiFi...\n", millis());
   WiFi.mode(WIFI_STA);
 
   // Launch WiFi selection subactivity
-  Serial.printf("[%lu] [OTA] Launching WifiSelectionActivity...\n", millis());
+  Serial.printf("[%lu] [OTA] Lancement de WifiSelectionActivity...\n", millis());
   enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
                                              [this](const bool connected) { onWifiSelectionComplete(connected); }));
 }
@@ -115,7 +115,7 @@ void OtaUpdateActivity::render() {
 
   float updaterProgress = 0;
   if (state == UPDATE_IN_PROGRESS) {
-    Serial.printf("[%lu] [OTA] Update progress: %d / %d\n", millis(), updater.processedSize, updater.totalSize);
+    Serial.printf("[%lu] [OTA] Progrès de la mise à jour : %d / %d\n", millis(), updater.processedSize, updater.totalSize);
     updaterProgress = static_cast<float>(updater.processedSize) / static_cast<float>(updater.totalSize);
     // Only update every 2% at the most
     if (static_cast<int>(updaterProgress * 50) == lastUpdaterPercentage / 2) {
@@ -127,27 +127,27 @@ void OtaUpdateActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Update", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Mise à jour", true, EpdFontFamily::BOLD);
 
   if (state == CHECKING_FOR_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Checking for update...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Recherche de mises à jour...", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == WAITING_CONFIRMATION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 200, "New update available!", true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, 20, 250, "Current Version: " CROSSPOINT_VERSION);
-    renderer.drawText(UI_10_FONT_ID, 20, 270, ("New Version: " + updater.getLatestVersion()).c_str());
+    renderer.drawCenteredText(UI_10_FONT_ID, 200, "Une mise à jour est disponible!", true, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, 20, 250, "Version actuelle: " CROSSPOINT_VERSION);
+    renderer.drawText(UI_10_FONT_ID, 20, 270, ("Nouvelle version: " + updater.getLatestVersion()).c_str());
 
-    const auto labels = mappedInput.mapLabels("Cancel", "Update", "", "");
+    const auto labels = mappedInput.mapLabels("Annuler", "M-à-j", "", "");
     renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == UPDATE_IN_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 310, "Updating...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 310, "Mise à jour...", true, EpdFontFamily::BOLD);
     renderer.drawRect(20, 350, pageWidth - 40, 50);
     renderer.fillRect(24, 354, static_cast<int>(updaterProgress * static_cast<float>(pageWidth - 44)), 42);
     renderer.drawCenteredText(UI_10_FONT_ID, 420,
@@ -160,20 +160,20 @@ void OtaUpdateActivity::render() {
   }
 
   if (state == NO_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "No update available", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Aucune novelle mise à jour disponible", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Update failed", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Mise à jour échouée", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == FINISHED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Update complete", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 350, "Press and hold power button to turn back on");
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Mise à jour terminée", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 350, "Appuyez longuement sur le bouton d'alimentation pour rallumer");
     renderer.displayBuffer();
     state = SHUTTING_DOWN;
     return;
@@ -188,7 +188,7 @@ void OtaUpdateActivity::loop() {
 
   if (state == WAITING_CONFIRMATION) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
+      Serial.printf("[%lu] [OTA] Nouvelle mise à jour disponible, téléchargement commencé...\n", millis());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;
       xSemaphoreGive(renderingMutex);
@@ -197,7 +197,7 @@ void OtaUpdateActivity::loop() {
       const auto res = updater.installUpdate([this](const size_t, const size_t) { updateRequired = true; });
 
       if (res != OtaUpdater::OK) {
-        Serial.printf("[%lu] [OTA] Update failed: %d\n", millis(), res);
+        Serial.printf("[%lu] [OTA] Mise à jour échouée: %d\n", millis(), res);
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
         state = FAILED;
         xSemaphoreGive(renderingMutex);

@@ -13,7 +13,7 @@
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  renderPopup("Entering Sleep...");
+  renderPopup("Mise en veille...");
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();
@@ -64,13 +64,13 @@ void SleepActivity::renderCustomSleepScreen() const {
       }
 
       if (filename.substr(filename.length() - 4) != ".bmp") {
-        Serial.printf("[%lu] [SLP] Skipping non-.bmp file name: %s\n", millis(), name);
+        Serial.printf("[%lu] [SLP] Ignorer les noms de fichiers non-.bmp: %s\n", millis(), name);
         file.close();
         continue;
       }
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        Serial.printf("[%lu] [SLP] Skipping invalid BMP file: %s\n", millis(), name);
+        Serial.printf("[%lu] [SLP] Ignorer le fichier BMP invalide: %s\n", millis(), name);
         file.close();
         continue;
       }
@@ -84,7 +84,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       const auto filename = "/sleep/" + files[randomFileIndex];
       FsFile file;
       if (SdMan.openFileForRead("SLP", filename, file)) {
-        Serial.printf("[%lu] [SLP] Randomly loading: /sleep/%s\n", millis(), files[randomFileIndex].c_str());
+        Serial.printf("[%lu] [SLP] Chargement aléatoire: /sleep/%s\n", millis(), files[randomFileIndex].c_str());
         delay(100);
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
@@ -103,7 +103,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   if (SdMan.openFileForRead("SLP", "/sleep.bmp", file)) {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      Serial.printf("[%lu] [SLP] Loading: /sleep.bmp\n", millis());
+      Serial.printf("[%lu] [SLP] Chargement: /sleep.bmp\n", millis());
       renderBitmapSleepScreen(bitmap);
       return;
     }
@@ -119,7 +119,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.clearScreen();
   renderer.drawImage(CrossLarge, (pageWidth + 128) / 2, (pageHeight - 128) / 2, 128, 128);
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "CrossPoint", true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "SLEEPING");
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "EN VEILLE");
 
   // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
@@ -135,34 +135,34 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   const auto pageHeight = renderer.getScreenHeight();
   float cropX = 0, cropY = 0;
 
-  Serial.printf("[%lu] [SLP] bitmap %d x %d, screen %d x %d\n", millis(), bitmap.getWidth(), bitmap.getHeight(),
+  Serial.printf("[%lu] [SLP] bitmap %d x %d, écran %d x %d\n", millis(), bitmap.getWidth(), bitmap.getHeight(),
                 pageWidth, pageHeight);
   if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
     // image will scale, make sure placement is right
     float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
     const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
 
-    Serial.printf("[%lu] [SLP] bitmap ratio: %f, screen ratio: %f\n", millis(), ratio, screenRatio);
+    Serial.printf("[%lu] [SLP] ratio bitmap: %f, ratio écran: %f\n", millis(), ratio, screenRatio);
     if (ratio > screenRatio) {
       // image wider than viewport ratio, scaled down image needs to be centered vertically
       if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
         cropX = 1.0f - (screenRatio / ratio);
-        Serial.printf("[%lu] [SLP] Cropping bitmap x: %f\n", millis(), cropX);
+        Serial.printf("[%lu] [SLP] Recadrage de bitmap x: %f\n", millis(), cropX);
         ratio = (1.0f - cropX) * static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
       }
       x = 0;
       y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
-      Serial.printf("[%lu] [SLP] Centering with ratio %f to y=%d\n", millis(), ratio, y);
+      Serial.printf("[%lu] [SLP] Centrage avec ratio de %f à y=%d\n", millis(), ratio, y);
     } else {
       // image taller than viewport ratio, scaled down image needs to be centered horizontally
       if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
         cropY = 1.0f - (ratio / screenRatio);
-        Serial.printf("[%lu] [SLP] Cropping bitmap y: %f\n", millis(), cropY);
+        Serial.printf("[%lu] [SLP] Recadrage bitmap y: %f\n", millis(), cropY);
         ratio = static_cast<float>(bitmap.getWidth()) / ((1.0f - cropY) * static_cast<float>(bitmap.getHeight()));
       }
       x = std::round((pageWidth - pageHeight * ratio) / 2);
       y = 0;
-      Serial.printf("[%lu] [SLP] Centering with ratio %f to x=%d\n", millis(), ratio, x);
+      Serial.printf("[%lu] [SLP] Centrage avec ratio de %f à x=%d\n", millis(), ratio, x);
     }
   } else {
     // center the image
@@ -170,7 +170,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     y = (pageHeight - bitmap.getHeight()) / 2;
   }
 
-  Serial.printf("[%lu] [SLP] drawing to %d x %d\n", millis(), x, y);
+  Serial.printf("[%lu] [SLP] dessinage à %d x %d\n", millis(), x, y);
   renderer.clearScreen();
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
@@ -205,12 +205,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     // Handle XTC file
     Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastXtc.load()) {
-      Serial.println("[SLP] Failed to load last XTC");
+      Serial.println("[SLP] Chargement échoué du dernier XTC");
       return renderDefaultSleepScreen();
     }
 
     if (!lastXtc.generateCoverBmp()) {
-      Serial.println("[SLP] Failed to generate XTC cover bmp");
+      Serial.println("[SLP] Génération échoué de bmp de couverture XTC");
       return renderDefaultSleepScreen();
     }
 
@@ -219,12 +219,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     // Handle EPUB file
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastEpub.load()) {
-      Serial.println("[SLP] Failed to load last epub");
+      Serial.println("[SLP] Chargement échoué du dernier epub");
       return renderDefaultSleepScreen();
     }
 
     if (!lastEpub.generateCoverBmp()) {
-      Serial.println("[SLP] Failed to generate cover bmp");
+      Serial.println("[SLP] Génération échoué de bmp de couverture");
       return renderDefaultSleepScreen();
     }
 

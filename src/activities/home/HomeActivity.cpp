@@ -277,21 +277,21 @@ void HomeActivity::render() const {
     }
 
     renderer.drawCenteredText(UI_10_FONT_ID, bookY + bookHeight - renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2,
-                              "Continue Reading", !bookSelected);
+                              "Continuer la lecture", !bookSelected);
   } else {
     // No book to continue reading
     const int y =
         bookY + (bookHeight - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, "No open book");
-    renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), "Start reading below");
+    renderer.drawCenteredText(UI_12_FONT_ID, y, "Aucun livre ouvert");
+    renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), "Commencer la lecture au-dessous");
   }
 
   // --- Bottom menu tiles ---
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {"Browse Files", "File Transfer", "Settings"};
+  std::vector<const char*> menuItems = {"Parcourir les fichiers", "Transfert de fichiers", "Paramètres"};
   if (hasOpdsUrl) {
     // Insert Calibre Library after Browse Files
-    menuItems.insert(menuItems.begin() + 1, "Calibre Library");
+    menuItems.insert(menuItems.begin() + 1, "Blibliothèque Calibre");
   }
 
   const int menuTileWidth = pageWidth - 2 * margin;
@@ -329,7 +329,7 @@ void HomeActivity::render() const {
     renderer.drawText(UI_10_FONT_ID, textX, textY, label, !selected);
   }
 
-  const auto labels = mappedInput.mapLabels("", "Confirm", "Up", "Down");
+  const auto labels = mappedInput.mapLabels("", "Confirmer", "Haut", "Bas");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   const auto batteryX = pageWidth - 25 - renderer.getTextWidth(SMALL_FONT_ID, "100 %");

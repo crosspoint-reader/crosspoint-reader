@@ -16,31 +16,31 @@ namespace {
 constexpr int settingsCount = 18;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
-    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
-    SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
-    SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}),
-    SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
-    SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing),
-    SettingInfo::Toggle("Short Power Button Click", &CrossPointSettings::shortPwrBtn),
-    SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
-                      {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
-    SettingInfo::Enum("Front Button Layout", &CrossPointSettings::frontButtonLayout,
-                      {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght"}),
-    SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
-                      {"Prev, Next", "Next, Prev"}),
-    SettingInfo::Enum("Reader Font Family", &CrossPointSettings::fontFamily,
+    SettingInfo::Enum("Écran de veille", &CrossPointSettings::sleepScreen, {"Sombre", "Clair", "Personnalisé", "Couverture", "Aucun"}),
+    SettingInfo::Enum("Mode de couverture de veille", &CrossPointSettings::sleepScreenCoverMode, {"Étirée", "Recadrée"}),
+    SettingInfo::Enum("Barre d'état", &CrossPointSettings::statusBar, {"Aucune", "Sans progrès", "Pleine"}),
+    SettingInfo::Toggle("Espace supplé. entre paragraphes", &CrossPointSettings::extraParagraphSpacing),
+    SettingInfo::Toggle("Anticrénelage du texte", &CrossPointSettings::textAntiAliasing),
+    SettingInfo::Toggle("Clic court du bouton alim.", &CrossPointSettings::shortPwrBtn),
+    SettingInfo::Enum("Orientation de lecture", &CrossPointSettings::orientation,
+                      {"Portrait", "Paysage à droite", "Inversée", "Paysage à gauche"}),
+    SettingInfo::Enum("Disposition des boutons au front", &CrossPointSettings::frontButtonLayout,
+                      {"Rtr, Cnfrmr, Gche, Drte", "Gche, Drte, Rtr, Cnfrmr", "Gche, Rtr, Cnfrmr, Drte"}),
+    SettingInfo::Enum("Disposition des boutons à droite (lis.)", &CrossPointSettings::sideButtonLayout,
+                      {"Précédent, Prochaine", "Prochaine, Précédent"}),
+    SettingInfo::Enum("Police", &CrossPointSettings::fontFamily,
                       {"Bookerly", "Noto Sans", "Open Dyslexic"}),
-    SettingInfo::Enum("Reader Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
-    SettingInfo::Enum("Reader Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}),
-    SettingInfo::Value("Reader Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
-    SettingInfo::Enum("Reader Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
-                      {"Justify", "Left", "Center", "Right"}),
-    SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
+    SettingInfo::Enum("Taille de police", &CrossPointSettings::fontSize, {"Petit", "Medium", "Large", "Très Large"}),
+    SettingInfo::Enum("Espacement des lignes", &CrossPointSettings::lineSpacing, {"Fin", "Normal", "Large"}),
+    SettingInfo::Value("Marge d'écran", &CrossPointSettings::screenMargin, {5, 40, 5}),
+    SettingInfo::Enum("Alignement des lignes", &CrossPointSettings::paragraphAlignment,
+                      {"Justifié", "Gauche", "Centré", "Droite"}),
+    SettingInfo::Enum("Temps de veille", &CrossPointSettings::sleepTimeout,
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
-    SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
+    SettingInfo::Enum("Fréquence de rafraîche.", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
-    SettingInfo::Action("Calibre Settings"),
-    SettingInfo::Action("Check for updates")};
+    SettingInfo::Action("Paramètres Calibre"),
+    SettingInfo::Action("Vérifier les mises à jour")};
 }  // namespace
 
 void SettingsActivity::taskTrampoline(void* param) {
@@ -137,7 +137,7 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    if (strcmp(setting.name, "Calibre Settings") == 0) {
+    if (strcmp(setting.name, "Paramètres Calibre") == 0) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
@@ -145,7 +145,7 @@ void SettingsActivity::toggleCurrentSetting() {
         updateRequired = true;
       }));
       xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "Check for updates") == 0) {
+    } else if (strcmp(setting.name, "Verifier les mises à jour") == 0) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
@@ -182,7 +182,7 @@ void SettingsActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Paramètres", true, EpdFontFamily::BOLD);
 
   // Draw selection
   renderer.fillRect(0, 60 + selectedSettingIndex * 30 - 2, pageWidth - 1, 30);
@@ -198,7 +198,7 @@ void SettingsActivity::render() const {
     std::string valueText = "";
     if (settingsList[i].type == SettingType::TOGGLE && settingsList[i].valuePtr != nullptr) {
       const bool value = SETTINGS.*(settingsList[i].valuePtr);
-      valueText = value ? "ON" : "OFF";
+      valueText = value ? "OUI" : "NON";
     } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
       const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
       valueText = settingsList[i].enumValues[value];
@@ -214,7 +214,7 @@ void SettingsActivity::render() const {
                     pageHeight - 60, CROSSPOINT_VERSION);
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels("« Save", "Toggle", "", "");
+  const auto labels = mappedInput.mapLabels("« Enreg.", "Basculer", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

@@ -180,14 +180,14 @@ void FileSelectionActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Books", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Livres", true, EpdFontFamily::BOLD);
 
   // Help text
-  const auto labels = mappedInput.mapLabels("« Home", "Open", "", "");
+  const auto labels = mappedInput.mapLabels("« Accueil", "Ouvrir", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (files.empty()) {
-    renderer.drawText(UI_10_FONT_ID, 20, 60, "No books found");
+    renderer.drawText(UI_10_FONT_ID, 20, 60, "Aucun livre trouvé");
     renderer.displayBuffer();
     return;
   }
