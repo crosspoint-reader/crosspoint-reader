@@ -29,7 +29,7 @@ const SettingInfo settingsList[settingsCount] = {
     SettingInfo::Enum("Disp. des bout. droite", &CrossPointSettings::sideButtonLayout,
                       {"Prcdent, Prochne", "Prochne, Prcdent"}),
     SettingInfo::Enum("Police", &CrossPointSettings::fontFamily,
-                      {"Bookerly", "Noto Sans", "Open Dyslexic"}),
+                      {"Bookerly", "Noto Sans", "Absinthe"}),
     SettingInfo::Enum("Taille de police", &CrossPointSettings::fontSize, {"Petit", "Medium", "Large", "Très Large"}),
     SettingInfo::Enum("Espacement des lignes", &CrossPointSettings::lineSpacing, {"Fin", "Normal", "Large"}),
     SettingInfo::Value("Marge d'écran", &CrossPointSettings::screenMargin, {5, 40, 5}),

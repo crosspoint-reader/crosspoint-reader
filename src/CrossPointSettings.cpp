@@ -140,15 +140,15 @@ float CrossPointSettings::getReaderLineCompression() const {
         case WIDE:
           return 1.0f;
       }
-    case OPENDYSLEXIC:
+    case ABSINTHE:
       switch (lineSpacing) {
         case TIGHT:
-          return 0.90f;
+          return 1.0f;
         case NORMAL:
         default:
-          return 0.95f;
+          return 1.1f;
         case WIDE:
-          return 1.0f;
+          return 1.2f;
       }
   }
 }
@@ -212,17 +212,17 @@ int CrossPointSettings::getReaderFontId() const {
         case EXTRA_LARGE:
           return NOTOSANS_18_FONT_ID;
       }
-    case OPENDYSLEXIC:
+    case ABSINTHE:
       switch (fontSize) {
         case SMALL:
-          return OPENDYSLEXIC_8_FONT_ID;
+          return ABSINTHE_12_FONT_ID;
         case MEDIUM:
         default:
-          return OPENDYSLEXIC_10_FONT_ID;
+          return ABSINTHE_14_FONT_ID;
         case LARGE:
-          return OPENDYSLEXIC_12_FONT_ID;
+          return ABSINTHE_16_FONT_ID;
         case EXTRA_LARGE:
-          return OPENDYSLEXIC_14_FONT_ID;
+          return ABSINTHE_18_FONT_ID;
       }
   }
 }
