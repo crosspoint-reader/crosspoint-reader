@@ -4,6 +4,8 @@
 #include <SDCardManager.h>
 #include <Serialization.h>
 
+#include <cstring>
+
 #include "fontIds.h"
 
 // Initialize the static instance
@@ -118,6 +120,14 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, hotspotSchedulerShutdownTime);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, screenMargin);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string urlStr;
+      serialization::readString(inputFile, urlStr);
+      strncpy(opdsServerUrl, urlStr.c_str(), sizeof(opdsServerUrl) - 1);
+      opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
+    }
+    serialization::readPod(inputFile, textAntiAliasing);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

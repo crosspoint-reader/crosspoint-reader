@@ -71,6 +71,7 @@ class CrossPointSettings {
   uint8_t statusBar = FULL;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  uint8_t textAntiAliasing = 1;
   // Duration of the power button press
   uint8_t shortPwrBtn = 0;
   // EPUB reading orientation settings
@@ -118,7 +119,6 @@ class CrossPointSettings {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
-  int getReaderScreenMargin() const;
 };
 
 // Helper macro to access settings

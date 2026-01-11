@@ -1,17 +1,16 @@
 # CrossPoint User Guide
 
-Welcome to the **CrossPoint** firmware. This guide outlines the hardware controls, navigation, and reading features of 
-the device.
+Welcome to the **CrossPoint** firmware. This guide outlines the hardware controls, navigation, and reading features of the device.
 
 ## 1. Hardware Overview
 
 The device utilises the standard buttons on the Xtink X4 (in the same layout as the manufacturer firmware, by default):
 
 ### Button Layout
-| Location        | Buttons                                    |
-|-----------------|--------------------------------------------|
-| **Bottom Edge** | **Back**, **Confirm**, **Left**, **Right** |
-| **Right Side**  | **Power**, **Volume Up**, **Volume Down**  |
+| Location        | Buttons                                              |
+| --------------- | ---------------------------------------------------- |
+| **Bottom Edge** | **Back**, **Confirm**, **Left**, **Right**           |
+| **Right Side**  | **Power**, **Volume Up**, **Volume Down**, **Reset** |
 
 Button layout can be customized in **[Settings](#35-settings)**.
 
@@ -21,8 +20,9 @@ Button layout can be customized in **[Settings](#35-settings)**.
 
 ### Power On / Off
 
-To turn the device on or off, **press and hold the Power button for half a second**. In **[Settings](#35-settings)** you can configure
-the power button to trigger on a short press instead of a long one.
+To turn the device on or off, **press and hold the Power button for half a second**. In **[Settings](#35-settings)** you can configure the power button to trigger on a short press instead of a long one.
+
+To reboot the device (for example if it's frozen, or after a firmware update), press and release the Reset button, and then hold the Power button for a few seconds.
 
 ### First Launch
 
@@ -37,15 +37,13 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home Screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Book Selection](#32-book-selection)**,
-**[Settings](#35-settings)**, or the **[File Upload](#34-file-upload-screen)** screen.
+The Home Screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Book Selection](#32-book-selection)**, **[Settings](#35-settings)**, or the **[File Upload](#34-file-upload-screen)** screen.
 
 ### 3.2 Book Selection
 
 The Book Selection acts as a folder and file browser.
 
-* **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up 
-  and down through folders and books.
+* **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
 * **Open Selection:** Press **Confirm** to open a folder or read a selected book.
 
 ### 3.3 Reading Mode
@@ -54,42 +52,46 @@ See [Reading Mode](#4-reading-mode) below for more information.
 
 ### 3.4 File Upload Screen
 
-The File Upload screen allows you to upload new e-books to the device. When you enter the screen, you'll be prompted with
-a WiFi selection dialog and then your X4 will start hosting a web server.
+The File Upload screen allows you to upload new e-books to the device. When you enter the screen, you'll be prompted with a WiFi selection dialog and then your X4 will start hosting a web server.
 
 See the [webserver docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
+
+> [!TIP]
+> Advanced users can also manage files programmatically or via the command line using `curl`. See the [webserver docs](./docs/webserver.md) for details.
 
 ### 3.5 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
-- **Sleep Screen**: Which sleep screen to display when the device sleeps, options are:
+- **Sleep Screen**: Which sleep screen to display when the device sleeps:
   - "Dark" (default) - The default dark sleep screen
   - "Light" - The same default sleep screen, on a white background
   - "Custom" - Custom images from the SD card, see [Sleep Screen](#36-sleep-screen) below for more information
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
-- **Status Bar**: Configure the status bar displayed while reading, options are:
+- **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
   - "Full" - Show status bar with reading progress
-- **Extra Paragraph Spacing**: If enabled, vertical space will be added between paragraphs in the book, if disabled,
-  paragraphs will not have vertical space between them, but will have first word indentation.
+- **Extra Paragraph Spacing**: If enabled, vertical space will be added between paragraphs in the book. If disabled, paragraphs will not have vertical space between them, but will have first-line indentation.
 - **Short Power Button Click**: Whether to trigger the power button on a short press or a long press.
-- **Reading Orientation**: Set the screen orientation for reading, options are:
+- **Reading Orientation**: Set the screen orientation for reading:
   - "Portrait" (default) - Standard portrait orientation
   - "Landscape CW" - Landscape, rotated clockwise
   - "Inverted" - Portrait, upside down
   - "Landscape CCW" - Landscape, rotated counter-clockwise
-- **Front Button Layout**: Configure the order of the bottom edge buttons, options are:
-  - "Bck, Cnfrm, Lft, Rght" (default) - Back, Confirm, Left, Right
-  - "Lft, Rght, Bck, Cnfrm" - Left, Right, Back, Confirm
-  - "Lft, Bck, Cnfrm, Rght" - Left, Back, Confirm, Right
-- **Side Button Layout**: Swap the order of the volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
-- **Reader Font Family**: Choose the font used for reading, options are:
+- **Front Button Layout**: Configure the order of the bottom edge buttons:
+  - Back, Confirm, Left, Right (default)
+  - Left, Right, Back, Confirm
+  - Left, Back, Confirm, Right
+- **Side Button Layout**: Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
+- **Reader Font Family**: Choose the font used for reading:
   - "Bookerly" (default) - Amazon's reading font
   - "Noto Sans" - Google's sans-serif font
   - "Open Dyslexic" - Font designed for readers with dyslexia
-- **Reader Font Size**: Adjust the text size for reading, options are "Small", "Medium", "Large", or "X Large".
-- **Reader Line Spacing**: Adjust the spacing between lines, options are "Tight", "Normal", or "Wide".
+- **Reader Font Size**: Adjust the text size for reading; options are "Small", "Medium", "Large", or "X Large".
+- **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal", or "Wide".
+- **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
+- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep.
+- **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting.
 - **Check for updates**: Check for firmware updates over WiFi.
 
 ### 3.6 Sleep Screen
@@ -97,9 +99,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 You can customize the sleep screen by placing custom images in specific locations on the SD card:
 
 - **Single Image:** Place a file named `sleep.bmp` in the root directory.
-- **Multiple Images:** Create a `sleep` directory in the root of the SD card and place any number of `.bmp` images
-  inside. If images are found in this directory, they will take priority over the `sleep.bmp` file, and one will be
-  randomly selected each time the device sleeps.
+- **Multiple Images:** Create a `sleep` directory in the root of the SD card and place any number of `.bmp` images inside. If images are found in this directory, they will take priority over the `sleep.bmp` file, and one will be randomly selected each time the device sleeps.
 
 > [!NOTE]
 > You'll need to set the **Sleep Screen** setting to **Custom** in order to use these images.
@@ -117,9 +117,11 @@ Once you have opened a book, the button layout changes to facilitate reading.
 
 ### Page Turning
 | Action            | Buttons                              |
-|-------------------|--------------------------------------|
+| ----------------- | ------------------------------------ |
 | **Previous Page** | Press **Left** _or_ **Volume Up**    |
 | **Next Page**     | Press **Right** _or_ **Volume Down** |
+
+The role of the volume (side) buttons can be swapped in **[Settings](#35-settings)**.
 
 ### Chapter Navigation
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
@@ -127,7 +129,7 @@ Once you have opened a book, the button layout changes to facilitate reading.
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
-* **Return to Home:** Press and hold **Back** to close the book and return to the **[Home](#31-home-screen)** screen.
+* **Return to Home:** Press and **hold** the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)**.
 
 ---
@@ -144,7 +146,6 @@ Accessible by pressing **Confirm** while inside a book.
 
 ## 6. Current Limitations & Roadmap
 
-Please note that this firmware is currently in active development. The following features are **not yet supported** but
-are planned for future updates:
+Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
 * **Images:** Embedded images in e-books will not render.
