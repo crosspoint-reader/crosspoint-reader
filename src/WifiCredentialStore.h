@@ -1,6 +1,11 @@
 #pragma once
+#include <functional>
 #include <string>
 #include <vector>
+
+class ActivityWithSubactivity;
+class GfxRenderer;
+class MappedInputManager;
 
 struct WifiCredential {
   std::string ssid;
@@ -16,6 +21,7 @@ class WifiCredentialStore {
  private:
   static WifiCredentialStore instance;
   std::vector<WifiCredential> credentials;
+  std::string defaultSSID;
 
   static constexpr size_t MAX_NETWORKS = 8;
 
@@ -50,6 +56,16 @@ class WifiCredentialStore {
 
   // Clear all credentials
   void clearAll();
+
+  // Default network management
+  void setDefaultSSID(const std::string& ssid);
+  const std::string& getDefaultSSID() const { return defaultSSID; }
+  bool connectToDefaultWifi(int timeoutMs = 5000) const;
+
+  // Helper function to try connecting to default WiFi, or show WiFi selection if it fails
+  static void ensureWifiConnected(ActivityWithSubactivity& activity, GfxRenderer& renderer,
+                                  MappedInputManager& mappedInput, const std::function<void()>& onSuccess,
+                                  const std::function<void()>& onCancel, int timeoutMs = 10000);
 };
 
 // Helper macro to access credentials store

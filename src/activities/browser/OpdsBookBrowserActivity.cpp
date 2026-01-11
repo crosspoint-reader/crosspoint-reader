@@ -8,6 +8,7 @@
 #include "MappedInputManager.h"
 #include "ScreenComponents.h"
 #include "WifiCredentialStore.h"
+#include "activities/network/WifiSelectionActivity.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/StringUtils.h"
@@ -66,6 +67,11 @@ void OpdsBookBrowserActivity::onExit() {
 }
 
 void OpdsBookBrowserActivity::loop() {
+  if (subActivity) {
+    subActivity->loop();
+    return;
+  }
+
   // Handle error state - Confirm retries, Back goes back or home
   if (state == BrowserState::ERROR) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -82,6 +88,9 @@ void OpdsBookBrowserActivity::loop() {
   // Handle WiFi check state - only Back works
   if (state == BrowserState::CHECK_WIFI) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      if (subActivity) {
+        exitActivity();
+      }
       onGoHome();
     }
     return;
@@ -139,6 +148,12 @@ void OpdsBookBrowserActivity::loop() {
 
 void OpdsBookBrowserActivity::displayTaskLoop() {
   while (true) {
+    // If a subactivity is active, yield CPU time but don't render
+    if (subActivity) {
+      vTaskDelay(10 / portTICK_PERIOD_MS);
+      continue;
+    }
+
     if (updateRequired) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -350,49 +365,24 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 }
 
 void OpdsBookBrowserActivity::checkAndConnectWifi() {
-  // Already connected?
-  if (WiFi.status() == WL_CONNECTED) {
-    state = BrowserState::LOADING;
-    statusMessage = "Loading...";
-    updateRequired = true;
-    fetchFeed(currentPath);
-    return;
-  }
-
-  // Try to connect using saved credentials
-  statusMessage = "Connecting to WiFi...";
-  updateRequired = true;
-
   WIFI_STORE.loadFromFile();
-  const auto& credentials = WIFI_STORE.getCredentials();
-  if (credentials.empty()) {
-    state = BrowserState::ERROR;
-    errorMessage = "No WiFi credentials saved";
+  const bool hasDefaultSSID = !WIFI_STORE.getDefaultSSID().empty();
+  const bool alreadyConnected = (WiFi.status() == WL_CONNECTED);
+  
+  if (hasDefaultSSID && !alreadyConnected) {
+    statusMessage = "Connecting to WiFi...";
     updateRequired = true;
-    return;
   }
 
-  // Use the first saved credential
-  const auto& cred = credentials[0];
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(cred.ssid.c_str(), cred.password.c_str());
-
-  // Wait for connection with timeout
-  constexpr int WIFI_TIMEOUT_MS = 10000;
-  const unsigned long startTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startTime < WIFI_TIMEOUT_MS) {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("[%lu] [OPDS] WiFi connected: %s\n", millis(), WiFi.localIP().toString().c_str());
+  WIFI_STORE.ensureWifiConnected(
+      *this, renderer, mappedInput,
+      [this]() {
     state = BrowserState::LOADING;
     statusMessage = "Loading...";
     updateRequired = true;
     fetchFeed(currentPath);
-  } else {
-    state = BrowserState::ERROR;
-    errorMessage = "WiFi connection failed";
-    updateRequired = true;
-  }
+      },
+      [this]() {
+        onGoHome();
+      });
 }

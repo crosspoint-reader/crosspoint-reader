@@ -36,6 +36,7 @@ void WifiSelectionActivity::onEnter() {
   usedSavedPassword = false;
   savePromptSelection = 0;
   forgetPromptSelection = 0;
+  setDefaultPromptSelection = 0;
 
   // Trigger first update to show scanning message
   updateRequired = true;
@@ -229,6 +230,28 @@ void WifiSelectionActivity::attemptConnection() {
   }
 }
 
+void WifiSelectionActivity::savePassword() {
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+  xSemaphoreGive(renderingMutex);
+}
+
+void WifiSelectionActivity::displaySetDefaultPrompt() {
+  WIFI_STORE.loadFromFile();
+  const std::string currentDefault = WIFI_STORE.getDefaultSSID();
+  if (selectedSSID != currentDefault) {
+    state = WifiSelectionState::SET_DEFAULT_PROMPT;
+    setDefaultPromptSelection = 0;
+    updateRequired = true;
+  }
+}
+
+void WifiSelectionActivity::setDefaultNetwork() {
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  WIFI_STORE.setDefaultSSID(selectedSSID);
+  xSemaphoreGive(renderingMutex);
+}
+
 void WifiSelectionActivity::checkConnectionStatus() {
   if (state != WifiSelectionState::CONNECTING) {
     return;
@@ -243,16 +266,19 @@ void WifiSelectionActivity::checkConnectionStatus() {
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     connectedIP = ipStr;
 
-    // If we entered a new password, ask if user wants to save it
-    // Otherwise, immediately complete so parent can start web server
+    // If we entered a new password, save it (with or without prompt based on fromSettingsScreen)
     if (!usedSavedPassword && !enteredPassword.empty()) {
-      state = WifiSelectionState::SAVE_PROMPT;
-      savePromptSelection = 0;  // Default to "Yes"
-      updateRequired = true;
-    } else {
-      // Using saved password or open network - complete immediately
-      Serial.printf("[%lu] [WIFI] Connected with saved/open credentials, completing immediately\n", millis());
-      onComplete(true);
+      if (fromSettingsScreen) {
+        // Always save without prompting
+        savePassword();
+        displaySetDefaultPrompt();
+
+        return;
+      } else {
+        state = WifiSelectionState::SAVE_PROMPT;
+        savePromptSelection = 0;
+        updateRequired = true;
+      }
     }
     return;
   }
@@ -318,14 +344,50 @@ void WifiSelectionActivity::loop() {
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (savePromptSelection == 0) {
         // User chose "Yes" - save the password
-        xSemaphoreTake(renderingMutex, portMAX_DELAY);
-        WIFI_STORE.addCredential(selectedSSID, enteredPassword);
-        xSemaphoreGive(renderingMutex);
+        savePassword();
+        displaySetDefaultPrompt();
       }
-      // Complete - parent will start web server
+      onComplete(true);
+    }else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    // Skip saving, complete anyway
+      onComplete(true);
+    }
+    return;
+  }
+
+  // Handle set default prompt state
+  if (state == WifiSelectionState::SET_DEFAULT_PROMPT) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      if (setDefaultPromptSelection > 0) {
+        setDefaultPromptSelection--;
+        updateRequired = true;
+      }
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+               mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      if (setDefaultPromptSelection < 1) {
+        setDefaultPromptSelection++;
+        updateRequired = true;
+      }
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      if (setDefaultPromptSelection == 0) {
+        // User chose "Yes" - set as default
+        setDefaultNetwork();
+      }
+      // Disconnect if from settings screen before completing
+      if (fromSettingsScreen) {
+        WiFi.disconnect(false);
+        delay(100);
+        WiFi.mode(WIFI_OFF);
+      }
       onComplete(true);
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      // Skip saving, complete anyway
+      // Disconnect if from settings screen before completing
+      if (fromSettingsScreen) {
+        WiFi.disconnect(false);
+        delay(100);
+        WiFi.mode(WIFI_OFF);
+      }
       onComplete(true);
     }
     return;
@@ -489,6 +551,9 @@ void WifiSelectionActivity::render() const {
     case WifiSelectionState::SAVE_PROMPT:
       renderSavePrompt();
       break;
+    case WifiSelectionState::SET_DEFAULT_PROMPT:
+      renderSetDefaultPrompt();
+      break;
     case WifiSelectionState::CONNECTION_FAILED:
       renderConnectionFailed();
       break;
@@ -647,6 +712,46 @@ void WifiSelectionActivity::renderSavePrompt() const {
 
   // Draw "No" button
   if (savePromptSelection == 1) {
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, "[No]");
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, "No");
+  }
+
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm");
+}
+
+void WifiSelectionActivity::renderSetDefaultPrompt() const {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height * 3) / 2;
+
+  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connected!", true, EpdFontFamily::BOLD);
+
+  std::string ssidInfo = "Network: " + selectedSSID;
+  if (ssidInfo.length() > 28) {
+    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
+  }
+  renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
+
+  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, "Set as default WiFi?");
+
+  // Draw Yes/No buttons
+  const int buttonY = top + 80;
+  constexpr int buttonWidth = 60;
+  constexpr int buttonSpacing = 30;
+  constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
+  const int startX = (pageWidth - totalWidth) / 2;
+
+  // Draw "Yes" button
+  if (setDefaultPromptSelection == 0) {
+    renderer.drawText(UI_10_FONT_ID, startX, buttonY, "[Yes]");
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + 4, buttonY, "Yes");
+  }
+
+  // Draw "No" button
+  if (setDefaultPromptSelection == 1) {
     renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, "[No]");
   } else {
     renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, "No");

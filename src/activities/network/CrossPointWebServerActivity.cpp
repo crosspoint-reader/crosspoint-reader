@@ -10,7 +10,7 @@
 
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
-#include "WifiSelectionActivity.h"
+#include "WifiCredentialStore.h"
 #include "fontIds.h"
 
 namespace {
@@ -135,14 +135,24 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   exitActivity();
 
   if (mode == NetworkMode::JOIN_NETWORK) {
-    // STA mode - launch WiFi selection
-    Serial.printf("[%lu] [WEBACT] Turning on WiFi (STA mode)...\n", millis());
+    // STA mode - use ensureWifiConnected helper
+    Serial.printf("[%lu] [WEBACT] Checking WiFi connection...\n", millis());
     WiFi.mode(WIFI_STA);
 
     state = WebServerActivityState::WIFI_SELECTION;
-    Serial.printf("[%lu] [WEBACT] Launching WifiSelectionActivity...\n", millis());
-    enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                               [this](const bool connected) { onWifiSelectionComplete(connected); }));
+    WIFI_STORE.ensureWifiConnected(
+        *this, renderer, mappedInput,
+        [this]() {
+          // WiFi connected - start web server
+          connectedIP = WiFi.localIP().toString().c_str();
+          connectedSSID = WiFi.SSID().c_str();
+          isApMode = false;
+          onWifiSelectionComplete(true);
+        },
+        [this]() {
+          // WiFi connection cancelled - go back to mode selection
+          onWifiSelectionComplete(false);
+        });
   } else {
     // AP mode - start access point
     state = WebServerActivityState::AP_STARTING;
@@ -152,15 +162,15 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 }
 
 void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) {
-  Serial.printf("[%lu] [WEBACT] WifiSelectionActivity completed, connected=%d\n", millis(), connected);
+  Serial.printf("[%lu] [WEBACT] WiFi connection completed, connected=%d\n", millis(), connected);
 
   if (connected) {
-    // Get connection info before exiting subactivity
-    connectedIP = static_cast<WifiSelectionActivity*>(subActivity.get())->getConnectedIP();
-    connectedSSID = WiFi.SSID().c_str();
     isApMode = false;
 
-    exitActivity();
+    // Exit any subactivity if present
+    if (subActivity) {
+      exitActivity();
+    }
 
     // Start mDNS for hostname resolution
     if (MDNS.begin(AP_HOSTNAME)) {

@@ -21,14 +21,15 @@ struct WifiNetworkInfo {
 
 // WiFi selection states
 enum class WifiSelectionState {
-  SCANNING,           // Scanning for networks
-  NETWORK_LIST,       // Displaying available networks
-  PASSWORD_ENTRY,     // Entering password for selected network
-  CONNECTING,         // Attempting to connect
-  CONNECTED,          // Successfully connected
-  SAVE_PROMPT,        // Asking user if they want to save the password
-  CONNECTION_FAILED,  // Connection failed
-  FORGET_PROMPT       // Asking user if they want to forget the network
+  SCANNING,            // Scanning for networks
+  NETWORK_LIST,        // Displaying available networks
+  PASSWORD_ENTRY,      // Entering password for selected network
+  CONNECTING,          // Attempting to connect
+  CONNECTED,           // Successfully connected
+  SAVE_PROMPT,         // Asking user if they want to save the password
+  SET_DEFAULT_PROMPT, // Asking user if they want to set as default
+  CONNECTION_FAILED,   // Connection failed
+  FORGET_PROMPT        // Asking user if they want to forget the network
 };
 
 /**
@@ -65,9 +66,13 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   // Whether network was connected using a saved password (skip save prompt)
   bool usedSavedPassword = false;
 
-  // Save/forget prompt selection (0 = Yes, 1 = No)
+  // Whether launched from settings screen (affects save behavior and disconnection)
+  bool fromSettingsScreen = false;
+
+  // Save/forget/set default prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;
   int forgetPromptSelection = 0;
+  int setDefaultPromptSelection = 0;
 
   // Connection timeout
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
@@ -81,6 +86,7 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   void renderConnecting() const;
   void renderConnected() const;
   void renderSavePrompt() const;
+  void renderSetDefaultPrompt() const;
   void renderConnectionFailed() const;
   void renderForgetPrompt() const;
 
@@ -91,10 +97,17 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   void checkConnectionStatus();
   std::string getSignalStrengthIndicator(int32_t rssi) const;
 
+  // Helper methods
+  void savePassword();
+  void displaySetDefaultPrompt();
+  void setDefaultNetwork();
+
  public:
   explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 const std::function<void(bool connected)>& onComplete)
-      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput), onComplete(onComplete) {}
+                                 const std::function<void(bool connected)>& onComplete,
+                                 bool fromSettingsScreen = false)
+      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput), onComplete(onComplete),
+        fromSettingsScreen(fromSettingsScreen) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

@@ -6,10 +6,10 @@
 class ActivityWithSubactivity : public Activity {
  protected:
   std::unique_ptr<Activity> subActivity = nullptr;
-  void exitActivity();
-  void enterNewActivity(Activity* activity);
 
  public:
+  void exitActivity();
+  void enterNewActivity(Activity* activity);
   explicit ActivityWithSubactivity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity(std::move(name), renderer, mappedInput) {}
   void loop() override;

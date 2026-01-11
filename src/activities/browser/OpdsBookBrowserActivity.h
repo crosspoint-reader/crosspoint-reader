@@ -8,13 +8,13 @@
 #include <string>
 #include <vector>
 
-#include "../Activity.h"
+#include "../ActivityWithSubactivity.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
  * Supports navigation through catalog hierarchy and downloading EPUBs.
  */
-class OpdsBookBrowserActivity final : public Activity {
+class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
  public:
   enum class BrowserState {
     CHECK_WIFI,   // Checking WiFi connection
@@ -26,7 +26,7 @@ class OpdsBookBrowserActivity final : public Activity {
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                    const std::function<void()>& onGoHome)
-      : Activity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome) {}
+      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome) {}
 
   void onEnter() override;
   void onExit() override;

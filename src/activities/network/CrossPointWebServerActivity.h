@@ -24,7 +24,7 @@ enum class WebServerActivityState {
  * CrossPointWebServerActivity is the entry point for file transfer functionality.
  * It:
  * - First presents a choice between "Join a Network" (STA) and "Create Hotspot" (AP)
- * - For STA mode: Launches WifiSelectionActivity to connect to an existing network
+ * - For STA mode: Uses ensureWifiConnected to auto-connect to default WiFi or show WiFi selection
  * - For AP mode: Creates an Access Point that clients can connect to
  * - Starts the CrossPointWebServer when connected
  * - Handles client requests in its loop() function
