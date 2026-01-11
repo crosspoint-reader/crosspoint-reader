@@ -3,6 +3,9 @@
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 
+#include <cstring>
+
+#include "CalibreSettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
@@ -10,7 +13,7 @@
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 16;
+constexpr int settingsCount = 18;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     {"Sleep Screen", SettingType::ENUM, &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover"}},
@@ -145,7 +148,15 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    if (std::string(setting.name) == "Check for updates") {
+    if (strcmp(setting.name, "Calibre Settings") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Check for updates") == 0) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {

@@ -4,6 +4,8 @@
 #include <SDCardManager.h>
 #include <Serialization.h>
 
+#include <cstring>
+
 #include "fontIds.h"
 
 // Initialize the static instance
@@ -12,7 +14,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 15;
+constexpr uint8_t SETTINGS_COUNT = 17;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -42,6 +44,8 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, refreshFrequency);
   serialization::writePod(outputFile, screenMargin);
   serialization::writePod(outputFile, sleepScreenCoverMode);
+  serialization::writeString(outputFile, std::string(opdsServerUrl));
+  serialization::writePod(outputFile, textAntiAliasing);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -97,6 +101,14 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, screenMargin);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, sleepScreenCoverMode);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string urlStr;
+      serialization::readString(inputFile, urlStr);
+      strncpy(opdsServerUrl, urlStr.c_str(), sizeof(opdsServerUrl) - 1);
+      opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
+    }
+    serialization::readPod(inputFile, textAntiAliasing);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

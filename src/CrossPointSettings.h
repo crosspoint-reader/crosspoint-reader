@@ -60,6 +60,7 @@ class CrossPointSettings {
   uint8_t statusBar = FULL;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  uint8_t textAntiAliasing = 1;
   // Duration of the power button press
   uint8_t shortPwrBtn = 0;
   // EPUB reading orientation settings
@@ -77,9 +78,10 @@ class CrossPointSettings {
   uint8_t autoSleepMinutes = 1;  // Default to 5 minutes
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
-
   // Reader screen margin settings
   uint8_t screenMargin = 5;
+  // OPDS browser settings
+  char opdsServerUrl[128] = "";
 
   ~CrossPointSettings() = default;
 
@@ -108,7 +110,6 @@ class CrossPointSettings {
     return (autoSleepMinutes < 8) ? timeouts[autoSleepMinutes] : timeouts[2];
   }
   int getRefreshFrequency() const;
-  int getReaderScreenMargin() const;
 };
 
 // Helper macro to access settings
