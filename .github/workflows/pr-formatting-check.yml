@@ -3,20 +3,9 @@ name: "PR Formatting"
 on:
   pull_request_target:
     types:
-      - assigned
-      - unassigned
-      - labeled
-      - unlabeled
       - opened
       - reopened
       - edited
-      - converted_to_draft
-      - ready_for_review
-      - review_requested
-      - review_request_removed
-      - locked
-      - unlocked
-      - synchronize
 
 permissions:
   statuses: write
@@ -32,6 +21,6 @@ jobs:
           egress-policy: audit
 
       - name: Check PR Title
-        uses: step-security/conventional-pr-title-action@101b3d5adffb51b5789997fea508c8313c8ddf02 # v3.2.2
+        uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
