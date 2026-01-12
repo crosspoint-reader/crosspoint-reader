@@ -25,7 +25,7 @@ constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 
-const char* SKIP_TAGS[] = {"head", "table"};
+const char* SKIP_TAGS[] = {"head"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
@@ -59,6 +59,27 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
+    self->depth += 1;
+    return;
+  }
+
+  // Special handling for tables - show placeholder text instead of dropping silently
+  if (strcmp(name, "table") == 0) {
+    // Flush any partial word
+    if (self->partWordBufferIndex > 0 && self->currentTextBlock) {
+      self->partWordBuffer[self->partWordBufferIndex] = '\0';
+      self->currentTextBlock->addWord(self->partWordBuffer, EpdFontFamily::REGULAR);
+      self->partWordBufferIndex = 0;
+    }
+
+    // Add placeholder text
+    self->startNewTextBlock((TextBlock::Style)self->paragraphAlignment);
+    if (self->currentTextBlock) {
+      self->currentTextBlock->addWord("[Table omitted]", EpdFontFamily::ITALIC);
+    }
+
+    // Skip table contents
+    self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
   }
