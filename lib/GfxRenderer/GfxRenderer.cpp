@@ -152,8 +152,17 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   einkDisplay.drawImage(bitmap, rotatedX, rotatedY, width, height);
 }
 
+void GfxRenderer::drawVal(const int x, const int y, const uint8_t val) const {
+  if (renderMode == BW && val < 3) {
+    drawPixel(x, y);
+  } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+    drawPixel(x, y, false);
+  } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+    drawPixel(x, y, false);
+  }
+}
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY) const {
+                             const float cropX, const float cropY, bool extend) const {
   float scale = 1.0f;
   bool isScaled = false;
   int cropPixX = std::floor(bitmap.getWidth() * cropX / 2.0f);
@@ -220,12 +229,29 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
-      if (renderMode == BW && val < 3) {
-        drawPixel(screenX, screenY);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+      drawVal(screenX, screenY, val);
+
+      // draw extended pixels
+      /// amount of pixels taken from bitmap and repeated to extend
+      int extendY = 10;  // TODO: fix rounding errors if this is not a divisor of height?
+      // don't draw MSB for darker extended area
+      // if (extend && renderMode != GRAYSCALE_MSB) {
+      if (extend) {
+        if (bmpY < extendY) {
+          for (int ny = 0; ny < extendY; ny++) {
+            // TODO: handle when extendY > y
+            const uint8_t rval = val + random(2);
+            drawVal(screenX, y - (bmpY + (extendY - 3) * (ny)), renderMode == GRAYSCALE_MSB ? rval : val);
+          }
+          //     drawVal(screenX, 2*y - screenY, val);
+        }
+        int endY = y + bitmap.getHeight();
+        // Serial.printf("[%lu] [GFX] Drawing bottom extension: screenY=%d, endY=%d\n", millis(), screenY, endY);
+        if (bmpY >= bitmap.getHeight() - extendY) {
+          for (int ny = 0; ny < extendY; ny++) {
+            drawVal(screenX, screenY + (ny + 1) * (extendY - 2), val);
+          }
+        }
       }
     }
   }
