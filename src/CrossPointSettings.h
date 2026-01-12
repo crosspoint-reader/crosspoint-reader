@@ -61,6 +61,10 @@ class CrossPointSettings {
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
+  // Reading speed (words per minute) for time-left estimate
+  uint16_t readingSpeedWpm = 200;
+  // Toggle to show time remaining in the current chapter
+  uint8_t showTimeLeftInChapter = 0;
   // Duration of the power button press
   uint8_t shortPwrBtn = 0;
   // EPUB reading orientation settings

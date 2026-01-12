@@ -5,6 +5,10 @@
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -17,6 +21,15 @@ namespace {
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 19;
+
+std::string formatMinutes(const float minutes) {
+  if (minutes <= 0.0f) {
+    return "";
+  }
+
+  const int totalMinutes = static_cast<int>(std::floor(minutes));
+  return std::to_string(totalMinutes) + "m";
+}
 }  // namespace
 
 void EpubReaderActivity::taskTrampoline(void* param) {
@@ -426,10 +439,20 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   if (showProgress) {
     // Calculate progress in book
     const float sectionChapterProg = static_cast<float>(section->currentPage) / section->pageCount;
+    std::string timeLeftText;
     const uint8_t bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg);
 
+    if (SETTINGS.showTimeLeftInChapter && SETTINGS.readingSpeedWpm > 0) {
+      const uint32_t wordsLeft = section->getWordsLeftFrom(section->currentPage);
+      if (wordsLeft > 0) {
+        const float minutesLeft =
+            static_cast<float>(wordsLeft) / static_cast<float>(std::max<uint8_t>(1, SETTINGS.readingSpeedWpm));
+        timeLeftText = formatMinutes(minutesLeft);
+      }
+    }
     // Right aligned text for progress counter
-    const std::string progress = std::to_string(section->currentPage + 1) + "/" + std::to_string(section->pageCount) +
+    const std::string progress = (timeLeftText.empty() ? std::string() : timeLeftText + "  ") +
+                                 std::to_string(section->currentPage + 1) + "/" + std::to_string(section->pageCount) +
                                  "  " + std::to_string(bookProgress) + "%";
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progress.c_str());
     renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - orientedMarginRight - progressTextWidth, textY,
