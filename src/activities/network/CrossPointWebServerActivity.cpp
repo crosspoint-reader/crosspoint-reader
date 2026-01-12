@@ -283,8 +283,30 @@ void CrossPointWebServerActivity::loop() {
       dnsServer->processNextRequest();
     }
 
-    // Handle web server requests - call handleClient multiple times per loop
-    // to improve responsiveness and upload throughput
+    // STA mode: Monitor WiFi connection health
+    if (!isApMode && webServer && webServer->isRunning()) {
+      static unsigned long lastWifiCheck = 0;
+      if (millis() - lastWifiCheck > 2000) {  // Check every 2 seconds
+        lastWifiCheck = millis();
+        const wl_status_t wifiStatus = WiFi.status();
+        if (wifiStatus != WL_CONNECTED) {
+          Serial.printf("[%lu] [WEBACT] WiFi disconnected! Status: %d\n", millis(), wifiStatus);
+          // Show error and exit gracefully
+          state = WebServerActivityState::SHUTTING_DOWN;
+          updateRequired = true;
+          return;
+        }
+        // Log weak signal warnings
+        const int rssi = WiFi.RSSI();
+        if (rssi < -75) {
+          Serial.printf("[%lu] [WEBACT] Warning: Weak WiFi signal: %d dBm\n", millis(), rssi);
+        }
+      }
+    }
+
+    // Handle web server requests using time-based processing
+    // Process requests for up to TIME_BUDGET_MS to maximize throughput
+    // while still allowing other loop activities to run
     if (webServer && webServer->isRunning()) {
       const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
 
@@ -294,12 +316,20 @@ void CrossPointWebServerActivity::loop() {
                       timeSinceLastHandleClient);
       }
 
-      // Call handleClient multiple times to process pending requests faster
-      // This is critical for upload performance - HTTP file uploads send data
-      // in chunks and each handleClient() call processes incoming data
-      constexpr int HANDLE_CLIENT_ITERATIONS = 10;
-      for (int i = 0; i < HANDLE_CLIENT_ITERATIONS && webServer->isRunning(); i++) {
+      // Time-based processing: handle requests for up to 50ms per loop iteration
+      // This is more efficient than a fixed iteration count because:
+      // 1. Processes more data when available (during uploads)
+      // 2. Returns quickly when idle (no wasted spinning)
+      // 3. yield() between calls lets WiFi stack receive more data
+      constexpr unsigned long TIME_BUDGET_MS = 50;
+      const unsigned long handleStart = millis();
+
+      while (webServer->isRunning() && (millis() - handleStart) < TIME_BUDGET_MS) {
         webServer->handleClient();
+        // Yield between calls to let WiFi stack process incoming packets
+        // This is critical for throughput - without it, TCP flow control
+        // throttles the sender because our receive buffer fills up
+        yield();
       }
       lastHandleClientTime = millis();
     }

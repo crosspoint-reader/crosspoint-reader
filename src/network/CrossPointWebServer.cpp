@@ -4,6 +4,7 @@
 #include <FsHelpers.h>
 #include <SDCardManager.h>
 #include <WiFi.h>
+#include <esp_task_wdt.h>
 
 #include <algorithm>
 
@@ -229,7 +230,8 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     }
 
     file.close();
-    yield();  // Yield to allow WiFi and other tasks to process during long scans
+    yield();               // Yield to allow WiFi and other tasks to process during long scans
+    esp_task_wdt_reset();  // Reset watchdog to prevent timeout on large directories
     file = root.openNextFile();
   }
   root.close();
@@ -301,9 +303,36 @@ static size_t uploadSize = 0;
 static bool uploadSuccess = false;
 static String uploadError = "";
 
+// Upload write buffer - batches small writes into larger SD card operations
+// This improves throughput by reducing the number of SD write syscalls
+constexpr size_t UPLOAD_BUFFER_SIZE = 8192;  // 8KB buffer
+static uint8_t uploadBuffer[UPLOAD_BUFFER_SIZE];
+static size_t uploadBufferPos = 0;
+
+// Diagnostic counters for upload performance analysis
+static unsigned long uploadStartTime = 0;
+static unsigned long totalWriteTime = 0;
+static size_t writeCount = 0;
+
+static bool flushUploadBuffer() {
+  if (uploadBufferPos > 0 && uploadFile) {
+    const unsigned long writeStart = millis();
+    const size_t written = uploadFile.write(uploadBuffer, uploadBufferPos);
+    totalWriteTime += millis() - writeStart;
+    writeCount++;
+
+    if (written != uploadBufferPos) {
+      Serial.printf("[%lu] [WEB] [UPLOAD] Buffer flush failed: expected %d, wrote %d\n", millis(), uploadBufferPos,
+                    written);
+      uploadBufferPos = 0;
+      return false;
+    }
+    uploadBufferPos = 0;
+  }
+  return true;
+}
+
 void CrossPointWebServer::handleUpload() const {
-  static unsigned long lastWriteTime = 0;
-  static unsigned long uploadStartTime = 0;
   static size_t lastLoggedSize = 0;
 
   // Safety check: ensure server is still valid
@@ -320,8 +349,10 @@ void CrossPointWebServer::handleUpload() const {
     uploadSuccess = false;
     uploadError = "";
     uploadStartTime = millis();
-    lastWriteTime = millis();
     lastLoggedSize = 0;
+    uploadBufferPos = 0;
+    totalWriteTime = 0;
+    writeCount = 0;
 
     // Get upload path from query parameter (defaults to root if not specified)
     // Note: We use query parameter instead of form data because multipart form
@@ -364,44 +395,62 @@ void CrossPointWebServer::handleUpload() const {
     Serial.printf("[%lu] [WEB] [UPLOAD] File created successfully: %s\n", millis(), filePath.c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (uploadFile && uploadError.isEmpty()) {
-      const unsigned long writeStartTime = millis();
-      const size_t written = uploadFile.write(upload.buf, upload.currentSize);
-      const unsigned long writeEndTime = millis();
-      const unsigned long writeDuration = writeEndTime - writeStartTime;
+      // Buffer incoming data and flush when buffer is full
+      // This reduces SD card write operations and improves throughput
+      const uint8_t* data = upload.buf;
+      size_t remaining = upload.currentSize;
 
-      if (written != upload.currentSize) {
-        uploadError = "Failed to write to SD card - disk may be full";
-        uploadFile.close();
-        Serial.printf("[%lu] [WEB] [UPLOAD] WRITE ERROR - expected %d, wrote %d\n", millis(), upload.currentSize,
-                      written);
-      } else {
-        uploadSize += written;
+      while (remaining > 0) {
+        const size_t space = UPLOAD_BUFFER_SIZE - uploadBufferPos;
+        const size_t toCopy = (remaining < space) ? remaining : space;
 
-        // Log progress every 50KB or if write took >100ms
-        if (uploadSize - lastLoggedSize >= 51200 || writeDuration > 100) {
-          const unsigned long timeSinceStart = millis() - uploadStartTime;
-          const unsigned long timeSinceLastWrite = millis() - lastWriteTime;
-          const float kbps = (uploadSize / 1024.0) / (timeSinceStart / 1000.0);
+        memcpy(uploadBuffer + uploadBufferPos, data, toCopy);
+        uploadBufferPos += toCopy;
+        data += toCopy;
+        remaining -= toCopy;
 
-          Serial.printf(
-              "[%lu] [WEB] [UPLOAD] Progress: %d bytes (%.1f KB), %.1f KB/s, write took %lu ms, gap since last: %lu "
-              "ms\n",
-              millis(), uploadSize, uploadSize / 1024.0, kbps, writeDuration, timeSinceLastWrite);
-          lastLoggedSize = uploadSize;
+        // Flush buffer when full
+        if (uploadBufferPos >= UPLOAD_BUFFER_SIZE) {
+          if (!flushUploadBuffer()) {
+            uploadError = "Failed to write to SD card - disk may be full";
+            uploadFile.close();
+            return;
+          }
         }
-        lastWriteTime = millis();
+      }
+
+      uploadSize += upload.currentSize;
+
+      // Log progress every 100KB
+      if (uploadSize - lastLoggedSize >= 102400) {
+        const unsigned long elapsed = millis() - uploadStartTime;
+        const float kbps = (elapsed > 0) ? (uploadSize / 1024.0) / (elapsed / 1000.0) : 0;
+        Serial.printf("[%lu] [WEB] [UPLOAD] %d bytes (%.1f KB), %.1f KB/s, %d writes\n", millis(), uploadSize,
+                      uploadSize / 1024.0, kbps, writeCount);
+        lastLoggedSize = uploadSize;
       }
     }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (uploadFile) {
+      // Flush any remaining buffered data
+      if (!flushUploadBuffer()) {
+        uploadError = "Failed to write final data to SD card";
+      }
       uploadFile.close();
 
       if (uploadError.isEmpty()) {
         uploadSuccess = true;
-        Serial.printf("[%lu] [WEB] Upload complete: %s (%d bytes)\n", millis(), uploadFileName.c_str(), uploadSize);
+        const unsigned long elapsed = millis() - uploadStartTime;
+        const float avgKbps = (elapsed > 0) ? (uploadSize / 1024.0) / (elapsed / 1000.0) : 0;
+        const float writePercent = (elapsed > 0) ? (totalWriteTime * 100.0 / elapsed) : 0;
+        Serial.printf("[%lu] [WEB] [UPLOAD] Complete: %s (%d bytes in %lu ms, avg %.1f KB/s)\n", millis(),
+                      uploadFileName.c_str(), uploadSize, elapsed, avgKbps);
+        Serial.printf("[%lu] [WEB] [UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)\n", millis(),
+                      writeCount, totalWriteTime, writePercent);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    uploadBufferPos = 0;  // Discard buffered data
     if (uploadFile) {
       uploadFile.close();
       // Try to delete the incomplete file
