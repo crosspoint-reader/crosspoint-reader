@@ -167,7 +167,10 @@ bool Epub::parseTocNavFile() const {
   }
   const auto navSize = tempNavFile.size();
 
-  TocNavParser navParser(contentBasePath, navSize, bookMetadataCache.get());
+  // Note: We can't use `contentBasePath` here as the nav file may be in a different folder to the content.opf
+  // and the HTMLX nav file will have hrefs relative to itself
+  const std::string navContentBasePath = tocNavItem.substr(0, tocNavItem.find_last_of('/') + 1);
+  TocNavParser navParser(navContentBasePath, navSize, bookMetadataCache.get());
 
   if (!navParser.setup()) {
     Serial.printf("[%lu] [EBP] Could not setup toc nav parser\n", millis());
