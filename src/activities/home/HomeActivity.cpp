@@ -7,6 +7,7 @@
 #include <cstring>
 #include <vector>
 
+#include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -332,8 +333,13 @@ void HomeActivity::render() const {
   const auto labels = mappedInput.mapLabels("", "Confirm", "Up", "Down");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  const auto batteryX = pageWidth - 25 - renderer.getTextWidth(SMALL_FONT_ID, "100 %");
-  ScreenComponents::drawBattery(renderer, batteryX, 10);
+  const bool showBatteryPercentage =
+      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+  // get percentage so we can align text properly
+  const uint16_t percentage = battery.readPercentage();
+  const auto percentageText = showBatteryPercentage ? std::to_string(percentage) + "%" : "";
+  const auto batteryX = pageWidth - 25 - renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+  ScreenComponents::drawBattery(renderer, batteryX, 10, showBatteryPercentage);
 
   renderer.displayBuffer();
 }

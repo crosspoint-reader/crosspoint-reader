@@ -7,7 +7,7 @@ class GfxRenderer;
 
 class ScreenComponents {
  public:
-  static void drawBattery(const GfxRenderer& renderer, int left, int top);
+  static void drawBattery(const GfxRenderer& renderer, int left, int top, bool showPercentage = true);
 
   /**
    * Draw a progress bar with percentage text.

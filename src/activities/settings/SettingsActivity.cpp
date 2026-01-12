@@ -13,12 +13,13 @@
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
 namespace {
-constexpr int displaySettingsCount = 4;
+constexpr int displaySettingsCount = 5;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
     SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}),
+    SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"})};
 
@@ -41,7 +42,7 @@ const SettingInfo controlsSettings[controlsSettingsCount] = {
                       {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght"}),
     SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
                       {"Prev, Next", "Next, Prev"}),
-    SettingInfo::Toggle("Short Power Button Click", &CrossPointSettings::shortPwrBtn)};
+    SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
 
 constexpr int systemSettingsCount = 3;
 const SettingInfo systemSettings[systemSettingsCount] = {
