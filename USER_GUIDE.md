@@ -67,6 +67,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Light" - The same default sleep screen, on a white background
   - "Custom" - Custom images from the SD card, see [Sleep Screen](#36-sleep-screen) below for more information
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
+  - "Blank" - A blank screen
 - **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
