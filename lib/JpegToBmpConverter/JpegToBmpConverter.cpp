@@ -360,7 +360,7 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
             if (atkinsonDitherer) {
               twoBit = atkinsonDitherer->processPixel(gray, x);
             } else if (fsDitherer) {
-              twoBit = fsDitherer->processPixel(gray, x, fsDitherer->isReverseRow());
+              twoBit = fsDitherer->processPixel(gray, x);
             } else {
               twoBit = quantize(gray, x, y);
             }
@@ -423,7 +423,7 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
               if (atkinsonDitherer) {
                 twoBit = atkinsonDitherer->processPixel(gray, x);
               } else if (fsDitherer) {
-                twoBit = fsDitherer->processPixel(gray, x, fsDitherer->isReverseRow());
+                twoBit = fsDitherer->processPixel(gray, x);
               } else {
                 twoBit = quantize(gray, x, currentOutY);
               }

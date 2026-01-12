@@ -134,7 +134,7 @@ class FloydSteinbergDitherer {
 
   // Process a single pixel and return quantized 2-bit value
   // x is the logical x position (0 to width-1), direction handled internally
-  uint8_t processPixel(int gray, int x, bool reverseDirection) {
+  uint8_t processPixel(int gray, int x) {
     // Add accumulated error to this pixel
     int adjusted = gray + errorCurRow[x + 1];
 
@@ -179,7 +179,7 @@ class FloydSteinbergDitherer {
     int error = adjusted - quantizedValue;
 
     // Distribute error to neighbors (serpentine: direction-aware)
-    if (!reverseDirection) {
+    if (!isReverseRow()) {
       // Left to right: standard distribution
       // Right: 7/16
       errorCurRow[x + 2] += (error * 7) >> 4;

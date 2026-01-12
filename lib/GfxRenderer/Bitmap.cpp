@@ -14,6 +14,9 @@ constexpr bool USE_ATKINSON = true;  // Use Atkinson dithering instead of Floyd-
 Bitmap::~Bitmap() {
   delete[] errorCurRow;
   delete[] errorNextRow;
+
+  delete atkinsonDitherer;
+  delete fsDitherer;
 }
 
 uint16_t Bitmap::readLE16(FsFile& f) {
@@ -168,7 +171,7 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
     if (atkinsonDitherer) {
       color = atkinsonDitherer->processPixel(adjustPixel(lum), currentX);
     } else if (fsDitherer) {
-      color = fsDitherer->processPixel(adjustPixel(lum), currentX, fsDitherer->isReverseRow());
+      color = fsDitherer->processPixel(adjustPixel(lum), currentX);
     } else {
       if (bpp > 2) {
         // Simple quantization or noise dithering
