@@ -305,9 +305,7 @@ void CrossPointWebServerActivity::loop() {
       }
     }
 
-    // Handle web server requests using time-based processing
-    // Process requests for up to TIME_BUDGET_MS to maximize throughput
-    // while still allowing other loop activities to run
+    // Handle web server requests - maximize throughput with watchdog safety
     if (webServer && webServer->isRunning()) {
       const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
 
@@ -317,17 +315,21 @@ void CrossPointWebServerActivity::loop() {
                       timeSinceLastHandleClient);
       }
 
-      // Process HTTP requests with watchdog safety
-      // Use iteration-based approach with watchdog resets to prevent crashes
-      // Higher iteration count improves throughput during uploads
-      constexpr int MAX_ITERATIONS = 200;
+      // Reset watchdog BEFORE processing - HTTP header parsing can be slow
+      esp_task_wdt_reset();
+
+      // Process HTTP requests in tight loop for maximum throughput
+      // More iterations = more data processed per main loop cycle
+      constexpr int MAX_ITERATIONS = 500;
       for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
         webServer->handleClient();
-        // Yield every iteration to let WiFi stack receive more packets
-        yield();
-        // Reset watchdog every 50 iterations to prevent timeout during uploads
-        if ((i & 0x3F) == 0) {  // Every 64 iterations
+        // Reset watchdog every 32 iterations, yield every 64
+        // Tight loop with minimal yielding for maximum speed
+        if ((i & 0x1F) == 0x1F) {
           esp_task_wdt_reset();
+        }
+        if ((i & 0x3F) == 0x3F) {
+          yield();
         }
       }
       lastHandleClientTime = millis();
