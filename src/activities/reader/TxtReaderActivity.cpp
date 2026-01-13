@@ -110,6 +110,8 @@ void TxtReaderActivity::loop() {
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                            (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                             mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
   if (!prevReleased && !nextReleased) {
@@ -227,9 +229,9 @@ void TxtReaderActivity::buildPageIndex() {
       pageOffsets.push_back(offset);
     }
 
-    // Update progress bar every 2%
+    // Update progress bar every 10% (matching EpubReaderActivity logic)
     int progressPercent = (offset * 100) / fileSize;
-    if (progressPercent != lastProgressPercent && progressPercent % 2 == 0) {
+    if (lastProgressPercent / 10 != progressPercent / 10) {
       lastProgressPercent = progressPercent;
 
       // Fill progress bar
@@ -272,7 +274,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
   // Parse lines from buffer
   size_t pos = 0;
-  size_t bytesConsumed = 0;
 
   while (pos < chunkSize && static_cast<int>(outLines.size()) < linesPerPage) {
     // Find end of line
@@ -289,13 +290,18 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
       break;
     }
 
-    // Extract line (without newline)
-    std::string line(reinterpret_cast<char*>(buffer + pos), lineEnd - pos);
+    // Calculate the actual length of line content in the buffer (excluding newline)
+    size_t lineContentLen = lineEnd - pos;
 
-    // Remove carriage return if present
-    if (!line.empty() && line.back() == '\r') {
-      line.pop_back();
-    }
+    // Check for carriage return
+    bool hasCR = (lineContentLen > 0 && buffer[pos + lineContentLen - 1] == '\r');
+    size_t displayLen = hasCR ? lineContentLen - 1 : lineContentLen;
+
+    // Extract line content for display (without CR/LF)
+    std::string line(reinterpret_cast<char*>(buffer + pos), displayLen);
+
+    // Track position within this source line (in bytes from pos)
+    size_t lineBytePos = 0;
 
     // Word wrap if needed
     while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
@@ -303,6 +309,8 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
       if (lineWidth <= viewportWidth) {
         outLines.push_back(line);
+        lineBytePos = displayLen;  // Consumed entire display content
+        line.clear();
         break;
       }
 
@@ -330,30 +338,39 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
       outLines.push_back(line.substr(0, breakPos));
 
       // Skip space at break point
+      size_t skipChars = breakPos;
       if (breakPos < line.length() && line[breakPos] == ' ') {
-        breakPos++;
+        skipChars++;
       }
-      line = line.substr(breakPos);
+      lineBytePos += skipChars;
+      line = line.substr(skipChars);
     }
 
-    // If we still have remaining wrapped text but no room, don't consume this source line
-    if (!line.empty() && static_cast<int>(outLines.size()) >= linesPerPage) {
+    // Determine how much of the source buffer we consumed
+    if (line.empty()) {
+      // Fully consumed this source line, move past the newline
+      pos = lineEnd + 1;
+    } else {
+      // Partially consumed - page is full mid-line
+      // Move pos to where we stopped in the line (NOT past the line)
+      pos = pos + lineBytePos;
       break;
     }
-
-    // Move past the newline
-    bytesConsumed = lineEnd + 1;
-    pos = lineEnd + 1;
   }
 
-  // Handle case where we filled the page mid-line (word wrap)
-  if (bytesConsumed == 0 && !outLines.empty()) {
-    // We processed some wrapped content, estimate bytes consumed
-    // This is approximate - we need to track actual byte positions
-    bytesConsumed = pos;
+  // Ensure we make progress even if calculations go wrong
+  if (pos == 0 && !outLines.empty()) {
+    // Fallback: at minimum, consume something to avoid infinite loop
+    pos = 1;
   }
 
-  nextOffset = offset + (bytesConsumed > 0 ? bytesConsumed : chunkSize);
+  nextOffset = offset + pos;
+
+  // Make sure we don't go past the file
+  if (nextOffset > fileSize) {
+    nextOffset = fileSize;
+  }
+
   free(buffer);
 
   return !outLines.empty();
@@ -455,11 +472,11 @@ void TxtReaderActivity::renderPage() {
     pagesUntilFullRefresh--;
   }
 
-  // Save BW buffer for restoration after grayscale pass
-  renderer.storeBwBuffer();
-
   // Grayscale rendering pass (for anti-aliased fonts)
   if (SETTINGS.textAntiAliasing) {
+    // Save BW buffer for restoration after grayscale pass
+    renderer.storeBwBuffer();
+
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderLines();
@@ -472,10 +489,10 @@ void TxtReaderActivity::renderPage() {
 
     renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
-  }
 
-  // Restore BW buffer
-  renderer.restoreBwBuffer();
+    // Restore BW buffer
+    renderer.restoreBwBuffer();
+  }
 }
 
 void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
