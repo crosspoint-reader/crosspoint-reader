@@ -12,9 +12,9 @@
 CrossPointSettings CrossPointSettings::instance;
 
 namespace {
-constexpr uint8_t SETTINGS_FILE_VERSION = 1;
+constexpr uint8_t SETTINGS_FILE_VERSION = 2;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 17;
+constexpr uint8_t SETTINGS_COUNT = 19;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -47,6 +47,8 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writeString(outputFile, std::string(opdsServerUrl));
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, hideBatteryPercentage);
+  serialization::writeString(outputFile, std::string(calibreUsername));
+  serialization::writeString(outputFile, std::string(calibrePassword));
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -112,6 +114,20 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, textAntiAliasing);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, hideBatteryPercentage);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string usernameStr;
+      serialization::readString(inputFile, usernameStr);
+      strncpy(calibreUsername, usernameStr.c_str(), sizeof(calibreUsername) - 1);
+      calibreUsername[sizeof(calibreUsername) - 1] = '\0';
+    }
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string passwordStr;
+      serialization::readString(inputFile, passwordStr);
+      strncpy(calibrePassword, passwordStr.c_str(), sizeof(calibrePassword) - 1);
+      calibrePassword[sizeof(calibrePassword) - 1] = '\0';
+    }
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

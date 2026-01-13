@@ -13,8 +13,8 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 2;
-const char* menuNames[MENU_ITEMS] = {"Calibre Web URL", "Connect as Wireless Device"};
+constexpr int MENU_ITEMS = 4;
+const char* menuNames[MENU_ITEMS] = {"Calibre Web URL", "Username", "Password", "Connect as Wireless Device"};
 }  // namespace
 
 void CalibreSettingsActivity::taskTrampoline(void* param) {
@@ -98,6 +98,42 @@ void CalibreSettingsActivity::handleSelection() {
           updateRequired = true;
         }));
   } else if (selectedIndex == 1) {
+    // Username
+    exitActivity();
+    enterNewActivity(new KeyboardEntryActivity(
+        renderer, mappedInput, "Username", SETTINGS.calibreUsername, 10,
+        63,     // maxLength
+        false,  // not password
+        [this](const std::string& username) {
+          strncpy(SETTINGS.calibreUsername, username.c_str(), sizeof(SETTINGS.calibreUsername) - 1);
+          SETTINGS.calibreUsername[sizeof(SETTINGS.calibreUsername) - 1] = '\0';
+          SETTINGS.saveToFile();
+          exitActivity();
+          updateRequired = true;
+        },
+        [this]() {
+          exitActivity();
+          updateRequired = true;
+        }));
+  } else if (selectedIndex == 2) {
+    // Password
+    exitActivity();
+    enterNewActivity(new KeyboardEntryActivity(
+        renderer, mappedInput, "Password", SETTINGS.calibrePassword, 10,
+        63,    // maxLength
+        true,  // is password
+        [this](const std::string& password) {
+          strncpy(SETTINGS.calibrePassword, password.c_str(), sizeof(SETTINGS.calibrePassword) - 1);
+          SETTINGS.calibrePassword[sizeof(SETTINGS.calibrePassword) - 1] = '\0';
+          SETTINGS.saveToFile();
+          exitActivity();
+          updateRequired = true;
+        },
+        [this]() {
+          exitActivity();
+          updateRequired = true;
+        }));
+  } else if (selectedIndex == 3) {
     // Wireless Device - launch the activity (handles WiFi connection internally)
     exitActivity();
     if (WiFi.status() != WL_CONNECTED) {
@@ -153,9 +189,17 @@ void CalibreSettingsActivity::render() {
 
     renderer.drawText(UI_10_FONT_ID, 20, settingY, menuNames[i], !isSelected);
 
-    // Draw status for URL setting
+    // Draw status for URL, username, and password settings
     if (i == 0) {
       const char* status = (strlen(SETTINGS.opdsServerUrl) > 0) ? "[Set]" : "[Not Set]";
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
+      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
+    } else if (i == 1) {
+      const char* status = (strlen(SETTINGS.calibreUsername) > 0) ? "[Set]" : "[Not Set]";
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
+      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
+    } else if (i == 2) {
+      const char* status = (strlen(SETTINGS.calibrePassword) > 0) ? "[Set]" : "[Not Set]";
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
       renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
     }

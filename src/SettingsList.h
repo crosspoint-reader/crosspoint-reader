@@ -41,6 +41,10 @@ inline std::vector<SettingInfo> getSettingsList() {
                         {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
       SettingInfo::String("opdsServerUrl", "Calibre Web URL", SETTINGS.opdsServerUrl,
                           sizeof(SETTINGS.opdsServerUrl) - 1),
+      SettingInfo::String("calibreUsername", "Calibre Username", SETTINGS.calibreUsername,
+                          sizeof(SETTINGS.calibreUsername) - 1),
+      SettingInfo::String("calibrePassword", "Calibre Password", SETTINGS.calibrePassword,
+                          sizeof(SETTINGS.calibrePassword) - 1),
       SettingInfo::Action("Calibre Settings"),
       SettingInfo::Action("Check for updates"),
   };

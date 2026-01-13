@@ -20,4 +20,17 @@ std::string extractHost(const std::string& url);
  */
 std::string buildUrl(const std::string& serverUrl, const std::string& path);
 
+/**
+ * URL encode a string (percent encoding for special characters)
+ */
+std::string urlEncode(const std::string& value);
+
+/**
+ * Build URL with basic authentication embedded.
+ * If username and password are provided, adds them to the URL.
+ * Example: https://username:password@example.com/path
+ */
+std::string buildUrlWithAuth(const std::string& serverUrl, const std::string& path, 
+                              const std::string& username, const std::string& password);
+
 }  // namespace UrlUtils
