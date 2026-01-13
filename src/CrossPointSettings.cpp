@@ -46,6 +46,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, sleepScreenCoverMode);
   serialization::writeString(outputFile, std::string(opdsServerUrl));
   serialization::writePod(outputFile, textAntiAliasing);
+  serialization::writePod(outputFile, hideBatteryPercentage);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -109,6 +110,8 @@ bool CrossPointSettings::loadFromFile() {
       opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
     }
     serialization::readPod(inputFile, textAntiAliasing);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, hideBatteryPercentage);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

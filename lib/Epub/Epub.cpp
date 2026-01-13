@@ -167,7 +167,10 @@ bool Epub::parseTocNavFile() const {
   }
   const auto navSize = tempNavFile.size();
 
-  TocNavParser navParser(contentBasePath, navSize, bookMetadataCache.get());
+  // Note: We can't use `contentBasePath` here as the nav file may be in a different folder to the content.opf
+  // and the HTMLX nav file will have hrefs relative to itself
+  const std::string navContentBasePath = tocNavItem.substr(0, tocNavItem.find_last_of('/') + 1);
+  TocNavParser navParser(navContentBasePath, navSize, bookMetadataCache.get());
 
   if (!navParser.setup()) {
     Serial.printf("[%lu] [EBP] Could not setup toc nav parser\n", millis());
@@ -345,11 +348,14 @@ const std::string& Epub::getAuthor() const {
   return bookMetadataCache->coreMetadata.author;
 }
 
-std::string Epub::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
+std::string Epub::getCoverBmpPath(bool cropped) const {
+  const auto coverFileName = "cover" + cropped ? "_crop" : "";
+  return cachePath + "/" + coverFileName + ".bmp";
+}
 
-bool Epub::generateCoverBmp() const {
+bool Epub::generateCoverBmp(bool cropped) const {
   // Already generated, return true
-  if (SdMan.exists(getCoverBmpPath().c_str())) {
+  if (SdMan.exists(getCoverBmpPath(cropped).c_str())) {
     return true;
   }
 
@@ -381,7 +387,7 @@ bool Epub::generateCoverBmp() const {
     }
 
     FsFile coverBmp;
-    if (!SdMan.openFileForWrite("EBP", getCoverBmpPath(), coverBmp)) {
+    if (!SdMan.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
       coverJpg.close();
       return false;
     }
@@ -392,7 +398,7 @@ bool Epub::generateCoverBmp() const {
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate BMP from JPG cover image\n", millis());
-      SdMan.remove(getCoverBmpPath().c_str());
+      SdMan.remove(getCoverBmpPath(cropped).c_str());
     }
     Serial.printf("[%lu] [EBP] Generated BMP from JPG cover image, success: %s\n", millis(), success ? "yes" : "no");
     return success;

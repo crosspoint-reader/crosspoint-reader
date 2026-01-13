@@ -2,6 +2,10 @@
 
 #include <SdFat.h>
 
+#include <cstdint>
+
+#include "BitmapHelpers.h"
+
 enum class BmpReaderError : uint8_t {
   Ok = 0,
   FileInvalid,
@@ -28,7 +32,7 @@ class Bitmap {
  public:
   static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(FsFile& file) : file(file) {}
+  explicit Bitmap(FsFile& file, bool dithering = false) : file(file), dithering(dithering) {}
   ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
@@ -46,6 +50,7 @@ class Bitmap {
   static uint32_t readLE32(FsFile& f);
 
   FsFile& file;
+  bool dithering = false;
   int width = 0;
   int height = 0;
   bool topDown = false;
@@ -58,4 +63,7 @@ class Bitmap {
   mutable int16_t* errorCurRow = nullptr;
   mutable int16_t* errorNextRow = nullptr;
   mutable int prevRowY = -1;  // Track row progression for error propagation
+
+  mutable AtkinsonDitherer* atkinsonDitherer = nullptr;
+  mutable FloydSteinbergDitherer* fsDitherer = nullptr;
 };

@@ -167,7 +167,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       if (strcmp(atts[i], "id") == 0) {
         itemId = atts[i + 1];
       } else if (strcmp(atts[i], "href") == 0) {
-        href = self->baseContentPath + atts[i + 1];
+        href = FsHelpers::normalisePath(self->baseContentPath + atts[i + 1]);
       } else if (strcmp(atts[i], "media-type") == 0) {
         mediaType = atts[i + 1];
       } else if (strcmp(atts[i], "properties") == 0) {
@@ -243,7 +243,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
           break;
         }
       } else if (strcmp(atts[i], "href") == 0) {
-        textHref = self->baseContentPath + atts[i + 1];
+        textHref = FsHelpers::normalisePath(self->baseContentPath + atts[i + 1]);
       }
     }
     if ((type == "text" || (type == "start" && !self->textReferenceHref.empty())) && (textHref.length() > 0)) {
