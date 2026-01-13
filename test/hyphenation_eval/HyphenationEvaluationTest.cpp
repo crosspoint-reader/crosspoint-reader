@@ -1,3 +1,5 @@
+#include <Utf8.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -8,11 +10,9 @@
 #include <string>
 #include <vector>
 
-#include <Utf8.h>
-
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
-#include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
+#include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
 struct TestCase {
   std::string word;

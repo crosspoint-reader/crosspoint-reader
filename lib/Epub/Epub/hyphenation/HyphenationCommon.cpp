@@ -14,11 +14,11 @@ uint32_t toLowerLatinImpl(const uint32_t cp) {
   }
 
   switch (cp) {
-    case 0x0152:  // Œ
+    case 0x0152:      // Œ
       return 0x0153;  // œ
-    case 0x0178:  // Ÿ
+    case 0x0178:      // Ÿ
       return 0x00FF;  // ÿ
-    case 0x1E9E:  // ẞ
+    case 0x1E9E:      // ẞ
       return 0x00DF;  // ß
     default:
       return cp;
