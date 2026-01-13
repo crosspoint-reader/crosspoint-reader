@@ -21,6 +21,7 @@ struct SettingInfo {
   uint8_t CrossPointSettings::* valuePtr;  // Pointer to member in CrossPointSettings (for TOGGLE/ENUM/VALUE)
   char* stringPtr;                         // Pointer to char array (for STRING type)
   size_t stringMaxLen;                     // Max length for STRING type
+  bool hideFromDeviceUI;                   // Hide from device settings menu (but show in web API)
   std::vector<std::string> enumValues;
 
   struct ValueRange {
@@ -33,25 +34,25 @@ struct SettingInfo {
 
   // Static constructors
   static SettingInfo Toggle(const char* key, const char* name, uint8_t CrossPointSettings::* ptr) {
-    return {key, name, SettingType::TOGGLE, ptr, nullptr, 0, {}, {}};
+    return {key, name, SettingType::TOGGLE, ptr, nullptr, 0, false, {}, {}};
   }
 
   static SettingInfo Enum(const char* key, const char* name, uint8_t CrossPointSettings::* ptr,
                           std::vector<std::string> values) {
-    return {key, name, SettingType::ENUM, ptr, nullptr, 0, std::move(values), {}};
+    return {key, name, SettingType::ENUM, ptr, nullptr, 0, false, std::move(values), {}};
   }
 
   static SettingInfo Action(const char* name) {
-    return {nullptr, name, SettingType::ACTION, nullptr, nullptr, 0, {}, {}};
+    return {nullptr, name, SettingType::ACTION, nullptr, nullptr, 0, false, {}, {}};
   }
 
   static SettingInfo Value(const char* key, const char* name, uint8_t CrossPointSettings::* ptr,
                            const ValueRange valueRange) {
-    return {key, name, SettingType::VALUE, ptr, nullptr, 0, {}, valueRange};
+    return {key, name, SettingType::VALUE, ptr, nullptr, 0, false, {}, valueRange};
   }
 
-  static SettingInfo String(const char* key, const char* name, char* ptr, size_t maxLen) {
-    return {key, name, SettingType::STRING, nullptr, ptr, maxLen, {}, {}};
+  static SettingInfo String(const char* key, const char* name, char* ptr, size_t maxLen, bool hideFromDeviceUI = false) {
+    return {key, name, SettingType::STRING, nullptr, ptr, maxLen, hideFromDeviceUI, {}, {}};
   }
 };
 

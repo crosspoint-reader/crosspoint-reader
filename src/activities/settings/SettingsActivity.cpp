@@ -15,8 +15,16 @@
 // Get settings list from shared source (lazily initialized to avoid static init issues)
 namespace {
 const std::vector<SettingInfo>& getSettings() {
-  static const std::vector<SettingInfo> settingsList = getSettingsList();
-  return settingsList;
+  static std::vector<SettingInfo> filteredSettings = []() {
+    std::vector<SettingInfo> filtered;
+    for (const auto& setting : getSettingsList()) {
+      if (!setting.hideFromDeviceUI) {
+        filtered.push_back(setting);
+      }
+    }
+    return filtered;
+  }();
+  return filteredSettings;
 }
 }  // namespace
 
