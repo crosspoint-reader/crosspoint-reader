@@ -71,13 +71,20 @@ int MyLibraryActivity::getCurrentPage() const {
 }
 
 void MyLibraryActivity::loadRecentBooks() {
+  constexpr size_t MAX_RECENT_BOOKS = 20;
+
   bookTitles.clear();
   bookPaths.clear();
   const auto &books = RECENT_BOOKS.getBooks();
-  bookTitles.reserve(books.size());
-  bookPaths.reserve(books.size());
+  bookTitles.reserve(std::min(books.size(), MAX_RECENT_BOOKS));
+  bookPaths.reserve(std::min(books.size(), MAX_RECENT_BOOKS));
 
   for (const auto &path : books) {
+    // Limit to maximum number of recent books
+    if (bookTitles.size() >= MAX_RECENT_BOOKS) {
+      break;
+    }
+
     // Skip if file no longer exists
     if (!SdMan.exists(path.c_str())) {
       continue;
