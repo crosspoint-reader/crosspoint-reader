@@ -4,12 +4,25 @@
 
 namespace {
 
-// Convert Latin uppercase letters (A-Z) to lowercase (a-z)
+// Convert Latin uppercase letters (ASCII plus Latin-1 supplement) to lowercase
 uint32_t toLowerLatinImpl(const uint32_t cp) {
   if (cp >= 'A' && cp <= 'Z') {
     return cp - 'A' + 'a';
   }
-  return cp;
+  if ((cp >= 0x00C0 && cp <= 0x00D6) || (cp >= 0x00D8 && cp <= 0x00DE)) {
+    return cp + 0x20;
+  }
+
+  switch (cp) {
+    case 0x0152:  // Œ
+      return 0x0153;  // œ
+    case 0x0178:  // Ÿ
+      return 0x00FF;  // ÿ
+    case 0x1E9E:  // ẞ
+      return 0x00DF;  // ß
+    default:
+      return cp;
+  }
 }
 
 // Convert Cyrillic uppercase letters to lowercase
@@ -31,7 +44,26 @@ uint32_t toLowerLatin(const uint32_t cp) { return toLowerLatinImpl(cp); }
 
 uint32_t toLowerCyrillic(const uint32_t cp) { return toLowerCyrillicImpl(cp); }
 
-bool isLatinLetter(const uint32_t cp) { return (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z'); }
+bool isLatinLetter(const uint32_t cp) {
+  if ((cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z')) {
+    return true;
+  }
+
+  if (((cp >= 0x00C0 && cp <= 0x00D6) || (cp >= 0x00D8 && cp <= 0x00F6) || (cp >= 0x00F8 && cp <= 0x00FF)) &&
+      cp != 0x00D7 && cp != 0x00F7) {
+    return true;
+  }
+
+  switch (cp) {
+    case 0x0152:  // Œ
+    case 0x0153:  // œ
+    case 0x0178:  // Ÿ
+    case 0x1E9E:  // ẞ
+      return true;
+    default:
+      return false;
+  }
+}
 
 bool isCyrillicLetter(const uint32_t cp) { return (cp >= 0x0400 && cp <= 0x052F); }
 
