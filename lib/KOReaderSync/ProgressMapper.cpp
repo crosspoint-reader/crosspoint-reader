@@ -14,9 +14,8 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
     intraSpineProgress = static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages);
   }
 
-  // Calculate overall book progress (0-100 from Epub, convert to 0.0-1.0)
-  const uint8_t progressPercent = epub->calculateProgress(pos.spineIndex, intraSpineProgress);
-  result.percentage = static_cast<float>(progressPercent) / 100.0f;
+  // Calculate overall book progress (0.0-1.0)
+  result.percentage = epub->calculateProgress(pos.spineIndex, intraSpineProgress);
 
   // Generate XPath with estimated paragraph position based on page
   result.xpath = generateXPath(pos.spineIndex, pos.pageNumber, pos.totalPages);
@@ -48,9 +47,11 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   int xpathSpineIndex = parseDocFragmentIndex(koPos.xpath);
   if (xpathSpineIndex >= 0 && xpathSpineIndex < epub->getSpineItemsCount()) {
     result.spineIndex = xpathSpineIndex;
-    Serial.printf("[%lu] [ProgressMapper] Got spine index from XPath: %d\n", millis(), result.spineIndex);
+    // When we have XPath, go to page 0 of the spine - byte-based page calculation is unreliable
+    result.pageNumber = 0;
+    Serial.printf("[%lu] [ProgressMapper] Got spine index from XPath: %d (page=0)\n", millis(), result.spineIndex);
   } else {
-    // Fall back to percentage-based lookup
+    // Fall back to percentage-based lookup for both spine and page
     const size_t targetBytes = static_cast<size_t>(bookSize * koPos.percentage);
 
     // Find the spine item that contains this byte position
@@ -63,26 +64,20 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     }
     Serial.printf("[%lu] [ProgressMapper] Got spine index from percentage (%.2f%%): %d\n", millis(),
                   koPos.percentage * 100, result.spineIndex);
-  }
 
-  // Estimate page number within the spine item using percentage
-  if (totalPagesInSpine > 0 && result.spineIndex < epub->getSpineItemsCount()) {
-    // Calculate what percentage through the spine item we should be
-    const size_t prevCumSize = (result.spineIndex > 0) ? epub->getCumulativeSpineItemSize(result.spineIndex - 1) : 0;
-    const size_t currentCumSize = epub->getCumulativeSpineItemSize(result.spineIndex);
-    const size_t spineSize = currentCumSize - prevCumSize;
+    // Estimate page number within the spine item using percentage (only when no XPath)
+    if (totalPagesInSpine > 0 && result.spineIndex < epub->getSpineItemsCount()) {
+      const size_t prevCumSize = (result.spineIndex > 0) ? epub->getCumulativeSpineItemSize(result.spineIndex - 1) : 0;
+      const size_t currentCumSize = epub->getCumulativeSpineItemSize(result.spineIndex);
+      const size_t spineSize = currentCumSize - prevCumSize;
 
-    if (spineSize > 0) {
-      const size_t targetBytes = static_cast<size_t>(bookSize * koPos.percentage);
-      const size_t bytesIntoSpine = (targetBytes > prevCumSize) ? (targetBytes - prevCumSize) : 0;
-      const float intraSpineProgress = static_cast<float>(bytesIntoSpine) / static_cast<float>(spineSize);
-
-      // Clamp to valid range
-      const float clampedProgress = std::max(0.0f, std::min(1.0f, intraSpineProgress));
-      result.pageNumber = static_cast<int>(clampedProgress * totalPagesInSpine);
-
-      // Ensure page number is valid
-      result.pageNumber = std::max(0, std::min(result.pageNumber, totalPagesInSpine - 1));
+      if (spineSize > 0) {
+        const size_t bytesIntoSpine = (targetBytes > prevCumSize) ? (targetBytes - prevCumSize) : 0;
+        const float intraSpineProgress = static_cast<float>(bytesIntoSpine) / static_cast<float>(spineSize);
+        const float clampedProgress = std::max(0.0f, std::min(1.0f, intraSpineProgress));
+        result.pageNumber = static_cast<int>(clampedProgress * totalPagesInSpine);
+        result.pageNumber = std::max(0, std::min(result.pageNumber, totalPagesInSpine - 1));
+      }
     }
   }
 

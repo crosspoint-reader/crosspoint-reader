@@ -438,11 +438,13 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   if (showProgress) {
     // Calculate progress in book
     const float sectionChapterProg = static_cast<float>(section->currentPage) / section->pageCount;
-    const uint8_t bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg);
+    const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
     // Right aligned text for progress counter
-    const std::string progress = std::to_string(section->currentPage + 1) + "/" + std::to_string(section->pageCount) +
-                                 "  " + std::to_string(bookProgress) + "%";
+    char progressStr[32];
+    snprintf(progressStr, sizeof(progressStr), "%d/%d  %.1f%%", section->currentPage + 1, section->pageCount,
+             bookProgress);
+    const std::string progress = progressStr;
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progress.c_str());
     renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - orientedMarginRight - progressTextWidth, textY,
                       progress.c_str());

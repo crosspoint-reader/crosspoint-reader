@@ -296,7 +296,7 @@ void KOReaderSyncActivity::render() {
     snprintf(remoteChapterStr, sizeof(remoteChapterStr), "  %s", remoteChapter.c_str());
     renderer.drawText(UI_10_FONT_ID, 20, 185, remoteChapterStr);
     char remotePageStr[64];
-    snprintf(remotePageStr, sizeof(remotePageStr), "  Page %d, %.0f%% overall", remotePosition.pageNumber + 1,
+    snprintf(remotePageStr, sizeof(remotePageStr), "  Page %d, %.2f%% overall", remotePosition.pageNumber + 1,
              remoteProgress.percentage * 100);
     renderer.drawText(UI_10_FONT_ID, 20, 210, remotePageStr);
 
@@ -312,7 +312,7 @@ void KOReaderSyncActivity::render() {
     snprintf(localChapterStr, sizeof(localChapterStr), "  %s", localChapter.c_str());
     renderer.drawText(UI_10_FONT_ID, 20, 295, localChapterStr);
     char localPageStr[64];
-    snprintf(localPageStr, sizeof(localPageStr), "  Page %d/%d, %.0f%% overall", currentPage + 1, totalPagesInSpine,
+    snprintf(localPageStr, sizeof(localPageStr), "  Page %d/%d, %.2f%% overall", currentPage + 1, totalPagesInSpine,
              localProgress.percentage * 100);
     renderer.drawText(UI_10_FONT_ID, 20, 320, localPageStr);
 
