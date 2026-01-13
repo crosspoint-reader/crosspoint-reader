@@ -235,29 +235,42 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       /// amount of pixels taken from bitmap and repeated to extend
       int extendY = 20;
       int drawExtY = 0;
-      // don't draw MSB for darker extended area
-      // if (extend && renderMode != GRAYSCALE_MSB) {
       if (extend) {
-        if (screenY - y < extendY) {
-          for (int ny = 0; ny < y / extendY / 2; ny++) {
-            // TODO: handle when extendY > y
-            // const uint8_t rval = val + random(3);
-            const uint8_t rval = val;
-            -(std::rand() < (RAND_MAX + 1.0) * 0.25);
-            drawExtY = y - (screenY - y + 2 * ny * (extendY));
-            if (drawExtY > 0) drawVal(screenX, drawExtY, renderMode == BW ? rval : val);
-            drawExtY = screenY + 1 - (ny + 1) * extendY * 2;
-            if (drawExtY > 0) drawVal(screenX, drawExtY, renderMode == BW ? rval : val);
+        // 1. TOP EXTENSION
+        // Check if the current pixel is within the strip to be mirrored
+        if (screenY >= y && screenY < y + extendY) {
+          // How many times do we need to mirror to fill the gap 'y'?
+          // Using +1 to ensure we cover fractional blocks at the screen edge
+          int numIterations = (y / extendY) + 1;
+
+          for (int ny = 0; ny < numIterations; ny++) {
+            // Compute 2 target rows t1, t2 for "accordeon" effect.
+            // Mirror Fold (e.g., pixel 0 goes to y-1, pixel 1 to y-2)
+            int t1 = y - 1 - (2 * ny * extendY + (screenY - y));
+            // Reverse Fold (creates the 'accordion' continuity)
+            int t2 = y - 1 - (2 * ny * extendY + (2 * extendY - 1 - (screenY - y)));
+
+            if (t1 >= 0 && t1 < y) drawVal(screenX, t1, val);
+            if (t2 >= 0 && t2 < y) drawVal(screenX, t2, val);
           }
-          //     drawVal(screenX, 2*y - screenY, val);
         }
-        if (screenY >= getScreenHeight() - y - extendY) {
-          for (int ny = 0; ny < y / extendY / 2; ny++) {
-            // int drawExtY = screenY + extendY + 1 + (ny) * (extendY);
-            drawExtY = getScreenHeight() - y - 1 + (getScreenHeight() - y - screenY) + (ny) * (extendY) * 2;
-            if (drawExtY < getScreenHeight()) drawVal(screenX, drawExtY, val);
-            drawExtY = screenY + (ny + 1) * (extendY) * 2;
-            if (drawExtY < getScreenHeight()) drawVal(screenX, drawExtY, val);
+
+        // 2. BOTTOM EXTENSION
+        int imgHeight = std::floor(scale * (bitmap.getHeight() - cropPixY));
+        int imgBottom = y + imgHeight;
+        int gapBottom = getScreenHeight() - imgBottom;
+
+        if (screenY >= imgBottom - extendY && screenY < imgBottom) {
+          int numIterations = (gapBottom / extendY) + 1;
+
+          for (int ny = 0; ny < numIterations; ny++) {
+            // Mirror Fold (pixel at imgBottom-1 goes to imgBottom)
+            int t1 = imgBottom + (2 * ny * extendY + (imgBottom - 1 - screenY));
+            // Reverse Fold
+            int t2 = imgBottom + (2 * ny * extendY + (2 * extendY - 1 - (imgBottom - 1 - screenY)));
+
+            if (t1 >= imgBottom && t1 < getScreenHeight()) drawVal(screenX, t1, val);
+            if (t2 >= imgBottom && t2 < getScreenHeight()) drawVal(screenX, t2, val);
           }
         }
       }
