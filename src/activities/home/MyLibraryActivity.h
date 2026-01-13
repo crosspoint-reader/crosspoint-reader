@@ -10,10 +10,10 @@
 #include "../Activity.h"
 
 class MyLibraryActivity final : public Activity {
- public:
+public:
   enum class Tab { Recent, Files };
 
- private:
+private:
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
 
@@ -22,8 +22,9 @@ class MyLibraryActivity final : public Activity {
   bool updateRequired = false;
 
   // Recent tab state (from RecentBooksActivity)
-  std::vector<std::string> bookTitles;  // Display titles for each book
-  std::vector<std::string> bookPaths;   // Paths for each visible book (excludes missing)
+  std::vector<std::string> bookTitles; // Display titles for each book
+  std::vector<std::string>
+      bookPaths; // Paths for each visible book (excludes missing)
 
   // Files tab state (from FileSelectionActivity)
   std::string basepath = "/";
@@ -31,7 +32,7 @@ class MyLibraryActivity final : public Activity {
 
   // Callbacks
   const std::function<void()> onGoHome;
-  const std::function<void(const std::string& path)> onSelectBook;
+  const std::function<void(const std::string &path)> onSelectBook;
 
   // Number of items that fit on a page
   int getPageItems() const;
@@ -44,21 +45,20 @@ class MyLibraryActivity final : public Activity {
   void loadFiles();
 
   // Rendering
-  static void taskTrampoline(void* param);
+  static void taskTrampoline(void *param);
   [[noreturn]] void displayTaskLoop();
   void render() const;
   void renderRecentTab() const;
   void renderFilesTab() const;
 
- public:
-  explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                             const std::function<void()>& onGoHome,
-                             const std::function<void(const std::string& path)>& onSelectBook,
-                             Tab initialTab = Tab::Recent)
-      : Activity("MyLibrary", renderer, mappedInput),
-        currentTab(initialTab),
-        onGoHome(onGoHome),
-        onSelectBook(onSelectBook) {}
+public:
+  explicit MyLibraryActivity(
+      GfxRenderer &renderer, MappedInputManager &mappedInput,
+      const std::function<void()> &onGoHome,
+      const std::function<void(const std::string &path)> &onSelectBook,
+      Tab initialTab = Tab::Recent)
+      : Activity("MyLibrary", renderer, mappedInput), currentTab(initialTab),
+        onGoHome(onGoHome), onSelectBook(onSelectBook) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

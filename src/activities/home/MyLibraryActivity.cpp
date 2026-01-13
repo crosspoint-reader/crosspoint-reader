@@ -269,25 +269,23 @@ void MyLibraryActivity::loop() {
     return;
   }
 
-  // Tab switching: Left/Right when selectorIndex == 0
-  if (selectorIndex == 0) {
-    if (leftReleased && currentTab == Tab::Files) {
-      currentTab = Tab::Recent;
-      selectorIndex = 0;
-      updateRequired = true;
-      return;
-    }
-    if (rightReleased && currentTab == Tab::Recent) {
-      currentTab = Tab::Files;
-      selectorIndex = 0;
-      updateRequired = true;
-      return;
-    }
+  // Tab switching: Left/Right always control tabs
+  if (leftReleased && currentTab == Tab::Files) {
+    currentTab = Tab::Recent;
+    selectorIndex = 0;
+    updateRequired = true;
+    return;
+  }
+  if (rightReleased && currentTab == Tab::Recent) {
+    currentTab = Tab::Files;
+    selectorIndex = 0;
+    updateRequired = true;
+    return;
   }
 
-  // Navigation: Up/Down moves through items, Left/Right also work as prev/next
-  const bool prevReleased = upReleased || leftReleased;
-  const bool nextReleased = downReleased || rightReleased;
+  // Navigation: Up/Down moves through items only
+  const bool prevReleased = upReleased;
+  const bool nextReleased = downReleased;
 
   if (prevReleased && itemCount > 0) {
     if (skipPage) {

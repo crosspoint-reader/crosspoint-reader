@@ -99,19 +99,18 @@ void ScreenComponents::drawScrollIndicator(const GfxRenderer &renderer,
       contentTop + 60; // Offset to avoid overlapping side button hints
   const int indicatorBottom = contentTop + contentHeight - 30;
 
-  // Draw up arrow at top (triangle pointing up - wide at bottom, narrow at top)
+  // Draw up arrow at top (^) - narrow point at top, wide base at bottom
   for (int i = 0; i < arrowSize; ++i) {
-    const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
-    const int startX = centerX - (arrowSize - 1 - i);
+    const int lineWidth = 1 + i * 2;
+    const int startX = centerX - i;
     renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1,
                       indicatorTop + i);
   }
 
-  // Draw down arrow at bottom (triangle pointing down - narrow at top, wide at
-  // bottom)
+  // Draw down arrow at bottom (v) - wide base at top, narrow point at bottom
   for (int i = 0; i < arrowSize; ++i) {
-    const int lineWidth = 1 + i * 2;
-    const int startX = centerX - i;
+    const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
+    const int startX = centerX - (arrowSize - 1 - i);
     renderer.drawLine(startX, indicatorBottom - arrowSize + 1 + i,
                       startX + lineWidth - 1,
                       indicatorBottom - arrowSize + 1 + i);
