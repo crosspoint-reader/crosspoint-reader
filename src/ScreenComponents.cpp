@@ -92,21 +92,23 @@ void ScreenComponents::drawScrollIndicator(const GfxRenderer &renderer,
   const int screenWidth = renderer.getScreenWidth();
   constexpr int indicatorWidth = 20;
   constexpr int arrowSize = 6;
-  constexpr int margin = 5;
+  constexpr int margin = 15; // Offset from right edge
 
   const int centerX = screenWidth - indicatorWidth / 2 - margin;
-  const int indicatorTop = contentTop + 10;
+  const int indicatorTop =
+      contentTop + 60; // Offset to avoid overlapping side button hints
   const int indicatorBottom = contentTop + contentHeight - 30;
 
-  // Draw up arrow (triangle pointing up)
+  // Draw up arrow at top (triangle pointing up - wide at bottom, narrow at top)
   for (int i = 0; i < arrowSize; ++i) {
-    const int lineWidth = 1 + i * 2;
-    const int startX = centerX - i;
-    renderer.drawLine(startX, indicatorTop + arrowSize - 1 - i,
-                      startX + lineWidth - 1, indicatorTop + arrowSize - 1 - i);
+    const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
+    const int startX = centerX - (arrowSize - 1 - i);
+    renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1,
+                      indicatorTop + i);
   }
 
-  // Draw down arrow (triangle pointing down)
+  // Draw down arrow at bottom (triangle pointing down - narrow at top, wide at
+  // bottom)
   for (int i = 0; i < arrowSize; ++i) {
     const int lineWidth = 1 + i * 2;
     const int startX = centerX - i;
