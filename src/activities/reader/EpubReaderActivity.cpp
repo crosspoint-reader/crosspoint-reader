@@ -447,7 +447,8 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   if (showChapterTitle) {
     // Centered chatper title text
     // Page width minus existing content with 30px padding on each side
-    const int titleMarginLeft = 50 + 30 + orientedMarginLeft;  // 50px for battery
+    const int batterySize = showBattery ? (showBatteryPercentage ? 50 : 20) : 0;
+    const int titleMarginLeft = batterySize + 30 + orientedMarginLeft;
     const int titleMarginRight = progressTextWidth + 30 + orientedMarginRight;
     const int availableTextWidth = renderer.getScreenWidth() - titleMarginLeft - titleMarginRight;
     const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
