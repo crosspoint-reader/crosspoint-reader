@@ -816,6 +816,124 @@
   }
 
 let failedUploadsGlobal = [];
+let wsConnection = null;
+const WS_PORT = 81;
+const WS_CHUNK_SIZE = 16384; // 16KB chunks for WebSocket - larger = faster
+
+// Get WebSocket URL based on current page location
+function getWsUrl() {
+  const host = window.location.hostname;
+  return `ws://${host}:${WS_PORT}/`;
+}
+
+// Upload file via WebSocket (faster, binary protocol)
+function uploadFileWebSocket(file, onProgress, onComplete, onError) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(getWsUrl());
+    let uploadStarted = false;
+
+    ws.onopen = function() {
+      console.log('[WS] Connected, starting upload:', file.name);
+      // Send start message: START:<filename>:<size>:<path>
+      ws.send(`START:${file.name}:${file.size}:${currentPath}`);
+    };
+
+    ws.onmessage = function(event) {
+      const msg = event.data;
+      console.log('[WS] Message:', msg);
+
+      if (msg === 'READY') {
+        uploadStarted = true;
+        // Start sending binary data in chunks
+        sendFileChunks(ws, file, onProgress);
+      } else if (msg.startsWith('PROGRESS:')) {
+        const parts = msg.split(':');
+        const received = parseInt(parts[1]);
+        const total = parseInt(parts[2]);
+        if (onProgress) onProgress(received, total);
+      } else if (msg === 'DONE') {
+        ws.close();
+        if (onComplete) onComplete();
+        resolve();
+      } else if (msg.startsWith('ERROR:')) {
+        const error = msg.substring(6);
+        ws.close();
+        if (onError) onError(error);
+        reject(new Error(error));
+      }
+    };
+
+    ws.onerror = function(event) {
+      console.error('[WS] Error:', event);
+      if (!uploadStarted) {
+        // WebSocket connection failed, reject to trigger fallback
+        reject(new Error('WebSocket connection failed'));
+      }
+    };
+
+    ws.onclose = function() {
+      console.log('[WS] Connection closed');
+    };
+  });
+}
+
+// Send file in chunks via WebSocket
+async function sendFileChunks(ws, file, onProgress) {
+  const totalSize = file.size;
+  let offset = 0;
+
+  while (offset < totalSize) {
+    const chunk = file.slice(offset, offset + WS_CHUNK_SIZE);
+    const buffer = await chunk.arrayBuffer();
+
+    // Wait for buffer to clear if needed
+    while (ws.bufferedAmount > WS_CHUNK_SIZE * 4) {
+      await new Promise(r => setTimeout(r, 10));
+    }
+
+    ws.send(buffer);
+    offset += chunk.size;
+
+    // Update local progress (server will confirm)
+    if (onProgress) onProgress(offset, totalSize);
+  }
+}
+
+// Upload file via HTTP (fallback method)
+function uploadFileHTTP(file, onProgress, onComplete, onError) {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
+
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable && onProgress) {
+        onProgress(e.loaded, e.total);
+      }
+    };
+
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        if (onComplete) onComplete();
+        resolve();
+      } else {
+        const error = xhr.responseText || 'Upload failed';
+        if (onError) onError(error);
+        reject(new Error(error));
+      }
+    };
+
+    xhr.onerror = function() {
+      const error = 'Network error';
+      if (onError) onError(error);
+      reject(new Error(error));
+    };
+
+    xhr.send(formData);
+  });
+}
 
 function uploadFile() {
   const fileInput = document.getElementById('fileInput');
@@ -836,8 +954,9 @@ function uploadFile() {
 
   let currentIndex = 0;
   const failedFiles = [];
+  let useWebSocket = true; // Try WebSocket first
 
-  function uploadNextFile() {
+  async function uploadNextFile() {
     if (currentIndex >= files.length) {
       // All files processed - show summary
       if (failedFiles.length === 0) {
@@ -845,67 +964,71 @@ function uploadFile() {
         progressText.textContent = 'All uploads complete!';
         setTimeout(() => {
           closeUploadModal();
-          hydrate(); // Refresh file list instead of reloading
+          hydrate();
         }, 1000);
       } else {
         progressFill.style.backgroundColor = '#e74c3c';
         const failedList = failedFiles.map(f => f.name).join(', ');
         progressText.textContent = `${files.length - failedFiles.length}/${files.length} uploaded. Failed: ${failedList}`;
-        
-        // Store failed files globally and show banner
         failedUploadsGlobal = failedFiles;
-        
         setTimeout(() => {
           closeUploadModal();
           showFailedUploadsBanner();
-          hydrate(); // Refresh file list to show successfully uploaded files
+          hydrate();
         }, 2000);
       }
       return;
     }
 
     const file = files[currentIndex];
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const xhr = new XMLHttpRequest();
-    // Include path as query parameter since multipart form data doesn't make
-    // form fields available until after file upload completes
-    xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
-
     progressFill.style.width = '0%';
-    progressFill.style.backgroundColor = '#4caf50';
-    progressText.textContent = `Uploading ${file.name} (${currentIndex + 1}/${files.length})`;
+    progressFill.style.backgroundColor = '#27ae60';
+    const methodText = useWebSocket ? ' [WS]' : ' [HTTP]';
+    progressText.textContent = `Uploading ${file.name} (${currentIndex + 1}/${files.length})${methodText}`;
 
-    xhr.upload.onprogress = function (e) {
-      if (e.lengthComputable) {
-        const percent = Math.round((e.loaded / e.total) * 100);
-        progressFill.style.width = percent + '%';
-        progressText.textContent =
-          `Uploading ${file.name} (${currentIndex + 1}/${files.length}) — ${percent}%`;
-      }
+    const onProgress = (loaded, total) => {
+      const percent = Math.round((loaded / total) * 100);
+      progressFill.style.width = percent + '%';
+      const speed = ''; // Could calculate speed here
+      progressText.textContent = `Uploading ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${percent}%`;
     };
 
-    xhr.onload = function () {
-      if (xhr.status === 200) {
-        currentIndex++;
-        uploadNextFile(); // upload next file
-      } else {
-        // Track failure and continue with next file
-        failedFiles.push({ name: file.name, error: xhr.responseText, file: file });
-        currentIndex++;
-        uploadNextFile();
-      }
-    };
-
-    xhr.onerror = function () {
-      // Track network error and continue with next file
-      failedFiles.push({ name: file.name, error: 'network error', file: file });
+    const onComplete = () => {
       currentIndex++;
       uploadNextFile();
     };
 
-    xhr.send(formData);
+    const onError = (error) => {
+      failedFiles.push({ name: file.name, error: error, file: file });
+      currentIndex++;
+      uploadNextFile();
+    };
+
+    try {
+      if (useWebSocket) {
+        await uploadFileWebSocket(file, onProgress, null, null);
+        onComplete();
+      } else {
+        await uploadFileHTTP(file, onProgress, null, null);
+        onComplete();
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      if (useWebSocket && error.message === 'WebSocket connection failed') {
+        // Fall back to HTTP for all subsequent uploads
+        console.log('WebSocket failed, falling back to HTTP');
+        useWebSocket = false;
+        // Retry this file with HTTP
+        try {
+          await uploadFileHTTP(file, onProgress, null, null);
+          onComplete();
+        } catch (httpError) {
+          onError(httpError.message);
+        }
+      } else {
+        onError(error.message);
+      }
+    }
   }
 
   uploadNextFile();

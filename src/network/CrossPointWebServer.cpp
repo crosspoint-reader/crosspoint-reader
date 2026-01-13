@@ -16,6 +16,18 @@ namespace {
 // Note: Items starting with "." are automatically hidden
 const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+
+// Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
+CrossPointWebServer* wsInstance = nullptr;
+
+// WebSocket upload state
+FsFile wsUploadFile;
+String wsUploadFileName;
+String wsUploadPath;
+size_t wsUploadSize = 0;
+size_t wsUploadReceived = 0;
+unsigned long wsUploadStartTime = 0;
+bool wsUploadInProgress = false;
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -87,12 +99,22 @@ void CrossPointWebServer::begin() {
   Serial.printf("[%lu] [WEB] [MEM] Free heap after route setup: %d bytes\n", millis(), ESP.getFreeHeap());
 
   server->begin();
+
+  // Start WebSocket server for fast binary uploads
+  Serial.printf("[%lu] [WEB] Starting WebSocket server on port %d...\n", millis(), wsPort);
+  wsServer.reset(new WebSocketsServer(wsPort));
+  wsInstance = const_cast<CrossPointWebServer*>(this);
+  wsServer->begin();
+  wsServer->onEvent(wsEventCallback);
+  Serial.printf("[%lu] [WEB] WebSocket server started\n", millis());
+
   running = true;
 
   Serial.printf("[%lu] [WEB] Web server started on port %d\n", millis(), port);
   // Show the correct IP based on network mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
   Serial.printf("[%lu] [WEB] Access at http://%s/\n", millis(), ipAddr.c_str());
+  Serial.printf("[%lu] [WEB] WebSocket at ws://%s:%d/\n", millis(), ipAddr.c_str(), wsPort);
   Serial.printf("[%lu] [WEB] [MEM] Free heap after server.begin(): %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
@@ -107,6 +129,21 @@ void CrossPointWebServer::stop() {
   running = false;  // Set this FIRST to prevent handleClient from using server
 
   Serial.printf("[%lu] [WEB] [MEM] Free heap before stop: %d bytes\n", millis(), ESP.getFreeHeap());
+
+  // Close any in-progress WebSocket upload
+  if (wsUploadInProgress && wsUploadFile) {
+    wsUploadFile.close();
+    wsUploadInProgress = false;
+  }
+
+  // Stop WebSocket server
+  if (wsServer) {
+    Serial.printf("[%lu] [WEB] Stopping WebSocket server...\n", millis());
+    wsServer->close();
+    wsServer.reset();
+    wsInstance = nullptr;
+    Serial.printf("[%lu] [WEB] WebSocket server stopped\n", millis());
+  }
 
   // Add delay to allow any in-flight handleClient() calls to complete
   delay(100);
@@ -149,6 +186,11 @@ void CrossPointWebServer::handleClient() const {
   }
 
   server->handleClient();
+
+  // Handle WebSocket events
+  if (wsServer) {
+    wsServer->loop();
+  }
 }
 
 void CrossPointWebServer::handleRoot() const {
@@ -615,5 +657,145 @@ void CrossPointWebServer::handleDelete() const {
   } else {
     Serial.printf("[%lu] [WEB] Failed to delete: %s\n", millis(), itemPath.c_str());
     server->send(500, "text/plain", "Failed to delete item");
+  }
+}
+
+// WebSocket callback trampoline
+void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+  if (wsInstance) {
+    wsInstance->onWebSocketEvent(num, type, payload, length);
+  }
+}
+
+// WebSocket event handler for fast binary uploads
+// Protocol:
+//   1. Client sends TEXT message: "START:<filename>:<size>:<path>"
+//   2. Client sends BINARY messages with file data chunks
+//   3. Server sends TEXT "PROGRESS:<received>:<total>" after each chunk
+//   4. Server sends TEXT "DONE" or "ERROR:<message>" when complete
+void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+  switch (type) {
+    case WStype_DISCONNECTED:
+      Serial.printf("[%lu] [WS] Client %u disconnected\n", millis(), num);
+      // Clean up any in-progress upload
+      if (wsUploadInProgress && wsUploadFile) {
+        wsUploadFile.close();
+        // Delete incomplete file
+        String filePath = wsUploadPath;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += wsUploadFileName;
+        SdMan.remove(filePath.c_str());
+        Serial.printf("[%lu] [WS] Deleted incomplete upload: %s\n", millis(), filePath.c_str());
+      }
+      wsUploadInProgress = false;
+      break;
+
+    case WStype_CONNECTED: {
+      Serial.printf("[%lu] [WS] Client %u connected\n", millis(), num);
+      break;
+    }
+
+    case WStype_TEXT: {
+      // Parse control messages
+      String msg = String((char*)payload);
+      Serial.printf("[%lu] [WS] Text from client %u: %s\n", millis(), num, msg.c_str());
+
+      if (msg.startsWith("START:")) {
+        // Parse: START:<filename>:<size>:<path>
+        int firstColon = msg.indexOf(':', 6);
+        int secondColon = msg.indexOf(':', firstColon + 1);
+
+        if (firstColon > 0 && secondColon > 0) {
+          wsUploadFileName = msg.substring(6, firstColon);
+          wsUploadSize = msg.substring(firstColon + 1, secondColon).toInt();
+          wsUploadPath = msg.substring(secondColon + 1);
+          wsUploadReceived = 0;
+          wsUploadStartTime = millis();
+
+          // Ensure path is valid
+          if (!wsUploadPath.startsWith("/")) wsUploadPath = "/" + wsUploadPath;
+          if (wsUploadPath.length() > 1 && wsUploadPath.endsWith("/")) {
+            wsUploadPath = wsUploadPath.substring(0, wsUploadPath.length() - 1);
+          }
+
+          // Build file path
+          String filePath = wsUploadPath;
+          if (!filePath.endsWith("/")) filePath += "/";
+          filePath += wsUploadFileName;
+
+          Serial.printf("[%lu] [WS] Starting upload: %s (%d bytes) to %s\n", millis(), wsUploadFileName.c_str(),
+                        wsUploadSize, filePath.c_str());
+
+          // Check if file exists and remove it
+          esp_task_wdt_reset();
+          if (SdMan.exists(filePath.c_str())) {
+            SdMan.remove(filePath.c_str());
+          }
+
+          // Open file for writing
+          esp_task_wdt_reset();
+          if (!SdMan.openFileForWrite("WS", filePath, wsUploadFile)) {
+            wsServer->sendTXT(num, "ERROR:Failed to create file");
+            wsUploadInProgress = false;
+            return;
+          }
+          esp_task_wdt_reset();
+
+          wsUploadInProgress = true;
+          wsServer->sendTXT(num, "READY");
+        } else {
+          wsServer->sendTXT(num, "ERROR:Invalid START format");
+        }
+      }
+      break;
+    }
+
+    case WStype_BIN: {
+      if (!wsUploadInProgress || !wsUploadFile) {
+        wsServer->sendTXT(num, "ERROR:No upload in progress");
+        return;
+      }
+
+      // Write binary data directly to file
+      esp_task_wdt_reset();
+      size_t written = wsUploadFile.write(payload, length);
+      esp_task_wdt_reset();
+
+      if (written != length) {
+        wsUploadFile.close();
+        wsUploadInProgress = false;
+        wsServer->sendTXT(num, "ERROR:Write failed - disk full?");
+        return;
+      }
+
+      wsUploadReceived += written;
+
+      // Send progress update (every 64KB or at end)
+      static size_t lastProgressSent = 0;
+      if (wsUploadReceived - lastProgressSent >= 65536 || wsUploadReceived >= wsUploadSize) {
+        String progress = "PROGRESS:" + String(wsUploadReceived) + ":" + String(wsUploadSize);
+        wsServer->sendTXT(num, progress);
+        lastProgressSent = wsUploadReceived;
+      }
+
+      // Check if upload complete
+      if (wsUploadReceived >= wsUploadSize) {
+        wsUploadFile.close();
+        wsUploadInProgress = false;
+
+        unsigned long elapsed = millis() - wsUploadStartTime;
+        float kbps = (elapsed > 0) ? (wsUploadSize / 1024.0) / (elapsed / 1000.0) : 0;
+
+        Serial.printf("[%lu] [WS] Upload complete: %s (%d bytes in %lu ms, %.1f KB/s)\n", millis(),
+                      wsUploadFileName.c_str(), wsUploadSize, elapsed, kbps);
+
+        wsServer->sendTXT(num, "DONE");
+        lastProgressSent = 0;
+      }
+      break;
+    }
+
+    default:
+      break;
   }
 }
