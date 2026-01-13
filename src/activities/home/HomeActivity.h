@@ -22,21 +22,21 @@ class HomeActivity final : public Activity {
   const std::function<void()> onFileTransferOpen;
   const std::function<void()> onOpdsBrowserOpen;
 
-  static void taskTrampoline(void *param);
+  static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void render() const;
   int getMenuItemCount() const;
 
-public:
-  explicit HomeActivity(GfxRenderer &renderer, MappedInputManager &mappedInput,
-                        const std::function<void()> &onContinueReading,
-                        const std::function<void()> &onMyLibraryOpen,
-                        const std::function<void()> &onSettingsOpen,
-                        const std::function<void()> &onFileTransferOpen,
-                        const std::function<void()> &onOpdsBrowserOpen)
+ public:
+  explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                        const std::function<void()>& onContinueReading, const std::function<void()>& onMyLibraryOpen,
+                        const std::function<void()>& onSettingsOpen, const std::function<void()>& onFileTransferOpen,
+                        const std::function<void()>& onOpdsBrowserOpen)
       : Activity("Home", renderer, mappedInput),
-        onContinueReading(onContinueReading), onMyLibraryOpen(onMyLibraryOpen),
-        onSettingsOpen(onSettingsOpen), onFileTransferOpen(onFileTransferOpen),
+        onContinueReading(onContinueReading),
+        onMyLibraryOpen(onMyLibraryOpen),
+        onSettingsOpen(onSettingsOpen),
+        onFileTransferOpen(onFileTransferOpen),
         onOpdsBrowserOpen(onOpdsBrowserOpen) {}
   void onEnter() override;
   void onExit() override;
