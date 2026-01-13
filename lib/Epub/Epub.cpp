@@ -358,15 +358,6 @@ const std::string& Epub::getLanguage() const {
   return bookMetadataCache->coreMetadata.language;
 }
 
-const std::string& Epub::getLanguage() const {
-  static std::string blank;
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    return blank;
-  }
-
-  return bookMetadataCache->coreMetadata.language;
-}
-
 std::string Epub::getCoverBmpPath(bool cropped) const {
   const auto coverFileName = "cover" + cropped ? "_crop" : "";
   return cachePath + "/" + coverFileName + ".bmp";
