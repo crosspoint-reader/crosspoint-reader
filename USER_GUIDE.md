@@ -70,8 +70,8 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
-  - "Fit" (default) - Scale the image to fit the screen while maintaining aspect ratio, padding the sides or top and bottom as necessary
-  - "Crop" - Scale the image to fill the screen, cropping as necessary (Note: this is experimental and may not work as expected)
+  - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
+  - "Crop" - Scale the image down and crop as necessary to try to to fill the screen (Note: this is experimental and may not work as expected)
 - **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
