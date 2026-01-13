@@ -303,6 +303,7 @@ void setup() {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
     APP_STATE.openEpubPath = "";
+    APP_STATE.lastSleepImage = 0;
     APP_STATE.saveToFile();
     onGoToReader(path);
   }

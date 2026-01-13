@@ -80,7 +80,13 @@ void SleepActivity::renderCustomSleepScreen() const {
     const auto numFiles = files.size();
     if (numFiles > 0) {
       // Generate a random number between 1 and numFiles
-      const auto randomFileIndex = random(numFiles);
+      auto randomFileIndex = random(numFiles);
+      // If we picked the same image as last time, reroll
+      while (numFiles > 1 && randomFileIndex == APP_STATE.lastSleepImage) {
+        randomFileIndex = random(numFiles);
+      }
+      APP_STATE.lastSleepImage = randomFileIndex;
+      APP_STATE.saveToFile();
       const auto filename = "/sleep/" + files[randomFileIndex];
       FsFile file;
       if (SdMan.openFileForRead("SLP", filename, file)) {
