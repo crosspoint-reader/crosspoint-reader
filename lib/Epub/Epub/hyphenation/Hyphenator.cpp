@@ -8,6 +8,8 @@
 #include "HyphenationCommon.h"
 #include "LanguageRegistry.h"
 
+const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
+
 namespace {
 
 // Maps a BCP-47 language tag to a language-specific hyphenator.
@@ -25,12 +27,6 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   if (primary.empty()) return nullptr;
 
   return getLanguageHyphenatorForPrimaryTag(primary);
-}
-
-// Cached hyphenator instance for the current preferred language.
-const LanguageHyphenator*& cachedHyphenator() {
-  static const LanguageHyphenator* hyphenator = nullptr;
-  return hyphenator;
 }
 
 // Maps a codepoint index back to its byte offset inside the source word.
@@ -88,7 +84,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   auto cps = collectCodepoints(word);
   trimSurroundingPunctuation(cps);
   trimTrailingFootnoteReference(cps);
-  const auto* hyphenator = cachedHyphenator();
+  const auto* hyphenator = cachedHyphenator_;
   const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LiangWordConfig::kDefaultMinPrefix;
   const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
 
@@ -127,4 +123,6 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   return breaks;
 }
 
-void Hyphenator::setPreferredLanguage(const std::string& lang) { cachedHyphenator() = hyphenatorForLanguage(lang); }
+void Hyphenator::setPreferredLanguage(const std::string& lang) {
+  cachedHyphenator_ = hyphenatorForLanguage(lang);
+}
