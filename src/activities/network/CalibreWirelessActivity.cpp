@@ -803,20 +803,55 @@ std::string CalibreWirelessActivity::getDeviceUuid() const {
 }
 
 uint64_t CalibreWirelessActivity::getSDCardFreeSpace() const {
-  // Report a large value (100GB) that will allow transfers to proceed.
-  // This is a workaround because SDCardManager doesn't expose the underlying
-  // SdFat volume info needed to query actual free space.
-  //
-  // The proper fix would be to add a getFreeSpace() method to SDCardManager:
-  //   uint64_t SDCardManager::getFreeSpace() {
-  //     return static_cast<uint64_t>(sd.vol()->freeClusterCount())
-  //            * sd.vol()->bytesPerCluster();
-  //   }
-  //
-  // For now, 100GB allows all practical transfers. If the SD card runs out
-  // of space during a transfer, Calibre will report an appropriate error.
-  constexpr uint64_t REPORTED_FREE_SPACE = 100ULL * 1024 * 1024 * 1024;  // 100GB
-  return REPORTED_FREE_SPACE;
+  // Probe available space using SdFat's preAllocate() method.
+  // preAllocate() fails if there isn't enough contiguous free space,
+  // so we can use it to find the actual available space on the SD card.
+
+  const char* testPath = "/.crosspoint/.free_space_probe";
+
+  // Ensure the crosspoint directory exists
+  SdMan.mkdir("/.crosspoint");
+
+  FsFile testFile;
+  if (!SdMan.openFileForWrite("CAL", testPath, testFile)) {
+    Serial.printf("[%lu] [CAL] Free space probe: failed to create test file\n", millis());
+    return 64ULL * 1024 * 1024 * 1024;  // Conservative fallback
+  }
+
+  // Probe sizes from large to small (exponential decrease)
+  // Start at 256GB (larger than any typical SD card) and work down
+  constexpr uint64_t probeSizes[] = {
+      256ULL * 1024 * 1024 * 1024,  // 256GB
+      128ULL * 1024 * 1024 * 1024,  // 128GB
+      64ULL * 1024 * 1024 * 1024,   // 64GB
+      32ULL * 1024 * 1024 * 1024,   // 32GB
+      16ULL * 1024 * 1024 * 1024,   // 16GB
+      8ULL * 1024 * 1024 * 1024,    // 8GB
+      4ULL * 1024 * 1024 * 1024,    // 4GB
+      2ULL * 1024 * 1024 * 1024,    // 2GB
+      1ULL * 1024 * 1024 * 1024,    // 1GB
+      512ULL * 1024 * 1024,         // 512MB
+      256ULL * 1024 * 1024,         // 256MB
+      128ULL * 1024 * 1024,         // 128MB
+      64ULL * 1024 * 1024,          // 64MB
+  };
+
+  uint64_t availableSpace = 64ULL * 1024 * 1024;  // Minimum 64MB fallback
+
+  for (const uint64_t size : probeSizes) {
+    if (testFile.preAllocate(size)) {
+      availableSpace = size;
+      // Truncate back to 0 to release the allocation
+      testFile.truncate(0);
+      Serial.printf("[%lu] [CAL] Free space probe: %llu bytes available\n", millis(), availableSpace);
+      break;
+    }
+  }
+
+  testFile.close();
+  SdMan.remove(testPath);
+
+  return availableSpace;
 }
 
 void CalibreWirelessActivity::setState(WirelessState newState) {
