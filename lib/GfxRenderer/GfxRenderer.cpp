@@ -154,6 +154,12 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
+  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
+  if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
+    drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
+    return;
+  }
+
   float scale = 1.0f;
   bool isScaled = false;
   int cropPixX = std::floor(bitmap.getWidth() * cropX / 2.0f);
@@ -195,6 +201,9 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     if (screenY >= getScreenHeight()) {
       break;
     }
+    if (screenY < 0) {
+      continue;
+    }
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
@@ -217,6 +226,9 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       if (screenX >= getScreenWidth()) {
         break;
       }
+      if (screenX < 0) {
+        continue;
+      }
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
@@ -232,6 +244,143 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
   free(outputRow);
   free(rowBytes);
+}
+
+void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
+                                 const int maxHeight) const {
+  float scale = 1.0f;
+  bool isScaled = false;
+  if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
+    scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
+    isScaled = true;
+  }
+  if (maxHeight > 0 && bitmap.getHeight() > maxHeight) {
+    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
+    isScaled = true;
+  }
+
+  // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
+  const int outputRowSize = (bitmap.getWidth() + 3) / 4;
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
+  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+
+  if (!outputRow || !rowBytes) {
+    Serial.printf("[%lu] [GFX] !! Failed to allocate 1-bit BMP row buffers\n", millis());
+    free(outputRow);
+    free(rowBytes);
+    return;
+  }
+
+  for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
+    // Read rows sequentially using readNextRow
+    if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+      Serial.printf("[%lu] [GFX] Failed to read row %d from 1-bit bitmap\n", millis(), bmpY);
+      free(outputRow);
+      free(rowBytes);
+      return;
+    }
+
+    // Calculate screen Y based on whether BMP is top-down or bottom-up
+    const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
+    int screenY = y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale)) : bmpYOffset);
+    if (screenY >= getScreenHeight()) {
+      continue;  // Continue reading to keep row counter in sync
+    }
+    if (screenY < 0) {
+      continue;
+    }
+
+    for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
+      int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
+      if (screenX >= getScreenWidth()) {
+        break;
+      }
+      if (screenX < 0) {
+        continue;
+      }
+
+      // Get 2-bit value (result of readNextRow quantization)
+      const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+
+      // For 1-bit source: 0 or 1 -> map to black (0,1,2) or white (3)
+      // val < 3 means black pixel (draw it)
+      if (val < 3) {
+        drawPixel(screenX, screenY, true);
+      }
+      // White pixels (val == 3) are not drawn (leave background)
+    }
+  }
+
+  free(outputRow);
+  free(rowBytes);
+}
+
+void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state) const {
+  if (numPoints < 3) return;
+
+  // Find bounding box
+  int minY = yPoints[0], maxY = yPoints[0];
+  for (int i = 1; i < numPoints; i++) {
+    if (yPoints[i] < minY) minY = yPoints[i];
+    if (yPoints[i] > maxY) maxY = yPoints[i];
+  }
+
+  // Clip to screen
+  if (minY < 0) minY = 0;
+  if (maxY >= getScreenHeight()) maxY = getScreenHeight() - 1;
+
+  // Allocate node buffer for scanline algorithm
+  auto* nodeX = static_cast<int*>(malloc(numPoints * sizeof(int)));
+  if (!nodeX) {
+    Serial.printf("[%lu] [GFX] !! Failed to allocate polygon node buffer\n", millis());
+    return;
+  }
+
+  // Scanline fill algorithm
+  for (int scanY = minY; scanY <= maxY; scanY++) {
+    int nodes = 0;
+
+    // Find all intersection points with edges
+    int j = numPoints - 1;
+    for (int i = 0; i < numPoints; i++) {
+      if ((yPoints[i] < scanY && yPoints[j] >= scanY) || (yPoints[j] < scanY && yPoints[i] >= scanY)) {
+        // Calculate X intersection using fixed-point to avoid float
+        int dy = yPoints[j] - yPoints[i];
+        if (dy != 0) {
+          nodeX[nodes++] = xPoints[i] + (scanY - yPoints[i]) * (xPoints[j] - xPoints[i]) / dy;
+        }
+      }
+      j = i;
+    }
+
+    // Sort nodes by X (simple bubble sort, numPoints is small)
+    for (int i = 0; i < nodes - 1; i++) {
+      for (int k = i + 1; k < nodes; k++) {
+        if (nodeX[i] > nodeX[k]) {
+          int temp = nodeX[i];
+          nodeX[i] = nodeX[k];
+          nodeX[k] = temp;
+        }
+      }
+    }
+
+    // Fill between pairs of nodes
+    for (int i = 0; i < nodes - 1; i += 2) {
+      int startX = nodeX[i];
+      int endX = nodeX[i + 1];
+
+      // Clip to screen
+      if (startX < 0) startX = 0;
+      if (endX >= getScreenWidth()) endX = getScreenWidth() - 1;
+
+      // Draw horizontal line
+      for (int x = startX; x <= endX; x++) {
+        drawPixel(x, scanY, state);
+      }
+    }
+  }
+
+  free(nodeX);
 }
 
 void GfxRenderer::clearScreen(const uint8_t color) const { einkDisplay.clearScreen(color); }
