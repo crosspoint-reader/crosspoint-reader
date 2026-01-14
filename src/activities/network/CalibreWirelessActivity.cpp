@@ -50,6 +50,7 @@ void CalibreWirelessActivity::onEnter() {
   skipOpcode = -1;
   skipExtractedLpath.clear();
   skipExtractedLength = 0;
+  shouldExit = false;
 
   updateRequired = true;
 
@@ -66,30 +67,27 @@ void CalibreWirelessActivity::onEnter() {
 void CalibreWirelessActivity::onExit() {
   Activity::onExit();
 
-  // Stop network task FIRST before touching any shared state
-  // This prevents the task from accessing members while we clean up
-  if (networkTaskHandle) {
-    vTaskDelete(networkTaskHandle);
-    networkTaskHandle = nullptr;
-  }
+  // Signal tasks to exit gracefully FIRST
+  shouldExit = true;
 
-  // Stop display task
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
+  // Small delay to let tasks see the flag
+  vTaskDelay(50 / portTICK_PERIOD_MS);
 
-  // Now safe to clean up - tasks are stopped
-  // Turn off WiFi when exiting
-  WiFi.mode(WIFI_OFF);
-
-  // Stop UDP listening
-  udp.stop();
-
-  // Close TCP client if connected
+  // Close TCP to unblock any pending reads in the network task
   if (tcpClient.connected()) {
     tcpClient.stop();
   }
+  udp.stop();
+
+  // Give tasks more time to notice the closed connection and exit
+  vTaskDelay(250 / portTICK_PERIOD_MS);
+
+  // Clear task handles (tasks self-deleted)
+  networkTaskHandle = nullptr;
+  displayTaskHandle = nullptr;
+
+  // Turn off WiFi when exiting
+  WiFi.mode(WIFI_OFF);
 
   // Close any open file
   if (currentFile) {
@@ -122,22 +120,27 @@ void CalibreWirelessActivity::loop() {
 }
 
 void CalibreWirelessActivity::displayTaskLoop() {
-  while (true) {
+  while (!shouldExit) {
     if (updateRequired) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
+      if (!shouldExit) {  // Double-check after acquiring mutex
+        render();
+      }
       xSemaphoreGive(renderingMutex);
     }
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
+  vTaskDelete(nullptr);  // Self-delete when done
 }
 
 void CalibreWirelessActivity::networkTaskLoop() {
-  while (true) {
+  while (!shouldExit) {
     xSemaphoreTake(stateMutex, portMAX_DELAY);
     const auto currentState = state;
     xSemaphoreGive(stateMutex);
+
+    if (shouldExit) break;
 
     switch (currentState) {
       case WirelessState::DISCOVERING:
@@ -160,6 +163,7 @@ void CalibreWirelessActivity::networkTaskLoop() {
 
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
+  vTaskDelete(nullptr);  // Self-delete when done
 }
 
 void CalibreWirelessActivity::listenForDiscovery() {
@@ -802,7 +806,8 @@ void CalibreWirelessActivity::handleSendBook(const std::string& data) {
   currentFileSize = length;
   bytesReceived = 0;
 
-  Serial.printf("[%lu] [CAL] SEND_BOOK: lpath='%s', length=%zu\n", millis(), lpath.c_str(), length);
+  Serial.printf("[%lu] [CAL] SEND_BOOK: lpath='%s', length=%zu, recvBuffer leftover=%zu\n",
+                millis(), lpath.c_str(), length, recvBuffer.size());
 
   setState(WirelessState::RECEIVING);
   setStatus("Receiving: " + filename);
@@ -824,11 +829,18 @@ void CalibreWirelessActivity::handleSendBook(const std::string& data) {
   // Check if recvBuffer has leftover data (binary file data that arrived with the JSON)
   if (!recvBuffer.empty()) {
     size_t toWrite = std::min(recvBuffer.size(), binaryBytesRemaining);
+    Serial.printf("[%lu] [CAL] Writing %zu bytes from recvBuffer (had %zu bytes)\n",
+                  millis(), toWrite, recvBuffer.size());
     size_t written = currentFile.write(reinterpret_cast<const uint8_t*>(recvBuffer.data()), toWrite);
+    if (written != toWrite) {
+      Serial.printf("[%lu] [CAL] WARNING: file.write returned %zu, expected %zu\n", millis(), written, toWrite);
+    }
     bytesReceived += written;
     binaryBytesRemaining -= written;
-    recvBuffer = recvBuffer.substr(toWrite);
+    recvBuffer = recvBuffer.substr(written);  // Use written, not toWrite!
     updateRequired = true;
+    Serial.printf("[%lu] [CAL] After recvBuffer write: received=%zu, remaining=%zu, recvBuffer=%zu\n",
+                  millis(), bytesReceived, binaryBytesRemaining, recvBuffer.size());
   }
 }
 
@@ -856,11 +868,23 @@ void CalibreWirelessActivity::handleNoop(const std::string& data) {
 }
 
 void CalibreWirelessActivity::receiveBinaryData() {
+  static unsigned long lastProgressLog = 0;
+
   // Read all available data in a loop to prevent TCP backpressure
   // This is important because Calibre sends data continuously
   while (binaryBytesRemaining > 0) {
+    if (shouldExit) return;
+
     const int available = tcpClient.available();
     if (available == 0) {
+      // Log progress periodically when waiting for data
+      if (millis() - lastProgressLog > 2000) {
+        Serial.printf("[%lu] [CAL] Binary transfer waiting: %zu/%zu bytes (%.1f%%), remaining=%zu\n",
+                      millis(), bytesReceived, currentFileSize,
+                      currentFileSize > 0 ? (100.0 * bytesReceived / currentFileSize) : 0.0,
+                      binaryBytesRemaining);
+        lastProgressLog = millis();
+      }
       // Check if connection is still alive
       if (!tcpClient.connected()) {
         Serial.printf("[%lu] [CAL] Connection lost during binary transfer. Received %zu/%zu bytes\n",

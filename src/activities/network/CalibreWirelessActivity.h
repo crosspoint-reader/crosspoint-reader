@@ -66,6 +66,7 @@ class CalibreWirelessActivity final : public Activity {
   SemaphoreHandle_t renderingMutex = nullptr;
   SemaphoreHandle_t stateMutex = nullptr;
   bool updateRequired = false;
+  volatile bool shouldExit = false;  // Signal for tasks to exit gracefully
 
   WirelessState state = WirelessState::DISCOVERING;
   const std::function<void()> onComplete;
