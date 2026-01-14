@@ -99,7 +99,7 @@ void ReaderActivity::onSelectBookFile(const std::string& path) {
       enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load TXT",
                                                      EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
       delay(2000);
-      onGoToFileSelection();
+      goToLibrary();
     }
   } else {
     // Load EPUB file
@@ -143,7 +143,7 @@ void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
   currentBookPath = txtPath;
   exitActivity();
   enterNewActivity(new TxtReaderActivity(
-      renderer, mappedInput, std::move(txt), [this, txtPath] { onGoToFileSelection(txtPath); },
+      renderer, mappedInput, std::move(txt), [this, txtPath] { goToLibrary(txtPath); },
       [this] { onGoBack(); }));
 }
 
