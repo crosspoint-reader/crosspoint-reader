@@ -10,7 +10,7 @@ class Txt;
 
 class ReaderActivity final : public ActivityWithSubactivity {
   std::string initialBookPath;
-  std::string currentBookPath;  // Track current book path for navigation
+  std::string currentBookPath;        // Track current book path for navigation
   MyLibraryActivity::Tab libraryTab;  // Track which tab to return to
   const std::function<void()> onGoBack;
   const std::function<void(const std::string&, MyLibraryActivity::Tab)> onGoToLibrary;
