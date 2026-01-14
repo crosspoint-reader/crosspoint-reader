@@ -93,6 +93,13 @@ class CalibreWirelessActivity final : public Activity {
   FsFile currentFile;
   std::string recvBuffer;  // Buffer for incoming data (like KOReader)
 
+  // Large message skip state - for streaming past oversized JSON (e.g., large covers)
+  bool inSkipMode = false;
+  size_t skipBytesRemaining = 0;
+  int skipOpcode = -1;  // Opcode of message being skipped
+  std::string skipExtractedLpath;
+  size_t skipExtractedLength = 0;
+
   static void displayTaskTrampoline(void* param);
   static void networkTaskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
