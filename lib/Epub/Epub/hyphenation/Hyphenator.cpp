@@ -123,6 +123,4 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   return breaks;
 }
 
-void Hyphenator::setPreferredLanguage(const std::string& lang) {
-  cachedHyphenator_ = hyphenatorForLanguage(lang);
-}
+void Hyphenator::setPreferredLanguage(const std::string& lang) { cachedHyphenator_ = hyphenatorForLanguage(lang); }

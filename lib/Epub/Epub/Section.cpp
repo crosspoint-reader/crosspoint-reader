@@ -122,8 +122,9 @@ bool Section::clearCache() const {
 
 bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                                const uint16_t viewportHeight, const std::function<void()>& progressSetupFn,
-                                const std::function<void(int)>& progressFn, const bool hyphenationEnabled) {
+                                const uint16_t viewportHeight, const bool hyphenationEnabled,
+                                const std::function<void()>& progressSetupFn,
+                                const std::function<void(int)>& progressFn) {
   constexpr uint32_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
