@@ -73,7 +73,7 @@ int KeyboardEntryActivity::getRowLength(const int row) const {
     case 3:
       return 10;  // zxcvbnm,./
     case 4:
-      return 10;  // caps (2 wide), space (5 wide), backspace (2 wide), OK
+      return 10;  // shift (2 wide), space (5 wide), backspace (2 wide), OK
     default:
       return 0;
   }
@@ -288,14 +288,14 @@ void KeyboardEntryActivity::render() const {
 
     // Handle bottom row (row 4) specially with proper multi-column keys
     if (row == 4) {
-      // Bottom row layout: CAPS (2 cols) | SPACE (5 cols) | <- (2 cols) | OK (2 cols)
+      // Bottom row layout: SHIFT (2 cols) | SPACE (5 cols) | <- (2 cols) | OK (2 cols)
       // Total: 11 visual columns, but we use logical positions for selection
 
       int currentX = startX;
 
-      // CAPS key (logical col 0, spans 2 key widths)
-      const bool capsSelected = (selectedRow == 4 && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
-      renderItemWithSelector(currentX + 2, rowY, shiftActive ? "CAPS" : "caps", capsSelected);
+      // SHIFT key (logical col 0, spans 2 key widths)
+      const bool shiftSelected = (selectedRow == 4 && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
+      renderItemWithSelector(currentX + 2, rowY, shiftActive ? "SHIFT" : "shift", shiftSelected);
       currentX += 2 * (keyWidth + keySpacing);
 
       // Space bar (logical cols 2-6, spans 5 key widths)
