@@ -20,7 +20,8 @@ class ParsedText {
   bool hyphenationEnabled;
 
   void applyParagraphIndent();
-  std::vector<size_t> computeLineBreaks(int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths) const;
+  std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth, int spaceWidth,
+                                        std::vector<uint16_t>& wordWidths);
   std::vector<size_t> computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                                   int spaceWidth, std::vector<uint16_t>& wordWidths);
   bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,

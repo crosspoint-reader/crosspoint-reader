@@ -75,7 +75,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.
     lineBreakIndices = computeHyphenatedLineBreaks(renderer, fontId, pageWidth, spaceWidth, wordWidths);
   } else {
-    lineBreakIndices = computeLineBreaks(pageWidth, spaceWidth, wordWidths);
+    lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, spaceWidth, wordWidths);
   }
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
@@ -103,8 +103,25 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   return wordWidths;
 }
 
-std::vector<size_t> ParsedText::computeLineBreaks(const int pageWidth, const int spaceWidth,
-                                                  const std::vector<uint16_t>& wordWidths) const {
+std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId, const int pageWidth,
+                                                  const int spaceWidth, std::vector<uint16_t>& wordWidths) {
+  if (words.empty()) {
+    return {};
+  }
+
+  // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
+  for (size_t i = 0; i < wordWidths.size(); ++i) {
+    while (wordWidths[i] > pageWidth) {
+      // Try language-aware hyphenation first; only fall back to heuristics when no dictionary break fits.
+      if (hyphenateWordAtIndex(i, pageWidth, renderer, fontId, wordWidths, /*allowFallbackBreaks=*/false)) {
+        continue;
+      }
+      if (!hyphenateWordAtIndex(i, pageWidth, renderer, fontId, wordWidths, /*allowFallbackBreaks=*/true)) {
+        break;
+      }
+    }
+  }
+
   const size_t totalWordCount = words.size();
 
   // DP table to store the minimum badness (cost) of lines starting at index i
@@ -260,7 +277,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   const auto style = *styleIt;
 
   // Collect candidate breakpoints (byte offsets and hyphen requirements).
-  const auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  auto breakInfos = Hyphenator::breakOffsets(word, /*allowFallback=*/false);
+  if (breakInfos.empty() && allowFallbackBreaks) {
+    breakInfos = Hyphenator::breakOffsets(word, /*allowFallback=*/true);
+  }
   if (breakInfos.empty()) {
     return false;
   }
