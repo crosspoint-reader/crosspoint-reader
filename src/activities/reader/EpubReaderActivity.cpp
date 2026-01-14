@@ -168,7 +168,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool skipChapter = mappedInput.getHeldTime() > skipChapterMs;
+  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
 
   if (skipChapter) {
     // We don't want to delete the section mid-render, so grab the semaphore

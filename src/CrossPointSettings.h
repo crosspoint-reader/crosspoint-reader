@@ -90,6 +90,8 @@ class CrossPointSettings {
   char opdsServerUrl[128] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
+  // Long-press chapter skip on side buttons
+  uint8_t longPressChapterSkip = 1;
 
   ~CrossPointSettings() = default;
 
