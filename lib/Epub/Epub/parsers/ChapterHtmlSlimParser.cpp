@@ -25,7 +25,7 @@ constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 
-const char* SKIP_TAGS[] = {"head", "table"};
+const char* SKIP_TAGS[] = {"head"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
@@ -63,11 +63,42 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
-    // TODO: Start processing image tags
+  // Special handling for tables - show placeholder text instead of dropping silently
+  if (strcmp(name, "table") == 0) {
+    // Add placeholder text
+    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+    if (self->currentTextBlock) {
+      self->currentTextBlock->addWord("[Table omitted]", EpdFontFamily::ITALIC);
+    }
+
+    // Skip table contents
     self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
+  }
+
+  if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
+    // TODO: Start processing image tags
+    std::string alt;
+    if (atts != nullptr) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "alt") == 0) {
+          alt = "[Image: " + std::string(atts[i + 1]) + "]";
+        }
+      }
+      Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
+
+      self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+      self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
+      self->depth += 1;
+      self->characterData(userData, alt.c_str(), alt.length());
+
+    } else {
+      // Skip for now
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
+    }
   }
 
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {

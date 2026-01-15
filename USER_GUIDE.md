@@ -96,6 +96,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - Left, Right, Back, Confirm
   - Left, Back, Confirm, Right
 - **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
+- **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skip to the next/previous chapter.
+  - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
+  - "Page Scroll" - Long-pressing scrolls a page up/down
+- Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
 - **Reader Font Family**: Choose the font used for reading:
   - "Bookerly" (default) - Amazon's reading font
   - "Noto Sans" - Google's sans-serif font
@@ -143,6 +147,9 @@ If the **Short Power Button Click** setting is set to "Page Turn", you can also 
 ### Chapter Navigation
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
 * **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button briefly, then release.
+
+This feature can be disabled in **[Settings](#35-settings)** to help avoid changing chapters by mistake.
+
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
