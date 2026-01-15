@@ -6,7 +6,8 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int SKIP_PAGE_MS = 700;
+constexpr int RAPID_NAV_START_MS = 500;
+constexpr int RAPID_NAV_DELAY_MS = 700;
 }  // namespace
 
 int XtcReaderChapterSelectionActivity::getPageItems() const {
@@ -80,8 +81,18 @@ void XtcReaderChapterSelectionActivity::loop() {
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
+  const bool prevPressed =
+      mappedInput.isPressed(MappedInputManager::Button::Up) || mappedInput.isPressed(MappedInputManager::Button::Left);
+  const bool nextPressed = mappedInput.isPressed(MappedInputManager::Button::Down) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Right);
+
   const int pageItems = getPageItems();
+  const int currentTocPage = selectorIndex / pageItems;
+  const int total = static_cast<int>(xtc->getChapters().size());
+  const int lastTocPage = total > 0 ? (total - 1) / pageItems : 0;
+
+  const bool shouldNavigateRapidly = mappedInput.getHeldTime() > RAPID_NAV_START_MS;
+  const bool isRapidNavigationDue = (millis() - lastRapidNavTime) > RAPID_NAV_DELAY_MS;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto& chapters = xtc->getChapters();
@@ -91,27 +102,37 @@ void XtcReaderChapterSelectionActivity::loop() {
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();
   } else if (prevReleased) {
-    const int total = static_cast<int>(xtc->getChapters().size());
-    if (total == 0) {
+    if (total == 0 || lastRapidNavTime != 0) {
+      lastRapidNavTime = 0;
       return;
     }
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + total) % total;
-    } else {
-      selectorIndex = (selectorIndex + total - 1) % total;
-    }
+
+    selectorIndex = (selectorIndex + total - 1) % total;
     updateRequired = true;
   } else if (nextReleased) {
-    const int total = static_cast<int>(xtc->getChapters().size());
+    if (total == 0 || lastRapidNavTime != 0) {
+      lastRapidNavTime = 0;
+      return;
+    }
+
+    selectorIndex = (selectorIndex + 1) % total;
+    updateRequired = true;
+  } else if (prevPressed && shouldNavigateRapidly && isRapidNavigationDue) {
     if (total == 0) {
       return;
     }
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % total;
-    } else {
-      selectorIndex = (selectorIndex + 1) % total;
-    }
+
+    selectorIndex = currentTocPage > 0 ? (currentTocPage - 1) * pageItems : lastTocPage * pageItems;
     updateRequired = true;
+    lastRapidNavTime = millis();
+  } else if (nextPressed && shouldNavigateRapidly && isRapidNavigationDue) {
+    if (total == 0) {
+      return;
+    }
+
+    selectorIndex = currentTocPage < lastTocPage ? (currentTocPage + 1) * pageItems : 0;
+    updateRequired = true;
+    lastRapidNavTime = millis();
   }
 }
 

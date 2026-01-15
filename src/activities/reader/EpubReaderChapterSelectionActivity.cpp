@@ -7,7 +7,8 @@
 
 namespace {
 // Time threshold for treating a long press as a page-up/page-down
-constexpr int SKIP_PAGE_MS = 700;
+constexpr int RAPID_NAV_START_MS = 500;
+constexpr int RAPID_NAV_DELAY_MS = 700;
 }  // namespace
 
 int EpubReaderChapterSelectionActivity::getPageItems() const {
@@ -75,8 +76,17 @@ void EpubReaderChapterSelectionActivity::loop() {
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
+  const bool prevPressed =
+      mappedInput.isPressed(MappedInputManager::Button::Up) || mappedInput.isPressed(MappedInputManager::Button::Left);
+  const bool nextPressed = mappedInput.isPressed(MappedInputManager::Button::Down) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Right);
+
   const int pageItems = getPageItems();
+  const int currentTocPage = selectorIndex / pageItems;
+  const int lastTocPage = (epub->getTocItemsCount() - 1) / pageItems;
+
+  const bool shouldNavigateRapidly = mappedInput.getHeldTime() > RAPID_NAV_START_MS;
+  const bool isRapidNavigationDue = (millis() - lastRapidNavTime) > RAPID_NAV_DELAY_MS;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto newSpineIndex = epub->getSpineIndexForTocIndex(selectorIndex);
@@ -88,20 +98,29 @@ void EpubReaderChapterSelectionActivity::loop() {
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();
   } else if (prevReleased) {
-    if (skipPage) {
-      selectorIndex =
-          ((selectorIndex / pageItems - 1) * pageItems + epub->getTocItemsCount()) % epub->getTocItemsCount();
-    } else {
-      selectorIndex = (selectorIndex + epub->getTocItemsCount() - 1) % epub->getTocItemsCount();
+    if (lastRapidNavTime != 0) {
+      lastRapidNavTime = 0;
+      return;
     }
+
+    selectorIndex = (selectorIndex + epub->getTocItemsCount() - 1) % epub->getTocItemsCount();
     updateRequired = true;
   } else if (nextReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % epub->getTocItemsCount();
-    } else {
-      selectorIndex = (selectorIndex + 1) % epub->getTocItemsCount();
+    if (lastRapidNavTime != 0) {
+      lastRapidNavTime = 0;
+      return;
     }
+
+    selectorIndex = (selectorIndex + 1) % epub->getTocItemsCount();
     updateRequired = true;
+  } else if (prevPressed && shouldNavigateRapidly && isRapidNavigationDue) {
+    selectorIndex = currentTocPage > 0 ? (currentTocPage - 1) * pageItems : lastTocPage * pageItems;
+    updateRequired = true;
+    lastRapidNavTime = millis();
+  } else if (nextPressed && shouldNavigateRapidly && isRapidNavigationDue) {
+    selectorIndex = currentTocPage < lastTocPage ? (currentTocPage + 1) * pageItems : 0;
+    updateRequired = true;
+    lastRapidNavTime = millis();
   }
 }
 
