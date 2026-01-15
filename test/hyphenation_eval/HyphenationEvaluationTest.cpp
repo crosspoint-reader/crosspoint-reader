@@ -128,8 +128,7 @@ std::string positionsToHyphenated(const std::string& word, const std::vector<siz
 
 std::vector<size_t> hyphenateWordWithHyphenator(const std::string& word, const LanguageHyphenator& hyphenator) {
   auto cps = collectCodepoints(word);
-  trimSurroundingPunctuation(cps);
-  trimTrailingFootnoteReference(cps);
+  trimSurroundingPunctuationAndFootnote(cps);
 
   return hyphenator.breakIndexes(cps);
 }

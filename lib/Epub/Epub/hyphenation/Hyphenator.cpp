@@ -1,8 +1,5 @@
 #include "Hyphenator.h"
 
-#include <Utf8.h>
-
-#include <algorithm>
 #include <vector>
 
 #include "HyphenationCommon.h"
@@ -60,13 +57,10 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
 
   // Convert to codepoints and normalize word boundaries.
   auto cps = collectCodepoints(word);
-  trimSurroundingPunctuation(cps);
-  trimTrailingFootnoteReference(cps);
+  trimSurroundingPunctuationAndFootnote(cps);
   const auto* hyphenator = cachedHyphenator_;
-  const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LiangWordConfig::kDefaultMinPrefix;
-  const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
 
-  // Explicit hyphen markers (soft or hard) take precedence over heuristic breaks.
+  // Explicit hyphen markers (soft or hard) take precedence over language breaks.
   auto explicitBreakInfos = buildExplicitBreakInfos(cps);
   if (!explicitBreakInfos.empty()) {
     return explicitBreakInfos;
@@ -80,6 +74,8 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
 
   // Only add fallback breaks if needed
   if (includeFallback && indexes.empty()) {
+    const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LiangWordConfig::kDefaultMinPrefix;
+    const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
     for (size_t idx = minPrefix; idx + minSuffix <= cps.size(); ++idx) {
       indexes.push_back(idx);
     }
