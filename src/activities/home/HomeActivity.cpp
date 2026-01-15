@@ -444,8 +444,11 @@ void HomeActivity::render() {
       renderer.drawRect(boxX, boxY, boxWidth, boxHeight, !bookSelected);
     }
 
+    // When cover is shown, invert text colors on selection; without cover, invert normally
+    const bool invertText = coverRendered ? bookSelected : !bookSelected;
+
     for (const auto& line : lines) {
-      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), coverRendered ? bookSelected : !bookSelected);
+      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), invertText);
       titleYStart += renderer.getLineHeight(UI_12_FONT_ID);
     }
 
@@ -466,7 +469,7 @@ void HomeActivity::render() {
         }
         trimmedAuthor.append("...");
       }
-      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, trimmedAuthor.c_str(), coverRendered ? bookSelected : !bookSelected);
+      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, trimmedAuthor.c_str(), invertText);
     }
 
     // "Continue Reading" label at the bottom
