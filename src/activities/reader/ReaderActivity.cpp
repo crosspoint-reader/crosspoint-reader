@@ -2,7 +2,6 @@
 
 #include "Epub.h"
 #include "EpubReaderActivity.h"
-#include "FileSelectionActivity.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
@@ -73,56 +72,10 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
   return nullptr;
 }
 
-void ReaderActivity::onSelectBookFile(const std::string& path) {
-  currentBookPath = path;  // Track current book path
-  exitActivity();
-  enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Loading..."));
-
-  if (isXtcFile(path)) {
-    // Load XTC file
-    auto xtc = loadXtc(path);
-    if (xtc) {
-      onGoToXtcReader(std::move(xtc));
-    } else {
-      exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load XTC",
-                                                     EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
-      delay(2000);
-      onGoToFileSelection();
-    }
-  } else if (isTxtFile(path)) {
-    // Load TXT file
-    auto txt = loadTxt(path);
-    if (txt) {
-      onGoToTxtReader(std::move(txt));
-    } else {
-      exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load TXT",
-                                                     EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
-      delay(2000);
-      onGoToFileSelection();
-    }
-  } else {
-    // Load EPUB file
-    auto epub = loadEpub(path);
-    if (epub) {
-      onGoToEpubReader(std::move(epub));
-    } else {
-      exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load epub",
-                                                     EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
-      delay(2000);
-      onGoToFileSelection();
-    }
-  }
-}
-
-void ReaderActivity::onGoToFileSelection(const std::string& fromBookPath) {
-  exitActivity();
+void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   // If coming from a book, start in that book's folder; otherwise start from root
   const auto initialPath = fromBookPath.empty() ? "/" : extractFolderPath(fromBookPath);
-  enterNewActivity(new FileSelectionActivity(
-      renderer, mappedInput, [this](const std::string& path) { onSelectBookFile(path); }, onGoBack, initialPath));
+  onGoToLibrary(initialPath, libraryTab);
 }
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
@@ -130,8 +83,7 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   currentBookPath = epubPath;
   exitActivity();
   enterNewActivity(new EpubReaderActivity(
-      renderer, mappedInput, std::move(epub), [this, epubPath] { onGoToFileSelection(epubPath); },
-      [this] { onGoBack(); }));
+      renderer, mappedInput, std::move(epub), [this, epubPath] { goToLibrary(epubPath); }, [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
@@ -139,8 +91,7 @@ void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   currentBookPath = xtcPath;
   exitActivity();
   enterNewActivity(new XtcReaderActivity(
-      renderer, mappedInput, std::move(xtc), [this, xtcPath] { onGoToFileSelection(xtcPath); },
-      [this] { onGoBack(); }));
+      renderer, mappedInput, std::move(xtc), [this, xtcPath] { goToLibrary(xtcPath); }, [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
@@ -148,15 +99,14 @@ void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
   currentBookPath = txtPath;
   exitActivity();
   enterNewActivity(new TxtReaderActivity(
-      renderer, mappedInput, std::move(txt), [this, txtPath] { onGoToFileSelection(txtPath); },
-      [this] { onGoBack(); }));
+      renderer, mappedInput, std::move(txt), [this, txtPath] { goToLibrary(txtPath); }, [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   if (initialBookPath.empty()) {
-    onGoToFileSelection();  // Start from root when entering via Browse
+    goToLibrary();  // Start from root when entering via Browse
     return;
   }
 

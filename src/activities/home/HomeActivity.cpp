@@ -23,7 +23,7 @@ void HomeActivity::taskTrampoline(void* param) {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 3;  // Browse files, File transfer, Settings
+  int count = 3;  // My Library, File transfer, Settings
   if (hasContinueReading) count++;
   if (hasOpdsUrl) count++;
   return count;
@@ -169,15 +169,15 @@ void HomeActivity::loop() {
     // Calculate dynamic indices based on which options are available
     int idx = 0;
     const int continueIdx = hasContinueReading ? idx++ : -1;
-    const int browseFilesIdx = idx++;
+    const int myLibraryIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
 
     if (selectorIndex == continueIdx) {
       onContinueReading();
-    } else if (selectorIndex == browseFilesIdx) {
-      onReaderOpen();
+    } else if (selectorIndex == myLibraryIdx) {
+      onMyLibraryOpen();
     } else if (selectorIndex == opdsLibraryIdx) {
       onOpdsBrowserOpen();
     } else if (selectorIndex == fileTransferIdx) {
@@ -496,9 +496,9 @@ void HomeActivity::render() {
 
   // --- Bottom menu tiles ---
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {"Browse Files", "File Transfer", "Settings"};
+  std::vector<const char*> menuItems = {"My Library", "File Transfer", "Settings"};
   if (hasOpdsUrl) {
-    // Insert Calibre Library after Browse Files
+    // Insert Calibre Library after My Library
     menuItems.insert(menuItems.begin() + 1, "Calibre Library");
   }
 
