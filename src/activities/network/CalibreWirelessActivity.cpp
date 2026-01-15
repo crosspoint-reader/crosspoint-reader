@@ -235,14 +235,26 @@ void CalibreWirelessActivity::listenForDiscovery() {
 }
 
 void CalibreWirelessActivity::handleTcpClient() {
+  // In binary mode, keep reading even if connection closed - data may still be buffered
+  if (inBinaryMode) {
+    // Check if there's still data to read, even if connection is closing
+    if (tcpClient.available() > 0 || tcpClient.connected()) {
+      receiveBinaryData();
+      return;
+    }
+    // Connection closed and no more data - check if transfer was complete
+    if (binaryBytesRemaining > 0) {
+      Serial.printf("[%lu] [CAL] Connection lost with %zu bytes remaining\n", millis(), binaryBytesRemaining);
+      currentFile.close();
+      inBinaryMode = false;
+      setError("Transfer incomplete - connection lost");
+      return;
+    }
+  }
+
   if (!tcpClient.connected()) {
     setState(WirelessState::DISCONNECTED);
     setStatus("Calibre disconnected");
-    return;
-  }
-
-  if (inBinaryMode) {
-    receiveBinaryData();
     return;
   }
 
@@ -532,8 +544,9 @@ void CalibreWirelessActivity::receiveBinaryData() {
 
   int available = tcpClient.available();
   if (available <= 0) {
-    // Brief wait for more data
-    vTaskDelay(1);
+    // Wait longer for data - TCP buffers may not be immediately available
+    // especially near end of transfer when connection is closing
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     return;
   }
 
