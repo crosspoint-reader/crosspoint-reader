@@ -450,7 +450,7 @@ void HomeActivity::render() {
     }
 
     for (const auto& line : lines) {
-      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), invertText);
+      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), !invertText);
       titleYStart += renderer.getLineHeight(UI_12_FONT_ID);
     }
 
@@ -471,7 +471,7 @@ void HomeActivity::render() {
         }
         trimmedAuthor.append("...");
       }
-      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, trimmedAuthor.c_str(), invertText);
+      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, trimmedAuthor.c_str(), !invertText);
     }
 
     // "Continue Reading" label at the bottom
@@ -487,9 +487,9 @@ void HomeActivity::render() {
       const int continueBoxY = continueY - continuePadding / 2;
       renderer.fillRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, bookSelected);
       renderer.drawRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, !bookSelected);
-      renderer.drawCenteredText(UI_10_FONT_ID, continueY, continueText, invertText);
+      renderer.drawCenteredText(UI_10_FONT_ID, continueY, continueText, !invertText);
     } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, continueY, "Continue Reading", invertText);
+      renderer.drawCenteredText(UI_10_FONT_ID, continueY, "Continue Reading", !invertText);
     }
   } else {
     // No book to continue reading
