@@ -325,7 +325,9 @@ void HomeActivity::render() {
   }
 
   if (hasContinueReading) {
-    // When cover is shown, invert text colors on selection; without cover, invert normally
+    // Invert text colors based on selection state:
+    // - With cover: selected = white text on black box, unselected = black text on white box
+    // - Without cover: selected = white text on black card, unselected = black text
     const bool invertText = coverRendered ? bookSelected : !bookSelected;
 
     // Split into words (avoid stringstream to keep this light on the MCU)
