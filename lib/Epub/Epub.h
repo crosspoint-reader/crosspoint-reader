@@ -62,5 +62,5 @@ class Epub {
   int getSpineIndexForTextReference() const;
 
   size_t getBookSize() const;
-  uint8_t calculateProgress(int currentSpineIndex, float currentSpineRead) const;
+  float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
 };
