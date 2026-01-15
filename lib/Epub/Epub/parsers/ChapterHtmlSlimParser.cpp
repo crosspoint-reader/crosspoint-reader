@@ -79,9 +79,26 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
     // TODO: Start processing image tags
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
-    return;
+    std::string alt;
+    if (atts != nullptr) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "alt") == 0) {
+          alt = "[Image: " + std::string(atts[i + 1]) + "]";
+        }
+      }
+      Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
+
+      self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+      self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
+      self->depth += 1;
+      self->characterData(userData, alt.c_str(), alt.length());
+
+    } else {
+      // Skip for now
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
+    }
   }
 
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {
