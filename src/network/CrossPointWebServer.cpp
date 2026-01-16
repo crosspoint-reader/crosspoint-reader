@@ -115,7 +115,8 @@ void CrossPointWebServer::begin() {
   Serial.printf("[%lu] [WEB] WebSocket server started\n", millis());
 
   udpActive = udp.begin(LOCAL_UDP_PORT);
-  Serial.printf("[%lu] [WEB] Discovery UDP %s on port %d\n", millis(), udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);
+  Serial.printf("[%lu] [WEB] Discovery UDP %s on port %d\n", millis(), udpActive ? "enabled" : "failed",
+                LOCAL_UDP_PORT);
 
   running = true;
 

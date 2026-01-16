@@ -43,8 +43,8 @@ void CalibreConnectActivity::onEnter() {
   );
 
   if (WiFi.status() != WL_CONNECTED) {
-    enterNewActivity(new WifiSelectionActivity(
-        renderer, mappedInput, [this](const bool connected) { onWifiSelectionComplete(connected); }));
+    enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
+                                               [this](const bool connected) { onWifiSelectionComplete(connected); }));
   } else {
     connectedIP = WiFi.localIP().toString().c_str();
     connectedSSID = WiFi.SSID().c_str();

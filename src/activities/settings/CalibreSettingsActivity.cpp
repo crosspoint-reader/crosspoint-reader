@@ -1,6 +1,7 @@
 #include "CalibreSettingsActivity.h"
 
 #include <GfxRenderer.h>
+
 #include <cstring>
 
 #include "CrossPointSettings.h"
