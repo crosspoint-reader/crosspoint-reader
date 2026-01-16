@@ -619,7 +619,7 @@ void CalibreWirelessActivity::handleGetInitializationInfo(const std::string& dat
   response += "\"deviceKind\":\"CrossPoint\",";
   response += "\"deviceName\":\"CrossPoint\",";
   response += "\"extensionPathLengths\":{\"epub\":37},";
-  response += "\"maxBookContentPacketLen\":4096,";
+  response += "\"maxBookContentPacketLen\":1024,";
   response += "\"passwordHash\":\"\",";
   response += "\"useUuidFileNames\":false,";
   response += "\"versionOK\":true";
