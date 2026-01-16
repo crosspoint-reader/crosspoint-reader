@@ -4,6 +4,14 @@
 
 #include <cstring>
 
+OpdsParser::OpdsParser() {
+  parser = XML_ParserCreate(nullptr);
+  if (!parser) {
+    errorOccured = true;
+    Serial.printf("[%lu] [OPDS] Couldn't allocate memory for parser\n", millis());
+  }
+}
+
 OpdsParser::~OpdsParser() {
   if (parser) {
     XML_StopParser(parser, XML_FALSE);
@@ -14,13 +22,9 @@ OpdsParser::~OpdsParser() {
   }
 }
 
-bool OpdsParser::parse(const char* xmlData, const size_t length) {
-  clear();
-
-  parser = XML_ParserCreate(nullptr);
-  if (!parser) {
-    Serial.printf("[%lu] [OPDS] Couldn't allocate memory for parser\n", millis());
-    return false;
+void OpdsParser::push(const char* xmlData, const size_t length) {
+  if (errorOccured) {
+    return;
   }
 
   XML_SetUserData(parser, this);
@@ -35,35 +39,39 @@ bool OpdsParser::parse(const char* xmlData, const size_t length) {
   while (remaining > 0) {
     void* const buf = XML_GetBuffer(parser, chunkSize);
     if (!buf) {
+      errorOccured = true;
       Serial.printf("[%lu] [OPDS] Couldn't allocate memory for buffer\n", millis());
       XML_ParserFree(parser);
       parser = nullptr;
-      return false;
+      return;
     }
 
     const size_t toRead = remaining < chunkSize ? remaining : chunkSize;
     memcpy(buf, currentPos, toRead);
 
-    const bool isFinal = (remaining == toRead);
-    if (XML_ParseBuffer(parser, static_cast<int>(toRead), isFinal) == XML_STATUS_ERROR) {
+    if (XML_ParseBuffer(parser, static_cast<int>(toRead), 0) == XML_STATUS_ERROR) {
+      errorOccured = true;
       Serial.printf("[%lu] [OPDS] Parse error at line %lu: %s\n", millis(), XML_GetCurrentLineNumber(parser),
                     XML_ErrorString(XML_GetErrorCode(parser)));
       XML_ParserFree(parser);
       parser = nullptr;
-      return false;
+      return;
     }
 
     currentPos += toRead;
     remaining -= toRead;
   }
-
-  // Clean up parser
-  XML_ParserFree(parser);
-  parser = nullptr;
-
-  Serial.printf("[%lu] [OPDS] Parsed %zu entries\n", millis(), entries.size());
-  return true;
 }
+
+void OpdsParser::finish() {
+  if (XML_Parse(parser, nullptr, 0, XML_TRUE) != XML_STATUS_OK) {
+    errorOccured = true;
+    XML_ParserFree(parser);
+    parser = nullptr;
+  }
+}
+
+bool OpdsParser::error() const { return errorOccured; }
 
 void OpdsParser::clear() {
   entries.clear();

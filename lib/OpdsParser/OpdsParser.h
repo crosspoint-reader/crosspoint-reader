@@ -44,26 +44,23 @@ using OpdsBook = OpdsEntry;
  */
 class OpdsParser {
  public:
-  OpdsParser() = default;
+  OpdsParser();
   ~OpdsParser();
 
   // Disable copy
   OpdsParser(const OpdsParser&) = delete;
   OpdsParser& operator=(const OpdsParser&) = delete;
 
-  /**
-   * Parse an OPDS XML feed.
-   * @param xmlData Pointer to the XML data
-   * @param length Length of the XML data
-   * @return true if parsing succeeded, false on error
-   */
-  bool parse(const char* xmlData, size_t length);
+  void push(const char* xmlData, size_t length);
+  void finish();
+  bool error() const;
 
   /**
    * Get the parsed entries (both navigation and book entries).
    * @return Vector of OpdsEntry entries
    */
-  const std::vector<OpdsEntry>& getEntries() const { return entries; }
+  const std::vector<OpdsEntry>& getEntries() const& { return entries; }
+  std::vector<OpdsEntry> getEntries() && { return std::move(entries); }
 
   /**
    * Get only book entries (legacy compatibility).
@@ -96,4 +93,6 @@ class OpdsParser {
   bool inAuthor = false;
   bool inAuthorName = false;
   bool inId = false;
+
+  bool errorOccured = false;
 };
