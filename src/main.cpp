@@ -43,18 +43,6 @@ GfxRenderer renderer(einkDisplay);
 Activity* currentActivity;
 
 // Fonts
-EpdFont bookerly10RegularFont(&bookerly_10_regular);
-EpdFont bookerly10BoldFont(&bookerly_10_bold);
-EpdFont bookerly10ItalicFont(&bookerly_10_italic);
-EpdFont bookerly10BoldItalicFont(&bookerly_10_bolditalic);
-EpdFontFamily bookerly10FontFamily(&bookerly10RegularFont, &bookerly10BoldFont, &bookerly10ItalicFont,
-                                   &bookerly10BoldItalicFont);
-EpdFont bookerly12RegularFont(&bookerly_12_regular);
-EpdFont bookerly12BoldFont(&bookerly_12_bold);
-EpdFont bookerly12ItalicFont(&bookerly_12_italic);
-EpdFont bookerly12BoldItalicFont(&bookerly_12_bolditalic);
-EpdFontFamily bookerly12FontFamily(&bookerly12RegularFont, &bookerly12BoldFont, &bookerly12ItalicFont,
-                                   &bookerly12BoldItalicFont);
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
 EpdFont bookerly14BoldFont(&bookerly_14_bold);
 EpdFont bookerly14ItalicFont(&bookerly_14_italic);
@@ -62,6 +50,12 @@ EpdFont bookerly14BoldItalicFont(&bookerly_14_bolditalic);
 EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
                                    &bookerly14BoldItalicFont);
 #ifndef OMIT_FONTS
+EpdFont bookerly10RegularFont(&bookerly_10_regular);
+EpdFont bookerly10BoldFont(&bookerly_10_bold);
+EpdFont bookerly10ItalicFont(&bookerly_10_italic);
+EpdFont bookerly10BoldItalicFont(&bookerly_10_bolditalic);
+EpdFontFamily bookerly10FontFamily(&bookerly10RegularFont, &bookerly10BoldFont, &bookerly10ItalicFont,
+                                   &bookerly10BoldItalicFont);
 EpdFont bookerly12RegularFont(&bookerly_12_regular);
 EpdFont bookerly12BoldFont(&bookerly_12_bold);
 EpdFont bookerly12ItalicFont(&bookerly_12_italic);
@@ -265,8 +259,6 @@ void onGoHome() {
 void setupDisplayAndFonts() {
   einkDisplay.begin();
   Serial.printf("[%lu] [   ] Display initialized\n", millis());
-  renderer.insertFont(BOOKERLY_10_FONT_ID, bookerly10FontFamily);
-  renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
   renderer.insertFont(BOOKERLY_10_FONT_ID, bookerly10FontFamily);
