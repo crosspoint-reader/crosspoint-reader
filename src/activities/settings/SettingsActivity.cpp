@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "CalibreSettingsActivity.h"
+#include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
@@ -14,7 +15,7 @@
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 22;
+constexpr int settingsCount = 23;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
@@ -44,6 +45,7 @@ const SettingInfo settingsList[settingsCount] = {
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
     SettingInfo::Action("KOReader Sync"),
+    SettingInfo::Action("Clear Cache"),
     SettingInfo::Action("Calibre Settings"),
     SettingInfo::Action("Check for updates")};
 }  // namespace
@@ -145,6 +147,14 @@ void SettingsActivity::toggleCurrentSetting() {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Clear Cache") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
