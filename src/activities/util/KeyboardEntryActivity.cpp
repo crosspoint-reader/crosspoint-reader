@@ -13,6 +13,10 @@ const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
 const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"",
                                                                     "ZXCVBNM<>?", "SPECIAL ROW"};
 
+namespace {
+constexpr unsigned long capsMs = 1000;
+}
+
 void KeyboardEntryActivity::taskTrampoline(void* param) {
   auto* self = static_cast<KeyboardEntryActivity*>(param);
   self->displayTaskLoop();
@@ -94,6 +98,7 @@ void KeyboardEntryActivity::handleKeyPress() {
     if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
       // Shift toggle
       shiftActive = !shiftActive;
+      updateRequired = true;
       return;
     }
 
@@ -221,7 +226,12 @@ void KeyboardEntryActivity::loop() {
   }
 
   // Selection
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= capsMs) {
+    onCapsHeld();
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < capsMs) {
     handleKeyPress();
     updateRequired = true;
   }
@@ -347,4 +357,14 @@ void KeyboardEntryActivity::renderItemWithSelector(const int x, const int y, con
     renderer.drawText(UI_10_FONT_ID, x + itemWidth, y, "]");
   }
   renderer.drawText(UI_10_FONT_ID, x, y, item);
+}
+
+void KeyboardEntryActivity::onCapsHeld() {
+  waitForCapsRelease();
+  shiftActive = !shiftActive;
+  updateRequired = true;
+}
+
+void KeyboardEntryActivity::waitForCapsRelease() {
+  while (mappedInput.isPressed(MappedInputManager::Button::Confirm)) delay(50);
 }

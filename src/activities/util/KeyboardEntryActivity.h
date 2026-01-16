@@ -96,4 +96,7 @@ class KeyboardEntryActivity : public Activity {
   int getRowLength(int row) const;
   void render() const;
   void renderItemWithSelector(int x, int y, const char* item, bool isSelected) const;
+
+  void onCapsHeld();
+  void waitForCapsRelease();
 };
