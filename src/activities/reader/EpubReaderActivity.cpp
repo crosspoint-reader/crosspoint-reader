@@ -268,7 +268,7 @@ void EpubReaderActivity::renderScreen() {
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight)) {
+                                  viewportHeight, SETTINGS.hyphenationEnabled)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       // Progress bar dimensions
@@ -313,7 +313,7 @@ void EpubReaderActivity::renderScreen() {
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, progressSetup, progressCallback)) {
+                                      viewportHeight, SETTINGS.hyphenationEnabled, progressSetup, progressCallback)) {
         Serial.printf("[%lu] [ERS] Failed to persist page data to SD\n", millis());
         section.reset();
         return;

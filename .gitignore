@@ -4,3 +4,5 @@
 .vscode
 lib/EpdFont/fontsrc
 *.generated.h
+build
+**/__pycache__/
