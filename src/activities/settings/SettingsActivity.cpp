@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "CalibreSettingsActivity.h"
+#include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
@@ -13,7 +14,7 @@
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 20;
+constexpr int settingsCount = 21;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
@@ -41,6 +42,7 @@ const SettingInfo settingsList[settingsCount] = {
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
+    SettingInfo::Action("Clear Cache"),
     SettingInfo::Action("Calibre Settings"),
     SettingInfo::Action("Check for updates")};
 }  // namespace
@@ -139,7 +141,15 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    if (strcmp(setting.name, "Calibre Settings") == 0) {
+    if (strcmp(setting.name, "Clear Cache") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Calibre Settings") == 0) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {

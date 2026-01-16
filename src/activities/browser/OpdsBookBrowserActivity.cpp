@@ -1,5 +1,6 @@
 #include "OpdsBookBrowserActivity.h"
 
+#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 #include <WiFi.h>
@@ -355,6 +356,12 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   if (result == HttpDownloader::OK) {
     Serial.printf("[%lu] [OPDS] Download complete: %s\n", millis(), filename.c_str());
+
+    // Invalidate any existing cache for this file to prevent stale metadata issues
+    Epub epub(filename, "/.crosspoint");
+    epub.clearCache();
+    Serial.printf("[%lu] [OPDS] Cleared cache for: %s\n", millis(), filename.c_str());
+
     state = BrowserState::BROWSING;
     updateRequired = true;
   } else {
