@@ -16,7 +16,8 @@ class ParsedText {
   std::list<std::string> words;
   std::list<EpdFontFamily::Style> wordStyles;
   TextBlock::Style style;
-  bool extraParagraphSpacing;
+  uint8_t extraParagraphSpacing;
+  uint8_t indentParagraph;
 
   std::vector<size_t> computeLineBreaks(int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths) const;
   void extractLine(size_t breakIndex, int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths,
@@ -25,8 +26,9 @@ class ParsedText {
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
-  explicit ParsedText(const TextBlock::Style style, const bool extraParagraphSpacing)
-      : style(style), extraParagraphSpacing(extraParagraphSpacing) {}
+  explicit ParsedText(const TextBlock::Style style, const uint8_t extraParagraphSpacing,
+                      const uint8_t indentParagraph = 1)
+      : style(style), extraParagraphSpacing(extraParagraphSpacing), indentParagraph(indentParagraph) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle);

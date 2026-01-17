@@ -42,10 +42,12 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   std::vector<uint16_t> wordWidths;
   wordWidths.reserve(totalWordCount);
 
-  // add em-space at the beginning of first word in paragraph to indent
-  if ((style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) && !extraParagraphSpacing) {
+  // add em-space at the beginning of first word in paragraph to indent (independent of paragraph spacing)
+  if ((style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) && indentParagraph > 0) {
     std::string& first_word = words.front();
-    first_word.insert(0, "\xe2\x80\x83");
+    for (uint8_t i = 0; i < indentParagraph; ++i) {
+      first_word.insert(0, "\xe2\x80\x83");  // em-space
+    }
   }
 
   auto wordsIt = words.begin();
