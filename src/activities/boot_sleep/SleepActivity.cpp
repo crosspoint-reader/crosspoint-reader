@@ -14,7 +14,7 @@
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  if(SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LAST_SCREEN) {
+  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LAST_SCREEN) {
     renderPopup("Entering Sleep...");
   } else {
     return renderLastScreenSleepScreen();
@@ -283,7 +283,7 @@ void SleepActivity::renderLastScreenSleepScreen() const {
   renderer.fillRect(x - 5, y - 5, w + 10, h + 10, true);
   renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
   renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, "SLEEPING...", true, EpdFontFamily::BOLD);
-  
+
   // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::DARK) {
     // Draw dark sleep image
