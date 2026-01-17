@@ -37,6 +37,10 @@ void SleepActivity::onEnter() {
     return renderCoverSleepScreen();
   }
 
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LAST_SCREEN) {
+    return renderLastScreenSleepScreen();
+  }
+
   renderDefaultSleepScreen();
 }
 
@@ -278,9 +282,28 @@ void SleepActivity::renderCoverSleepScreen() const {
 }
 
 void SleepActivity::renderLastScreenSleepScreen() const {
+<<<<<<< HEAD
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.drawImage(MoonIcon, 48, pageHeight - 48, 48, 48);
+=======
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, "SLEEPING...", EpdFontFamily::BOLD);
+  constexpr int margin = 20;
+  const int x = (renderer.getScreenWidth() - textWidth - margin * 2) / 2;
+  const int w = textWidth + margin * 2;
+  const int h = renderer.getLineHeight(UI_12_FONT_ID) + margin * 2;
+  const int y = renderer.getScreenHeight() - h - margin;
+
+  renderer.fillRect(x - 5, y - 5, w + 10, h + 10, true);
+  renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
+  renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, "SLEEPING...", true, EpdFontFamily::BOLD);
+  
+  // Make sleep screen dark unless light is selected in settings
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::DARK) {
+    // Draw dark sleep image
+  }
+
+>>>>>>> cc60375 (Initial push)
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
 
