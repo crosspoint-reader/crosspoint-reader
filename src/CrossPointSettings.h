@@ -58,6 +58,17 @@ class CrossPointSettings {
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2 };
 
+  // Paragraph spacing options
+  enum PARAGRAPH_SPACING {
+    SPACING_NONE = 0,
+    SPACING_0_3X = 1,
+    SPACING_0_5X = 2,
+    SPACING_0_8X = 3,
+    SPACING_1_0X = 4,
+    SPACING_1_2X = 5,
+    SPACING_1_4X = 6
+  };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -65,7 +76,8 @@ class CrossPointSettings {
   // Status bar settings
   uint8_t statusBar = FULL;
   // Text rendering settings
-  uint8_t extraParagraphSpacing = 1;
+  uint8_t indentParagraph = 1;  // 0-3: number of em-spaces to indent paragraph
+  uint8_t extraParagraphSpacing = SPACING_1_0X;  // 0-6: spacing (0, 0.3x, 0.5x, 0.8x, 1x, 1.2x, 1.4x)
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
