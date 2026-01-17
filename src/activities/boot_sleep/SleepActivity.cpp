@@ -14,7 +14,11 @@
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  renderPopup("Entering Sleep...");
+  if(SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LAST_SCREEN) {
+    renderPopup("Entering Sleep...");
+  } else {
+    return renderLastScreenSleepScreen();
+  }
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();
@@ -26,10 +30,6 @@ void SleepActivity::onEnter() {
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER) {
     return renderCoverSleepScreen();
-  }
-
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LAST_SCREEN) {
-    return renderLastScreenSleepScreen();
   }
 
   renderDefaultSleepScreen();
