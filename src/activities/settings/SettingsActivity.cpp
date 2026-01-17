@@ -11,15 +11,11 @@
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
 namespace {
-constexpr int displaySettingsCount = 5;
+constexpr int displaySettingsCount = 6;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
-<<<<<<< HEAD
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
     SettingInfo::Enum("Show Sleep Screen", &CrossPointSettings::showSleepScreen, {"Always", "Except Timeout", "Never"}),
-=======
-    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "Last Screen" "None"}),
->>>>>>> cc60375 (Initial push)
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
     SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}),
     SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"}),
