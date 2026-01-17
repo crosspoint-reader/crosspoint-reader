@@ -1,6 +1,8 @@
 #pragma once
 #include <Print.h>
 
+#include <vector>
+
 #include "Epub.h"
 #include "expat.h"
 
@@ -38,6 +40,7 @@ class ContentOpfParser final : public Print {
   std::string tocNavPath;  // EPUB 3 nav document path
   std::string coverItemHref;
   std::string textReferenceHref;
+  std::vector<std::string> cssFiles;  // CSS stylesheet paths
 
   explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, const size_t xmlSize,
                             BookMetadataCache* cache)

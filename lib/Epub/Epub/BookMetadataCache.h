@@ -3,6 +3,7 @@
 #include <SDCardManager.h>
 
 #include <string>
+#include <vector>
 
 class BookMetadataCache {
  public:
@@ -11,6 +12,7 @@ class BookMetadataCache {
     std::string author;
     std::string coverItemHref;
     std::string textReferenceHref;
+    std::vector<std::string> cssFiles;
   };
 
   struct SpineEntry {

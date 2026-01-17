@@ -10,11 +10,12 @@
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
-void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle) {
+void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
   wordStyles.push_back(fontStyle);
+  wordUnderlines.push_back(underline);
 }
 
 // Consumes data to minimize memory usage
@@ -42,17 +43,33 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   std::vector<uint16_t> wordWidths;
   wordWidths.reserve(totalWordCount);
 
-  // add em-space at the beginning of first word in paragraph to indent
-  if ((style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) && !extraParagraphSpacing) {
+  // Apply text indent: either from CSS blockStyle or default em-space for justified/left-aligned
+  const bool shouldIndent = (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) && !extraParagraphSpacing;
+  if (blockStyle.textIndent > 0) {
+    // CSS text-indent is handled via first word width adjustment
+    // We'll add the indent value directly to the first word's width
+  } else if (shouldIndent) {
+    // Default: add em-space at the beginning of first word in paragraph to indent
     std::string& first_word = words.front();
     first_word.insert(0, "\xe2\x80\x83");
   }
 
   auto wordsIt = words.begin();
   auto wordStylesIt = wordStyles.begin();
+  bool isFirst = true;
 
   while (wordsIt != words.end()) {
-    wordWidths.push_back(renderer.getTextWidth(fontId, wordsIt->c_str(), *wordStylesIt));
+    uint16_t width = renderer.getTextWidth(fontId, wordsIt->c_str(), *wordStylesIt);
+
+    // Add CSS text-indent to first word width
+    if (isFirst && blockStyle.textIndent > 0 && shouldIndent) {
+      width += static_cast<uint16_t>(blockStyle.textIndent);
+      isFirst = false;
+    } else {
+      isFirst = false;
+    }
+
+    wordWidths.push_back(width);
 
     std::advance(wordsIt, 1);
     std::advance(wordStylesIt, 1);
@@ -182,14 +199,19 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Iterators always start at the beginning as we are moving content with splice below
   auto wordEndIt = words.begin();
   auto wordStyleEndIt = wordStyles.begin();
+  auto wordUnderlineEndIt = wordUnderlines.begin();
   std::advance(wordEndIt, lineWordCount);
   std::advance(wordStyleEndIt, lineWordCount);
+  std::advance(wordUnderlineEndIt, lineWordCount);
 
   // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
   std::list<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
+  std::list<bool> lineWordUnderlines;
+  lineWordUnderlines.splice(lineWordUnderlines.begin(), wordUnderlines, wordUnderlines.begin(), wordUnderlineEndIt);
 
-  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style));
+  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style,
+                                          blockStyle, std::move(lineWordUnderlines)));
 }

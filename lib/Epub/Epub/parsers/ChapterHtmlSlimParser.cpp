@@ -22,6 +22,9 @@ constexpr int NUM_BOLD_TAGS = sizeof(BOLD_TAGS) / sizeof(BOLD_TAGS[0]);
 const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
 
+const char* UNDERLINE_TAGS[] = {"u", "ins"};
+constexpr int NUM_UNDERLINE_TAGS = sizeof(UNDERLINE_TAGS) / sizeof(UNDERLINE_TAGS[0]);
+
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 
@@ -40,19 +43,55 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
   return false;
 }
 
+// Create a BlockStyle from CSS style properties
+BlockStyle createBlockStyleFromCss(const CssStyle& cssStyle) {
+  BlockStyle blockStyle;
+  blockStyle.marginTop = static_cast<int8_t>(cssStyle.marginTop + cssStyle.paddingTop);
+  blockStyle.marginBottom = static_cast<int8_t>(cssStyle.marginBottom + cssStyle.paddingBottom);
+  blockStyle.paddingTop = cssStyle.paddingTop;
+  blockStyle.paddingBottom = cssStyle.paddingBottom;
+  blockStyle.textIndent = static_cast<int16_t>(cssStyle.indentPixels);
+  return blockStyle;
+}
+
+// Update effective bold/italic/underline based on block style and inline style stack
+void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
+  // Start with block-level styles
+  effectiveBold = currentBlockStyle.hasFontWeight() && currentBlockStyle.fontWeight == CssFontWeight::Bold;
+  effectiveItalic = currentBlockStyle.hasFontStyle() && currentBlockStyle.fontStyle == CssFontStyle::Italic;
+  effectiveUnderline =
+      currentBlockStyle.hasTextDecoration() && currentBlockStyle.decoration == CssTextDecoration::Underline;
+
+  // Apply inline style stack in order
+  for (const auto& entry : inlineStyleStack) {
+    if (entry.hasBold) {
+      effectiveBold = entry.bold;
+    }
+    if (entry.hasItalic) {
+      effectiveItalic = entry.italic;
+    }
+    if (entry.hasUnderline) {
+      effectiveUnderline = entry.underline;
+    }
+  }
+}
+
 // start a new text block if needed
-void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style) {
+void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style, const BlockStyle& blockStyle) {
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
       currentTextBlock->setStyle(style);
+      currentTextBlock->setBlockStyle(blockStyle);
       return;
     }
 
     makePages();
   }
-  currentTextBlock.reset(new ParsedText(style, extraParagraphSpacing));
+  currentTextBlock.reset(new ParsedText(style, extraParagraphSpacing, blockStyle));
 }
+
+void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style) { startNewTextBlock(style, BlockStyle{}); }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
@@ -61,6 +100,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   if (self->skipUntilDepth < self->depth) {
     self->depth += 1;
     return;
+  }
+
+  // Extract class and style attributes for CSS processing
+  std::string classAttr;
+  std::string styleAttr;
+  if (atts != nullptr) {
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "class") == 0) {
+        classAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "style") == 0) {
+        styleAttr = atts[i + 1];
+      }
+    }
   }
 
   // Special handling for tables - show placeholder text instead of dropping silently
@@ -120,22 +172,151 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  // Determine if this is a block element
+  bool isBlockElement = matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
+
+  // Compute CSS style for this element
+  CssStyle cssStyle;
+  if (self->cssParser) {
+    // Get combined tag + class styles
+    cssStyle = self->cssParser->resolveStyle(name, classAttr);
+    // Merge inline style (highest priority)
+    if (!styleAttr.empty()) {
+      CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
+      cssStyle.merge(inlineStyle);
+    }
+  }
+
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
-    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+    // Headers: center aligned, bold, apply CSS overrides
+    TextBlock::Style alignment = TextBlock::CENTER_ALIGN;
+    if (cssStyle.hasTextAlign()) {
+      switch (cssStyle.alignment) {
+        case TextAlign::Left:
+          alignment = TextBlock::LEFT_ALIGN;
+          break;
+        case TextAlign::Right:
+          alignment = TextBlock::RIGHT_ALIGN;
+          break;
+        case TextAlign::Center:
+          alignment = TextBlock::CENTER_ALIGN;
+          break;
+        case TextAlign::Justify:
+          alignment = TextBlock::JUSTIFIED;
+          break;
+        default:
+          break;
+      }
+    }
+
+    self->currentBlockStyle = cssStyle;
+    self->startNewTextBlock(alignment, createBlockStyleFromCss(cssStyle));
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
+    self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
       self->startNewTextBlock(self->currentTextBlock->getStyle());
     } else {
-      self->startNewTextBlock((TextBlock::Style)self->paragraphAlignment);
+      // Determine alignment from CSS or default
+      auto alignment = static_cast<TextBlock::Style>(self->paragraphAlignment);
+      if (cssStyle.hasTextAlign()) {
+        switch (cssStyle.alignment) {
+          case TextAlign::Left:
+            alignment = TextBlock::LEFT_ALIGN;
+            break;
+          case TextAlign::Right:
+            alignment = TextBlock::RIGHT_ALIGN;
+            break;
+          case TextAlign::Center:
+            alignment = TextBlock::CENTER_ALIGN;
+            break;
+          case TextAlign::Justify:
+            alignment = TextBlock::JUSTIFIED;
+            break;
+          default:
+            break;
+        }
+      }
+
+      self->currentBlockStyle = cssStyle;
+      self->startNewTextBlock(alignment, createBlockStyleFromCss(cssStyle));
+      self->updateEffectiveInlineStyle();
+
       if (strcmp(name, "li") == 0) {
         self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
       }
     }
+  } else if (matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS)) {
+    self->underlineUntilDepth = std::min(self->underlineUntilDepth, self->depth);
+    // Push inline style entry for underline tag
+    StyleStackEntry entry;
+    entry.depth = self->depth;  // Track depth for matching pop
+    entry.hasUnderline = true;
+    entry.underline = true;
+    if (cssStyle.hasFontWeight()) {
+      entry.hasBold = true;
+      entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+    }
+    if (cssStyle.hasFontStyle()) {
+      entry.hasItalic = true;
+      entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
   } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
+    // Push inline style entry for bold tag
+    StyleStackEntry entry;
+    entry.depth = self->depth;  // Track depth for matching pop
+    entry.hasBold = true;
+    entry.bold = true;
+    if (cssStyle.hasFontStyle()) {
+      entry.hasItalic = true;
+      entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+    }
+    if (cssStyle.hasTextDecoration()) {
+      entry.hasUnderline = true;
+      entry.underline = cssStyle.decoration == CssTextDecoration::Underline;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
   } else if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
     self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
+    // Push inline style entry for italic tag
+    StyleStackEntry entry;
+    entry.depth = self->depth;  // Track depth for matching pop
+    entry.hasItalic = true;
+    entry.italic = true;
+    if (cssStyle.hasFontWeight()) {
+      entry.hasBold = true;
+      entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+    }
+    if (cssStyle.hasTextDecoration()) {
+      entry.hasUnderline = true;
+      entry.underline = cssStyle.decoration == CssTextDecoration::Underline;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "span") == 0 || !isBlockElement) {
+    // Handle span and other inline elements for CSS styling
+    if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration()) {
+      StyleStackEntry entry;
+      entry.depth = self->depth;  // Track depth for matching pop
+      if (cssStyle.hasFontWeight()) {
+        entry.hasBold = true;
+        entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+      }
+      if (cssStyle.hasFontStyle()) {
+        entry.hasItalic = true;
+        entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+      }
+      if (cssStyle.hasTextDecoration()) {
+        entry.hasUnderline = true;
+        entry.underline = cssStyle.decoration == CssTextDecoration::Underline;
+      }
+      self->inlineStyleStack.push_back(entry);
+      self->updateEffectiveInlineStyle();
+    }
   }
 
   self->depth += 1;
@@ -149,12 +330,17 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     return;
   }
 
+  // Determine font style from depth-based tracking and CSS effective style
+  const bool isBold = self->boldUntilDepth < self->depth || self->effectiveBold;
+  const bool isItalic = self->italicUntilDepth < self->depth || self->effectiveItalic;
+  const bool isUnderline = self->underlineUntilDepth < self->depth || self->effectiveUnderline;
+
   EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
-  if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth) {
+  if (isBold && isItalic) {
     fontStyle = EpdFontFamily::BOLD_ITALIC;
-  } else if (self->boldUntilDepth < self->depth) {
+  } else if (isBold) {
     fontStyle = EpdFontFamily::BOLD;
-  } else if (self->italicUntilDepth < self->depth) {
+  } else if (isItalic) {
     fontStyle = EpdFontFamily::ITALIC;
   }
 
@@ -163,7 +349,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
         self->partWordBuffer[self->partWordBufferIndex] = '\0';
-        self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
+        self->currentTextBlock->addWord(self->partWordBuffer, fontStyle, isUnderline);
         self->partWordBufferIndex = 0;
       }
       // Skip the whitespace char
@@ -202,7 +388,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     // If we're about to run out of space, then cut the word off and start a new one
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
+      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle, isUnderline);
       self->partWordBufferIndex = 0;
     }
 
@@ -224,27 +410,42 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
-  if (self->partWordBufferIndex > 0) {
-    // Only flush out part word buffer if we're closing a block tag or are at the top of the HTML file.
-    // We don't want to flush out content when closing inline tags like <span>.
-    // Currently this also flushes out on closing <b> and <i> tags, but they are line tags so that shouldn't happen,
-    // text styling needs to be overhauled to fix it.
-    const bool shouldBreakText =
-        matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || matches(name, HEADER_TAGS, NUM_HEADER_TAGS) ||
-        matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) || self->depth == 1;
+  // Check if any style state will change after we decrement depth
+  // If so, we MUST flush the partWordBuffer with the CURRENT style first
+  // Note: depth hasn't been decremented yet, so we check against (depth - 1)
+  const bool willPopStyleStack =
+      !self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth - 1;
+  const bool willClearBold = self->boldUntilDepth == self->depth - 1;
+  const bool willClearItalic = self->italicUntilDepth == self->depth - 1;
+  const bool willClearUnderline = self->underlineUntilDepth == self->depth - 1;
 
-    if (shouldBreakText) {
+  const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic || willClearUnderline;
+
+  // Flush buffer with current style BEFORE any style changes
+  if (self->partWordBufferIndex > 0) {
+    // Flush if style will change OR if we're closing a block/structural element
+    const bool shouldFlush = styleWillChange || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) ||
+                             matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BOLD_TAGS, NUM_BOLD_TAGS) ||
+                             matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) ||
+                             matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS) || self->depth == 1;
+
+    if (shouldFlush) {
+      // Use combined depth-based and CSS-based style
+      const bool isBold = self->boldUntilDepth < self->depth || self->effectiveBold;
+      const bool isItalic = self->italicUntilDepth < self->depth || self->effectiveItalic;
+      const bool isUnderline = self->underlineUntilDepth < self->depth || self->effectiveUnderline;
+
       EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
-      if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth) {
+      if (isBold && isItalic) {
         fontStyle = EpdFontFamily::BOLD_ITALIC;
-      } else if (self->boldUntilDepth < self->depth) {
+      } else if (isBold) {
         fontStyle = EpdFontFamily::BOLD;
-      } else if (self->italicUntilDepth < self->depth) {
+      } else if (isItalic) {
         fontStyle = EpdFontFamily::ITALIC;
       }
 
       self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
+      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle, isUnderline);
       self->partWordBufferIndex = 0;
     }
   }
@@ -256,14 +457,32 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->skipUntilDepth = INT_MAX;
   }
 
-  // Leaving bold
+  // Leaving bold tag
   if (self->boldUntilDepth == self->depth) {
     self->boldUntilDepth = INT_MAX;
   }
 
-  // Leaving italic
+  // Leaving italic tag
   if (self->italicUntilDepth == self->depth) {
     self->italicUntilDepth = INT_MAX;
+  }
+
+  // Leaving underline tag
+  if (self->underlineUntilDepth == self->depth) {
+    self->underlineUntilDepth = INT_MAX;
+  }
+
+  // Pop from inline style stack if we pushed an entry at this depth
+  // This handles all inline elements: b, i, u, span, etc.
+  if (!self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth) {
+    self->inlineStyleStack.pop_back();
+    self->updateEffectiveInlineStyle();
+  }
+
+  // Clear block style when leaving block elements
+  if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
+    self->currentBlockStyle.reset();
+    self->updateEffectiveInlineStyle();
   }
 }
 
@@ -384,10 +603,23 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+
+  // Apply marginTop before the paragraph
+  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
+  if (blockStyle.marginTop > 0) {
+    currentPageNextY += lineHeight * blockStyle.marginTop;
+  }
+
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, viewportWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
-  // Extra paragraph spacing if enabled
+
+  // Apply marginBottom after the paragraph
+  if (blockStyle.marginBottom > 0) {
+    currentPageNextY += lineHeight * blockStyle.marginBottom;
+  }
+
+  // Extra paragraph spacing if enabled (default behavior)
   if (extraParagraphSpacing) {
     currentPageNextY += lineHeight / 2;
   }
