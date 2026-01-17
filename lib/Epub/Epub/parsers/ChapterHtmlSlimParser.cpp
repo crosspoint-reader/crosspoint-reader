@@ -51,7 +51,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style) {
 
     makePages();
   }
-  currentTextBlock.reset(new ParsedText(style, extraParagraphSpacing));
+  currentTextBlock.reset(new ParsedText(style, extraParagraphSpacing, indentParagraph));
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -387,8 +387,11 @@ void ChapterHtmlSlimParser::makePages() {
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, viewportWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
-  // Extra paragraph spacing if enabled
-  if (extraParagraphSpacing) {
-    currentPageNextY += lineHeight / 2;
+  // Apply paragraph spacing: 0->0%, 1->30%, 2->50%, 3->80%, 4->100%, 5->120%, 6->140%
+  if (extraParagraphSpacing > 0) {
+    const float spacingMultipliers[] = {0.0f, 0.3f, 0.5f, 0.8f, 1.0f, 1.2f, 1.4f};
+    const float spacingMultiplier = spacingMultipliers[extraParagraphSpacing];
+    const int spacingAmount = static_cast<int>(lineHeight * spacingMultiplier);
+    currentPageNextY += spacingAmount;
   }
 }
