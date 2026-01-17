@@ -41,7 +41,7 @@ const SettingInfo settingsList[settingsCount] = {
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
-    SettingInfo::Action("Calibre Settings"),
+    SettingInfo::Action("OPDS Browser"),
     SettingInfo::Action("Check for updates")};
 }  // namespace
 
@@ -139,7 +139,7 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    if (strcmp(setting.name, "Calibre Settings") == 0) {
+    if (strcmp(setting.name, "OPDS Browser") == 0) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {

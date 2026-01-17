@@ -16,6 +16,8 @@ namespace {
 // Note: Items starting with "." are automatically hidden
 const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
+constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
@@ -28,6 +30,9 @@ size_t wsUploadSize = 0;
 size_t wsUploadReceived = 0;
 unsigned long wsUploadStartTime = 0;
 bool wsUploadInProgress = false;
+String wsLastCompleteName;
+size_t wsLastCompleteSize = 0;
+unsigned long wsLastCompleteAt = 0;
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -85,6 +90,7 @@ void CrossPointWebServer::begin() {
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
+  server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(); }, [this] { handleUpload(); });
@@ -107,6 +113,10 @@ void CrossPointWebServer::begin() {
   wsServer->begin();
   wsServer->onEvent(wsEventCallback);
   Serial.printf("[%lu] [WEB] WebSocket server started\n", millis());
+
+  udpActive = udp.begin(LOCAL_UDP_PORT);
+  Serial.printf("[%lu] [WEB] Discovery UDP %s on port %d\n", millis(), udpActive ? "enabled" : "failed",
+                LOCAL_UDP_PORT);
 
   running = true;
 
@@ -145,6 +155,11 @@ void CrossPointWebServer::stop() {
     Serial.printf("[%lu] [WEB] WebSocket server stopped\n", millis());
   }
 
+  if (udpActive) {
+    udp.stop();
+    udpActive = false;
+  }
+
   // Brief delay to allow any in-flight handleClient() calls to complete
   delay(20);
 
@@ -163,7 +178,7 @@ void CrossPointWebServer::stop() {
   Serial.printf("[%lu] [WEB] [MEM] Free heap final: %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
-void CrossPointWebServer::handleClient() const {
+void CrossPointWebServer::handleClient() {
   static unsigned long lastDebugPrint = 0;
 
   // Check running flag FIRST before accessing server
@@ -189,6 +204,40 @@ void CrossPointWebServer::handleClient() const {
   if (wsServer) {
     wsServer->loop();
   }
+
+  // Respond to discovery broadcasts
+  if (udpActive) {
+    int packetSize = udp.parsePacket();
+    if (packetSize > 0) {
+      char buffer[16];
+      int len = udp.read(buffer, sizeof(buffer) - 1);
+      if (len > 0) {
+        buffer[len] = '\0';
+        if (strcmp(buffer, "hello") == 0) {
+          String hostname = WiFi.getHostname();
+          if (hostname.isEmpty()) {
+            hostname = "crosspoint";
+          }
+          String message = "crosspoint (on " + hostname + ");" + String(wsPort);
+          udp.beginPacket(udp.remoteIP(), udp.remotePort());
+          udp.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.length());
+          udp.endPacket();
+        }
+      }
+    }
+  }
+}
+
+CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() const {
+  WsUploadStatus status;
+  status.inProgress = wsUploadInProgress;
+  status.received = wsUploadReceived;
+  status.total = wsUploadSize;
+  status.filename = wsUploadFileName.c_str();
+  status.lastCompleteName = wsLastCompleteName.c_str();
+  status.lastCompleteSize = wsLastCompleteSize;
+  status.lastCompleteAt = wsLastCompleteAt;
+  return status;
 }
 
 void CrossPointWebServer::handleRoot() const {
@@ -333,6 +382,69 @@ void CrossPointWebServer::handleFileListData() const {
   // End of streamed response, empty chunk to signal client
   server->sendContent("");
   Serial.printf("[%lu] [WEB] Served file listing page for path: %s\n", millis(), currentPath.c_str());
+}
+
+void CrossPointWebServer::handleDownload() const {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+
+  String itemPath = server->arg("path");
+  if (itemPath.isEmpty() || itemPath == "/") {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+  if (!itemPath.startsWith("/")) {
+    itemPath = "/" + itemPath;
+  }
+
+  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+  if (itemName.startsWith(".")) {
+    server->send(403, "text/plain", "Cannot access system files");
+    return;
+  }
+  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+    if (itemName.equals(HIDDEN_ITEMS[i])) {
+      server->send(403, "text/plain", "Cannot access protected items");
+      return;
+    }
+  }
+
+  if (!SdMan.exists(itemPath.c_str())) {
+    server->send(404, "text/plain", "Item not found");
+    return;
+  }
+
+  FsFile file = SdMan.open(itemPath.c_str());
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open file");
+    return;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    server->send(400, "text/plain", "Path is a directory");
+    return;
+  }
+
+  String contentType = "application/octet-stream";
+  if (isEpubFile(itemPath)) {
+    contentType = "application/epub+zip";
+  }
+
+  char nameBuf[128] = {0};
+  String filename = "download";
+  if (file.getName(nameBuf, sizeof(nameBuf))) {
+    filename = nameBuf;
+  }
+
+  server->setContentLength(file.size());
+  server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+  server->send(200, contentType.c_str(), "");
+
+  WiFiClient client = server->client();
+  client.write(file);
+  file.close();
 }
 
 // Static variables for upload handling
@@ -780,6 +892,10 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       if (wsUploadReceived >= wsUploadSize) {
         wsUploadFile.close();
         wsUploadInProgress = false;
+
+        wsLastCompleteName = wsUploadFileName;
+        wsLastCompleteSize = wsUploadSize;
+        wsLastCompleteAt = millis();
 
         unsigned long elapsed = millis() - wsUploadStartTime;
         float kbps = (elapsed > 0) ? (wsUploadSize / 1024.0) / (elapsed / 1000.0) : 0;

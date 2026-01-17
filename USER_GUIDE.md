@@ -60,6 +60,17 @@ See the [webserver docs](./docs/webserver.md) for more information on how to con
 > [!TIP]
 > Advanced users can also manage files programmatically or via the command line using `curl`. See the [webserver docs](./docs/webserver.md) for details.
 
+### 3.4.1 Calibre Wireless Transfers
+
+CrossPoint supports sending books from Calibre using the CrossPoint Reader device plugin.
+
+1. Install the plugin in Calibre:
+   - Open Calibre → Preferences → Plugins → Load plugin from file.
+   - Select `calibre-plugin/crosspoint_reader/CrossPointReaderCalibrePlugin.zip`.
+2. On the device: File Transfer → Connect to Calibre → Join a network.
+3. Make sure your computer is on the same WiFi network.
+4. In Calibre, click "Send to device" to transfer books.
+
 ### 3.5 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
@@ -110,7 +121,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep.
 - **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting.
-- **Calibre Settings**: Set up integration for accessing a Calibre web library or connecting to Calibre as a wireless device.
+- **OPDS Browser**: Configure OPDS server settings for browsing and downloading books. Set the server URL (for Calibre Content Server, add `/opds` to the end), and optionally configure username and password for servers requiring authentication. Note: Only HTTP Basic authentication is supported. If using Calibre Content Server with authentication enabled, you must set it to use Basic authentication instead of the default Digest authentication.
 - **Check for updates**: Check for firmware updates over WiFi.
 
 ### 3.6 Sleep Screen
