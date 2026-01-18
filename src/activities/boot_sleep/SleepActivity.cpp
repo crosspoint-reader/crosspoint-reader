@@ -284,11 +284,6 @@ void SleepActivity::renderLastScreenSleepScreen() const {
   renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
   renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, "SLEEPING...", true, EpdFontFamily::BOLD);
 
-  // Make sleep screen dark unless light is selected in settings
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::DARK) {
-    // Draw dark sleep image
-  }
-
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
 
