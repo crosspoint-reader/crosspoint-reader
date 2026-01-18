@@ -7,7 +7,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "EpubReaderChapterSelectionActivity.h"
+#include "EpubReaderMenuActivity.h"
 #include "MappedInputManager.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
@@ -119,11 +119,15 @@ void EpubReaderActivity::loop() {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     exitActivity();
-    enterNewActivity(new EpubReaderChapterSelectionActivity(
+    enterNewActivity(new EpubReaderMenuActivity(
         this->renderer, this->mappedInput, epub, currentSpineIndex,
         [this] {
           exitActivity();
           updateRequired = true;
+        },
+        [this] {
+          nextPageNumber = 0;
+          section.reset();
         },
         [this](const int newSpineIndex) {
           if (currentSpineIndex != newSpineIndex) {
