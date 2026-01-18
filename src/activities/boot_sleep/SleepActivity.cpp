@@ -14,7 +14,11 @@
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  renderPopup("Entering Sleep...");
+  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LAST_SCREEN) {
+    renderPopup("Entering Sleep...");
+  } else {
+    return renderLastScreenSleepScreen();
+  }
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();
@@ -266,6 +270,21 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   renderDefaultSleepScreen();
+}
+
+void SleepActivity::renderLastScreenSleepScreen() const {
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, "SLEEPING...", EpdFontFamily::BOLD);
+  constexpr int margin = 20;
+  const int x = (renderer.getScreenWidth() - textWidth - margin * 2) / 2;
+  const int w = textWidth + margin * 2;
+  const int h = renderer.getLineHeight(UI_12_FONT_ID) + margin * 2;
+  const int y = renderer.getScreenHeight() - h - margin;
+
+  renderer.fillRect(x - 5, y - 5, w + 10, h + 10, true);
+  renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
+  renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, "SLEEPING...", true, EpdFontFamily::BOLD);
+
+  renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderBlankSleepScreen() const {
