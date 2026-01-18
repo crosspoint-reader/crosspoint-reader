@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "../ActivityWithSubActivity.h"
+#include "activities/ActivityWithSubactivity.h"
 
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   std::shared_ptr<Epub> epub;
