@@ -9,6 +9,7 @@ class CrossPointState {
  public:
   std::string openEpubPath;
   uint8_t lastSleepImage;
+  uint32_t lastCalendarFetch = 0;  // Unix epoch of last successful calendar fetch
   ~CrossPointState() = default;
 
   // Get singleton instance

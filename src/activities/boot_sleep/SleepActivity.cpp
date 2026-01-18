@@ -20,6 +20,10 @@ void SleepActivity::onEnter() {
     return renderBlankSleepScreen();
   }
 
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CALENDAR) {
+    return renderCalendarSleepScreen();
+  }
+
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
     return renderCustomSleepScreen();
   }
@@ -116,6 +120,21 @@ void SleepActivity::renderCustomSleepScreen() const {
     }
   }
 
+  renderDefaultSleepScreen();
+}
+
+void SleepActivity::renderCalendarSleepScreen() const {
+  // Calendar mode: read /sleep.bmp directly, bypassing /sleep/ directory
+  FsFile file;
+  if (SdMan.openFileForRead("SLP", "/sleep.bmp", file)) {
+    Bitmap bitmap(file, true);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      Serial.printf("[%lu] [SLP] Loading calendar: /sleep.bmp\n", millis());
+      renderBitmapSleepScreen(bitmap);
+      return;
+    }
+  }
+  // Fallback if no calendar image
   renderDefaultSleepScreen();
 }
 
