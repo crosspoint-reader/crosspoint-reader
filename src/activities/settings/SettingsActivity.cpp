@@ -216,6 +216,9 @@ void SettingsActivity::render() const {
       valueText = settingsList[i].enumValues[value];
     } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
       valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
+    } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Custom Font") == 0) {
+      // Show current custom font name or "Default"
+      valueText = SETTINGS.hasCustomFont() ? SETTINGS.getCustomFontName() : "Default";
     }
     const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
     renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), i != selectedSettingIndex);
