@@ -11,7 +11,7 @@
 
 /**
  * Activity for selecting a custom font from /.crosspoint/fonts folder.
- * Lists .bin font files and allows the user to select one.
+ * Lists .epdfont files and allows the user to select one.
  */
 class FontSelectionActivity final : public ActivityWithSubactivity {
  public:
