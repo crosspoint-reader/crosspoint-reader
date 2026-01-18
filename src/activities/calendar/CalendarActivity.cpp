@@ -53,9 +53,7 @@ void CalendarActivity::startWifiConnection() {
   stateStartTime = millis();
 }
 
-bool CalendarActivity::checkWifiConnection() {
-  return WiFi.status() == WL_CONNECTED;
-}
+bool CalendarActivity::checkWifiConnection() { return WiFi.status() == WL_CONNECTED; }
 
 bool CalendarActivity::fetchAndSaveImage() {
   Serial.printf("[%lu] [CAL] Fetching image from: %s\n", millis(), SETTINGS.calendarServerUrl);

@@ -5,12 +5,12 @@
 
 #include <cstring>
 
+#include "../calendar/CalendarActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "fontIds.h"
-#include "../calendar/CalendarActivity.h"
 
 // Define the static settings list
 namespace {
@@ -45,8 +45,7 @@ const SettingInfo settingsList[settingsCount] = {
     // Calendar mode settings
     SettingInfo::Toggle("Calendar Mode", &CrossPointSettings::calendarModeEnabled),
     SettingInfo::Value("Calendar Refresh (hrs)", &CrossPointSettings::calendarRefreshHours, {1, 24, 1}),
-    SettingInfo::Action("Test Calendar Now"),
-    SettingInfo::Action("Calibre Settings"),
+    SettingInfo::Action("Test Calendar Now"), SettingInfo::Action("Calibre Settings"),
     SettingInfo::Action("Check for updates")};
 }  // namespace
 

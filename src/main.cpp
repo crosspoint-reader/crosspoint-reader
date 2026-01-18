@@ -5,9 +5,9 @@
 #include <InputManager.h>
 #include <SDCardManager.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <builtinFonts/all.h>
 #include <esp_sleep.h>
-#include <WiFi.h>
 
 #include <cstring>
 
@@ -18,12 +18,12 @@
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
+#include "activities/calendar/CalendarActivity.h"
 #include "activities/home/HomeActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
-#include "activities/calendar/CalendarActivity.h"
 #include "fontIds.h"
 
 #define SPI_FQ 40000000
@@ -335,8 +335,7 @@ void setup() {
     // Not a timer wake - check if we need a backup fetch
     time_t now;
     time(&now);
-    uint32_t elapsed = (now > APP_STATE.lastCalendarFetch) ?
-                       (now - APP_STATE.lastCalendarFetch) : UINT32_MAX;
+    uint32_t elapsed = (now > APP_STATE.lastCalendarFetch) ? (now - APP_STATE.lastCalendarFetch) : UINT32_MAX;
     uint32_t thresholdSec = SETTINGS.calendarRefreshHours * 3600;
 
     // If time is valid and elapsed > threshold, trigger backup fetch
