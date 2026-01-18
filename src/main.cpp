@@ -21,6 +21,7 @@
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 #define SPI_FQ 40000000
@@ -272,6 +273,7 @@ void setup() {
   }
 
   inputManager.begin();
+
   // Initialize pins
   pinMode(BAT_GPIO0, INPUT);
 
@@ -289,6 +291,7 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
+  UITheme::initialize();
 
   // verify power button press duration after we've read settings.
   verifyWakeupLongPress();
