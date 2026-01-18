@@ -1,9 +1,10 @@
 #pragma once
 
 #include <EInkDisplay.h>
-#include <EpdFontFamily.h>
+#include <SdFontFamily.h>
 
 #include <map>
+#include <memory>
 
 #include "Bitmap.h"
 
@@ -29,9 +30,10 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
-  std::map<int, EpdFontFamily> fontMap;
-  void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
-                  EpdFontFamily::Style style) const;
+  std::map<int, std::unique_ptr<UnifiedFontFamily>> fontMap;
+  int fallbackFontId = 0;  // Default fallback font ID (set after fonts are loaded)
+  void renderChar(const UnifiedFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
+                  EpdFontStyle style) const;
   void freeBwBufferChunks();
   void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
 
@@ -44,8 +46,18 @@ class GfxRenderer {
   static constexpr int VIEWABLE_MARGIN_BOTTOM = 3;
   static constexpr int VIEWABLE_MARGIN_LEFT = 3;
 
-  // Setup
-  void insertFont(int fontId, EpdFontFamily font);
+  // Setup - Flash fonts (EpdFontFamily) - stores pointer to global font
+  void insertFont(int fontId, const EpdFontFamily* font);
+  // Setup - SD card fonts (SdFontFamily) - takes ownership
+  void insertSdFont(int fontId, SdFontFamily* font);
+  // Set fallback font ID (used when requested font is not found)
+  void setFallbackFont(int fontId) { fallbackFontId = fontId; }
+  // Check if a font is registered
+  bool hasFont(int fontId) const { return fontMap.find(fontId) != fontMap.end(); }
+  // Remove a font from the registry (frees memory for SD fonts)
+  bool removeFont(int fontId);
+  // Get effective font ID (returns fallback if requested font not found)
+  int getEffectiveFontId(int fontId) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
@@ -72,19 +84,16 @@ class GfxRenderer {
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 
   // Text
-  int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  void drawCenteredText(int fontId, int y, const char* text, bool black = true,
-                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  void drawText(int fontId, int x, int y, const char* text, bool black = true,
-                EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  int getTextWidth(int fontId, const char* text, EpdFontStyle style = REGULAR) const;
+  void drawCenteredText(int fontId, int y, const char* text, bool black = true, EpdFontStyle style = REGULAR) const;
+  void drawText(int fontId, int x, int y, const char* text, bool black = true, EpdFontStyle style = REGULAR) const;
   int getSpaceWidth(int fontId) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
-  std::string truncatedText(int fontId, const char* text, int maxWidth,
-                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  std::string truncatedText(int fontId, const char* text, int maxWidth, EpdFontStyle style = REGULAR) const;
 
   // UI Components
-  void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4);
+  void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4) const;
   void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn) const;
 
  private:
@@ -99,8 +108,10 @@ class GfxRenderer {
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;
-  bool storeBwBuffer();    // Returns true if buffer was stored successfully
-  void restoreBwBuffer();  // Restore and free the stored buffer
+  bool storeBwBuffer();       // Returns true if buffer was stored successfully
+  void restoreBwBuffer();     // Restore and free the stored buffer
+  bool copyStoredBwBuffer();  // Copy stored buffer to framebuffer without freeing
+  void freeStoredBwBuffer();  // Free the stored buffer manually
   void cleanupGrayscaleWithFrameBuffer() const;
 
   // Low level functions

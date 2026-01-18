@@ -16,3 +16,6 @@
 #define UI_10_FONT_ID (-823541435)
 #define UI_12_FONT_ID (-126318184)
 #define SMALL_FONT_ID (-874196069)
+
+// Custom font ID (used as slot ID in fontMap, actual ID is hash-based for cache invalidation)
+#define CUSTOM_FONT_ID (-999999)

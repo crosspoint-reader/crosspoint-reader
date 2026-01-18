@@ -340,11 +340,11 @@ void EpubReaderActivity::renderScreen() {
   }
 
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
-    Serial.printf("[%lu] [ERS] Page out of bounds: %d (max %d)\n", millis(), section->currentPage, section->pageCount);
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Out of bounds", true, EpdFontFamily::BOLD);
-    renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
-    renderer.displayBuffer();
-    return;
+    // Page out of bounds - likely due to font change causing different page count
+    // Clamp to valid range instead of showing error
+    Serial.printf("[%lu] [ERS] Page out of bounds: %d (max %d), clamping to last page\n", millis(),
+                  section->currentPage, section->pageCount);
+    section->currentPage = section->pageCount - 1;
   }
 
   {

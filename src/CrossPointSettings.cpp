@@ -14,7 +14,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 18;
+constexpr uint8_t SETTINGS_COUNT = 19;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -48,6 +48,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, hideBatteryPercentage);
   serialization::writePod(outputFile, longPressChapterSkip);
+  serialization::writeString(outputFile, std::string(customFontPath));
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -115,6 +116,13 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, hideBatteryPercentage);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, longPressChapterSkip);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string fontPathStr;
+      serialization::readString(inputFile, fontPathStr);
+      strncpy(customFontPath, fontPathStr.c_str(), sizeof(customFontPath) - 1);
+      customFontPath[sizeof(customFontPath) - 1] = '\0';
+    }
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
@@ -192,6 +200,19 @@ int CrossPointSettings::getRefreshFrequency() const {
 }
 
 int CrossPointSettings::getReaderFontId() const {
+  // Return custom font ID if a custom font is configured
+  if (hasCustomFont()) {
+    // Generate unique negative ID based on font path hash
+    // This ensures different custom fonts have different IDs for cache invalidation
+    uint32_t hash = 5381;
+    for (const char* p = customFontPath; *p; p++) {
+      hash = ((hash << 5) + hash) + static_cast<uint8_t>(*p);  // djb2 hash
+    }
+    // Return negative value to avoid collision with built-in font IDs
+    return -static_cast<int>((hash & 0x7FFFFFFF) | 1);
+  }
+
+  // Use built-in font based on fontFamily/fontSize
   switch (fontFamily) {
     case BOOKERLY:
     default:
@@ -231,4 +252,22 @@ int CrossPointSettings::getReaderFontId() const {
           return OPENDYSLEXIC_14_FONT_ID;
       }
   }
+}
+
+const char* CrossPointSettings::getCustomFontName() const {
+  if (!hasCustomFont()) {
+    return nullptr;
+  }
+  // Extract filename from path (e.g., "/.crosspoint/fonts/MyFont.epdfont" -> "MyFont")
+  const char* lastSlash = strrchr(customFontPath, '/');
+  const char* filename = lastSlash ? lastSlash + 1 : customFontPath;
+  // Remove extension for display
+  static char nameBuffer[32];
+  strncpy(nameBuffer, filename, sizeof(nameBuffer) - 1);
+  nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+  char* dot = strrchr(nameBuffer, '.');
+  if (dot) {
+    *dot = '\0';
+  }
+  return nameBuffer;
 }

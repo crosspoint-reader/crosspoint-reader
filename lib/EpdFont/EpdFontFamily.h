@@ -14,6 +14,9 @@ class EpdFontFamily {
   const EpdFontData* getData(Style style = REGULAR) const;
   const EpdGlyph* getGlyph(uint32_t cp, Style style = REGULAR) const;
 
+  // Check if bold variant is available (for synthetic bold decision)
+  bool hasBold() const { return bold != nullptr; }
+
  private:
   const EpdFont* regular;
   const EpdFont* bold;
@@ -22,3 +25,10 @@ class EpdFontFamily {
 
   const EpdFont* getFont(Style style) const;
 };
+
+// Global typedef for use outside class scope (needed by SdFontFamily and GfxRenderer)
+using EpdFontStyle = EpdFontFamily::Style;
+constexpr EpdFontStyle REGULAR = EpdFontFamily::REGULAR;
+constexpr EpdFontStyle BOLD = EpdFontFamily::BOLD;
+constexpr EpdFontStyle ITALIC = EpdFontFamily::ITALIC;
+constexpr EpdFontStyle BOLD_ITALIC = EpdFontFamily::BOLD_ITALIC;

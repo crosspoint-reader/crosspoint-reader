@@ -2,7 +2,40 @@
 
 #include <Utf8.h>
 
-void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
+void GfxRenderer::insertFont(const int fontId, const EpdFontFamily* font) {
+  fontMap[fontId] = std::unique_ptr<UnifiedFontFamily>(new UnifiedFontFamily(font));
+}
+
+void GfxRenderer::insertSdFont(const int fontId, SdFontFamily* font) {
+  fontMap[fontId] = std::unique_ptr<UnifiedFontFamily>(new UnifiedFontFamily(font));
+}
+
+bool GfxRenderer::removeFont(const int fontId) {
+  auto it = fontMap.find(fontId);
+  if (it == fontMap.end()) {
+    return false;
+  }
+  fontMap.erase(it);
+  Serial.printf("[%lu] [GFX] Removed font %d\n", millis(), fontId);
+  return true;
+}
+
+int GfxRenderer::getEffectiveFontId(const int fontId) const {
+  if (fontMap.find(fontId) != fontMap.end()) {
+    return fontId;
+  }
+  // Custom font IDs are negative (hash-based), map to CUSTOM_FONT_ID slot (-999999)
+  constexpr int CUSTOM_FONT_ID = -999999;
+  if (fontId < 0 && fontMap.find(CUSTOM_FONT_ID) != fontMap.end()) {
+    return CUSTOM_FONT_ID;
+  }
+  // Font not found, return fallback
+  if (fallbackFontId != 0 && fontMap.find(fallbackFontId) != fontMap.end()) {
+    return fallbackFontId;
+  }
+  // No fallback set or fallback not found, return original (will fail gracefully)
+  return fontId;
+}
 
 void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
   switch (orientation) {
@@ -66,26 +99,46 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   }
 }
 
-int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontStyle style) const {
+  const int effectiveId = getEffectiveFontId(fontId);
+  auto it = fontMap.find(effectiveId);
+  if (it == fontMap.end()) {
+    Serial.printf("[%lu] [GFX] Font %d not found (no fallback)\n", millis(), fontId);
     return 0;
   }
 
   int w = 0, h = 0;
-  fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
+  it->second->getTextDimensions(text, &w, &h, style);
+
+  // Add 1px per character for synthetic bold (bold requested but no bold font)
+  const bool syntheticBold = (style == BOLD || style == BOLD_ITALIC) && !it->second->hasBold();
+  if (syntheticBold && text != nullptr) {
+    // Count UTF-8 characters
+    const uint8_t* ptr = reinterpret_cast<const uint8_t*>(text);
+    int charCount = 0;
+    while (*ptr) {
+      // Count UTF-8 start bytes (not continuation bytes 10xxxxxx)
+      if ((*ptr & 0xC0) != 0x80) {
+        charCount++;
+      }
+      ptr++;
+    }
+    w += charCount;
+  }
+
   return w;
 }
 
 void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,
-                                   const EpdFontFamily::Style style) const {
+                                   const EpdFontStyle style) const {
   const int x = (getScreenWidth() - getTextWidth(fontId, text, style)) / 2;
   drawText(fontId, x, y, text, black, style);
 }
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
-                           const EpdFontFamily::Style style) const {
-  const int yPos = y + getFontAscenderSize(fontId);
+                           const EpdFontStyle style) const {
+  const int effectiveId = getEffectiveFontId(fontId);
+  const int yPos = y + getFontAscenderSize(effectiveId);
   int xpos = x;
 
   // cannot draw a NULL / empty string
@@ -93,11 +146,12 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  auto it = fontMap.find(effectiveId);
+  if (it == fontMap.end()) {
+    Serial.printf("[%lu] [GFX] Font %d not found (no fallback)\n", millis(), fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+  const auto& font = *(it->second);
 
   // no printable characters
   if (!font.hasPrintableChars(text, style)) {
@@ -401,7 +455,7 @@ void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode) cons
 }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
-                                       const EpdFontFamily::Style style) const {
+                                       const EpdFontStyle style) const {
   std::string item = text;
   int itemWidth = getTextWidth(fontId, item.c_str(), style);
   while (itemWidth > maxWidth && item.length() > 8) {
@@ -441,37 +495,41 @@ int GfxRenderer::getScreenHeight() const {
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const int effectiveId = getEffectiveFontId(fontId);
+  auto it = fontMap.find(effectiveId);
+  if (it == fontMap.end()) {
+    Serial.printf("[%lu] [GFX] Font %d not found (no fallback)\n", millis(), fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
+  const EpdGlyph* glyph = it->second->getGlyph(' ', REGULAR);
+  return glyph ? glyph->advanceX : 0;
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const int effectiveId = getEffectiveFontId(fontId);
+  auto it = fontMap.find(effectiveId);
+  if (it == fontMap.end()) {
+    Serial.printf("[%lu] [GFX] Font %d not found (no fallback)\n", millis(), fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  return it->second->getAscender(REGULAR);
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const int effectiveId = getEffectiveFontId(fontId);
+  auto it = fontMap.find(effectiveId);
+  if (it == fontMap.end()) {
+    Serial.printf("[%lu] [GFX] Font %d not found (no fallback)\n", millis(), fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  return it->second->getAdvanceY(REGULAR);
 }
 
 void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
-                                  const char* btn4) {
-  const Orientation orig_orientation = getOrientation();
-  setOrientation(Orientation::Portrait);
-
+                                  const char* btn4) const {
   const int pageHeight = getScreenHeight();
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = 40;
@@ -484,15 +542,12 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const int x = buttonPositions[i];
-      fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
       drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
       const int textWidth = getTextWidth(fontId, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
       drawText(fontId, textX, pageHeight - buttonY + textYOffset, labels[i]);
     }
   }
-
-  setOrientation(orig_orientation);
 }
 
 void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, const char* bottomBtn) const {
@@ -551,7 +606,7 @@ int GfxRenderer::getTextHeight(const int fontId) const {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return 0;
   }
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  return fontMap.at(fontId)->getAscender(EpdFontFamily::REGULAR);
 }
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
@@ -565,10 +620,10 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+  const auto& font = fontMap.at(fontId);
 
   // No printable characters
-  if (!font.hasPrintableChars(text, style)) {
+  if (!font->hasPrintableChars(text, style)) {
     return;
   }
 
@@ -580,22 +635,22 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    const EpdGlyph* glyph = font->getGlyph(cp, style);
     if (!glyph) {
-      glyph = font.getGlyph('?', style);
+      glyph = font->getGlyph('?', style);
     }
     if (!glyph) {
       continue;
     }
 
-    const int is2Bit = font.getData(style)->is2Bit;
-    const uint32_t offset = glyph->dataOffset;
+    const bool is2BitFont = font->is2Bit(style);
     const uint8_t width = glyph->width;
     const uint8_t height = glyph->height;
     const int left = glyph->left;
     const int top = glyph->top;
+    const int ascender = font->getAscender(style);
 
-    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
+    const uint8_t* bitmap = font->getGlyphBitmap(cp, style);
 
     if (bitmap != nullptr) {
       for (int glyphY = 0; glyphY < height; glyphY++) {
@@ -605,10 +660,10 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
           // 90° clockwise rotation transformation:
           // screenX = x + (ascender - top + glyphY)
           // screenY = yPos - (left + glyphX)
-          const int screenX = x + (font.getData(style)->ascender - top + glyphY);
+          const int screenX = x + (ascender - top + glyphY);
           const int screenY = yPos - left - glyphX;
 
-          if (is2Bit) {
+          if (is2BitFont) {
             const uint8_t byte = bitmap[pixelPosition / 4];
             const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
             const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
@@ -746,6 +801,38 @@ void GfxRenderer::restoreBwBuffer() {
 }
 
 /**
+ * Copy stored BW buffer to framebuffer without freeing the stored chunks.
+ * Use this when you want to restore the buffer but keep it for later reuse.
+ * Returns true if buffer was copied successfully.
+ */
+bool GfxRenderer::copyStoredBwBuffer() {
+  // Check if all chunks are allocated
+  for (const auto& bwBufferChunk : bwBufferChunks) {
+    if (!bwBufferChunk) {
+      return false;
+    }
+  }
+
+  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer) {
+    return false;
+  }
+
+  for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
+    const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
+    memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
+  }
+
+  return true;
+}
+
+/**
+ * Free the stored BW buffer chunks manually.
+ * Use this when you no longer need the stored buffer.
+ */
+void GfxRenderer::freeStoredBwBuffer() { freeBwBufferChunks(); }
+
+/**
  * Cleanup grayscale buffers using the current frame buffer.
  * Use this when BW buffer was re-rendered instead of stored/restored.
  */
@@ -756,11 +843,11 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   }
 }
 
-void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
-                             const bool pixelState, const EpdFontFamily::Style style) const {
+void GfxRenderer::renderChar(const UnifiedFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
+                             const bool pixelState, const EpdFontStyle style) const {
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
-    // TODO: Replace with fallback glyph property?
+    // Try fallback glyph
     glyph = fontFamily.getGlyph('?', style);
   }
 
@@ -770,14 +857,20 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
     return;
   }
 
-  const int is2Bit = fontFamily.getData(style)->is2Bit;
-  const uint32_t offset = glyph->dataOffset;
+  const bool is2Bit = fontFamily.is2Bit(style);
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
 
-  const uint8_t* bitmap = nullptr;
-  bitmap = &fontFamily.getData(style)->bitmap[offset];
+  // Check if we need synthetic bold (bold requested but no bold font available)
+  const bool syntheticBold = (style == BOLD || style == BOLD_ITALIC) && !fontFamily.hasBold();
+
+  // Get bitmap data (works for both flash and SD fonts)
+  const uint8_t* bitmap = fontFamily.getGlyphBitmap(cp, style);
+  if (!bitmap) {
+    // Try fallback
+    bitmap = fontFamily.getGlyphBitmap('?', style);
+  }
 
   if (bitmap != nullptr) {
     for (int glyphY = 0; glyphY < height; glyphY++) {
@@ -797,13 +890,22 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
           if (renderMode == BW && bmpVal < 3) {
             // Black (also paints over the grays in BW mode)
             drawPixel(screenX, screenY, pixelState);
+            if (syntheticBold) {
+              drawPixel(screenX + 1, screenY, pixelState);  // Draw again 1px to the right
+            }
           } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
             // Light gray (also mark the MSB if it's going to be a dark gray too)
             // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
             drawPixel(screenX, screenY, false);
+            if (syntheticBold) {
+              drawPixel(screenX + 1, screenY, false);
+            }
           } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
             // Dark gray
             drawPixel(screenX, screenY, false);
+            if (syntheticBold) {
+              drawPixel(screenX + 1, screenY, false);
+            }
           }
         } else {
           const uint8_t byte = bitmap[pixelPosition / 8];
@@ -811,13 +913,17 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
 
           if ((byte >> bit_index) & 1) {
             drawPixel(screenX, screenY, pixelState);
+            if (syntheticBold) {
+              drawPixel(screenX + 1, screenY, pixelState);
+            }
           }
         }
       }
     }
   }
 
-  *x += glyph->advanceX;
+  // Advance by glyph width, adding 1px for synthetic bold
+  *x += glyph->advanceX + (syntheticBold ? 1 : 0);
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {

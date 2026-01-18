@@ -5,6 +5,7 @@
 #include <InputManager.h>
 #include <SDCardManager.h>
 #include <SPI.h>
+#include <SdFontFamily.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -131,6 +132,67 @@ EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 
+// Custom font loading from SD card
+constexpr char FONTS_DIR[] = "/.crosspoint/fonts";
+
+// Load custom reader font from SD card if configured
+// Returns true if custom font was loaded successfully
+bool loadCustomReaderFont(GfxRenderer& gfxRenderer) {
+  if (!SETTINGS.hasCustomFont()) {
+    Serial.printf("[%lu] [FNT] No custom font configured\n", millis());
+    return false;
+  }
+
+  const char* fontPath = SETTINGS.customFontPath;
+  Serial.printf("[%lu] [FNT] Loading custom font: %s\n", millis(), fontPath);
+
+  if (!SdMan.exists(fontPath)) {
+    Serial.printf("[%lu] [FNT] Custom font file not found: %s\n", millis(), fontPath);
+    // Clear invalid font path
+    SETTINGS.customFontPath[0] = '\0';
+    SETTINGS.saveToFile();
+    return false;
+  }
+
+  // Create SdFontFamily for the custom font
+  SdFontFamily* font = new SdFontFamily(fontPath);
+  if (font == nullptr) {
+    Serial.printf("[%lu] [FNT] Failed to allocate memory for custom font\n", millis());
+    return false;
+  }
+
+  if (font->load()) {
+    gfxRenderer.insertSdFont(CUSTOM_FONT_ID, font);
+    Serial.printf("[%lu] [FNT] Custom reader font loaded successfully\n", millis());
+    return true;
+  }
+
+  Serial.printf("[%lu] [FNT] Failed to load custom font, clearing setting\n", millis());
+  delete font;
+  // Clear invalid font path so getReaderFontId() returns default font
+  SETTINGS.customFontPath[0] = '\0';
+  SETTINGS.saveToFile();
+  return false;
+}
+
+// Reload custom reader font - removes old font and loads new one
+// Call this when font settings change to apply immediately without reboot
+bool reloadCustomReaderFont() {
+  Serial.printf("[%lu] [FNT] Reloading custom reader font...\n", millis());
+
+  // Remove existing custom font if any
+  if (renderer.hasFont(CUSTOM_FONT_ID)) {
+    renderer.removeFont(CUSTOM_FONT_ID);
+    Serial.printf("[%lu] [FNT] Removed previous custom font\n", millis());
+  }
+
+  // Load new custom font if configured
+  return loadCustomReaderFont(renderer);
+}
+
+// Get reference to global renderer (for font operations from other modules)
+GfxRenderer& getGlobalRenderer() { return renderer; }
+
 // measurement of power button press duration calibration value
 unsigned long t1 = 0;
 unsigned long t2 = 0;
@@ -241,25 +303,34 @@ void onGoHome() {
 void setupDisplayAndFonts() {
   einkDisplay.begin();
   Serial.printf("[%lu] [   ] Display initialized\n", millis());
-  renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
-#ifndef OMIT_FONTS
-  renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
-  renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
-  renderer.insertFont(BOOKERLY_18_FONT_ID, bookerly18FontFamily);
 
-  renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
-  renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
-  renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
-  renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
-  renderer.insertFont(OPENDYSLEXIC_8_FONT_ID, opendyslexic8FontFamily);
-  renderer.insertFont(OPENDYSLEXIC_10_FONT_ID, opendyslexic10FontFamily);
-  renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
-  renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
+  // Register built-in flash fonts
+  renderer.insertFont(BOOKERLY_14_FONT_ID, &bookerly14FontFamily);
+#ifndef OMIT_FONTS
+  renderer.insertFont(BOOKERLY_12_FONT_ID, &bookerly12FontFamily);
+  renderer.insertFont(BOOKERLY_16_FONT_ID, &bookerly16FontFamily);
+  renderer.insertFont(BOOKERLY_18_FONT_ID, &bookerly18FontFamily);
+
+  renderer.insertFont(NOTOSANS_12_FONT_ID, &notosans12FontFamily);
+  renderer.insertFont(NOTOSANS_14_FONT_ID, &notosans14FontFamily);
+  renderer.insertFont(NOTOSANS_16_FONT_ID, &notosans16FontFamily);
+  renderer.insertFont(NOTOSANS_18_FONT_ID, &notosans18FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_8_FONT_ID, &opendyslexic8FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_10_FONT_ID, &opendyslexic10FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, &opendyslexic12FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, &opendyslexic14FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
-  renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
-  Serial.printf("[%lu] [   ] Fonts setup\n", millis());
+  renderer.insertFont(UI_10_FONT_ID, &ui10FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, &ui12FontFamily);
+  renderer.insertFont(SMALL_FONT_ID, &smallFontFamily);
+
+  // Set fallback font
+  renderer.setFallbackFont(UI_10_FONT_ID);
+
+  // Try to load custom reader font from SD card
+  loadCustomReaderFont(renderer);
+
+  Serial.printf("[%lu] [   ] Fonts setup complete\n", millis());
 }
 
 void setup() {

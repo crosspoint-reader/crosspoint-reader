@@ -92,8 +92,15 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
+  // Custom reader font path (empty means use built-in font based on fontFamily/fontSize)
+  char customFontPath[64] = "";
 
   ~CrossPointSettings() = default;
+
+  // Check if custom font is set
+  bool hasCustomFont() const { return customFontPath[0] != '\0'; }
+  // Get custom font name (extracted from path)
+  const char* getCustomFontName() const;
 
   // Get singleton instance
   static CrossPointSettings& getInstance() { return instance; }
