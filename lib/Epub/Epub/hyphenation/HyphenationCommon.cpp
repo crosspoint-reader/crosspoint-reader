@@ -125,6 +125,12 @@ bool isExplicitHyphen(const uint32_t cp) {
     case 0xFE58:  // small em dash
     case 0xFE63:  // small hyphen-minus
     case 0xFF0D:  // fullwidth hyphen-minus
+    case 0x002F:  // Solidus (slash)
+    case 0x005C:  // Backslash
+    case 0x005F:  // Underscore
+    case 0x00B7:  // Middle dot
+    case 0x2026:  // Ellipsis
+    case 0x22EF:  // Midline horizontal ellipsis
       return true;
     default:
       return false;
