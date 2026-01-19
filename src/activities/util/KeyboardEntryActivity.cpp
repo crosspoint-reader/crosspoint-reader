@@ -226,13 +226,12 @@ void KeyboardEntryActivity::loop() {
   }
 
   // Selection
-  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= capsMs) {
-    onCapsHeld();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < capsMs) {
-    handleKeyPress();
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.getHeldTime() >= capsMs) {
+      shiftActive = !shiftActive;
+    } else {
+      handleKeyPress();
+    }
     updateRequired = true;
   }
 
@@ -357,14 +356,4 @@ void KeyboardEntryActivity::renderItemWithSelector(const int x, const int y, con
     renderer.drawText(UI_10_FONT_ID, x + itemWidth, y, "]");
   }
   renderer.drawText(UI_10_FONT_ID, x, y, item);
-}
-
-void KeyboardEntryActivity::onCapsHeld() {
-  waitForCapsRelease();
-  shiftActive = !shiftActive;
-  updateRequired = true;
-}
-
-void KeyboardEntryActivity::waitForCapsRelease() {
-  while (mappedInput.isPressed(MappedInputManager::Button::Confirm)) delay(50);
 }
