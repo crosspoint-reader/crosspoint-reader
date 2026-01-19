@@ -43,6 +43,5 @@
         "message": "Release - ${nextRelease.version}"
       }
     ]
-  ],
-  "branches": ["feature/add-semantic-releases"]
+  ]
 }
