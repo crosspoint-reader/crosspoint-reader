@@ -28,5 +28,11 @@
       }
     ]
   ],
+  "releaseRules": [
+    {
+      "breaking": true,
+      "release": "minor"
+    }
+  ],
   "branches": ["feature/add-semantic-releases"]
 }
