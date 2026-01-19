@@ -21,9 +21,7 @@ void addAuthHeaders(HTTPClient& http) {
   http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password().c_str());
 }
 
-bool isHttpsUrl(const std::string& url) {
-  return url.rfind("https://", 0) == 0;
-}
+bool isHttpsUrl(const std::string& url) { return url.rfind("https://", 0) == 0; }
 }  // namespace
 
 KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
