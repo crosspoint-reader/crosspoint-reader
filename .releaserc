@@ -28,5 +28,5 @@
       }
     ]
   ],
-  "branches": ["master"]
+  "branches": ["feature/add-semantic-releases"]
 }
