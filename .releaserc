@@ -1,5 +1,5 @@
 {
-  "branches": ["main", "feature/add-semantic-releases"],
+  "branches": ["feature/add-semantic-releases"],
   "plugins": [
     [
       "@semantic-release/commit-analyzer",
