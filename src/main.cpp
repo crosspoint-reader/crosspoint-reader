@@ -174,7 +174,8 @@ void verifyWakeupLongPress() {
       delay(10);
       inputManager.update();
     } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() < calibratedPressDuration);
-    abort = false;
+    // Abort wakeup if the button was released before the required press duration
+    abort = (inputManager.getHeldTime() < calibratedPressDuration);
   } else {
     abort = true;
   }
