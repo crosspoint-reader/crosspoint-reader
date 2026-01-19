@@ -13,6 +13,7 @@ class SleepActivity final : public Activity {
   void renderPopup(const char* message) const;
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
+  void renderCalendarSleepScreen() const;
   void renderCoverSleepScreen() const;
   void renderBitmapSleepScreen(const Bitmap& bitmap) const;
   void renderBlankSleepScreen() const;

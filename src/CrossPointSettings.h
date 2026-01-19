@@ -16,7 +16,8 @@ class CrossPointSettings {
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
   // Should match with SettingsActivity text
-  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3, BLANK = 4 };
+  // Note: CALENDAR is internal-only, not user-selectable in Settings
+  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3, BLANK = 4, CALENDAR = 5 };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1 };
 
   // Status bar display type enum
@@ -92,6 +93,11 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
+
+  // Calendar mode settings
+  uint8_t calendarModeEnabled = 0;   // 0 = disabled, 1 = enabled
+  uint8_t calendarRefreshHours = 4;  // Refresh interval in hours (1-24)
+  char calendarServerUrl[256] = "";  // URL to fetch BMP image from
 
   ~CrossPointSettings() = default;
 
