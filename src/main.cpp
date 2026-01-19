@@ -310,7 +310,7 @@ void setup() {
   KOREADER_STORE.loadFromFile();
 
   if (!isWakeupAfterFlashing()) {
-    // If we woke up from sleep, verify long press
+    // For normal wakeups (not immediately after flashing), verify long press
     verifyWakeupLongPress();
   }
 
