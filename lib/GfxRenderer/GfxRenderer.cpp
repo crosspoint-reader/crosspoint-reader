@@ -131,11 +131,132 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
   }
 }
 
+void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const int lineWidth, const bool state) const {
+  for (int i = 0; i < lineWidth; i++) {
+    drawLine(x1, y1 + i, x2, y2 + i, state);
+  }
+}
+
 void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const bool state) const {
   drawLine(x, y, x + width - 1, y, state);
   drawLine(x + width - 1, y, x + width - 1, y + height - 1, state);
   drawLine(x + width - 1, y + height - 1, x, y + height - 1, state);
   drawLine(x, y, x, y + height - 1, state);
+}
+
+// Border is inside the rectangle
+void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const int lineWidth,
+                           const bool state) const {
+  for (int i = 0; i < lineWidth; i++) {
+    drawLine(x + i, y + i, x + width - i, y + i, state);
+    drawLine(x + width - i, y + i, x + width - i, y + height - i, state);
+    drawLine(x + width - i, y + height - i, x + i, y + height - i, state);
+    drawLine(x + i, y + height - i, x + i, y + i, state);
+  }
+}
+
+void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir,
+                          const int lineWidth, const bool state) const {
+  const int stroke = std::min(lineWidth, maxRadius);
+  const int innerRadius = std::max(maxRadius - stroke, 0);
+  const int outerRadiusSq = maxRadius * maxRadius;
+  const int innerRadiusSq = innerRadius * innerRadius;
+  for (int dy = 0; dy <= maxRadius; ++dy) {
+    for (int dx = 0; dx <= maxRadius; ++dx) {
+      const int distSq = dx * dx + dy * dy;
+      if (distSq > outerRadiusSq || distSq < innerRadiusSq) {
+        continue;
+      }
+      const int px = cx + xDir * dx;
+      const int py = cy + yDir * dy;
+      drawPixel(px, py, state);
+    }
+  }
+};
+
+// Use Bayer matrix 4x4 dithering to fill the rectangle with a grey level - 0 white to 15 black
+void GfxRenderer::fillRectGrey(const int x, const int y, const int width, const int height, const int greyLevel) const {
+  static constexpr uint8_t bayer4x4[4][4] = {
+      {0, 8, 2, 10},
+      {12, 4, 14, 6},
+      {3, 11, 1, 9},
+      {15, 7, 13, 5},
+  };
+  static constexpr int matrixSize = 4;
+  static constexpr int matrixLevels = matrixSize * matrixSize;
+
+  const int normalizedGrey = (greyLevel * 255) / (matrixLevels - 1);
+  const int clampedGrey = std::max(0, std::min(normalizedGrey, 255));
+  const int threshold = (clampedGrey * (matrixLevels + 1)) / 256;
+
+  for (int dy = 0; dy < height; ++dy) {
+    const int screenY = y + dy;
+    const int matrixY = screenY & (matrixSize - 1);
+    for (int dx = 0; dx < width; ++dx) {
+      const int screenX = x + dx;
+      const int matrixX = screenX & (matrixSize - 1);
+      const uint8_t patternValue = bayer4x4[matrixY][matrixX];
+      const bool black = patternValue < threshold;
+      drawPixel(screenX, screenY, black);
+    }
+  }
+}
+
+// Color -1 white, 0 clear, 1 black
+void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir,
+                          const int insideColor, const int outsideColor) const {
+  const int radiusSq = maxRadius * maxRadius;
+  for (int dy = 0; dy <= maxRadius; ++dy) {
+    for (int dx = 0; dx <= maxRadius; ++dx) {
+      const int distSq = dx * dx + dy * dy;
+      const int px = cx + xDir * dx;
+      const int py = cy + yDir * dy;
+      if (distSq > radiusSq) {
+        if (outsideColor != 0) {
+          drawPixel(px, py, outsideColor == 1);
+        }
+      } else {
+        if (insideColor != 0) {
+          drawPixel(px, py, insideColor == 1);
+        }
+      }
+    }
+  }
+};
+
+// Border is inside the rectangle, rounded corners
+void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, const int lineWidth,
+                                  const int cornerRadius, const bool state) const {
+  if (lineWidth <= 0 || width <= 0 || height <= 0) {
+    return;
+  }
+
+  const int maxRadius = std::min({cornerRadius, width / 2, height / 2});
+  if (maxRadius <= 0) {
+    drawRect(x, y, width, height, lineWidth, state);
+    return;
+  }
+
+  const int stroke = std::min(lineWidth, maxRadius);
+  const int right = x + width - 1;
+  const int bottom = y + height - 1;
+
+  const int horizontalWidth = width - 2 * maxRadius;
+  if (horizontalWidth > 0) {
+    fillRect(x + maxRadius, y, horizontalWidth, stroke, state);
+    fillRect(x + maxRadius, bottom - stroke + 1, horizontalWidth, stroke, state);
+  }
+
+  const int verticalHeight = height - 2 * maxRadius;
+  if (verticalHeight > 0) {
+    fillRect(x, y + maxRadius, stroke, verticalHeight, state);
+    fillRect(right - stroke + 1, y + maxRadius, stroke, verticalHeight, state);
+  }
+
+  drawArc(maxRadius, x + maxRadius, y + maxRadius, -1, -1, lineWidth, state);         // TL
+  drawArc(maxRadius, right - maxRadius, y + maxRadius, 1, -1, lineWidth, state);      // TR
+  drawArc(maxRadius, right - maxRadius, bottom - maxRadius, 1, 1, lineWidth, state);  // BR
+  drawArc(maxRadius, x + maxRadius, bottom - maxRadius, -1, 1, lineWidth, state);     // BL
 }
 
 void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
@@ -150,6 +271,10 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   int rotatedY = 0;
   rotateCoordinates(x, y, &rotatedX, &rotatedY);
   einkDisplay.drawImage(bitmap, rotatedX, rotatedY, width, height);
+}
+
+void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
+  einkDisplay.drawImage(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,

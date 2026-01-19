@@ -8,7 +8,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
-#include "ScreenComponents.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -517,7 +517,7 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
   }
 
   if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft, textY);
+    UITheme::drawBattery(renderer, Rect{orientedMarginLeft, textY});
   }
 
   if (showTitle) {

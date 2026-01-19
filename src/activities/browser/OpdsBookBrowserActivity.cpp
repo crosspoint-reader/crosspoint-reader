@@ -6,8 +6,8 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "ScreenComponents.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/StringUtils.h"
@@ -205,7 +205,7 @@ void OpdsBookBrowserActivity::render() const {
       constexpr int barHeight = 20;
       constexpr int barX = 50;
       const int barY = pageHeight / 2 + 20;
-      ScreenComponents::drawProgressBar(renderer, barX, barY, barWidth, barHeight, downloadProgress, downloadTotal);
+      UITheme::drawProgressBar(renderer, Rect{barX, barY, barWidth, barHeight}, downloadProgress, downloadTotal);
     }
     renderer.displayBuffer();
     return;

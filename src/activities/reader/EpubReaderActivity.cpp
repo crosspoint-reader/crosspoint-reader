@@ -9,7 +9,7 @@
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "MappedInputManager.h"
-#include "ScreenComponents.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -455,7 +455,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   }
 
   if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft + 1, textY, showBatteryPercentage);
+    UITheme::drawBattery(renderer, Rect{orientedMarginLeft + 1, textY}, showBatteryPercentage);
   }
 
   if (showChapterTitle) {

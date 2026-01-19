@@ -63,9 +63,20 @@ class GfxRenderer {
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
+  void drawLine(int x1, int y1, int x2, int y2, const int lineWidth, const bool state) const;
+  void drawArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir, const int lineWidth,
+               const bool state) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;
+  void drawRect(const int x, const int y, const int width, const int height, const int lineWidth,
+                const bool state) const;
+  void drawRoundedRect(const int x, const int y, const int width, const int height, const int lineWidth,
+                       const int cornerRadius, const bool state) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
+  void fillRectGrey(const int x, const int y, const int width, const int height, const int greyLevel) const;
+  void fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir, const int insideColor,
+               const int outsideColor) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
+  void drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const;
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
                   float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;

@@ -10,11 +10,12 @@
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 22;
+constexpr int settingsCount = 23;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
@@ -27,7 +28,7 @@ const SettingInfo settingsList[settingsCount] = {
     SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
                       {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
     SettingInfo::Enum("Front Button Layout", &CrossPointSettings::frontButtonLayout,
-                      {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght"}),
+                      {"Bck, OK, L, R", "L, R, Bck, OK", "L, Bck, OK, R"}),
     SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
                       {"Prev, Next", "Next, Prev"}),
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
@@ -43,6 +44,7 @@ const SettingInfo settingsList[settingsCount] = {
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
+    SettingInfo::Enum("UI Theme", &CrossPointSettings::uiTheme, {"Classic", "Rounded"}),
     SettingInfo::Action("KOReader Sync"),
     SettingInfo::Action("Calibre Settings"),
     SettingInfo::Action("Check for updates")};
@@ -82,6 +84,8 @@ void SettingsActivity::onExit() {
   }
   vSemaphoreDelete(renderingMutex);
   renderingMutex = nullptr;
+
+  UITheme::initialize();  // Re-apply theme in case it was changed
 }
 
 void SettingsActivity::loop() {
@@ -193,36 +197,26 @@ void SettingsActivity::render() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true, EpdFontFamily::BOLD);
+  UITheme::drawFullscreenWindowFrame(renderer, "Settings");
+  Rect contentRect = UITheme::getWindowContentFrame(renderer);
 
-  // Draw selection highlight
-  renderer.fillRect(0, 60 + selectedSettingIndex * 30 - 2, pageWidth - 1, 30);
-
-  // Draw all settings
-  for (int i = 0; i < settingsCount; i++) {
-    const int settingY = 60 + i * 30;  // 30 pixels between settings
-    const bool isSelected = (i == selectedSettingIndex);
-
-    // Draw setting name
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, !isSelected);
-
-    // Draw value based on setting type
-    std::string valueText;
-    if (settingsList[i].type == SettingType::TOGGLE && settingsList[i].valuePtr != nullptr) {
-      const bool value = SETTINGS.*(settingsList[i].valuePtr);
-      valueText = value ? "ON" : "OFF";
-    } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
-      const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
-      valueText = settingsList[i].enumValues[value];
-    } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
-      valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
-    }
-    if (!valueText.empty()) {
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), !isSelected);
-    }
-  }
+  UITheme::drawList(
+      renderer, contentRect, settingsCount, selectedSettingIndex,
+      [](int index) { return std::string(settingsList[index].name); }, false, nullptr, true,
+      [this](int i) {
+        const auto& setting = settingsList[i];
+        std::string valueText = "";
+        if (settingsList[i].type == SettingType::TOGGLE && settingsList[i].valuePtr != nullptr) {
+          const bool value = SETTINGS.*(settingsList[i].valuePtr);
+          valueText = value ? "ON" : "OFF";
+        } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
+          const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
+          valueText = settingsList[i].enumValues[value];
+        } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
+          valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
+        }
+        return valueText;
+      });
 
   // Draw version text above button hints
   renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),

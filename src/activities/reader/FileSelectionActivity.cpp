@@ -4,6 +4,7 @@
 #include <SDCardManager.h>
 
 #include "MappedInputManager.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
@@ -180,23 +181,21 @@ void FileSelectionActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Books", true, EpdFontFamily::BOLD);
+
+  auto folderName = basepath == "/" ? "SD card" : basepath.substr(basepath.rfind('/') + 1).c_str();
+  UITheme::drawFullscreenWindowFrame(renderer, folderName);
+  Rect contentRect = UITheme::getWindowContentFrame(renderer);
 
   // Help text
   const auto labels = mappedInput.mapLabels("« Home", "Open", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (files.empty()) {
-    renderer.drawText(UI_10_FONT_ID, 20, 60, "No books found");
-    renderer.displayBuffer();
-    return;
-  }
-
-  const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-  renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
-  for (size_t i = pageStartIndex; i < files.size() && i < pageStartIndex + PAGE_ITEMS; i++) {
-    auto item = renderer.truncatedText(UI_10_FONT_ID, files[i].c_str(), renderer.getScreenWidth() - 40);
-    renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(), i != selectorIndex);
+    renderer.drawText(UI_10_FONT_ID, contentRect.x + 20, contentRect.y + 20, "No books found");
+  } else {
+    UITheme::drawList(
+        renderer, contentRect, files.size(), selectorIndex, [this](int index) { return files[index]; }, false, nullptr,
+        false, nullptr);
   }
 
   renderer.displayBuffer();
