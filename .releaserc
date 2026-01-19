@@ -3,7 +3,15 @@
     [
       "@semantic-release/commit-analyzer",
       {
-        "preset": "conventionalcommits"
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          { "breaking": true, "release": "minor" },
+          { "type": "feat", "release": "minor" },
+          { "type": "fix", "release": "patch" }
+        ],
+        "parserOpts": {
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES", "BREAKING"]
+        }
       }
     ],
     [
@@ -27,12 +35,6 @@
         "message": "Release - ${nextRelease.version}"
       }
     ]
-  ],
-  "releaseRules": [
-    {
-      "breaking": true,
-      "release": "minor"
-    }
   ],
   "branches": ["feature/add-semantic-releases"]
 }
