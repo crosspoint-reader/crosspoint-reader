@@ -199,7 +199,11 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
       // Draw TOC item (account for top sync offset)
       const int tocIndex = tocIndexFromItemIndex(itemIndex);
       auto item = epub->getTocItem(tocIndex);
-      renderer.drawText(UI_10_FONT_ID, 20 + (item.level - 1) * 15, displayY, item.title.c_str(), !isSelected);
+      const int indentSize = 20 + (item.level - 1) * 15;
+      const std::string chapterName =
+          renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), pageWidth - 40 - indentSize);
+      renderer.drawText(UI_10_FONT_ID, indentSize, 60 + (tocIndex % pageItems) * 30, chapterName.c_str(),
+                        tocIndex != selectorIndex);
     }
   }
 
