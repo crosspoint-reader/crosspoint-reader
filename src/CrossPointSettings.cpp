@@ -14,7 +14,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 19;
+constexpr uint8_t SETTINGS_COUNT = 20;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -111,6 +111,7 @@ bool CrossPointSettings::loadFromFile() {
       strncpy(opdsServerUrl, urlStr.c_str(), sizeof(opdsServerUrl) - 1);
       opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
     }
+    if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, textAntiAliasing);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, hideBatteryPercentage);
