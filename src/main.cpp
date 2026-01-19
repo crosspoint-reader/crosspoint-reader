@@ -15,6 +15,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/bluetooth/BluetoothActivity.h"
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
@@ -226,6 +227,11 @@ void onGoToFileTransfer() {
   enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToBluetooth() {
+  exitActivity();
+  enterNewActivity(new BluetoothActivity(renderer, mappedInputManager, onGoHome));
+}
+
 void onGoToSettings() {
   exitActivity();
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
@@ -249,7 +255,7 @@ void onGoToBrowser() {
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToMyLibrary, onGoToSettings,
-                                    onGoToFileTransfer, onGoToBrowser));
+                                    onGoToFileTransfer, onGoToBluetooth, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {
