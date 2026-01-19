@@ -7,6 +7,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderMenuActivity.h"
 #include "MappedInputManager.h"
 #include "ScreenComponents.h"
@@ -114,8 +115,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Enter chapter selection activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Enter shortcut menu activity
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= skipChapterMs) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     exitActivity();
@@ -139,6 +140,30 @@ void EpubReaderActivity::loop() {
           updateRequired = true;
         }));
     xSemaphoreGive(renderingMutex);
+    return;
+  }
+
+  // Enter chapter selection activity
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    exitActivity();
+    enterNewActivity(new EpubReaderChapterSelectionActivity(
+        this->renderer, this->mappedInput, epub, currentSpineIndex,
+        [this] {
+          exitActivity();
+          updateRequired = true;
+        },
+        [this](const int newSpineIndex) {
+          if (currentSpineIndex != newSpineIndex) {
+            currentSpineIndex = newSpineIndex;
+            nextPageNumber = 0;
+            section.reset();
+          }
+          exitActivity();
+          updateRequired = true;
+        }));
+    xSemaphoreGive(renderingMutex);
+    return;
   }
 
   // Long press BACK (1s+) goes directly to home

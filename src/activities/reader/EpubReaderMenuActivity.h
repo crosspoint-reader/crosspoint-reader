@@ -16,7 +16,6 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   SemaphoreHandle_t renderingMutex = nullptr;
   int currentSpineIndex = 0;
   int selectedItemIndex = 0;
-  int nextPageNumber = 0;
   bool updateRequired = false;
   const std::function<void()> onGoBack;
 
