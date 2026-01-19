@@ -20,9 +20,10 @@ Button layout can be customized in **[Settings](#35-settings)**.
 
 ### Power On / Off
 
-To turn the device on or off, **press and hold the Power button for half a second**. In **[Settings](#35-settings)** you can configure the power button to trigger on a short press instead of a long one.
+To turn the device on or off, **press and hold the Power button for approximately half a second**.
+In **[Settings](#35-settings)** you can configure the power button to turn the device off with a short press instead of a long one.
 
-To reboot the device (for example if it's frozen, or after a firmware update), press and release the Reset button, and then hold the Power button for a few seconds.
+To reboot the device (for example if it's frozen, or after a firmware update), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
 
 ### First Launch
 
@@ -63,18 +64,29 @@ See the [webserver docs](./docs/webserver.md) for more information on how to con
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
 - **Sleep Screen**: Which sleep screen to display when the device sleeps:
-  - "Dark" (default) - The default dark sleep screen
+  - "Dark" (default) - The default dark Crosspoint logo sleep screen
   - "Light" - The same default sleep screen, on a white background
-  - "Custom" - Custom images from the SD card, see [Sleep Screen](#36-sleep-screen) below for more information
+  - "Custom" - Custom images from the SD card; see [Sleep Screen](#36-sleep-screen) below for more information
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
-  - "Blank" - A blank screen
+  - "None" - A blank screen
+- **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
+  - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
+  - "Crop" - Scale the image down and crop as necessary to try to to fill the screen (Note: this is experimental and may not work as expected)
 - **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
   - "Full" - Show status bar with reading progress
+- **Hide Battery %**: Configure where to suppress the battery pecentage display in the status bar; the battery icon will still be shown:
+  - "Never" - Always show battery percentage (default)
+  - "In Reader" - Show battery percentage everywhere except in reading mode
+  - "Always" - Always hide battery percentage
 - **Extra Paragraph Spacing**: If enabled, vertical space will be added between paragraphs in the book. If disabled, paragraphs will not have vertical space between them, but will have first-line indentation.
-- **Short Power Button Click**: Whether to trigger the power button on a short press or a long press.
-- **Reading Orientation**: Set the screen orientation for reading:
+- **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
+- **Short Power Button Click**: Controls the effect of a short click of the power button:
+  - "Ignore" - Require a long press to turn off the device
+  - "Sleep" - A short press powers the device off
+  - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
+- **Reading Orientation**: Set the screen orientation for reading EPUB files:
   - "Portrait" (default) - Standard portrait orientation
   - "Landscape CW" - Landscape, rotated clockwise
   - "Inverted" - Portrait, upside down
@@ -83,16 +95,22 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - Back, Confirm, Left, Right (default)
   - Left, Right, Back, Confirm
   - Left, Back, Confirm, Right
-- **Side Button Layout**: Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
+- **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
+- **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skip to the next/previous chapter.
+  - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
+  - "Page Scroll" - Long-pressing scrolls a page up/down
+- Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
 - **Reader Font Family**: Choose the font used for reading:
   - "Bookerly" (default) - Amazon's reading font
   - "Noto Sans" - Google's sans-serif font
   - "Open Dyslexic" - Font designed for readers with dyslexia
 - **Reader Font Size**: Adjust the text size for reading; options are "Small", "Medium", "Large", or "X Large".
 - **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal", or "Wide".
+- **Reader Screen Margin**: Controls the screen margins in reader mode between 5 and 40 pixels in 5 pixel increments.
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep.
 - **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting.
+- **Calibre Settings**: Set up integration for accessing a Calibre web library or connecting to Calibre as a wireless device.
 - **Check for updates**: Check for firmware updates over WiFi.
 
 ### 3.6 Sleep Screen
@@ -124,9 +142,14 @@ Once you have opened a book, the button layout changes to facilitate reading.
 
 The role of the volume (side) buttons can be swapped in **[Settings](#35-settings)**.
 
+If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
+
 ### Chapter Navigation
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
 * **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button briefly, then release.
+
+This feature can be disabled in **[Settings](#35-settings)** to help avoid changing chapters by mistake.
+
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.

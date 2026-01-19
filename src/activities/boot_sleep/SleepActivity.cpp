@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
+#include <Txt.h>
 #include <Xtc.h>
 
 #include "CrossPointSettings.h"
@@ -80,7 +81,13 @@ void SleepActivity::renderCustomSleepScreen() const {
     const auto numFiles = files.size();
     if (numFiles > 0) {
       // Generate a random number between 1 and numFiles
-      const auto randomFileIndex = random(numFiles);
+      auto randomFileIndex = random(numFiles);
+      // If we picked the same image as last time, reroll
+      while (numFiles > 1 && randomFileIndex == APP_STATE.lastSleepImage) {
+        randomFileIndex = random(numFiles);
+      }
+      APP_STATE.lastSleepImage = randomFileIndex;
+      APP_STATE.saveToFile();
       const auto filename = "/sleep/" + files[randomFileIndex];
       FsFile file;
       if (SdMan.openFileForRead("SLP", filename, file)) {
@@ -201,6 +208,7 @@ void SleepActivity::renderCoverSleepScreen() const {
   std::string coverBmpPath;
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
 
+  // Check if the current book is XTC, TXT, or EPUB
   if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
       StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
     // Handle XTC file
@@ -216,6 +224,20 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
+  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".txt")) {
+    // Handle TXT file - looks for cover image in the same folder
+    Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!lastTxt.load()) {
+      Serial.println("[SLP] Failed to load last TXT");
+      return renderDefaultSleepScreen();
+    }
+
+    if (!lastTxt.generateCoverBmp()) {
+      Serial.println("[SLP] No cover image found for TXT file");
+      return renderDefaultSleepScreen();
+    }
+
+    coverBmpPath = lastTxt.getCoverBmpPath();
   } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
     // Handle EPUB file
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");

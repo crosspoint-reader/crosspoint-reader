@@ -42,6 +42,8 @@ class Bitmap {
   bool isTopDown() const { return topDown; }
   bool hasGreyscale() const { return bpp > 1; }
   int getRowBytes() const { return rowBytes; }
+  bool is1Bit() const { return bpp == 1; }
+  uint16_t getBpp() const { return bpp; }
 
  private:
   static uint16_t readLE16(FsFile& f);

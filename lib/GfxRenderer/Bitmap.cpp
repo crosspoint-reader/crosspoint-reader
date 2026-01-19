@@ -228,7 +228,10 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
     }
     case 1: {
       for (int x = 0; x < width; x++) {
-        lum = (rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 0xFF : 0x00;
+        // Get palette index (0 or 1) from bit at position x
+        const uint8_t palIndex = (rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 1 : 0;
+        // Use palette lookup for proper black/white mapping
+        lum = paletteLum[palIndex];
         packPixel(lum);
       }
       break;
