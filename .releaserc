@@ -1,0 +1,37 @@
+{
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits"
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          ".pio/build/gh_release/bootloader.bin",
+          ".pio/build/gh_release/firmware.bin",
+          ".pio/build/gh_release/firmware.elf",
+          ".pio/build/gh_release/firmware.map",
+          ".pio/build/gh_release/partitions.bin"
+        ],
+        "successComment": false,
+        "failComment": false,
+        "message": "Release - ${nextRelease.version}"
+      }
+    ],
+    [
+      "branches",
+      {
+         "name": "main"
+      }
+   ]
+  ]
+}

@@ -1,9 +1,12 @@
 name: Compile Release
 on:
-  push:
-    tags:
-      - '*'
-
+  workflow_dispatch:
+    inputs:
+      dry-run-enabled:
+        description: 'Run in dry-run mode (no real release)'
+        required: true
+        default: true
+        type: boolean
 jobs:
   build-release:
     runs-on: ubuntu-latest
@@ -29,13 +32,32 @@ jobs:
       - name: Build CrossPoint
         run: pio run -e gh_release
 
-      - name: Upload Artifacts
+      - name: Upload Artifacts (for semantic-release assets)
         uses: actions/upload-artifact@v4
         with:
-          name: CrossPoint-${{ github.ref_name }}
+          name: CrossPoint-artifacts
           path: |
             .pio/build/gh_release/bootloader.bin
             .pio/build/gh_release/firmware.bin
             .pio/build/gh_release/firmware.elf
             .pio/build/gh_release/firmware.map
             .pio/build/gh_release/partitions.bin
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Semantic Release
+        run: npm install -g semantic-release@24.2.4 @semantic-release/exec@7.1.0 conventional-changelog-conventionalcommits@8.0.0
+
+      - name: Run semantic-release (dry run if requested)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FLAGS=""
+          if [[ "${{ inputs.dry-run-enabled }}" == "true" ]]; then
+            FLAGS="--dry-run"
+          fi
+          
+          npx semantic-release ${FLAGS}
