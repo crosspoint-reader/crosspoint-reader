@@ -64,7 +64,7 @@ void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const Popu
   const int barWidth = POPUP_DEFAULT_MIN_WIDTH;
   const int barHeight = POPUP_DEFAULT_BAR_HEIGHT;
   const int barX = layout.x + (layout.width - barWidth) / 2;
-  const int barY = layout.y + layout.height - 16; // 16 pixels above bottom of popup
+  const int barY = layout.y + layout.height - 16;  // 16 pixels above bottom of popup
 
   int fillWidth = barWidth * progress / 100;
   if (fillWidth < 0) {
