@@ -20,6 +20,7 @@ class TxtReaderActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
+  const std::function<void()> onSwapBooks;
 
   // Streaming text reader - stores file offsets for each page
   std::vector<size_t> pageOffsets;  // File offset for start of each page
@@ -49,11 +50,13 @@ class TxtReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt,
-                             const std::function<void()>& onGoBack, const std::function<void()>& onGoHome)
+                             const std::function<void()>& onGoBack, const std::function<void()>& onGoHome,
+                             const std::function<void()>& onSwapBooks)
       : ActivityWithSubactivity("TxtReader", renderer, mappedInput),
         txt(std::move(txt)),
         onGoBack(onGoBack),
-        onGoHome(onGoHome) {}
+        onGoHome(onGoHome),
+        onSwapBooks(onSwapBooks) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

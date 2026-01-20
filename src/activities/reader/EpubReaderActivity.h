@@ -18,6 +18,7 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
+  const std::function<void()> onSwapBooks;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
@@ -28,11 +29,13 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
-                              const std::function<void()>& onGoBack, const std::function<void()>& onGoHome)
+                              const std::function<void()>& onGoBack, const std::function<void()>& onGoHome,
+                              const std::function<void()>& onSwapBooks)
       : ActivityWithSubactivity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),
         onGoBack(onGoBack),
-        onGoHome(onGoHome) {}
+        onGoHome(onGoHome),
+        onSwapBooks(onSwapBooks) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

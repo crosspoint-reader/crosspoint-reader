@@ -23,6 +23,7 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
+  const std::function<void()> onSwapBooks;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
@@ -33,11 +34,13 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,
-                             const std::function<void()>& onGoBack, const std::function<void()>& onGoHome)
+                             const std::function<void()>& onGoBack, const std::function<void()>& onGoHome,
+                             const std::function<void()>& onSwapBooks)
       : ActivityWithSubactivity("XtcReader", renderer, mappedInput),
         xtc(std::move(xtc)),
         onGoBack(onGoBack),
-        onGoHome(onGoHome) {}
+        onGoHome(onGoHome),
+        onSwapBooks(onSwapBooks) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

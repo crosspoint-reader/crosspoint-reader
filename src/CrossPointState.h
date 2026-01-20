@@ -8,6 +8,7 @@ class CrossPointState {
 
  public:
   std::string openEpubPath;
+  std::string lastOpenBookPath;
   uint8_t lastSleepImage;
   ~CrossPointState() = default;
 

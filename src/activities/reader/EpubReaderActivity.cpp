@@ -74,7 +74,10 @@ void EpubReaderActivity::onEnter() {
     }
   }
 
-  // Save current epub as last opened epub
+  // Save last opened epub before setting current opened epub
+  if (APP_STATE.openEpubPath != epub->getPath()) {
+    APP_STATE.lastOpenBookPath = APP_STATE.openEpubPath;
+  }
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
 
@@ -146,6 +149,25 @@ void EpubReaderActivity::loop() {
   // Short press BACK goes to file selection
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
     onGoBack();
+    return;
+  }
+
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::LAST_BOOK &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    if (APP_STATE.lastOpenBookPath.empty()) {
+      const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, "No last book found.");
+      constexpr int margin = 20;
+      const int x = (renderer.getScreenWidth() - textWidth - margin * 2) / 2;
+      constexpr int y = 117;
+      const int w = textWidth + margin * 2;
+      const int h = renderer.getLineHeight(UI_12_FONT_ID) + margin * 2;
+      renderer.fillRect(x - 5, y - 5, w + 10, h + 10, true);
+      renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
+      renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, "No last book found.");
+      renderer.displayBuffer();
+    } else {
+      onSwapBooks();
+    }
     return;
   }
 

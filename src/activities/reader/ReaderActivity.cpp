@@ -1,5 +1,6 @@
 #include "ReaderActivity.h"
 
+#include "CrossPointState.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
 #include "FileSelectionActivity.h"
@@ -74,7 +75,12 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
 }
 
 void ReaderActivity::onSelectBookFile(const std::string& path) {
+  if (path.empty()) {
+    return;
+  }
+
   currentBookPath = path;  // Track current book path
+
   exitActivity();
   enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Loading..."));
 
@@ -131,7 +137,7 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   exitActivity();
   enterNewActivity(new EpubReaderActivity(
       renderer, mappedInput, std::move(epub), [this, epubPath] { onGoToFileSelection(epubPath); },
-      [this] { onGoBack(); }));
+      [this] { onGoBack(); }, [this] { onSelectBookFile(APP_STATE.lastOpenBookPath); }));
 }
 
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
@@ -139,8 +145,8 @@ void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   currentBookPath = xtcPath;
   exitActivity();
   enterNewActivity(new XtcReaderActivity(
-      renderer, mappedInput, std::move(xtc), [this, xtcPath] { onGoToFileSelection(xtcPath); },
-      [this] { onGoBack(); }));
+      renderer, mappedInput, std::move(xtc), [this, xtcPath] { onGoToFileSelection(xtcPath); }, [this] { onGoBack(); },
+      [this] { onSelectBookFile(APP_STATE.lastOpenBookPath); }));
 }
 
 void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
@@ -148,8 +154,8 @@ void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
   currentBookPath = txtPath;
   exitActivity();
   enterNewActivity(new TxtReaderActivity(
-      renderer, mappedInput, std::move(txt), [this, txtPath] { onGoToFileSelection(txtPath); },
-      [this] { onGoBack(); }));
+      renderer, mappedInput, std::move(txt), [this, txtPath] { onGoToFileSelection(txtPath); }, [this] { onGoBack(); },
+      [this] { onSelectBookFile(APP_STATE.lastOpenBookPath); }));
 }
 
 void ReaderActivity::onEnter() {
