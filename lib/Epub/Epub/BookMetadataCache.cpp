@@ -133,17 +133,12 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     tocFile.close();
     return false;
   }
-  // TODO: For large ZIPs loading the all localHeaderOffsets will crash.
-  //       However not having them loaded is extremely slow. Need a better solution here.
-  //       Perhaps only a cache of spine items or a better way to speedup lookups?
-  if (!zip.loadAllFileStatSlims()) {
-    Serial.printf("[%lu] [BMC] Could not load zip local header offsets for size calculations\n", millis());
-    bookFile.close();
-    spineFile.close();
-    tocFile.close();
-    zip.close();
-    return false;
-  }
+  // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
+  // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
+  // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
+  // Instead, we let loadFileStatSlim() do individual lookups per spine item.
+  // This is O(n*m) instead of O(n) for lookups, but avoids memory exhaustion.
+  // See: https://github.com/crosspoint-reader/crosspoint-reader/issues/134
   uint32_t cumSize = 0;
   spineFile.seek(0);
   int lastSpineTocIndex = -1;
