@@ -14,6 +14,8 @@
 namespace {
 constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 25;
+constexpr int progressBarHeight = 4;
+constexpr int progressBarMarginTop = 1;
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 
 // Cache file magic and version
@@ -149,6 +151,9 @@ void TxtReaderActivity::initializeReader() {
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 
+  // Add additional margin for status bar if progress bar is shown
+  const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::FULL_WITH_PROGRESS_BAR;
+
   // Calculate viewport dimensions
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -156,7 +161,7 @@ void TxtReaderActivity::initializeReader() {
   orientedMarginTop += cachedScreenMargin;
   orientedMarginLeft += cachedScreenMargin;
   orientedMarginRight += cachedScreenMargin;
-  orientedMarginBottom += statusBarMargin;
+  orientedMarginBottom += statusBarMargin + (showProgressBar ? (progressBarHeight + progressBarMarginTop) : 0);
 
   viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
@@ -497,23 +502,44 @@ void TxtReaderActivity::renderPage() {
 
 void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) const {
-  const bool showProgress = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
+  const bool showProgressPercentage = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
+  const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR;
   const bool showBattery = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS ||
-                           SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
+                           SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL ||
+                           SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR;
   const bool showTitle = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS ||
-                         SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
+                         SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL ||
+                         SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR;
 
   const auto screenHeight = renderer.getScreenHeight();
   const auto textY = screenHeight - orientedMarginBottom - 4;
   int progressTextWidth = 0;
 
-  if (showProgress) {
-    const int progress = totalPages > 0 ? (currentPage + 1) * 100 / totalPages : 0;
-    const std::string progressStr =
-        std::to_string(currentPage + 1) + "/" + std::to_string(totalPages) + "  " + std::to_string(progress) + "%";
-    progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr.c_str());
+  if (showProgressPercentage || showProgressBar) {
+    const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
+
+    char progressStr[32];
+    if (showProgressPercentage) {
+      snprintf(progressStr, sizeof(progressStr), "%d/%d %.1f%%", currentPage + 1, totalPages, progress);
+    } else {
+      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage + 1, totalPages);
+    }
+
+    progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
     renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - orientedMarginRight - progressTextWidth, textY,
-                      progressStr.c_str());
+                      progressStr);
+
+    if (showProgressBar) {
+      // Draw progress bar at the very bottom of the screen, from edge to edge of viewable area
+      int vieweableMarginTop, vieweableMarginRight, vieweableMarginBottom, vieweableMarginLeft;
+      renderer.getOrientedViewableTRBL(&vieweableMarginTop, &vieweableMarginRight, &vieweableMarginBottom,
+                                       &vieweableMarginLeft);
+
+      const int progressBarMaxWidth = renderer.getScreenWidth() - vieweableMarginLeft - vieweableMarginRight;
+      const int progressBarY = renderer.getScreenHeight() - vieweableMarginBottom - progressBarHeight;
+      const int barWidth = progressBarMaxWidth * progress / 100;
+      renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, progressBarHeight, true);
+    }
   }
 
   if (showBattery) {
