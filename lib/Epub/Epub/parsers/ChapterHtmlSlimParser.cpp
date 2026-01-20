@@ -269,7 +269,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 }
 
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
-  SDLock lock;
   Serial.printf("[%lu] [EHP] parseAndBuildPages start. Heap: %u\n", millis(), ESP.getFreeHeap());
 
   Serial.printf("[%lu] [EHP] Calling startNewTextBlock\n", millis());
