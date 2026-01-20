@@ -163,21 +163,19 @@ void EpubReaderActivity::loop() {
 
   // When long-press chapter skip is disabled, turn pages on press instead of release.
   const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
-  const bool prevTriggered = usePressForPageTurn
-                                 ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
-                                    mappedInput.wasPressed(MappedInputManager::Button::Left))
-                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                                    mappedInput.wasReleased(MappedInputManager::Button::Left));
-  const bool nextTriggered =
-      usePressForPageTurn
-          ? (mappedInput.wasPressed(MappedInputManager::Button::PageForward) ||
-             (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-              mappedInput.wasPressed(MappedInputManager::Button::Power)) ||
-             mappedInput.wasPressed(MappedInputManager::Button::Right))
-          : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-             (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-              mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
-             mappedInput.wasReleased(MappedInputManager::Button::Right));
+  const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
+                                                    mappedInput.wasPressed(MappedInputManager::Button::Left))
+                                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                                                    mappedInput.wasReleased(MappedInputManager::Button::Left));
+  const bool nextTriggered = usePressForPageTurn
+                                 ? (mappedInput.wasPressed(MappedInputManager::Button::PageForward) ||
+                                    (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                                     mappedInput.wasPressed(MappedInputManager::Button::Power)) ||
+                                    mappedInput.wasPressed(MappedInputManager::Button::Right))
+                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                                    (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                                     mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
+                                    mappedInput.wasReleased(MappedInputManager::Button::Right));
 
   if (!prevTriggered && !nextTriggered) {
     return;
