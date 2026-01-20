@@ -42,6 +42,45 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   renderer.fillRect(x + 2, y + 2, filledWidth, batteryHeight - 4);
 }
 
+ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& renderer, const char* message,
+                                                          const int y, const int minWidth,
+                                                          const int minHeight) {
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
+  constexpr int margin = 16;
+  const int contentWidth = textWidth > minWidth ? textWidth : minWidth;
+  const int x = (renderer.getScreenWidth() - contentWidth - margin * 2) / 2;
+  const int w = contentWidth + margin * 2;
+  const int contentHeight = renderer.getLineHeight(UI_12_FONT_ID) + margin * 2;
+  const int h = contentHeight >= minHeight ? contentHeight : minHeight;
+  renderer.fillRect(x - 2, y - 2, w + 4, h + 4, true);
+  renderer.fillRect(x + 2, y + 2, w - 4, h - 4, false);
+
+  const int barWidth = POPUP_DEFAULT_MIN_WIDTH;
+  const int barHeight = POPUP_DEFAULT_BAR_HEIGHT;
+  const int barX = x + (w - barWidth) / 2;
+  const int barY = y + renderer.getLineHeight(UI_12_FONT_ID) + margin * 2 - 6;
+
+  const int textX = x + margin + (contentWidth - textWidth) / 2;
+  renderer.drawText(UI_12_FONT_ID, textX, y + margin, message, true, EpdFontFamily::BOLD);
+  renderer.displayBuffer();
+  return {x, y, w, h, barX, barY, barWidth, barHeight};
+}
+
+void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const PopupLayout& layout,
+                                         const int progress) {
+  int fillWidth = layout.barWidth * progress / 100;
+  if (fillWidth < 0) {
+    fillWidth = 0;
+  } else if (fillWidth > layout.barWidth) {
+    fillWidth = layout.barWidth;
+  }
+
+  if (fillWidth > 2) {
+    renderer.fillRect(layout.barX + 1, layout.barY + 1, fillWidth - 2, layout.barHeight - 2, true);
+  }
+  renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
+}
+
 void ScreenComponents::drawProgressBar(const GfxRenderer& renderer, const int x, const int y, const int width,
                                        const int height, const size_t current, const size_t total) {
   if (total == 0) {

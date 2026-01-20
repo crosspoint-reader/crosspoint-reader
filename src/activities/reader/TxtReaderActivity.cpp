@@ -192,24 +192,7 @@ void TxtReaderActivity::buildPageIndex() {
 
   Serial.printf("[%lu] [TRS] Building page index for %zu bytes...\n", millis(), fileSize);
 
-  // Progress bar dimensions (matching EpubReaderActivity style)
-  constexpr int barWidth = 200;
-  constexpr int barHeight = 10;
-  constexpr int boxMargin = 20;
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, "Indexing...");
-  const int boxWidth = (barWidth > textWidth ? barWidth : textWidth) + boxMargin * 2;
-  const int boxHeight = renderer.getLineHeight(UI_12_FONT_ID) + barHeight + boxMargin * 3;
-  const int boxX = (renderer.getScreenWidth() - boxWidth) / 2;
-  constexpr int boxY = 50;
-  const int barX = boxX + (boxWidth - barWidth) / 2;
-  const int barY = boxY + renderer.getLineHeight(UI_12_FONT_ID) + boxMargin * 2;
-
-  // Draw initial progress box
-  renderer.fillRect(boxX, boxY, boxWidth, boxHeight, false);
-  renderer.drawText(UI_12_FONT_ID, boxX + boxMargin, boxY + boxMargin, "Indexing...");
-  renderer.drawRect(boxX + 5, boxY + 5, boxWidth - 10, boxHeight - 10);
-  renderer.drawRect(barX, barY, barWidth, barHeight);
-  renderer.displayBuffer();
+  const auto popupLayout = ScreenComponents::drawPopup(renderer, "Indexing...");
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
@@ -235,9 +218,7 @@ void TxtReaderActivity::buildPageIndex() {
       lastProgressPercent = progressPercent;
 
       // Fill progress bar
-      const int fillWidth = (barWidth - 2) * progressPercent / 100;
-      renderer.fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2, true);
-      renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
+      ScreenComponents::fillPopupProgress(renderer, popupLayout, progressPercent);
     }
 
     // Yield to other tasks periodically
@@ -383,9 +364,6 @@ void TxtReaderActivity::renderScreen() {
 
   // Initialize reader if not done
   if (!initialized) {
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Indexing...", true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
     initializeReader();
   }
 
