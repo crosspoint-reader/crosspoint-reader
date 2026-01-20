@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include "Print.h"
 
 /**
  * Type of OPDS entry.
@@ -42,7 +43,7 @@ using OpdsBook = OpdsEntry;
  *     }
  *   }
  */
-class OpdsParser {
+class OpdsParser final : public Print {
  public:
   OpdsParser();
   ~OpdsParser();
@@ -51,9 +52,16 @@ class OpdsParser {
   OpdsParser(const OpdsParser&) = delete;
   OpdsParser& operator=(const OpdsParser&) = delete;
 
-  void push(const char* xmlData, size_t length);
-  void finish();
+  size_t write(uint8_t) override;
+  size_t write(const uint8_t*, size_t) override;
+
+  void flush() override;
+
   bool error() const;
+
+  operator bool() {
+    return !error();
+  }
 
   /**
    * Get the parsed entries (both navigation and book entries).

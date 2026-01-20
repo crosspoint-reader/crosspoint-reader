@@ -22,9 +22,14 @@ OpdsParser::~OpdsParser() {
   }
 }
 
-void OpdsParser::push(const char* xmlData, const size_t length) {
+size_t OpdsParser::write(uint8_t c) {
+  return write(&c, 1);
+}
+
+size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
+  Serial.printf("Got %d bytes to parse\n", length);
   if (errorOccured) {
-    return;
+    return length;
   }
 
   XML_SetUserData(parser, this);
@@ -32,7 +37,7 @@ void OpdsParser::push(const char* xmlData, const size_t length) {
   XML_SetCharacterDataHandler(parser, characterData);
 
   // Parse in chunks to avoid large buffer allocations
-  const char* currentPos = xmlData;
+  const char* currentPos = reinterpret_cast<const char*>(xmlData);
   size_t remaining = length;
   constexpr size_t chunkSize = 1024;
 
@@ -43,7 +48,7 @@ void OpdsParser::push(const char* xmlData, const size_t length) {
       Serial.printf("[%lu] [OPDS] Couldn't allocate memory for buffer\n", millis());
       XML_ParserFree(parser);
       parser = nullptr;
-      return;
+      return length;
     }
 
     const size_t toRead = remaining < chunkSize ? remaining : chunkSize;
@@ -55,7 +60,7 @@ void OpdsParser::push(const char* xmlData, const size_t length) {
                     XML_ErrorString(XML_GetErrorCode(parser)));
       XML_ParserFree(parser);
       parser = nullptr;
-      return;
+      return length;
     }
 
     currentPos += toRead;
@@ -63,7 +68,7 @@ void OpdsParser::push(const char* xmlData, const size_t length) {
   }
 }
 
-void OpdsParser::finish() {
+void OpdsParser::flush() {
   if (XML_Parse(parser, nullptr, 0, XML_TRUE) != XML_STATUS_OK) {
     errorOccured = true;
     XML_ParserFree(parser);
