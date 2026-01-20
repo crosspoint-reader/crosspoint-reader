@@ -44,6 +44,7 @@ class Epub {
   const std::string& getPath() const;
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
+  const std::string& getLanguage() const;
   std::string getCoverBmpPath(bool cropped = false) const;
   bool generateCoverBmp(bool cropped = false) const;
   std::string getThumbBmpPath() const;
@@ -62,5 +63,5 @@ class Epub {
   int getSpineIndexForTextReference() const;
 
   size_t getBookSize() const;
-  uint8_t calculateProgress(int currentSpineIndex, float currentSpineRead) const;
+  float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
 };

@@ -7,13 +7,14 @@
 
 #include "CalibreSettingsActivity.h"
 #include "CrossPointSettings.h"
+#include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "fontIds.h"
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 20;
+constexpr int settingsCount = 22;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
@@ -37,10 +38,12 @@ const SettingInfo settingsList[settingsCount] = {
     SettingInfo::Value("Reader Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
     SettingInfo::Enum("Reader Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
                       {"Justify", "Left", "Center", "Right"}),
+    SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled),
     SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
+    SettingInfo::Action("KOReader Sync"),
     SettingInfo::Action("Calibre Settings"),
     SettingInfo::Action("Check for updates")};
 }  // namespace
@@ -115,7 +118,6 @@ void SettingsActivity::loop() {
 }
 
 void SettingsActivity::toggleCurrentSetting() {
-  // Validate index
   if (selectedSettingIndex < 0 || selectedSettingIndex >= settingsCount) {
     return;
   }
@@ -139,7 +141,15 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    if (strcmp(setting.name, "Calibre Settings") == 0) {
+    if (strcmp(setting.name, "KOReader Sync") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Calibre Settings") == 0) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
@@ -186,18 +196,19 @@ void SettingsActivity::render() const {
   // Draw header
   renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true, EpdFontFamily::BOLD);
 
-  // Draw selection
+  // Draw selection highlight
   renderer.fillRect(0, 60 + selectedSettingIndex * 30 - 2, pageWidth - 1, 30);
 
   // Draw all settings
   for (int i = 0; i < settingsCount; i++) {
     const int settingY = 60 + i * 30;  // 30 pixels between settings
+    const bool isSelected = (i == selectedSettingIndex);
 
     // Draw setting name
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, i != selectedSettingIndex);
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, !isSelected);
 
     // Draw value based on setting type
-    std::string valueText = "";
+    std::string valueText;
     if (settingsList[i].type == SettingType::TOGGLE && settingsList[i].valuePtr != nullptr) {
       const bool value = SETTINGS.*(settingsList[i].valuePtr);
       valueText = value ? "ON" : "OFF";
@@ -207,8 +218,10 @@ void SettingsActivity::render() const {
     } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
       valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
     }
-    const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), i != selectedSettingIndex);
+    if (!valueText.empty()) {
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
+      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), !isSelected);
+    }
   }
 
   // Draw version text above button hints
