@@ -5,6 +5,7 @@
 
 #include <cstring>
 
+#include "BluetoothManager.h"
 #include "CalibreSettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "KOReaderSettingsActivity.h"
@@ -14,7 +15,7 @@
 
 // Define the static settings list
 namespace {
-constexpr int settingsCount = 22;
+constexpr int settingsCount = 23;
 const SettingInfo settingsList[settingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
@@ -43,6 +44,7 @@ const SettingInfo settingsList[settingsCount] = {
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
+    SettingInfo::Enum("Bluetooth", &CrossPointSettings::bluetoothEnabled, {"Off", "On"}),
     SettingInfo::Action("KOReader Sync"),
     SettingInfo::Action("Calibre Settings"),
     SettingInfo::Action("Check for updates")};
@@ -130,7 +132,28 @@ void SettingsActivity::toggleCurrentSetting() {
     SETTINGS.*(setting.valuePtr) = !currentValue;
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
-    SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+    const uint8_t newValue = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+    SETTINGS.*(setting.valuePtr) = newValue;
+    
+    // Handle Bluetooth toggle specifically
+    if (strcmp(setting.name, "Bluetooth") == 0) {
+      if (newValue == CrossPointSettings::BLUETOOTH_MODE::ON) {
+        // Enable Bluetooth
+        if (!BLUETOOTH_MANAGER.isInitialized()) {
+          if (BLUETOOTH_MANAGER.initialize()) {
+            BLUETOOTH_MANAGER.startAdvertising();
+          } else {
+            // Failed to initialize, revert to OFF
+            SETTINGS.*(setting.valuePtr) = CrossPointSettings::BLUETOOTH_MODE::OFF;
+          }
+        }
+      } else {
+        // Disable Bluetooth
+        if (BLUETOOTH_MANAGER.isInitialized()) {
+          BLUETOOTH_MANAGER.shutdown();
+        }
+      }
+    }
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     // Decreasing would also be nice for large ranges I think but oh well can't have everything
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);

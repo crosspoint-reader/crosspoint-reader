@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "Battery.h"
+#include "BluetoothManager.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -200,6 +201,11 @@ void enterDeepSleep() {
   exitActivity();
   enterNewActivity(new SleepActivity(renderer, mappedInputManager));
 
+  // Shutdown Bluetooth to save power and memory
+  if (BLUETOOTH_MANAGER.isInitialized()) {
+    BLUETOOTH_MANAGER.shutdown();
+  }
+
   einkDisplay.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
@@ -291,6 +297,15 @@ void setup() {
 
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
+
+  // Initialize Bluetooth if enabled (before display to minimize RAM impact)
+  if (SETTINGS.bluetoothEnabled == CrossPointSettings::BLUETOOTH_MODE::ON) {
+    if (!BLUETOOTH_MANAGER.initialize()) {
+      Serial.printf("[%lu] [BLE] Failed to initialize Bluetooth\n", millis());
+      // Fall back to disabled state
+      SETTINGS.bluetoothEnabled = CrossPointSettings::BLUETOOTH_MODE::OFF;
+    }
+  }
 
   // verify power button press duration after we've read settings.
   verifyWakeupLongPress();
