@@ -128,6 +128,12 @@ You can customize the sleep screen by placing custom images in specific location
 > - Use uncompressed BMP files with 24-bit color depth
 > - Use a resolution of 480x800 pixels to match the device's screen resolution.
 
+### 3.7 Custom Fonts
+
+You can load your own custom fonts onto the device by converting them to the required `.epdfont` format.
+
+See the **[Font Conversion Guide](FONT_CONVERSION.md)** for detailed instructions on how to use the conversion tool.
+
 ---
 
 ## 4. Reading Mode
