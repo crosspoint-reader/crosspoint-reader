@@ -42,9 +42,8 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   renderer.fillRect(x + 2, y + 2, filledWidth, batteryHeight - 4);
 }
 
-ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& renderer, const char* message,
-                                                          const int y, const int minWidth,
-                                                          const int minHeight) {
+ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& renderer, const char* message, const int y,
+                                                          const int minWidth, const int minHeight) {
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
   constexpr int margin = 16;
   const int contentWidth = textWidth > minWidth ? textWidth : minWidth;
@@ -66,8 +65,7 @@ ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& ren
   return {x, y, w, h, barX, barY, barWidth, barHeight};
 }
 
-void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const PopupLayout& layout,
-                                         const int progress) {
+void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const PopupLayout& layout, const int progress) {
   int fillWidth = layout.barWidth * progress / 100;
   if (fillWidth < 0) {
     fillWidth = 0;
