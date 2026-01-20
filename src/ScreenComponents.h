@@ -16,11 +16,6 @@ class ScreenComponents {
     int y;
     int width;
     int height;
-
-    int barX;
-    int barY;
-    int barWidth;
-    int barHeight;
   };
 
   static void drawBattery(const GfxRenderer& renderer, int left, int top, bool showPercentage = true);

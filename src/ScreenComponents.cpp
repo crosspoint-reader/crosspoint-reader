@@ -54,27 +54,27 @@ ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& ren
   renderer.fillRect(x - 2, y - 2, w + 4, h + 4, true);
   renderer.fillRect(x + 2, y + 2, w - 4, h - 4, false);
 
-  const int barWidth = POPUP_DEFAULT_MIN_WIDTH;
-  const int barHeight = POPUP_DEFAULT_BAR_HEIGHT;
-  const int barX = x + (w - barWidth) / 2;
-  const int barY = y + renderer.getLineHeight(UI_12_FONT_ID) + margin * 2 - 6;
-
   const int textX = x + margin + (contentWidth - textWidth) / 2;
   renderer.drawText(UI_12_FONT_ID, textX, y + margin, message, true, EpdFontFamily::BOLD);
   renderer.displayBuffer();
-  return {x, y, w, h, barX, barY, barWidth, barHeight};
+  return {x, y, w, h};
 }
 
 void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const PopupLayout& layout, const int progress) {
-  int fillWidth = layout.barWidth * progress / 100;
+  const int barWidth = POPUP_DEFAULT_MIN_WIDTH;
+  const int barHeight = POPUP_DEFAULT_BAR_HEIGHT;
+  const int barX = layout.x + (layout.width - barWidth) / 2;
+  const int barY = layout.y + layout.height - 16; // 16 pixels above bottom of popup
+
+  int fillWidth = barWidth * progress / 100;
   if (fillWidth < 0) {
     fillWidth = 0;
-  } else if (fillWidth > layout.barWidth) {
-    fillWidth = layout.barWidth;
+  } else if (fillWidth > barWidth) {
+    fillWidth = barWidth;
   }
 
   if (fillWidth > 2) {
-    renderer.fillRect(layout.barX + 1, layout.barY + 1, fillWidth - 2, layout.barHeight - 2, true);
+    renderer.fillRect(barX + 1, barY + 1, fillWidth - 2, barHeight - 2, true);
   }
   renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
 }
