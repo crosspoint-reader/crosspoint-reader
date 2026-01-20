@@ -1,5 +1,7 @@
 #include "EpubReaderMenuActivity.h"
+
 #include <GfxRenderer.h>
+
 #include "fontIds.h"
 
 void EpubReaderMenuActivity::onEnter() {
@@ -46,11 +48,11 @@ void EpubReaderMenuActivity::loop() {
 
   // Use local variables for items we need to check after potential deletion
   if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Left) ) {
+      mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     selectedIndex = (selectedIndex + menuItems.size() - 1) % menuItems.size();
     updateRequired = true;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+             mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     selectedIndex = (selectedIndex + 1) % menuItems.size();
     updateRequired = true;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -65,7 +67,7 @@ void EpubReaderMenuActivity::loop() {
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onBack();
-    return; // Also return here just in case
+    return;  // Also return here just in case
   }
 }
 
