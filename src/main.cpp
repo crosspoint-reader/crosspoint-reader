@@ -43,6 +43,8 @@ MappedInputManager mappedInputManager(inputManager);
 GfxRenderer renderer(einkDisplay);
 Activity* currentActivity;
 
+RTC_DATA_ATTR uint16_t rtcPowerButtonDurationMs = 400;
+
 // Fonts
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
 EpdFont bookerly14BoldFont(&bookerly_14_bold);
@@ -151,15 +153,10 @@ void enterNewActivity(Activity* activity) {
 
 // Verify long press on wake-up from deep sleep
 void verifyWakeupLongPress() {
-  // Give the user up to 1000ms to start holding the power button, and must hold for SETTINGS.getPowerButtonDuration()
+  // Give the user up to 1000ms to start holding the power button, and must hold for the configured duration
   const auto start = millis();
   bool abort = false;
-  // Subtract the current time, because inputManager only starts counting the HeldTime from the first update()
-  // This way, we remove the time we already took to reach here from the duration,
-  // assuming the button was held until now from millis()==0 (i.e. device start time).
-  const uint16_t calibration = start;
-  const uint16_t calibratedPressDuration =
-      (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
+  const uint16_t requiredPressDuration = rtcPowerButtonDurationMs;
 
   inputManager.update();
   // Verify the user has actually pressed
@@ -173,8 +170,8 @@ void verifyWakeupLongPress() {
     do {
       delay(10);
       inputManager.update();
-    } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() < calibratedPressDuration);
-    abort = inputManager.getHeldTime() < calibratedPressDuration;
+    } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() <= requiredPressDuration);
+    abort = inputManager.getHeldTime() <= requiredPressDuration;
   } else {
     abort = true;
   }
@@ -199,6 +196,8 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   exitActivity();
   enterNewActivity(new SleepActivity(renderer, mappedInputManager));
+
+  rtcPowerButtonDurationMs = SETTINGS.getPowerButtonDuration();
 
   einkDisplay.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
@@ -273,6 +272,10 @@ void setup() {
   }
 
   inputManager.begin();
+  verifyWakeupLongPress();
+
+  Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
+
   // Initialize pins
   pinMode(BAT_GPIO0, INPUT);
 
@@ -290,13 +293,9 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
+  rtcPowerButtonDurationMs = SETTINGS.getPowerButtonDuration();
+
   KOREADER_STORE.loadFromFile();
-
-  // verify power button press duration after we've read settings.
-  verifyWakeupLongPress();
-
-  // First serial output only here to avoid timing inconsistencies for power button press duration verification
-  Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
 
   setupDisplayAndFonts();
 
