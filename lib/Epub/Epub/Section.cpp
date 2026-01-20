@@ -13,7 +13,6 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) +
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
-  SDLock lock;
   if (!file) {
     Serial.printf("[%lu] [SCT] File not open for writing page %d\n", millis(), pageCount);
     return 0;
@@ -54,7 +53,6 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                               const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                               const uint16_t viewportHeight) {
-  SDLock lock;
   if (!SdMan.openFileForRead("SCT", filePath, file)) {
     return false;
   }
@@ -100,7 +98,6 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
 
 // Your updated class method (assuming you are using the 'SD' object, which is a wrapper for a specific filesystem)
 bool Section::clearCache() const {
-  SDLock lock;
   if (!SdMan.exists(filePath.c_str())) {
     return true;
   }
@@ -117,7 +114,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                 const uint16_t viewportHeight, const std::function<void()>& progressSetupFn,
                                 const std::function<void(int)>& progressFn) {
-  SDLock lock;
   constexpr uint32_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
@@ -216,7 +212,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 }
 
 std::unique_ptr<Page> Section::loadPageFromSectionFile() {
-  SDLock lock;
   if (!SdMan.openFileForRead("SCT", filePath, file)) {
     return nullptr;
   }
