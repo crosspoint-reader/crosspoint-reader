@@ -48,12 +48,24 @@ bool BookMetadataCache::beginTocPass() {
     spineFile.close();
     return false;
   }
+
+  // Build href->spineIndex lookup map for O(1) access during TOC creation
+  hrefToSpineIndex.clear();
+  hrefToSpineIndex.reserve(spineCount);
+  spineFile.seek(0);
+  for (int i = 0; i < spineCount; i++) {
+    auto entry = readSpineEntry(spineFile);
+    hrefToSpineIndex[entry.href] = static_cast<int16_t>(i);
+  }
+  spineFile.seek(0);
+
   return true;
 }
 
 bool BookMetadataCache::endTocPass() {
   tocFile.close();
   spineFile.close();
+  hrefToSpineIndex.clear();
   return true;
 }
 
@@ -124,6 +136,18 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // LUTs complete
   // Loop through spines from spine file matching up TOC indexes, calculating cumulative size and writing to book.bin
 
+  // Build spineIndex->tocIndex mapping in one pass (O(n) instead of O(n*m))
+  std::vector<int16_t> spineToTocIndex(spineCount, -1);
+  tocFile.seek(0);
+  for (int j = 0; j < tocCount; j++) {
+    auto tocEntry = readTocEntry(tocFile);
+    if (tocEntry.spineIndex >= 0 && tocEntry.spineIndex < spineCount) {
+      if (spineToTocIndex[tocEntry.spineIndex] == -1) {
+        spineToTocIndex[tocEntry.spineIndex] = static_cast<int16_t>(j);
+      }
+    }
+  }
+
   ZipFile zip(epubPath);
   // Pre-open zip file to speed up size calculations
   if (!zip.open()) {
@@ -145,14 +169,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   for (int i = 0; i < spineCount; i++) {
     auto spineEntry = readSpineEntry(spineFile);
 
-    tocFile.seek(0);
-    for (int j = 0; j < tocCount; j++) {
-      auto tocEntry = readTocEntry(tocFile);
-      if (tocEntry.spineIndex == i) {
-        spineEntry.tocIndex = j;
-        break;
-      }
-    }
+    spineEntry.tocIndex = spineToTocIndex[i];
 
     // Not a huge deal if we don't fine a TOC entry for the spine entry, this is expected behaviour for EPUBs
     // Logging here is for debugging
@@ -243,20 +260,11 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
     return;
   }
 
-  int spineIndex = -1;
-  // find spine index
-  // TODO: This lookup is slow as need to scan through all items each time. We can't hold it all in memory due to size.
-  //       But perhaps we can load just the hrefs in a vector/list to do an index lookup?
-  spineFile.seek(0);
-  for (int i = 0; i < spineCount; i++) {
-    auto spineEntry = readSpineEntry(spineFile);
-    if (spineEntry.href == href) {
-      spineIndex = i;
-      break;
-    }
-  }
-
-  if (spineIndex == -1) {
+  int16_t spineIndex = -1;
+  auto it = hrefToSpineIndex.find(href);
+  if (it != hrefToSpineIndex.end()) {
+    spineIndex = it->second;
+  } else {
     Serial.printf("[%lu] [BMC] addTocEntry: Could not find spine item for TOC href %s\n", millis(), href.c_str());
   }
 
