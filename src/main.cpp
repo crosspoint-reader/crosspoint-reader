@@ -384,6 +384,14 @@ void loop() {
     }
   }
 
+  // Update keyboard handler if enabled
+  if (BLUETOOTH_MANAGER.isInitialized()) {
+    auto* keyboardHandler = BLUETOOTH_MANAGER.getKeyboardHandler();
+    if (keyboardHandler) {
+      keyboardHandler->update();
+    }
+  }
+
   // Add delay at the end of the loop to prevent tight spinning
   // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
   // Otherwise, use longer delay to save power

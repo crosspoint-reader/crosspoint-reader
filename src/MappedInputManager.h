@@ -22,6 +22,9 @@ class MappedInputManager {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
+  
+  // Inject button press from external source (e.g., BLE keyboard)
+  void injectButton(Button button);
 
  private:
   InputManager& inputManager;

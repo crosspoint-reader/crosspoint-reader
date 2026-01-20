@@ -61,6 +61,9 @@ class CrossPointSettings {
   // Bluetooth mode settings
   enum BLUETOOTH_MODE { OFF = 0, ON = 1 };
 
+  // Bluetooth keyboard mode settings
+  enum BLUETOOTH_KEYBOARD_MODE { DISABLED = 0, ENABLED = 1 };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -99,6 +102,8 @@ class CrossPointSettings {
   uint8_t longPressChapterSkip = 1;
   // Bluetooth enabled setting
   uint8_t bluetoothEnabled = OFF;
+  // Bluetooth keyboard enabled setting
+  uint8_t bluetoothKeyboardEnabled = DISABLED;
 
   ~CrossPointSettings() = default;
 

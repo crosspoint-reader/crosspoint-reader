@@ -1,4 +1,5 @@
 #include "BluetoothManager.h"
+#include "BLEKeyboardHandler.h"
 #include <Arduino.h>
 
 // Static instance definition
@@ -55,6 +56,13 @@ void BluetoothManager::shutdown() {
   
   // Deinitialize BLE device
   BLEDevice::deinit();
+  
+  // Clean up keyboard handler first
+  if (pKeyboardHandler) {
+    pKeyboardHandler->shutdown();
+    delete pKeyboardHandler;
+    pKeyboardHandler = nullptr;
+  }
   
   // Clean up pointers
   pServer = nullptr;
@@ -114,9 +122,22 @@ size_t BluetoothManager::getMemoryUsage() const {
     stackUsage += 12288;  // Conservative estimate
   }
   
+  // Add keyboard handler usage
+  if (pKeyboardHandler) {
+    stackUsage += pKeyboardHandler->getMemoryUsage();
+  }
+  
   return baseUsage + stackUsage;
 #else
   return sizeof(*this);  // Minimal usage when disabled
+#endif
+}
+
+BLEKeyboardHandler* BluetoothManager::getKeyboardHandler() const {
+#ifdef CONFIG_BT_ENABLED
+  return pKeyboardHandler;
+#else
+  return nullptr;
 #endif
 }
 
@@ -145,10 +166,21 @@ bool BluetoothManager::createServer() {
     // Set callbacks with minimal overhead
     pServer->setCallbacks(new ServerCallbacks());
     
+    // Initialize keyboard handler if enabled
+    if (SETTINGS.bluetoothKeyboardEnabled == CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::ENABLED) {
+      pKeyboardHandler = new BLEKeyboardHandler();
+      if (!pKeyboardHandler->initialize(pServer)) {
+        Serial.printf("[%lu] [BLE] Failed to initialize keyboard handler\n", millis());
+        delete pKeyboardHandler;
+        pKeyboardHandler = nullptr;
+      }
+    }
+    
     return true;
     
   } catch (...) {
     pServer = nullptr;
+    pKeyboardHandler = nullptr;
     return false;
   }
 }

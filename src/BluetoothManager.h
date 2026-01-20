@@ -9,6 +9,8 @@
 #include <NimBLEServer.h>
 #endif
 
+class BLEKeyboardHandler;
+
 /**
  * Memory-efficient Bluetooth Manager for CrossPoint Reader
  * 
@@ -35,6 +37,7 @@ private:
   // BLE components (only allocated when BLE is enabled)
   BLEServer* pServer = nullptr;
   BLEAdvertising* pAdvertising = nullptr;
+  BLEKeyboardHandler* pKeyboardHandler = nullptr;
   
   // Device name (short to save memory)
   static constexpr const char* DEVICE_NAME = "CrossPoint";
@@ -90,6 +93,12 @@ public:
    * @return Estimated RAM usage in bytes
    */
   size_t getMemoryUsage() const;
+  
+  /**
+   * Get keyboard handler instance
+   * @return Pointer to keyboard handler or nullptr if not initialized
+   */
+  BLEKeyboardHandler* getKeyboardHandler() const;
   
   /**
    * Force garbage collection to free unused memory
