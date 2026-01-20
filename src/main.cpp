@@ -174,7 +174,7 @@ void verifyWakeupLongPress() {
       delay(10);
       inputManager.update();
     } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() < calibratedPressDuration);
-    abort = (inputManager.getHeldTime() < calibratedPressDuration);
+    abort = inputManager.getHeldTime() < calibratedPressDuration;
   } else {
     abort = true;
   }
