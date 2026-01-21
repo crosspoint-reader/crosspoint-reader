@@ -179,7 +179,7 @@ void EpubReaderActivity::loop() {
     delayedSkipDir = nextPressed ? +1 : -1;
     delayedSkipExecuteAtMs = millis() + 500;
     xSemaphoreGive(renderingMutex);
-    // Block release-based page change until unpressed
+    // Block changing page until unpressed skip button
     awaitingReleaseAfterSkip = true;
     return;
   }
@@ -190,6 +190,10 @@ void EpubReaderActivity::loop() {
                             (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                              mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
+
+  if (delayedSkipPending) {
+    return;
+  }
 
   if (!prevReleased && !nextReleased) {
     return;
@@ -252,7 +256,6 @@ void EpubReaderActivity::displayTaskLoop() {
       renderScreen();
       xSemaphoreGive(renderingMutex);
     } else if (delayedSkipPending && now >= delayedSkipExecuteAtMs) {
-      // Execute the delayed chapter skip now
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       nextPageNumber = 0;
       currentSpineIndex += delayedSkipDir;

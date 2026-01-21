@@ -128,7 +128,7 @@ void XtcReaderActivity::loop() {
     delayedSkipAmount = 10;  // long-press skip amount
     delayedSkipExecuteAtMs = millis() + 500;
     xSemaphoreGive(renderingMutex);
-    // Block release-based page change until unpressed
+    // Block changing page until unpressed skip button
     awaitingReleaseAfterSkip = true;
     return;
   }
@@ -139,6 +139,10 @@ void XtcReaderActivity::loop() {
                             (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                              mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
+
+  if (delayedSkipPending) {
+    return;
+  }
 
   if (!prevReleased && !nextReleased) {
     return;
