@@ -1,10 +1,9 @@
 #pragma once
+#include <Print.h>
 #include <expat.h>
 
 #include <string>
 #include <vector>
-
-#include <Print.h>
 
 /**
  * Type of OPDS entry.
