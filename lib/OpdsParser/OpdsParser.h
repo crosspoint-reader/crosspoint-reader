@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+
 #include "Print.h"
 
 /**
@@ -59,9 +60,7 @@ class OpdsParser final : public Print {
 
   bool error() const;
 
-  operator bool() {
-    return !error();
-  }
+  operator bool() { return !error(); }
 
   /**
    * Get the parsed entries (both navigation and book entries).

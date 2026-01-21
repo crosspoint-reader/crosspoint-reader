@@ -22,9 +22,7 @@ OpdsParser::~OpdsParser() {
   }
 }
 
-size_t OpdsParser::write(uint8_t c) {
-  return write(&c, 1);
-}
+size_t OpdsParser::write(uint8_t c) { return write(&c, 1); }
 
 size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
   if (errorOccured) {

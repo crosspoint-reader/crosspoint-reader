@@ -17,7 +17,7 @@
 namespace {
 constexpr int PAGE_ITEMS = 23;
 constexpr int SKIP_PAGE_MS = 700;
-constexpr char OPDS_ROOT_PATH[] = "api/opds/c7f8522c-5539-4f60-b978-3626a33245b6";  // No leading slash - relative to server URL
+constexpr char OPDS_ROOT_PATH[] = "opds";  // No leading slash - relative to server URL
 }  // namespace
 
 void OpdsBookBrowserActivity::taskTrampoline(void* param) {
