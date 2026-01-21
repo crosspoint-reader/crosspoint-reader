@@ -140,10 +140,6 @@ void XtcReaderActivity::loop() {
                              mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
-  if (delayedSkipPending) {
-    return;
-  }
-
   if (!prevReleased && !nextReleased) {
     return;
   }
@@ -151,6 +147,10 @@ void XtcReaderActivity::loop() {
   if (awaitingReleaseAfterSkip) {
     awaitingReleaseAfterSkip = false;
     skipUnpressed = true;
+    return;
+  }
+
+  if (delayedSkipPending) {
     return;
   }
 

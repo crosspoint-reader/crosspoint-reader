@@ -191,10 +191,6 @@ void EpubReaderActivity::loop() {
                              mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
-  if (delayedSkipPending) {
-    return;
-  }
-
   if (!prevReleased && !nextReleased) {
     return;
   }
@@ -202,6 +198,10 @@ void EpubReaderActivity::loop() {
   if (awaitingReleaseAfterSkip) {
     awaitingReleaseAfterSkip = false;
     skipUnpressed = true;
+    return;
+  }
+
+  if (delayedSkipPending) {
     return;
   }
 
