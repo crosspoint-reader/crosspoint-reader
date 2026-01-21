@@ -9,6 +9,7 @@
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
 
@@ -74,9 +75,10 @@ void EpubReaderActivity::onEnter() {
     }
   }
 
-  // Save current epub as last opened epub
+  // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
+  RECENT_BOOKS.addBook(epub->getPath());
 
   // Trigger first update
   updateRequired = true;
@@ -461,9 +463,16 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   if (showChapterTitle) {
     // Centered chatper title text
     // Page width minus existing content with 30px padding on each side
-    const int titleMarginLeft = 50 + 30 + orientedMarginLeft;  // 50px for battery
-    const int titleMarginRight = progressTextWidth + 30 + orientedMarginRight;
-    const int availableTextWidth = renderer.getScreenWidth() - titleMarginLeft - titleMarginRight;
+    const int rendererableScreenWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
+
+    const int batterySize = showBattery ? (showBatteryPercentage ? 50 : 20) : 0;
+    const int titleMarginLeft = batterySize + 30;
+    const int titleMarginRight = progressTextWidth + 30;
+
+    // Attempt to center title on the screen, but if title is too wide then later we will center it within the
+    // available space.
+    int titleMarginLeftAdjusted = std::max(titleMarginLeft, titleMarginRight);
+    int availableTitleSpace = rendererableScreenWidth - 2 * titleMarginLeftAdjusted;
     const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
 
     std::string title;
@@ -475,12 +484,19 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
       titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-      while (titleWidth > availableTextWidth && title.length() > 11) {
+      if (titleWidth > availableTitleSpace) {
+        // Not enough space to center on the screen, center it within the remaining space instead
+        availableTitleSpace = rendererableScreenWidth - titleMarginLeft - titleMarginRight;
+        titleMarginLeftAdjusted = titleMarginLeft;
+      }
+      while (titleWidth > availableTitleSpace && title.length() > 11) {
         title.replace(title.length() - 8, 8, "...");
         titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
       }
     }
 
-    renderer.drawText(SMALL_FONT_ID, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, title.c_str());
+    renderer.drawText(SMALL_FONT_ID,
+                      titleMarginLeftAdjusted + orientedMarginLeft + (availableTitleSpace - titleWidth) / 2, textY,
+                      title.c_str());
   }
 }
