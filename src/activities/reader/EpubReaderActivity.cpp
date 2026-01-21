@@ -152,6 +152,8 @@ void EpubReaderActivity::loop() {
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                            (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                             mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
   if (!prevReleased && !nextReleased) {
@@ -166,7 +168,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool skipChapter = mappedInput.getHeldTime() > skipChapterMs;
+  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
 
   if (skipChapter) {
     // We don't want to delete the section mid-render, so grab the semaphore
@@ -417,6 +419,8 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
                            SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
   const bool showChapterTitle = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS ||
                                 SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
+  const bool showBatteryPercentage =
+      SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
 
   // Position status bar near the bottom of the logical screen, regardless of orientation
   const auto screenHeight = renderer.getScreenHeight();
@@ -437,7 +441,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   }
 
   if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft, textY);
+    ScreenComponents::drawBattery(renderer, orientedMarginLeft + 1, textY, showBatteryPercentage);
   }
 
   if (showChapterTitle) {

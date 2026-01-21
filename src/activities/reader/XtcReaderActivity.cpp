@@ -112,6 +112,8 @@ void XtcReaderActivity::loop() {
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                            (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                             mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
   if (!prevReleased && !nextReleased) {
@@ -125,7 +127,7 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = mappedInput.getHeldTime() > skipPageMs;
+  const bool skipPages = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipPageMs;
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevReleased) {

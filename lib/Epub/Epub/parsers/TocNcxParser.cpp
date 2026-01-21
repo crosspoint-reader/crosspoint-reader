@@ -1,5 +1,6 @@
 #include "TocNcxParser.h"
 
+#include <FsHelpers.h>
 #include <HardwareSerial.h>
 
 #include "../BookMetadataCache.h"
@@ -159,7 +160,7 @@ void XMLCALL TocNcxParser::endElement(void* userData, const XML_Char* name) {
     // This is the safest place to push the data, assuming <navLabel> always comes before <content>.
     // NCX spec says navLabel comes before content.
     if (!self->currentLabel.empty() && !self->currentSrc.empty()) {
-      std::string href = self->baseContentPath + self->currentSrc;
+      std::string href = FsHelpers::normalisePath(self->baseContentPath + self->currentSrc);
       std::string anchor;
 
       const size_t pos = href.find('#');

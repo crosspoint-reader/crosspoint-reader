@@ -43,7 +43,7 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   wordWidths.reserve(totalWordCount);
 
   // add em-space at the beginning of first word in paragraph to indent
-  if (!extraParagraphSpacing) {
+  if ((style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) && !extraParagraphSpacing) {
     std::string& first_word = words.front();
     first_word.insert(0, "\xe2\x80\x83");
   }

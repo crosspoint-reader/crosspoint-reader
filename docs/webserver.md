@@ -170,6 +170,40 @@ This is useful for organizing your ebooks by genre, author, or series.
 
 ---
 
+## Command Line File Management
+
+For power users, you can manage files directly from your terminal using `curl` while the device is in File Upload mode. 
+
+### Uploading a File
+To upload a file to the root directory, use the following command:
+```bash
+curl -F "file=@book.epub" "http://crosspoint.local/upload?path=/"
+```
+
+* **`-F "file=@filename"`**: Points to the local file on your computer.
+* **`path=/`**: The destination folder on the device SD card.
+
+### Deleting a File
+
+To delete a specific file, provide the full path on the SD card:
+
+```bash
+curl -F "path=/folder/file.epub" "http://crosspoint.local/delete"
+```
+
+### Advanced Flags
+
+For more reliable transfers of large EPUB files, consider adding these flags:
+
+* `-#`: Shows a simple progress bar.
+* `--connect-timeout 30`: Limits how long curl waits to establish a connection (in seconds).
+* `--max-time 300`: Sets a maximum duration for the entire transfer (5 minutes).
+
+> [!NOTE]
+> These examples use `crosspoint.local`. If your network does not support mDNS or the address does not resolve, replace it with the specific **IP Address** displayed on your device screen (e.g., `http://192.168.1.102/`).
+
+---
+
 ## Troubleshooting
 
 ### Cannot See the Device on the Network

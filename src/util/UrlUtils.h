@@ -4,6 +4,11 @@
 namespace UrlUtils {
 
 /**
+ * Check if URL uses HTTPS protocol
+ */
+bool isHttpsUrl(const std::string& url);
+
+/**
  * Prepend http:// if no protocol specified (server will redirect to https if needed)
  */
 std::string ensureProtocol(const std::string& url);

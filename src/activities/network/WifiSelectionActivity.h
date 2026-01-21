@@ -62,6 +62,9 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   // Password to potentially save (from keyboard or saved credentials)
   std::string enteredPassword;
 
+  // Cached MAC address string for display
+  std::string cachedMacAddress;
+
   // Whether network was connected using a saved password (skip save prompt)
   bool usedSavedPassword = false;
 

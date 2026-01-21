@@ -25,7 +25,7 @@ constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 
-const char* SKIP_TAGS[] = {"head", "table"};
+const char* SKIP_TAGS[] = {"head"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
@@ -63,11 +63,42 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
-    // TODO: Start processing image tags
+  // Special handling for tables - show placeholder text instead of dropping silently
+  if (strcmp(name, "table") == 0) {
+    // Add placeholder text
+    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+    if (self->currentTextBlock) {
+      self->currentTextBlock->addWord("[Table omitted]", EpdFontFamily::ITALIC);
+    }
+
+    // Skip table contents
     self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
+  }
+
+  if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
+    // TODO: Start processing image tags
+    std::string alt;
+    if (atts != nullptr) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "alt") == 0) {
+          alt = "[Image: " + std::string(atts[i + 1]) + "]";
+        }
+      }
+      Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
+
+      self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+      self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
+      self->depth += 1;
+      self->characterData(userData, alt.c_str(), alt.length());
+
+    } else {
+      // Skip for now
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
+    }
   }
 
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {
@@ -97,6 +128,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->startNewTextBlock(self->currentTextBlock->getStyle());
     } else {
       self->startNewTextBlock((TextBlock::Style)self->paragraphAlignment);
+      if (strcmp(name, "li") == 0) {
+        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+      }
     }
   } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
@@ -148,6 +182,20 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         // Skip the current byte (0xC2) and the next byte (0xAD)
         i++;       // Increment 'i' one more time to skip the 0xAD byte
         continue;  // Skip the rest of the loop and move to the next iteration
+      }
+    }
+
+    // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
+    const XML_Char FEFF_BYTE_1 = static_cast<XML_Char>(0xEF);
+    const XML_Char FEFF_BYTE_2 = static_cast<XML_Char>(0xBB);
+    const XML_Char FEFF_BYTE_3 = static_cast<XML_Char>(0xBF);
+
+    if (s[i] == FEFF_BYTE_1) {
+      // Check if the next two bytes complete the 3-byte sequence
+      if ((i + 2 < len) && (s[i + 1] == FEFF_BYTE_2) && (s[i + 2] == FEFF_BYTE_3)) {
+        // Sequence 0xEF 0xBB 0xBF found!
+        i += 2;    // Skip the next two bytes
+        continue;  // Move to the next iteration
       }
     }
 

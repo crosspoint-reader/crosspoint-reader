@@ -2,13 +2,23 @@
 
 #include <HTTPClient.h>
 #include <HardwareSerial.h>
+#include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 
 #include <memory>
 
+#include "util/UrlUtils.h"
+
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
-  const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
-  client->setInsecure();
+  // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
+  std::unique_ptr<WiFiClient> client;
+  if (UrlUtils::isHttpsUrl(url)) {
+    auto* secureClient = new WiFiClientSecure();
+    secureClient->setInsecure();
+    client.reset(secureClient);
+  } else {
+    client.reset(new WiFiClient());
+  }
   HTTPClient http;
 
   Serial.printf("[%lu] [HTTP] Fetching: %s\n", millis(), url.c_str());
@@ -33,8 +43,15 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress) {
-  const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
-  client->setInsecure();
+  // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
+  std::unique_ptr<WiFiClient> client;
+  if (UrlUtils::isHttpsUrl(url)) {
+    auto* secureClient = new WiFiClientSecure();
+    secureClient->setInsecure();
+    client.reset(secureClient);
+  } else {
+    client.reset(new WiFiClient());
+  }
   HTTPClient http;
 
   Serial.printf("[%lu] [HTTP] Downloading: %s\n", millis(), url.c_str());
