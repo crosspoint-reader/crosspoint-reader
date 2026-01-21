@@ -11,6 +11,7 @@
 
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "util/StringUtils.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -33,9 +34,8 @@ bool wsUploadInProgress = false;
 // Helper function to clear epub cache after upload
 void clearEpubCacheIfNeeded(const String& filePath) {
   // Only clear cache for .epub files
-  if (filePath.endsWith(".epub") || filePath.endsWith(".EPUB")) {
-    Epub epub(filePath.c_str(), "/.crosspoint");
-    epub.clearCache();
+  if (StringUtils::checkFileExtension(filePath, ".epub")) {
+    Epub(filePath.c_str(), "/.crosspoint").clearCache();
     Serial.printf("[%lu] [WEB] Cleared epub cache for: %s\n", millis(), filePath.c_str());
   }
 }
