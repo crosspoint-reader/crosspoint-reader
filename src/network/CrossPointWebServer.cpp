@@ -1,6 +1,7 @@
 #include "CrossPointWebServer.h"
 
 #include <ArduinoJson.h>
+#include <Epub.h>
 #include <FsHelpers.h>
 #include <SDCardManager.h>
 #include <WiFi.h>
@@ -10,6 +11,7 @@
 
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "util/StringUtils.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -28,6 +30,15 @@ size_t wsUploadSize = 0;
 size_t wsUploadReceived = 0;
 unsigned long wsUploadStartTime = 0;
 bool wsUploadInProgress = false;
+
+// Helper function to clear epub cache after upload
+void clearEpubCacheIfNeeded(const String& filePath) {
+  // Only clear cache for .epub files
+  if (StringUtils::checkFileExtension(filePath, ".epub")) {
+    Epub(filePath.c_str(), "/.crosspoint").clearCache();
+    Serial.printf("[%lu] [WEB] Cleared epub cache for: %s\n", millis(), filePath.c_str());
+  }
+}
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -500,6 +511,12 @@ void CrossPointWebServer::handleUpload() const {
                       uploadFileName.c_str(), uploadSize, elapsed, avgKbps);
         Serial.printf("[%lu] [WEB] [UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)\n", millis(),
                       writeCount, totalWriteTime, writePercent);
+
+        // Clear epub cache to prevent stale metadata issues when overwriting files
+        String filePath = uploadPath;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += uploadFileName;
+        clearEpubCacheIfNeeded(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -786,6 +803,12 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
         Serial.printf("[%lu] [WS] Upload complete: %s (%d bytes in %lu ms, %.1f KB/s)\n", millis(),
                       wsUploadFileName.c_str(), wsUploadSize, elapsed, kbps);
+
+        // Clear epub cache to prevent stale metadata issues when overwriting files
+        String filePath = wsUploadPath;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += wsUploadFileName;
+        clearEpubCacheIfNeeded(filePath);
 
         wsServer->sendTXT(num, "DONE");
         lastProgressSent = 0;

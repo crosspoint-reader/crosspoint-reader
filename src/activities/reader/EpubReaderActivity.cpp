@@ -9,6 +9,7 @@
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
 
@@ -74,9 +75,10 @@ void EpubReaderActivity::onEnter() {
     }
   }
 
-  // Save current epub as last opened epub
+  // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
+  RECENT_BOOKS.addBook(epub->getPath());
 
   // Trigger first update
   updateRequired = true;
@@ -118,9 +120,11 @@ void EpubReaderActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    const int currentPage = section ? section->currentPage : 0;
+    const int totalPages = section ? section->pageCount : 0;
     exitActivity();
     enterNewActivity(new EpubReaderChapterSelectionActivity(
-        this->renderer, this->mappedInput, epub, currentSpineIndex,
+        this->renderer, this->mappedInput, epub, epub->getPath(), currentSpineIndex, currentPage, totalPages,
         [this] {
           exitActivity();
           updateRequired = true;
@@ -129,6 +133,16 @@ void EpubReaderActivity::loop() {
           if (currentSpineIndex != newSpineIndex) {
             currentSpineIndex = newSpineIndex;
             nextPageNumber = 0;
+            section.reset();
+          }
+          exitActivity();
+          updateRequired = true;
+        },
+        [this](const int newSpineIndex, const int newPage) {
+          // Handle sync position
+          if (currentSpineIndex != newSpineIndex || (section && section->currentPage != newPage)) {
+            currentSpineIndex = newSpineIndex;
+            nextPageNumber = newPage;
             section.reset();
           }
           exitActivity();
@@ -268,7 +282,7 @@ void EpubReaderActivity::renderScreen() {
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight)) {
+                                  viewportHeight, SETTINGS.hyphenationEnabled)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       // Progress bar dimensions
@@ -313,7 +327,7 @@ void EpubReaderActivity::renderScreen() {
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, progressSetup, progressCallback)) {
+                                      viewportHeight, SETTINGS.hyphenationEnabled, progressSetup, progressCallback)) {
         Serial.printf("[%lu] [ERS] Failed to persist page data to SD\n", millis());
         section.reset();
         return;
@@ -430,11 +444,13 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   if (showProgress) {
     // Calculate progress in book
     const float sectionChapterProg = static_cast<float>(section->currentPage) / section->pageCount;
-    const uint8_t bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg);
+    const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
     // Right aligned text for progress counter
-    const std::string progress = std::to_string(section->currentPage + 1) + "/" + std::to_string(section->pageCount) +
-                                 "  " + std::to_string(bookProgress) + "%";
+    char progressStr[32];
+    snprintf(progressStr, sizeof(progressStr), "%d/%d  %.1f%%", section->currentPage + 1, section->pageCount,
+             bookProgress);
+    const std::string progress = progressStr;
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progress.c_str());
     renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - orientedMarginRight - progressTextWidth, textY,
                       progress.c_str());
@@ -447,9 +463,16 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   if (showChapterTitle) {
     // Centered chatper title text
     // Page width minus existing content with 30px padding on each side
-    const int titleMarginLeft = 50 + 30 + orientedMarginLeft;  // 50px for battery
-    const int titleMarginRight = progressTextWidth + 30 + orientedMarginRight;
-    const int availableTextWidth = renderer.getScreenWidth() - titleMarginLeft - titleMarginRight;
+    const int rendererableScreenWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
+
+    const int batterySize = showBattery ? (showBatteryPercentage ? 50 : 20) : 0;
+    const int titleMarginLeft = batterySize + 30;
+    const int titleMarginRight = progressTextWidth + 30;
+
+    // Attempt to center title on the screen, but if title is too wide then later we will center it within the
+    // available space.
+    int titleMarginLeftAdjusted = std::max(titleMarginLeft, titleMarginRight);
+    int availableTitleSpace = rendererableScreenWidth - 2 * titleMarginLeftAdjusted;
     const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
 
     std::string title;
@@ -461,12 +484,19 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
       titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-      while (titleWidth > availableTextWidth && title.length() > 11) {
+      if (titleWidth > availableTitleSpace) {
+        // Not enough space to center on the screen, center it within the remaining space instead
+        availableTitleSpace = rendererableScreenWidth - titleMarginLeft - titleMarginRight;
+        titleMarginLeftAdjusted = titleMarginLeft;
+      }
+      while (titleWidth > availableTitleSpace && title.length() > 11) {
         title.replace(title.length() - 8, 8, "...");
         titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
       }
     }
 
-    renderer.drawText(SMALL_FONT_ID, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, title.c_str());
+    renderer.drawText(SMALL_FONT_ID,
+                      titleMarginLeftAdjusted + orientedMarginLeft + (availableTitleSpace - titleWidth) / 2, textY,
+                      title.c_str());
   }
 }

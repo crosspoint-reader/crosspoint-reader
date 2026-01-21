@@ -22,7 +22,7 @@ class HomeActivity final : public Activity {
   std::string lastBookAuthor;
   std::string coverBmpPath;
   const std::function<void()> onContinueReading;
-  const std::function<void()> onReaderOpen;
+  const std::function<void()> onMyLibraryOpen;
   const std::function<void()> onSettingsOpen;
   const std::function<void()> onFileTransferOpen;
   const std::function<void()> onOpdsBrowserOpen;
@@ -37,12 +37,12 @@ class HomeActivity final : public Activity {
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                        const std::function<void()>& onContinueReading, const std::function<void()>& onReaderOpen,
+                        const std::function<void()>& onContinueReading, const std::function<void()>& onMyLibraryOpen,
                         const std::function<void()>& onSettingsOpen, const std::function<void()>& onFileTransferOpen,
                         const std::function<void()>& onOpdsBrowserOpen)
       : Activity("Home", renderer, mappedInput),
         onContinueReading(onContinueReading),
-        onReaderOpen(onReaderOpen),
+        onMyLibraryOpen(onMyLibraryOpen),
         onSettingsOpen(onSettingsOpen),
         onFileTransferOpen(onFileTransferOpen),
         onOpdsBrowserOpen(onOpdsBrowserOpen) {}

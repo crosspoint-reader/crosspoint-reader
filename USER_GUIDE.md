@@ -2,6 +2,27 @@
 
 Welcome to the **CrossPoint** firmware. This guide outlines the hardware controls, navigation, and reading features of the device.
 
+- [CrossPoint User Guide](#crosspoint-user-guide)
+  - [1. Hardware Overview](#1-hardware-overview)
+    - [Button Layout](#button-layout)
+  - [2. Power \& Startup](#2-power--startup)
+    - [Power On / Off](#power-on--off)
+    - [First Launch](#first-launch)
+  - [3. Screens](#3-screens)
+    - [3.1 Home Screen](#31-home-screen)
+    - [3.2 Book Selection](#32-book-selection)
+    - [3.3 Reading Mode](#33-reading-mode)
+    - [3.4 File Upload Screen](#34-file-upload-screen)
+    - [3.5 Settings](#35-settings)
+    - [3.6 Sleep Screen](#36-sleep-screen)
+  - [4. Reading Mode](#4-reading-mode)
+    - [Page Turning](#page-turning)
+    - [Chapter Navigation](#chapter-navigation)
+    - [System Navigation](#system-navigation)
+  - [5. Chapter Selection Screen](#5-chapter-selection-screen)
+  - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
+
+
 ## 1. Hardware Overview
 
 The device utilises the standard buttons on the Xtink X4 (in the same layout as the manufacturer firmware, by default):
@@ -96,6 +117,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - Left, Right, Back, Confirm
   - Left, Back, Confirm, Right
 - **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
+- **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skip to the next/previous chapter.
+  - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
+  - "Page Scroll" - Long-pressing scrolls a page up/down
+- Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
 - **Reader Font Family**: Choose the font used for reading:
   - "Bookerly" (default) - Amazon's reading font
   - "Noto Sans" - Google's sans-serif font
@@ -143,6 +168,9 @@ If the **Short Power Button Click** setting is set to "Page Turn", you can also 
 ### Chapter Navigation
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
 * **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button briefly, then release.
+
+This feature can be disabled in **[Settings](#35-settings)** to help avoid changing chapters by mistake.
+
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
