@@ -17,7 +17,6 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
-constexpr int SKIP_PAGE_MS = 700;
 constexpr char OPDS_ROOT_PATH[] = "opds";  // No leading slash - relative to server URL
 }  // namespace
 
@@ -123,7 +122,7 @@ void OpdsBookBrowserActivity::loop() {
                               mappedInput.wasReleased(MappedInputManager::Button::Left);
     const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
                               mappedInput.wasReleased(MappedInputManager::Button::Right);
-    const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
+    const bool skipPage = mappedInput.getHeldTime() > SETTINGS.getLongPressDurationMs();
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!entries.empty()) {

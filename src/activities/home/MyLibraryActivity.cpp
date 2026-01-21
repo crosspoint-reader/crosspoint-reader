@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "CrossPointSettings.h"
 #include "RecentBooksStore.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
@@ -20,7 +21,6 @@ constexpr int LEFT_MARGIN = 20;
 constexpr int RIGHT_MARGIN = 40;  // Extra space for scroll indicator
 
 // Timing thresholds
-constexpr int SKIP_PAGE_MS = 700;
 constexpr unsigned long GO_HOME_MS = 1000;
 
 void sortFileList(std::vector<std::string>& strs) {
@@ -201,7 +201,7 @@ void MyLibraryActivity::loop() {
   const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
 
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
+  const bool skipPage = mappedInput.getHeldTime() > SETTINGS.getLongPressDurationMs();
 
   // Confirm button - open selected item
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {

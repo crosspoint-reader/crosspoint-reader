@@ -2,11 +2,11 @@
 
 #include <GfxRenderer.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
 
 int XtcReaderChapterSelectionActivity::getPageItems() const {
@@ -80,7 +80,7 @@ void XtcReaderChapterSelectionActivity::loop() {
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
+  const bool skipPage = mappedInput.getHeldTime() > SETTINGS.getLongPressDurationMs();
   const int pageItems = getPageItems();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {

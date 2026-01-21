@@ -14,7 +14,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 20;
+constexpr uint8_t SETTINGS_COUNT = 21;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -49,6 +49,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, hideBatteryPercentage);
   serialization::writePod(outputFile, longPressChapterSkip);
   serialization::writePod(outputFile, hyphenationEnabled);
+  serialization::writePod(outputFile, longPressDuration);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -119,6 +120,8 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, longPressChapterSkip);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, hyphenationEnabled);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, longPressDuration);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
@@ -192,6 +195,22 @@ int CrossPointSettings::getRefreshFrequency() const {
       return 15;
     case REFRESH_30:
       return 30;
+  }
+}
+
+unsigned long CrossPointSettings::getLongPressDurationMs() const {
+  switch (longPressDuration) {
+    case LONG_PRESS_DURATION::LP_1S:
+      return 1UL * 1000;
+    case LONG_PRESS_DURATION::LP_2S:
+    default:
+      return 2UL * 1000;
+    case LONG_PRESS_DURATION::LP_3S:
+      return 3UL * 1000;
+    case LONG_PRESS_DURATION::LP_5S:
+      return 5UL * 1000;
+    case LONG_PRESS_DURATION::LP_10S:
+      return 10UL * 1000;
   }
 }
 

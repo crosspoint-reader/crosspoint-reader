@@ -19,7 +19,6 @@
 #include "fontIds.h"
 
 namespace {
-constexpr unsigned long skipPageMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 }  // namespace
 
@@ -129,7 +128,7 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipPageMs;
+  const bool skipPages = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > SETTINGS.getLongPressDurationMs();
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevReleased) {

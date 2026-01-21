@@ -55,6 +55,9 @@ class CrossPointSettings {
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2 };
 
+  // Long-press duration options
+  enum LONG_PRESS_DURATION { LP_1S = 0, LP_2S = 1, LP_3S = 2, LP_5S = 3, LP_10S = 4 };
+
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2 };
 
@@ -94,6 +97,7 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
+  uint8_t longPressDuration = LP_2S;
 
   ~CrossPointSettings() = default;
 
@@ -111,6 +115,7 @@ class CrossPointSettings {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+  unsigned long getLongPressDurationMs() const;
 };
 
 // Helper macro to access settings

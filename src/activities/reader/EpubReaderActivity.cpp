@@ -15,7 +15,6 @@
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
-constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 19;
 }  // namespace
@@ -182,7 +181,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
+  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > SETTINGS.getLongPressDurationMs();
 
   if (skipChapter) {
     // We don't want to delete the section mid-render, so grab the semaphore

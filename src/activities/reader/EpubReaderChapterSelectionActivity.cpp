@@ -4,12 +4,11 @@
 
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
 namespace {
-// Time threshold for treating a long press as a page-up/page-down
-constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
 
 bool EpubReaderChapterSelectionActivity::hasSyncOption() const { return KOREADER_STORE.hasCredentials(); }
@@ -124,7 +123,7 @@ void EpubReaderChapterSelectionActivity::loop() {
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Right);
 
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
+  const bool skipPage = mappedInput.getHeldTime() > SETTINGS.getLongPressDurationMs();
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 

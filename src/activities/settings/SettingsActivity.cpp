@@ -35,13 +35,14 @@ const SettingInfo readerSettings[readerSettingsCount] = {
     SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
     SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing)};
 
-constexpr int controlsSettingsCount = 4;
+constexpr int controlsSettingsCount = 5;
 const SettingInfo controlsSettings[controlsSettingsCount] = {
     SettingInfo::Enum("Front Button Layout", &CrossPointSettings::frontButtonLayout,
                       {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght"}),
     SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
                       {"Prev, Next", "Next, Prev"}),
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
+  SettingInfo::Enum("Long-press Duration", &CrossPointSettings::longPressDuration, {"1s", "2s", "3s", "5s", "10s"}),
     SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
 
 constexpr int systemSettingsCount = 5;
