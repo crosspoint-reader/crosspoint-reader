@@ -33,6 +33,16 @@
 #include <builtinFonts/notosans_18_bolditalic.h>
 #include <builtinFonts/notosans_18_italic.h>
 #include <builtinFonts/notosans_18_regular.h>
+#include <builtinFonts/notosansthai_8_regular.h>
+#include <builtinFonts/notosansthai_10_regular.h>
+#include <builtinFonts/notosansthai_12_regular.h>
+#include <builtinFonts/notosansthai_12_bold.h>
+#include <builtinFonts/notosansthai_14_regular.h>
+#include <builtinFonts/notosansthai_14_bold.h>
+#include <builtinFonts/notosansthai_16_regular.h>
+#include <builtinFonts/notosansthai_16_bold.h>
+#include <builtinFonts/notosansthai_18_regular.h>
+#include <builtinFonts/notosansthai_18_bold.h>
 #include <builtinFonts/opendyslexic_10_bold.h>
 #include <builtinFonts/opendyslexic_10_bolditalic.h>
 #include <builtinFonts/opendyslexic_10_italic.h>

@@ -26,9 +26,36 @@ std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
 }
 
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  size_t lineIdx = 0;
   for (auto& element : elements) {
     element->render(renderer, fontId, xOffset, yOffset);
+
+    // After each line renders, validate ALL subsequent lines for corruption
+    // This helps identify which line's rendering corrupts future lines
+    size_t checkIdx = 0;
+    for (const auto& checkElement : elements) {
+      if (checkIdx > lineIdx) {
+        int corrupt = checkElement->validate("INTER_LINE_CHECK");
+        if (corrupt > 0) {
+          Serial.printf("[%lu] [PGE] !! CORRUPTION: Rendering line[%u] corrupted line[%u] (%d words)\n",
+                        millis(), (uint32_t)lineIdx, (uint32_t)checkIdx, corrupt);
+        }
+      }
+      checkIdx++;
+    }
+    lineIdx++;
   }
+}
+
+int Page::validate(const char* checkpoint) const {
+  int totalCorrupt = 0;
+  for (const auto& element : elements) {
+    totalCorrupt += element->validate(checkpoint);
+  }
+  if (totalCorrupt > 0) {
+    Serial.printf("[%lu] [PGE] Validation @ %s: %d corrupted words found\n", millis(), checkpoint, totalCorrupt);
+  }
+  return totalCorrupt;
 }
 
 bool Page::serialize(FsFile& file) const {

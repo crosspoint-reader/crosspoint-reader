@@ -1,3 +1,5 @@
+
+
 #!python3
 import freetype
 import zlib
@@ -5,6 +7,8 @@ import sys
 import re
 import math
 import argparse
+import sys
+sys.stdout.reconfigure(encoding="utf-8")
 from collections import namedtuple
 
 # Originally from https://github.com/vroland/epdiy
@@ -99,6 +103,9 @@ intervals = [
     # (0xFE30, 0xFE4F),
     # # CJK Compatibility Ideographs
     # (0xF900, 0xFAFF),
+    ### Thai ###
+    # Thai script: consonants, vowels, tone marks, digits, and symbols
+    (0x0E00, 0x0E7F),
     ### Specials
     # Replacement Character
     (0xFFFD, 0xFFFD),

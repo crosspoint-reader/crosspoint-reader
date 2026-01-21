@@ -1,6 +1,7 @@
 #include "ParsedText.h"
 
 #include <GfxRenderer.h>
+#include <ThaiShaper.h>
 
 #include <algorithm>
 #include <cmath>
@@ -10,6 +11,29 @@
 #include <vector>
 
 #include "hyphenation/Hyphenator.h"
+
+// Debug: validate Thai UTF-8 strings for corruption
+// Set to 1 to enable validation in addWord
+#define PARSEDTEXT_THAI_VALIDATION 1
+
+#if PARSEDTEXT_THAI_VALIDATION
+#include <Arduino.h>
+static bool checkThaiWordCorruption(const std::string& word, const char* context) {
+  const uint8_t* ptr = reinterpret_cast<const uint8_t*>(word.data());
+  const uint8_t* end = ptr + word.size();
+
+  while (ptr + 3 <= end) {
+    if (*ptr == 0xE0 && (ptr[1] == 0x00 || ptr[2] == 0x00)) {
+      Serial.printf("[PTX] %s CORRUPT @ offset %u: %02X %02X %02X in word len=%u\n",
+                    context, (uint32_t)(ptr - reinterpret_cast<const uint8_t*>(word.data())),
+                    ptr[0], ptr[1], ptr[2], (uint32_t)word.size());
+      return true;
+    }
+    ptr++;
+  }
+  return false;
+}
+#endif
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
@@ -52,8 +76,48 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle) {
   if (word.empty()) return;
 
+#if PARSEDTEXT_THAI_VALIDATION
+  // Check input word BEFORE any processing
+  checkThaiWordCorruption(word, "ADDWORD_INPUT");
+#endif
+
+  // Check if word contains Thai text that needs segmentation
+  if (ThaiShaper::containsThai(word.c_str())) {
+#if PARSEDTEXT_THAI_VALIDATION
+    // Save a copy of the original input to detect if it gets corrupted during segmentation
+    std::string originalCopy = word;
+#endif
+
+    // Segment Thai text into individual words for proper line breaking
+    auto segmentedWords = ThaiShaper::ThaiWordBreak::segmentWords(word.c_str());
+
+#if PARSEDTEXT_THAI_VALIDATION
+    // Check if the ORIGINAL INPUT was corrupted during segmentation
+    if (word != originalCopy) {
+      Serial.printf("[PTX] !! ORIGINAL_CORRUPTED during segmentWords! len=%u\n", (uint32_t)word.size());
+      checkThaiWordCorruption(word, "ORIGINAL_AFTER_SEG");
+    }
+#endif
+
+    bool isFirst = true;
+    for (auto& segment : segmentedWords) {
+      if (!segment.empty()) {
+#if PARSEDTEXT_THAI_VALIDATION
+        // Check each segment AFTER Thai segmentation
+        checkThaiWordCorruption(segment, "AFTER_SEGMENT");
+#endif
+        words.push_back(std::move(segment));
+        wordStyles.push_back(fontStyle);
+        wordNoSpaceBefore.push_back(!isFirst);  // No space before Thai cluster continuations
+        isFirst = false;
+      }
+    }
+    return;
+  }
+
   words.push_back(std::move(word));
   wordStyles.push_back(fontStyle);
+  wordNoSpaceBefore.push_back(false);  // Normal words have space before
 }
 
 // Consumes data to minimize memory usage
@@ -120,6 +184,9 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
   const size_t totalWordCount = words.size();
 
+  // Create vector copy of wordNoSpaceBefore for efficient random access
+  std::vector<bool> noSpaceBeforeVec(wordNoSpaceBefore.begin(), wordNoSpaceBefore.end());
+
   // DP table to store the minimum badness (cost) of lines starting at index i
   std::vector<int> dp(totalWordCount);
   // 'ans[i]' stores the index 'j' of the *last word* in the optimal line starting at 'i'
@@ -130,12 +197,13 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   ans[totalWordCount - 1] = totalWordCount - 1;
 
   for (int i = totalWordCount - 2; i >= 0; --i) {
-    int currlen = -spaceWidth;
+    int currlen = 0;
     dp[i] = MAX_COST;
 
     for (size_t j = i; j < totalWordCount; ++j) {
-      // Current line length: previous width + space + current word width
-      currlen += wordWidths[j] + spaceWidth;
+      // Current line length: previous width + space (if applicable) + current word width
+      const int thisSpacing = (j == static_cast<size_t>(i) || noSpaceBeforeVec[j]) ? 0 : spaceWidth;
+      currlen += wordWidths[j] + thisSpacing;
 
       if (currlen > pageWidth) {
         break;
@@ -212,6 +280,9 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
 
+  // Create vector copy of wordNoSpaceBefore for efficient random access
+  std::vector<bool> noSpaceBeforeVec(wordNoSpaceBefore.begin(), wordNoSpaceBefore.end());
+
   while (currentIndex < wordWidths.size()) {
     const size_t lineStart = currentIndex;
     int lineWidth = 0;
@@ -219,7 +290,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
     // Consume as many words as possible for current line, splitting when prefixes fit
     while (currentIndex < wordWidths.size()) {
       const bool isFirstWord = currentIndex == lineStart;
-      const int spacing = isFirstWord ? 0 : spaceWidth;
+      const int spacing = (isFirstWord || noSpaceBeforeVec[currentIndex]) ? 0 : spaceWidth;
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
       // Word fits on current line
@@ -236,6 +307,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       if (availableWidth > 0 &&
           hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
         // Prefix now fits; append it to this line and move to next line
+        // Also update noSpaceBeforeVec to match the inserted word
+        noSpaceBeforeVec.insert(noSpaceBeforeVec.begin() + currentIndex + 1, false);
         lineWidth += spacing + wordWidths[currentIndex];
         ++currentIndex;
         break;
@@ -265,11 +338,13 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     return false;
   }
 
-  // Get iterators to target word and style.
+  // Get iterators to target word, style, and no-space flag.
   auto wordIt = words.begin();
   auto styleIt = wordStyles.begin();
+  auto noSpaceIt = wordNoSpaceBefore.begin();
   std::advance(wordIt, wordIndex);
   std::advance(styleIt, wordIndex);
+  std::advance(noSpaceIt, wordIndex);
 
   const std::string& word = *wordIt;
   const auto style = *styleIt;
@@ -314,11 +389,13 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     wordIt->push_back('-');
   }
 
-  // Insert the remainder word (with matching style) directly after the prefix.
+  // Insert the remainder word (with matching style and no-space flag) directly after the prefix.
   auto insertWordIt = std::next(wordIt);
   auto insertStyleIt = std::next(styleIt);
+  auto insertNoSpaceIt = std::next(noSpaceIt);
   words.insert(insertWordIt, remainder);
   wordStyles.insert(insertStyleIt, style);
+  wordNoSpaceBefore.insert(insertNoSpaceIt, false);  // Remainder is a normal word (will be first on next line)
 
   // Update cached widths to reflect the new prefix/remainder pairing.
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
@@ -340,49 +417,75 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     lineWordWidthSum += wordWidths[i];
   }
 
+  // Count actual word gaps (excluding no-space words) for justified spacing
+  auto noSpaceIt = wordNoSpaceBefore.begin();
+  std::advance(noSpaceIt, lastBreakAt);
+  size_t actualWordGaps = 0;
+  for (size_t i = lastBreakAt; i < lineBreak; i++) {
+    if (i > lastBreakAt && !*noSpaceIt) {
+      actualWordGaps++;
+    }
+    ++noSpaceIt;
+  }
+
   // Calculate spacing
   const int spareSpace = pageWidth - lineWordWidthSum;
 
   int spacing = spaceWidth;
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
 
-  if (style == TextBlock::JUSTIFIED && !isLastLine && lineWordCount >= 2) {
-    spacing = spareSpace / (lineWordCount - 1);
+  if (style == TextBlock::JUSTIFIED && !isLastLine && actualWordGaps >= 1) {
+    spacing = spareSpace / actualWordGaps;
   }
 
-  // Calculate initial x position
+  // Calculate initial x position (for right/center align, use actual word gaps)
   uint16_t xpos = 0;
   if (style == TextBlock::RIGHT_ALIGN) {
-    xpos = spareSpace - (lineWordCount - 1) * spaceWidth;
+    xpos = spareSpace - actualWordGaps * spaceWidth;
   } else if (style == TextBlock::CENTER_ALIGN) {
-    xpos = (spareSpace - (lineWordCount - 1) * spaceWidth) / 2;
+    xpos = (spareSpace - actualWordGaps * spaceWidth) / 2;
   }
 
-  // Pre-calculate X positions for words
+  // Pre-calculate X positions for words, skipping spacing for no-space words
   std::list<uint16_t> lineXPos;
+  noSpaceIt = wordNoSpaceBefore.begin();
+  std::advance(noSpaceIt, lastBreakAt);
   for (size_t i = lastBreakAt; i < lineBreak; i++) {
     const uint16_t currentWordWidth = wordWidths[i];
     lineXPos.push_back(xpos);
-    xpos += currentWordWidth + spacing;
+    const bool skipSpacing = (i == lastBreakAt) || *noSpaceIt;
+    xpos += currentWordWidth + (skipSpacing ? 0 : spacing);
+    ++noSpaceIt;
   }
 
   // Iterators always start at the beginning as we are moving content with splice below
   auto wordEndIt = words.begin();
   auto wordStyleEndIt = wordStyles.begin();
+  auto noSpaceEndIt = wordNoSpaceBefore.begin();
   std::advance(wordEndIt, lineWordCount);
   std::advance(wordStyleEndIt, lineWordCount);
+  std::advance(noSpaceEndIt, lineWordCount);
 
   // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
   std::list<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
+  std::list<bool> lineNoSpaceBefore;
+  lineNoSpaceBefore.splice(lineNoSpaceBefore.begin(), wordNoSpaceBefore, wordNoSpaceBefore.begin(), noSpaceEndIt);
 
   for (auto& word : lineWords) {
     if (containsSoftHyphen(word)) {
       stripSoftHyphensInPlace(word);
     }
   }
+
+#if PARSEDTEXT_THAI_VALIDATION
+  // Check all words just before TextBlock creation
+  for (const auto& word : lineWords) {
+    checkThaiWordCorruption(word, "BEFORE_TEXTBLOCK");
+  }
+#endif
 
   processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style));
 }

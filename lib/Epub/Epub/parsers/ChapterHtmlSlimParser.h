@@ -40,6 +40,8 @@ class ChapterHtmlSlimParser {
 
   void startNewTextBlock(TextBlock::Style style);
   void makePages();
+  // Helper to flush partWordBuffer while preserving incomplete UTF-8 sequences
+  static void flushPartWordBuffer(ChapterHtmlSlimParser* self, EpdFontFamily::Style fontStyle);
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);

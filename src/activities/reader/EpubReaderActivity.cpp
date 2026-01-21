@@ -82,7 +82,7 @@ void EpubReaderActivity::onEnter() {
   updateRequired = true;
 
   xTaskCreate(&EpubReaderActivity::taskTrampoline, "EpubReaderActivityTask",
-              8192,               // Stack size
+              16384,              // Stack size (increased from 8192 for Thai rendering)
               this,               // Parameters
               1,                  // Priority
               &displayTaskHandle  // Task handle
@@ -232,6 +232,10 @@ void EpubReaderActivity::displayTaskLoop() {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       renderScreen();
+      // Log stack high water mark to detect stack overflow issues
+      UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+      Serial.printf("[%lu] [ERS] Stack high water mark: %u words (%u bytes remaining)\n", millis(),
+                    stackHighWaterMark, stackHighWaterMark * sizeof(StackType_t));
       xSemaphoreGive(renderingMutex);
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -387,7 +391,14 @@ void EpubReaderActivity::renderScreen() {
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
+  // Validate before BW render
+  page->validate("BEFORE_BW_RENDER");
+
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+
+  // Validate after BW render
+  page->validate("AFTER_BW_RENDER");
+
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
@@ -403,10 +414,16 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // grayscale rendering
   // TODO: Only do this if font supports it
   if (SETTINGS.textAntiAliasing) {
+    // Validate before grayscale LSB render
+    page->validate("BEFORE_GRAY_LSB");
+
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleLsbBuffers();
+
+    // Validate before grayscale MSB render
+    page->validate("BEFORE_GRAY_MSB");
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);

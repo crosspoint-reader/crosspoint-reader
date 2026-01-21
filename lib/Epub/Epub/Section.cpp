@@ -240,5 +240,11 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
 
   auto page = Page::deserialize(file);
   file.close();
+
+  // Validate immediately after deserialization, before file handle is released
+  if (page) {
+    page->validate("AFTER_DESERIALIZE");
+  }
+
   return page;
 }

@@ -2,6 +2,7 @@
 
 #include <EInkDisplay.h>
 #include <EpdFontFamily.h>
+#include <ThaiShaper.h>
 
 #include <map>
 
@@ -92,6 +93,13 @@ class GfxRenderer {
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
+
+  // Thai text rendering helpers
+  void drawThaiText(int fontId, int x, int y, const char* text, bool black,
+                    EpdFontFamily::Style style) const;
+  void renderThaiCluster(const EpdFontFamily& fontFamily, const ThaiShaper::ThaiCluster& cluster,
+                         int* x, int y, bool pixelState, EpdFontFamily::Style style) const;
+  int getThaiTextWidth(int fontId, const char* text, EpdFontFamily::Style style) const;
 
  public:
   // Grayscale functions

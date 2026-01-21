@@ -2,6 +2,43 @@
 
 #include <GfxRenderer.h>
 #include <Serialization.h>
+#include <Utf8.h>
+
+// Debug logging for Thai rendering investigation
+// Set to 1 to enable verbose TextBlock render logging
+#define TEXTBLOCK_DEBUG_LOGGING 0
+
+// Validates a UTF-8 string for proper encoding
+// Returns true if valid, false if corruption detected
+static bool validateUtf8String(const std::string& str) {
+  const uint8_t* ptr = reinterpret_cast<const uint8_t*>(str.data());
+  const uint8_t* end = ptr + str.size();
+
+  while (ptr < end) {
+    if (*ptr == 0) {
+      // Null byte in middle of string indicates corruption
+      return false;
+    }
+
+    int bytes = utf8CodepointLen(*ptr);
+
+    // Check we have enough bytes remaining
+    if (ptr + bytes > end) {
+      return false;
+    }
+
+    // Validate continuation bytes
+    for (int i = 1; i < bytes; i++) {
+      if ((ptr[i] & 0xC0) != 0x80) {
+        return false;
+      }
+    }
+
+    ptr += bytes;
+  }
+
+  return true;
+}
 
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
   // Validate iterator bounds before rendering
@@ -43,6 +80,25 @@ bool TextBlock::serialize(FsFile& file) const {
   return true;
 }
 
+int TextBlock::validateAllWords(const char* checkpoint) const {
+  int corruptCount = 0;
+  size_t idx = 0;
+  for (const auto& word : words) {
+    if (!validateUtf8String(word)) {
+      corruptCount++;
+      Serial.printf("[%lu] [TXB] CORRUPT @ %s word[%u] len=%u bytes: ", millis(), checkpoint, (uint32_t)idx,
+                    (uint32_t)word.size());
+      const uint8_t* bytes = reinterpret_cast<const uint8_t*>(word.data());
+      for (size_t j = 0; j < word.size() && j < 16; j++) {
+        Serial.printf("%02X ", bytes[j]);
+      }
+      Serial.printf("\n");
+    }
+    idx++;
+  }
+  return corruptCount;
+}
+
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   uint16_t wc;
   std::list<std::string> words;
@@ -63,7 +119,23 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   words.resize(wc);
   wordXpos.resize(wc);
   wordStyles.resize(wc);
-  for (auto& w : words) serialization::readString(file, w);
+  size_t wordIdx = 0;
+  for (auto& w : words) {
+    serialization::readString(file, w);
+#if TEXTBLOCK_DEBUG_LOGGING
+    // Check for corruption immediately after deserialization
+    if (!validateUtf8String(w)) {
+      Serial.printf("[%lu] [TXB] !! CORRUPT ON DESERIALIZE word[%u] len=%u, bytes: ",
+                    millis(), (uint32_t)wordIdx, (uint32_t)w.size());
+      const uint8_t* bytes = reinterpret_cast<const uint8_t*>(w.data());
+      for (size_t j = 0; j < w.size() && j < 16; j++) {
+        Serial.printf("%02X ", bytes[j]);
+      }
+      Serial.printf("\n");
+    }
+#endif
+    wordIdx++;
+  }
   for (auto& x : wordXpos) serialization::readPod(file, x);
   for (auto& s : wordStyles) serialization::readPod(file, s);
 
