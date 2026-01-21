@@ -9,6 +9,7 @@
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
 
@@ -74,9 +75,10 @@ void EpubReaderActivity::onEnter() {
     }
   }
 
-  // Save current epub as last opened epub
+  // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
+  RECENT_BOOKS.addBook(epub->getPath());
 
   // Trigger first update
   updateRequired = true;
