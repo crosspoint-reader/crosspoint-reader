@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include "BitmapHelpers.h"
+
 // Context structure for picojpeg callback
 struct JpegReadContext {
   FsFile& file;
@@ -23,281 +25,11 @@ constexpr bool USE_8BIT_OUTPUT = false;  // true: 8-bit grayscale (no quantizati
 constexpr bool USE_ATKINSON = true;          // Atkinson dithering (cleaner than F-S, less error diffusion)
 constexpr bool USE_FLOYD_STEINBERG = false;  // Floyd-Steinberg error diffusion (can cause "worm" artifacts)
 constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering (good for downsampling)
-// Brightness/Contrast adjustments:
-constexpr bool USE_BRIGHTNESS = true;     // true: apply brightness/gamma adjustments
-constexpr int BRIGHTNESS_BOOST = 10;      // Brightness offset (0-50)
-constexpr bool GAMMA_CORRECTION = true;   // Gamma curve (brightens midtones)
-constexpr float CONTRAST_FACTOR = 1.15f;  // Contrast multiplier (1.0 = no change, >1 = more contrast)
 // Pre-resize to target display size (CRITICAL: avoids dithering artifacts from post-downsampling)
 constexpr bool USE_PRESCALE = true;     // true: scale image to target size before dithering
 constexpr int TARGET_MAX_WIDTH = 480;   // Max width for cover images (portrait display width)
 constexpr int TARGET_MAX_HEIGHT = 800;  // Max height for cover images (portrait display height)
 // ============================================================================
-
-// Integer approximation of gamma correction (brightens midtones)
-// Uses a simple curve: out = 255 * sqrt(in/255) ≈ sqrt(in * 255)
-static inline int applyGamma(int gray) {
-  if (!GAMMA_CORRECTION) return gray;
-  // Fast integer square root approximation for gamma ~0.5 (brightening)
-  // This brightens dark/mid tones while preserving highlights
-  const int product = gray * 255;
-  // Newton-Raphson integer sqrt (2 iterations for good accuracy)
-  int x = gray;
-  if (x > 0) {
-    x = (x + product / x) >> 1;
-    x = (x + product / x) >> 1;
-  }
-  return x > 255 ? 255 : x;
-}
-
-// Apply contrast adjustment around midpoint (128)
-// factor > 1.0 increases contrast, < 1.0 decreases
-static inline int applyContrast(int gray) {
-  // Integer-based contrast: (gray - 128) * factor + 128
-  // Using fixed-point: factor 1.15 ≈ 115/100
-  constexpr int factorNum = static_cast<int>(CONTRAST_FACTOR * 100);
-  int adjusted = ((gray - 128) * factorNum) / 100 + 128;
-  if (adjusted < 0) adjusted = 0;
-  if (adjusted > 255) adjusted = 255;
-  return adjusted;
-}
-
-// Combined brightness/contrast/gamma adjustment
-static inline int adjustPixel(int gray) {
-  if (!USE_BRIGHTNESS) return gray;
-
-  // Order: contrast first, then brightness, then gamma
-  gray = applyContrast(gray);
-  gray += BRIGHTNESS_BOOST;
-  if (gray > 255) gray = 255;
-  if (gray < 0) gray = 0;
-  gray = applyGamma(gray);
-
-  return gray;
-}
-
-// Simple quantization without dithering - just divide into 4 levels
-static inline uint8_t quantizeSimple(int gray) {
-  gray = adjustPixel(gray);
-  // Simple 2-bit quantization: 0-63=0, 64-127=1, 128-191=2, 192-255=3
-  return static_cast<uint8_t>(gray >> 6);
-}
-
-// Hash-based noise dithering - survives downsampling without moiré artifacts
-// Uses integer hash to generate pseudo-random threshold per pixel
-static inline uint8_t quantizeNoise(int gray, int x, int y) {
-  gray = adjustPixel(gray);
-
-  // Generate noise threshold using integer hash (no regular pattern to alias)
-  uint32_t hash = static_cast<uint32_t>(x) * 374761393u + static_cast<uint32_t>(y) * 668265263u;
-  hash = (hash ^ (hash >> 13)) * 1274126177u;
-  const int threshold = static_cast<int>(hash >> 24);  // 0-255
-
-  // Map gray (0-255) to 4 levels with dithering
-  const int scaled = gray * 3;
-
-  if (scaled < 255) {
-    return (scaled + threshold >= 255) ? 1 : 0;
-  } else if (scaled < 510) {
-    return ((scaled - 255) + threshold >= 255) ? 2 : 1;
-  } else {
-    return ((scaled - 510) + threshold >= 255) ? 3 : 2;
-  }
-}
-
-// Main quantization function - selects between methods based on config
-static inline uint8_t quantize(int gray, int x, int y) {
-  if (USE_NOISE_DITHERING) {
-    return quantizeNoise(gray, x, y);
-  } else {
-    return quantizeSimple(gray);
-  }
-}
-
-// Atkinson dithering - distributes only 6/8 (75%) of error for cleaner results
-// Error distribution pattern:
-//     X  1/8 1/8
-// 1/8 1/8 1/8
-//     1/8
-// Less error buildup = fewer artifacts than Floyd-Steinberg
-class AtkinsonDitherer {
- public:
-  AtkinsonDitherer(int width) : width(width) {
-    errorRow0 = new int16_t[width + 4]();  // Current row
-    errorRow1 = new int16_t[width + 4]();  // Next row
-    errorRow2 = new int16_t[width + 4]();  // Row after next
-  }
-
-  ~AtkinsonDitherer() {
-    delete[] errorRow0;
-    delete[] errorRow1;
-    delete[] errorRow2;
-  }
-
-  uint8_t processPixel(int gray, int x) {
-    // Apply brightness/contrast/gamma adjustments
-    gray = adjustPixel(gray);
-
-    // Add accumulated error
-    int adjusted = gray + errorRow0[x + 2];
-    if (adjusted < 0) adjusted = 0;
-    if (adjusted > 255) adjusted = 255;
-
-    // Quantize to 4 levels
-    uint8_t quantized;
-    int quantizedValue;
-    if (adjusted < 43) {
-      quantized = 0;
-      quantizedValue = 0;
-    } else if (adjusted < 128) {
-      quantized = 1;
-      quantizedValue = 85;
-    } else if (adjusted < 213) {
-      quantized = 2;
-      quantizedValue = 170;
-    } else {
-      quantized = 3;
-      quantizedValue = 255;
-    }
-
-    // Calculate error (only distribute 6/8 = 75%)
-    int error = (adjusted - quantizedValue) >> 3;  // error/8
-
-    // Distribute 1/8 to each of 6 neighbors
-    errorRow0[x + 3] += error;  // Right
-    errorRow0[x + 4] += error;  // Right+1
-    errorRow1[x + 1] += error;  // Bottom-left
-    errorRow1[x + 2] += error;  // Bottom
-    errorRow1[x + 3] += error;  // Bottom-right
-    errorRow2[x + 2] += error;  // Two rows down
-
-    return quantized;
-  }
-
-  void nextRow() {
-    int16_t* temp = errorRow0;
-    errorRow0 = errorRow1;
-    errorRow1 = errorRow2;
-    errorRow2 = temp;
-    memset(errorRow2, 0, (width + 4) * sizeof(int16_t));
-  }
-
-  void reset() {
-    memset(errorRow0, 0, (width + 4) * sizeof(int16_t));
-    memset(errorRow1, 0, (width + 4) * sizeof(int16_t));
-    memset(errorRow2, 0, (width + 4) * sizeof(int16_t));
-  }
-
- private:
-  int width;
-  int16_t* errorRow0;
-  int16_t* errorRow1;
-  int16_t* errorRow2;
-};
-
-// Floyd-Steinberg error diffusion dithering with serpentine scanning
-// Serpentine scanning alternates direction each row to reduce "worm" artifacts
-// Error distribution pattern (left-to-right):
-//       X   7/16
-// 3/16 5/16 1/16
-// Error distribution pattern (right-to-left, mirrored):
-// 1/16 5/16 3/16
-//      7/16  X
-class FloydSteinbergDitherer {
- public:
-  FloydSteinbergDitherer(int width) : width(width), rowCount(0) {
-    errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
-    errorNextRow = new int16_t[width + 2]();
-  }
-
-  ~FloydSteinbergDitherer() {
-    delete[] errorCurRow;
-    delete[] errorNextRow;
-  }
-
-  // Process a single pixel and return quantized 2-bit value
-  // x is the logical x position (0 to width-1), direction handled internally
-  uint8_t processPixel(int gray, int x, bool reverseDirection) {
-    // Add accumulated error to this pixel
-    int adjusted = gray + errorCurRow[x + 1];
-
-    // Clamp to valid range
-    if (adjusted < 0) adjusted = 0;
-    if (adjusted > 255) adjusted = 255;
-
-    // Quantize to 4 levels (0, 85, 170, 255)
-    uint8_t quantized;
-    int quantizedValue;
-    if (adjusted < 43) {
-      quantized = 0;
-      quantizedValue = 0;
-    } else if (adjusted < 128) {
-      quantized = 1;
-      quantizedValue = 85;
-    } else if (adjusted < 213) {
-      quantized = 2;
-      quantizedValue = 170;
-    } else {
-      quantized = 3;
-      quantizedValue = 255;
-    }
-
-    // Calculate error
-    int error = adjusted - quantizedValue;
-
-    // Distribute error to neighbors (serpentine: direction-aware)
-    if (!reverseDirection) {
-      // Left to right: standard distribution
-      // Right: 7/16
-      errorCurRow[x + 2] += (error * 7) >> 4;
-      // Bottom-left: 3/16
-      errorNextRow[x] += (error * 3) >> 4;
-      // Bottom: 5/16
-      errorNextRow[x + 1] += (error * 5) >> 4;
-      // Bottom-right: 1/16
-      errorNextRow[x + 2] += (error) >> 4;
-    } else {
-      // Right to left: mirrored distribution
-      // Left: 7/16
-      errorCurRow[x] += (error * 7) >> 4;
-      // Bottom-right: 3/16
-      errorNextRow[x + 2] += (error * 3) >> 4;
-      // Bottom: 5/16
-      errorNextRow[x + 1] += (error * 5) >> 4;
-      // Bottom-left: 1/16
-      errorNextRow[x] += (error) >> 4;
-    }
-
-    return quantized;
-  }
-
-  // Call at the end of each row to swap buffers
-  void nextRow() {
-    // Swap buffers
-    int16_t* temp = errorCurRow;
-    errorCurRow = errorNextRow;
-    errorNextRow = temp;
-    // Clear the next row buffer
-    memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
-    rowCount++;
-  }
-
-  // Check if current row should be processed in reverse
-  bool isReverseRow() const { return (rowCount & 1) != 0; }
-
-  // Reset for a new image or MCU block
-  void reset() {
-    memset(errorCurRow, 0, (width + 2) * sizeof(int16_t));
-    memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
-    rowCount = 0;
-  }
-
- private:
-  int width;
-  int rowCount;
-  int16_t* errorCurRow;
-  int16_t* errorNextRow;
-};
 
 inline void write16(Print& out, const uint16_t value) {
   out.write(value & 0xFF);
@@ -355,8 +87,47 @@ void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
   }
 }
 
+// Helper function: Write BMP header with 1-bit color depth (black and white)
+static void writeBmpHeader1bit(Print& bmpOut, const int width, const int height) {
+  // Calculate row padding (each row must be multiple of 4 bytes)
+  const int bytesPerRow = (width + 31) / 32 * 4;  // 1 bit per pixel, round up to 4-byte boundary
+  const int imageSize = bytesPerRow * height;
+  const uint32_t fileSize = 62 + imageSize;  // 14 (file header) + 40 (DIB header) + 8 (palette) + image
+
+  // BMP File Header (14 bytes)
+  bmpOut.write('B');
+  bmpOut.write('M');
+  write32(bmpOut, fileSize);  // File size
+  write32(bmpOut, 0);         // Reserved
+  write32(bmpOut, 62);        // Offset to pixel data (14 + 40 + 8)
+
+  // DIB Header (BITMAPINFOHEADER - 40 bytes)
+  write32(bmpOut, 40);
+  write32Signed(bmpOut, width);
+  write32Signed(bmpOut, -height);  // Negative height = top-down bitmap
+  write16(bmpOut, 1);              // Color planes
+  write16(bmpOut, 1);              // Bits per pixel (1 bit)
+  write32(bmpOut, 0);              // BI_RGB (no compression)
+  write32(bmpOut, imageSize);
+  write32(bmpOut, 2835);  // xPixelsPerMeter (72 DPI)
+  write32(bmpOut, 2835);  // yPixelsPerMeter (72 DPI)
+  write32(bmpOut, 2);     // colorsUsed
+  write32(bmpOut, 2);     // colorsImportant
+
+  // Color Palette (2 colors x 4 bytes = 8 bytes)
+  // Format: Blue, Green, Red, Reserved (BGRA)
+  // Note: In 1-bit BMP, palette index 0 = black, 1 = white
+  uint8_t palette[8] = {
+      0x00, 0x00, 0x00, 0x00,  // Color 0: Black
+      0xFF, 0xFF, 0xFF, 0x00   // Color 1: White
+  };
+  for (const uint8_t i : palette) {
+    bmpOut.write(i);
+  }
+}
+
 // Helper function: Write BMP header with 2-bit color depth
-void JpegToBmpConverter::writeBmpHeader(Print& bmpOut, const int width, const int height) {
+static void writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
   // Calculate row padding (each row must be multiple of 4 bytes)
   const int bytesPerRow = (width * 2 + 31) / 32 * 4;  // 2 bits per pixel, round up
   const int imageSize = bytesPerRow * height;
@@ -427,9 +198,11 @@ unsigned char JpegToBmpConverter::jpegReadCallback(unsigned char* pBuf, const un
   return 0;  // Success
 }
 
-// Core function: Convert JPEG file to 2-bit BMP
-bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
-  Serial.printf("[%lu] [JPG] Converting JPEG to BMP\n", millis());
+// Internal implementation with configurable target size and bit depth
+bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
+                                                     bool oneBit) {
+  Serial.printf("[%lu] [JPG] Converting JPEG to %s BMP (target: %dx%d)\n", millis(), oneBit ? "1-bit" : "2-bit",
+                targetWidth, targetHeight);
 
   // Setup context for picojpeg callback
   JpegReadContext context = {.file = jpegFile, .bufferPos = 0, .bufferFilled = 0};
@@ -464,10 +237,10 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
   uint32_t scaleY_fp = 65536;
   bool needsScaling = false;
 
-  if (USE_PRESCALE && (imageInfo.m_width > TARGET_MAX_WIDTH || imageInfo.m_height > TARGET_MAX_HEIGHT)) {
+  if (targetWidth > 0 && targetHeight > 0 && (imageInfo.m_width > targetWidth || imageInfo.m_height > targetHeight)) {
     // Calculate scale to fit within target dimensions while maintaining aspect ratio
-    const float scaleToFitWidth = static_cast<float>(TARGET_MAX_WIDTH) / imageInfo.m_width;
-    const float scaleToFitHeight = static_cast<float>(TARGET_MAX_HEIGHT) / imageInfo.m_height;
+    const float scaleToFitWidth = static_cast<float>(targetWidth) / imageInfo.m_width;
+    const float scaleToFitHeight = static_cast<float>(targetHeight) / imageInfo.m_height;
     // We scale to the smaller dimension, so we can potentially crop later.
     // TODO: ideally, we already crop here.
     const float scale = (scaleToFitWidth > scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
@@ -486,16 +259,19 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
     needsScaling = true;
 
     Serial.printf("[%lu] [JPG] Pre-scaling %dx%d -> %dx%d (fit to %dx%d)\n", millis(), imageInfo.m_width,
-                  imageInfo.m_height, outWidth, outHeight, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT);
+                  imageInfo.m_height, outWidth, outHeight, targetWidth, targetHeight);
   }
 
   // Write BMP header with output dimensions
   int bytesPerRow;
-  if (USE_8BIT_OUTPUT) {
+  if (USE_8BIT_OUTPUT && !oneBit) {
     writeBmpHeader8bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth + 3) / 4 * 4;
+  } else if (oneBit) {
+    writeBmpHeader1bit(bmpOut, outWidth, outHeight);
+    bytesPerRow = (outWidth + 31) / 32 * 4;  // 1 bit per pixel
   } else {
-    writeBmpHeader(bmpOut, outWidth, outHeight);
+    writeBmpHeader2bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
@@ -526,11 +302,16 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
     return false;
   }
 
-  // Create ditherer if enabled (only for 2-bit output)
+  // Create ditherer if enabled
   // Use OUTPUT dimensions for dithering (after prescaling)
   AtkinsonDitherer* atkinsonDitherer = nullptr;
   FloydSteinbergDitherer* fsDitherer = nullptr;
-  if (!USE_8BIT_OUTPUT) {
+  Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
+
+  if (oneBit) {
+    // For 1-bit output, use Atkinson dithering for better quality
+    atkinson1BitDitherer = new Atkinson1BitDitherer(outWidth);
+  } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
       atkinsonDitherer = new AtkinsonDitherer(outWidth);
     } else if (USE_FLOYD_STEINBERG) {
@@ -616,19 +397,32 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
         // No scaling - direct output (1:1 mapping)
         memset(rowBuffer, 0, bytesPerRow);
 
-        if (USE_8BIT_OUTPUT) {
+        if (USE_8BIT_OUTPUT && !oneBit) {
           for (int x = 0; x < outWidth; x++) {
             const uint8_t gray = mcuRowBuffer[bufferY * imageInfo.m_width + x];
             rowBuffer[x] = adjustPixel(gray);
           }
-        } else {
+        } else if (oneBit) {
+          // 1-bit output with Atkinson dithering for better quality
           for (int x = 0; x < outWidth; x++) {
             const uint8_t gray = mcuRowBuffer[bufferY * imageInfo.m_width + x];
+            const uint8_t bit =
+                atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(gray, x) : quantize1bit(gray, x, y);
+            // Pack 1-bit value: MSB first, 8 pixels per byte
+            const int byteIndex = x / 8;
+            const int bitOffset = 7 - (x % 8);
+            rowBuffer[byteIndex] |= (bit << bitOffset);
+          }
+          if (atkinson1BitDitherer) atkinson1BitDitherer->nextRow();
+        } else {
+          // 2-bit output
+          for (int x = 0; x < outWidth; x++) {
+            const uint8_t gray = adjustPixel(mcuRowBuffer[bufferY * imageInfo.m_width + x]);
             uint8_t twoBit;
             if (atkinsonDitherer) {
               twoBit = atkinsonDitherer->processPixel(gray, x);
             } else if (fsDitherer) {
-              twoBit = fsDitherer->processPixel(gray, x, fsDitherer->isReverseRow());
+              twoBit = fsDitherer->processPixel(gray, x);
             } else {
               twoBit = quantize(gray, x, y);
             }
@@ -679,19 +473,32 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
         if (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
           memset(rowBuffer, 0, bytesPerRow);
 
-          if (USE_8BIT_OUTPUT) {
+          if (USE_8BIT_OUTPUT && !oneBit) {
             for (int x = 0; x < outWidth; x++) {
               const uint8_t gray = (rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0;
               rowBuffer[x] = adjustPixel(gray);
             }
-          } else {
+          } else if (oneBit) {
+            // 1-bit output with Atkinson dithering for better quality
             for (int x = 0; x < outWidth; x++) {
               const uint8_t gray = (rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0;
+              const uint8_t bit = atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(gray, x)
+                                                       : quantize1bit(gray, x, currentOutY);
+              // Pack 1-bit value: MSB first, 8 pixels per byte
+              const int byteIndex = x / 8;
+              const int bitOffset = 7 - (x % 8);
+              rowBuffer[byteIndex] |= (bit << bitOffset);
+            }
+            if (atkinson1BitDitherer) atkinson1BitDitherer->nextRow();
+          } else {
+            // 2-bit output
+            for (int x = 0; x < outWidth; x++) {
+              const uint8_t gray = adjustPixel((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
               uint8_t twoBit;
               if (atkinsonDitherer) {
                 twoBit = atkinsonDitherer->processPixel(gray, x);
               } else if (fsDitherer) {
-                twoBit = fsDitherer->processPixel(gray, x, fsDitherer->isReverseRow());
+                twoBit = fsDitherer->processPixel(gray, x);
               } else {
                 twoBit = quantize(gray, x, currentOutY);
               }
@@ -732,9 +539,29 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
   if (fsDitherer) {
     delete fsDitherer;
   }
+  if (atkinson1BitDitherer) {
+    delete atkinson1BitDitherer;
+  }
   free(mcuRowBuffer);
   free(rowBuffer);
 
   Serial.printf("[%lu] [JPG] Successfully converted JPEG to BMP\n", millis());
   return true;
+}
+
+// Core function: Convert JPEG file to 2-bit BMP (uses default target size)
+bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT, false);
+}
+
+// Convert with custom target size (for thumbnails, 2-bit)
+bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
+                                                     int targetMaxHeight) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
+}
+
+// Convert to 1-bit BMP (black and white only, no grays) for fast home screen rendering
+bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
+                                                         int targetMaxHeight) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true);
 }

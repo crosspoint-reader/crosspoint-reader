@@ -4,6 +4,7 @@
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
 #include <WiFi.h>
+#include <esp_task_wdt.h>
 #include <qrcode.h>
 
 #include <cstddef>
@@ -83,9 +84,8 @@ void CrossPointWebServerActivity::onExit() {
     dnsServer = nullptr;
   }
 
-  // CRITICAL: Wait for LWIP stack to flush any pending packets
-  Serial.printf("[%lu] [WEBACT] Waiting 500ms for network stack to flush pending packets...\n", millis());
-  delay(500);
+  // Brief wait for LWIP stack to flush pending packets
+  delay(50);
 
   // Disconnect WiFi gracefully
   if (isApMode) {
@@ -95,11 +95,11 @@ void CrossPointWebServerActivity::onExit() {
     Serial.printf("[%lu] [WEBACT] Disconnecting WiFi (graceful)...\n", millis());
     WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
   }
-  delay(100);  // Allow disconnect frame to be sent
+  delay(30);  // Allow disconnect frame to be sent
 
   Serial.printf("[%lu] [WEBACT] Setting WiFi mode OFF...\n", millis());
   WiFi.mode(WIFI_OFF);
-  delay(100);  // Allow WiFi hardware to fully power down
+  delay(30);  // Allow WiFi hardware to power down
 
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap after WiFi disconnect: %d bytes\n", millis(), ESP.getFreeHeap());
 
@@ -283,8 +283,28 @@ void CrossPointWebServerActivity::loop() {
       dnsServer->processNextRequest();
     }
 
-    // Handle web server requests - call handleClient multiple times per loop
-    // to improve responsiveness and upload throughput
+    // STA mode: Monitor WiFi connection health
+    if (!isApMode && webServer && webServer->isRunning()) {
+      static unsigned long lastWifiCheck = 0;
+      if (millis() - lastWifiCheck > 2000) {  // Check every 2 seconds
+        lastWifiCheck = millis();
+        const wl_status_t wifiStatus = WiFi.status();
+        if (wifiStatus != WL_CONNECTED) {
+          Serial.printf("[%lu] [WEBACT] WiFi disconnected! Status: %d\n", millis(), wifiStatus);
+          // Show error and exit gracefully
+          state = WebServerActivityState::SHUTTING_DOWN;
+          updateRequired = true;
+          return;
+        }
+        // Log weak signal warnings
+        const int rssi = WiFi.RSSI();
+        if (rssi < -75) {
+          Serial.printf("[%lu] [WEBACT] Warning: Weak WiFi signal: %d dBm\n", millis(), rssi);
+        }
+      }
+    }
+
+    // Handle web server requests - maximize throughput with watchdog safety
     if (webServer && webServer->isRunning()) {
       const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
 
@@ -294,17 +314,32 @@ void CrossPointWebServerActivity::loop() {
                       timeSinceLastHandleClient);
       }
 
-      // Call handleClient multiple times to process pending requests faster
-      // This is critical for upload performance - HTTP file uploads send data
-      // in chunks and each handleClient() call processes incoming data
-      constexpr int HANDLE_CLIENT_ITERATIONS = 10;
-      for (int i = 0; i < HANDLE_CLIENT_ITERATIONS && webServer->isRunning(); i++) {
+      // Reset watchdog BEFORE processing - HTTP header parsing can be slow
+      esp_task_wdt_reset();
+
+      // Process HTTP requests in tight loop for maximum throughput
+      // More iterations = more data processed per main loop cycle
+      constexpr int MAX_ITERATIONS = 500;
+      for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
         webServer->handleClient();
+        // Reset watchdog every 32 iterations
+        if ((i & 0x1F) == 0x1F) {
+          esp_task_wdt_reset();
+        }
+        // Yield and check for exit button every 64 iterations
+        if ((i & 0x3F) == 0x3F) {
+          yield();
+          // Check for exit button inside loop for responsiveness
+          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+            onGoBack();
+            return;
+          }
+        }
       }
       lastHandleClientTime = millis();
     }
 
-    // Handle exit on Back button
+    // Handle exit on Back button (also check outside loop)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onGoBack();
       return;

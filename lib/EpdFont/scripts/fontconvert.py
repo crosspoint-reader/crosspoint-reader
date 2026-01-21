@@ -99,6 +99,9 @@ intervals = [
     # (0xFE30, 0xFE4F),
     # # CJK Compatibility Ideographs
     # (0xF900, 0xFAFF),
+    ### Specials
+    # Replacement Character
+    (0xFFFD, 0xFFFD),
 ]
 
 add_ints = []

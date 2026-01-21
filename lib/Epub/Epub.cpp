@@ -74,6 +74,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   // Grab data from opfParser into epub
   bookMetadata.title = opfParser.title;
   bookMetadata.author = opfParser.author;
+  bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
   bookMetadata.textReferenceHref = opfParser.textReferenceHref;
 
@@ -167,7 +168,10 @@ bool Epub::parseTocNavFile() const {
   }
   const auto navSize = tempNavFile.size();
 
-  TocNavParser navParser(contentBasePath, navSize, bookMetadataCache.get());
+  // Note: We can't use `contentBasePath` here as the nav file may be in a different folder to the content.opf
+  // and the HTMLX nav file will have hrefs relative to itself
+  const std::string navContentBasePath = tocNavItem.substr(0, tocNavItem.find_last_of('/') + 1);
+  TocNavParser navParser(navContentBasePath, navSize, bookMetadataCache.get());
 
   if (!navParser.setup()) {
     Serial.printf("[%lu] [EBP] Could not setup toc nav parser\n", millis());
@@ -345,6 +349,15 @@ const std::string& Epub::getAuthor() const {
   return bookMetadataCache->coreMetadata.author;
 }
 
+const std::string& Epub::getLanguage() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+
+  return bookMetadataCache->coreMetadata.language;
+}
+
 std::string Epub::getCoverBmpPath(bool cropped) const {
   const auto coverFileName = "cover" + cropped ? "_crop" : "";
   return cachePath + "/" + coverFileName + ".bmp";
@@ -401,6 +414,70 @@ bool Epub::generateCoverBmp(bool cropped) const {
     return success;
   } else {
     Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping\n", millis());
+  }
+
+  return false;
+}
+
+std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+
+bool Epub::generateThumbBmp() const {
+  // Already generated, return true
+  if (SdMan.exists(getThumbBmpPath().c_str())) {
+    return true;
+  }
+
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    Serial.printf("[%lu] [EBP] Cannot generate thumb BMP, cache not loaded\n", millis());
+    return false;
+  }
+
+  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+  if (coverImageHref.empty()) {
+    Serial.printf("[%lu] [EBP] No known cover image for thumbnail\n", millis());
+    return false;
+  }
+
+  if (coverImageHref.substr(coverImageHref.length() - 4) == ".jpg" ||
+      coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
+    Serial.printf("[%lu] [EBP] Generating thumb BMP from JPG cover image\n", millis());
+    const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
+
+    FsFile coverJpg;
+    if (!SdMan.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
+      return false;
+    }
+    readItemContentsToStream(coverImageHref, coverJpg, 1024);
+    coverJpg.close();
+
+    if (!SdMan.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
+      return false;
+    }
+
+    FsFile thumbBmp;
+    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(), thumbBmp)) {
+      coverJpg.close();
+      return false;
+    }
+    // Use smaller target size for Continue Reading card (half of screen: 240x400)
+    // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
+    constexpr int THUMB_TARGET_WIDTH = 240;
+    constexpr int THUMB_TARGET_HEIGHT = 400;
+    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
+                                                                             THUMB_TARGET_HEIGHT);
+    coverJpg.close();
+    thumbBmp.close();
+    SdMan.remove(coverJpgTempPath.c_str());
+
+    if (!success) {
+      Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
+      SdMan.remove(getThumbBmpPath().c_str());
+    }
+    Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
+                  success ? "yes" : "no");
+    return success;
+  } else {
+    Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping thumbnail\n", millis());
   }
 
   return false;
@@ -542,14 +619,15 @@ int Epub::getSpineIndexForTextReference() const {
   return 0;
 }
 
-// Calculate progress in book
-uint8_t Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
+// Calculate progress in book (returns 0.0-1.0)
+float Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
   const size_t bookSize = getBookSize();
   if (bookSize == 0) {
-    return 0;
+    return 0.0f;
   }
   const size_t prevChapterSize = (currentSpineIndex >= 1) ? getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
   const size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
-  const size_t sectionProgSize = currentSpineRead * curChapterSize;
-  return round(static_cast<float>(prevChapterSize + sectionProgSize) / bookSize * 100.0);
+  const float sectionProgSize = currentSpineRead * static_cast<float>(curChapterSize);
+  const float totalProgress = static_cast<float>(prevChapterSize) + sectionProgSize;
+  return totalProgress / static_cast<float>(bookSize);
 }

@@ -8,25 +8,27 @@
 #include <string>
 #include <vector>
 
-#include "../Activity.h"
+#include "../ActivityWithSubactivity.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
  * Supports navigation through catalog hierarchy and downloading EPUBs.
+ * When WiFi connection fails, launches WiFi selection to let user connect.
  */
-class OpdsBookBrowserActivity final : public Activity {
+class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
  public:
   enum class BrowserState {
-    CHECK_WIFI,   // Checking WiFi connection
-    LOADING,      // Fetching OPDS feed
-    BROWSING,     // Displaying entries (navigation or books)
-    DOWNLOADING,  // Downloading selected EPUB
-    ERROR         // Error state with message
+    CHECK_WIFI,      // Checking WiFi connection
+    WIFI_SELECTION,  // WiFi selection subactivity is active
+    LOADING,         // Fetching OPDS feed
+    BROWSING,        // Displaying entries (navigation or books)
+    DOWNLOADING,     // Downloading selected EPUB
+    ERROR            // Error state with message
   };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                    const std::function<void()>& onGoHome)
-      : Activity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome) {}
+      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome) {}
 
   void onEnter() override;
   void onExit() override;
@@ -54,6 +56,8 @@ class OpdsBookBrowserActivity final : public Activity {
   void render() const;
 
   void checkAndConnectWifi();
+  void launchWifiSelection();
+  void onWifiSelectionComplete(bool connected);
   void fetchFeed(const std::string& path);
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();

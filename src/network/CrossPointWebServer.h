@@ -1,6 +1,7 @@
 #pragma once
 
 #include <WebServer.h>
+#include <WebSocketsServer.h>
 
 #include <vector>
 
@@ -34,9 +35,15 @@ class CrossPointWebServer {
 
  private:
   std::unique_ptr<WebServer> server = nullptr;
+  std::unique_ptr<WebSocketsServer> wsServer = nullptr;
   bool running = false;
   bool apMode = false;  // true when running in AP mode, false for STA mode
   uint16_t port = 80;
+  uint16_t wsPort = 81;  // WebSocket port
+
+  // WebSocket upload state
+  void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
+  static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
 
   // File scanning
   void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;

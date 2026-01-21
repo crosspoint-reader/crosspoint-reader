@@ -84,12 +84,16 @@ class CrossPointSettings {
   uint8_t sleepTimeout = SLEEP_10_MIN;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
+  uint8_t hyphenationEnabled = 0;
+
   // Reader screen margin settings
   uint8_t screenMargin = 5;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
+  // Long-press chapter skip on side buttons
+  uint8_t longPressChapterSkip = 1;
 
   ~CrossPointSettings() = default;
 

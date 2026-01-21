@@ -49,4 +49,23 @@ bool checkFileExtension(const std::string& fileName, const char* extension) {
   return true;
 }
 
+size_t utf8RemoveLastChar(std::string& str) {
+  if (str.empty()) return 0;
+  size_t pos = str.size() - 1;
+  // Walk back to find the start of the last UTF-8 character
+  // UTF-8 continuation bytes start with 10xxxxxx (0x80-0xBF)
+  while (pos > 0 && (static_cast<unsigned char>(str[pos]) & 0xC0) == 0x80) {
+    --pos;
+  }
+  str.resize(pos);
+  return pos;
+}
+
+// Truncate string by removing N UTF-8 characters from the end
+void utf8TruncateChars(std::string& str, const size_t numChars) {
+  for (size_t i = 0; i < numChars && !str.empty(); ++i) {
+    utf8RemoveLastChar(str);
+  }
+}
+
 }  // namespace StringUtils

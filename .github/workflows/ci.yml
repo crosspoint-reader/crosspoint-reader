@@ -7,11 +7,11 @@ name: CI
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
