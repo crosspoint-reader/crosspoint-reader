@@ -2,14 +2,11 @@
 
 #include <GfxRenderer.h>
 
+#include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
-#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
-
-namespace {
-}  // namespace
 
 bool EpubReaderChapterSelectionActivity::hasSyncOption() const { return KOREADER_STORE.hasCredentials(); }
 

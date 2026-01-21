@@ -110,7 +110,7 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  // Detect long-press and schedule skip immediately 
+  // Detect long-press and schedule skip immediately
   const bool prevPressed = mappedInput.isPressed(MappedInputManager::Button::PageBack) ||
                            mappedInput.isPressed(MappedInputManager::Button::Left);
   const bool nextPressed = mappedInput.isPressed(MappedInputManager::Button::PageForward) ||

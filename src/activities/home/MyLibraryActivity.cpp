@@ -5,8 +5,8 @@
 
 #include <algorithm>
 
-#include "MappedInputManager.h"
 #include "CrossPointSettings.h"
+#include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"

@@ -6,9 +6,6 @@
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
-namespace {
-}  // namespace
-
 int XtcReaderChapterSelectionActivity::getPageItems() const {
   constexpr int startY = 60;
   constexpr int lineHeight = 30;

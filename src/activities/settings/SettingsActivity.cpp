@@ -42,7 +42,7 @@ const SettingInfo controlsSettings[controlsSettingsCount] = {
     SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
                       {"Prev, Next", "Next, Prev"}),
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
-  SettingInfo::Enum("Long-press Duration", &CrossPointSettings::longPressDuration, {"1s", "2s", "3s", "5s", "10s"}),
+    SettingInfo::Enum("Long-press Duration", &CrossPointSettings::longPressDuration, {"1s", "2s", "3s", "5s", "10s"}),
     SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
 
 constexpr int systemSettingsCount = 5;
