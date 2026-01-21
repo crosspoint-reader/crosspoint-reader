@@ -14,7 +14,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 19;
+constexpr uint8_t SETTINGS_COUNT = 21;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -48,6 +48,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, hideBatteryPercentage);
   serialization::writePod(outputFile, longPressChapterSkip);
+  serialization::writePod(outputFile, hyphenationEnabled);
   serialization::writeString(outputFile, std::string(selectedSleepBmp));
   outputFile.close();
 
@@ -75,52 +76,36 @@ bool CrossPointSettings::loadFromFile() {
   // load settings that exist (support older files with fewer fields)
   uint8_t settingsRead = 0;
   do {
-    Serial.printf("settingsRead: %d, fileSettingsCount: %d\n", settingsRead, fileSettingsCount);
     serialization::readPod(inputFile, sleepScreen);
-    Serial.printf("sleepScreen: %d\n", sleepScreen);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, extraParagraphSpacing);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("extraParagraphSpacing: %d\n", extraParagraphSpacing);
     serialization::readPod(inputFile, shortPwrBtn);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("shortPwrBtn: %d\n", shortPwrBtn);
     serialization::readPod(inputFile, statusBar);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("statusBar: %d\n", statusBar);
     serialization::readPod(inputFile, orientation);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("orientation: %d\n", orientation);
     serialization::readPod(inputFile, frontButtonLayout);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("frontButtonLayout: %d\n", frontButtonLayout);
     serialization::readPod(inputFile, sideButtonLayout);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("sideButtonLayout: %d\n", sideButtonLayout);
     serialization::readPod(inputFile, fontFamily);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("fontFamily: %d\n", fontFamily);
     serialization::readPod(inputFile, fontSize);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("fontSize: %d\n", fontSize);
     serialization::readPod(inputFile, lineSpacing);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("lineSpacing: %d\n", lineSpacing);
     serialization::readPod(inputFile, paragraphAlignment);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("paragraphAlignment: %d\n", paragraphAlignment);
-      serialization::readPod(inputFile, sleepTimeout);
+    serialization::readPod(inputFile, sleepTimeout);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("sleepTimeout: %d\n", sleepTimeout);
     serialization::readPod(inputFile, refreshFrequency);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("refreshFrequency: %d\n", refreshFrequency);
     serialization::readPod(inputFile, screenMargin);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("screenMargin: %d\n", screenMargin);
     serialization::readPod(inputFile, sleepScreenCoverMode);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("sleepScreenCoverMode: %d\n", sleepScreenCoverMode);
     {
       std::string urlStr;
       serialization::readString(inputFile, urlStr);
@@ -128,16 +113,14 @@ bool CrossPointSettings::loadFromFile() {
       opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
     }
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("textAntiAliasing: %d\n", textAntiAliasing);
     serialization::readPod(inputFile, textAntiAliasing);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("hideBatteryPercentage: %d\n", hideBatteryPercentage);
     serialization::readPod(inputFile, hideBatteryPercentage);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("longPressChapterSkip: %d\n", longPressChapterSkip);
     serialization::readPod(inputFile, longPressChapterSkip);
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("selectedSleepBmp: %s\n", selectedSleepBmp);
+    serialization::readPod(inputFile, hyphenationEnabled);
+    if (++settingsRead >= fileSettingsCount) break;
     {
       std::string bmpStr;
       serialization::readString(inputFile, bmpStr);
@@ -145,7 +128,6 @@ bool CrossPointSettings::loadFromFile() {
       selectedSleepBmp[sizeof(selectedSleepBmp) - 1] = '\0';
     }
     if (++settingsRead >= fileSettingsCount) break;
-    Serial.printf("settingsRead: %d, fileSettingsCount: %d\n", settingsRead, fileSettingsCount);
   } while (false);
 
   inputFile.close();

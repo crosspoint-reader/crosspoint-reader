@@ -201,15 +201,16 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     if (screenY >= getScreenHeight()) {
       break;
     }
-    if (screenY < 0) {
-      continue;
-    }
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
       free(outputRow);
       free(rowBytes);
       return;
+    }
+
+    if (screenY < 0) {
+      continue;
     }
 
     if (bmpY < cropPixY) {
@@ -582,7 +583,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     const EpdGlyph* glyph = font.getGlyph(cp, style);
     if (!glyph) {
-      glyph = font.getGlyph('?', style);
+      glyph = font.getGlyph(REPLACEMENT_GLYPH, style);
     }
     if (!glyph) {
       continue;
@@ -760,8 +761,7 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
                              const bool pixelState, const EpdFontFamily::Style style) const {
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
-    // TODO: Replace with fallback glyph property?
-    glyph = fontFamily.getGlyph('?', style);
+    glyph = fontFamily.getGlyph(REPLACEMENT_GLYPH, style);
   }
 
   // no glyph?
