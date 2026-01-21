@@ -27,7 +27,6 @@ size_t OpdsParser::write(uint8_t c) {
 }
 
 size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
-  Serial.printf("Got %d bytes to parse\n", length);
   if (errorOccured) {
     return length;
   }
@@ -66,6 +65,7 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
     currentPos += toRead;
     remaining -= toRead;
   }
+  return length;
 }
 
 void OpdsParser::flush() {
