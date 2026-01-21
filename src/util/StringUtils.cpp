@@ -61,7 +61,6 @@ bool checkFileExtension(const String& fileName, const char* extension) {
   return localFile.endsWith(localExtension);
 }
 
-
 size_t utf8RemoveLastChar(std::string& str) {
   if (str.empty()) return 0;
   size_t pos = str.size() - 1;

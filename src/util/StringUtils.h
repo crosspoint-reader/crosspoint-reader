@@ -1,7 +1,8 @@
 #pragma once
 
-#include <string>
 #include <WString.h>
+
+#include <string>
 
 namespace StringUtils {
 
