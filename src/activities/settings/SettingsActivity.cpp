@@ -32,7 +32,7 @@ const SettingInfo settingsList[settingsCount] = {
                       {"Prev, Next", "Next, Prev"}),
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
     SettingInfo::Enum("Reader Font Family", &CrossPointSettings::fontFamily,
-                      {"Bookerly", "Noto Sans", "Open Dyslexic"}),
+                      {"Bookerly", "Noto Sans", "Open Dyslexic", "Noto Sans Thai"}),
     SettingInfo::Enum("Reader Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
     SettingInfo::Enum("Reader Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}),
     SettingInfo::Value("Reader Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),

@@ -1,6 +1,11 @@
 #include "GfxRenderer.h"
 
+#include <ThaiShaper.h>
 #include <Utf8.h>
+
+// Debug logging for Thai rendering investigation
+// Set to 1 to enable verbose Thai rendering logging
+#define THAI_RENDER_DEBUG_LOGGING 0
 
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
@@ -72,9 +77,42 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
     return 0;
   }
 
+  // Check if text contains Thai - use cluster-based width calculation
+  if (text != nullptr && ThaiShaper::containsThai(text)) {
+    return getThaiTextWidth(fontId, text, style);
+  }
+
   int w = 0, h = 0;
   fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
   return w;
+}
+
+int GfxRenderer::getThaiTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') {
+    return 0;
+  }
+
+  const auto& font = fontMap.at(fontId);
+  int totalWidth = 0;
+
+  // Build clusters and sum their widths
+  auto clusters = ThaiShaper::ThaiClusterBuilder::buildClusters(text);
+
+  for (const auto& cluster : clusters) {
+    for (const auto& glyph : cluster.glyphs) {
+      if (!glyph.zeroAdvance) {
+        const EpdGlyph* glyphData = font.getGlyph(glyph.codepoint, style);
+        if (!glyphData) {
+          glyphData = font.getGlyph(REPLACEMENT_GLYPH, style);
+        }
+        if (glyphData) {
+          totalWidth += glyphData->advanceX;
+        }
+      }
+    }
+  }
+
+  return totalWidth;
 }
 
 void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,
@@ -85,9 +123,6 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
-  const int yPos = y + getFontAscenderSize(fontId);
-  int xpos = x;
-
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -103,6 +138,16 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   if (!font.hasPrintableChars(text, style)) {
     return;
   }
+
+  // Check if text contains Thai script - use Thai rendering path if so
+  if (ThaiShaper::containsThai(text)) {
+    drawThaiText(fontId, x, y, text, black, style);
+    return;
+  }
+
+  // Standard rendering path for non-Thai text
+  const int yPos = y + getFontAscenderSize(fontId);
+  int xpos = x;
 
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
@@ -817,6 +862,140 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
   }
 
   *x += glyph->advanceX;
+}
+
+void GfxRenderer::drawThaiText(const int fontId, const int x, const int y, const char* text, const bool black,
+                               const EpdFontFamily::Style style) const {
+  const int yPos = y + getFontAscenderSize(fontId);
+  int xpos = x;
+
+  const auto font = fontMap.at(fontId);
+
+#if THAI_RENDER_DEBUG_LOGGING
+  Serial.printf("[GFX-THAI] drawThaiText at (%d,%d), text bytes: ", x, y);
+  const uint8_t* dbgPtr = reinterpret_cast<const uint8_t*>(text);
+  for (int i = 0; i < 32 && dbgPtr[i] != '\0'; i++) {
+    Serial.printf("%02X ", dbgPtr[i]);
+  }
+  Serial.printf("\n");
+#endif
+
+  // Build Thai clusters from the text
+  auto clusters = ThaiShaper::ThaiClusterBuilder::buildClusters(text);
+
+#if THAI_RENDER_DEBUG_LOGGING
+  Serial.printf("[GFX-THAI] Rendering %zu clusters\n", clusters.size());
+#endif
+
+  // Render each cluster
+  for (const auto& cluster : clusters) {
+    renderThaiCluster(font, cluster, &xpos, yPos, black, style);
+  }
+}
+
+void GfxRenderer::renderThaiCluster(const EpdFontFamily& fontFamily, const ThaiShaper::ThaiCluster& cluster, int* x,
+                                    const int y, const bool pixelState, const EpdFontFamily::Style style) const {
+  const EpdFontData* fontData = fontFamily.getData(style);
+  if (!fontData) {
+    return;
+  }
+
+  // Calculate scale factor for y-offsets based on font size
+  // Thai offset values are designed for typical font metrics
+  const int fontHeight = fontData->advanceY;
+  const float yScale = fontHeight / 16.0f;  // Normalize to ~16pt reference
+
+  // Track the maximum advance for this cluster (for non-combining glyphs)
+  int clusterAdvance = 0;
+  int baseX = *x;  // Store base position for combining marks
+
+#if THAI_RENDER_DEBUG_LOGGING
+  Serial.printf("[GFX-THAI] renderThaiCluster at x=%d, %zu glyphs: ", *x, cluster.glyphs.size());
+  for (const auto& g : cluster.glyphs) {
+    Serial.printf("U+%04X ", g.codepoint);
+  }
+  Serial.printf("\n");
+#endif
+
+  for (const auto& glyph : cluster.glyphs) {
+    const EpdGlyph* glyphData = fontFamily.getGlyph(glyph.codepoint, style);
+
+#if THAI_RENDER_DEBUG_LOGGING
+    Serial.printf("[GFX-THAI] Glyph U+%04X -> glyphData=%p\n", glyph.codepoint, (void*)glyphData);
+#endif
+
+    if (!glyphData) {
+      glyphData = fontFamily.getGlyph(REPLACEMENT_GLYPH, style);
+#if THAI_RENDER_DEBUG_LOGGING
+      Serial.printf("[GFX-THAI] !! No glyph for U+%04X, using replacement\n", glyph.codepoint);
+#endif
+    }
+    if (!glyphData) {
+      continue;
+    }
+
+    const int is2Bit = fontData->is2Bit;
+    const uint32_t offset = glyphData->dataOffset;
+    const uint8_t width = glyphData->width;
+    const uint8_t height = glyphData->height;
+    const int left = glyphData->left;
+
+    // Calculate x position for this glyph
+    int glyphX;
+    if (glyph.zeroAdvance) {
+      // Combining mark: position relative to base consonant
+      // Center the mark over the base glyph
+      glyphX = baseX + glyph.xOffset;
+    } else {
+      // Normal glyph: position at current cursor
+      glyphX = *x + glyph.xOffset;
+    }
+
+    // Calculate y offset (scaled by font size)
+    const int yOffset = static_cast<int>(glyph.yOffset * yScale);
+    const int glyphY = y + yOffset;
+
+    const uint8_t* bitmap = &fontData->bitmap[offset];
+
+    if (bitmap != nullptr) {
+      for (int bitmapY = 0; bitmapY < height; bitmapY++) {
+        const int screenY = glyphY - glyphData->top + bitmapY;
+        for (int bitmapX = 0; bitmapX < width; bitmapX++) {
+          const int pixelPosition = bitmapY * width + bitmapX;
+          const int screenX = glyphX + left + bitmapX;
+
+          if (is2Bit) {
+            const uint8_t byte = bitmap[pixelPosition / 4];
+            const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+            const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
+
+            if (renderMode == BW && bmpVal < 3) {
+              drawPixel(screenX, screenY, pixelState);
+            } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+              drawPixel(screenX, screenY, false);
+            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+              drawPixel(screenX, screenY, false);
+            }
+          } else {
+            const uint8_t byte = bitmap[pixelPosition / 8];
+            const uint8_t bit_index = 7 - (pixelPosition % 8);
+
+            if ((byte >> bit_index) & 1) {
+              drawPixel(screenX, screenY, pixelState);
+            }
+          }
+        }
+      }
+    }
+
+    // Track advance for non-combining glyphs
+    if (!glyph.zeroAdvance) {
+      // Update base position to right of center (for subsequent combining marks)
+      baseX = *x + glyphData->advanceX;
+      *x += glyphData->advanceX;
+      clusterAdvance += glyphData->advanceX;
+    }
+  }
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {

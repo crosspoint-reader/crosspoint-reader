@@ -15,6 +15,7 @@ class GfxRenderer;
 class ParsedText {
   std::list<std::string> words;
   std::list<EpdFontFamily::Style> wordStyles;
+  std::list<bool> wordNoSpaceBefore;  // true = no space before this word (Thai cluster continuations)
   TextBlock::Style style;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;

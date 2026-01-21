@@ -19,6 +19,7 @@ class PageElement {
   virtual ~PageElement() = default;
   virtual void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) = 0;
   virtual bool serialize(FsFile& file) = 0;
+  virtual int validate(const char* checkpoint) const { return 0; }
 };
 
 // a line from a block element
@@ -31,6 +32,7 @@ class PageLine final : public PageElement {
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
   bool serialize(FsFile& file) override;
   static std::unique_ptr<PageLine> deserialize(FsFile& file);
+  int validate(const char* checkpoint) const override { return block ? block->validateAllWords(checkpoint) : 0; }
 };
 
 class Page {
@@ -40,4 +42,6 @@ class Page {
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(FsFile& file) const;
   static std::unique_ptr<Page> deserialize(FsFile& file);
+  // Validate all elements for corruption, returns total corrupt word count
+  int validate(const char* checkpoint) const;
 };

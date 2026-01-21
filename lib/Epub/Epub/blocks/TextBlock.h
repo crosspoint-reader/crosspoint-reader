@@ -38,4 +38,6 @@ class TextBlock final : public Block {
   BlockType getType() override { return TEXT_BLOCK; }
   bool serialize(FsFile& file) const;
   static std::unique_ptr<TextBlock> deserialize(FsFile& file);
+  // Validate all words for UTF-8 corruption, returns number of corrupted words
+  int validateAllWords(const char* checkpoint) const;
 };

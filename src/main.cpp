@@ -95,6 +95,28 @@ EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
 EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
                                    &notosans18BoldItalicFont);
 
+EpdFont notosansthai8RegularFont(&notosansthai_8_regular);
+EpdFontFamily notosansthai8FontFamily(&notosansthai8RegularFont);
+
+EpdFont notosansthai10RegularFont(&notosansthai_10_regular);
+EpdFontFamily notosansthai10FontFamily(&notosansthai10RegularFont);                        
+
+EpdFont notosansthai12RegularFont(&notosansthai_12_regular);
+EpdFont notosansthai12BoldFont(&notosansthai_12_bold);
+EpdFontFamily notosansthai12FontFamily(&notosansthai12RegularFont, &notosansthai12BoldFont);
+
+EpdFont notosansthai14RegularFont(&notosansthai_14_regular);
+EpdFont notosansthai14BoldFont(&notosansthai_14_bold);
+EpdFontFamily notosansthai14FontFamily(&notosansthai14RegularFont, &notosansthai14BoldFont);
+
+EpdFont notosansthai16RegularFont(&notosansthai_16_regular);
+EpdFont notosansthai16BoldFont(&notosansthai_16_bold);
+EpdFontFamily notosansthai16FontFamily(&notosansthai16RegularFont, &notosansthai16BoldFont);
+
+EpdFont notosansthai18RegularFont(&notosansthai_18_regular);
+EpdFont notosansthai18BoldFont(&notosansthai_18_bold);
+EpdFontFamily notosansthai18FontFamily(&notosansthai18RegularFont, &notosansthai18BoldFont);
+
 EpdFont opendyslexic8RegularFont(&opendyslexic_8_regular);
 EpdFont opendyslexic8BoldFont(&opendyslexic_8_bold);
 EpdFont opendyslexic8ItalicFont(&opendyslexic_8_italic);
@@ -252,14 +274,20 @@ void setupDisplayAndFonts() {
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
+
+  renderer.insertFont(NOTOSANSTHAI_12_FONT_ID, notosansthai12FontFamily);
+  renderer.insertFont(NOTOSANSTHAI_14_FONT_ID, notosansthai14FontFamily);
+  renderer.insertFont(NOTOSANSTHAI_16_FONT_ID, notosansthai16FontFamily);
+  renderer.insertFont(NOTOSANSTHAI_18_FONT_ID, notosansthai18FontFamily);
+
   renderer.insertFont(OPENDYSLEXIC_8_FONT_ID, opendyslexic8FontFamily);
   renderer.insertFont(OPENDYSLEXIC_10_FONT_ID, opendyslexic10FontFamily);
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
   renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
-  renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  renderer.insertFont(UI_10_FONT_ID, notosansthai10FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, notosansthai12FontFamily);
+  renderer.insertFont(SMALL_FONT_ID, notosansthai8FontFamily);
   Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 

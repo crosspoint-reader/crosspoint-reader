@@ -30,6 +30,42 @@ constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
+// Returns number of bytes forming incomplete UTF-8 at buffer end (0 if complete)
+static int incompleteUtf8Tail(const char* buf, int len) {
+  if (len == 0) return 0;
+  for (int i = 1; i <= 3 && i <= len; i++) {
+    uint8_t c = buf[len - i];
+    if ((c & 0x80) == 0) return 0;                          // ASCII - complete
+    if ((c & 0xE0) == 0xC0) return (i < 2) ? i : 0;         // 2-byte start
+    if ((c & 0xF0) == 0xE0) return (i < 3) ? i : 0;         // 3-byte start (Thai)
+    if ((c & 0xF8) == 0xF0) return (i < 4) ? i : 0;         // 4-byte start
+    if ((c & 0xC0) == 0x80) continue;                       // Continuation byte
+  }
+  return 0;
+}
+
+// Flush partWordBuffer, preserving incomplete UTF-8 for next callback
+void ChapterHtmlSlimParser::flushPartWordBuffer(ChapterHtmlSlimParser* self, EpdFontFamily::Style fontStyle) {
+  if (self->partWordBufferIndex == 0) return;
+
+  int incomplete = incompleteUtf8Tail(self->partWordBuffer, self->partWordBufferIndex);
+  if (incomplete > 0 && incomplete < self->partWordBufferIndex) {
+    char saved[4];
+    memcpy(saved, self->partWordBuffer + self->partWordBufferIndex - incomplete, incomplete);
+    self->partWordBufferIndex -= incomplete;
+    self->partWordBuffer[self->partWordBufferIndex] = '\0';
+    if (self->partWordBufferIndex > 0) {
+      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
+    }
+    memcpy(self->partWordBuffer, saved, incomplete);
+    self->partWordBufferIndex = incomplete;
+  } else {
+    self->partWordBuffer[self->partWordBufferIndex] = '\0';
+    self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
+    self->partWordBufferIndex = 0;
+  }
+}
+
 // given the start and end of a tag, check to see if it matches a known tag
 bool matches(const char* tag_name, const char* possible_tags[], const int possible_tag_count) {
   for (int i = 0; i < possible_tag_count; i++) {
@@ -161,11 +197,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   for (int i = 0; i < len; i++) {
     if (isWhitespace(s[i])) {
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
-      if (self->partWordBufferIndex > 0) {
-        self->partWordBuffer[self->partWordBufferIndex] = '\0';
-        self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
-        self->partWordBufferIndex = 0;
-      }
+      flushPartWordBuffer(self, fontStyle);
       // Skip the whitespace char
       continue;
     }
@@ -186,9 +218,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     // If we're about to run out of space, then cut the word off and start a new one
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
-      self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
-      self->partWordBufferIndex = 0;
+      flushPartWordBuffer(self, fontStyle);
     }
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
@@ -228,9 +258,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
         fontStyle = EpdFontFamily::ITALIC;
       }
 
-      self->partWordBuffer[self->partWordBufferIndex] = '\0';
-      self->currentTextBlock->addWord(self->partWordBuffer, fontStyle);
-      self->partWordBufferIndex = 0;
+      flushPartWordBuffer(self, fontStyle);
     }
   }
 
