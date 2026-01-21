@@ -2,6 +2,27 @@
 
 Welcome to the **CrossPoint** firmware. This guide outlines the hardware controls, navigation, and reading features of the device.
 
+- [CrossPoint User Guide](#crosspoint-user-guide)
+  - [1. Hardware Overview](#1-hardware-overview)
+    - [Button Layout](#button-layout)
+  - [2. Power \& Startup](#2-power--startup)
+    - [Power On / Off](#power-on--off)
+    - [First Launch](#first-launch)
+  - [3. Screens](#3-screens)
+    - [3.1 Home Screen](#31-home-screen)
+    - [3.2 Book Selection](#32-book-selection)
+    - [3.3 Reading Mode](#33-reading-mode)
+    - [3.4 File Upload Screen](#34-file-upload-screen)
+    - [3.5 Settings](#35-settings)
+    - [3.6 Sleep Screen](#36-sleep-screen)
+  - [4. Reading Mode](#4-reading-mode)
+    - [Page Turning](#page-turning)
+    - [Chapter Navigation](#chapter-navigation)
+    - [System Navigation](#system-navigation)
+  - [5. Chapter Selection Screen](#5-chapter-selection-screen)
+  - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
+
+
 ## 1. Hardware Overview
 
 The device utilises the standard buttons on the Xtink X4 (in the same layout as the manufacturer firmware, by default):
