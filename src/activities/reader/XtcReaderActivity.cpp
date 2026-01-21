@@ -110,6 +110,29 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  // Detect long-press and schedule skip immediately 
+  const bool prevPressed = mappedInput.isPressed(MappedInputManager::Button::PageBack) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Left);
+  const bool nextPressed = mappedInput.isPressed(MappedInputManager::Button::PageForward) ||
+                           (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                            mappedInput.isPressed(MappedInputManager::Button::Power)) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Right);
+
+  if (SETTINGS.longPressChapterSkip && (prevPressed || nextPressed) &&
+      mappedInput.getHeldTime() >= SETTINGS.getLongPressDurationMs() && !delayedSkipPending &&
+      !awaitingReleaseAfterSkip) {
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    showSkipPopup("Skipping");
+    delayedSkipPending = true;
+    delayedSkipDir = nextPressed ? +1 : -1;
+    delayedSkipAmount = 10;  // long-press skip amount
+    delayedSkipExecuteAtMs = millis() + 500;
+    xSemaphoreGive(renderingMutex);
+    // Block release-based page change until unpressed
+    awaitingReleaseAfterSkip = true;
+    return;
+  }
+
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
@@ -121,6 +144,12 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  if (awaitingReleaseAfterSkip) {
+    awaitingReleaseAfterSkip = false;
+    skipUnpressed = true;
+    return;
+  }
+
   // Handle end of book
   if (currentPage >= xtc->getPageCount()) {
     currentPage = xtc->getPageCount() - 1;
@@ -128,38 +157,17 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > SETTINGS.getLongPressDurationMs();
-  const int skipAmount = skipPages ? 10 : 1;
-
   if (prevReleased) {
-    if (skipPages) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      showSkipPopup("Skipping");
-      delayedSkipPending = true;
-      delayedSkipDir = -1;
-      delayedSkipAmount = skipAmount;
-      delayedSkipExecuteAtMs = millis() + 500;
-      xSemaphoreGive(renderingMutex);
-      return;
-    }
-    if (currentPage >= static_cast<uint32_t>(skipAmount)) {
-      currentPage -= skipAmount;
+    // Short press: single page back
+    if (currentPage >= 1) {
+      currentPage -= 1;
     } else {
       currentPage = 0;
     }
     updateRequired = true;
   } else if (nextReleased) {
-    if (skipPages) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      showSkipPopup("Skipping");
-      delayedSkipPending = true;
-      delayedSkipDir = +1;
-      delayedSkipAmount = skipAmount;
-      delayedSkipExecuteAtMs = millis() + 500;
-      xSemaphoreGive(renderingMutex);
-      return;
-    }
-    currentPage += skipAmount;
+    // Short press: single page forward
+    currentPage += 1;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }

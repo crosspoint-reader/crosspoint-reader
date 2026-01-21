@@ -162,6 +162,28 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Detect long-press and schedule skip immediately 
+  const bool prevPressed = mappedInput.isPressed(MappedInputManager::Button::PageBack) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Left);
+  const bool nextPressed = mappedInput.isPressed(MappedInputManager::Button::PageForward) ||
+                           (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                            mappedInput.isPressed(MappedInputManager::Button::Power)) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Right);
+
+  if (SETTINGS.longPressChapterSkip && (prevPressed || nextPressed) &&
+      mappedInput.getHeldTime() >= SETTINGS.getLongPressDurationMs() && !delayedSkipPending &&
+      !awaitingReleaseAfterSkip) {
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    showSkipPopup("Skipping");
+    delayedSkipPending = true;
+    delayedSkipDir = nextPressed ? +1 : -1;
+    delayedSkipExecuteAtMs = millis() + 500;
+    xSemaphoreGive(renderingMutex);
+    // Block release-based page change until unpressed
+    awaitingReleaseAfterSkip = true;
+    return;
+  }
+
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
@@ -173,6 +195,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (awaitingReleaseAfterSkip) {
+    awaitingReleaseAfterSkip = false;
+    skipUnpressed = true;
+    return;
+  }
+
   // any botton press when at end of the book goes back to the last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
     currentSpineIndex = epub->getSpineItemsCount() - 1;
@@ -181,20 +209,6 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > SETTINGS.getLongPressDurationMs();
-
-  if (skipChapter) {
-    // We don't want to delete the section mid-render, so grab the semaphore
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    // Show immediate feedback for long-press skip, then schedule delayed action (500ms)
-    showSkipPopup("Skipping");
-    delayedSkipPending = true;
-    delayedSkipDir = nextReleased ? +1 : -1;
-    delayedSkipExecuteAtMs = millis() + 500;
-    xSemaphoreGive(renderingMutex);
-    // Do not perform the skip immediately; it will be executed in display loop after delay
-    return;
-  }
 
   // No current section, attempt to rerender the book
   if (!section) {

@@ -25,6 +25,8 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   int delayedSkipDir = 0;
   uint32_t delayedSkipExecuteAtMs = 0;
   uint32_t delayedSkipAmount = 0; 
+  bool awaitingReleaseAfterSkip = false;
+  bool skipUnpressed = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
