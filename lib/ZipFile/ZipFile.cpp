@@ -74,6 +74,10 @@ bool ZipFile::loadAllFileStatSlims() {
     file.seekCur(m + k);
   }
 
+  // Set cursor to start of central directory for sequential access
+  lastCentralDirPos = zipDetails.centralDirOffset;
+  lastCentralDirPosValid = true;
+
   if (!wasOpen) {
     close();
   }
@@ -102,15 +106,35 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
     return false;
   }
 
-  file.seek(zipDetails.centralDirOffset);
+  // Phase 1: Try scanning from cursor position first
+  uint32_t startPos = lastCentralDirPosValid ? lastCentralDirPos : zipDetails.centralDirOffset;
+  uint32_t wrapPos = zipDetails.centralDirOffset;
+  bool wrapped = false;
+  bool found = false;
+
+  file.seek(startPos);
 
   uint32_t sig;
   char itemName[256];
-  bool found = false;
 
-  while (file.available()) {
-    file.read(&sig, 4);
-    if (sig != 0x02014b50) break;  // End of list
+  while (true) {
+    uint32_t entryStart = file.position();
+
+    if (file.read(&sig, 4) != 4 || sig != 0x02014b50) {
+      // End of central directory
+      if (!wrapped && lastCentralDirPosValid && startPos != zipDetails.centralDirOffset) {
+        // Wrap around to beginning
+        file.seek(zipDetails.centralDirOffset);
+        wrapped = true;
+        continue;
+      }
+      break;
+    }
+
+    // If we've wrapped and reached our start position, stop
+    if (wrapped && entryStart >= startPos) {
+      break;
+    }
 
     file.seekCur(6);
     file.read(&fileStat->method, 2);
@@ -123,15 +147,25 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
     file.read(&k, 2);
     file.seekCur(8);
     file.read(&fileStat->localHeaderOffset, 4);
-    file.read(itemName, nameLen);
-    itemName[nameLen] = '\0';
 
-    if (strcmp(itemName, filename) == 0) {
-      found = true;
-      break;
+    if (nameLen < 256) {
+      file.read(itemName, nameLen);
+      itemName[nameLen] = '\0';
+
+      if (strcmp(itemName, filename) == 0) {
+        // Found it! Update cursor to next entry
+        file.seekCur(m + k);
+        lastCentralDirPos = file.position();
+        lastCentralDirPosValid = true;
+        found = true;
+        break;
+      }
+    } else {
+      // Name too long, skip it
+      file.seekCur(nameLen);
     }
 
-    // Skip the rest of this entry (extra field + comment)
+    // Skip extra field + comment
     file.seekCur(m + k);
   }
 
@@ -253,6 +287,8 @@ bool ZipFile::close() {
   if (file) {
     file.close();
   }
+  lastCentralDirPos = 0;
+  lastCentralDirPosValid = false;
   return true;
 }
 

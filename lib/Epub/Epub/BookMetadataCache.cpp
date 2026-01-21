@@ -40,7 +40,6 @@ bool BookMetadataCache::endContentOpfPass() {
 bool BookMetadataCache::beginTocPass() {
   Serial.printf("[%lu] [BMC] Beginning toc pass\n", millis());
 
-  // Open spine file for reading
   if (!SdMan.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
   }
@@ -49,12 +48,40 @@ bool BookMetadataCache::beginTocPass() {
     return false;
   }
 
+  if (spineCount >= LARGE_SPINE_THRESHOLD) {
+    spineHrefIndex.clear();
+    spineHrefIndex.reserve(spineCount);
+    spineFile.seek(0);
+    for (int i = 0; i < spineCount; i++) {
+      auto entry = readSpineEntry(spineFile);
+      SpineHrefIndexEntry idx;
+      idx.hrefHash = fnvHash64(entry.href);
+      idx.hrefLen = static_cast<uint16_t>(entry.href.size());
+      idx.spineIndex = static_cast<int16_t>(i);
+      spineHrefIndex.push_back(idx);
+    }
+    std::sort(spineHrefIndex.begin(), spineHrefIndex.end(),
+      [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
+        return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
+      });
+    spineFile.seek(0);
+    useSpineHrefIndex = true;
+    Serial.printf("[%lu] [BMC] Using fast index for %d spine items\n", millis(), spineCount);
+  } else {
+    useSpineHrefIndex = false;
+  }
+
   return true;
 }
 
 bool BookMetadataCache::endTocPass() {
   tocFile.close();
   spineFile.close();
+
+  spineHrefIndex.clear();
+  spineHrefIndex.shrink_to_fit();
+  useSpineHrefIndex = false;
+
   return true;
 }
 
@@ -250,16 +277,37 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   }
 
   int16_t spineIndex = -1;
-  spineFile.seek(0);
-  for (int i = 0; i < spineCount; i++) {
-    auto spineEntry = readSpineEntry(spineFile);
-    if (spineEntry.href == href) {
-      spineIndex = static_cast<int16_t>(i);
+
+  if (useSpineHrefIndex) {
+    uint64_t targetHash = fnvHash64(href);
+    uint16_t targetLen = static_cast<uint16_t>(href.size());
+
+    auto it = std::lower_bound(spineHrefIndex.begin(), spineHrefIndex.end(),
+      SpineHrefIndexEntry{targetHash, targetLen, 0},
+      [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
+        return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
+      });
+
+    while (it != spineHrefIndex.end() && it->hrefHash == targetHash && it->hrefLen == targetLen) {
+      spineIndex = it->spineIndex;
       break;
     }
-  }
-  if (spineIndex == -1) {
-    Serial.printf("[%lu] [BMC] addTocEntry: Could not find spine item for TOC href %s\n", millis(), href.c_str());
+
+    if (spineIndex == -1) {
+      Serial.printf("[%lu] [BMC] createTocEntry: Could not find spine item for TOC href %s\n", millis(), href.c_str());
+    }
+  } else {
+    spineFile.seek(0);
+    for (int i = 0; i < spineCount; i++) {
+      auto spineEntry = readSpineEntry(spineFile);
+      if (spineEntry.href == href) {
+        spineIndex = static_cast<int16_t>(i);
+        break;
+      }
+    }
+    if (spineIndex == -1) {
+      Serial.printf("[%lu] [BMC] createTocEntry: Could not find spine item for TOC href %s\n", millis(), href.c_str());
+    }
   }
 
   const TocEntry entry(title, href, anchor, level, spineIndex);

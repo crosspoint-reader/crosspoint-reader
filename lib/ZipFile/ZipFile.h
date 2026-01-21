@@ -25,6 +25,10 @@ class ZipFile {
   ZipDetails zipDetails = {0, 0, false};
   std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
 
+  // Cursor for sequential central-dir scanning optimization
+  uint32_t lastCentralDirPos = 0;
+  bool lastCentralDirPosValid = false;
+
   bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
   long getDataOffset(const FileStatSlim& fileStat);
   bool loadZipDetails();
