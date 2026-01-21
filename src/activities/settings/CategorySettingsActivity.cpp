@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "CalibreSettingsActivity.h"
+#include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
@@ -106,6 +107,14 @@ void CategorySettingsActivity::toggleCurrentSetting() {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Clear Cache") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
