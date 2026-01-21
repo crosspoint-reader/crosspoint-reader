@@ -4,6 +4,7 @@
 
 #include "MappedInputManager.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 #define DEVICE_NAME         "EPaper"
 #define SERVICE_UUID        "4ae29d01-499a-480a-8c41-a82192105125"
@@ -11,6 +12,7 @@
 #define RESPONSE_CHARACTERISTIC_UUID "0c656023-dee6-47c5-9afb-e601dfbdaa1d"
 
 #define OUTPUT_DIRECTORY "/bt"
+#define MAX_FILENAME_LENGTH 200
 
 #define PROTOCOL_ASSERT(cond, fmt, ...)                            \
     do {                                                           \
@@ -181,7 +183,7 @@ void BluetoothActivity::render() const {
   renderer.drawCenteredText(UI_10_FONT_ID, 75, stateText.c_str());
 
   if (state == STATE_OFFERED || state == STATE_RECEIVING || state == STATE_DONE) {
-    renderer.drawCenteredText(UI_12_FONT_ID, 110, filename);
+    renderer.drawCenteredText(UI_12_FONT_ID, 110, filename.c_str());
   } else if (state == STATE_ERROR) {
     renderer.drawCenteredText(UI_10_FONT_ID, 110, errorMessage);
   }
@@ -249,25 +251,30 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
 
       totalBytes = msg->body.clientOffer.bodyLength;
       
-      size_t filenameLen = msg_len - 8 - sizeof(lfbt_msg_client_offer);
-      if (filenameLen > MAX_FILENAME) {
-        filenameLen = MAX_FILENAME;
-      }
-
-      memcpy(filename, msg->body.clientOffer.name, filenameLen);
-      filename[filenameLen] = 0;
-
-      // sanitize filename
-      for (char *p = filename; *p; p++) {
-        if (*p == '/' || *p == '\\' || *p == ':') {
-          *p = '_';
-        }
-      }
+      size_t filenameLength = msg_len - 8 - sizeof(lfbt_msg_client_offer);
+      std::string originalFilename = StringUtils::sanitizeFilename(
+        std::string(msg->body.clientOffer.name, filenameLength),
+        MAX_FILENAME_LENGTH
+      );
 
       PROTOCOL_ASSERT(SdMan.ensureDirectoryExists(OUTPUT_DIRECTORY), "Couldn't create output directory %s", OUTPUT_DIRECTORY);
-      char filepath[MAX_FILENAME + strlen(OUTPUT_DIRECTORY) + 2];
-      snprintf(filepath, sizeof(filepath), "%s/%s", OUTPUT_DIRECTORY, filename);
-      // TODO: we could check if file already exists and append a number to filename to avoid overwriting
+
+      // generate unique filepath
+      auto splitName = StringUtils::splitFileName(originalFilename);
+      filename = originalFilename;
+      std::string filepath = OUTPUT_DIRECTORY "/" + filename;
+      uint32_t duplicateIndex = 0;
+      while (SdMan.exists(filepath.c_str())) {
+        duplicateIndex++;
+        if (splitName.second.empty()) {
+          // no extension
+          filename = splitName.first + "-" + std::to_string(duplicateIndex);
+        } else {
+          filename = splitName.first + "-" + std::to_string(duplicateIndex) + splitName.second;
+        }
+        filepath = OUTPUT_DIRECTORY "/" + filename;
+      }
+
       PROTOCOL_ASSERT(SdMan.openFileForWrite("BT", filepath, file), "Couldn't open file %s for writing", filepath);
       // TODO: would be neat to check if we have enough space, but SDCardManager doesn't seem to expose that info currently
 

@@ -13,8 +13,6 @@
 
 #include "../Activity.h"
 
-#define MAX_FILENAME 200
-
 typedef struct  __attribute__((packed)) {
   uint32_t version;
   uint32_t bodyLength;
@@ -104,7 +102,7 @@ class BluetoothActivity final : public Activity {
   } State;
 
   State state = STATE_INITIALIZING;
-  char filename[MAX_FILENAME + 1];
+  std::string filename;
   FsFile file;
   size_t receivedBytes = 0;
   size_t totalBytes = 0; 

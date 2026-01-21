@@ -61,6 +61,14 @@ bool checkFileExtension(const String& fileName, const char* extension) {
   return localFile.endsWith(localExtension);
 }
 
+std::pair<std::string, std::string> splitFileName(const std::string& name) {
+  size_t lastDot = name.find_last_of('.');
+  if (lastDot == std::string::npos) {
+    return std::make_pair(name, "");
+  }
+  return std::make_pair(name.substr(0, lastDot), name.substr(lastDot));
+}
+
 size_t utf8RemoveLastChar(std::string& str) {
   if (str.empty()) return 0;
   size_t pos = str.size() - 1;
