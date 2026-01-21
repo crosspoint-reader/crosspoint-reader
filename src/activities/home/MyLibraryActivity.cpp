@@ -323,9 +323,7 @@ void MyLibraryActivity::render() const {
   renderer.drawSideButtonHints(UI_10_FONT_ID, ">", "<");
 
   // Draw bottom button hints
-  // In Files tab, show "BACK" when in subdirectory, "HOME" when at root
-  const char* backLabel = (currentTab == Tab::Files && basepath != "/") ? "BACK" : "HOME";
-  const auto labels = mappedInput.mapLabels(backLabel, "OPEN", "<", ">");
+  const auto labels = mappedInput.mapLabels("« Back", "Open", "<", ">");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

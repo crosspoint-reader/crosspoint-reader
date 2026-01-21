@@ -537,7 +537,7 @@ void HomeActivity::render() {
     renderer.drawText(UI_10_FONT_ID, textX, textY, label, !selected);
   }
 
-  const auto labels = mappedInput.mapLabels("", "Confirm", "Up", "Down");
+  const auto labels = mappedInput.mapLabels("", "Select", "Up", "Down");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   const bool showBatteryPercentage =
