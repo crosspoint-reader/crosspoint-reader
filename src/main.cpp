@@ -276,13 +276,30 @@ void setupDisplayAndFonts() {
   Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 
+bool isUsbConnected() {
+  // U0RXD/GPIO20 reads HIGH when USB is connected
+  return digitalRead(UART0_RXD) == HIGH;
+}
+
+bool isWakeupAfterFlashing() {
+  const auto wakeupCause = esp_sleep_get_wakeup_cause();
+  const auto resetReason = esp_reset_reason();
+
+  return isUsbConnected() && (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_UNKNOWN);
+}
+
 void setup() {
   t1 = millis();
 
   // Only start serial if USB connected
   pinMode(UART0_RXD, INPUT);
-  if (digitalRead(UART0_RXD) == HIGH) {
+  if (isUsbConnected()) {
     Serial.begin(115200);
+    // Wait up to 3 seconds for Serial to be ready to catch early logs
+    unsigned long start = millis();
+    while (!Serial && (millis() - start) < 3000) {
+      delay(10);
+    }
   }
 
   inputManager.begin();
@@ -305,8 +322,10 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
-  // verify power button press duration after we've read settings.
-  verifyWakeupLongPress();
+  if (!isWakeupAfterFlashing()) {
+    // For normal wakeups (not immediately after flashing), verify long press
+    verifyWakeupLongPress();
+  }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
