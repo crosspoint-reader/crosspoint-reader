@@ -166,11 +166,10 @@ The role of the volume (side) buttons can be swapped in **[Settings](#35-setting
 If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
 
 ### Chapter Navigation
-* **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button for 2 seconds, then release.
-* **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button for 2 seconds, then release.
+* **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button for 2 seconds.
+* **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button for 2 seconds.
 
-This feature can be disabled in **[Settings](#35-settings)** where the long-press hold time can also be configured.
-
+This long-press feature can be configured in **[Settings](#35-settings)**.
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
