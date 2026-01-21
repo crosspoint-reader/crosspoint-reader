@@ -215,12 +215,12 @@ void BluetoothActivity::render() const {
 }
 
 void BluetoothActivity::ServerCallbacks::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
-  Serial.printf("BLE connected\n");
+  Serial.printf("[%lu] [BT] connected\n", millis());
   activity->onConnected(true);
 }
 
 void BluetoothActivity::ServerCallbacks::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) {
-  Serial.printf("BLE disconnected\n");
+  Serial.printf("[%lu] [BT] disconnected\n", millis());
   activity->onConnected(false);
 }
 
@@ -281,14 +281,19 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
         .body = {.serverResponse = {.status = 0}}
       };
       pResponseChar->setValue((uint8_t*)&response, 8 + sizeof(lfbt_msg_server_response));
-      pResponseChar->indicate(); // TODO: indicate should not be called in a callback, this ends up timing out
+      pResponseChar->indicate();
 
       updateRequired = true;
       break;
     }
     case 2: // client_chunk
     {
-      Serial.printf("Received client_chunk, offset %u, length %zu\n", msg->body.clientChunk.offset, msg_len - 8 - sizeof(lfbt_msg_client_chunk));
+      Serial.printf(
+        "[%lu] [BT] Received client_chunk, offset %u, length %zu\n",
+        millis(),
+        msg->body.clientChunk.offset,
+        msg_len - 8 - sizeof(lfbt_msg_client_chunk)
+      );
       PROTOCOL_ASSERT(state == STATE_OFFERED || state == STATE_RECEIVING, "Invalid state for client_chunk: %d", state);
       PROTOCOL_ASSERT(msg->body.clientChunk.offset == receivedBytes, "Expected chunk %d, got %d", receivedBytes, msg->body.clientChunk.offset);
 
@@ -311,6 +316,11 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
 
 void BluetoothActivity::RequestCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) {
   lfbt_message *msg = (lfbt_message*) pCharacteristic->getValue().data();
-  Serial.printf("Received BLE message of type %u, txnId %x, length %d\n", msg->type, msg->txnId, pCharacteristic->getValue().length());
+  Serial.printf("[%lu] [BT] Received BLE message of type %u, txnId %x, length %d\n",
+    millis(),
+    msg->type,
+    msg->txnId,
+    pCharacteristic->getValue().length()
+  );
   activity->onRequest(msg, pCharacteristic->getValue().length());
 }
