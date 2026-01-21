@@ -3,7 +3,6 @@
 #include <SDCardManager.h>
 
 #include <string>
-#include <unordered_map>
 
 class BookMetadataCache {
  public:
@@ -53,8 +52,6 @@ class BookMetadataCache {
   // Temp file handles during build
   FsFile spineFile;
   FsFile tocFile;
-  // Lookup cache for O(1) href->spineIndex during TOC pass
-  std::unordered_map<std::string, int16_t> hrefToSpineIndex;
 
   uint32_t writeSpineEntry(FsFile& file, const SpineEntry& entry) const;
   uint32_t writeTocEntry(FsFile& file, const TocEntry& entry) const;

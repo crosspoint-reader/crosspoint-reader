@@ -49,23 +49,12 @@ bool BookMetadataCache::beginTocPass() {
     return false;
   }
 
-  // Build href->spineIndex lookup map for O(1) access during TOC creation
-  hrefToSpineIndex.clear();
-  hrefToSpineIndex.reserve(spineCount);
-  spineFile.seek(0);
-  for (int i = 0; i < spineCount; i++) {
-    auto entry = readSpineEntry(spineFile);
-    hrefToSpineIndex[entry.href] = static_cast<int16_t>(i);
-  }
-  spineFile.seek(0);
-
   return true;
 }
 
 bool BookMetadataCache::endTocPass() {
   tocFile.close();
   spineFile.close();
-  hrefToSpineIndex.clear();
   return true;
 }
 
@@ -261,10 +250,15 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   }
 
   int16_t spineIndex = -1;
-  auto it = hrefToSpineIndex.find(href);
-  if (it != hrefToSpineIndex.end()) {
-    spineIndex = it->second;
-  } else {
+  spineFile.seek(0);
+  for (int i = 0; i < spineCount; i++) {
+    auto spineEntry = readSpineEntry(spineFile);
+    if (spineEntry.href == href) {
+      spineIndex = static_cast<int16_t>(i);
+      break;
+    }
+  }
+  if (spineIndex == -1) {
     Serial.printf("[%lu] [BMC] addTocEntry: Could not find spine item for TOC href %s\n", millis(), href.c_str());
   }
 
