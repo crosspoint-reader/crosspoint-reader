@@ -3,9 +3,9 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
+#include <NimBLEDevice.h>
+#include <NimBLEUtils.h>
+#include <NimBLEServer.h>
 
 #include <functional>
 
@@ -61,12 +61,12 @@ class BluetoothActivity final : public Activity {
   void onConnected(bool isConnected);
   void onRequest(lfbt_message *msg, size_t msg_len);
 
-  class ServerCallbacks : public BLEServerCallbacks {
+  class ServerCallbacks : public NimBLEServerCallbacks {
     friend class BluetoothActivity;
     BluetoothActivity *activity;
 
-    void onConnect(BLEServer* pServer);
-    void onDisconnect(BLEServer* pServer);
+    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo);
+    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason);
 
     protected:
     explicit ServerCallbacks(BluetoothActivity *activity) : activity(activity) {}
@@ -74,11 +74,11 @@ class BluetoothActivity final : public Activity {
 
   ServerCallbacks serverCallbacks;
 
-  class RequestCallbacks : public BLECharacteristicCallbacks {
+  class RequestCallbacks : public NimBLECharacteristicCallbacks {
     friend class BluetoothActivity;
     BluetoothActivity *activity;
 
-    void onWrite(BLECharacteristic* pCharacteristic, esp_ble_gatts_cb_param_t* param);
+    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo);
 
     protected:
     explicit RequestCallbacks(BluetoothActivity *activity) : activity(activity) {}
@@ -86,10 +86,10 @@ class BluetoothActivity final : public Activity {
 
   RequestCallbacks requestCallbacks;
 
-  BLEServer *pServer;
-  BLEService *pService;
-  BLECharacteristic *pRequestChar, *pResponseChar;
-  BLEAdvertising *pAdvertising;
+  NimBLEServer *pServer;
+  NimBLEService *pService;
+  NimBLECharacteristic *pRequestChar, *pResponseChar;
+  NimBLEAdvertising *pAdvertising;
   void startAdvertising();
   void stopAdvertising();
 

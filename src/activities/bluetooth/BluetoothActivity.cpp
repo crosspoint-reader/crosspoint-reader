@@ -1,7 +1,6 @@
 #include "BluetoothActivity.h"
 
 #include <GfxRenderer.h>
-#include <BLE2902.h>
 
 #include "MappedInputManager.h"
 #include "fontIds.h"
@@ -29,37 +28,35 @@ void BluetoothActivity::taskTrampoline(void* param) {
 }
 
 void BluetoothActivity::startAdvertising() {
-  BLEDevice::startAdvertising();
+  NimBLEDevice::startAdvertising();
 }
 
 void BluetoothActivity::stopAdvertising() {
-  BLEDevice::stopAdvertising();
+  NimBLEDevice::stopAdvertising();
 }
 
 void BluetoothActivity::onEnter() {
   Activity::onEnter();
 
-  BLEDevice::init(DEVICE_NAME);
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(&serverCallbacks);
+  NimBLEDevice::init(DEVICE_NAME);
+  pServer = NimBLEDevice::createServer();
+  pServer->setCallbacks(&serverCallbacks, false);
   pService = pServer->createService(SERVICE_UUID);
   pRequestChar = pService->createCharacteristic(
     REQUEST_CHARACTERISTIC_UUID,
-    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
   pRequestChar->setCallbacks(&requestCallbacks);
   pResponseChar = pService->createCharacteristic(
     RESPONSE_CHARACTERISTIC_UUID,
-    BLECharacteristic::PROPERTY_INDICATE
+    NIMBLE_PROPERTY::INDICATE
   );
-  pResponseChar->addDescriptor(new BLE2902());
   pService->start();
 
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);
-  pAdvertising->setMinPreferred(0x12);
+  NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+  pAdvertising->setName(DEVICE_NAME);
+  pAdvertising->addServiceUUID(pService->getUUID());
+  pAdvertising->enableScanResponse(true);
 
   renderingMutex = xSemaphoreCreateMutex();
 
@@ -94,10 +91,9 @@ void BluetoothActivity::intoState(State newState) {
     {
       // caller sets errorMessage
       file.close();
-      auto connId = pServer->getConnId();
-      if (connId != ESP_GATT_IF_NONE) {
+      if (pServer->getConnectedCount() > 0) {
         // TODO: send back a response over BLE?
-        pServer->disconnect(connId);
+        pServer->disconnect(pServer->getPeerInfo(0));
       }
       break;
     }
@@ -114,8 +110,7 @@ void BluetoothActivity::onExit() {
 
   stopAdvertising();
 
-  pService->stop();
-  BLEDevice::deinit();
+  NimBLEDevice::deinit(true);
 
   // Wait until not rendering to delete task
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -219,12 +214,12 @@ void BluetoothActivity::render() const {
   renderer.displayBuffer();
 }
 
-void BluetoothActivity::ServerCallbacks::onConnect(BLEServer* pServer) {
+void BluetoothActivity::ServerCallbacks::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
   Serial.printf("BLE connected\n");
   activity->onConnected(true);
 }
 
-void BluetoothActivity::ServerCallbacks::onDisconnect(BLEServer* pServer) {
+void BluetoothActivity::ServerCallbacks::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) {
   Serial.printf("BLE disconnected\n");
   activity->onConnected(false);
 }
@@ -314,8 +309,8 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
   }
 }
 
-void BluetoothActivity::RequestCallbacks::onWrite(BLECharacteristic* pCharacteristic, esp_ble_gatts_cb_param_t* param) {
-  lfbt_message *msg = (lfbt_message*) param->write.value;
-  Serial.printf("Received BLE message of type %u, txnId %x, length %d\n", msg->type, msg->txnId, param->write.len);
-  activity->onRequest(msg, param->write.len);
+void BluetoothActivity::RequestCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) {
+  lfbt_message *msg = (lfbt_message*) pCharacteristic->getValue().data();
+  Serial.printf("Received BLE message of type %u, txnId %x, length %d\n", msg->type, msg->txnId, pCharacteristic->getValue().length());
+  activity->onRequest(msg, pCharacteristic->getValue().length());
 }
