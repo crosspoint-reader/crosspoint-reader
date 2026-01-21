@@ -479,7 +479,8 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
       }
     }
 
-    renderer.drawText(SMALL_FONT_ID, titleMarginLeftAdjusted + orientedMarginLeft + (availableTitleSpace - titleWidth) / 2, textY,
+    renderer.drawText(SMALL_FONT_ID,
+                      titleMarginLeftAdjusted + orientedMarginLeft + (availableTitleSpace - titleWidth) / 2, textY,
                       title.c_str());
   }
 }
