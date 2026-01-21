@@ -46,6 +46,10 @@ void FileSelectionActivity::loadFiles() {
       file.close();
       continue;
     }
+    if (name[0] == '.' || strcmp(name, "fonts") == 0) {
+      file.close();
+      continue;
+    }
 
     if (file.isDirectory()) {
       files.emplace_back(std::string(name) + "/");

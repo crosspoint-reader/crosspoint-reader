@@ -51,29 +51,13 @@ void FontSelectionActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left) ||
-      mappedInput.wasPressed(MappedInputManager::Button::PageBack)) {
-    if (selectedIndex > 0) {
-      selectedIndex--;
-      if (selectedIndex < scrollOffset) {
-        scrollOffset = selectedIndex;
-        update = true;
-      } else {
-        update = true;
-      }
-    }
+      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    selectedIndex = (selectedIndex > 0) ? (selectedIndex - 1) : ((int)fontFamilies.size() - 1);
+    update = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-             mappedInput.wasPressed(MappedInputManager::Button::Right) ||
-             mappedInput.wasPressed(MappedInputManager::Button::PageForward)) {
-    if (selectedIndex < (int)fontFamilies.size() - 1) {
-      selectedIndex++;
-      if (selectedIndex >= scrollOffset + itemsPerPage) {
-        scrollOffset = selectedIndex - itemsPerPage + 1;
-        update = true;
-      } else {
-        update = true;
-      }
-    }
+             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    selectedIndex = (selectedIndex < (int)fontFamilies.size() - 1) ? (selectedIndex + 1) : 0;
+    update = true;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
@@ -120,7 +104,7 @@ void FontSelectionActivity::render() const {
     // Draw selection box
     if (idx == selectedIndex) {
       Serial.printf("[FSA] Drawing selected: %s at %d\n", fontFamilies[idx].c_str(), y);
-      renderer.fillRect(10, y - 2, 460, 24);
+      renderer.fillRect(0, y - 2, 480, 30);
       renderer.drawText(UI_10_FONT_ID, 20, y, fontFamilies[idx].c_str(), false);  // false = white (on black box)
     } else {
       Serial.printf("[FSA] Drawing: %s at %d\n", fontFamilies[idx].c_str(), y);
