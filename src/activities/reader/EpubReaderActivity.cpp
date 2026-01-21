@@ -186,11 +186,13 @@ void EpubReaderActivity::loop() {
   if (skipChapter) {
     // We don't want to delete the section mid-render, so grab the semaphore
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    nextPageNumber = 0;
-    currentSpineIndex = nextReleased ? currentSpineIndex + 1 : currentSpineIndex - 1;
-    section.reset();
+    // Show immediate feedback for long-press skip, then schedule delayed action (500ms)
+    showSkipPopup("Skipping");
+    delayedSkipPending = true;
+    delayedSkipDir = nextReleased ? +1 : -1;
+    delayedSkipExecuteAtMs = millis() + 500;
     xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    // Do not perform the skip immediately; it will be executed in display loop after delay
     return;
   }
 
@@ -229,11 +231,21 @@ void EpubReaderActivity::loop() {
 
 void EpubReaderActivity::displayTaskLoop() {
   while (true) {
+    const uint32_t now = millis();
     if (updateRequired) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       renderScreen();
       xSemaphoreGive(renderingMutex);
+    } else if (delayedSkipPending && now >= delayedSkipExecuteAtMs) {
+      // Execute the delayed chapter skip now
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      nextPageNumber = 0;
+      currentSpineIndex += delayedSkipDir;
+      section.reset();
+      delayedSkipPending = false;
+      xSemaphoreGive(renderingMutex);
+      updateRequired = true;
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
@@ -383,6 +395,19 @@ void EpubReaderActivity::renderScreen() {
     f.write(data, 4);
     f.close();
   }
+}
+
+void EpubReaderActivity::showSkipPopup(const char* text) {
+  constexpr int boxMargin = 20;
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, text);
+  const int boxWidth = textWidth + boxMargin * 2;
+  const int boxHeight = renderer.getLineHeight(UI_12_FONT_ID) + boxMargin * 2;
+  const int boxX = (renderer.getScreenWidth() - boxWidth) / 2;
+  constexpr int boxY = 50;
+  renderer.fillRect(boxX, boxY, boxWidth, boxHeight, false);
+  renderer.drawText(UI_12_FONT_ID, boxX + boxMargin, boxY + boxMargin, text);
+  renderer.drawRect(boxX + 5, boxY + 5, boxWidth - 10, boxHeight - 10);
+  renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
 }
 
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,

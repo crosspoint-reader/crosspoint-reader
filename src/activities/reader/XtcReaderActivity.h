@@ -21,6 +21,10 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
   bool updateRequired = false;
+  bool delayedSkipPending = false;
+  int delayedSkipDir = 0;
+  uint32_t delayedSkipExecuteAtMs = 0;
+  uint32_t delayedSkipAmount = 0; 
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
@@ -30,6 +34,7 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   void renderPage();
   void saveProgress() const;
   void loadProgress();
+  void showSkipPopup(const char* text);
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,
