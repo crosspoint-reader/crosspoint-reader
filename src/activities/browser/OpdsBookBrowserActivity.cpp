@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <OpdsStream.h>
 #include <WiFi.h>
 
 #include "CrossPointSettings.h"
@@ -265,23 +266,27 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   std::string url = UrlUtils::buildUrl(serverUrl, path);
   Serial.printf("[%lu] [OPDS] Fetching: %s\n", millis(), url.c_str());
 
-  std::string content;
-  if (!HttpDownloader::fetchUrl(url, content)) {
-    state = BrowserState::ERROR;
-    errorMessage = "Failed to fetch feed";
-    updateRequired = true;
-    return;
+  OpdsParser parser;
+
+  {
+    OpdsParserStream stream{parser};
+    if (!HttpDownloader::fetchUrl(url, stream)) {
+      state = BrowserState::ERROR;
+      errorMessage = "Failed to fetch feed";
+      updateRequired = true;
+      return;
+    }
   }
 
-  OpdsParser parser;
-  if (!parser.parse(content.c_str(), content.size())) {
+  if (!parser) {
     state = BrowserState::ERROR;
     errorMessage = "Failed to parse feed";
     updateRequired = true;
     return;
   }
 
-  entries = parser.getEntries();
+  entries = std::move(parser).getEntries();
+  Serial.printf("[%lu] [OPDS] Found %d entries\n", millis(), entries.size());
   selectorIndex = 0;
 
   if (entries.empty()) {
