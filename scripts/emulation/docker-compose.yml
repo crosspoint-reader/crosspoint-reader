@@ -7,7 +7,7 @@ services:
     tmpfs:
       - /tmp
     ports:
-      - "8080:80"
+      - "8090:8090"
     stdin_open: true
     tty: true
     stop_signal: SIGKILL
@@ -16,6 +16,7 @@ services:
       - -c
       - |
         set -x;
+        set -e;
         source /root/esp/esp-idf/export.sh
 
         cd /tmp
@@ -26,8 +27,8 @@ services:
         dd if="partitions.bin" bs=1 count=$(stat -c%s "partitions.bin") seek=$((16#8000)) conv=notrunc of=./flash.bin
         dd if="firmware.bin" bs=1 count=$(stat -c%s "firmware.bin") seek=$((16#10000)) conv=notrunc of=./flash.bin
 
-        qemu-system-riscv32 \
-            -nographic \
-            -M esp32c3 \
-            -drive \
-            file=flash.bin,if=mtd,format=raw
+        # TODO: why pip install doesn't work in Dockerfile?
+        python3 -m pip install websockets --break-system-packages
+
+        cp /app/scripts/emulation/web_ui.html .
+        python3 /app/scripts/emulation/web_server.py

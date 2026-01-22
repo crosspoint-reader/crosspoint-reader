@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CrossPoint Emulator</title>
+  <style>
+    body {
+      font-family: monospace;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="screen" width="480" height="800" style="border:1px solid #555;"></canvas>
+
+  <div id="output"></div>
+
+  <script>
+    const output = document.getElementById('output');
+    const screen = document.getElementById('screen');
+    const ctx = screen.getContext('2d');
+
+    let ws = null;
+
+    function appendLog(type, message) {
+      const line = document.createElement('div');
+      line.className = type;
+      line.textContent = message;
+      output.appendChild(line);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function drawScreen(b64Data) {
+      // b64Data is a base64-encoded 1-bit per pixel framebuffer
+      // Source buffer is 800x480, with 100 bytes per row (800/8 = 100)
+      // We rotate 90 degrees clockwise to display as 480x800
+      const binaryString = atob(b64Data);
+      const srcWidth = 800;
+      const srcHeight = 480;
+      const srcWidthBytes = srcWidth / 8; // 100 bytes per row
+
+      // After 90° clockwise rotation: new width = srcHeight, new height = srcWidth
+      const dstWidth = srcHeight;  // 480
+      const dstHeight = srcWidth;  // 800
+
+      const imageData = ctx.createImageData(dstWidth, dstHeight);
+      const pixels = imageData.data;
+
+      for (let srcY = 0; srcY < srcHeight; srcY++) {
+        for (let xByte = 0; xByte < srcWidthBytes; xByte++) {
+          const byteIndex = srcY * srcWidthBytes + xByte;
+          const byte = binaryString.charCodeAt(byteIndex);
+
+          // Each byte contains 8 pixels (MSB first)
+          for (let bit = 0; bit < 8; bit++) {
+            const srcX = xByte * 8 + bit;
+
+            // 90° clockwise rotation: (srcX, srcY) -> (srcHeight - 1 - srcY, srcX)
+            const dstX = srcHeight - 1 - srcY;
+            const dstY = srcX;
+
+            const pixelIndex = (dstY * dstWidth + dstX) * 4;
+
+            // Bit 1 = white (0xFF), Bit 0 = black (0x00)
+            const isWhite = (byte >> (7 - bit)) & 1;
+            const color = isWhite ? 255 : 0;
+
+            pixels[pixelIndex] = color;     // R
+            pixels[pixelIndex + 1] = color; // G
+            pixels[pixelIndex + 2] = color; // B
+            pixels[pixelIndex + 3] = 255;   // A
+          }
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function connect() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+      appendLog('info', `Connecting to ${wsUrl}...`);
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        appendLog('info', 'Connected');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.data.startsWith('$$DATA:DISPLAY:')) {
+            // Parse the display data: $$DATA:DISPLAY:{"mode":X,"buffer":"..."}$$
+            const jsonStart = msg.data.indexOf('{');
+            const jsonEnd = msg.data.lastIndexOf('}');
+            if (jsonStart !== -1 && jsonEnd !== -1) {
+              const displayData = JSON.parse(msg.data.substring(jsonStart, jsonEnd + 1));
+              drawScreen(displayData.buffer);
+            }
+          } else {
+            appendLog(msg.type, msg.data);
+          }
+        } catch (e) {
+          appendLog('stdout', event.data);
+        }
+      };
+
+      ws.onclose = () => {
+        appendLog('info', 'Disconnected');
+        setTimeout(connect, 3000);
+      };
+    }
+
+    setTimeout(connect, 100);
+  </script>
+</body>
+</html>
