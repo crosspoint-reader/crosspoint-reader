@@ -512,6 +512,11 @@ void EpubReaderActivity::rotateScreen() {
   // We don't want to change orientation mid-render, so grab the semaphore
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
 
+  // If a section is loaded, preserve the current page number
+  if (section) {
+    nextPageNumber = section->currentPage;
+  }
+
   //
   // Cycle to next orientation
   //
