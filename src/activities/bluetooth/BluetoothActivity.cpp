@@ -260,7 +260,7 @@ void BluetoothActivity::onConnected(bool isConnected) {
   intoState(isConnected ? STATE_CONNECTED : STATE_WAITING);
 }
 
-void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
+void BluetoothActivity::onRequest(const lfbt_message* msg, size_t msg_len) {
   if (state == STATE_ERROR) {
     // ignore further messages in error state
     return;
@@ -312,7 +312,7 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
         .txnId = txnId,
         .body = {.serverResponse = {.status = 0}}
       };
-      pResponseChar->setValue((uint8_t*)&response, 8 + sizeof(lfbt_msg_server_response));
+      pResponseChar->setValue(reinterpret_cast<uint8_t*>(&response), 8 + sizeof(lfbt_msg_server_response));
       pResponseChar->indicate();
 
       updateRequired = true;
@@ -329,7 +329,10 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
       PROTOCOL_ASSERT(state == STATE_OFFERED || state == STATE_RECEIVING, "Invalid state for client_chunk: %d", state);
       PROTOCOL_ASSERT(msg->body.clientChunk.offset == receivedBytes, "Expected chunk %zu, got %u", receivedBytes, msg->body.clientChunk.offset);
 
-      size_t written = file.write((uint8_t*)msg->body.clientChunk.body, msg_len - 8 - sizeof(lfbt_msg_client_chunk));
+      size_t written = file.write(
+        reinterpret_cast<const uint8_t*>(msg->body.clientChunk.body),
+        msg_len - 8 - sizeof(lfbt_msg_client_chunk)
+      );
       PROTOCOL_ASSERT(written > 0, "Couldn't write to file");
       receivedBytes += msg_len - 8 - sizeof(lfbt_msg_client_chunk);
       if (receivedBytes >= totalBytes) {
@@ -346,7 +349,7 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
 }
 
 void BluetoothActivity::RequestCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) {
-  lfbt_message *msg = (lfbt_message*) pCharacteristic->getValue().data();
+  const lfbt_message *msg = reinterpret_cast<const lfbt_message*>(pCharacteristic->getValue().data());
   Serial.printf("[%lu] [BT] Received BLE message of type %u, txnId %x, length %d\n",
     millis(),
     msg->type,

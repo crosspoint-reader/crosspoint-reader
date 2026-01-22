@@ -62,7 +62,7 @@ class BluetoothActivity final : public Activity {
   void report();
 
   void onConnected(bool isConnected);
-  void onRequest(lfbt_message *msg, size_t msg_len);
+  void onRequest(const lfbt_message *msg, size_t msg_len);
 
   class ServerCallbacks : public NimBLEServerCallbacks {
     friend class BluetoothActivity;
