@@ -189,8 +189,40 @@ Accessible by pressing **Confirm** while inside a book.
 
 ---
 
-## 6. Current Limitations & Roadmap
+## 6. OPDS Library Integration
+
+The CrossPoint firmware supports integration with OPDS libraries, allowing you to browse and download books directly from remote sources such as Calibre Web or Kavita.
+
+### Calibre Web
+
+To connect to a Calibre Web library:
+
+1. Navigate to **Settings → System → Remote Library**
+2. In the **Server URL** field, enter your Calibre Web server address (e.g., `http://192.168.1.100:8080` or `https://calibre.example.com`)
+3. Leave the **OPDS Path** field empty
+4. Save your settings and return to the Home screen
+5. Access your library through the **Remote Library** option
+
+> [!NOTE]
+> Make sure your Calibre Web server is accessible from your device's network. If using a local IP address, ensure both devices are on the same network.
+
+### Kavita
+
+To connect to a Kavita server:
+
+1. Navigate to **Settings → System → Remote Library**
+2. In the **Server URL** field, enter your Kavita server address (e.g., `http://192.168.1.100:5000` or `https://kavita.example.com`)
+3. In the **OPDS Path** field, enter the [Kavita OPDS endpoint path](https://wiki.kavitareader.com/guides/features/opds/) without the server URL
+   - Example: `/api/opds/...`
+   - The exact path depends on your Kavita configuration and authentication setup
+4. Save your settings and return to the Home screen
+5. Access your library through the **Remote Library** option
+
+---
+
+## 7. Current Limitations & Roadmap
 
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
 * **Images:** Embedded images in e-books will not render.
+
