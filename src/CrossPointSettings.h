@@ -50,8 +50,7 @@ class CrossPointSettings {
   enum SLEEP_TIMEOUT { SLEEP_1_MIN = 0, SLEEP_5_MIN = 1, SLEEP_10_MIN = 2, SLEEP_15_MIN = 3, SLEEP_30_MIN = 4 };
 
   // E-ink refresh frequency (pages between full refreshes)
-  // Note: REFRESH_15 removed; keep explicit values for backward compatibility
-  enum REFRESH_FREQUENCY { REFRESH_1 = 0, REFRESH_5 = 1, REFRESH_10 = 2, REFRESH_30 = 4 };
+  enum REFRESH_FREQUENCY { REFRESH_1 = 0, REFRESH_5 = 1, REFRESH_10 = 2, REFRESH_15 = 3, REFRESH_30 = 4 };
 
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2 };
@@ -83,8 +82,8 @@ class CrossPointSettings {
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes)
   uint8_t sleepTimeout = SLEEP_10_MIN;
-  // E-ink refresh frequency (default 10 pages)
-  uint8_t refreshFrequency = REFRESH_10;
+  // E-ink refresh frequency (default 15 pages)
+  uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
 
   // Reader screen margin settings
