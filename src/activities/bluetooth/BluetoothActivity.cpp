@@ -24,9 +24,22 @@
         }                                                          \
     } while (0)
 
-void BluetoothActivity::taskTrampoline(void* param) {
+void BluetoothActivity::displayTaskTrampoline(void* param) {
   auto* self = static_cast<BluetoothActivity*>(param);
   self->displayTaskLoop();
+}
+
+void BluetoothActivity::reportTaskTrampoline(void* param) {
+  auto* self = static_cast<BluetoothActivity*>(param);
+  self->report();
+  vTaskDelete(nullptr);
+}
+
+void BluetoothActivity::report() {
+  if (state != STATE_DONE) {
+    return;
+  }
+  onFileReceived(OUTPUT_DIRECTORY "/" + filename);
 }
 
 void BluetoothActivity::startAdvertising() {
@@ -65,7 +78,7 @@ void BluetoothActivity::onEnter() {
   state = STATE_INITIALIZING;
   intoState(STATE_WAITING);
 
-  xTaskCreate(&BluetoothActivity::taskTrampoline, "BluetoothTask",
+  xTaskCreate(&BluetoothActivity::displayTaskTrampoline, "BluetoothTask",
               // TODO: figure out how much stack we actually need
               4096,               // Stack size
               this,               // Parameters
@@ -88,6 +101,16 @@ void BluetoothActivity::intoState(State newState) {
     case STATE_OFFERED:
       // caller sets filename, totalBytes, file, txnId
       receivedBytes = 0;
+      break;
+    case STATE_DONE:
+      // we cannot call onFileReceived here directly because it might cause onExit to be called,
+      // which calls NimBLEDevice::deinit, which cannot be called from inside a NimBLE callback.
+      xTaskCreate(&BluetoothActivity::reportTaskTrampoline, "BluetoothReportTask",
+                  2048,               // Stack size
+                  this,               // Parameters
+                  1,                  // Priority,
+                  nullptr
+      );
       break;
     case STATE_ERROR:
     {
@@ -131,7 +154,7 @@ void BluetoothActivity::loop() {
     return;
   }
 
-  if (state == STATE_ERROR) {
+  if (state == STATE_ERROR || state == STATE_DONE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       // restart
       intoState(STATE_WAITING);
@@ -207,7 +230,7 @@ void BluetoothActivity::render() const {
   // Draw help text at bottom
   const auto labels = mappedInput.mapLabels(
     "« Back",
-    (state == STATE_ERROR) ? "Restart" : "",
+    (state == STATE_ERROR || state == STATE_DONE) ? "Restart" : "",
     "",
     ""
   );
@@ -227,8 +250,9 @@ void BluetoothActivity::ServerCallbacks::onDisconnect(NimBLEServer* pServer, Nim
 }
 
 void BluetoothActivity::onConnected(bool isConnected) {
-  if (state == STATE_ERROR) {
-    // stay in error state so the user can read the error message even after disconnect
+  if (state == STATE_ERROR || state == STATE_DONE) {
+    // stay in error state so the user can read the error message even after disconnect.
+    // stay in done state so the user can see the transfer complete message.
     return;
   }
 
@@ -310,7 +334,6 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
       if (receivedBytes >= totalBytes) {
         PROTOCOL_ASSERT(receivedBytes == totalBytes, "Got more bytes than expected: %zu > %zu", receivedBytes, totalBytes);
         PROTOCOL_ASSERT(file.close(), "Couldn't finalize writing the file");
-        // TODO: automatically open file in reader
         intoState(STATE_DONE);
       } else {
         intoState(STATE_RECEIVING);

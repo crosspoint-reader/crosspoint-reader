@@ -26,6 +26,7 @@
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 #define SPI_FQ 40000000
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
@@ -229,7 +230,17 @@ void onGoToFileTransfer() {
 
 void onGoToBluetooth() {
   exitActivity();
-  enterNewActivity(new BluetoothActivity(renderer, mappedInputManager, onGoHome));
+  enterNewActivity(new BluetoothActivity(
+    renderer,
+    mappedInputManager,
+    onGoHome,
+    [](const std::string& filepath) {
+      Serial.printf("[%lu] [   ] File received over Bluetooth: %s\n", millis(), filepath.c_str());
+      if (StringUtils::readableFileExtension(filepath)) {
+        onGoToReader(filepath, MyLibraryActivity::Tab::Recent);
+      }
+    }
+  ));
 }
 
 void onGoToSettings() {

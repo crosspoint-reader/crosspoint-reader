@@ -45,16 +45,21 @@ typedef struct __attribute__((packed)) {
  * BluetoothActivity receives files over a custom BLE protocol and stores them on the SD card.
  * 
  * The onCancel callback is called if the user presses back.
+ * onFileReceived is called when a file is successfully received with the path to the file.
  */
 class BluetoothActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
   const std::function<void()> onCancel;
+  const std::function<void(const std::string&)> onFileReceived;
 
-  static void taskTrampoline(void* param);
+  static void displayTaskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void render() const;
+
+  static void reportTaskTrampoline(void* param);
+  void report();
 
   void onConnected(bool isConnected);
   void onRequest(lfbt_message *msg, size_t msg_len);
@@ -113,8 +118,9 @@ class BluetoothActivity final : public Activity {
 
  public:
   explicit BluetoothActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        const std::function<void()>& onCancel)
-      : Activity("Bluetooth", renderer, mappedInput), onCancel(onCancel),
+                                        const std::function<void()>& onCancel,
+                                        const std::function<void(const std::string&)>& onFileReceived)
+      : Activity("Bluetooth", renderer, mappedInput), onCancel(onCancel), onFileReceived(onFileReceived),
         serverCallbacks(this), requestCallbacks(this) {}
   void onEnter() override;
   void onExit() override;

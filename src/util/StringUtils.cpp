@@ -61,6 +61,11 @@ bool checkFileExtension(const String& fileName, const char* extension) {
   return localFile.endsWith(localExtension);
 }
 
+bool readableFileExtension(const std::string& fileName) {
+  return (StringUtils::checkFileExtension(fileName, ".epub") || StringUtils::checkFileExtension(fileName, ".xtch") ||
+          StringUtils::checkFileExtension(fileName, ".xtc") || StringUtils::checkFileExtension(fileName, ".txt"));
+}
+
 std::pair<std::string, std::string> splitFileName(const std::string& name) {
   size_t lastDot = name.find_last_of('.');
   if (lastDot == std::string::npos) {
