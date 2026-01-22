@@ -22,9 +22,8 @@ bool ReaderActivity::isXtcFile(const std::string& path) {
 }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
-  if (path.length() < 4) return false;
-  std::string ext4 = path.substr(path.length() - 4);
-  return ext4 == ".txt" || ext4 == ".TXT" || ext4 == ".md" || ext4 == ".MD"; // Treat .md as txt files (until we have a markdown reader)
+  return StringUtils::checkFileExtension(path, ".txt") ||
+         StringUtils::checkFileExtension(path, ".md");  // Treat .md as txt files (until we have a markdown reader)
 }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
