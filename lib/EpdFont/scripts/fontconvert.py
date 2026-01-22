@@ -74,6 +74,9 @@ def norm_floor(val):
 def norm_ceil(val):
     return int(math.ceil(val / (1 << 6)))
 
+def norm_round(val):
+    return int(round(val / 64.0))
+
 def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
@@ -188,7 +191,7 @@ for i_start, i_end in intervals:
         glyph = GlyphProps(
             width = bitmap.width,
             height = bitmap.rows,
-            advance_x = norm_floor(face.glyph.advance.x),
+            advance_x = norm_round(face.glyph.advance.x),
             left = face.glyph.bitmap_left,
             top = face.glyph.bitmap_top,
             data_length = len(packed),
@@ -263,8 +266,6 @@ if isBinary:
             # 13 bytes per glyph
             f.write(struct.pack("<BBB b B b B H I", g.width, g.height, g.advance_x, g.left, 0, g.top, 0, g.data_length, g.data_offset))
         
-        # Bitmaps
-        f.write(bytes(glyph_data))
         # Bitmaps
         f.write(bytes(glyph_data))
     print(f"Generated {font_name}.epdfont")

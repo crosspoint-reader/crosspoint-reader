@@ -76,6 +76,7 @@ class GfxRenderer {
 
   // Text
   int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
+  int getTextAdvance(int fontId, const char* text, EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,
                         EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true,

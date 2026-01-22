@@ -8,6 +8,13 @@
 #include <limits>
 #include <vector>
 
+// ASCII Punctuation and symbols that should attach to the previous word
+bool isAttachedPunctuation(const std::string& word) {
+  if (word.empty()) return false;
+  const char c = word[0];
+  return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?' || c == ')' || c == ']' || c == '}';
+}
+
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle) {
@@ -29,11 +36,18 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   const int pageWidth = viewportWidth;
   const int spaceWidth = renderer.getSpaceWidth(fontId);
   const auto wordWidths = calculateWordWidths(renderer, fontId);
-  const auto lineBreakIndices = computeLineBreaks(pageWidth, spaceWidth, wordWidths);
+
+  std::vector<bool> attachToPrevious;
+  attachToPrevious.reserve(words.size());
+  for (const auto& w : words) {
+    attachToPrevious.push_back(isAttachedPunctuation(w));
+  }
+
+  const auto lineBreakIndices = computeLineBreaks(pageWidth, spaceWidth, wordWidths, attachToPrevious);
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
   for (size_t i = 0; i < lineCount; ++i) {
-    extractLine(i, pageWidth, spaceWidth, wordWidths, lineBreakIndices, processLine);
+    extractLine(i, pageWidth, spaceWidth, wordWidths, lineBreakIndices, attachToPrevious, processLine);
   }
 }
 
@@ -53,7 +67,7 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   auto wordStylesIt = wordStyles.begin();
 
   while (wordsIt != words.end()) {
-    wordWidths.push_back(renderer.getTextWidth(fontId, wordsIt->c_str(), *wordStylesIt));
+    wordWidths.push_back(renderer.getTextAdvance(fontId, wordsIt->c_str(), *wordStylesIt));
 
     std::advance(wordsIt, 1);
     std::advance(wordStylesIt, 1);
@@ -63,7 +77,8 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
 }
 
 std::vector<size_t> ParsedText::computeLineBreaks(const int pageWidth, const int spaceWidth,
-                                                  const std::vector<uint16_t>& wordWidths) const {
+                                                  const std::vector<uint16_t>& wordWidths,
+                                                  const std::vector<bool>& attachToPrevious) const {
   const size_t totalWordCount = words.size();
 
   // DP table to store the minimum badness (cost) of lines starting at index i
@@ -81,7 +96,9 @@ std::vector<size_t> ParsedText::computeLineBreaks(const int pageWidth, const int
 
     for (size_t j = i; j < totalWordCount; ++j) {
       // Current line length: previous width + space + current word width
-      currlen += wordWidths[j] + spaceWidth;
+      // Don't add space if the current word attaches to the previous one
+      const int gap = (j > i && attachToPrevious[j]) ? 0 : spaceWidth;
+      currlen += wordWidths[j] + gap;
 
       if (currlen > pageWidth) {
         break;
@@ -143,6 +160,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const int pageWidth, const int
 
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const int spaceWidth,
                              const std::vector<uint16_t>& wordWidths, const std::vector<size_t>& lineBreakIndices,
+                             const std::vector<bool>& attachToPrevious,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
@@ -161,7 +179,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
 
   if (style == TextBlock::JUSTIFIED && !isLastLine && lineWordCount >= 2) {
-    spacing = spareSpace / (lineWordCount - 1);
+    int gaps = 0;
+    for (size_t i = lastBreakAt + 1; i < lineBreak; i++) {
+      if (!attachToPrevious[i]) gaps++;
+    }
+    if (gaps > 0) {
+      spacing = spareSpace / gaps;
+    }
   }
 
   // Calculate initial x position
@@ -175,6 +199,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Pre-calculate X positions for words
   std::list<uint16_t> lineXPos;
   for (size_t i = lastBreakAt; i < lineBreak; i++) {
+    // If this word attaches to previous, remove the spacing added by the previous iteration
+    if (i > lastBreakAt && attachToPrevious[i]) {
+      xpos -= spacing;
+    }
+
     const uint16_t currentWordWidth = wordWidths[i];
     lineXPos.push_back(xpos);
     xpos += currentWordWidth + spacing;

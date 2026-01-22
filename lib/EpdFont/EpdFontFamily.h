@@ -16,6 +16,7 @@ class EpdFontFamily {
       : regular(regular), bold(bold), italic(italic), boldItalic(boldItalic) {}
   ~EpdFontFamily() = default;
   void getTextDimensions(const char* string, int* w, int* h, Style style = EpdFontStyles::REGULAR) const;
+  int getTextAdvance(const char* string, Style style = EpdFontStyles::REGULAR) const;
   bool hasPrintableChars(const char* string, Style style = EpdFontStyles::REGULAR) const;
   const EpdFontData* getData(Style style = EpdFontStyles::REGULAR) const;
   const EpdGlyph* getGlyph(uint32_t cp, Style style = EpdFontStyles::REGULAR) const;

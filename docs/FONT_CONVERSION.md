@@ -34,9 +34,9 @@ For best results, rename your downloaded file to match one of these patterns:
 
 **Note:** If you download a file named just `Aileron.epdfont`, the reader will try to load it, but using the explicit naming convention above ensures the correct style and size are recognized.
 
-## Method 2: Python Script (Legacy)
+## Method 2: Python Script (Improved)
 
-You can also use the included Python script located at `lib/EpdFont/scripts/fontconvert.py`.
+You can also use the included Python script located at `lib/EpdFont/scripts/fontconvert.py`. This script has been recently updated to ensure high-precision metric calculations (fixing issues with spacing and em-dashes).
 
 ### Requirements
 - Python 3

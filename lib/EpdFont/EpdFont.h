@@ -14,6 +14,7 @@ class EpdFont {
 
   void getTextDimensions(const char* string, int* w, int* h,
                          const EpdFontStyles::Style style = EpdFontStyles::REGULAR) const;
+  int getTextAdvance(const char* string, const EpdFontStyles::Style style = EpdFontStyles::REGULAR) const;
   bool hasPrintableChars(const char* string, const EpdFontStyles::Style style = EpdFontStyles::REGULAR) const;
 
   virtual const EpdGlyph* getGlyph(uint32_t cp, const EpdFontStyles::Style style = EpdFontStyles::REGULAR) const;

@@ -80,3 +80,9 @@ The EPUB reader core was modified to improve stability, performance, and memory 
 *   **V0 Format Fix**: Fixed a regression in V0 font loading where the header read was truncated to 32 bytes (instead of 48), restoring support for `LibreBaskerville` and other legacy fonts.
 *   **Flexible Discovery**: Updated `FontManager` to support `Family_Style_Size` (underscore-separated) naming conventions, enabling compatibility with a wider range of auto-generated filenames.
 *   **Documentation**: Rewrote `FONT_CONVERSION.md` to cover both the Python script and the new web converter.
+
+### Update: Typographic Rendering Improvements (2026-01-22)
+
+*   **Precise Character Spacing**: Implemented `getTextAdvance` to use typographic advance widths instead of visual bounding boxes for layout. This fixes clipping issues with characters like em-dashes.
+*   **Punctuation Attachment**: Added logic to `ParsedText` to "attach" punctuation (., ,, ;, etc.) to the preceding word, ensuring no visual gap appears between the word and the punctuation mark, even when line breaking occurs.
+*   **Font Converter Precision**: Updated `lib/EpdFont/scripts/fontconvert.py` to use rounding instead of flooring for advance width calculations and fixed a binary file writing bug, resulting in higher quality generated fonts.

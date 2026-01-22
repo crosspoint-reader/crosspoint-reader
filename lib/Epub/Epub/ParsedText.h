@@ -18,9 +18,10 @@ class ParsedText {
   TextBlock::Style style;
   bool extraParagraphSpacing;
 
-  std::vector<size_t> computeLineBreaks(int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths) const;
+  std::vector<size_t> computeLineBreaks(int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths,
+                                        const std::vector<bool>& attachToPrevious) const;
   void extractLine(size_t breakIndex, int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths,
-                   const std::vector<size_t>& lineBreakIndices,
+                   const std::vector<size_t>& lineBreakIndices, const std::vector<bool>& attachToPrevious,
                    const std::function<void(std::shared_ptr<TextBlock>)>& processLine);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
