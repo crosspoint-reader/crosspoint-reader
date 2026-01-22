@@ -2,7 +2,7 @@
 
 #include <HardwareSerial.h>
 #include <MD5Builder.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <Serialization.h>
 
 // Initialize the static instance
@@ -32,10 +32,10 @@ void KOReaderCredentialStore::obfuscate(std::string& data) const {
 
 bool KOReaderCredentialStore::saveToFile() const {
   // Make sure the directory exists
-  SdMan.mkdir("/.crosspoint");
+  HAL_STORAGE.mkdir("/.crosspoint");
 
   FsFile file;
-  if (!SdMan.openFileForWrite("KRS", KOREADER_FILE, file)) {
+  if (!HAL_STORAGE.openFileForWrite("KRS", KOREADER_FILE, file)) {
     return false;
   }
 
@@ -64,7 +64,7 @@ bool KOReaderCredentialStore::saveToFile() const {
 
 bool KOReaderCredentialStore::loadFromFile() {
   FsFile file;
-  if (!SdMan.openFileForRead("KRS", KOREADER_FILE, file)) {
+  if (!HAL_STORAGE.openFileForRead("KRS", KOREADER_FILE, file)) {
     Serial.printf("[%lu] [KRS] No credentials file found\n", millis());
     return false;
   }

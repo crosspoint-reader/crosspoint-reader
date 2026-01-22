@@ -1,7 +1,7 @@
 #include "RecentBooksStore.h"
 
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <Serialization.h>
 
 #include <algorithm>
@@ -34,10 +34,10 @@ void RecentBooksStore::addBook(const std::string& path) {
 
 bool RecentBooksStore::saveToFile() const {
   // Make sure the directory exists
-  SdMan.mkdir("/.crosspoint");
+  HAL_STORAGE.mkdir("/.crosspoint");
 
   FsFile outputFile;
-  if (!SdMan.openFileForWrite("RBS", RECENT_BOOKS_FILE, outputFile)) {
+  if (!HAL_STORAGE.openFileForWrite("RBS", RECENT_BOOKS_FILE, outputFile)) {
     return false;
   }
 
@@ -56,7 +56,7 @@ bool RecentBooksStore::saveToFile() const {
 
 bool RecentBooksStore::loadFromFile() {
   FsFile inputFile;
-  if (!SdMan.openFileForRead("RBS", RECENT_BOOKS_FILE, inputFile)) {
+  if (!HAL_STORAGE.openFileForRead("RBS", RECENT_BOOKS_FILE, inputFile)) {
     return false;
   }
 

@@ -1,7 +1,7 @@
 #include "ZipFile.h"
 
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <miniz.h>
 
 bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t* outputBuf, const size_t inflatedSize) {
@@ -243,7 +243,7 @@ bool ZipFile::loadZipDetails() {
 }
 
 bool ZipFile::open() {
-  if (!SdMan.openFileForRead("ZIP", filePath, file)) {
+  if (!HAL_STORAGE.openFileForRead("ZIP", filePath, file)) {
     return false;
   }
   return true;

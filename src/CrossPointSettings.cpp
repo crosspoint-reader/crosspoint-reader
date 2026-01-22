@@ -1,7 +1,7 @@
 #include "CrossPointSettings.h"
 
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <Serialization.h>
 
 #include <cstring>
@@ -20,10 +20,10 @@ constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 
 bool CrossPointSettings::saveToFile() const {
   // Make sure the directory exists
-  SdMan.mkdir("/.crosspoint");
+  HAL_STORAGE.mkdir("/.crosspoint");
 
   FsFile outputFile;
-  if (!SdMan.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
+  if (!HAL_STORAGE.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
     return false;
   }
 
@@ -57,7 +57,7 @@ bool CrossPointSettings::saveToFile() const {
 
 bool CrossPointSettings::loadFromFile() {
   FsFile inputFile;
-  if (!SdMan.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
+  if (!HAL_STORAGE.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
     return false;
   }
 

@@ -2,7 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <expat.h>
 
 #include "../Page.h"
@@ -264,7 +264,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   }
 
   FsFile file;
-  if (!SdMan.openFileForRead("EHP", filepath, file)) {
+  if (!HAL_STORAGE.openFileForRead("EHP", filepath, file)) {
     XML_ParserFree(parser);
     return false;
   }
