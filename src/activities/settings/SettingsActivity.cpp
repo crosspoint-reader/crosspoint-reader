@@ -44,7 +44,7 @@ const SettingInfo controlsSettings[controlsSettingsCount] = {
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
     SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"}),
     SettingInfo::Enum("Power Button Hold Duration", &CrossPointSettings::powerButtonHoldDuration,
-                      {"0.4s", "0.6s", "1s", "2s"})};
+                      {"0.5s", "1s", "2s"})};
 constexpr int systemSettingsCount = 5;
 const SettingInfo systemSettings[systemSettingsCount] = {
     SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,

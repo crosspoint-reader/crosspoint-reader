@@ -56,7 +56,7 @@ class CrossPointSettings {
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2 };
 
   // Power button hold duration options
-  enum POWER_BTN_HOLD_DURATION { PB_FAST = 0, PB_NORMAL = 1, PB_SLOW = 2, PB_XSLOW = 3 };
+  enum POWER_BTN_HOLD_DURATION { PB_FAST = 0, PB_NORMAL = 1, PB_SLOW = 2 };
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2 };
@@ -73,7 +73,7 @@ class CrossPointSettings {
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // Power button hold duration
-  uint8_t powerButtonHoldDuration = PB_NORMAL;
+  uint8_t powerButtonHoldDuration = PB_FAST;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
@@ -111,13 +111,11 @@ class CrossPointSettings {
     } else {
       switch (powerButtonHoldDuration) {
         case POWER_BTN_HOLD_DURATION::PB_FAST:
-          return 400;
-        case POWER_BTN_HOLD_DURATION::PB_NORMAL:
         default:
-          return 600;
-        case POWER_BTN_HOLD_DURATION::PB_SLOW:
+          return 500;
+        case POWER_BTN_HOLD_DURATION::PB_NORMAL:
           return 1000;
-        case POWER_BTN_HOLD_DURATION::PB_XSLOW:
+        case POWER_BTN_HOLD_DURATION::PB_SLOW:
           return 2000;
       }
     }
