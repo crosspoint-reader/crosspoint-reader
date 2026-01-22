@@ -188,8 +188,6 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
   renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 - 2, pageWidth - 1, 30);
 
-  // for (int itemIndex = pageStartIndex; itemIndex < totalItems && itemIndex < pageStartIndex + pageItems; itemIndex++)
-  // {
   for (int i = 0; i < pageItems; i++) {
     int itemIndex = pageStartIndex + i;
     if (itemIndex >= totalItems) break;
@@ -206,7 +204,6 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
       const std::string chapterName =
           renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), pageWidth - 40 - indentSize);
 
-      // FIX: Use displayY here instead of recalculating based on tocIndex
       renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
     }
   }
