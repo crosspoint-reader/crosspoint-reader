@@ -11,9 +11,11 @@
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
 namespace {
-constexpr int displaySettingsCount = 6;
+constexpr int displaySettingsCount = 7;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
+    SettingInfo::Enum("Orientation", &CrossPointSettings::orientation,
+                      {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
     SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
@@ -24,7 +26,7 @@ const SettingInfo displaySettings[displaySettingsCount] = {
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"})};
 
-constexpr int readerSettingsCount = 9;
+constexpr int readerSettingsCount = 8;
 const SettingInfo readerSettings[readerSettingsCount] = {
     SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"}),
     SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
@@ -33,8 +35,6 @@ const SettingInfo readerSettings[readerSettingsCount] = {
     SettingInfo::Enum("Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
                       {"Justify", "Left", "Center", "Right"}),
     SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled),
-    SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
-                      {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
     SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
     SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing)};
 
@@ -157,6 +157,7 @@ void SettingsActivity::enterCategory(int categoryIndex) {
   enterNewActivity(new CategorySettingsActivity(renderer, mappedInput, categoryNames[categoryIndex], settingsList,
                                                 settingsCount, [this] {
                                                   exitActivity();
+                                                  updateMargins();  // we may have changed orientation
                                                   updateRequired = true;
                                                 }));
   xSemaphoreGive(renderingMutex);
@@ -178,25 +179,24 @@ void SettingsActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, marginTop, "Settings", true, EpdFontFamily::BOLD);
 
   // Draw selection
-  renderer.fillRect(0, 60 + selectedCategoryIndex * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, contentStartY + selectedCategoryIndex * LINE_HEIGHT - 2, pageWidth - 1, LINE_HEIGHT);
 
   // Draw all categories
   for (int i = 0; i < categoryCount; i++) {
-    const int categoryY = 60 + i * 30;  // 30 pixels between categories
+    const int categoryY = contentStartY + i * LINE_HEIGHT;
 
     // Draw category name
-    renderer.drawText(UI_10_FONT_ID, 20, categoryY, categoryNames[i], i != selectedCategoryIndex);
+    renderer.drawText(UI_10_FONT_ID, marginLeft, categoryY, categoryNames[i], i != selectedCategoryIndex);
   }
 
-  // Draw version text above button hints
-  renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
-                    pageHeight - 60, CROSSPOINT_VERSION);
+  // Draw version text in corner of header
+  renderer.drawText(SMALL_FONT_ID, pageWidth - marginRight - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
+                    marginTop + 5, CROSSPOINT_VERSION);
 
   // Draw help text
   const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");

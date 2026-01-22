@@ -80,7 +80,7 @@ void CalibreSettingsActivity::handleSelection() {
     // OPDS Server URL
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "OPDS Server URL", SETTINGS.opdsServerUrl, 10,
+        renderer, mappedInput, "OPDS Server URL", SETTINGS.opdsServerUrl, 50,
         127,    // maxLength
         false,  // not password
         [this](const std::string& url) {
@@ -98,7 +98,7 @@ void CalibreSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Username", SETTINGS.opdsUsername, 10,
+        renderer, mappedInput, "Username", SETTINGS.opdsUsername, 50,
         63,     // maxLength
         false,  // not password
         [this](const std::string& username) {
@@ -116,7 +116,7 @@ void CalibreSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Password", SETTINGS.opdsPassword, 10,
+        renderer, mappedInput, "Password", SETTINGS.opdsPassword, 50,
         63,     // maxLength
         false,  // not password mode
         [this](const std::string& password) {
@@ -153,20 +153,20 @@ void CalibreSettingsActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "OPDS Browser", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, marginTop, "OPDS Browser", true, EpdFontFamily::BOLD);
 
   // Draw info text about Calibre
-  renderer.drawCenteredText(UI_10_FONT_ID, 40, "For Calibre, add /opds to your URL");
+  renderer.drawCenteredText(UI_10_FONT_ID, marginTop + 25, "For Calibre, add /opds to your URL");
 
   // Draw selection highlight
-  renderer.fillRect(0, 70 + selectedIndex * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, contentStartY + 10 + selectedIndex * LINE_HEIGHT - 2, pageWidth - 1, LINE_HEIGHT);
 
   // Draw menu items
   for (int i = 0; i < MENU_ITEMS; i++) {
-    const int settingY = 70 + i * 30;
+    const int settingY = contentStartY + 10 + i * LINE_HEIGHT;
     const bool isSelected = (i == selectedIndex);
 
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, menuNames[i], !isSelected);
+    renderer.drawText(UI_10_FONT_ID, marginLeft, settingY, menuNames[i], !isSelected);
 
     // Draw status for each setting
     const char* status = "[Not Set]";
@@ -178,7 +178,7 @@ void CalibreSettingsActivity::render() {
       status = (strlen(SETTINGS.opdsPassword) > 0) ? "[Set]" : "[Not Set]";
     }
     const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
+    renderer.drawText(UI_10_FONT_ID, pageWidth - marginRight - width, settingY, status, !isSelected);
   }
 
   // Draw button hints

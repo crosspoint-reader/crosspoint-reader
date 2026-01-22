@@ -34,7 +34,6 @@ class MyLibraryActivity final : public Activity {
   const std::function<void(const std::string& path, Tab fromTab)> onSelectBook;
 
   // Number of items that fit on a page
-  int getPageItems() const;
   int getCurrentItemCount() const;
   int getTotalPages() const;
   int getCurrentPage() const;

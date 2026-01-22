@@ -417,12 +417,13 @@ void drawQRCode(const GfxRenderer& renderer, const int x, const int y, const std
 void CrossPointWebServerActivity::renderServerRunning() const {
   // Use consistent line spacing
   constexpr int LINE_SPACING = 28;  // Space between lines
+  const int screenWidth = renderer.getScreenWidth();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, marginTop, "File Transfer", true, EpdFontFamily::BOLD);
 
   if (isApMode) {
     // AP mode display - center the content block
-    int startY = 55;
+    int startY = marginTop + 35;
 
     renderer.drawCenteredText(UI_10_FONT_ID, startY, "Hotspot Mode", true, EpdFontFamily::BOLD);
 
@@ -435,7 +436,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
                               "or scan QR code with your phone to connect to Wifi.");
     // Show QR code for URL
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
+    drawQRCode(renderer, (screenWidth - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
 
     startY += 6 * 29 + 3 * LINE_SPACING;
     // Show primary URL (hostname)
@@ -449,10 +450,10 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // Show QR code for URL
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "or scan QR code with your phone:");
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 7, hostnameUrl);
+    drawQRCode(renderer, (screenWidth - 6 * 33) / 2, startY + LINE_SPACING * 7, hostnameUrl);
   } else {
     // STA mode display (original behavior)
-    const int startY = 65;
+    const int startY = marginTop + 50;
 
     std::string ssidInfo = "Network: " + connectedSSID;
     if (ssidInfo.length() > 28) {
@@ -474,7 +475,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Open this URL in your browser");
 
     // Show QR code for URL
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
+    drawQRCode(renderer, (screenWidth - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
   }
 
