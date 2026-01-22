@@ -354,8 +354,8 @@ void WifiSelectionActivity::loop() {
         updateRequired = true;
       }
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (forgetPromptSelection == 0) {
-        // User chose "Yes" - forget the network
+      if (forgetPromptSelection == 1) {
+        // User chose "Forget network" - forget the network
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
         WIFI_STORE.removeCredential(selectedSSID);
         xSemaphoreGive(renderingMutex);
@@ -366,7 +366,7 @@ void WifiSelectionActivity::loop() {
           network->hasSavedPassword = false;
         }
       }
-      // Go back to network list
+      // Go back to network list (whether Cancel or Forget network was selected)
       state = WifiSelectionState::NETWORK_LIST;
       updateRequired = true;
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -391,7 +391,7 @@ void WifiSelectionActivity::loop() {
       // If we used saved credentials, offer to forget the network
       if (usedSavedPassword) {
         state = WifiSelectionState::FORGET_PROMPT;
-        forgetPromptSelection = 0;  // Default to "Yes"
+        forgetPromptSelection = 1;  // Default to "No" (Cancel)
       } else {
         // Go back to network list on failure
         state = WifiSelectionState::NETWORK_LIST;
@@ -692,26 +692,28 @@ void WifiSelectionActivity::renderForgetPrompt() const {
 
   renderer.drawCenteredText(UI_10_FONT_ID, top + 40, "Remove saved password?");
 
-  // Draw Yes/No buttons
+  // Draw Cancel/Forget network buttons
   const int buttonY = top + 80;
-  constexpr int buttonWidth = 60;
+  constexpr int buttonWidth = 120;
   constexpr int buttonSpacing = 30;
   constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
   const int startX = (pageWidth - totalWidth) / 2;
 
-  // Draw "Yes" button
+  // Draw "Cancel" button
   if (forgetPromptSelection == 0) {
-    renderer.drawText(UI_10_FONT_ID, startX, buttonY, "[Yes]");
+    renderer.drawText(UI_10_FONT_ID, startX, buttonY, "[Cancel]");
   } else {
-    renderer.drawText(UI_10_FONT_ID, startX + 4, buttonY, "Yes");
+    renderer.drawText(UI_10_FONT_ID, startX + 4, buttonY, "Cancel");
   }
 
-  // Draw "No" button
+  // Draw "Forget network" button
   if (forgetPromptSelection == 1) {
-    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, "[No]");
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, "[Forget network]");
   } else {
-    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, "No");
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, "Forget network");
   }
 
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm");
+  // Use centralized button hints
+  const auto labels = mappedInput.mapLabels("« Back", "Select", "Left", "Right");
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
