@@ -9,9 +9,6 @@
 
 #include "activities/ActivityWithSubactivity.h"
 
-class CrossPointSettings;
-struct SettingInfo;
-
 class SettingsActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;

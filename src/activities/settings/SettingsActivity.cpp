@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 
+#include <algorithm>
+
 #include "CategorySettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -10,51 +12,12 @@
 
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
-namespace {
-constexpr int displaySettingsCount = 6;
-const SettingInfo displaySettings[displaySettingsCount] = {
-    // Should match with SLEEP_SCREEN_MODE
-    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
-    SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
-    SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
-                      {"None", "Contrast", "Inverted"}),
-    SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar,
-                      {"None", "No Progress", "Full w/ Percentage", "Full w/ Progress Bar", "Progress Bar"}),
-    SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"}),
-    SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
-                      {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"})};
-
-constexpr int readerSettingsCount = 9;
-const SettingInfo readerSettings[readerSettingsCount] = {
-    SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"}),
-    SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
-    SettingInfo::Enum("Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}),
-    SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
-    SettingInfo::Enum("Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
-                      {"Justify", "Left", "Center", "Right"}),
-    SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled),
-    SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
-                      {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
-    SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
-    SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing)};
-
-constexpr int controlsSettingsCount = 4;
-const SettingInfo controlsSettings[controlsSettingsCount] = {
-    SettingInfo::Enum(
-        "Front Button Layout", &CrossPointSettings::frontButtonLayout,
-        {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght", "Bck, Cnfrm, Rght, Lft"}),
-    SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
-                      {"Prev, Next", "Next, Prev"}),
-    SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
-    SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
-
-constexpr int systemSettingsCount = 5;
-const SettingInfo systemSettings[systemSettingsCount] = {
-    SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
-                      {"1 min", "5 min", "10 min", "15 min", "30 min"}),
-    SettingInfo::Action("KOReader Sync"), SettingInfo::Action("OPDS Browser"), SettingInfo::Action("Clear Cache"),
-    SettingInfo::Action("Check for updates")};
-}  // namespace
+// Helper function to find descriptor by member pointer
+static const SettingDescriptor* findDescriptor(uint8_t CrossPointSettings::* memberPtr) {
+  auto it = std::find_if(CrossPointSettings::descriptors.begin(), CrossPointSettings::descriptors.end(),
+                         [memberPtr](const SettingDescriptor& desc) { return desc.memberPtr == memberPtr; });
+  return (it != CrossPointSettings::descriptors.end()) ? &(*it) : nullptr;
+}
 
 void SettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<SettingsActivity*>(param);
@@ -125,37 +88,51 @@ void SettingsActivity::loop() {
 }
 
 void SettingsActivity::enterCategory(int categoryIndex) {
-  if (categoryIndex < 0 || categoryIndex >= categoryCount) {
-    return;
+  std::vector<const SettingDescriptor*> descriptors;
+  std::vector<ActionItem> actionItems;
+
+  switch (categoryIndex) {
+    case 0:  // Display
+      descriptors.push_back(findDescriptor(&CrossPointSettings::sleepScreen));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::sleepScreenCoverMode));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::sleepScreenCoverFilter));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::statusBar));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::hideBatteryPercentage));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::refreshFrequency));
+      break;
+
+    case 1:  // Reader
+      descriptors.push_back(findDescriptor(&CrossPointSettings::fontFamily));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::fontSize));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::lineSpacing));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::screenMargin));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::paragraphAlignment));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::hyphenationEnabled));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::orientation));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::extraParagraphSpacing));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::textAntiAliasing));
+      break;
+
+    case 2:  // Controls
+      descriptors.push_back(findDescriptor(&CrossPointSettings::frontButtonLayout));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::sideButtonLayout));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::longPressChapterSkip));
+      descriptors.push_back(findDescriptor(&CrossPointSettings::shortPwrBtn));
+      break;
+
+    case 3:  // System
+      descriptors.push_back(findDescriptor(&CrossPointSettings::sleepTimeout));
+      actionItems.push_back({"KOReader Sync", ActionItem::Type::KOREADER_SYNC});
+      actionItems.push_back({"Calibre Settings", ActionItem::Type::CALIBRE_SETTINGS});
+      actionItems.push_back({"Clear Cache", ActionItem::Type::CLEAR_CACHE});
+      actionItems.push_back({"Check for updates", ActionItem::Type::CHECK_UPDATES});
+      break;
   }
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   exitActivity();
-
-  const SettingInfo* settingsList = nullptr;
-  int settingsCount = 0;
-
-  switch (categoryIndex) {
-    case 0:  // Display
-      settingsList = displaySettings;
-      settingsCount = displaySettingsCount;
-      break;
-    case 1:  // Reader
-      settingsList = readerSettings;
-      settingsCount = readerSettingsCount;
-      break;
-    case 2:  // Controls
-      settingsList = controlsSettings;
-      settingsCount = controlsSettingsCount;
-      break;
-    case 3:  // System
-      settingsList = systemSettings;
-      settingsCount = systemSettingsCount;
-      break;
-  }
-
-  enterNewActivity(new CategorySettingsActivity(renderer, mappedInput, categoryNames[categoryIndex], settingsList,
-                                                settingsCount, [this] {
+  enterNewActivity(new CategorySettingsActivity(renderer, mappedInput, categoryNames[categoryIndex], descriptors,
+                                                actionItems, [this] {
                                                   exitActivity();
                                                   updateRequired = true;
                                                 }));
