@@ -44,27 +44,29 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
 
 ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& renderer, const char* message, const int y,
                                                           const int minWidth, const int minHeight) {
+  constexpr int margin = 15;
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
-  constexpr int margin = 16;
-  const int contentWidth = textWidth > minWidth ? textWidth : minWidth;
-  const int x = (renderer.getScreenWidth() - contentWidth - margin * 2) / 2;
-  const int w = contentWidth + margin * 2;
+  const int contentWidth = std::max(textWidth, minWidth);
   const int contentHeight = renderer.getLineHeight(UI_12_FONT_ID) + margin * 2;
-  const int h = contentHeight >= minHeight ? contentHeight : minHeight;
+  const int w = contentWidth + margin * 2 + 50;
+  // const int x = (renderer.getScreenWidth() - w) / 2;
+  const int x = renderer.getScreenWidth() - w - margin;
+  const int h = std::max(contentHeight, minHeight);
   renderer.fillRect(x - 2, y - 2, w + 4, h + 4, true);
   renderer.fillRect(x + 2, y + 2, w - 4, h - 4, false);
 
   const int textX = x + margin + (contentWidth - textWidth) / 2;
-  renderer.drawText(UI_12_FONT_ID, textX, y + margin, message, true, EpdFontFamily::BOLD);
+  // renderer.drawText(UI_12_FONT_ID, textX, y + margin + 4, message, true, EpdFontFamily::BOLD);
+  renderer.drawText(NOTOSANS_18_FONT_ID, textX, y + margin + 4, message, true, EpdFontFamily::BOLD);
   renderer.displayBuffer();
   return {x, y, w, h};
 }
 
 void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const PopupLayout& layout, const int progress) {
-  const int barWidth = POPUP_DEFAULT_MIN_WIDTH;
-  const int barHeight = POPUP_DEFAULT_BAR_HEIGHT;
+  constexpr int barWidth = POPUP_DEFAULT_MIN_WIDTH;
+  constexpr int barHeight = POPUP_DEFAULT_BAR_HEIGHT;
   const int barX = layout.x + (layout.width - barWidth) / 2;
-  const int barY = layout.y + layout.height - 16;  // 16 pixels above bottom of popup
+  const int barY = layout.y + layout.height - 15;
 
   int fillWidth = barWidth * progress / 100;
   if (fillWidth < 0) {
@@ -73,9 +75,8 @@ void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const Popu
     fillWidth = barWidth;
   }
 
-  if (fillWidth > 2) {
-    renderer.fillRect(barX + 1, barY + 1, fillWidth - 2, barHeight - 2, true);
-  }
+  renderer.fillRect(barX, barY, fillWidth, barHeight, true);
+
   renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
 }
 

@@ -13,9 +13,9 @@ struct TabInfo {
 
 class ScreenComponents {
  public:
-  static constexpr int POPUP_DEFAULT_MIN_HEIGHT = 72;
-  static constexpr int POPUP_DEFAULT_BAR_HEIGHT = 6;
   static constexpr int POPUP_DEFAULT_MIN_WIDTH = 200;
+  static constexpr int POPUP_DEFAULT_MIN_HEIGHT = 72;
+  static constexpr int POPUP_DEFAULT_BAR_HEIGHT = 4;
 
   struct PopupLayout {
     int x;
@@ -26,7 +26,7 @@ class ScreenComponents {
 
   static void drawBattery(const GfxRenderer& renderer, int left, int top, bool showPercentage = true);
 
-  static PopupLayout drawPopup(const GfxRenderer& renderer, const char* message, int y = 117,
+  static PopupLayout drawPopup(const GfxRenderer& renderer, const char* message, int y = 125,
                                int minWidth = POPUP_DEFAULT_MIN_WIDTH, int minHeight = POPUP_DEFAULT_MIN_HEIGHT);
 
   static void fillPopupProgress(const GfxRenderer& renderer, const PopupLayout& layout, int progress);

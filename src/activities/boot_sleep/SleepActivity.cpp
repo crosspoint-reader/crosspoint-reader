@@ -11,9 +11,12 @@
 #include "fontIds.h"
 #include "images/CrossLarge.h"
 #include "util/StringUtils.h"
+#include "ScreenComponents.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
+
+  ScreenComponents::drawPopup(renderer, "Entering Sleep...");
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();

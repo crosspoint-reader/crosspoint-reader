@@ -332,6 +332,9 @@ void setup() {
 
   setupDisplayAndFonts();
 
+  exitActivity();
+  enterNewActivity(new BootActivity(renderer, mappedInputManager));
+
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
