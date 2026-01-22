@@ -173,8 +173,8 @@ void RemoteLibrarySettingsActivity::render() {
     renderer.drawText(UI_10_FONT_ID, 20, settingY, menuNames[i], !isSelected);
 
     // Draw status for URL setting
-    if (i == 0) {
-      const char* status = (strlen(SETTINGS.opdsServerUrl) > 0) ? "[Set]" : "[Not Set]";
+    if (i == 0 || i == 1) {
+      const char* status = (strlen(i == 0 ? SETTINGS.opdsServerUrl : SETTINGS.opdsPath) > 0) ? "[Set]" : "[Not Set]";
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
       renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
     }
