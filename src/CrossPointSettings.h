@@ -116,9 +116,9 @@ class CrossPointSettings {
         default:
           return 600;
         case POWER_BTN_HOLD_DURATION::PB_SLOW:
-          return 800;
-        case POWER_BTN_HOLD_DURATION::PB_XSLOW:
           return 1000;
+        case POWER_BTN_HOLD_DURATION::PB_XSLOW:
+          return 2000;
       }
     }
   }
