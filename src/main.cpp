@@ -230,17 +230,12 @@ void onGoToFileTransfer() {
 
 void onGoToBluetooth() {
   exitActivity();
-  enterNewActivity(new BluetoothActivity(
-    renderer,
-    mappedInputManager,
-    onGoHome,
-    [](const std::string& filepath) {
-      Serial.printf("[%lu] [   ] File received over Bluetooth: %s\n", millis(), filepath.c_str());
-      if (StringUtils::readableFileExtension(filepath)) {
-        onGoToReader(filepath, MyLibraryActivity::Tab::Recent);
-      }
+  enterNewActivity(new BluetoothActivity(renderer, mappedInputManager, onGoHome, [](const std::string& filepath) {
+    Serial.printf("[%lu] [   ] File received over Bluetooth: %s\n", millis(), filepath.c_str());
+    if (StringUtils::readableFileExtension(filepath)) {
+      onGoToReader(filepath, MyLibraryActivity::Tab::Recent);
     }
-  ));
+  }));
 }
 
 void onGoToSettings() {

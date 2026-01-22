@@ -6,23 +6,22 @@
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
-#define DEVICE_NAME         "EPaper"
-#define SERVICE_UUID        "4ae29d01-499a-480a-8c41-a82192105125"
-#define REQUEST_CHARACTERISTIC_UUID  "a00e530d-b48b-48c8-aadb-d062a1b91792"
+#define DEVICE_NAME "EPaper"
+#define SERVICE_UUID "4ae29d01-499a-480a-8c41-a82192105125"
+#define REQUEST_CHARACTERISTIC_UUID "a00e530d-b48b-48c8-aadb-d062a1b91792"
 #define RESPONSE_CHARACTERISTIC_UUID "0c656023-dee6-47c5-9afb-e601dfbdaa1d"
 
 #define OUTPUT_DIRECTORY "/bt"
 #define MAX_FILENAME_LENGTH 200
 
-#define PROTOCOL_ASSERT(cond, fmt, ...)                            \
-    do {                                                           \
-        if (!(cond))                                               \
-        {                                                          \
-            snprintf(errorMessage, sizeof(errorMessage), fmt, ##__VA_ARGS__); \
-            intoState(STATE_ERROR);                                \
-            return;                                                \
-        }                                                          \
-    } while (0)
+#define PROTOCOL_ASSERT(cond, fmt, ...)                                 \
+  do {                                                                  \
+    if (!(cond)) {                                                      \
+      snprintf(errorMessage, sizeof(errorMessage), fmt, ##__VA_ARGS__); \
+      intoState(STATE_ERROR);                                           \
+      return;                                                           \
+    }                                                                   \
+  } while (0)
 
 void BluetoothActivity::displayTaskTrampoline(void* param) {
   auto* self = static_cast<BluetoothActivity*>(param);
@@ -42,33 +41,24 @@ void BluetoothActivity::report() {
   onFileReceived(OUTPUT_DIRECTORY "/" + filename);
 }
 
-void BluetoothActivity::startAdvertising() {
-  NimBLEDevice::startAdvertising();
-}
+void BluetoothActivity::startAdvertising() { NimBLEDevice::startAdvertising(); }
 
-void BluetoothActivity::stopAdvertising() {
-  NimBLEDevice::stopAdvertising();
-}
+void BluetoothActivity::stopAdvertising() { NimBLEDevice::stopAdvertising(); }
 
 void BluetoothActivity::onEnter() {
   Activity::onEnter();
 
   NimBLEDevice::init(DEVICE_NAME);
-  NimBLEServer *pServer = NimBLEDevice::createServer();
+  NimBLEServer* pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(&serverCallbacks, false);
-  NimBLEService *pService = pServer->createService(SERVICE_UUID);
-  NimBLECharacteristic *pRequestChar = pService->createCharacteristic(
-    REQUEST_CHARACTERISTIC_UUID,
-    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
-  );
+  NimBLEService* pService = pServer->createService(SERVICE_UUID);
+  NimBLECharacteristic* pRequestChar =
+      pService->createCharacteristic(REQUEST_CHARACTERISTIC_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
   pRequestChar->setCallbacks(&requestCallbacks);
-  pResponseChar = pService->createCharacteristic(
-    RESPONSE_CHARACTERISTIC_UUID,
-    NIMBLE_PROPERTY::INDICATE
-  );
+  pResponseChar = pService->createCharacteristic(RESPONSE_CHARACTERISTIC_UUID, NIMBLE_PROPERTY::INDICATE);
   pService->start();
 
-  NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+  NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
   pAdvertising->setName(DEVICE_NAME);
   pAdvertising->addServiceUUID(pService->getUUID());
   pAdvertising->enableScanResponse(true);
@@ -106,14 +96,12 @@ void BluetoothActivity::intoState(State newState) {
       // we cannot call onFileReceived here directly because it might cause onExit to be called,
       // which calls NimBLEDevice::deinit, which cannot be called from inside a NimBLE callback.
       xTaskCreate(&BluetoothActivity::reportTaskTrampoline, "BluetoothReportTask",
-                  2048,               // Stack size
-                  this,               // Parameters
-                  1,                  // Priority,
-                  nullptr
-      );
+                  2048,  // Stack size
+                  this,  // Parameters
+                  1,     // Priority,
+                  nullptr);
       break;
-    case STATE_ERROR:
-    {
+    case STATE_ERROR: {
       // caller sets errorMessage
       file.close();
       NimBLEServer* pServer = NimBLEDevice::getServer();
@@ -229,12 +217,8 @@ void BluetoothActivity::render() const {
   }
 
   // Draw help text at bottom
-  const auto labels = mappedInput.mapLabels(
-    "« Back",
-    (state == STATE_ERROR || state == STATE_DONE) ? "Restart" : "",
-    "",
-    ""
-  );
+  const auto labels =
+      mappedInput.mapLabels("« Back", (state == STATE_ERROR || state == STATE_DONE) ? "Restart" : "", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
@@ -266,23 +250,24 @@ void BluetoothActivity::onRequest(const lfbt_message* msg, size_t msg_len) {
     return;
   }
 
-  PROTOCOL_ASSERT((txnId == 0) || (txnId == msg->txnId), "Multiple transfers happening at once (%x != %x)", txnId, msg->txnId);
+  PROTOCOL_ASSERT((txnId == 0) || (txnId == msg->txnId), "Multiple transfers happening at once (%x != %x)", txnId,
+                  msg->txnId);
 
   switch (msg->type) {
-    case 0: // client_offer
+    case 0:  // client_offer
     {
       PROTOCOL_ASSERT(state == STATE_CONNECTED, "Invalid state for client_offer: %d", state);
-      PROTOCOL_ASSERT(msg->body.clientOffer.version == 1, "Unsupported protocol version: %u", msg->body.clientOffer.version);
+      PROTOCOL_ASSERT(msg->body.clientOffer.version == 1, "Unsupported protocol version: %u",
+                      msg->body.clientOffer.version);
 
       totalBytes = msg->body.clientOffer.bodyLength;
-      
-      size_t filenameLength = msg_len - 8 - sizeof(lfbt_msg_client_offer);
-      std::string originalFilename = StringUtils::sanitizeFilename(
-        std::string(msg->body.clientOffer.name, filenameLength),
-        MAX_FILENAME_LENGTH
-      );
 
-      PROTOCOL_ASSERT(SdMan.ensureDirectoryExists(OUTPUT_DIRECTORY), "Couldn't create output directory %s", OUTPUT_DIRECTORY);
+      size_t filenameLength = msg_len - 8 - sizeof(lfbt_msg_client_offer);
+      std::string originalFilename =
+          StringUtils::sanitizeFilename(std::string(msg->body.clientOffer.name, filenameLength), MAX_FILENAME_LENGTH);
+
+      PROTOCOL_ASSERT(SdMan.ensureDirectoryExists(OUTPUT_DIRECTORY), "Couldn't create output directory %s",
+                      OUTPUT_DIRECTORY);
 
       // generate unique filepath
       auto splitName = StringUtils::splitFileName(originalFilename);
@@ -300,43 +285,39 @@ void BluetoothActivity::onRequest(const lfbt_message* msg, size_t msg_len) {
         filepath = OUTPUT_DIRECTORY "/" + filename;
       }
 
-      PROTOCOL_ASSERT(SdMan.openFileForWrite("BT", filepath, file), "Couldn't open file %s for writing", filepath.c_str());
-      // TODO: would be neat to check if we have enough space, but SDCardManager doesn't seem to expose that info currently
+      PROTOCOL_ASSERT(SdMan.openFileForWrite("BT", filepath, file), "Couldn't open file %s for writing",
+                      filepath.c_str());
+      // TODO: would be neat to check if we have enough space, but SDCardManager doesn't seem to expose that info
+      // currently
 
       txnId = msg->txnId;
 
       intoState(STATE_OFFERED);
 
-      lfbt_message response = {
-        .type = 1, // server_response
-        .txnId = txnId,
-        .body = {.serverResponse = {.status = 0}}
-      };
+      lfbt_message response = {.type = 1,  // server_response
+                               .txnId = txnId,
+                               .body = {.serverResponse = {.status = 0}}};
       pResponseChar->setValue(reinterpret_cast<uint8_t*>(&response), 8 + sizeof(lfbt_msg_server_response));
       pResponseChar->indicate();
 
       updateRequired = true;
       break;
     }
-    case 2: // client_chunk
+    case 2:  // client_chunk
     {
-      Serial.printf(
-        "[%lu] [BT] Received client_chunk, offset %u, length %zu\n",
-        millis(),
-        msg->body.clientChunk.offset,
-        msg_len - 8 - sizeof(lfbt_msg_client_chunk)
-      );
+      Serial.printf("[%lu] [BT] Received client_chunk, offset %u, length %zu\n", millis(), msg->body.clientChunk.offset,
+                    msg_len - 8 - sizeof(lfbt_msg_client_chunk));
       PROTOCOL_ASSERT(state == STATE_OFFERED || state == STATE_RECEIVING, "Invalid state for client_chunk: %d", state);
-      PROTOCOL_ASSERT(msg->body.clientChunk.offset == receivedBytes, "Expected chunk %zu, got %u", receivedBytes, msg->body.clientChunk.offset);
+      PROTOCOL_ASSERT(msg->body.clientChunk.offset == receivedBytes, "Expected chunk %zu, got %u", receivedBytes,
+                      msg->body.clientChunk.offset);
 
-      size_t written = file.write(
-        reinterpret_cast<const uint8_t*>(msg->body.clientChunk.body),
-        msg_len - 8 - sizeof(lfbt_msg_client_chunk)
-      );
+      size_t written = file.write(reinterpret_cast<const uint8_t*>(msg->body.clientChunk.body),
+                                  msg_len - 8 - sizeof(lfbt_msg_client_chunk));
       PROTOCOL_ASSERT(written > 0, "Couldn't write to file");
       receivedBytes += msg_len - 8 - sizeof(lfbt_msg_client_chunk);
       if (receivedBytes >= totalBytes) {
-        PROTOCOL_ASSERT(receivedBytes == totalBytes, "Got more bytes than expected: %zu > %zu", receivedBytes, totalBytes);
+        PROTOCOL_ASSERT(receivedBytes == totalBytes, "Got more bytes than expected: %zu > %zu", receivedBytes,
+                        totalBytes);
         PROTOCOL_ASSERT(file.close(), "Couldn't finalize writing the file");
         intoState(STATE_DONE);
       } else {
@@ -349,12 +330,8 @@ void BluetoothActivity::onRequest(const lfbt_message* msg, size_t msg_len) {
 }
 
 void BluetoothActivity::RequestCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) {
-  const lfbt_message *msg = reinterpret_cast<const lfbt_message*>(pCharacteristic->getValue().data());
-  Serial.printf("[%lu] [BT] Received BLE message of type %u, txnId %x, length %d\n",
-    millis(),
-    msg->type,
-    msg->txnId,
-    pCharacteristic->getValue().length()
-  );
+  const lfbt_message* msg = reinterpret_cast<const lfbt_message*>(pCharacteristic->getValue().data());
+  Serial.printf("[%lu] [BT] Received BLE message of type %u, txnId %x, length %d\n", millis(), msg->type, msg->txnId,
+                pCharacteristic->getValue().length());
   activity->onRequest(msg, pCharacteristic->getValue().length());
 }
