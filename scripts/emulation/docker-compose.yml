@@ -1,0 +1,33 @@
+services:
+  crosspoint-emulator:
+    build: .
+    container_name: crosspoint-emulator
+    volumes:
+      - ../..:/app:ro
+    tmpfs:
+      - /tmp
+    ports:
+      - "8080:80"
+    stdin_open: true
+    tty: true
+    stop_signal: SIGKILL
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        set -x;
+        source /root/esp/esp-idf/export.sh
+
+        cd /tmp
+
+        cp /app/.pio/build/emulation/*.bin .
+        dd if=/dev/zero bs=1M count=16 of=./flash.bin
+        dd if="bootloader.bin" bs=1 count=$(stat -c%s "bootloader.bin") seek=0 conv=notrunc of=./flash.bin
+        dd if="partitions.bin" bs=1 count=$(stat -c%s "partitions.bin") seek=$((16#8000)) conv=notrunc of=./flash.bin
+        dd if="firmware.bin" bs=1 count=$(stat -c%s "firmware.bin") seek=$((16#10000)) conv=notrunc of=./flash.bin
+
+        qemu-system-riscv32 \
+            -nographic \
+            -M esp32c3 \
+            -drive \
+            file=flash.bin,if=mtd,format=raw

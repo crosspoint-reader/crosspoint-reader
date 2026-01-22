@@ -278,7 +278,7 @@ void setupDisplayAndFonts() {
 
 bool isUsbConnected() {
   // U0RXD/GPIO20 reads HIGH when USB is connected
-  return digitalRead(UART0_RXD) == HIGH;
+  return CROSSPOINT_EMULATED || digitalRead(UART0_RXD) == HIGH;
 }
 
 bool isWakeupAfterFlashing() {
