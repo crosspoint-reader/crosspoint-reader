@@ -1,4 +1,4 @@
-#include "CalibreSettingsActivity.h"
+#include "RemoteLibrarySettingsActivity.h"
 
 #include <GfxRenderer.h>
 #include <WiFi.h>
@@ -14,22 +14,22 @@
 
 namespace {
 constexpr int MENU_ITEMS = 3;
-const char* menuNames[MENU_ITEMS] = {"Server URL", "OPDS Path", "Connect as Wireless Device"};
+const char* menuNames[MENU_ITEMS] = {"Server URL", "OPDS Path", "Connect Calibre as Wireless Device"};
 }  // namespace
 
-void CalibreSettingsActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<CalibreSettingsActivity*>(param);
+void RemoteLibrarySettingsActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<RemoteLibrarySettingsActivity*>(param);
   self->displayTaskLoop();
 }
 
-void CalibreSettingsActivity::onEnter() {
+void RemoteLibrarySettingsActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   renderingMutex = xSemaphoreCreateMutex();
   selectedIndex = 0;
   updateRequired = true;
 
-  xTaskCreate(&CalibreSettingsActivity::taskTrampoline, "CalibreSettingsTask",
+  xTaskCreate(&RemoteLibrarySettingsActivity::taskTrampoline, "RemoteLibrarySettingsTask",
               4096,               // Stack size
               this,               // Parameters
               1,                  // Priority
@@ -37,7 +37,7 @@ void CalibreSettingsActivity::onEnter() {
   );
 }
 
-void CalibreSettingsActivity::onExit() {
+void RemoteLibrarySettingsActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -49,7 +49,7 @@ void CalibreSettingsActivity::onExit() {
   renderingMutex = nullptr;
 }
 
-void CalibreSettingsActivity::loop() {
+void RemoteLibrarySettingsActivity::loop() {
   if (subActivity) {
     subActivity->loop();
     return;
@@ -76,7 +76,7 @@ void CalibreSettingsActivity::loop() {
   }
 }
 
-void CalibreSettingsActivity::handleSelection() {
+void RemoteLibrarySettingsActivity::handleSelection() {
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
 
   if (selectedIndex == 0) {
@@ -142,7 +142,7 @@ void CalibreSettingsActivity::handleSelection() {
   xSemaphoreGive(renderingMutex);
 }
 
-void CalibreSettingsActivity::displayTaskLoop() {
+void RemoteLibrarySettingsActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired && !subActivity) {
       updateRequired = false;
@@ -154,7 +154,7 @@ void CalibreSettingsActivity::displayTaskLoop() {
   }
 }
 
-void CalibreSettingsActivity::render() {
+void RemoteLibrarySettingsActivity::render() {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

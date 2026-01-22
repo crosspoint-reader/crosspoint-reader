@@ -8,14 +8,14 @@
 #include "activities/ActivityWithSubactivity.h"
 
 /**
- * Submenu for Calibre settings.
- * Shows Calibre Web URL and Calibre Wireless Device options.
+ * Submenu for RemoteLibrary settings.
+ * Shows RemoteLibrary Web URL and Calibre Wireless Device options.
  */
-class CalibreSettingsActivity final : public ActivityWithSubactivity {
+class RemoteLibrarySettingsActivity final : public ActivityWithSubactivity {
  public:
-  explicit CalibreSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+  explicit RemoteLibrarySettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                    const std::function<void()>& onBack)
-      : ActivityWithSubactivity("CalibreSettings", renderer, mappedInput), onBack(onBack) {}
+      : ActivityWithSubactivity("RemoteLibrarySettings", renderer, mappedInput), onBack(onBack) {}
 
   void onEnter() override;
   void onExit() override;

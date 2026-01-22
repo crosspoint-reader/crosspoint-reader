@@ -5,7 +5,7 @@
 
 #include <cstring>
 
-#include "CalibreSettingsActivity.h"
+#include "RemoteLibrarySettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "KOReaderSettingsActivity.h"
@@ -106,7 +106,7 @@ void CategorySettingsActivity::toggleCurrentSetting() {
     } else if (strcmp(setting.name, "Remote Library") == 0) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
-      enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
+      enterNewActivity(new RemoteLibrarySettingsActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
