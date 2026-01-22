@@ -1,8 +1,8 @@
 #pragma once
 #include <Print.h>
 
-#include <vector>
 #include <algorithm>
+#include <vector>
 
 #include "Epub.h"
 #include "expat.h"

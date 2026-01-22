@@ -57,8 +57,8 @@ class BookMetadataCache {
 
   // Index for fast href→spineIndex lookup (used only for large EPUBs)
   struct SpineHrefIndexEntry {
-    uint64_t hrefHash;    // FNV-1a 64-bit hash
-    uint16_t hrefLen;     // length for collision reduction
+    uint64_t hrefHash;  // FNV-1a 64-bit hash
+    uint16_t hrefLen;   // length for collision reduction
     int16_t spineIndex;
   };
   std::vector<SpineHrefIndexEntry> spineHrefIndex;

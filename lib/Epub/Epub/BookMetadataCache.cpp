@@ -61,9 +61,9 @@ bool BookMetadataCache::beginTocPass() {
       spineHrefIndex.push_back(idx);
     }
     std::sort(spineHrefIndex.begin(), spineHrefIndex.end(),
-      [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
-        return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
-      });
+              [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
+                return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
+              });
     spineFile.seek(0);
     useSpineHrefIndex = true;
     Serial.printf("[%lu] [BMC] Using fast index for %d spine items\n", millis(), spineCount);
@@ -176,9 +176,46 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
   // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
   // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
-  // Instead, we let loadFileStatSlim() do individual lookups per spine item.
-  // This is O(n*m) instead of O(n) for lookups, but avoids memory exhaustion.
+  // Instead, for large books we use a one-pass batch lookup that scans the ZIP
+  // central directory once and matches against spine targets using hash comparison.
+  // This is O(n*log(m)) instead of O(n*m) while avoiding memory exhaustion.
   // See: https://github.com/crosspoint-reader/crosspoint-reader/issues/134
+
+  std::vector<uint32_t> spineSizes;
+  bool useBatchSizes = false;
+
+  if (spineCount >= LARGE_SPINE_THRESHOLD) {
+    Serial.printf("[%lu] [BMC] Using batch size lookup for %d spine items\n", millis(), spineCount);
+
+    std::vector<ZipFile::SizeTarget> targets;
+    targets.reserve(spineCount);
+
+    spineFile.seek(0);
+    for (int i = 0; i < spineCount; i++) {
+      auto entry = readSpineEntry(spineFile);
+      std::string path = FsHelpers::normalisePath(entry.href);
+
+      ZipFile::SizeTarget t;
+      t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
+      t.len = static_cast<uint16_t>(path.size());
+      t.index = static_cast<uint16_t>(i);
+      targets.push_back(t);
+    }
+
+    std::sort(targets.begin(), targets.end(), [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
+      return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+    });
+
+    spineSizes.resize(spineCount, 0);
+    int matched = zip.fillUncompressedSizes(targets, spineSizes);
+    Serial.printf("[%lu] [BMC] Batch lookup matched %d/%d spine items\n", millis(), matched, spineCount);
+
+    targets.clear();
+    targets.shrink_to_fit();
+
+    useBatchSizes = true;
+  }
+
   uint32_t cumSize = 0;
   spineFile.seek(0);
   int lastSpineTocIndex = -1;
@@ -197,15 +234,24 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     }
     lastSpineTocIndex = spineEntry.tocIndex;
 
-    // Calculate size for cumulative size
     size_t itemSize = 0;
-    const std::string path = FsHelpers::normalisePath(spineEntry.href);
-    if (zip.getInflatedFileSize(path.c_str(), &itemSize)) {
-      cumSize += itemSize;
-      spineEntry.cumulativeSize = cumSize;
+    if (useBatchSizes) {
+      itemSize = spineSizes[i];
+      if (itemSize == 0) {
+        const std::string path = FsHelpers::normalisePath(spineEntry.href);
+        if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
+          Serial.printf("[%lu] [BMC] Warning: Could not get size for spine item: %s\n", millis(), path.c_str());
+        }
+      }
     } else {
-      Serial.printf("[%lu] [BMC] Warning: Could not get size for spine item: %s\n", millis(), path.c_str());
+      const std::string path = FsHelpers::normalisePath(spineEntry.href);
+      if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
+        Serial.printf("[%lu] [BMC] Warning: Could not get size for spine item: %s\n", millis(), path.c_str());
+      }
     }
+
+    cumSize += itemSize;
+    spineEntry.cumulativeSize = cumSize;
 
     // Write out spine data to book.bin
     writeSpineEntry(bookFile, spineEntry);
@@ -282,11 +328,11 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
     uint64_t targetHash = fnvHash64(href);
     uint16_t targetLen = static_cast<uint16_t>(href.size());
 
-    auto it = std::lower_bound(spineHrefIndex.begin(), spineHrefIndex.end(),
-      SpineHrefIndexEntry{targetHash, targetLen, 0},
-      [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
-        return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
-      });
+    auto it =
+        std::lower_bound(spineHrefIndex.begin(), spineHrefIndex.end(), SpineHrefIndexEntry{targetHash, targetLen, 0},
+                         [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
+                           return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
+                         });
 
     while (it != spineHrefIndex.end() && it->hrefHash == targetHash && it->hrefLen == targetLen) {
       spineIndex = it->spineIndex;

@@ -132,13 +132,12 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
           "[%lu] [COF] Couldn't open temp items file for reading. This is probably going to be a fatal error.\n",
           millis());
     }
-    
+
     // Sort item index for binary search if we have enough items
     if (self->itemIndex.size() >= LARGE_SPINE_THRESHOLD) {
-      std::sort(self->itemIndex.begin(), self->itemIndex.end(),
-        [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-          return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
-        });
+      std::sort(self->itemIndex.begin(), self->itemIndex.end(), [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
+        return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
+      });
       self->useItemIndex = true;
       Serial.printf("[%lu] [COF] Using fast index for %zu manifest items\n", millis(), self->itemIndex.size());
     }
@@ -246,10 +245,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
             uint16_t targetLen = static_cast<uint16_t>(idref.size());
 
             auto it = std::lower_bound(self->itemIndex.begin(), self->itemIndex.end(),
-              ItemIndexEntry{targetHash, targetLen, 0},
-              [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-                return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
-              });
+                                       ItemIndexEntry{targetHash, targetLen, 0},
+                                       [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
+                                         return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
+                                       });
 
             // Check for match (may need to check a few due to hash collisions)
             while (it != self->itemIndex.end() && it->idHash == targetHash) {
