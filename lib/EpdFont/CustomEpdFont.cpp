@@ -237,6 +237,10 @@ const EpdGlyph* CustomEpdFont::getGlyph(uint32_t cp, const EpdFontStyles::Style 
         currentCp = 32;               // Space
         triedFallback = true;
         continue;
+      } else if (currentCp == 0x2013 || currentCp == 0x2014) {  // En/Em dash
+        currentCp = 0x002D;                                     // Hyphen-Minus
+        triedFallback = true;
+        continue;
       }
     }
 
