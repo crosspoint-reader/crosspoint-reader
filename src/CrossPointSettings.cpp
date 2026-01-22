@@ -121,13 +121,13 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, hyphenationEnabled);
     if (++settingsRead >= fileSettingsCount) break;
-    if (++settingsRead >= fileSettingsCount) break;
     {
       std::string urlPath;
       serialization::readString(inputFile, urlPath);
       strncpy(opdsPath, urlPath.c_str(), sizeof(opdsPath) - 1);
       opdsPath[sizeof(opdsPath) - 1] = '\0';
     }
+    if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
   inputFile.close();
