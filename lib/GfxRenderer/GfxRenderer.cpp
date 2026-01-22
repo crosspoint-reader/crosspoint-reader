@@ -201,15 +201,16 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     if (screenY >= getScreenHeight()) {
       break;
     }
-    if (screenY < 0) {
-      continue;
-    }
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
       free(outputRow);
       free(rowBytes);
       return;
+    }
+
+    if (screenY < 0) {
+      continue;
     }
 
     if (bmpY < cropPixY) {

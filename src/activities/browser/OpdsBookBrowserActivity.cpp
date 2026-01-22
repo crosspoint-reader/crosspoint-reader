@@ -1,7 +1,9 @@
 #include "OpdsBookBrowserActivity.h"
 
+#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <OpdsStream.h>
 #include <WiFi.h>
 
 #include "CrossPointSettings.h"
@@ -264,23 +266,27 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   std::string url = UrlUtils::buildUrl(serverUrl, path);
   Serial.printf("[%lu] [OPDS] Fetching: %s\n", millis(), url.c_str());
 
-  std::string content;
-  if (!HttpDownloader::fetchUrl(url, content)) {
-    state = BrowserState::ERROR;
-    errorMessage = "Failed to fetch feed";
-    updateRequired = true;
-    return;
+  OpdsParser parser;
+
+  {
+    OpdsParserStream stream{parser};
+    if (!HttpDownloader::fetchUrl(url, stream)) {
+      state = BrowserState::ERROR;
+      errorMessage = "Failed to fetch feed";
+      updateRequired = true;
+      return;
+    }
   }
 
-  OpdsParser parser;
-  if (!parser.parse(content.c_str(), content.size())) {
+  if (!parser) {
     state = BrowserState::ERROR;
     errorMessage = "Failed to parse feed";
     updateRequired = true;
     return;
   }
 
-  entries = parser.getEntries();
+  entries = std::move(parser).getEntries();
+  Serial.printf("[%lu] [OPDS] Found %d entries\n", millis(), entries.size());
   selectorIndex = 0;
 
   if (entries.empty()) {
@@ -355,6 +361,12 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   if (result == HttpDownloader::OK) {
     Serial.printf("[%lu] [OPDS] Download complete: %s\n", millis(), filename.c_str());
+
+    // Invalidate any existing cache for this file to prevent stale metadata issues
+    Epub epub(filename, "/.crosspoint");
+    epub.clearCache();
+    Serial.printf("[%lu] [OPDS] Cleared cache for: %s\n", millis(), filename.c_str());
+
     state = BrowserState::BROWSING;
     updateRequired = true;
   } else {

@@ -49,6 +49,18 @@ bool checkFileExtension(const std::string& fileName, const char* extension) {
   return true;
 }
 
+bool checkFileExtension(const String& fileName, const char* extension) {
+  if (fileName.length() < strlen(extension)) {
+    return false;
+  }
+
+  String localFile(fileName);
+  String localExtension(extension);
+  localFile.toLowerCase();
+  localExtension.toLowerCase();
+  return localFile.endsWith(localExtension);
+}
+
 size_t utf8RemoveLastChar(std::string& str) {
   if (str.empty()) return 0;
   size_t pos = str.size() - 1;

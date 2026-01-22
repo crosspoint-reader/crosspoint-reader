@@ -14,6 +14,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
 #include "fontIds.h"
 
@@ -41,9 +42,10 @@ void XtcReaderActivity::onEnter() {
   // Load saved progress
   loadProgress();
 
-  // Save current XTC as last opened book
+  // Save current XTC as last opened book and add to recent books
   APP_STATE.openEpubPath = xtc->getPath();
   APP_STATE.saveToFile();
+  RECENT_BOOKS.addBook(xtc->getPath());
 
   // Trigger first update
   updateRequired = true;
