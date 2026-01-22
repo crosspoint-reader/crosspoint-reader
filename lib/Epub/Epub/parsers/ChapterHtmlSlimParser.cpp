@@ -83,7 +83,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (atts != nullptr) {
       for (int i = 0; atts[i]; i += 2) {
         if (strcmp(atts[i], "alt") == 0) {
-          alt = "[Image: " + std::string(atts[i + 1]) + "]";
+          // add " " (counts as whitespace) at the end of alt
+          //  so the corresponding text block ends.
+          // TODO: A zero-width breaking space would be more appropriate (once/if we support it)
+          alt = "[Image: " + std::string(atts[i + 1]) + "] ";
         }
       }
       Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
@@ -92,7 +95,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
       self->depth += 1;
       self->characterData(userData, alt.c_str(), alt.length());
-
+      return;
     } else {
       // Skip for now
       self->skipUntilDepth = self->depth;
