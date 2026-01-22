@@ -54,10 +54,10 @@ void BluetoothActivity::onEnter() {
   Activity::onEnter();
 
   NimBLEDevice::init(DEVICE_NAME);
-  pServer = NimBLEDevice::createServer();
+  NimBLEServer *pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(&serverCallbacks, false);
-  pService = pServer->createService(SERVICE_UUID);
-  pRequestChar = pService->createCharacteristic(
+  NimBLEService *pService = pServer->createService(SERVICE_UUID);
+  NimBLECharacteristic *pRequestChar = pService->createCharacteristic(
     REQUEST_CHARACTERISTIC_UUID,
     NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
@@ -116,7 +116,8 @@ void BluetoothActivity::intoState(State newState) {
     {
       // caller sets errorMessage
       file.close();
-      if (pServer->getConnectedCount() > 0) {
+      NimBLEServer* pServer = NimBLEDevice::getServer();
+      if (pServer != nullptr && pServer->getConnectedCount() > 0) {
         // TODO: send back a response over BLE?
         pServer->disconnect(pServer->getPeerInfo(0));
       }
@@ -299,7 +300,7 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
         filepath = OUTPUT_DIRECTORY "/" + filename;
       }
 
-      PROTOCOL_ASSERT(SdMan.openFileForWrite("BT", filepath, file), "Couldn't open file %s for writing", filepath);
+      PROTOCOL_ASSERT(SdMan.openFileForWrite("BT", filepath, file), "Couldn't open file %s for writing", filepath.c_str());
       // TODO: would be neat to check if we have enough space, but SDCardManager doesn't seem to expose that info currently
 
       txnId = msg->txnId;
@@ -326,7 +327,7 @@ void BluetoothActivity::onRequest(lfbt_message* msg, size_t msg_len) {
         msg_len - 8 - sizeof(lfbt_msg_client_chunk)
       );
       PROTOCOL_ASSERT(state == STATE_OFFERED || state == STATE_RECEIVING, "Invalid state for client_chunk: %d", state);
-      PROTOCOL_ASSERT(msg->body.clientChunk.offset == receivedBytes, "Expected chunk %d, got %d", receivedBytes, msg->body.clientChunk.offset);
+      PROTOCOL_ASSERT(msg->body.clientChunk.offset == receivedBytes, "Expected chunk %zu, got %u", receivedBytes, msg->body.clientChunk.offset);
 
       size_t written = file.write((uint8_t*)msg->body.clientChunk.body, msg_len - 8 - sizeof(lfbt_msg_client_chunk));
       PROTOCOL_ASSERT(written > 0, "Couldn't write to file");

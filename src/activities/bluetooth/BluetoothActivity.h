@@ -89,10 +89,7 @@ class BluetoothActivity final : public Activity {
 
   RequestCallbacks requestCallbacks;
 
-  NimBLEServer *pServer;
-  NimBLEService *pService;
-  NimBLECharacteristic *pRequestChar, *pResponseChar;
-  NimBLEAdvertising *pAdvertising;
+  NimBLECharacteristic *pResponseChar = nullptr;
   void startAdvertising();
   void stopAdvertising();
 
@@ -111,8 +108,8 @@ class BluetoothActivity final : public Activity {
   FsFile file;
   size_t receivedBytes = 0;
   size_t totalBytes = 0; 
-  char errorMessage[256];
-  uint32_t txnId;
+  char errorMessage[256] = {};
+  uint32_t txnId = 0;
 
   void intoState(State newState);
 
