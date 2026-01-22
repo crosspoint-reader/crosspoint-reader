@@ -17,6 +17,7 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
+constexpr unsigned long rotateScreenMs = 1000;
 constexpr int statusBarMargin = 19;
 }  // namespace
 
@@ -116,8 +117,14 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Long press CONFIRM (1s+) rotates the screen
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= rotateScreenMs) {
+    rotateScreen();
+    return;
+  }
+
   // Enter chapter selection activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < rotateScreenMs) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     const int currentPage = section ? section->currentPage : 0;
@@ -499,4 +506,44 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
                       titleMarginLeftAdjusted + orientedMarginLeft + (availableTitleSpace - titleWidth) / 2, textY,
                       title.c_str());
   }
+}
+
+void EpubReaderActivity::rotateScreen() {
+  // We don't want to change orientation mid-render, so grab the semaphore
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+
+  //
+  // Cycle to next orientation
+  //
+  uint8_t newOrientation = (SETTINGS.orientation + 1) % 4;
+  SETTINGS.orientation = newOrientation;
+  SETTINGS.saveToFile();
+
+  //
+  // Apply orientation to renderer
+  //
+  switch (SETTINGS.orientation) {
+    case CrossPointSettings::ORIENTATION::PORTRAIT:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
+      break;
+    case CrossPointSettings::ORIENTATION::INVERTED:
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+      break;
+    default:
+      break;
+  }
+
+  //
+  // Force a redraw
+  //
+  section.reset();
+  updateRequired = true;
+
+  xSemaphoreGive(renderingMutex);
 }
