@@ -1,6 +1,19 @@
 #include "BluetoothManager.h"
 #include "BLEKeyboardHandler.h"
+
+// Platform-specific includes
+#ifdef ARDUINO
 #include <Arduino.h>
+#include "CrossPointSettings.h"
+#else
+// For static analysis, provide minimal declarations
+extern "C" {
+  unsigned long millis();
+  int ESP_getFreeHeap();
+  void Serial_printf(const char* format, ...);
+}
+#define Serial Serial_printf
+#endif
 
 // Static instance definition
 BluetoothManager BluetoothManager::instance;
@@ -167,7 +180,7 @@ bool BluetoothManager::createServer() {
     pServer->setCallbacks(new ServerCallbacks());
     
     // Initialize keyboard handler if enabled
-    if (SETTINGS.bluetoothKeyboardEnabled == CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::ENABLED) {
+    if (SETTINGS.bluetoothKeyboardEnabled == CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::KBD_ENABLED) {
       pKeyboardHandler = new BLEKeyboardHandler();
       if (!pKeyboardHandler->initialize(pServer)) {
         Serial.printf("[%lu] [BLE] Failed to initialize keyboard handler\n", millis());

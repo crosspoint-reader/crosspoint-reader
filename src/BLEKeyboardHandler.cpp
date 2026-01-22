@@ -1,6 +1,18 @@
 #include "BLEKeyboardHandler.h"
+
+// Platform-specific includes
+#ifdef ARDUINO
 #include "Arduino.h"
 #include "MappedInputManager.h"
+#else
+// For static analysis, provide minimal declarations
+extern "C" {
+  unsigned long millis();
+  int ESP_getFreeHeap();
+  void Serial_printf(const char* format, ...);
+}
+#define Serial Serial_printf
+#endif
 
 // Static instance definition
 BLEKeyboardHandler BLEKeyboardHandler::instance;
@@ -16,23 +28,20 @@ bool BLEKeyboardHandler::initialize(NimBLEServer* server) {
   try {
     pServer = server;
     
-    // Create HID device
-    pHidDevice = new NimBLEHIDDevice(pServer);
-    
-    // Setup HID descriptor
-    if (!setupHidDescriptor()) {
-      Serial.printf("[%lu] [KBD] Failed to setup HID descriptor\n", millis());
-      delete pHidDevice;
-      pHidDevice = nullptr;
+    // Create custom keyboard service
+    pService = pServer->createService("12345678-1234-1234-1234-123456789abc");
+    if (!pService) {
+      Serial.printf("[%lu] [KBD] Failed to create service\n", millis());
       return false;
     }
     
-    // Get input characteristic
-    pInputCharacteristic = pHidDevice->inputReport();
+    // Create input characteristic
+    pInputCharacteristic = pService->createCharacteristic(
+      "87654321-4321-4321-4321-cba987654321",
+      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY
+    );
     if (!pInputCharacteristic) {
-      Serial.printf("[%lu] [KBD] Failed to get input characteristic\n", millis());
-      delete pHidDevice;
-      pHidDevice = nullptr;
+      Serial.printf("[%lu] [KBD] Failed to create input characteristic\n", millis());
       return false;
     }
     

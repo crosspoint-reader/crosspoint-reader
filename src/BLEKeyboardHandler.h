@@ -5,9 +5,11 @@
 
 // Forward declarations for conditional compilation
 #ifdef CONFIG_BT_ENABLED
-#include <NimBLEHIDDevice.h>
 #include <NimBLEServer.h>
-#include <NimBLEHID.h>
+#include <NimBLECharacteristic.h>
+#include <NimBLEService.h>
+#include <NimBLEHIDDevice.h>
+#include <HIDKeyboardTypes.h>
 #endif
 
 /**
@@ -33,10 +35,10 @@ private:
   uint32_t lastActivityTime = 0;
   
 #ifdef CONFIG_BT_ENABLED
-  // BLE HID components (only allocated when needed)
-  NimBLEHIDDevice* pHidDevice = nullptr;
-  NimBLECharacteristic* pInputCharacteristic = nullptr;
+  // BLE components (only allocated when needed)
   NimBLEServer* pServer = nullptr;
+  NimBLEService* pService = nullptr;
+  NimBLECharacteristic* pInputCharacteristic = nullptr;
   
   // Keyboard report buffer (minimal size for our needs)
   uint8_t keyboardReport[8] = {0};
@@ -58,7 +60,7 @@ public:
   static BLEKeyboardHandler& getInstance() { return instance; }
   
   /**
-   * Initialize BLE HID Keyboard service
+   * Initialize BLE Keyboard service
    * @param server Pointer to existing BLE server
    * @return true if initialization successful
    */
@@ -131,9 +133,9 @@ private:
    */
   class KeyboardCallbacks : public NimBLECharacteristicCallbacks {
   public:
-    void onWrite(NimBLECharacteristic* pCharacteristic) override;
-    void onSubscribe(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override;
-    void onUnsubscribe(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override;
+    void onWrite(NimBLECharacteristic* pCharacteristic);
+    void onSubscribe(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc);
+    void onUnsubscribe(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc);
   };
 #endif
 };

@@ -166,7 +166,7 @@ void SettingsActivity::enterCategory(int categoryIndex) {
         }
       }
     } else if (strcmp(setting.name, "Bluetooth Keyboard") == 0) {
-      if (newValue == CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::ENABLED) {
+      if (newValue == CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::KBD_ENABLED) {
         // Enable keyboard requires Bluetooth to be on
         if (!BLUETOOTH_MANAGER.isInitialized()) {
           // Force Bluetooth on first
@@ -174,7 +174,7 @@ void SettingsActivity::enterCategory(int categoryIndex) {
           if (!BLUETOOTH_MANAGER.initialize()) {
             // Failed, revert both to OFF
             SETTINGS.bluetoothEnabled = CrossPointSettings::BLUETOOTH_MODE::OFF;
-            SETTINGS.*(setting.valuePtr) = CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::DISABLED;
+            SETTINGS.*(setting.valuePtr) = CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::KBD_DISABLED;
           }
         }
         
