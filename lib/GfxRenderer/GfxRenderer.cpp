@@ -83,12 +83,6 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
   drawText(fontId, x, y, text, black, style);
 }
 
-void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black, const int x,
-                                   const int width, const EpdFontFamily::Style style) const {
-  const int text_x = x + (width - getTextWidth(fontId, text, style)) / 2;
-  drawText(fontId, text_x, y, text, black, style);
-}
-
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
   const int yPos = y + getFontAscenderSize(fontId);

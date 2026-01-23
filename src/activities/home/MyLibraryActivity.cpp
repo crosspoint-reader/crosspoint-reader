@@ -491,8 +491,10 @@ void MyLibraryActivity::renderRecentAsBookCoverList() const {
     } else {
       // Draw a placeholder if no cover
       renderer.drawRect(LEFT_MARGIN, y, coverWidth, itemHeight - 10);
-      renderer.drawCenteredText(UI_10_FONT_ID, y + (itemHeight - 10) / 2 - 10, "No cover", false,
-                                LEFT_MARGIN, coverWidth);
+      const char* noCoverText = "No cover";
+      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, noCoverText);
+      const int textX = LEFT_MARGIN + (coverWidth - textWidth) / 2;
+      renderer.drawText(UI_10_FONT_ID, textX, y + (itemHeight - 10) / 2 - 10, noCoverText, false);
     }
 
     // --- Draw text ---
@@ -577,7 +579,10 @@ void MyLibraryActivity::renderRecentAsBookCoverGrid() const {
     } else {
       // Draw a placeholder if no cover
       renderer.drawRect(x, y, itemWidth, itemHeight);
-      renderer.drawCenteredText(UI_10_FONT_ID, y + itemHeight / 2 - 10, "No cover", false, x, itemWidth);
+      const char* noCoverText = "No cover";
+      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, noCoverText);
+      const int textX = x + (itemWidth - textWidth) / 2;
+      renderer.drawText(UI_10_FONT_ID, textX, y + itemHeight / 2 - 10, noCoverText, false);
     }
 
     // --- Draw selection highlight ---
