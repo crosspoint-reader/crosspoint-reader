@@ -2,7 +2,7 @@
 #include <HalDisplay.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <InputManager.h>
+#include <HalInput.h>
 #include <HalStorage.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
@@ -184,8 +184,7 @@ void verifyWakeupLongPress() {
   if (abort) {
     // Button released too early. Returning to sleep.
     // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-    esp_deep_sleep_start();
+    inputManager.setupGpioWakeup();
   }
 }
 
@@ -208,11 +207,7 @@ void enterDeepSleep() {
   einkDisplay.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
-  waitForPowerRelease();
-  // Enter Deep Sleep
-  esp_deep_sleep_start();
+  inputManager.setupGpioWakeup();
 }
 
 void onGoHome();
