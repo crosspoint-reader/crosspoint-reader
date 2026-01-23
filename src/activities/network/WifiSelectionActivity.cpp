@@ -677,7 +677,7 @@ void WifiSelectionActivity::renderConnectionFailed() const {
 
   renderer.drawCenteredText(UI_12_FONT_ID, top - 20, "Connection Failed", true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(UI_10_FONT_ID, top + 20, connectionError.c_str());
-  
+
   // Use centralized button hints
   const auto labels = mappedInput.mapLabels("« Back", "Continue", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
