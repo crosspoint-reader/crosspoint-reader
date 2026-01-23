@@ -48,6 +48,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, hideBatteryPercentage);
   serialization::writePod(outputFile, longPressChapterSkip);
+  serialization::writePod(outputFile, hyphenationEnabled);
   // New fields added at end for backward compatibility
   serialization::writeString(outputFile, std::string(opdsUsername));
   serialization::writeString(outputFile, std::string(opdsPassword));
@@ -119,6 +120,8 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, hideBatteryPercentage);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, longPressChapterSkip);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, hyphenationEnabled);
     if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
     {
