@@ -23,8 +23,10 @@ class ClearCacheActivity final : public ActivityWithSubactivity {
 
   State state = WARNING;
   TaskHandle_t displayTaskHandle = nullptr;
+  TaskHandle_t clearCacheTaskHandle = nullptr;  // Track clearCache task
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
+  bool isExiting = false;  // Flag to prevent new operations during exit
   const std::function<void()> goBack;
 
   int clearedCount = 0;

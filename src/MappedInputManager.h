@@ -15,6 +15,7 @@ class MappedInputManager {
 
   explicit MappedInputManager(InputManager& inputManager) : inputManager(inputManager) {}
 
+  void update();  // Update button state (call before wasPressed/wasReleased)
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;

@@ -2,13 +2,14 @@
 
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
-
-#include <cstring>
+#include <I18n.h>
 
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "FontSelectActivity.h"
 #include "KOReaderSettingsActivity.h"
+#include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "fontIds.h"
@@ -51,7 +52,11 @@ void CategorySettingsActivity::loop() {
   // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     toggleCurrentSetting();
-    updateRequired = true;
+    // Only update if we didn't enter a subactivity
+    // If we entered a subactivity, it will handle its own rendering
+    if (!subActivity) {
+      updateRequired = true;
+    }
     return;
   }
 
@@ -95,38 +100,45 @@ void CategorySettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    if (strcmp(setting.name, "KOReader Sync") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
+    // 创建新的 Activity 但不持有 mutex
+    // 注意：不能在持有 mutex 的情况下调用 enterNewActivity
+    // 因为新 Activity 的 onEnter 会创建自己的任务，可能导致 FreeRTOS 冲突
+
+    if (setting.nameId == StrId::KOREADER_SYNC) {
       enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "Calibre Settings") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
+    } else if (setting.nameId == StrId::CALIBRE_SETTINGS) {
       enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "Clear Cache") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
+    } else if (setting.nameId == StrId::CLEAR_READING_CACHE) {
       enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "Check for updates") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
+    } else if (setting.nameId == StrId::CHECK_UPDATES) {
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
-      xSemaphoreGive(renderingMutex);
+    } else if (setting.nameId == StrId::EXT_UI_FONT) {
+      enterNewActivity(new FontSelectActivity(renderer, mappedInput, FontSelectActivity::SelectMode::UI, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+    } else if (setting.nameId == StrId::EXT_READER_FONT) {
+      enterNewActivity(new FontSelectActivity(renderer, mappedInput, FontSelectActivity::SelectMode::Reader, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+    } else if (setting.nameId == StrId::LANGUAGE) {
+      enterNewActivity(new LanguageSelectActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
     }
   } else {
     return;
@@ -137,6 +149,8 @@ void CategorySettingsActivity::toggleCurrentSetting() {
 
 void CategorySettingsActivity::displayTaskLoop() {
   while (true) {
+    // CRITICAL: Check both updateRequired AND subActivity atomically
+    // This prevents race condition where parent and child render simultaneously
     if (updateRequired && !subActivity) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -163,17 +177,17 @@ void CategorySettingsActivity::render() const {
     const int settingY = 60 + i * 30;  // 30 pixels between settings
     const bool isSelected = (i == selectedSettingIndex);
 
-    // Draw setting name
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, !isSelected);
+    // Draw setting name (translated)
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, I18N.get(settingsList[i].nameId), !isSelected);
 
     // Draw value based on setting type
     std::string valueText;
     if (settingsList[i].type == SettingType::TOGGLE && settingsList[i].valuePtr != nullptr) {
       const bool value = SETTINGS.*(settingsList[i].valuePtr);
-      valueText = value ? "ON" : "OFF";
+      valueText = value ? TR(ON) : TR(OFF);
     } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
       const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
-      valueText = settingsList[i].enumValues[value];
+      valueText = I18N.get(settingsList[i].enumValues[value]);
     } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
       valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
     }
@@ -186,7 +200,7 @@ void CategorySettingsActivity::render() const {
   renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
                     pageHeight - 60, CROSSPOINT_VERSION);
 
-  const auto labels = mappedInput.mapLabels("« Back", "Toggle", "", "");
+  const auto labels = mappedInput.mapLabels(TR(BACK), TR(TOGGLE), "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

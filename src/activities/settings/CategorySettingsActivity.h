@@ -2,6 +2,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <I18n.h>
 
 #include <functional>
 #include <string>
@@ -14,10 +15,10 @@ class CrossPointSettings;
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE };
 
 struct SettingInfo {
-  const char* name;
+  StrId nameId;
   SettingType type;
   uint8_t CrossPointSettings::* valuePtr;
-  std::vector<std::string> enumValues;
+  std::vector<StrId> enumValues;
 
   struct ValueRange {
     uint8_t min;
@@ -26,18 +27,18 @@ struct SettingInfo {
   };
   ValueRange valueRange;
 
-  static SettingInfo Toggle(const char* name, uint8_t CrossPointSettings::* ptr) {
-    return {name, SettingType::TOGGLE, ptr};
+  static SettingInfo Toggle(StrId nameId, uint8_t CrossPointSettings::* ptr) {
+    return {nameId, SettingType::TOGGLE, ptr};
   }
 
-  static SettingInfo Enum(const char* name, uint8_t CrossPointSettings::* ptr, std::vector<std::string> values) {
-    return {name, SettingType::ENUM, ptr, std::move(values)};
+  static SettingInfo Enum(StrId nameId, uint8_t CrossPointSettings::* ptr, std::vector<StrId> values) {
+    return {nameId, SettingType::ENUM, ptr, std::move(values)};
   }
 
-  static SettingInfo Action(const char* name) { return {name, SettingType::ACTION, nullptr}; }
+  static SettingInfo Action(StrId nameId) { return {nameId, SettingType::ACTION, nullptr}; }
 
-  static SettingInfo Value(const char* name, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange) {
-    return {name, SettingType::VALUE, ptr, {}, valueRange};
+  static SettingInfo Value(StrId nameId, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange) {
+    return {nameId, SettingType::VALUE, ptr, {}, valueRange};
   }
 };
 

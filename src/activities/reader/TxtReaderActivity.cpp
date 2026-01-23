@@ -1,6 +1,7 @@
 #include "TxtReaderActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
 #include <Utf8.h>
@@ -206,7 +207,7 @@ void TxtReaderActivity::buildPageIndex() {
 
   // Draw initial progress box
   renderer.fillRect(boxX, boxY, boxWidth, boxHeight, false);
-  renderer.drawText(UI_12_FONT_ID, boxX + boxMargin, boxY + boxMargin, "Indexing...");
+  renderer.drawText(UI_12_FONT_ID, boxX + boxMargin, boxY + boxMargin, TR(INDEXING));
   renderer.drawRect(boxX + 5, boxY + 5, boxWidth - 10, boxHeight - 10);
   renderer.drawRect(barX, barY, barWidth, barHeight);
   renderer.displayBuffer();
@@ -384,14 +385,14 @@ void TxtReaderActivity::renderScreen() {
   // Initialize reader if not done
   if (!initialized) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Indexing...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(INDEXING), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     initializeReader();
   }
 
   if (pageOffsets.empty()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty file", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(EMPTY_FILE), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }

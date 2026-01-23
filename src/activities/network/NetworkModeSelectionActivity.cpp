@@ -1,15 +1,13 @@
 #include "NetworkModeSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
 namespace {
 constexpr int MENU_ITEM_COUNT = 2;
-const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Create Hotspot"};
-const char* MENU_DESCRIPTIONS[MENU_ITEM_COUNT] = {"Connect to an existing WiFi network",
-                                                  "Create a WiFi network others can join"};
 }  // namespace
 
 void NetworkModeSelectionActivity::taskTrampoline(void* param) {
@@ -97,10 +95,15 @@ void NetworkModeSelectionActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(FILE_TRANSFER), true, EpdFontFamily::BOLD);
 
   // Draw subtitle
-  renderer.drawCenteredText(UI_10_FONT_ID, 50, "How would you like to connect?");
+  renderer.drawCenteredText(UI_10_FONT_ID, 50, TR(HOW_CONNECT));
+
+  // Menu items and descriptions
+  const char* menuItems[] = {TR(JOIN_NETWORK), TR(CREATE_HOTSPOT)};
+  const char* menuDescs[] = {TR(JOIN_DESC), TR(HOTSPOT_DESC)};
+  constexpr int MENU_ITEM_COUNT = 2;
 
   // Draw menu items centered on screen
   constexpr int itemHeight = 50;  // Height for each menu item (including description)
@@ -117,12 +120,12 @@ void NetworkModeSelectionActivity::render() const {
 
     // Draw text: black=false (white text) when selected (on black background)
     //            black=true (black text) when not selected (on white background)
-    renderer.drawText(UI_10_FONT_ID, 30, itemY, MENU_ITEMS[i], /*black=*/!isSelected);
-    renderer.drawText(SMALL_FONT_ID, 30, itemY + 22, MENU_DESCRIPTIONS[i], /*black=*/!isSelected);
+    renderer.drawText(UI_10_FONT_ID, 30, itemY, menuItems[i], /*black=*/!isSelected);
+    renderer.drawText(SMALL_FONT_ID, 30, itemY + 22, menuDescs[i], /*black=*/!isSelected);
   }
 
   // Draw help text at bottom
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
+  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

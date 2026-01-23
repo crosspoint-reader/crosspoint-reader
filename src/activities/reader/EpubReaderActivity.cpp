@@ -3,6 +3,7 @@
 #include <Epub/Page.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <SDCardManager.h>
 
 #include "CrossPointSettings.h"
@@ -258,7 +259,7 @@ void EpubReaderActivity::renderScreen() {
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "End of book", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(END_OF_BOOK), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
@@ -303,7 +304,7 @@ void EpubReaderActivity::renderScreen() {
       // Always show "Indexing..." text first
       {
         renderer.fillRect(boxXNoBar, boxY, boxWidthNoBar, boxHeightNoBar, false);
-        renderer.drawText(UI_12_FONT_ID, boxXNoBar + boxMargin, boxY + boxMargin, "Indexing...");
+        renderer.drawText(UI_12_FONT_ID, boxXNoBar + boxMargin, boxY + boxMargin, TR(INDEXING));
         renderer.drawRect(boxXNoBar + 5, boxY + 5, boxWidthNoBar - 10, boxHeightNoBar - 10);
         renderer.displayBuffer();
         pagesUntilFullRefresh = 0;
@@ -312,7 +313,7 @@ void EpubReaderActivity::renderScreen() {
       // Setup callback - only called for chapters >= 50KB, redraws with progress bar
       auto progressSetup = [this, boxXWithBar, boxWidthWithBar, boxHeightWithBar, barX, barY] {
         renderer.fillRect(boxXWithBar, boxY, boxWidthWithBar, boxHeightWithBar, false);
-        renderer.drawText(UI_12_FONT_ID, boxXWithBar + boxMargin, boxY + boxMargin, "Indexing...");
+        renderer.drawText(UI_12_FONT_ID, boxXWithBar + boxMargin, boxY + boxMargin, TR(INDEXING));
         renderer.drawRect(boxXWithBar + 5, boxY + 5, boxWidthWithBar - 10, boxHeightWithBar - 10);
         renderer.drawRect(barX, barY, barWidth, barHeight);
         renderer.displayBuffer();
@@ -347,7 +348,7 @@ void EpubReaderActivity::renderScreen() {
 
   if (section->pageCount == 0) {
     Serial.printf("[%lu] [ERS] No pages to render\n", millis());
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty chapter", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
     return;
@@ -355,7 +356,7 @@ void EpubReaderActivity::renderScreen() {
 
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
     Serial.printf("[%lu] [ERS] Page out of bounds: %d (max %d)\n", millis(), section->currentPage, section->pageCount);
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Out of bounds", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
     return;
@@ -478,8 +479,8 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     std::string title;
     int titleWidth;
     if (tocIndex == -1) {
-      title = "Unnamed";
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, "Unnamed");
+      title = TR(UNNAMED);
+      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, TR(UNNAMED));
     } else {
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;

@@ -6,3 +6,9 @@ lib/EpdFont/fontsrc
 *.generated.h
 build
 **/__pycache__/
+
+# AI
+.claude/
+.serena/
+.spec-workflow/
+docs/plans

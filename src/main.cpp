@@ -5,6 +5,8 @@
 #include <InputManager.h>
 #include <SDCardManager.h>
 #include <SPI.h>
+#include <FontManager.h>
+#include <I18n.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -321,6 +323,13 @@ void setup() {
 
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
+
+  // Initialize FontManager - scan fonts and load user's font selection
+  FontMgr.scanFonts();
+  FontMgr.loadSettings();
+
+  // Initialize I18n - load language settings
+  I18N.loadSettings();
 
   if (!isWakeupAfterFlashing()) {
     // For normal wakeups (not immediately after flashing), verify long press

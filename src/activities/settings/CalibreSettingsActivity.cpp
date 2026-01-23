@@ -1,6 +1,7 @@
 #include "CalibreSettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <WiFi.h>
 
 #include <cstring>
@@ -12,11 +13,6 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "fontIds.h"
 
-namespace {
-constexpr int MENU_ITEMS = 2;
-const char* menuNames[MENU_ITEMS] = {"Calibre Web URL", "Connect as Wireless Device"};
-}  // namespace
-
 void CalibreSettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<CalibreSettingsActivity*>(param);
   self->displayTaskLoop();
@@ -27,7 +23,7 @@ void CalibreSettingsActivity::onEnter() {
 
   renderingMutex = xSemaphoreCreateMutex();
   selectedIndex = 0;
-  updateRequired = true;
+  updateRequired = false;  // Don't trigger render immediately to avoid race with parent activity
 
   xTaskCreate(&CalibreSettingsActivity::taskTrampoline, "CalibreSettingsTask",
               4096,               // Stack size
@@ -67,23 +63,24 @@ void CalibreSettingsActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
+    selectedIndex = (selectedIndex + 2 - 1) % 2;
     updateRequired = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
+    selectedIndex = (selectedIndex + 1) % 2;
     updateRequired = true;
   }
 }
 
 void CalibreSettingsActivity::handleSelection() {
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  // Don't hold mutex while creating subactivities to avoid race conditions
+  // between parent and child rendering tasks
 
   if (selectedIndex == 0) {
     // Calibre Web URL
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Calibre Web URL", SETTINGS.opdsServerUrl, 10,
+        renderer, mappedInput, TR(CALIBRE_WEB_URL), SETTINGS.opdsServerUrl, 10,
         127,    // maxLength
         false,  // not password
         [this](const std::string& url) {
@@ -119,11 +116,14 @@ void CalibreSettingsActivity::handleSelection() {
       }));
     }
   }
-
-  xSemaphoreGive(renderingMutex);
 }
 
 void CalibreSettingsActivity::displayTaskLoop() {
+  // Wait for parent activity's rendering to complete (screen refresh takes ~422ms)
+  // Wait 500ms to be safe and avoid race conditions with parent activity
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+  updateRequired = true;
+
   while (true) {
     if (updateRequired && !subActivity) {
       updateRequired = false;
@@ -141,13 +141,14 @@ void CalibreSettingsActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Calibre", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(CALIBRE), true, EpdFontFamily::BOLD);
 
   // Draw selection highlight
   renderer.fillRect(0, 60 + selectedIndex * 30 - 2, pageWidth - 1, 30);
 
   // Draw menu items
-  for (int i = 0; i < MENU_ITEMS; i++) {
+  const char* menuNames[2] = {TR(CALIBRE_WEB_URL), TR(CONNECT_WIRELESS)};
+  for (int i = 0; i < 2; i++) {
     const int settingY = 60 + i * 30;
     const bool isSelected = (i == selectedIndex);
 
@@ -155,14 +156,14 @@ void CalibreSettingsActivity::render() {
 
     // Draw status for URL setting
     if (i == 0) {
-      const char* status = (strlen(SETTINGS.opdsServerUrl) > 0) ? "[Set]" : "[Not Set]";
+      const char* status = (strlen(SETTINGS.opdsServerUrl) > 0) ? TR(SET) : TR(NOT_SET);
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
       renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
     }
   }
 
   // Draw button hints
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
+  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

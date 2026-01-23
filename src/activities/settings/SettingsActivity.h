@@ -20,7 +20,6 @@ class SettingsActivity final : public ActivityWithSubactivity {
   const std::function<void()> onGoHome;
 
   static constexpr int categoryCount = 4;
-  static const char* categoryNames[categoryCount];
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();

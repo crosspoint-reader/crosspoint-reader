@@ -3,6 +3,7 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 #include <qrcode.h>
@@ -329,6 +330,9 @@ void CrossPointWebServerActivity::loop() {
         // Yield and check for exit button every 64 iterations
         if ((i & 0x3F) == 0x3F) {
           yield();
+          // CRITICAL: Must call update() before wasPressed() to refresh button state
+          // Otherwise button presses during the loop will be missed
+          mappedInput.update();
           // Check for exit button inside loop for responsiveness
           if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
             onGoBack();
@@ -369,7 +373,7 @@ void CrossPointWebServerActivity::render() const {
   } else if (state == WebServerActivityState::AP_STARTING) {
     renderer.clearScreen();
     const auto pageHeight = renderer.getScreenHeight();
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, "Starting Hotspot...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, TR(STARTING_HOTSPOT), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
   }
 }
@@ -400,21 +404,20 @@ void CrossPointWebServerActivity::renderServerRunning() const {
   // Use consistent line spacing
   constexpr int LINE_SPACING = 28;  // Space between lines
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(FILE_TRANSFER), true, EpdFontFamily::BOLD);
 
   if (isApMode) {
     // AP mode display - center the content block
     int startY = 55;
 
-    renderer.drawCenteredText(UI_10_FONT_ID, startY, "Hotspot Mode", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, TR(HOTSPOT_MODE), true, EpdFontFamily::BOLD);
 
-    std::string ssidInfo = "Network: " + connectedSSID;
+    std::string ssidInfo = std::string(TR(NETWORK_PREFIX)) + connectedSSID;
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ssidInfo.c_str());
 
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, "Connect your device to this WiFi network");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, TR(CONNECT_WIFI_HINT));
 
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3,
-                              "or scan QR code with your phone to connect to Wifi.");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, TR(SCAN_QR_WIFI_HINT));
     // Show QR code for URL
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
@@ -425,24 +428,24 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str(), true, EpdFontFamily::BOLD);
 
     // Show IP address as fallback
-    std::string ipUrl = "or http://" + connectedIP + "/";
+    std::string ipUrl = std::string(TR(OR_HTTP_PREFIX)) + connectedIP + "/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, ipUrl.c_str());
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "Open this URL in your browser");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, TR(OPEN_URL_HINT));
 
     // Show QR code for URL
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "or scan QR code with your phone:");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, TR(SCAN_QR_HINT));
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 7, hostnameUrl);
   } else {
     // STA mode display (original behavior)
     const int startY = 65;
 
-    std::string ssidInfo = "Network: " + connectedSSID;
+    std::string ssidInfo = std::string(TR(NETWORK_PREFIX)) + connectedSSID;
     if (ssidInfo.length() > 28) {
       ssidInfo.replace(25, ssidInfo.length() - 25, "...");
     }
     renderer.drawCenteredText(UI_10_FONT_ID, startY, ssidInfo.c_str());
 
-    std::string ipInfo = "IP Address: " + connectedIP;
+    std::string ipInfo = std::string(TR(IP_ADDRESS_PREFIX)) + connectedIP;
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ipInfo.c_str());
 
     // Show web server URL prominently
@@ -450,16 +453,16 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 2, webInfo.c_str(), true, EpdFontFamily::BOLD);
 
     // Also show hostname URL
-    std::string hostnameUrl = std::string("or http://") + AP_HOSTNAME + ".local/";
+    std::string hostnameUrl = std::string(TR(OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str());
 
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Open this URL in your browser");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, TR(OPEN_URL_HINT));
 
     // Show QR code for URL
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, TR(SCAN_QR_HINT));
   }
 
-  const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
+  const auto labels = mappedInput.mapLabels(TR(EXIT), "", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

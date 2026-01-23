@@ -72,6 +72,8 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
   return InputManager::BTN_BACK;
 }
 
+void MappedInputManager::update() { inputManager.update(); }
+
 bool MappedInputManager::wasPressed(const Button button) const { return inputManager.wasPressed(mapButton(button)); }
 
 bool MappedInputManager::wasReleased(const Button button) const { return inputManager.wasReleased(mapButton(button)); }

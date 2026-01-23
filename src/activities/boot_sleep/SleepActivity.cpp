@@ -2,6 +2,7 @@
 
 #include <Epub.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <SDCardManager.h>
 #include <Txt.h>
 #include <Xtc.h>
@@ -14,7 +15,7 @@
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  renderPopup("Entering Sleep...");
+  renderPopup(TR(ENTERING_SLEEP));
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();
@@ -125,8 +126,8 @@ void SleepActivity::renderDefaultSleepScreen() const {
 
   renderer.clearScreen();
   renderer.drawImage(CrossLarge, (pageWidth + 128) / 2, (pageHeight - 128) / 2, 128, 128);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "CrossPoint", true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "SLEEPING");
+  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, TR(CROSSPOINT), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, TR(SLEEPING));
 
   // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {

@@ -2,54 +2,55 @@
 
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <I18n.h>
 
 #include "CategorySettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
-const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
-
 namespace {
-constexpr int displaySettingsCount = 5;
+constexpr int displaySettingsCount = 6;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
-    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
-    SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
-    SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}),
-    SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"}),
-    SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
-                      {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"})};
+    SettingInfo::Enum(StrId::SLEEP_SCREEN, &CrossPointSettings::sleepScreen, {StrId::DARK, StrId::LIGHT, StrId::CUSTOM, StrId::COVER, StrId::NONE}),
+    SettingInfo::Enum(StrId::SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode, {StrId::FIT, StrId::CROP}),
+    SettingInfo::Enum(StrId::STATUS_BAR, &CrossPointSettings::statusBar, {StrId::NONE, StrId::NO_PROGRESS, StrId::FULL}),
+    SettingInfo::Enum(StrId::HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage, {StrId::NEVER, StrId::IN_READER, StrId::ALWAYS}),
+    SettingInfo::Enum(StrId::REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
+                      {StrId::PAGES_1, StrId::PAGES_5, StrId::PAGES_10, StrId::PAGES_15, StrId::PAGES_30}),
+    SettingInfo::Action(StrId::EXT_UI_FONT)};
 
 constexpr int readerSettingsCount = 9;
 const SettingInfo readerSettings[readerSettingsCount] = {
-    SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"}),
-    SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
-    SettingInfo::Enum("Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}),
-    SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
-    SettingInfo::Enum("Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
-                      {"Justify", "Left", "Center", "Right"}),
-    SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled),
-    SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
-                      {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
-    SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
-    SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing)};
+    SettingInfo::Action(StrId::EXT_READER_FONT),
+    SettingInfo::Enum(StrId::FONT_SIZE, &CrossPointSettings::fontSize, {StrId::SMALL, StrId::MEDIUM, StrId::LARGE, StrId::X_LARGE}),
+    SettingInfo::Enum(StrId::LINE_SPACING, &CrossPointSettings::lineSpacing, {StrId::TIGHT, StrId::NORMAL, StrId::WIDE}),
+    SettingInfo::Value(StrId::SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}),
+    SettingInfo::Enum(StrId::PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
+                      {StrId::JUSTIFY, StrId::LEFT, StrId::CENTER, StrId::RIGHT}),
+    SettingInfo::Toggle(StrId::HYPHENATION, &CrossPointSettings::hyphenationEnabled),
+    SettingInfo::Enum(StrId::ORIENTATION, &CrossPointSettings::orientation,
+                      {StrId::PORTRAIT, StrId::LANDSCAPE_CW, StrId::INVERTED, StrId::LANDSCAPE_CCW}),
+    SettingInfo::Toggle(StrId::EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing),
+    SettingInfo::Toggle(StrId::TEXT_AA, &CrossPointSettings::textAntiAliasing)};
 
 constexpr int controlsSettingsCount = 4;
 const SettingInfo controlsSettings[controlsSettingsCount] = {
-    SettingInfo::Enum("Front Button Layout", &CrossPointSettings::frontButtonLayout,
-                      {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght"}),
-    SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
-                      {"Prev, Next", "Next, Prev"}),
-    SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
-    SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
+    SettingInfo::Enum(StrId::FRONT_BTN_LAYOUT, &CrossPointSettings::frontButtonLayout,
+                      {StrId::FRONT_LAYOUT_BCLR, StrId::FRONT_LAYOUT_LRBC, StrId::FRONT_LAYOUT_LBCR}),
+    SettingInfo::Enum(StrId::SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
+                      {StrId::PREV_NEXT, StrId::NEXT_PREV}),
+    SettingInfo::Toggle(StrId::LONG_PRESS_SKIP, &CrossPointSettings::longPressChapterSkip),
+    SettingInfo::Enum(StrId::SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn, {StrId::IGNORE, StrId::SLEEP, StrId::PAGE_TURN})};
 
-constexpr int systemSettingsCount = 5;
+constexpr int systemSettingsCount = 6;
 const SettingInfo systemSettings[systemSettingsCount] = {
-    SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
-                      {"1 min", "5 min", "10 min", "15 min", "30 min"}),
-    SettingInfo::Action("KOReader Sync"), SettingInfo::Action("Calibre Settings"), SettingInfo::Action("Clear Cache"),
-    SettingInfo::Action("Check for updates")};
+    SettingInfo::Enum(StrId::TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
+                      {StrId::MIN_1, StrId::MIN_5, StrId::MIN_10, StrId::MIN_15, StrId::MIN_30}),
+    SettingInfo::Action(StrId::LANGUAGE),
+    SettingInfo::Action(StrId::KOREADER_SYNC), SettingInfo::Action(StrId::CALIBRE_SETTINGS), SettingInfo::Action(StrId::CLEAR_READING_CACHE),
+    SettingInfo::Action(StrId::CHECK_UPDATES)};
 }  // namespace
 
 void SettingsActivity::taskTrampoline(void* param) {
@@ -131,6 +132,11 @@ void SettingsActivity::enterCategory(int categoryIndex) {
   const SettingInfo* settingsList = nullptr;
   int settingsCount = 0;
 
+  // Category StrIds for dynamic translation
+  static constexpr StrId categoryStrIds[categoryCount] = {
+    StrId::CAT_DISPLAY, StrId::CAT_READER, StrId::CAT_CONTROLS, StrId::CAT_SYSTEM
+  };
+
   switch (categoryIndex) {
     case 0:  // Display
       settingsList = displaySettings;
@@ -150,7 +156,7 @@ void SettingsActivity::enterCategory(int categoryIndex) {
       break;
   }
 
-  enterNewActivity(new CategorySettingsActivity(renderer, mappedInput, categoryNames[categoryIndex], settingsList,
+  enterNewActivity(new CategorySettingsActivity(renderer, mappedInput, I18N.get(categoryStrIds[categoryIndex]), settingsList,
                                                 settingsCount, [this] {
                                                   exitActivity();
                                                   updateRequired = true;
@@ -177,17 +183,22 @@ void SettingsActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(SETTINGS_TITLE), true, EpdFontFamily::BOLD);
 
   // Draw selection
   renderer.fillRect(0, 60 + selectedCategoryIndex * 30 - 2, pageWidth - 1, 30);
+
+  // Category StrIds for dynamic translation
+  static constexpr StrId categoryStrIds[categoryCount] = {
+    StrId::CAT_DISPLAY, StrId::CAT_READER, StrId::CAT_CONTROLS, StrId::CAT_SYSTEM
+  };
 
   // Draw all categories
   for (int i = 0; i < categoryCount; i++) {
     const int categoryY = 60 + i * 30;  // 30 pixels between categories
 
-    // Draw category name
-    renderer.drawText(UI_10_FONT_ID, 20, categoryY, categoryNames[i], i != selectedCategoryIndex);
+    // Draw category name (dynamically translated)
+    renderer.drawText(UI_10_FONT_ID, 20, categoryY, I18N.get(categoryStrIds[i]), i != selectedCategoryIndex);
   }
 
   // Draw version text above button hints
@@ -195,7 +206,7 @@ void SettingsActivity::render() const {
                     pageHeight - 60, CROSSPOINT_VERSION);
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
+  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

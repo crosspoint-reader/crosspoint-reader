@@ -1,5 +1,7 @@
 #include "KeyboardEntryActivity.h"
 
+#include <I18n.h>
+
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
@@ -342,11 +344,11 @@ void KeyboardEntryActivity::render() const {
   }
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "Left", "Right");
+  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), TR(DIR_LEFT), TR(DIR_RIGHT));
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Draw side button hints for Up/Down navigation
-  renderer.drawSideButtonHints(UI_10_FONT_ID, "Up", "Down");
+  renderer.drawSideButtonHints(UI_10_FONT_ID, TR(DIR_UP), TR(DIR_DOWN));
 
   renderer.displayBuffer();
 }

@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <I18n.h>
 #include <SDCardManager.h>
 #include <WiFi.h>
 
@@ -34,7 +35,7 @@ void CalibreWirelessActivity::onEnter() {
   stateMutex = xSemaphoreCreateMutex();
 
   state = WirelessState::DISCOVERING;
-  statusMessage = "Discovering Calibre...";
+  statusMessage = TR(CALIBRE_DISCOVERING);
   errorMessage.clear();
   calibreHostname.clear();
   calibreHost.clear();
@@ -220,7 +221,7 @@ void CalibreWirelessActivity::listenForDiscovery() {
       if (calibrePort > 0) {
         // Connect to Calibre's TCP server - try main port first, then alt port
         setState(WirelessState::CONNECTING);
-        setStatus("Connecting to " + calibreHostname + "...");
+        setStatus(std::string(TR(CALIBRE_CONNECTING_TO)) + calibreHostname + "...");
 
         // Small delay before connecting
         vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -242,11 +243,11 @@ void CalibreWirelessActivity::listenForDiscovery() {
 
         if (connected) {
           setState(WirelessState::WAITING);
-          setStatus("Connected to " + calibreHostname + "\nWaiting for commands...");
+          setStatus(std::string(TR(CALIBRE_CONNECTED_TO)) + calibreHostname + "\n" + TR(CALIBRE_WAITING_COMMANDS));
         } else {
           // Don't set error yet, keep trying discovery
           setState(WirelessState::DISCOVERING);
-          setStatus("Discovering Calibre...\n(Connection failed, retrying)");
+          setStatus(std::string(TR(CALIBRE_DISCOVERING)) + "\n" + TR(CONNECTION_FAILED_RETRYING));
           calibrePort = 0;
           calibreAltPort = 0;
         }
@@ -258,7 +259,7 @@ void CalibreWirelessActivity::listenForDiscovery() {
 void CalibreWirelessActivity::handleTcpClient() {
   if (!tcpClient.connected()) {
     setState(WirelessState::DISCONNECTED);
-    setStatus("Calibre disconnected");
+    setStatus(TR(CALIBRE_DISCONNECTED));
     return;
   }
 
@@ -455,9 +456,7 @@ void CalibreWirelessActivity::handleCommand(const OpCode opcode, const std::stri
 
 void CalibreWirelessActivity::handleGetInitializationInfo(const std::string& data) {
   setState(WirelessState::WAITING);
-  setStatus("Connected to " + calibreHostname +
-            "\nWaiting for transfer...\n\nIf transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice "
-            "plugin settings.");
+  setStatus(std::string(TR(CALIBRE_CONNECTED_TO)) + calibreHostname + "\n" + TR(CALIBRE_WAITING_TRANSFER) + "\n\n" + TR(CALIBRE_TRANSFER_HINT));
 
   // Build response with device capabilities
   // Format must match what Calibre expects from a smart device
@@ -589,11 +588,11 @@ void CalibreWirelessActivity::handleSendBook(const std::string& data) {
   bytesReceived = 0;
 
   setState(WirelessState::RECEIVING);
-  setStatus("Receiving: " + filename);
+  setStatus(std::string(TR(CALIBRE_RECEIVING)) + filename);
 
   // Open file for writing
   if (!SdMan.openFileForWrite("CAL", currentFilename.c_str(), currentFile)) {
-    setError("Failed to create file");
+    setError(TR(CALIBRE_FAILED_CREATE_FILE));
     sendJsonResponse(OpCode::ERROR, "{\"message\":\"Failed to create file\"}");
     return;
   }
@@ -625,7 +624,7 @@ void CalibreWirelessActivity::handleDisplayMessage(const std::string& data) {
   // Calibre may send messages to display
   // Check messageKind - 1 means password error
   if (data.find("\"messageKind\":1") != std::string::npos) {
-    setError("Password required");
+    setError(TR(CALIBRE_PASSWORD_REQUIRED));
   }
   sendJsonResponse(OpCode::OK, "{}");
 }
@@ -634,7 +633,7 @@ void CalibreWirelessActivity::handleNoop(const std::string& data) {
   // Check for ejecting flag
   if (data.find("\"ejecting\":true") != std::string::npos) {
     setState(WirelessState::DISCONNECTED);
-    setStatus("Calibre disconnected");
+    setStatus(TR(CALIBRE_DISCONNECTED));
   }
   sendJsonResponse(OpCode::NOOP, "{}");
 }
@@ -646,7 +645,7 @@ void CalibreWirelessActivity::receiveBinaryData() {
     if (!tcpClient.connected()) {
       currentFile.close();
       inBinaryMode = false;
-      setError("Transfer interrupted");
+      setError(TR(CALIBRE_TRANSFER_INTERRUPTED));
     }
     return;
   }
@@ -668,7 +667,7 @@ void CalibreWirelessActivity::receiveBinaryData() {
       inBinaryMode = false;
 
       setState(WirelessState::WAITING);
-      setStatus("Received: " + currentFilename + "\nWaiting for more...");
+      setStatus(std::string(TR(CALIBRE_RECEIVED)) + currentFilename + "\n" + TR(CALIBRE_WAITING_MORE));
 
       // Send OK to acknowledge completion
       sendJsonResponse(OpCode::OK, "{}");
@@ -683,11 +682,11 @@ void CalibreWirelessActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 30, "Calibre Wireless", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 30, TR(CALIBRE_WIRELESS), true, EpdFontFamily::BOLD);
 
   // Draw IP address
   const std::string ipAddr = WiFi.localIP().toString().c_str();
-  renderer.drawCenteredText(UI_10_FONT_ID, 60, ("IP: " + ipAddr).c_str());
+  renderer.drawCenteredText(UI_10_FONT_ID, 60, (std::string(TR(IP_ADDRESS_PREFIX)) + ipAddr).c_str());
 
   // Draw status message
   int statusY = pageHeight / 2 - 40;
@@ -720,7 +719,7 @@ void CalibreWirelessActivity::render() const {
   }
 
   // Draw button hints
-  const auto labels = mappedInput.mapLabels("Back", "", "", "");
+  const auto labels = mappedInput.mapLabels(TR(BACK), "", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

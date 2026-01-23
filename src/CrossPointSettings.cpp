@@ -1,5 +1,6 @@
 #include "CrossPointSettings.h"
 
+#include <FontManager.h>
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
@@ -196,6 +197,16 @@ int CrossPointSettings::getRefreshFrequency() const {
 }
 
 int CrossPointSettings::getReaderFontId() const {
+  // Check if external font is enabled - if so, return a unique ID based on font index
+  // This ensures cache invalidation when external font changes
+  FontManager &fm = FontManager::getInstance();
+  if (fm.isExternalFontEnabled()) {
+    // Return a unique negative ID based on external font index
+    // Using negative values to avoid collision with built-in font IDs
+    return -(fm.getSelectedIndex() + 1000);
+  }
+
+  // Fall back to built-in font selection
   switch (fontFamily) {
     case BOOKERLY:
     default:
