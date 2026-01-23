@@ -13,6 +13,9 @@ const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
 const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"",
                                                                     "ZXCVBNM<>?", "SPECIAL ROW"};
 
+// Shift state strings
+const char* const KeyboardEntryActivity::shiftString[3] = {"shift", "SHIFT", "LOCK"};
+
 void KeyboardEntryActivity::taskTrampoline(void* param) {
   auto* self = static_cast<KeyboardEntryActivity*>(param);
   self->displayTaskLoop();
@@ -80,7 +83,7 @@ int KeyboardEntryActivity::getRowLength(const int row) const {
 }
 
 char KeyboardEntryActivity::getSelectedChar() const {
-  const char* const* layout = shiftActive ? keyboardShift : keyboard;
+  const char* const* layout = shiftState ? keyboardShift : keyboard;
 
   if (selectedRow < 0 || selectedRow >= NUM_ROWS) return '\0';
   if (selectedCol < 0 || selectedCol >= getRowLength(selectedRow)) return '\0';
@@ -92,8 +95,8 @@ void KeyboardEntryActivity::handleKeyPress() {
   // Handle special row (bottom row with shift, space, backspace, done)
   if (selectedRow == SPECIAL_ROW) {
     if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
-      // Shift toggle
-      shiftActive = !shiftActive;
+      // Shift toggle (0 = lower case, 1 = upper case, 2 = shift lock)
+      shiftState = (shiftState + 1) % 3;
       return;
     }
 
@@ -130,9 +133,9 @@ void KeyboardEntryActivity::handleKeyPress() {
 
   if (maxLength == 0 || text.length() < maxLength) {
     text += c;
-    // Auto-disable shift after typing a character
-    if (shiftActive) {
-      shiftActive = false;
+    // Auto-disable shift after typing a character in non-lock mode
+    if (shiftState == 1) {
+      shiftState = 0;
     }
   }
 }
@@ -286,7 +289,7 @@ void KeyboardEntryActivity::render() const {
   constexpr int keyHeight = 18;
   constexpr int keySpacing = 3;
 
-  const char* const* layout = shiftActive ? keyboardShift : keyboard;
+  const char* const* layout = shiftState ? keyboardShift : keyboard;
 
   // Calculate left margin to center the longest row (13 keys)
   constexpr int maxRowWidth = KEYS_PER_ROW * (keyWidth + keySpacing);
@@ -307,7 +310,7 @@ void KeyboardEntryActivity::render() const {
 
       // SHIFT key (logical col 0, spans 2 key widths)
       const bool shiftSelected = (selectedRow == 4 && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
-      renderItemWithSelector(currentX + 2, rowY, shiftActive ? "SHIFT" : "shift", shiftSelected);
+      renderItemWithSelector(currentX + 2, rowY, shiftString[shiftState], shiftSelected);
       currentX += 2 * (keyWidth + keySpacing);
 
       // Space bar (logical cols 2-6, spans 5 key widths)
