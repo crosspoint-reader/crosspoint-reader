@@ -10,79 +10,79 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
     case Button::Back:
       switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
-          return InputManager::BTN_LEFT;
+          return HalGPIO::BTN_LEFT;
         case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
-          return InputManager::BTN_CONFIRM;
+          return HalGPIO::BTN_CONFIRM;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
         default:
-          return InputManager::BTN_BACK;
+          return HalGPIO::BTN_BACK;
       }
     case Button::Confirm:
       switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
-          return InputManager::BTN_RIGHT;
+          return HalGPIO::BTN_RIGHT;
         case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
-          return InputManager::BTN_LEFT;
+          return HalGPIO::BTN_LEFT;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
         default:
-          return InputManager::BTN_CONFIRM;
+          return HalGPIO::BTN_CONFIRM;
       }
     case Button::Left:
       switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
         case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
-          return InputManager::BTN_BACK;
+          return HalGPIO::BTN_BACK;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
         default:
-          return InputManager::BTN_LEFT;
+          return HalGPIO::BTN_LEFT;
       }
     case Button::Right:
       switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
-          return InputManager::BTN_CONFIRM;
+          return HalGPIO::BTN_CONFIRM;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
         case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
         default:
-          return InputManager::BTN_RIGHT;
+          return HalGPIO::BTN_RIGHT;
       }
     case Button::Up:
-      return InputManager::BTN_UP;
+      return HalGPIO::BTN_UP;
     case Button::Down:
-      return InputManager::BTN_DOWN;
+      return HalGPIO::BTN_DOWN;
     case Button::Power:
-      return InputManager::BTN_POWER;
+      return HalGPIO::BTN_POWER;
     case Button::PageBack:
       switch (sideLayout) {
         case CrossPointSettings::NEXT_PREV:
-          return InputManager::BTN_DOWN;
+          return HalGPIO::BTN_DOWN;
         case CrossPointSettings::PREV_NEXT:
         default:
-          return InputManager::BTN_UP;
+          return HalGPIO::BTN_UP;
       }
     case Button::PageForward:
       switch (sideLayout) {
         case CrossPointSettings::NEXT_PREV:
-          return InputManager::BTN_UP;
+          return HalGPIO::BTN_UP;
         case CrossPointSettings::PREV_NEXT:
         default:
-          return InputManager::BTN_DOWN;
+          return HalGPIO::BTN_DOWN;
       }
   }
 
-  return InputManager::BTN_BACK;
+  return HalGPIO::BTN_BACK;
 }
 
-bool MappedInputManager::wasPressed(const Button button) const { return inputManager.wasPressed(mapButton(button)); }
+bool MappedInputManager::wasPressed(const Button button) const { return gpio.wasPressed(mapButton(button)); }
 
-bool MappedInputManager::wasReleased(const Button button) const { return inputManager.wasReleased(mapButton(button)); }
+bool MappedInputManager::wasReleased(const Button button) const { return gpio.wasReleased(mapButton(button)); }
 
-bool MappedInputManager::isPressed(const Button button) const { return inputManager.isPressed(mapButton(button)); }
+bool MappedInputManager::isPressed(const Button button) const { return gpio.isPressed(mapButton(button)); }
 
-bool MappedInputManager::wasAnyPressed() const { return inputManager.wasAnyPressed(); }
+bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
 
-bool MappedInputManager::wasAnyReleased() const { return inputManager.wasAnyReleased(); }
+bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
 
-unsigned long MappedInputManager::getHeldTime() const { return inputManager.getHeldTime(); }
+unsigned long MappedInputManager::getHeldTime() const { return gpio.getHeldTime(); }
 
 MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const char* confirm, const char* previous,
                                                          const char* next) const {

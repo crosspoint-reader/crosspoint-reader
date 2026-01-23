@@ -237,7 +237,7 @@ void TxtReaderActivity::buildPageIndex() {
       // Fill progress bar
       const int fillWidth = (barWidth - 2) * progressPercent / 100;
       renderer.fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2, true);
-      renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     }
 
     // Yield to other tasks periodically
@@ -465,7 +465,7 @@ void TxtReaderActivity::renderPage() {
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
   if (pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
     renderer.displayBuffer();
