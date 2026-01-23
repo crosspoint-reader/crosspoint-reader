@@ -21,7 +21,7 @@ CrossPoint Reader aims to:
 * Support **customisable font, layout, and display** options.
 * Run purely on the **Xteink X4 hardware**.
 
-CrossPoint Reader supports EPUB files in at least these languages: English, Spanish, French, _____, Russian, Ukranian, ______. 
+CrossPoint Reader supports EPUB files in multiple languages, including English, Spanish, French, _____, _____, _____, Russian, Ukranian, ______. // TODO
 
 This project is **not affiliated with Xteink**; it's built as a community project.
 
