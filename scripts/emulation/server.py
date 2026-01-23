@@ -380,7 +380,7 @@ async def spawn_qemu():
     "-nographic",
     "-M", "esp32c3",
     "-drive", "file=flash.bin,if=mtd,format=raw",
-    "-global", "driver=timer.esp32c3.timg,property=wdt_disable,value=true", # got panic if we don't disable WDT, why?
+    # "-global", "driver=timer.esp32c3.timg,property=wdt_disable,value=true", # got panic if we don't disable WDT, why?
   ]
 
   # Get working directory from environment or use /tmp
