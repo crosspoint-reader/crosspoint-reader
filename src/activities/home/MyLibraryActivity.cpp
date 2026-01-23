@@ -345,13 +345,13 @@ void MyLibraryActivity::renderRecentTab() const {
       }
     }
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title.c_str(), pageWidth - LEFT_MARGIN - RIGHT_MARGIN);
-    renderer.drawText(UI_12_FONT_ID, LEFT_MARGIN, y + 10, truncatedTitle.c_str(), i != selectorIndex);
+    renderer.drawText(UI_12_FONT_ID, LEFT_MARGIN, y + 5, truncatedTitle.c_str(), i != selectorIndex);
 
     // Line 2: Author
     if (!book.author.empty()) {
       auto truncatedAuthor =
           renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), pageWidth - LEFT_MARGIN - RIGHT_MARGIN);
-      renderer.drawText(UI_10_FONT_ID, LEFT_MARGIN, y + 35, truncatedAuthor.c_str(), i != selectorIndex);
+      renderer.drawText(UI_10_FONT_ID, LEFT_MARGIN, y + 32, truncatedAuthor.c_str(), i != selectorIndex);
     }
   }
 }
