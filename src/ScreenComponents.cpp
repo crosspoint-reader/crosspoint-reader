@@ -42,22 +42,23 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   renderer.fillRect(x + 2, y + 2, filledWidth, batteryHeight - 4);
 }
 
-ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& renderer, const char* message, const int y,
-                                                          const int minWidth, const int minHeight) {
-  constexpr int margin = 15;
+ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& renderer, const char* message) {
+  constexpr int margin = 12;
+  constexpr int frameThickness = 4;
+  constexpr int frameInset = frameThickness / 2;
+  constexpr int frameRadius = 8;
+  constexpr int bottomOffset = 20;
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
-  const int contentWidth = std::max(textWidth, minWidth);
-  const int contentHeight = renderer.getLineHeight(UI_12_FONT_ID) + margin * 2;
-  const int w = contentWidth + margin * 2 + 50;
-  // const int x = (renderer.getScreenWidth() - w) / 2;
-  const int x = renderer.getScreenWidth() - w - margin;
-  const int h = std::max(contentHeight, minHeight);
-  renderer.fillRect(x - 2, y - 2, w + 4, h + 4, true);
-  renderer.fillRect(x + 2, y + 2, w - 4, h - 4, false);
+  const int w = std::max(textWidth, POPUP_DEFAULT_MIN_WIDTH) + margin * 2;
+  const int h = std::max(renderer.getLineHeight(UI_12_FONT_ID) + margin * 2, POPUP_DEFAULT_MIN_HEIGHT);
+  const int x = std::max(0, (renderer.getScreenWidth() - w) / 2);
+  const int y = std::max(0, renderer.getScreenHeight() - h - margin - bottomOffset);
 
-  const int textX = x + margin + (contentWidth - textWidth) / 2;
-  // renderer.drawText(UI_12_FONT_ID, textX, y + margin + 4, message, true, EpdFontFamily::BOLD);
-  renderer.drawText(NOTOSANS_18_FONT_ID, textX, y + margin + 4, message, true, EpdFontFamily::BOLD);
+  renderer.drawRoundedRectFrame(x - frameInset, y - frameInset, w + frameInset * 2, h + frameInset * 2,
+                                frameRadius, frameThickness, true, false);
+
+  const int textX = x + (w - textWidth) / 2;
+  renderer.drawText(UI_12_FONT_ID, textX, y + margin - 2, message, true, EpdFontFamily::BOLD);
   renderer.displayBuffer();
   return {x, y, w, h};
 }
@@ -66,7 +67,7 @@ void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const Popu
   constexpr int barWidth = POPUP_DEFAULT_MIN_WIDTH;
   constexpr int barHeight = POPUP_DEFAULT_BAR_HEIGHT;
   const int barX = layout.x + (layout.width - barWidth) / 2;
-  const int barY = layout.y + layout.height - 15;
+  const int barY = layout.y + layout.height - 13;
 
   int fillWidth = barWidth * progress / 100;
   if (fillWidth < 0) {

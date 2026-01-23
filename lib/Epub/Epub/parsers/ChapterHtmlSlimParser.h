@@ -2,6 +2,7 @@
 
 #include <expat.h>
 
+#include <cstddef>
 #include <climits>
 #include <functional>
 #include <memory>
@@ -15,6 +16,11 @@ class GfxRenderer;
 #define MAX_WORD_SIZE 200
 
 class ChapterHtmlSlimParser {
+ public:
+  // Minimum file size (in bytes) to show progress bar - smaller chapters don't benefit from it.
+  static constexpr size_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB
+
+ private:
   const std::string& filepath;
   GfxRenderer& renderer;
   std::function<void(std::unique_ptr<Page>)> completePageFn;

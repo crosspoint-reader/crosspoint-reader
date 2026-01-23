@@ -64,6 +64,10 @@ class GfxRenderer {
   void drawPixel(int x, int y, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;
+  void drawRoundedRect(int x, int y, int width, int height, int radius, bool state = true) const;
+  void fillRoundedRect(int x, int y, int width, int height, int radius, bool state = true) const;
+  void drawRoundedRectFrame(int x, int y, int width, int height, int radius, int thickness = 1,
+                            bool frameState = true, bool fillState = false) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,

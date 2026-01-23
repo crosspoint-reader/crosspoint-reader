@@ -2,6 +2,19 @@
 
 #include <Utf8.h>
 
+namespace {
+int clampRoundedRadius(const int width, const int height, int radius) {
+  if (radius <= 0) {
+    return 0;
+  }
+  const int maxRadius = (std::min(width, height) - 1) / 2;
+  if (maxRadius <= 0) {
+    return 0;
+  }
+  return radius > maxRadius ? maxRadius : radius;
+}
+}  // namespace
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
@@ -136,6 +149,158 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
   drawLine(x + width - 1, y, x + width - 1, y + height - 1, state);
   drawLine(x + width - 1, y + height - 1, x, y + height - 1, state);
   drawLine(x, y, x, y + height - 1, state);
+}
+
+void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, int radius,
+                                  const bool state) const {
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  radius = clampRoundedRadius(width, height, radius);
+  if (radius <= 0) {
+    drawRect(x, y, width, height, state);
+    return;
+  }
+
+  const int right = x + width - 1;
+  const int bottom = y + height - 1;
+  const int x0 = x + radius;
+  const int x1 = right - radius;
+  const int y0 = y + radius;
+  const int y1 = bottom - radius;
+
+  if (x0 <= x1) {
+    drawLine(x0, y, x1, y, state);
+    drawLine(x0, bottom, x1, bottom, state);
+  }
+  if (y0 <= y1) {
+    drawLine(x, y0, x, y1, state);
+    drawLine(right, y0, right, y1, state);
+  }
+
+  const int cxLeft = x + radius;
+  const int cxRight = right - radius;
+  const int cyTop = y + radius;
+  const int cyBottom = bottom - radius;
+
+  auto plotCornerPoints = [&](const int offsetX, const int offsetY) {
+    drawPixel(cxLeft - offsetX, cyTop - offsetY, state);
+    drawPixel(cxRight + offsetX, cyTop - offsetY, state);
+    drawPixel(cxRight + offsetX, cyBottom + offsetY, state);
+    drawPixel(cxLeft - offsetX, cyBottom + offsetY, state);
+
+    if (offsetX == offsetY) {
+      return;
+    }
+
+    drawPixel(cxLeft - offsetY, cyTop - offsetX, state);
+    drawPixel(cxRight + offsetY, cyTop - offsetX, state);
+    drawPixel(cxRight + offsetY, cyBottom + offsetX, state);
+    drawPixel(cxLeft - offsetY, cyBottom + offsetX, state);
+  };
+
+  int f = 1 - radius;
+  int ddF_x = 1;
+  int ddF_y = -2 * radius;
+  int offsetX = 0;
+  int offsetY = radius;
+
+  while (offsetX <= offsetY) {
+    plotCornerPoints(offsetX, offsetY);
+    if (f >= 0) {
+      offsetY--;
+      ddF_y += 2;
+      f += ddF_y;
+    }
+    offsetX++;
+    ddF_x += 2;
+    f += ddF_x;
+    plotCornerPoints(offsetX, offsetY);
+  }
+}
+
+void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, const int height, int radius,
+                                  const bool state) const {
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  radius = clampRoundedRadius(width, height, radius);
+  if (radius <= 0) {
+    fillRect(x, y, width, height, state);
+    return;
+  }
+
+  const int right = x + width - 1;
+  const int bottom = y + height - 1;
+  const int innerTop = y + radius;
+  const int innerBottom = bottom - radius;
+
+  if (innerBottom >= innerTop) {
+    fillRect(x, innerTop, width, innerBottom - innerTop + 1, state);
+  }
+
+  int f = 1 - radius;
+  int ddF_x = 1;
+  int ddF_y = -2 * radius;
+  int offsetX = 0;
+  int offsetY = radius;
+
+  while (offsetX <= offsetY) {
+    int left = x + radius - offsetX;
+    int rightSpan = right - radius + offsetX;
+    int topY = innerTop - offsetY;
+    int bottomY = innerBottom + offsetY;
+    drawLine(left, topY, rightSpan, topY, state);
+    drawLine(left, bottomY, rightSpan, bottomY, state);
+
+    if (offsetX != offsetY) {
+      left = x + radius - offsetY;
+      rightSpan = right - radius + offsetY;
+      topY = innerTop - offsetX;
+      bottomY = innerBottom + offsetX;
+      drawLine(left, topY, rightSpan, topY, state);
+      drawLine(left, bottomY, rightSpan, bottomY, state);
+    }
+
+    if (f >= 0) {
+      offsetY--;
+      ddF_y += 2;
+      f += ddF_y;
+    }
+    offsetX++;
+    ddF_x += 2;
+    f += ddF_x;
+  }
+}
+
+void GfxRenderer::drawRoundedRectFrame(const int x, const int y, const int width, const int height, int radius,
+                                       int thickness, const bool frameState, const bool fillState) const {
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  const int maxThickness = (std::min(width, height) - 1) / 2;
+  thickness = std::min(thickness, maxThickness);
+  if (thickness <= 0) {
+    fillRoundedRect(x, y, width, height, radius, fillState);
+    return;
+  }
+
+  fillRoundedRect(x, y, width, height, radius, frameState);
+
+  const int inset = thickness * 2;
+  const int innerX = x + thickness;
+  const int innerY = y + thickness;
+  const int innerW = width - inset;
+  const int innerH = height - inset;
+  if (innerW <= 0 || innerH <= 0) {
+    return;
+  }
+
+  const int innerRadius = radius - thickness;
+  fillRoundedRect(innerX, innerY, innerW, innerH, innerRadius, fillState);
 }
 
 void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
