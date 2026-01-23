@@ -264,7 +264,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   }
 
   FsFile file;
-  if (!HAL_STORAGE.openFileForRead("EHP", filepath, file)) {
+  if (!SdMan.openFileForRead("EHP", filepath, file)) {
     XML_ParserFree(parser);
     return false;
   }

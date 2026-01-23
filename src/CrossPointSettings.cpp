@@ -20,10 +20,10 @@ constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 
 bool CrossPointSettings::saveToFile() const {
   // Make sure the directory exists
-  HAL_STORAGE.mkdir("/.crosspoint");
+  SdMan.mkdir("/.crosspoint");
 
   FsFile outputFile;
-  if (!HAL_STORAGE.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
+  if (!SdMan.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
     return false;
   }
 
@@ -57,7 +57,7 @@ bool CrossPointSettings::saveToFile() const {
 
 bool CrossPointSettings::loadFromFile() {
   FsFile inputFile;
-  if (!HAL_STORAGE.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
+  if (!SdMan.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
     return false;
   }
 

@@ -31,12 +31,12 @@ bool Xtc::load() {
 }
 
 bool Xtc::clearCache() const {
-  if (!HAL_STORAGE.exists(cachePath.c_str())) {
+  if (!SdMan.exists(cachePath.c_str())) {
     Serial.printf("[%lu] [XTC] Cache does not exist, no action needed\n", millis());
     return true;
   }
 
-  if (!HAL_STORAGE.removeDir(cachePath.c_str())) {
+  if (!SdMan.removeDir(cachePath.c_str())) {
     Serial.printf("[%lu] [XTC] Failed to clear cache\n", millis());
     return false;
   }
@@ -46,17 +46,17 @@ bool Xtc::clearCache() const {
 }
 
 void Xtc::setupCacheDir() const {
-  if (HAL_STORAGE.exists(cachePath.c_str())) {
+  if (SdMan.exists(cachePath.c_str())) {
     return;
   }
 
   // Create directories recursively
   for (size_t i = 1; i < cachePath.length(); i++) {
     if (cachePath[i] == '/') {
-      HAL_STORAGE.mkdir(cachePath.substr(0, i).c_str());
+      SdMan.mkdir(cachePath.substr(0, i).c_str());
     }
   }
-  HAL_STORAGE.mkdir(cachePath.c_str());
+  SdMan.mkdir(cachePath.c_str());
 }
 
 std::string Xtc::getTitle() const {
@@ -106,7 +106,7 @@ std::string Xtc::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
 bool Xtc::generateCoverBmp() const {
   // Already generated
-  if (HAL_STORAGE.exists(getCoverBmpPath().c_str())) {
+  if (SdMan.exists(getCoverBmpPath().c_str())) {
     return true;
   }
 
@@ -158,7 +158,7 @@ bool Xtc::generateCoverBmp() const {
 
   // Create BMP file
   FsFile coverBmp;
-  if (!HAL_STORAGE.openFileForWrite("XTC", getCoverBmpPath(), coverBmp)) {
+  if (!SdMan.openFileForWrite("XTC", getCoverBmpPath(), coverBmp)) {
     Serial.printf("[%lu] [XTC] Failed to create cover BMP file\n", millis());
     free(pageBuffer);
     return false;
@@ -297,7 +297,7 @@ std::string Xtc::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
 
 bool Xtc::generateThumbBmp() const {
   // Already generated
-  if (HAL_STORAGE.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getThumbBmpPath().c_str())) {
     return true;
   }
 
@@ -339,8 +339,8 @@ bool Xtc::generateThumbBmp() const {
     // Copy cover.bmp to thumb.bmp
     if (generateCoverBmp()) {
       FsFile src, dst;
-      if (HAL_STORAGE.openFileForRead("XTC", getCoverBmpPath(), src)) {
-        if (HAL_STORAGE.openFileForWrite("XTC", getThumbBmpPath(), dst)) {
+      if (SdMan.openFileForRead("XTC", getCoverBmpPath(), src)) {
+        if (SdMan.openFileForWrite("XTC", getThumbBmpPath(), dst)) {
           uint8_t buffer[512];
           while (src.available()) {
             size_t bytesRead = src.read(buffer, sizeof(buffer));
@@ -351,7 +351,7 @@ bool Xtc::generateThumbBmp() const {
         src.close();
       }
       Serial.printf("[%lu] [XTC] Copied cover to thumb (no scaling needed)\n", millis());
-      return HAL_STORAGE.exists(getThumbBmpPath().c_str());
+      return SdMan.exists(getThumbBmpPath().c_str());
     }
     return false;
   }
@@ -385,7 +385,7 @@ bool Xtc::generateThumbBmp() const {
 
   // Create thumbnail BMP file - use 1-bit format for fast home screen rendering (no gray passes)
   FsFile thumbBmp;
-  if (!HAL_STORAGE.openFileForWrite("XTC", getThumbBmpPath(), thumbBmp)) {
+  if (!SdMan.openFileForWrite("XTC", getThumbBmpPath(), thumbBmp)) {
     Serial.printf("[%lu] [XTC] Failed to create thumb BMP file\n", millis());
     free(pageBuffer);
     return false;

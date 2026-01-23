@@ -101,12 +101,12 @@ bool Epub::parseTocNcxFile() const {
 
   const auto tmpNcxPath = getCachePath() + "/toc.ncx";
   FsFile tempNcxFile;
-  if (!HAL_STORAGE.openFileForWrite("EBP", tmpNcxPath, tempNcxFile)) {
+  if (!SdMan.openFileForWrite("EBP", tmpNcxPath, tempNcxFile)) {
     return false;
   }
   readItemContentsToStream(tocNcxItem, tempNcxFile, 1024);
   tempNcxFile.close();
-  if (!HAL_STORAGE.openFileForRead("EBP", tmpNcxPath, tempNcxFile)) {
+  if (!SdMan.openFileForRead("EBP", tmpNcxPath, tempNcxFile)) {
     return false;
   }
   const auto ncxSize = tempNcxFile.size();
@@ -141,7 +141,7 @@ bool Epub::parseTocNcxFile() const {
 
   free(ncxBuffer);
   tempNcxFile.close();
-  HAL_STORAGE.remove(tmpNcxPath.c_str());
+  SdMan.remove(tmpNcxPath.c_str());
 
   Serial.printf("[%lu] [EBP] Parsed TOC items\n", millis());
   return true;
@@ -158,12 +158,12 @@ bool Epub::parseTocNavFile() const {
 
   const auto tmpNavPath = getCachePath() + "/toc.nav";
   FsFile tempNavFile;
-  if (!HAL_STORAGE.openFileForWrite("EBP", tmpNavPath, tempNavFile)) {
+  if (!SdMan.openFileForWrite("EBP", tmpNavPath, tempNavFile)) {
     return false;
   }
   readItemContentsToStream(tocNavItem, tempNavFile, 1024);
   tempNavFile.close();
-  if (!HAL_STORAGE.openFileForRead("EBP", tmpNavPath, tempNavFile)) {
+  if (!SdMan.openFileForRead("EBP", tmpNavPath, tempNavFile)) {
     return false;
   }
   const auto navSize = tempNavFile.size();
@@ -198,7 +198,7 @@ bool Epub::parseTocNavFile() const {
 
   free(navBuffer);
   tempNavFile.close();
-  HAL_STORAGE.remove(tmpNavPath.c_str());
+  SdMan.remove(tmpNavPath.c_str());
 
   Serial.printf("[%lu] [EBP] Parsed TOC nav items\n", millis());
   return true;
@@ -305,12 +305,12 @@ bool Epub::load(const bool buildIfMissing) {
 }
 
 bool Epub::clearCache() const {
-  if (!HAL_STORAGE.exists(cachePath.c_str())) {
+  if (!SdMan.exists(cachePath.c_str())) {
     Serial.printf("[%lu] [EPB] Cache does not exist, no action needed\n", millis());
     return true;
   }
 
-  if (!HAL_STORAGE.removeDir(cachePath.c_str())) {
+  if (!SdMan.removeDir(cachePath.c_str())) {
     Serial.printf("[%lu] [EPB] Failed to clear cache\n", millis());
     return false;
   }
@@ -320,11 +320,11 @@ bool Epub::clearCache() const {
 }
 
 void Epub::setupCacheDir() const {
-  if (HAL_STORAGE.exists(cachePath.c_str())) {
+  if (SdMan.exists(cachePath.c_str())) {
     return;
   }
 
-  HAL_STORAGE.mkdir(cachePath.c_str());
+  SdMan.mkdir(cachePath.c_str());
 }
 
 const std::string& Epub::getCachePath() const { return cachePath; }
@@ -365,7 +365,7 @@ std::string Epub::getCoverBmpPath(bool cropped) const {
 
 bool Epub::generateCoverBmp(bool cropped) const {
   // Already generated, return true
-  if (HAL_STORAGE.exists(getCoverBmpPath(cropped).c_str())) {
+  if (SdMan.exists(getCoverBmpPath(cropped).c_str())) {
     return true;
   }
 
@@ -386,29 +386,29 @@ bool Epub::generateCoverBmp(bool cropped) const {
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
     FsFile coverJpg;
-    if (!HAL_STORAGE.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
+    if (!SdMan.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
     readItemContentsToStream(coverImageHref, coverJpg, 1024);
     coverJpg.close();
 
-    if (!HAL_STORAGE.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
+    if (!SdMan.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
 
     FsFile coverBmp;
-    if (!HAL_STORAGE.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
+    if (!SdMan.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
       coverJpg.close();
       return false;
     }
     const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
     coverJpg.close();
     coverBmp.close();
-    HAL_STORAGE.remove(coverJpgTempPath.c_str());
+    SdMan.remove(coverJpgTempPath.c_str());
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate BMP from JPG cover image\n", millis());
-      HAL_STORAGE.remove(getCoverBmpPath(cropped).c_str());
+      SdMan.remove(getCoverBmpPath(cropped).c_str());
     }
     Serial.printf("[%lu] [EBP] Generated BMP from JPG cover image, success: %s\n", millis(), success ? "yes" : "no");
     return success;
@@ -423,7 +423,7 @@ std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
 
 bool Epub::generateThumbBmp() const {
   // Already generated, return true
-  if (HAL_STORAGE.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getThumbBmpPath().c_str())) {
     return true;
   }
 
@@ -444,18 +444,18 @@ bool Epub::generateThumbBmp() const {
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
     FsFile coverJpg;
-    if (!HAL_STORAGE.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
+    if (!SdMan.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
     readItemContentsToStream(coverImageHref, coverJpg, 1024);
     coverJpg.close();
 
-    if (!HAL_STORAGE.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
+    if (!SdMan.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
 
     FsFile thumbBmp;
-    if (!HAL_STORAGE.openFileForWrite("EBP", getThumbBmpPath(), thumbBmp)) {
+    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(), thumbBmp)) {
       coverJpg.close();
       return false;
     }
@@ -467,11 +467,11 @@ bool Epub::generateThumbBmp() const {
                                                                              THUMB_TARGET_HEIGHT);
     coverJpg.close();
     thumbBmp.close();
-    HAL_STORAGE.remove(coverJpgTempPath.c_str());
+    SdMan.remove(coverJpgTempPath.c_str());
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
-      HAL_STORAGE.remove(getThumbBmpPath().c_str());
+      SdMan.remove(getThumbBmpPath().c_str());
     }
     Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
                   success ? "yes" : "no");

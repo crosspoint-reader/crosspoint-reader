@@ -106,7 +106,7 @@ void ClearCacheActivity::clearCache() {
   Serial.printf("[%lu] [CLEAR_CACHE] Clearing cache...\n", millis());
 
   // Open .crosspoint directory
-  auto root = HAL_STORAGE.open("/.crosspoint");
+  auto root = SdMan.open("/.crosspoint");
   if (!root || !root.isDirectory()) {
     Serial.printf("[%lu] [CLEAR_CACHE] Failed to open cache directory\n", millis());
     if (root) root.close();
@@ -131,7 +131,7 @@ void ClearCacheActivity::clearCache() {
 
       file.close();  // Close before attempting to delete
 
-      if (HAL_STORAGE.removeDir(fullPath.c_str())) {
+      if (SdMan.removeDir(fullPath.c_str())) {
         clearedCount++;
       } else {
         Serial.printf("[%lu] [CLEAR_CACHE] Failed to remove: %s\n", millis(), fullPath.c_str());

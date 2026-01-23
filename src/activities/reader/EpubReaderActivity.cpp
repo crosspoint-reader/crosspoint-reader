@@ -55,7 +55,7 @@ void EpubReaderActivity::onEnter() {
   epub->setupCacheDir();
 
   FsFile f;
-  if (HAL_STORAGE.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
+  if (SdMan.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
       currentSpineIndex = data[0] + (data[1] << 8);
@@ -375,7 +375,7 @@ void EpubReaderActivity::renderScreen() {
   }
 
   FsFile f;
-  if (HAL_STORAGE.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
+  if (SdMan.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     data[0] = currentSpineIndex & 0xFF;
     data[1] = (currentSpineIndex >> 8) & 0xFF;

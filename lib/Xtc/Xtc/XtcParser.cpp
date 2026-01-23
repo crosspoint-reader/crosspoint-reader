@@ -34,7 +34,7 @@ XtcError XtcParser::open(const char* filepath) {
   }
 
   // Open file
-  if (!HAL_STORAGE.openFileForRead("XTC", filepath, m_file)) {
+  if (!SdMan.openFileForRead("XTC", filepath, m_file)) {
     m_lastError = XtcError::FILE_NOT_FOUND;
     return m_lastError;
   }
@@ -421,7 +421,7 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
 
 bool XtcParser::isValidXtcFile(const char* filepath) {
   FsFile file;
-  if (!HAL_STORAGE.openFileForRead("XTC", filepath, file)) {
+  if (!SdMan.openFileForRead("XTC", filepath, file)) {
     return false;
   }
 

@@ -83,13 +83,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   Serial.printf("[%lu] [HTTP] Content-Length: %zu\n", millis(), contentLength);
 
   // Remove existing file if present
-  if (HAL_STORAGE.exists(destPath.c_str())) {
-    HAL_STORAGE.remove(destPath.c_str());
+  if (SdMan.exists(destPath.c_str())) {
+    SdMan.remove(destPath.c_str());
   }
 
   // Open file for writing
   FsFile file;
-  if (!HAL_STORAGE.openFileForWrite("HTTP", destPath.c_str(), file)) {
+  if (!SdMan.openFileForWrite("HTTP", destPath.c_str(), file)) {
     Serial.printf("[%lu] [HTTP] Failed to open file for writing\n", millis());
     http.end();
     return FILE_ERROR;
@@ -100,7 +100,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (!stream) {
     Serial.printf("[%lu] [HTTP] Failed to get stream\n", millis());
     file.close();
-    HAL_STORAGE.remove(destPath.c_str());
+    SdMan.remove(destPath.c_str());
     http.end();
     return HTTP_ERROR;
   }
@@ -128,7 +128,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     if (written != bytesRead) {
       Serial.printf("[%lu] [HTTP] Write failed: wrote %zu of %zu bytes\n", millis(), written, bytesRead);
       file.close();
-      HAL_STORAGE.remove(destPath.c_str());
+      SdMan.remove(destPath.c_str());
       http.end();
       return FILE_ERROR;
     }
@@ -148,7 +148,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Verify download size if known
   if (contentLength > 0 && downloaded != contentLength) {
     Serial.printf("[%lu] [HTTP] Size mismatch: got %zu, expected %zu\n", millis(), downloaded, contentLength);
-    HAL_STORAGE.remove(destPath.c_str());
+    SdMan.remove(destPath.c_str());
     return HTTP_ERROR;
   }
 

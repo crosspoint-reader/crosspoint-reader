@@ -28,7 +28,7 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
 }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
-  if (!HAL_STORAGE.exists(path.c_str())) {
+  if (!SdMan.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }
@@ -43,7 +43,7 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
 }
 
 std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
-  if (!HAL_STORAGE.exists(path.c_str())) {
+  if (!SdMan.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }
@@ -58,7 +58,7 @@ std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
 }
 
 std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
-  if (!HAL_STORAGE.exists(path.c_str())) {
+  if (!SdMan.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }

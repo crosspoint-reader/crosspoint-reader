@@ -29,10 +29,10 @@ void WifiCredentialStore::obfuscate(std::string& data) const {
 
 bool WifiCredentialStore::saveToFile() const {
   // Make sure the directory exists
-  HAL_STORAGE.mkdir("/.crosspoint");
+  SdMan.mkdir("/.crosspoint");
 
   FsFile file;
-  if (!HAL_STORAGE.openFileForWrite("WCS", WIFI_FILE, file)) {
+  if (!SdMan.openFileForWrite("WCS", WIFI_FILE, file)) {
     return false;
   }
 
@@ -60,7 +60,7 @@ bool WifiCredentialStore::saveToFile() const {
 
 bool WifiCredentialStore::loadFromFile() {
   FsFile file;
-  if (!HAL_STORAGE.openFileForRead("WCS", WIFI_FILE, file)) {
+  if (!SdMan.openFileForRead("WCS", WIFI_FILE, file)) {
     return false;
   }
 

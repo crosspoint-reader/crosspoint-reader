@@ -243,7 +243,7 @@ bool ZipFile::loadZipDetails() {
 }
 
 bool ZipFile::open() {
-  if (!HAL_STORAGE.openFileForRead("ZIP", filePath, file)) {
+  if (!SdMan.openFileForRead("ZIP", filePath, file)) {
     return false;
   }
   return true;

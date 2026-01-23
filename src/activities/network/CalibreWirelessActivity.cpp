@@ -592,7 +592,7 @@ void CalibreWirelessActivity::handleSendBook(const std::string& data) {
   setStatus("Receiving: " + filename);
 
   // Open file for writing
-  if (!HAL_STORAGE.openFileForWrite("CAL", currentFilename.c_str(), currentFile)) {
+  if (!SdMan.openFileForWrite("CAL", currentFilename.c_str(), currentFile)) {
     setError("Failed to create file");
     sendJsonResponse(OpCode::ERROR, "{\"message\":\"Failed to create file\"}");
     return;

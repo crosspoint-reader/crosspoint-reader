@@ -32,10 +32,10 @@ void KOReaderCredentialStore::obfuscate(std::string& data) const {
 
 bool KOReaderCredentialStore::saveToFile() const {
   // Make sure the directory exists
-  HAL_STORAGE.mkdir("/.crosspoint");
+  SdMan.mkdir("/.crosspoint");
 
   FsFile file;
-  if (!HAL_STORAGE.openFileForWrite("KRS", KOREADER_FILE, file)) {
+  if (!SdMan.openFileForWrite("KRS", KOREADER_FILE, file)) {
     return false;
   }
 
@@ -64,7 +64,7 @@ bool KOReaderCredentialStore::saveToFile() const {
 
 bool KOReaderCredentialStore::loadFromFile() {
   FsFile file;
-  if (!HAL_STORAGE.openFileForRead("KRS", KOREADER_FILE, file)) {
+  if (!SdMan.openFileForRead("KRS", KOREADER_FILE, file)) {
     Serial.printf("[%lu] [KRS] No credentials file found\n", millis());
     return false;
   }

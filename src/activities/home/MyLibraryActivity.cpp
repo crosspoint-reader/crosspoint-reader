@@ -80,7 +80,7 @@ void MyLibraryActivity::loadRecentBooks() {
     }
 
     // Skip if file no longer exists
-    if (!HAL_STORAGE.exists(path.c_str())) {
+    if (!SdMan.exists(path.c_str())) {
       continue;
     }
 
@@ -99,7 +99,7 @@ void MyLibraryActivity::loadRecentBooks() {
 void MyLibraryActivity::loadFiles() {
   files.clear();
 
-  auto root = HAL_STORAGE.open(basepath.c_str());
+  auto root = SdMan.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
     if (root) root.close();
     return;

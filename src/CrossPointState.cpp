@@ -13,7 +13,7 @@ CrossPointState CrossPointState::instance;
 
 bool CrossPointState::saveToFile() const {
   FsFile outputFile;
-  if (!HAL_STORAGE.openFileForWrite("CPS", STATE_FILE, outputFile)) {
+  if (!SdMan.openFileForWrite("CPS", STATE_FILE, outputFile)) {
     return false;
   }
 
@@ -26,7 +26,7 @@ bool CrossPointState::saveToFile() const {
 
 bool CrossPointState::loadFromFile() {
   FsFile inputFile;
-  if (!HAL_STORAGE.openFileForRead("CPS", STATE_FILE, inputFile)) {
+  if (!SdMan.openFileForRead("CPS", STATE_FILE, inputFile)) {
     return false;
   }
 

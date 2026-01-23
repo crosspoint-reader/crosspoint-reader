@@ -15,13 +15,13 @@ bool Txt::load() {
     return true;
   }
 
-  if (!HAL_STORAGE.exists(filepath.c_str())) {
+  if (!SdMan.exists(filepath.c_str())) {
     Serial.printf("[%lu] [TXT] File does not exist: %s\n", millis(), filepath.c_str());
     return false;
   }
 
   FsFile file;
-  if (!HAL_STORAGE.openFileForRead("TXT", filepath, file)) {
+  if (!SdMan.openFileForRead("TXT", filepath, file)) {
     Serial.printf("[%lu] [TXT] Failed to open file: %s\n", millis(), filepath.c_str());
     return false;
   }
@@ -48,11 +48,11 @@ std::string Txt::getTitle() const {
 }
 
 void Txt::setupCacheDir() const {
-  if (!HAL_STORAGE.exists(cacheBasePath.c_str())) {
-    HAL_STORAGE.mkdir(cacheBasePath.c_str());
+  if (!SdMan.exists(cacheBasePath.c_str())) {
+    SdMan.mkdir(cacheBasePath.c_str());
   }
-  if (!HAL_STORAGE.exists(cachePath.c_str())) {
-    HAL_STORAGE.mkdir(cachePath.c_str());
+  if (!SdMan.exists(cachePath.c_str())) {
+    SdMan.mkdir(cachePath.c_str());
   }
 }
 
@@ -73,7 +73,7 @@ std::string Txt::findCoverImage() const {
   // First priority: look for image with same name as txt file (e.g., mybook.jpg)
   for (const auto& ext : extensions) {
     std::string coverPath = folder + "/" + baseName + ext;
-    if (HAL_STORAGE.exists(coverPath.c_str())) {
+    if (SdMan.exists(coverPath.c_str())) {
       Serial.printf("[%lu] [TXT] Found matching cover image: %s\n", millis(), coverPath.c_str());
       return coverPath;
     }
@@ -84,7 +84,7 @@ std::string Txt::findCoverImage() const {
   for (const auto& name : coverNames) {
     for (const auto& ext : extensions) {
       std::string coverPath = folder + "/" + std::string(name) + ext;
-      if (HAL_STORAGE.exists(coverPath.c_str())) {
+      if (SdMan.exists(coverPath.c_str())) {
         Serial.printf("[%lu] [TXT] Found fallback cover image: %s\n", millis(), coverPath.c_str());
         return coverPath;
       }
@@ -98,7 +98,7 @@ std::string Txt::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
 bool Txt::generateCoverBmp() const {
   // Already generated, return true
-  if (HAL_STORAGE.exists(getCoverBmpPath().c_str())) {
+  if (SdMan.exists(getCoverBmpPath().c_str())) {
     return true;
   }
 
@@ -122,10 +122,10 @@ bool Txt::generateCoverBmp() const {
     // Copy BMP file to cache
     Serial.printf("[%lu] [TXT] Copying BMP cover image to cache\n", millis());
     FsFile src, dst;
-    if (!HAL_STORAGE.openFileForRead("TXT", coverImagePath, src)) {
+    if (!SdMan.openFileForRead("TXT", coverImagePath, src)) {
       return false;
     }
-    if (!HAL_STORAGE.openFileForWrite("TXT", getCoverBmpPath(), dst)) {
+    if (!SdMan.openFileForWrite("TXT", getCoverBmpPath(), dst)) {
       src.close();
       return false;
     }
@@ -144,10 +144,10 @@ bool Txt::generateCoverBmp() const {
     // Convert JPG/JPEG to BMP (same approach as Epub)
     Serial.printf("[%lu] [TXT] Generating BMP from JPG cover image\n", millis());
     FsFile coverJpg, coverBmp;
-    if (!HAL_STORAGE.openFileForRead("TXT", coverImagePath, coverJpg)) {
+    if (!SdMan.openFileForRead("TXT", coverImagePath, coverJpg)) {
       return false;
     }
-    if (!HAL_STORAGE.openFileForWrite("TXT", getCoverBmpPath(), coverBmp)) {
+    if (!SdMan.openFileForWrite("TXT", getCoverBmpPath(), coverBmp)) {
       coverJpg.close();
       return false;
     }
@@ -157,7 +157,7 @@ bool Txt::generateCoverBmp() const {
 
     if (!success) {
       Serial.printf("[%lu] [TXT] Failed to generate BMP from JPG cover image\n", millis());
-      HAL_STORAGE.remove(getCoverBmpPath().c_str());
+      SdMan.remove(getCoverBmpPath().c_str());
     } else {
       Serial.printf("[%lu] [TXT] Generated BMP from JPG cover image\n", millis());
     }
@@ -175,7 +175,7 @@ bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
   }
 
   FsFile file;
-  if (!HAL_STORAGE.openFileForRead("TXT", filepath, file)) {
+  if (!SdMan.openFileForRead("TXT", filepath, file)) {
     return false;
   }
 

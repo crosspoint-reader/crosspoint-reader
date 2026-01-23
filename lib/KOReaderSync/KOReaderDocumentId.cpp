@@ -43,7 +43,7 @@ size_t KOReaderDocumentId::getOffset(int i) {
 
 std::string KOReaderDocumentId::calculate(const std::string& filePath) {
   FsFile file;
-  if (!HAL_STORAGE.openFileForRead("KODoc", filePath, file)) {
+  if (!SdMan.openFileForRead("KODoc", filePath, file)) {
     Serial.printf("[%lu] [KODoc] Failed to open file: %s\n", millis(), filePath.c_str());
     return "";
   }
