@@ -359,8 +359,7 @@ const std::string& Epub::getLanguage() const {
 }
 
 std::string Epub::getCoverBmpPath(bool cropped) const {
-  const auto coverFileName = "cover" + cropped ? "_crop" : "";
-  return cachePath + "/" + coverFileName + ".bmp";
+  return cropped ? (cachePath + "/cover_crop.bmp") : (cachePath + "/cover_fit.bmp");
 }
 
 bool Epub::generateCoverBmp(bool cropped) const {
@@ -396,12 +395,37 @@ bool Epub::generateCoverBmp(bool cropped) const {
       return false;
     }
 
+    // Get JPEG dimensions to calculate target dimensions for FIT/CROP
+    int jpegWidth, jpegHeight;
+    if (!JpegToBmpConverter::getJpegDimensions(coverJpg, jpegWidth, jpegHeight)) {
+      Serial.printf("[%lu] [EBP] Failed to get JPEG dimensions\n", millis());
+      coverJpg.close();
+      return false;
+    }
+
+    // Calculate target dimensions based on FIT/CROP mode
+    // FIT: ancho fijo 480px, alto proporcional = 480 * (jpegHeight / jpegWidth)
+    // CROP: alto fijo 800px, ancho proporcional = 800 * (jpegWidth / jpegHeight)
+    int targetWidth, targetHeight;
+    if (cropped) {
+      // CROP mode: height = 800, width proportional
+      targetHeight = 800;
+      targetWidth = (800 * jpegWidth) / jpegHeight;
+    } else {
+      // FIT mode: width = 480, height proportional
+      targetWidth = 480;
+      targetHeight = (480 * jpegHeight) / jpegWidth;
+    }
+
+    Serial.printf("[%lu] [EBP] Calculated %s dimensions: %dx%d (original JPEG: %dx%d)\n", millis(),
+                  cropped ? "CROP" : "FIT", targetWidth, targetHeight, jpegWidth, jpegHeight);
+
     FsFile coverBmp;
     if (!SdMan.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
       coverJpg.close();
       return false;
     }
-    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
+    const bool success = JpegToBmpConverter::jpegFileToBmpStreamWithSize(coverJpg, coverBmp, targetWidth, targetHeight);
     coverJpg.close();
     coverBmp.close();
     SdMan.remove(coverJpgTempPath.c_str());

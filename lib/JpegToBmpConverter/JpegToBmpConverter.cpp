@@ -565,3 +565,32 @@ bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(FsFile& jpegFile, Print
                                                          int targetMaxHeight) {
   return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true);
 }
+
+// Get JPEG dimensions without full conversion
+bool JpegToBmpConverter::getJpegDimensions(FsFile& jpegFile, int& width, int& height) {
+  // Reset file position to beginning
+  if (!jpegFile.seek(0)) {
+    Serial.printf("[%lu] [JPG] Failed to seek to beginning of JPEG file\n", millis());
+    return false;
+  }
+
+  // Initialize JPEG decoder
+  pjpeg_image_info_t imageInfo = {};
+  JpegReadContext context{jpegFile, {}, 0, 0};
+
+  const int decodeStatus = pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, false);
+  if (decodeStatus != 0) {
+    Serial.printf("[%lu] [JPG] pjpeg_decode_init failed with status %d\n", millis(), decodeStatus);
+    return false;
+  }
+
+  // Get dimensions from image info
+  width = imageInfo.m_width;
+  height = imageInfo.m_height;
+
+  Serial.printf("[%lu] [JPG] Read JPEG dimensions: %dx%d\n", millis(), width, height);
+
+  // Reset file position after reading
+  jpegFile.seek(0);
+  return true;
+}
