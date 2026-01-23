@@ -342,7 +342,7 @@ void MyLibraryActivity::renderRecentTab() const {
       }
       const size_t dot = title.find_last_of('.');
       if (dot != std::string::npos) {
-        title = title.substr(0, dot);
+        title.resize(dot);
       }
     }
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title.c_str(), pageWidth - LEFT_MARGIN - RIGHT_MARGIN);
