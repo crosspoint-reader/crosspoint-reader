@@ -55,6 +55,10 @@ class CategorySettingsActivity final : public ActivityWithSubactivity {
   [[noreturn]] void displayTaskLoop();
   void render() const;
   void toggleCurrentSetting();
+  bool shouldShowSetting(int index) const;
+  int getVisibleSettingsCount() const;
+  int mapVisibleIndexToActualIndex(int visibleIndex) const;
+  int mapActualIndexToVisibleIndex(int actualIndex) const;
 
  public:
   CategorySettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* categoryName,

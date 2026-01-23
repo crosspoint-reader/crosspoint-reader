@@ -11,6 +11,7 @@
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "SleepBmpSelectionActivity.h"
 #include "fontIds.h"
 
 void CategorySettingsActivity::taskTrampoline(void* param) {
@@ -61,24 +62,40 @@ void CategorySettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
+  // Handle navigation (skip hidden settings)
+  const int visibleCount = getVisibleSettingsCount();
+  if (visibleCount == 0) {
+    return;  // No visible settings
+  }
+  
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount - 1);
+    // Move to previous visible setting
+    int currentActual = mapVisibleIndexToActualIndex(selectedSettingIndex);
+    do {
+      currentActual = (currentActual > 0) ? (currentActual - 1) : (settingsCount - 1);
+    } while (!shouldShowSetting(currentActual) && currentActual != mapVisibleIndexToActualIndex(selectedSettingIndex));
+    selectedSettingIndex = mapActualIndexToVisibleIndex(currentActual);
     updateRequired = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    selectedSettingIndex = (selectedSettingIndex < settingsCount - 1) ? (selectedSettingIndex + 1) : 0;
+    // Move to next visible setting
+    int currentActual = mapVisibleIndexToActualIndex(selectedSettingIndex);
+    do {
+      currentActual = (currentActual < settingsCount - 1) ? (currentActual + 1) : 0;
+    } while (!shouldShowSetting(currentActual) && currentActual != mapVisibleIndexToActualIndex(selectedSettingIndex));
+    selectedSettingIndex = mapActualIndexToVisibleIndex(currentActual);
     updateRequired = true;
   }
 }
 
 void CategorySettingsActivity::toggleCurrentSetting() {
-  if (selectedSettingIndex < 0 || selectedSettingIndex >= settingsCount) {
+  const int actualIndex = mapVisibleIndexToActualIndex(selectedSettingIndex);
+  if (actualIndex < 0 || actualIndex >= settingsCount) {
     return;
   }
 
-  const auto& setting = settingsList[selectedSettingIndex];
+  const auto& setting = settingsList[actualIndex];
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
@@ -87,6 +104,16 @@ void CategorySettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+    
+    // If sleep screen changed away from CUSTOM, adjust selection if needed
+    if (setting.valuePtr == &CrossPointSettings::sleepScreen) {
+      const int visibleCount = getVisibleSettingsCount();
+      // If current selection is now hidden or out of bounds, adjust it
+      const int currentActual = mapVisibleIndexToActualIndex(selectedSettingIndex);
+      if (!shouldShowSetting(currentActual) || selectedSettingIndex >= visibleCount) {
+        selectedSettingIndex = visibleCount > 0 ? visibleCount - 1 : 0;
+      }
+    }
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
@@ -127,6 +154,14 @@ void CategorySettingsActivity::toggleCurrentSetting() {
         updateRequired = true;
       }));
       xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Select Sleep BMP") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new SleepBmpSelectionActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
     }
   } else {
     return;
@@ -147,6 +182,57 @@ void CategorySettingsActivity::displayTaskLoop() {
   }
 }
 
+bool CategorySettingsActivity::shouldShowSetting(int index) const {
+  if (index < 0 || index >= settingsCount) {
+    return false;
+  }
+  // Hide "Select Sleep BMP" if sleep screen is not set to CUSTOM
+  if (settingsList[index].type == SettingType::ACTION && 
+      strcmp(settingsList[index].name, "Select Sleep BMP") == 0) {
+    return SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+  }
+  return true;
+}
+
+int CategorySettingsActivity::getVisibleSettingsCount() const {
+  int count = 0;
+  for (int i = 0; i < settingsCount; i++) {
+    if (shouldShowSetting(i)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+int CategorySettingsActivity::mapVisibleIndexToActualIndex(int visibleIndex) const {
+  int visibleCount = 0;
+  for (int i = 0; i < settingsCount; i++) {
+    if (shouldShowSetting(i)) {
+      if (visibleCount == visibleIndex) {
+        return i;
+      }
+      visibleCount++;
+    }
+  }
+  // If visibleIndex is out of bounds, return first visible setting
+  for (int i = 0; i < settingsCount; i++) {
+    if (shouldShowSetting(i)) {
+      return i;
+    }
+  }
+  return 0;  // Fallback
+}
+
+int CategorySettingsActivity::mapActualIndexToVisibleIndex(int actualIndex) const {
+  int visibleIndex = 0;
+  for (int i = 0; i < actualIndex; i++) {
+    if (shouldShowSetting(i)) {
+      visibleIndex++;
+    }
+  }
+  return visibleIndex;
+}
+
 void CategorySettingsActivity::render() const {
   renderer.clearScreen();
 
@@ -155,13 +241,31 @@ void CategorySettingsActivity::render() const {
 
   renderer.drawCenteredText(UI_12_FONT_ID, 15, categoryName, true, EpdFontFamily::BOLD);
 
+  // Calculate visible settings count and map selection
+  const int visibleCount = getVisibleSettingsCount();
+  const int actualSelectedIndex = mapVisibleIndexToActualIndex(selectedSettingIndex);
+  
   // Draw selection highlight
-  renderer.fillRect(0, 60 + selectedSettingIndex * 30 - 2, pageWidth - 1, 30);
-
-  // Draw all settings
+  int visibleIndex = 0;
   for (int i = 0; i < settingsCount; i++) {
-    const int settingY = 60 + i * 30;  // 30 pixels between settings
-    const bool isSelected = (i == selectedSettingIndex);
+    if (shouldShowSetting(i)) {
+      if (i == actualSelectedIndex) {
+        renderer.fillRect(0, 60 + visibleIndex * 30 - 2, pageWidth - 1, 30);
+        break;
+      }
+      visibleIndex++;
+    }
+  }
+
+  // Draw all visible settings
+  visibleIndex = 0;
+  for (int i = 0; i < settingsCount; i++) {
+    if (!shouldShowSetting(i)) {
+      continue;
+    }
+    
+    const int settingY = 60 + visibleIndex * 30;  // 30 pixels between settings
+    const bool isSelected = (i == actualSelectedIndex);
 
     // Draw setting name
     renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, !isSelected);
@@ -176,11 +280,22 @@ void CategorySettingsActivity::render() const {
       valueText = settingsList[i].enumValues[value];
     } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
       valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
+    } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Select Sleep BMP") == 0) {
+      if (SETTINGS.selectedSleepBmp[0] != '\0') {
+        valueText = SETTINGS.selectedSleepBmp;
+        if (valueText.length() > 20) {
+          valueText = valueText.substr(0, 17) + "...";
+        }
+      } else {
+        valueText = "Random";
+      }
     }
     if (!valueText.empty()) {
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
       renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), !isSelected);
     }
+    
+    visibleIndex++;
   }
 
   renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),

@@ -12,7 +12,7 @@
 class SleepBmpSelectionActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
-  std::vector<std::string> files;
+  std::vector<std::string> files;  // Sorted list of valid BMP filenames ("Random" at index 0)
   size_t selectorIndex = 0;
   bool updateRequired = false;
   unsigned long enterTime = 0;  // Time when activity was entered
@@ -21,7 +21,7 @@ class SleepBmpSelectionActivity final : public Activity {
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void render() const;
-  void loadFiles();
+  void loadFiles();  // Load and sort all valid BMP files
 
  public:
   explicit SleepBmpSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
