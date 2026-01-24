@@ -32,7 +32,7 @@ class CrossPointSettings {
   // Front button layout options
   // Default: Back, Confirm, Left, Right
   // Swapped: Left, Right, Back, Confirm
-  // Additional: Back, Left, Right, Confirm (navigation buttons centered)
+  // Additional: Back, Left, Right, Confirm
   enum FRONT_BUTTON_LAYOUT {
     BACK_CONFIRM_LEFT_RIGHT = 0,
     LEFT_RIGHT_BACK_CONFIRM = 1,
