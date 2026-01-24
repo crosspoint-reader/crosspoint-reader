@@ -425,6 +425,12 @@ std::string Epub::getThumbBmpPath(int width, int height) const {
   return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";
 }
 
+bool Epub::generateThumbBmp() const {
+  constexpr int THUMB_TARGET_WIDTH = 240;
+  constexpr int THUMB_TARGET_HEIGHT = 400;
+  return generateThumbBmp(THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
+}
+
 bool Epub::generateThumbBmp(int width, int height) const {
   // Already generated, return true
   if (SdMan.exists(getThumbBmpPath(width, height).c_str())) {
