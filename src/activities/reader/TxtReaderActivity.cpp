@@ -8,6 +8,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "ScreenComponents.h"
 #include "fontIds.h"
 
@@ -55,9 +56,10 @@ void TxtReaderActivity::onEnter() {
 
   txt->setupCacheDir();
 
-  // Save current txt as last opened file
+  // Save current txt as last opened file and add to recent books
   APP_STATE.openEpubPath = txt->getPath();
   APP_STATE.saveToFile();
+  RECENT_BOOKS.addBook(txt->getPath());
 
   // Trigger first update
   updateRequired = true;
