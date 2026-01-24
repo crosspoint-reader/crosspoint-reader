@@ -18,7 +18,9 @@ class BookCoverCache {
 
  private:
   std::string getCachePath(const std::string& book_path) const;
-  bool generateThumbnail(const std::string& book_path);
+  std::shared_ptr<Bitmap> generateThumbnail(const std::string& book_path);
+  std::shared_ptr<Bitmap> getCover(const std::string& book_path);
+  bool isCacheValid(const std::string& book_path) const;
   
   std::string cache_dir;
   GfxRenderer* renderer;
