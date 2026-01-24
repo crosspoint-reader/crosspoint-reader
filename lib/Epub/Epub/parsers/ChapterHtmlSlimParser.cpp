@@ -125,7 +125,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
-      // flush word preceding <br> to currentTextBlock before calling startNewTextBlock
+      // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
       EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
       if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth) {
         fontStyle = EpdFontFamily::BOLD_ITALIC;
