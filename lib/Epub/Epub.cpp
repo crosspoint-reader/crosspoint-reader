@@ -419,6 +419,8 @@ bool Epub::generateCoverBmp(bool cropped) const {
   return false;
 }
 
+std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+
 std::string Epub::getThumbBmpPath(int width, int height) const {
   return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";
 }
@@ -463,8 +465,7 @@ bool Epub::generateThumbBmp(int width, int height) const {
     }
     // Use smaller target size for Continue Reading card (half of screen: 240x400)
     // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, width,
-                                                                             height);
+    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, width, height);
     coverJpg.close();
     thumbBmp.close();
     SdMan.remove(coverJpgTempPath.c_str());
