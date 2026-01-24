@@ -177,6 +177,15 @@ This feature can be disabled in **[Settings](#35-settings)** to help avoid chang
 * **Return to Home:** Press and **hold** the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)**.
 
+### Supported Languages
+
+CrossPoint renders text using the following Unicode character blocks, enabling support for a wide range of languages:
+
+*   **Latin Script (Basic, Supplement, Extended-A):** Covers English, German, French, Spanish, Portuguese, Italian, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Czech, Hungarian, Romanian, Slovak, Slovenian, Turkish, and others.
+*   **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
+
+What is not supported: Chinese, Japanese, Korean, Vietnamese, Hebrew, Arabic and Farsi.
+
 ---
 
 ## 5. Chapter Selection Screen

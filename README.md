@@ -41,7 +41,9 @@ This project is **not affiliated with Xteink**; it's built as a community projec
   - [ ] Full UTF support
 - [x] Screen rotation
 
-See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint.
+Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
+
+See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint. 
 
 ## Installing
 
