@@ -167,7 +167,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
         Serial.printf("[%lu] [SLP] Cropping bitmap y: %f\n", millis(), cropY);
         ratio = static_cast<float>(bitmap.getWidth()) / ((1.0f - cropY) * static_cast<float>(bitmap.getHeight()));
       }
-      x = std::round((pageWidth - pageHeight * ratio) / 2);
+      x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
       y = 0;
       Serial.printf("[%lu] [SLP] Centering with ratio %f to x=%d\n", millis(), ratio, x);
     }
