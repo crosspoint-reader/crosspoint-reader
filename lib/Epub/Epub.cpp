@@ -419,7 +419,11 @@ bool Epub::generateCoverBmp(bool cropped) const {
   return false;
 }
 
-std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Epub::getThumbBmpPath() const {
+  constexpr int THUMB_TARGET_WIDTH = 240;
+  constexpr int THUMB_TARGET_HEIGHT = 400;
+  return getThumbBmpPath(THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
+}
 
 std::string Epub::getThumbBmpPath(int width, int height) const {
   return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";

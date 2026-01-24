@@ -293,7 +293,11 @@ bool Xtc::generateCoverBmp() const {
   return true;
 }
 
-std::string Xtc::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Xtc::getThumbBmpPath() const {   
+  constexpr int THUMB_TARGET_WIDTH = 240;
+  constexpr int THUMB_TARGET_HEIGHT = 400;
+  return getThumbBmpPath(THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
+}
 
 std::string Xtc::getThumbBmpPath(int width, int height) const {
   return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";
