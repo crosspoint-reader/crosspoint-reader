@@ -471,7 +471,7 @@ bool Epub::generateThumbBmp(int width, int height) const {
     }
     // Use smaller target size for Continue Reading card (half of screen: 240x400)
     // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, width, height);
+    const bool success = JpegToBmpConverter::jpegFileToBmpStreamWithSize(coverJpg, thumbBmp, width, height);
     coverJpg.close();
     thumbBmp.close();
     SdMan.remove(coverJpgTempPath.c_str());
