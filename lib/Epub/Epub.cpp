@@ -419,11 +419,13 @@ bool Epub::generateCoverBmp(bool cropped) const {
   return false;
 }
 
-std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Epub::getThumbBmpPath(int width, int height) const {
+  return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";
+}
 
-bool Epub::generateThumbBmp() const {
+bool Epub::generateThumbBmp(int width, int height) const {
   // Already generated, return true
-  if (SdMan.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getThumbBmpPath(width, height).c_str())) {
     return true;
   }
 
@@ -455,23 +457,21 @@ bool Epub::generateThumbBmp() const {
     }
 
     FsFile thumbBmp;
-    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(), thumbBmp)) {
+    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(width, height), thumbBmp)) {
       coverJpg.close();
       return false;
     }
     // Use smaller target size for Continue Reading card (half of screen: 240x400)
     // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-    constexpr int THUMB_TARGET_WIDTH = 240;
-    constexpr int THUMB_TARGET_HEIGHT = 400;
-    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
-                                                                             THUMB_TARGET_HEIGHT);
+    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, width,
+                                                                             height);
     coverJpg.close();
     thumbBmp.close();
     SdMan.remove(coverJpgTempPath.c_str());
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
-      SdMan.remove(getThumbBmpPath().c_str());
+      SdMan.remove(getThumbBmpPath(width, height).c_str());
     }
     Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
                   success ? "yes" : "no");

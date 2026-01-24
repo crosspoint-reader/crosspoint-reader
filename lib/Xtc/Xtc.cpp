@@ -293,11 +293,13 @@ bool Xtc::generateCoverBmp() const {
   return true;
 }
 
-std::string Xtc::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Xtc::getThumbBmpPath(int width, int height) const {
+  return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";
+}
 
-bool Xtc::generateThumbBmp() const {
+bool Xtc::generateThumbBmp(int width, int height) const {
   // Already generated
-  if (SdMan.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getThumbBmpPath(width, height).c_str())) {
     return true;
   }
 
@@ -324,40 +326,24 @@ bool Xtc::generateThumbBmp() const {
   // Get bit depth
   const uint8_t bitDepth = parser->getBitDepth();
 
-  // Calculate target dimensions for thumbnail (fit within 240x400 Continue Reading card)
-  constexpr int THUMB_TARGET_WIDTH = 240;
-  constexpr int THUMB_TARGET_HEIGHT = 400;
+  // Calculate target dimensions for thumbnail
+  uint16_t thumbWidth = width;
+  uint16_t thumbHeight = height;
 
-  // Calculate scale factor
-  float scaleX = static_cast<float>(THUMB_TARGET_WIDTH) / pageInfo.width;
-  float scaleY = static_cast<float>(THUMB_TARGET_HEIGHT) / pageInfo.height;
+  float scaleX = static_cast<float>(thumbWidth) / pageInfo.width;
+  float scaleY = static_cast<float>(thumbHeight) / pageInfo.height;
   float scale = (scaleX < scaleY) ? scaleX : scaleY;
 
-  // Only scale down, never up
+  // If we are scaling up, we should adjust thumbWidth and thumbHeight
+  // to maintain aspect ratio, but not exceed the given width and height.
   if (scale >= 1.0f) {
-    // Page is already small enough, just use cover.bmp
-    // Copy cover.bmp to thumb.bmp
-    if (generateCoverBmp()) {
-      FsFile src, dst;
-      if (SdMan.openFileForRead("XTC", getCoverBmpPath(), src)) {
-        if (SdMan.openFileForWrite("XTC", getThumbBmpPath(), dst)) {
-          uint8_t buffer[512];
-          while (src.available()) {
-            size_t bytesRead = src.read(buffer, sizeof(buffer));
-            dst.write(buffer, bytesRead);
-          }
-          dst.close();
-        }
-        src.close();
-      }
-      Serial.printf("[%lu] [XTC] Copied cover to thumb (no scaling needed)\n", millis());
-      return SdMan.exists(getThumbBmpPath().c_str());
-    }
-    return false;
+    thumbWidth = pageInfo.width;
+    thumbHeight = pageInfo.height;
+    scale = 1.0f;
+  } else {
+    thumbWidth = static_cast<uint16_t>(pageInfo.width * scale);
+    thumbHeight = static_cast<uint16_t>(pageInfo.height * scale);
   }
-
-  uint16_t thumbWidth = static_cast<uint16_t>(pageInfo.width * scale);
-  uint16_t thumbHeight = static_cast<uint16_t>(pageInfo.height * scale);
 
   Serial.printf("[%lu] [XTC] Generating thumb BMP: %dx%d -> %dx%d (scale: %.3f)\n", millis(), pageInfo.width,
                 pageInfo.height, thumbWidth, thumbHeight, scale);
@@ -385,7 +371,7 @@ bool Xtc::generateThumbBmp() const {
 
   // Create thumbnail BMP file - use 1-bit format for fast home screen rendering (no gray passes)
   FsFile thumbBmp;
-  if (!SdMan.openFileForWrite("XTC", getThumbBmpPath(), thumbBmp)) {
+  if (!SdMan.openFileForWrite("XTC", getThumbBmpPath(width, height), thumbBmp)) {
     Serial.printf("[%lu] [XTC] Failed to create thumb BMP file\n", millis());
     free(pageBuffer);
     return false;
@@ -550,7 +536,7 @@ bool Xtc::generateThumbBmp() const {
   free(pageBuffer);
 
   Serial.printf("[%lu] [XTC] Generated thumb BMP (%dx%d): %s\n", millis(), thumbWidth, thumbHeight,
-                getThumbBmpPath().c_str());
+                getThumbBmpPath(width, height).c_str());
   return true;
 }
 

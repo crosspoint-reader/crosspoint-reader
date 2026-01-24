@@ -466,15 +466,15 @@ void MyLibraryActivity::renderRecentAsBookCoverList() const {
 
     if (StringUtils::checkFileExtension(book.path, ".epub")) {
       Epub epub(book.path, "/.crosspoint");
-      if (epub.load(false) && epub.generateThumbBmp()) {
-        coverBmpPath = epub.getThumbBmpPath();
+      if (epub.load(false) && epub.generateThumbBmp(coverWidth, itemHeight - 10)) {
+        coverBmpPath = epub.getThumbBmpPath(coverWidth, itemHeight - 10);
         hasCoverImage = true;
       }
     } else if (StringUtils::checkFileExtension(book.path, ".xtch") ||
                StringUtils::checkFileExtension(book.path, ".xtc")) {
       Xtc xtc(book.path, "/.crosspoint");
-      if (xtc.load() && xtc.generateThumbBmp()) {
-        coverBmpPath = xtc.getThumbBmpPath();
+      if (xtc.load() && xtc.generateThumbBmp(coverWidth, itemHeight - 10)) {
+        coverBmpPath = xtc.getThumbBmpPath(coverWidth, itemHeight - 10);
         hasCoverImage = true;
       }
     }
@@ -554,15 +554,15 @@ void MyLibraryActivity::renderRecentAsBookCoverGrid() const {
 
     if (StringUtils::checkFileExtension(book.path, ".epub")) {
       Epub epub(book.path, "/.crosspoint");
-      if (epub.load(false) && epub.generateThumbBmp()) {
-        coverBmpPath = epub.getThumbBmpPath();
+      if (epub.load(false) && epub.generateThumbBmp(itemWidth, itemHeight)) {
+        coverBmpPath = epub.getThumbBmpPath(itemWidth, itemHeight);
         hasCoverImage = true;
       }
     } else if (StringUtils::checkFileExtension(book.path, ".xtch") ||
                StringUtils::checkFileExtension(book.path, ".xtc")) {
       Xtc xtc(book.path, "/.crosspoint");
-      if (xtc.load() && xtc.generateThumbBmp()) {
-        coverBmpPath = xtc.getThumbBmpPath();
+      if (xtc.load() && xtc.generateThumbBmp(itemWidth, itemHeight)) {
+        coverBmpPath = xtc.getThumbBmpPath(itemWidth, itemHeight);
         hasCoverImage = true;
       }
     }
