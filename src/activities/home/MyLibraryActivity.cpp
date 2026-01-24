@@ -484,6 +484,8 @@ void MyLibraryActivity::renderRecentAsBookCoverList() const {
       if (SdMan.openFileForRead("MYLIB", coverBmpPath, file)) {
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          // draw white rect for image background
+          renderer.fillRect(LEFT_MARGIN - 1, y - 1, coverWidth + 2, itemHeight - 10 + 2, false);
           renderer.drawBitmap(bitmap, LEFT_MARGIN, y, coverWidth, itemHeight - 10);
         }
         file.close();
