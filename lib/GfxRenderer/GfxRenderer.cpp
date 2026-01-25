@@ -827,11 +827,11 @@ void GfxRenderer::drawTransparentBitmap(const Bitmap& bitmap, const int x, const
 
   float scale = 1.0f;
   bool isScaled = false;
-  if (w > 0 && bitmap.getWidth() > w) {
+  if (w > 0) {
     scale = static_cast<float>(w) / static_cast<float>(bitmap.getWidth());
     isScaled = true;
   }
-  if (h > 0 && bitmap.getHeight() > h) {
+  if (h > 0) {
     scale = std::min(scale, static_cast<float>(h) / static_cast<float>(bitmap.getHeight()));
     isScaled = true;
   }
@@ -855,25 +855,34 @@ void GfxRenderer::drawTransparentBitmap(const Bitmap& bitmap, const int x, const
     }
 
     const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
-    int screenY = y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale)) : bmpYOffset);
 
-    if (screenY >= getScreenHeight()) continue;
-    if (screenY < 0) continue;
+    // Calculate target Y span
+    int startY = y + static_cast<int>(std::floor(bmpYOffset * scale));
+    int endY = y + static_cast<int>(std::floor((bmpYOffset + 1) * scale));
+
+    // Clamp to screen
+    if (startY < 0) startY = 0;
+    if (endY > getScreenHeight()) endY = getScreenHeight();
+    if (startY >= endY) continue;
 
     for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
-      int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
+      // Calculate target X span
+      int startX = x + static_cast<int>(std::floor(bmpX * scale));
+      int endX = x + static_cast<int>(std::floor((bmpX + 1) * scale));
 
-      if (screenX >= getScreenWidth()) break;
-      if (screenX < 0) continue;
+      if (startX < 0) startX = 0;
+      if (endX > getScreenWidth()) endX = getScreenWidth();
+      if (startX >= endX) continue;
 
-      // Get 2-bit value. For 1-bit BMPs from BmpReader:
-      // Black in BMP -> 0 (Black)
-      // White in BMP -> 3 (White)
+      // Extract 2-bit value (0=Black, 3=White for 1-bit BMP)
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
-      // Only draw if NOT white (val < 3)
       if (val < 3) {
-         drawPixel(screenX, screenY, true); // True = Black
+        for (int sy = startY; sy < endY; sy++) {
+          for (int sx = startX; sx < endX; sx++) {
+            drawPixel(sx, sy, true); // Black
+          }
+        }
       }
     }
   }
@@ -891,11 +900,11 @@ void GfxRenderer::drawRoundedBitmap(const Bitmap& bitmap, const int x, const int
 
   float scale = 1.0f;
   bool isScaled = false;
-  if (w > 0 && bitmap.getWidth() > w) {
+  if (w > 0) {
     scale = static_cast<float>(w) / static_cast<float>(bitmap.getWidth());
     isScaled = true;
   }
-  if (h > 0 && bitmap.getHeight() > h) {
+  if (h > 0) {
     scale = std::min(scale, static_cast<float>(h) / static_cast<float>(bitmap.getHeight()));
     isScaled = true;
   }
@@ -952,36 +961,44 @@ void GfxRenderer::drawRoundedBitmap(const Bitmap& bitmap, const int x, const int
     }
 
     const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
-    int screenY = y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale)) : bmpYOffset);
 
-    if (screenY >= getScreenHeight()) continue;
-    if (screenY < 0) continue;
+    // Calculate target Y span
+    int startY = y + static_cast<int>(std::floor(bmpYOffset * scale));
+    int endY = y + static_cast<int>(std::floor((bmpYOffset + 1) * scale));
 
-    // Relative Y for rounded check
-    int relY = screenY - y;
-    if (relY < 0 || relY >= h) continue;
+    if (startY < 0) startY = 0;
+    if (endY > getScreenHeight()) endY = getScreenHeight();
+    if (startY >= endY) continue;
 
     for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
-      int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
+      int startX = x + static_cast<int>(std::floor(bmpX * scale));
+      int endX = x + static_cast<int>(std::floor((bmpX + 1) * scale));
 
-      if (screenX >= getScreenWidth()) break;
-      if (screenX < 0) continue;
-
-      // Relative X for rounded check
-      int relX = screenX - x;
-      if (relX < 0 || relX >= w) continue;
-
-      // Check mask
-      if (!isVisible(relX, relY)) continue;
+      if (startX < 0) startX = 0;
+      if (endX > getScreenWidth()) endX = getScreenWidth();
+      if (startX >= endX) continue;
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+      bool pixelBlack = false;
 
       if (renderMode == BW) {
-        drawPixel(screenX, screenY, val < 2);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+        pixelBlack = (val < 2);
+      } else if (renderMode == GRAYSCALE_MSB) {
+        pixelBlack = (val < 3); // Draw all non-white as black for icons/covers
+      } else if (renderMode == GRAYSCALE_LSB) {
+        pixelBlack = (val == 0);
+      }
+
+      if (pixelBlack) {
+        for (int sy = startY; sy < endY; sy++) {
+          int relY = sy - y;
+          for (int sx = startX; sx < endX; sx++) {
+            int relX = sx - x;
+            if (isVisible(relX, relY)) {
+              drawPixel(sx, sy, true);
+            }
+          }
+        }
       }
     }
   }
