@@ -120,7 +120,7 @@ void XtcReaderActivity::loop() {
   const bool nextTriggered = usePressForPageTurn
                                  ? (mappedInput.wasPressed(MappedInputManager::Button::PageForward) ||
                                     (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                                     mappedInput.wasPressed(MappedInputManager::Button::Power)) ||
+                                     mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
                                     mappedInput.wasPressed(MappedInputManager::Button::Right))
                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
                                     (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
