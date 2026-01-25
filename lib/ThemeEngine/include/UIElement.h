@@ -153,6 +153,7 @@ public:
     Toggle,
     TabBar,
     Icon,
+    BatteryIcon,
     ScrollIndicator
   };
 

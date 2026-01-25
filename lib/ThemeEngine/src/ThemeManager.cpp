@@ -63,6 +63,8 @@ UIElement *ThemeManager::createElement(const std::string &id,
     return new Icon(id);
   if (type == "ScrollIndicator")
     return new ScrollIndicator(id);
+  if (type == "BatteryIcon")
+    return new BatteryIcon(id);
 
   return nullptr;
 }
@@ -115,6 +117,8 @@ void ThemeManager::applyProperties(
         static_cast<Divider *>(elem)->setColorExpr(val);
       } else if (elemType == UIElement::ElementType::Icon) {
         static_cast<Icon *>(elem)->setColorExpr(val);
+      } else if (elemType == UIElement::ElementType::BatteryIcon) {
+        static_cast<BatteryIcon *>(elem)->setColor(val);
       }
     }
 
@@ -273,6 +277,8 @@ void ThemeManager::applyProperties(
         static_cast<ProgressBar *>(elem)->setValue(val);
       } else if (elemType == UIElement::ElementType::Toggle) {
         static_cast<Toggle *>(elem)->setValue(val);
+      } else if (elemType == UIElement::ElementType::BatteryIcon) {
+        static_cast<BatteryIcon *>(elem)->setValue(val);
       }
     } else if (key == "Max") {
       if (elemType == UIElement::ElementType::ProgressBar) {
