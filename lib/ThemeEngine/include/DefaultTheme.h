@@ -6,8 +6,8 @@
 namespace ThemeEngine {
 
 // Use static function for C++14 ODR compatibility
-static const char *getDefaultThemeIni() {
-  static const char *theme = R"INI(
+static const char* getDefaultThemeIni() {
+  static const char* theme = R"INI(
 ; ============================================
 ; DEFAULT THEME - Original CrossPoint Reader
 ; ============================================
@@ -275,4 +275,4 @@ Align = center
   return theme;
 }
 
-} // namespace ThemeEngine
+}  // namespace ThemeEngine

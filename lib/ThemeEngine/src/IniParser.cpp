@@ -1,11 +1,11 @@
 #include "IniParser.h"
+
 #include <sstream>
 
 namespace ThemeEngine {
 
-void IniParser::trim(std::string &s) {
-  if (s.empty())
-    return;
+void IniParser::trim(std::string& s) {
+  if (s.empty()) return;
 
   // Trim left
   size_t first = s.find_first_not_of(" \t\n\r");
@@ -19,14 +19,13 @@ void IniParser::trim(std::string &s) {
   s = s.substr(first, (last - first + 1));
 }
 
-std::map<std::string, std::map<std::string, std::string>>
-IniParser::parse(Stream &stream) {
+std::map<std::string, std::map<std::string, std::string>> IniParser::parse(Stream& stream) {
   std::map<std::string, std::map<std::string, std::string>> sections;
   // stream check not strictly possible like file, can rely on available()
 
   std::string currentSection = "";
-  String line; // Use Arduino String for easy file reading, then convert to
-               // std::string
+  String line;  // Use Arduino String for easy file reading, then convert to
+                // std::string
 
   while (stream.available()) {
     line = stream.readStringUntil('\n');
@@ -34,7 +33,7 @@ IniParser::parse(Stream &stream) {
     trim(sLine);
 
     if (sLine.empty() || sLine[0] == ';' || sLine[0] == '#') {
-      continue; // Skip comments and empty lines
+      continue;  // Skip comments and empty lines
     }
 
     if (sLine.front() == '[' && sLine.back() == ']') {
@@ -62,8 +61,7 @@ IniParser::parse(Stream &stream) {
   return sections;
 }
 
-std::map<std::string, std::map<std::string, std::string>>
-IniParser::parseString(const std::string &content) {
+std::map<std::string, std::map<std::string, std::string>> IniParser::parseString(const std::string& content) {
   std::map<std::string, std::map<std::string, std::string>> sections;
   std::stringstream ss(content);
   std::string line;
@@ -101,4 +99,4 @@ IniParser::parseString(const std::string &content) {
   return sections;
 }
 
-} // namespace ThemeEngine
+}  // namespace ThemeEngine

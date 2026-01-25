@@ -1,14 +1,17 @@
 #include "ThemeSelectionActivity.h"
+
+#include <GfxRenderer.h>
+#include <SDCardManager.h>
+#include <esp_system.h>
+
+#include <cstring>
+
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
-#include <GfxRenderer.h>
-#include <SDCardManager.h>
-#include <cstring>
-#include <esp_system.h>
 
-void ThemeSelectionActivity::taskTrampoline(void *param) {
-  auto *self = static_cast<ThemeSelectionActivity *>(param);
+void ThemeSelectionActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<ThemeSelectionActivity*>(param);
   self->displayTaskLoop();
 }
 
@@ -49,8 +52,7 @@ void ThemeSelectionActivity::onEnter() {
   }
 
   updateRequired = true;
-  xTaskCreate(&ThemeSelectionActivity::taskTrampoline, "ThemeSelTask", 4096,
-              this, 1, &displayTaskHandle);
+  xTaskCreate(&ThemeSelectionActivity::taskTrampoline, "ThemeSelTask", 4096, this, 1, &displayTaskHandle);
 }
 
 void ThemeSelectionActivity::onExit() {
@@ -72,17 +74,14 @@ void ThemeSelectionActivity::loop() {
 
       // Only reboot if theme actually changed
       if (selected != std::string(SETTINGS.themeName)) {
-        strncpy(SETTINGS.themeName, selected.c_str(),
-                sizeof(SETTINGS.themeName) - 1);
+        strncpy(SETTINGS.themeName, selected.c_str(), sizeof(SETTINGS.themeName) - 1);
         SETTINGS.themeName[sizeof(SETTINGS.themeName) - 1] = '\0';
         SETTINGS.saveToFile();
 
         // Show reboot message
         renderer.clearScreen();
-        renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() / 2 - 20,
-                                  "Applying theme...", true);
-        renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2 + 10,
-                                  "Device will restart", true);
+        renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() / 2 - 20, "Applying theme...", true);
+        renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2 + 10, "Device will restart", true);
         renderer.displayBuffer();
 
         // Small delay to ensure display updates
@@ -103,13 +102,11 @@ void ThemeSelectionActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedIndex =
-        (selectedIndex > 0) ? (selectedIndex - 1) : (themeNames.size() - 1);
+    selectedIndex = (selectedIndex > 0) ? (selectedIndex - 1) : (themeNames.size() - 1);
     updateRequired = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    selectedIndex =
-        (selectedIndex < themeNames.size() - 1) ? (selectedIndex + 1) : 0;
+    selectedIndex = (selectedIndex < themeNames.size() - 1) ? (selectedIndex + 1) : 0;
     updateRequired = true;
   }
 }
@@ -133,8 +130,7 @@ void ThemeSelectionActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Select Theme", true,
-                            EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Select Theme", true, EpdFontFamily::BOLD);
 
   // Layout constants
   const int entryHeight = 30;
@@ -155,8 +151,7 @@ void ThemeSelectionActivity::render() const {
   // Draw Highlight
   int visibleIndex = selectedIndex - startIdx;
   if (visibleIndex >= 0 && visibleIndex < maxVisible) {
-    renderer.fillRect(0, startY + visibleIndex * entryHeight - 2, pageWidth - 1,
-                      entryHeight);
+    renderer.fillRect(0, startY + visibleIndex * entryHeight - 2, pageWidth - 1, entryHeight);
   }
 
   // Draw List
@@ -176,15 +171,13 @@ void ThemeSelectionActivity::render() const {
   if (themeNames.size() > maxVisible) {
     int barHeight = pageHeight - startY - 40;
     int thumbHeight = barHeight * maxVisible / themeNames.size();
-    int thumbY = startY + (barHeight - thumbHeight) * startIdx /
-                              (themeNames.size() - maxVisible);
+    int thumbY = startY + (barHeight - thumbHeight) * startIdx / (themeNames.size() - maxVisible);
     renderer.fillRect(pageWidth - 5, startY, 2, barHeight, 0);
     renderer.fillRect(pageWidth - 7, thumbY, 6, thumbHeight, 1);
   }
 
   const auto labels = mappedInput.mapLabels("Cancel", "Select", "", "");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3,
-                           labels.btn4);
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

@@ -1,52 +1,51 @@
 #pragma once
 
-#include "ThemeContext.h"
-#include "ThemeTypes.h"
 #include <GfxRenderer.h>
+
 #include <string>
 #include <vector>
 
+#include "ThemeContext.h"
+#include "ThemeTypes.h"
+
 namespace ThemeEngine {
 
-class Container; // Forward declaration
+class Container;  // Forward declaration
 
 class UIElement {
-public:
+ public:
   int getAbsX() const { return absX; }
   int getAbsY() const { return absY; }
   int getAbsW() const { return absW; }
   int getAbsH() const { return absH; }
-  const std::string &getId() const { return id; }
+  const std::string& getId() const { return id; }
 
-protected:
+ protected:
   std::string id;
   Dimension x, y, width, height;
   Expression visibleExpr;
-  bool visibleExprIsStatic = true; // True if visibility doesn't depend on data
+  bool visibleExprIsStatic = true;  // True if visibility doesn't depend on data
 
   // Recomputed every layout pass
   int absX = 0, absY = 0, absW = 0, absH = 0;
 
   // Caching support
-  bool cacheable = false;      // Set true for expensive elements like bitmaps
-  bool cacheValid = false;     // Is the cached render still valid?
-  uint8_t *cachedRender = nullptr;
+  bool cacheable = false;   // Set true for expensive elements like bitmaps
+  bool cacheValid = false;  // Is the cached render still valid?
+  uint8_t* cachedRender = nullptr;
   size_t cachedRenderSize = 0;
   int cachedX = 0, cachedY = 0, cachedW = 0, cachedH = 0;
 
   // Dirty tracking
-  bool dirty = true; // Needs redraw
+  bool dirty = true;  // Needs redraw
 
-  bool isVisible(const ThemeContext &context) const {
-    if (visibleExpr.empty())
-      return true;
+  bool isVisible(const ThemeContext& context) const {
+    if (visibleExpr.empty()) return true;
     return context.evaluateBool(visibleExpr.rawExpr);
   }
 
-public:
-  UIElement(const std::string &id) : id(id) {
-    visibleExpr = Expression::parse("true");
-  }
+ public:
+  UIElement(const std::string& id) : id(id) { visibleExpr = Expression::parse("true"); }
 
   virtual ~UIElement() {
     if (cachedRender) {
@@ -71,11 +70,11 @@ public:
     height = val;
     markDirty();
   }
-  void setVisibleExpr(const std::string &expr) {
+  void setVisibleExpr(const std::string& expr) {
     visibleExpr = Expression::parse(expr);
     // Check if expression contains variables
-    visibleExprIsStatic = (expr == "true" || expr == "false" || expr == "1" ||
-                           expr == "0" || expr.find('{') == std::string::npos);
+    visibleExprIsStatic =
+        (expr == "true" || expr == "false" || expr == "1" || expr == "0" || expr.find('{') == std::string::npos);
     markDirty();
   }
 
@@ -97,31 +96,24 @@ public:
   }
 
   // Calculate absolute position based on parent
-  virtual void layout(const ThemeContext &context, int parentX, int parentY,
-                      int parentW, int parentH) {
+  virtual void layout(const ThemeContext& context, int parentX, int parentY, int parentW, int parentH) {
     int newX = parentX + x.resolve(parentW);
     int newY = parentY + y.resolve(parentH);
     int newW = width.resolve(parentW);
     int newH = height.resolve(parentH);
 
     // Clamp to parent bounds
-    if (newX >= parentX + parentW)
-      newX = parentX + parentW - 1;
-    if (newY >= parentY + parentH)
-      newY = parentY + parentH - 1;
+    if (newX >= parentX + parentW) newX = parentX + parentW - 1;
+    if (newY >= parentY + parentH) newY = parentY + parentH - 1;
 
     int maxX = parentX + parentW;
     int maxY = parentY + parentH;
 
-    if (newX + newW > maxX)
-      newW = maxX - newX;
-    if (newY + newH > maxY)
-      newH = maxY - newY;
+    if (newX + newW > maxX) newW = maxX - newX;
+    if (newY + newH > maxY) newH = maxY - newY;
 
-    if (newW < 0)
-      newW = 0;
-    if (newH < 0)
-      newH = 0;
+    if (newW < 0) newW = 0;
+    if (newH < 0) newH = 0;
 
     // Check if position changed
     if (newX != absX || newY != absY || newW != absW || newH != absH) {
@@ -133,7 +125,7 @@ public:
     }
   }
 
-  virtual Container *asContainer() { return nullptr; }
+  virtual Container* asContainer() { return nullptr; }
 
   enum class ElementType {
     Base,
@@ -166,12 +158,11 @@ public:
   Rect getBounds() const { return Rect(absX, absY, absW, absH); }
 
   // Main draw method - handles caching automatically
-  virtual void draw(const GfxRenderer &renderer,
-                    const ThemeContext &context) = 0;
+  virtual void draw(const GfxRenderer& renderer, const ThemeContext& context) = 0;
 
-protected:
+ protected:
   // Cache the rendered output
-  bool cacheRender(const GfxRenderer &renderer) {
+  bool cacheRender(const GfxRenderer& renderer) {
     if (cachedRender) {
       free(cachedRender);
       cachedRender = nullptr;
@@ -190,16 +181,13 @@ protected:
   }
 
   // Restore from cache
-  bool restoreFromCache(const GfxRenderer &renderer) const {
-    if (!cacheValid || !cachedRender)
-      return false;
-    if (absX != cachedX || absY != cachedY || absW != cachedW ||
-        absH != cachedH)
-      return false;
+  bool restoreFromCache(const GfxRenderer& renderer) const {
+    if (!cacheValid || !cachedRender) return false;
+    if (absX != cachedX || absY != cachedY || absW != cachedW || absH != cachedH) return false;
 
     renderer.restoreRegion(cachedRender, absX, absY, absW, absH);
     return true;
   }
 };
 
-} // namespace ThemeEngine
+}  // namespace ThemeEngine

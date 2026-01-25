@@ -1,7 +1,9 @@
 #include "Bitmap.h"
-#include "BitmapHelpers.h"
+
 #include <cstdlib>
 #include <cstring>
+
+#include "BitmapHelpers.h"
 
 // ============================================================================
 // IMAGE PROCESSING OPTIONS
@@ -31,13 +33,12 @@ int Bitmap::readByte() const {
   return -1;
 }
 
-size_t Bitmap::readBytes(void *buf, size_t count) const {
+size_t Bitmap::readBytes(void* buf, size_t count) const {
   if (file && *file) {
     return file->read(buf, count);
   } else if (memoryBuffer) {
     size_t available = memorySize - bufferPos;
-    if (count > available)
-      count = available;
+    if (count > available) count = available;
     memcpy(buf, memoryBuffer + bufferPos, count);
     bufferPos += count;
     return count;
@@ -74,8 +75,7 @@ bool Bitmap::seekCur(int32_t offset) const {
 uint16_t Bitmap::readLE16() {
   const int c0 = readByte();
   const int c1 = readByte();
-  return static_cast<uint16_t>(c0 & 0xFF) |
-         (static_cast<uint16_t>(c1 & 0xFF) << 8);
+  return static_cast<uint16_t>(c0 & 0xFF) | (static_cast<uint16_t>(c1 & 0xFF) << 8);
 }
 
 uint32_t Bitmap::readLE32() {
@@ -83,64 +83,58 @@ uint32_t Bitmap::readLE32() {
   const int c1 = readByte();
   const int c2 = readByte();
   const int c3 = readByte();
-  return static_cast<uint32_t>(c0 & 0xFF) |
-         (static_cast<uint32_t>(c1 & 0xFF) << 8) |
-         (static_cast<uint32_t>(c2 & 0xFF) << 16) |
-         (static_cast<uint32_t>(c3 & 0xFF) << 24);
+  return static_cast<uint32_t>(c0 & 0xFF) | (static_cast<uint32_t>(c1 & 0xFF) << 8) |
+         (static_cast<uint32_t>(c2 & 0xFF) << 16) | (static_cast<uint32_t>(c3 & 0xFF) << 24);
 }
 
-const char *Bitmap::errorToString(BmpReaderError err) {
+const char* Bitmap::errorToString(BmpReaderError err) {
   switch (err) {
-  case BmpReaderError::Ok:
-    return "Ok";
-  case BmpReaderError::FileInvalid:
-    return "FileInvalid";
-  case BmpReaderError::SeekStartFailed:
-    return "SeekStartFailed";
-  case BmpReaderError::NotBMP:
-    return "NotBMP";
-  case BmpReaderError::DIBTooSmall:
-    return "DIBTooSmall";
-  case BmpReaderError::BadPlanes:
-    return "BadPlanes";
-  case BmpReaderError::UnsupportedBpp:
-    return "UnsupportedBpp";
-  case BmpReaderError::UnsupportedCompression:
-    return "UnsupportedCompression";
-  case BmpReaderError::BadDimensions:
-    return "BadDimensions";
-  case BmpReaderError::ImageTooLarge:
-    return "ImageTooLarge";
-  case BmpReaderError::PaletteTooLarge:
-    return "PaletteTooLarge";
-  case BmpReaderError::SeekPixelDataFailed:
-    return "SeekPixelDataFailed";
-  case BmpReaderError::BufferTooSmall:
-    return "BufferTooSmall";
-  case BmpReaderError::OomRowBuffer:
-    return "OomRowBuffer";
-  case BmpReaderError::ShortReadRow:
-    return "ShortReadRow";
+    case BmpReaderError::Ok:
+      return "Ok";
+    case BmpReaderError::FileInvalid:
+      return "FileInvalid";
+    case BmpReaderError::SeekStartFailed:
+      return "SeekStartFailed";
+    case BmpReaderError::NotBMP:
+      return "NotBMP";
+    case BmpReaderError::DIBTooSmall:
+      return "DIBTooSmall";
+    case BmpReaderError::BadPlanes:
+      return "BadPlanes";
+    case BmpReaderError::UnsupportedBpp:
+      return "UnsupportedBpp";
+    case BmpReaderError::UnsupportedCompression:
+      return "UnsupportedCompression";
+    case BmpReaderError::BadDimensions:
+      return "BadDimensions";
+    case BmpReaderError::ImageTooLarge:
+      return "ImageTooLarge";
+    case BmpReaderError::PaletteTooLarge:
+      return "PaletteTooLarge";
+    case BmpReaderError::SeekPixelDataFailed:
+      return "SeekPixelDataFailed";
+    case BmpReaderError::BufferTooSmall:
+      return "BufferTooSmall";
+    case BmpReaderError::OomRowBuffer:
+      return "OomRowBuffer";
+    case BmpReaderError::ShortReadRow:
+      return "ShortReadRow";
   }
   return "Unknown";
 }
 
 BmpReaderError Bitmap::parseHeaders() {
-  if (!file && !memoryBuffer)
-    return BmpReaderError::FileInvalid;
-  if (!seekSet(0))
-    return BmpReaderError::SeekStartFailed;
+  if (!file && !memoryBuffer) return BmpReaderError::FileInvalid;
+  if (!seekSet(0)) return BmpReaderError::SeekStartFailed;
 
   const uint16_t bfType = readLE16();
-  if (bfType != 0x4D42)
-    return BmpReaderError::NotBMP;
+  if (bfType != 0x4D42) return BmpReaderError::NotBMP;
 
   seekCur(8);
   bfOffBits = readLE32();
 
   const uint32_t biSize = readLE32();
-  if (biSize < 40)
-    return BmpReaderError::DIBTooSmall;
+  if (biSize < 40) return BmpReaderError::DIBTooSmall;
 
   width = static_cast<int32_t>(readLE32());
   const auto rawHeight = static_cast<int32_t>(readLE32());
@@ -150,24 +144,18 @@ BmpReaderError Bitmap::parseHeaders() {
   const uint16_t planes = readLE16();
   bpp = readLE16();
   const uint32_t comp = readLE32();
-  const bool validBpp =
-      bpp == 1 || bpp == 2 || bpp == 8 || bpp == 24 || bpp == 32;
+  const bool validBpp = bpp == 1 || bpp == 2 || bpp == 8 || bpp == 24 || bpp == 32;
 
-  if (planes != 1)
-    return BmpReaderError::BadPlanes;
-  if (!validBpp)
-    return BmpReaderError::UnsupportedBpp;
-  if (!(comp == 0 || (bpp == 32 && comp == 3)))
-    return BmpReaderError::UnsupportedCompression;
+  if (planes != 1) return BmpReaderError::BadPlanes;
+  if (!validBpp) return BmpReaderError::UnsupportedBpp;
+  if (!(comp == 0 || (bpp == 32 && comp == 3))) return BmpReaderError::UnsupportedCompression;
 
   seekCur(12);
   const uint32_t colorsUsed = readLE32();
-  if (colorsUsed > 256u)
-    return BmpReaderError::PaletteTooLarge;
+  if (colorsUsed > 256u) return BmpReaderError::PaletteTooLarge;
   seekCur(4);
 
-  if (width <= 0 || height <= 0)
-    return BmpReaderError::BadDimensions;
+  if (width <= 0 || height <= 0) return BmpReaderError::BadDimensions;
 
   constexpr int MAX_IMAGE_WIDTH = 2048;
   constexpr int MAX_IMAGE_HEIGHT = 3072;
@@ -177,8 +165,7 @@ BmpReaderError Bitmap::parseHeaders() {
 
   rowBytes = (width * bpp + 31) / 32 * 4;
 
-  for (int i = 0; i < 256; i++)
-    paletteLum[i] = static_cast<uint8_t>(i);
+  for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
   if (colorsUsed > 0) {
     for (uint32_t i = 0; i < colorsUsed; i++) {
       uint8_t rgb[4];
@@ -187,8 +174,7 @@ BmpReaderError Bitmap::parseHeaders() {
     }
   }
 
-  if (!seekSet(bfOffBits))
-    return BmpReaderError::SeekPixelDataFailed;
+  if (!seekSet(bfOffBits)) return BmpReaderError::SeekPixelDataFailed;
 
   if (bpp > 2 && dithering) {
     if (USE_ATKINSON) {
@@ -201,12 +187,11 @@ BmpReaderError Bitmap::parseHeaders() {
   return BmpReaderError::Ok;
 }
 
-BmpReaderError Bitmap::readNextRow(uint8_t *data, uint8_t *rowBuffer) const {
-  if (readBytes(rowBuffer, rowBytes) != (size_t)rowBytes)
-    return BmpReaderError::ShortReadRow;
+BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
+  if (readBytes(rowBuffer, rowBytes) != (size_t)rowBytes) return BmpReaderError::ShortReadRow;
 
   prevRowY += 1;
-  uint8_t *outPtr = data;
+  uint8_t* outPtr = data;
   uint8_t currentOutByte = 0;
   int bitShift = 6;
   int currentX = 0;
@@ -236,46 +221,44 @@ BmpReaderError Bitmap::readNextRow(uint8_t *data, uint8_t *rowBuffer) const {
   };
 
   switch (bpp) {
-  case 32: {
-    const uint8_t *p = rowBuffer;
-    for (int x = 0; x < width; x++) {
-      uint8_t lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
-      packPixel(lum);
-      p += 4;
+    case 32: {
+      const uint8_t* p = rowBuffer;
+      for (int x = 0; x < width; x++) {
+        uint8_t lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+        packPixel(lum);
+        p += 4;
+      }
+      break;
     }
-    break;
-  }
-  case 24: {
-    const uint8_t *p = rowBuffer;
-    for (int x = 0; x < width; x++) {
-      uint8_t lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
-      packPixel(lum);
-      p += 3;
+    case 24: {
+      const uint8_t* p = rowBuffer;
+      for (int x = 0; x < width; x++) {
+        uint8_t lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+        packPixel(lum);
+        p += 3;
+      }
+      break;
     }
-    break;
-  }
-  case 8: {
-    for (int x = 0; x < width; x++)
-      packPixel(paletteLum[rowBuffer[x]]);
-    break;
-  }
-  case 2: {
-    for (int x = 0; x < width; x++) {
-      uint8_t lum =
-          paletteLum[(rowBuffer[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03];
-      packPixel(lum);
+    case 8: {
+      for (int x = 0; x < width; x++) packPixel(paletteLum[rowBuffer[x]]);
+      break;
     }
-    break;
-  }
-  case 1: {
-    for (int x = 0; x < width; x++) {
-      const uint8_t palIndex = (rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 1 : 0;
-      packPixel(paletteLum[palIndex]);
+    case 2: {
+      for (int x = 0; x < width; x++) {
+        uint8_t lum = paletteLum[(rowBuffer[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03];
+        packPixel(lum);
+      }
+      break;
     }
-    break;
-  }
-  default:
-    return BmpReaderError::UnsupportedBpp;
+    case 1: {
+      for (int x = 0; x < width; x++) {
+        const uint8_t palIndex = (rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 1 : 0;
+        packPixel(paletteLum[palIndex]);
+      }
+      break;
+    }
+    default:
+      return BmpReaderError::UnsupportedBpp;
   }
 
   if (atkinsonDitherer)
@@ -283,17 +266,13 @@ BmpReaderError Bitmap::readNextRow(uint8_t *data, uint8_t *rowBuffer) const {
   else if (fsDitherer)
     fsDitherer->nextRow();
 
-  if (bitShift != 6)
-    *outPtr = currentOutByte;
+  if (bitShift != 6) *outPtr = currentOutByte;
   return BmpReaderError::Ok;
 }
 
 BmpReaderError Bitmap::rewindToData() const {
-  if (!seekSet(bfOffBits))
-    return BmpReaderError::SeekPixelDataFailed;
-  if (fsDitherer)
-    fsDitherer->reset();
-  if (atkinsonDitherer)
-    atkinsonDitherer->reset();
+  if (!seekSet(bfOffBits)) return BmpReaderError::SeekPixelDataFailed;
+  if (fsDitherer) fsDitherer->reset();
+  if (atkinsonDitherer) atkinsonDitherer->reset();
   return BmpReaderError::Ok;
 }
