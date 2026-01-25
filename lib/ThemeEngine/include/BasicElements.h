@@ -232,12 +232,6 @@ public:
       drawX = absX + absW - textWidth;
     }
 
-    // Bounds check
-    if (drawX + textWidth > renderer.getScreenWidth()) {
-      markClean();
-      return;
-    }
-
     renderer.drawText(fontId, drawX, drawY, finalText.c_str(), black);
     markClean();
   }

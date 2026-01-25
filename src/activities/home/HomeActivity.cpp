@@ -25,7 +25,7 @@ void HomeActivity::taskTrampoline(void *param) {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 3; // My Library, File transfer, Settings
+  int count = 4; // My Library, Files, Transfer, Settings
   if (hasContinueReading)
     count++;
   if (hasOpdsUrl)
@@ -268,7 +268,8 @@ void HomeActivity::loop() {
     const int continueIdx = hasContinueReading ? idx++ : -1;
     const int myLibraryIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
-    const int fileTransferIdx = idx++;
+    const int filesIdx = idx++;
+    const int transferIdx = idx++;
     const int settingsIdx = idx;
 
     if (selectorIndex == continueIdx) {
@@ -277,8 +278,10 @@ void HomeActivity::loop() {
       onMyLibraryOpen();
     } else if (selectorIndex == opdsLibraryIdx) {
       onOpdsBrowserOpen();
-    } else if (selectorIndex == fileTransferIdx) {
-      onFileTransferOpen();
+    } else if (selectorIndex == filesIdx) {
+      onMyLibraryOpen(); // Files = file browser
+    } else if (selectorIndex == transferIdx) {
+      onFileTransferOpen(); // Transfer = web transfer
     } else if (selectorIndex == settingsIdx) {
       onSettingsOpen();
     }
@@ -362,7 +365,8 @@ void HomeActivity::render() {
   const int continueIdx = hasContinueReading ? idx++ : -1;
   const int myLibraryIdx = idx++;
   const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
-  const int fileTransferIdx = idx++;
+  const int filesIdx = idx++;
+  const int transferIdx = idx++;
   const int settingsIdx = idx;
 
   context.setBool("IsBookSelected", selectorIndex == continueIdx);
@@ -384,11 +388,11 @@ void HomeActivity::render() {
 
   menuLabels.push_back("Files");
   menuIcons.push_back("folder");
-  menuSelected.push_back(selectorIndex == fileTransferIdx);
+  menuSelected.push_back(selectorIndex == filesIdx);
 
   menuLabels.push_back("Transfer");
   menuIcons.push_back("transfer");
-  menuSelected.push_back(false); // Separate from file transfer
+  menuSelected.push_back(selectorIndex == transferIdx);
 
   menuLabels.push_back("Settings");
   menuIcons.push_back("settings");

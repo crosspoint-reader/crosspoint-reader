@@ -134,9 +134,10 @@ public:
     // Layout self first (bounds)
     UIElement::layout(context, parentX, parentY, parentW, parentH);
 
-    // Pre-layout the template once with parent dimensions to get its height
+    // Pre-layout the template once with list's dimensions to get item sizes
+    // Pass absH so percentage heights in the template work correctly
     if (itemTemplate && itemHeight == 0) {
-      itemTemplate->layout(context, absX, absY, absW, 0);
+      itemTemplate->layout(context, absX, absY, absW, absH);
     }
   }
 
