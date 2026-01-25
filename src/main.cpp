@@ -195,9 +195,9 @@ void waitForPowerRelease() {
 }
 
 // Enter deep sleep mode
-void enterDeepSleep() {
+void enterDeepSleep(bool fromTimeout) {
   exitActivity();
-  enterNewActivity(new SleepActivity(renderer, mappedInputManager));
+  enterNewActivity(new SleepActivity(renderer, mappedInputManager, fromTimeout));
 
   einkDisplay.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
@@ -340,14 +340,14 @@ void loop() {
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (millis() - lastActivityTime >= sleepTimeoutMs) {
     Serial.printf("[%lu] [SLP] Auto-sleep triggered after %lu ms of inactivity\n", millis(), sleepTimeoutMs);
-    enterDeepSleep();
+    enterDeepSleep(true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }
 
   if (inputManager.isPressed(InputManager::BTN_POWER) &&
       inputManager.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    enterDeepSleep();
+    enterDeepSleep(false);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }
