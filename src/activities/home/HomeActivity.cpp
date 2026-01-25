@@ -232,8 +232,6 @@ bool HomeActivity::storeCoverBuffer() {
   return true;
 }
 
-
-
 void HomeActivity::freeCoverBuffer() {
   if (coverBuffer) {
     free(coverBuffer);
@@ -372,10 +370,10 @@ void HomeActivity::render() {
         if (f.read(data, 4) == 4) {
           int spineIndex = data[0] + (data[1] << 8);
           int spineCount = epub.getSpineItemsCount();
-          
-          currentPageStr = std::to_string(spineIndex + 1); // Display 1-based
+
+          currentPageStr = std::to_string(spineIndex + 1);  // Display 1-based
           totalPagesStr = std::to_string(spineCount);
-          
+
           if (spineCount > 0) {
             progressPercent = (spineIndex * 100) / spineCount;
           }
@@ -383,8 +381,8 @@ void HomeActivity::render() {
           // Resolve Chapter Title
           auto spineEntry = epub.getSpineItem(spineIndex);
           if (spineEntry.tocIndex != -1) {
-             auto tocEntry = epub.getTocItem(spineEntry.tocIndex);
-             chapterTitle = tocEntry.title;
+            auto tocEntry = epub.getTocItem(spineEntry.tocIndex);
+            chapterTitle = tocEntry.title;
           }
         }
         f.close();
@@ -393,22 +391,22 @@ void HomeActivity::render() {
                StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
       Xtc xtc(APP_STATE.openEpubPath, "/.crosspoint");
       if (xtc.load()) {
-         // Read progress
+        // Read progress
         FsFile f;
         if (SdMan.openFileForRead("HOME", xtc.getCachePath() + "/progress.bin", f)) {
           uint8_t data[4];
           if (f.read(data, 4) == 4) {
-             uint32_t currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
-             uint32_t totalPages = xtc.getPageCount();
+            uint32_t currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+            uint32_t totalPages = xtc.getPageCount();
 
-             currentPageStr = std::to_string(currentPage + 1); // 1-based
-             totalPagesStr = std::to_string(totalPages);
+            currentPageStr = std::to_string(currentPage + 1);  // 1-based
+            totalPagesStr = std::to_string(totalPages);
 
-             if (totalPages > 0) {
-               progressPercent = (currentPage * 100) / totalPages;
-             }
-             
-             chapterTitle = "Page " + currentPageStr;
+            if (totalPages > 0) {
+              progressPercent = (currentPage * 100) / totalPages;
+            }
+
+            chapterTitle = "Page " + currentPageStr;
           }
           f.close();
         }
