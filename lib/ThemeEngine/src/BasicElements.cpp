@@ -4,6 +4,7 @@
 #include "ListElement.h"
 #include "ThemeManager.h"
 #include "ThemeTypes.h"
+#include <GfxRenderer.h>
 
 namespace ThemeEngine {
 
@@ -20,62 +21,89 @@ void BitmapElement::draw(const GfxRenderer& renderer, const ThemeContext& contex
     return;
   }
 
-  // Check if we have a cached 1-bit render of this bitmap at this size
+  // Resolve simplified or relative paths
+  if (path.find('/') == std::string::npos || (path.length() > 0 && path[0] != '/')) {
+     path = ThemeManager::get().getAssetPath(path);
+  }
+
+  // 1. Check if we have a cached 1-bit render
   const ProcessedAsset* processed = ThemeManager::get().getProcessedAsset(path, renderer.getOrientation(), absW, absH);
   if (processed && processed->w == absW && processed->h == absH) {
-    // Draw cached 1-bit data directly
     const int rowBytes = (absW + 7) / 8;
     for (int y = 0; y < absH; y++) {
       const uint8_t* srcRow = processed->data.data() + y * rowBytes;
       for (int x = 0; x < absW; x++) {
+        // Cached 1-bit data: 0=Black, 1=White
         bool isBlack = !(srcRow[x / 8] & (1 << (7 - (x % 8))));
+        // Draw opaque (true=black, false=white)
+        renderer.drawPixel(absX + x, absY + y, isBlack);
+      }
+    }
+    markClean();
+    return;
+  }
+
+  bool drawSuccess = false;
+
+  // 2. Try Streaming (Absolute paths, large images)
+  if (path.length() > 0 && path[0] == '/') {
+      FsFile file;
+      if (SdMan.openFileForRead("HOME", path, file)) {
+          Bitmap bmp(file, true); // (file, dithering=true)
+          if (bmp.parseHeaders() == BmpReaderError::Ok) {
+              // Center logic
+              int drawX = absX;
+              int drawY = absY;
+              if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
+              if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
+              
+              renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+              drawSuccess = true;
+          }
+          file.close();
+      }
+  }
+
+  // 3. Fallback to RAM Cache (Standard method)
+  if (!drawSuccess) {
+     const std::vector<uint8_t>* data = ThemeManager::get().getCachedAsset(path);
+     if (data && !data->empty()) {
+        Bitmap bmp(data->data(), data->size());
+        if (bmp.parseHeaders() == BmpReaderError::Ok) {
+            int drawX = absX;
+            int drawY = absY;
+            if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
+            if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
+            
+            renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+            drawSuccess = true;
+        }
+     }
+  }
+
+  // 4. Cache result if successful
+  if (drawSuccess) {
+    ProcessedAsset asset;
+    asset.w = absW;
+    asset.h = absH;
+    asset.orientation = renderer.getOrientation();
+
+    const int rowBytes = (absW + 7) / 8;
+    asset.data.resize(rowBytes * absH, 0xFF);  // Initialize to 0xFF (White)
+
+    for (int y = 0; y < absH; y++) {
+      uint8_t* dstRow = asset.data.data() + y * rowBytes;
+      for (int x = 0; x < absW; x++) {
+        // Read precise pixel state from framebuffer
+        bool isBlack = renderer.readPixel(absX + x, absY + y);
         if (isBlack) {
-          renderer.drawPixel(absX + x, absY + y, true);
+          // Clear bit for black (0)
+          dstRow[x / 8] &= ~(1 << (7 - (x % 8)));
         }
       }
     }
-    markClean();
-    return;
+    ThemeManager::get().cacheProcessedAsset(path, asset, absW, absH);
   }
-
-  // Load raw asset from cache (file data cached in memory)
-  const std::vector<uint8_t>* data = ThemeManager::get().getCachedAsset(path);
-  if (!data || data->empty()) {
-    markClean();
-    return;
-  }
-
-  Bitmap bmp(data->data(), data->size());
-  if (bmp.parseHeaders() != BmpReaderError::Ok) {
-    markClean();
-    return;
-  }
-
-  // Draw the bitmap (handles scaling internally)
-  renderer.drawBitmap(bmp, absX, absY, absW, absH);
-
-  // Cache the result as 1-bit packed data for next time
-  ProcessedAsset asset;
-  asset.w = absW;
-  asset.h = absH;
-  asset.orientation = renderer.getOrientation();
-
-  const int rowBytes = (absW + 7) / 8;
-  asset.data.resize(rowBytes * absH, 0xFF);  // Initialize to white
-
-  // Capture pixels using renderer's coordinate system
-  for (int y = 0; y < absH; y++) {
-    uint8_t* dstRow = asset.data.data() + y * rowBytes;
-    for (int x = 0; x < absW; x++) {
-      // Read pixel from framebuffer (this handles orientation)
-      bool isBlack = renderer.readPixel(absX + x, absY + y);
-      if (isBlack) {
-        dstRow[x / 8] &= ~(1 << (7 - (x % 8)));
-      }
-    }
-  }
-
-  ThemeManager::get().cacheProcessedAsset(path, asset, absW, absH);
 
   markClean();
 }

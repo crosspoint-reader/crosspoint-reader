@@ -589,9 +589,9 @@ void GfxRenderer::drawBitmap(const Bitmap &bitmap, const int x, const int y,
       // 1 = Dark Gray (< 70)
       // 2 = Light Gray (< 140)
       // 3 = White
-      // Draw black for val < 2 (everything below 70), treating Light Gray as White.
-      if (renderMode == BW && val < 2) {
-        drawPixel(screenX, screenY);
+      // Draw black for val < 2, and white for val >= 2 (Opaque)
+      if (renderMode == BW) {
+        drawPixel(screenX, screenY, val < 2);
       } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
         drawPixel(screenX, screenY, false);
       } else if (renderMode == GRAYSCALE_LSB && val == 1) {
@@ -811,10 +811,8 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap &bitmap, const int x, const int y,
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
       // For 1-bit source: 0 or 1 -> map to black (0,1,2) or white (3)
-      // val < 3 means black pixel (draw it)
-      if (val < 3) {
-        drawPixel(screenX, screenY, true);
-      }
+      // Draw black if val < 3, Draw white if val == 3 (Opaque)
+      drawPixel(screenX, screenY, val < 3);
       // White pixels (val == 3) are not drawn (leave background)
     }
   }
