@@ -5,6 +5,7 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -517,7 +518,7 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
   }
 
   if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft, textY);
+    ScreenComponents::drawBattery(renderer, orientedMarginLeft, textY, true, isCharging());
   }
 
   if (showTitle) {

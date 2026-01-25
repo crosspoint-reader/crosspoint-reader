@@ -13,7 +13,8 @@ struct TabInfo {
 
 class ScreenComponents {
  public:
-  static void drawBattery(const GfxRenderer& renderer, int left, int top, bool showPercentage = true);
+  static void drawBattery(const GfxRenderer& renderer, int left, int top, bool showPercentage = true,
+                          bool charging = false);
 
   // Draw a horizontal tab bar with underline indicator for selected tab
   // Returns the height of the tab bar (for positioning content below)
