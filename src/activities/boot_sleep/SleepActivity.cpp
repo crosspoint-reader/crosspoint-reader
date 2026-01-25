@@ -19,15 +19,7 @@ void SleepActivity::onEnter() {
       (!fromTimeout && SETTINGS.showSleepScreen == CrossPointSettings::SHOW_SLEEP_SCREEN::EXCEPT_TIMEOUT);
 
   Activity::onEnter();
-<<<<<<< HEAD
-<<<<<<< HEAD
   if (SHOW_SLEEP_SCREEN) {
-=======
-  if(SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LAST_SCREEN) {
->>>>>>> 4709ffb (Remove Entering Sleep message)
-=======
-  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LAST_SCREEN) {
->>>>>>> b392ba3 (fix formatting issues)
     renderPopup("Entering Sleep...");
   } else {
     return renderLastScreenSleepScreen();
