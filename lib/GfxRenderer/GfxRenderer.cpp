@@ -821,7 +821,8 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap &bitmap, const int x, const int y,
   free(rowBytes);
 }
 
-void GfxRenderer::drawTransparentBitmap(const Bitmap& bitmap, const int x, const int y, const int w, const int h) const {
+void GfxRenderer::drawTransparentBitmap(const Bitmap& bitmap, const int x, const int y, const int w,
+                                        const int h) const {
   // Similar to drawBitmap1Bit but strictly skips 1s (white) in the source 1-bit data
   // The Bitmap reader returns 2-bit packed data where 0-2=Black and 3=White for 1-bit sources
 
@@ -880,7 +881,7 @@ void GfxRenderer::drawTransparentBitmap(const Bitmap& bitmap, const int x, const
       if (val < 3) {
         for (int sy = startY; sy < endY; sy++) {
           for (int sx = startX; sx < endX; sx++) {
-            drawPixel(sx, sy, true); // Black
+            drawPixel(sx, sy, true);  // Black
           }
         }
       }
@@ -984,7 +985,7 @@ void GfxRenderer::drawRoundedBitmap(const Bitmap& bitmap, const int x, const int
       if (renderMode == BW) {
         pixelBlack = (val < 2);
       } else if (renderMode == GRAYSCALE_MSB) {
-        pixelBlack = (val < 3); // Draw all non-white as black for icons/covers
+        pixelBlack = (val < 3);  // Draw all non-white as black for icons/covers
       } else if (renderMode == GRAYSCALE_LSB) {
         pixelBlack = (val == 0);
       }
