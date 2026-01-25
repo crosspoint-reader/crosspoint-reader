@@ -329,6 +329,10 @@ bool isWakeupAfterFlashing() {
          (resetReason == ESP_RST_UNKNOWN);
 }
 
+bool isSoftwareRestart() {
+  return esp_reset_reason() == ESP_RST_SW;
+}
+
 void setup() {
   t1 = millis();
 
@@ -364,8 +368,8 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
-  if (!isWakeupAfterFlashing()) {
-    // For normal wakeups (not immediately after flashing), verify long press
+  if (!isWakeupAfterFlashing() && !isSoftwareRestart()) {
+    // For normal wakeups (not immediately after flashing or software restart), verify long press
     verifyWakeupLongPress();
   }
 

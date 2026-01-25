@@ -1,11 +1,11 @@
 #include "ThemeSelectionActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "ThemeManager.h"
 #include "fontIds.h"
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 #include <cstring>
+#include <esp_system.h>
 
 void ThemeSelectionActivity::taskTrampoline(void *param) {
   auto *self = static_cast<ThemeSelectionActivity *>(param);
@@ -69,13 +69,28 @@ void ThemeSelectionActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (selectedIndex >= 0 && selectedIndex < themeNames.size()) {
       std::string selected = themeNames[selectedIndex];
-      strncpy(SETTINGS.themeName, selected.c_str(),
-              sizeof(SETTINGS.themeName) - 1);
-      SETTINGS.themeName[sizeof(SETTINGS.themeName) - 1] = '\0';
-      SETTINGS.saveToFile();
 
-      // Load the new theme immediately
-      ThemeEngine::ThemeManager::get().loadTheme(selected);
+      // Only reboot if theme actually changed
+      if (selected != std::string(SETTINGS.themeName)) {
+        strncpy(SETTINGS.themeName, selected.c_str(),
+                sizeof(SETTINGS.themeName) - 1);
+        SETTINGS.themeName[sizeof(SETTINGS.themeName) - 1] = '\0';
+        SETTINGS.saveToFile();
+
+        // Show reboot message
+        renderer.clearScreen();
+        renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() / 2 - 20,
+                                  "Applying theme...", true);
+        renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2 + 10,
+                                  "Device will restart", true);
+        renderer.displayBuffer();
+
+        // Small delay to ensure display updates
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+
+        esp_restart();
+        return;
+      }
     }
     onGoBack();
     return;
@@ -150,14 +165,11 @@ void ThemeSelectionActivity::render() const {
     int y = startY + i * entryHeight;
     bool isSelected = (idx == selectedIndex);
 
-    renderer.drawText(UI_10_FONT_ID, 20, y, themeNames[idx].c_str(),
-                      !isSelected);
-
-    // Mark current active theme if different from selected
+    std::string displayName = themeNames[idx];
     if (themeNames[idx] == std::string(SETTINGS.themeName)) {
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 80, y, "(Current)",
-                        !isSelected);
+      displayName = "* " + displayName;
     }
+    renderer.drawText(UI_10_FONT_ID, 20, y, displayName.c_str(), !isSelected);
   }
 
   // Scrollbar if needed
@@ -166,12 +178,10 @@ void ThemeSelectionActivity::render() const {
     int thumbHeight = barHeight * maxVisible / themeNames.size();
     int thumbY = startY + (barHeight - thumbHeight) * startIdx /
                               (themeNames.size() - maxVisible);
-    renderer.fillRect(pageWidth - 5, startY, 2, barHeight,
-                      0); // Track logic? No just draw thumb
+    renderer.fillRect(pageWidth - 5, startY, 2, barHeight, 0);
     renderer.fillRect(pageWidth - 7, thumbY, 6, thumbHeight, 1);
   }
 
-  // Hints
   const auto labels = mappedInput.mapLabels("Cancel", "Select", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3,
                            labels.btn4);
