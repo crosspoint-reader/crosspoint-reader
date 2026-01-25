@@ -90,12 +90,12 @@ class ChapterHtmlSlimParser {
   bool insideParagraphNote = false;
   int paragraphNoteDepth = 0;
   char currentParagraphNoteId[16] = {0};
-  static constexpr int MAX_PNOTE_BUFFER = 512;
+  static constexpr int MAX_PNOTE_BUFFER = 256;
   char currentParagraphNoteText[MAX_PNOTE_BUFFER] = {0};
   int currentParagraphNoteTextLen = 0;
 
   // Temporary buffer for accumulation, will be copied to dynamic allocation
-  static constexpr int MAX_ASIDE_BUFFER = 2048;
+  static constexpr int MAX_ASIDE_BUFFER = 1024;
   char currentAsideText[MAX_ASIDE_BUFFER] = {0};
   int currentAsideTextLen = 0;
 
@@ -116,7 +116,7 @@ class ChapterHtmlSlimParser {
   InlineFootnote inlineFootnotes[16];
   int inlineFootnoteCount = 0;
   // paragraph notes
-  ParagraphNote paragraphNotes[32];
+  ParagraphNote paragraphNotes[16];
   int paragraphNoteCount = 0;
 
   explicit ChapterHtmlSlimParser(const std::string& filepath, GfxRenderer& renderer, const int fontId,

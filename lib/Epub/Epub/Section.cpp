@@ -245,11 +245,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                          viewportHeight, hyphenationEnabled);
   std::vector<uint32_t> lut = {};
 
-  ChapterHtmlSlimParser visitor(
+  std::unique_ptr<ChapterHtmlSlimParser> visitor(new ChapterHtmlSlimParser(
       fileToParse, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
       viewportHeight, hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
-      progressFn);
+      progressFn));
   
   Hyphenator::setPreferredLanguage(epub->getLanguage());
 
@@ -257,7 +257,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   std::set<std::string> rewrittenInlineIds;
   int noterefCount = 0;
 
-  visitor.setNoterefCallback([this, &noterefCount, &rewrittenInlineIds](Noteref& noteref) {
+  visitor->setNoterefCallback([this, &noterefCount, &rewrittenInlineIds](Noteref& noteref) {
     // Extract the ID from the href for tracking
     std::string href(noteref.href);
 
@@ -277,7 +277,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     noterefCount++;
   });
 
-  success = visitor.parseAndBuildPages();
+  success = visitor->parseAndBuildPages();
 
   if (!isVirtual) {
     SdMan.remove(tmpHtmlPath.c_str());
@@ -293,9 +293,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   // --- Footnote Generation Logic (Merged from HEAD) ---
   
   // Inline footnotes
-  for (int i = 0; i < visitor.inlineFootnoteCount; i++) {
-    const char* inlineId = visitor.inlineFootnotes[i].id;
-    const char* inlineText = visitor.inlineFootnotes[i].text;
+  for (int i = 0; i < visitor->inlineFootnoteCount; i++) {
+    const char* inlineId = visitor->inlineFootnotes[i].id;
+    const char* inlineText = visitor->inlineFootnotes[i].text;
 
     if (rewrittenInlineIds.find(std::string(inlineId)) == rewrittenInlineIds.end()) continue;
     if (!inlineText || strlen(inlineText) == 0) continue;
@@ -326,9 +326,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   // Paragraph notes
-  for (int i = 0; i < visitor.paragraphNoteCount; i++) {
-    const char* pnoteId = visitor.paragraphNotes[i].id;
-    const char* pnoteText = visitor.paragraphNotes[i].text;
+  for (int i = 0; i < visitor->paragraphNoteCount; i++) {
+    const char* pnoteId = visitor->paragraphNotes[i].id;
+    const char* pnoteText = visitor->paragraphNotes[i].text;
 
     if (!pnoteText || strlen(pnoteText) == 0) continue;
     if (rewrittenInlineIds.find(std::string(pnoteId)) == rewrittenInlineIds.end()) continue;
