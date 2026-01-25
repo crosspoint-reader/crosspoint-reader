@@ -45,7 +45,7 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
   if (data && !data->empty()) {
     Bitmap bmp(data->data(), data->size());
     if (bmp.parseHeaders() == BmpReaderError::Ok) {
-      renderer.drawBitmap(bmp, absX, absY, w, h);
+      renderer.drawTransparentBitmap(bmp, absX, absY, w, h);
       markClean();
       return;
     }

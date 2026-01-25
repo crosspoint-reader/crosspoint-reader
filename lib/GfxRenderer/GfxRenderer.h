@@ -80,6 +80,7 @@ public:
                   int maxHeight, float cropX = 0, float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap &bitmap, int x, int y, int maxWidth,
                       int maxHeight) const;
+  void drawTransparentBitmap(const Bitmap& bitmap, int x, int y, int w, int h) const;
   void draw2BitImage(const uint8_t data[], int x, int y, int w, int h) const;
   void fillPolygon(const int *xPoints, const int *yPoints, int numPoints,
                    bool state = true) const;
