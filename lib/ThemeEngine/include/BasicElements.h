@@ -247,28 +247,114 @@ class Label : public UIElement {
     int textWidth = renderer.getTextWidth(fontId, finalText.c_str());
     int lineHeight = renderer.getLineHeight(fontId);
 
-    // Truncate if needed
-    if (ellipsis && textWidth > absW && absW > 0) {
-      finalText = renderer.truncatedText(fontId, finalText.c_str(), absW);
-      textWidth = renderer.getTextWidth(fontId, finalText.c_str());
+    // Split text into lines based on width
+    std::vector<std::string> lines;
+    if (absW > 0 && textWidth > absW && maxLines > 1) {
+      // Logic to wrap text
+      std::string remaining = finalText;
+      while (!remaining.empty() && (int)lines.size() < maxLines) {
+        // If it fits, add entire line
+        if (renderer.getTextWidth(fontId, remaining.c_str()) <= absW) {
+          lines.push_back(remaining);
+          break;
+        }
+
+        // Binary search for cut point
+        int len = remaining.length();
+        int cut = len;
+        
+        // Find split point
+        // Optimistic start: approximate chars that fit
+        int avgCharWidth = renderer.getTextWidth(fontId, "a"); 
+        if (avgCharWidth < 1) avgCharWidth = 8;
+        int approxChars = absW / avgCharWidth; 
+        if (approxChars < 1) approxChars = 1;
+        if (approxChars >= len) approxChars = len - 1;
+        
+        // Refine from approxChars
+        int w = renderer.getTextWidth(fontId, remaining.substr(0, approxChars).c_str());
+        if (w < absW) {
+             // Grow
+             for (int i = approxChars; i <= len; i++) {
+                 if (renderer.getTextWidth(fontId, remaining.substr(0, i).c_str()) > absW) {
+                     cut = i - 1;
+                     break;
+                 }
+                 cut = i;
+             }
+        } else {
+            // Shrink
+             for (int i = approxChars; i > 0; i--) {
+                 if (renderer.getTextWidth(fontId, remaining.substr(0, i).c_str()) <= absW) {
+                     cut = i;
+                     break;
+                 }
+             }
+        }
+
+        // Find last space before cut
+        if (cut < (int)remaining.length()) {
+            int space = -1;
+            for (int i = cut; i > 0; i--) {
+                if (remaining[i] == ' ') {
+                    space = i;
+                    break;
+                }
+            }
+            if (space != -1) cut = space;
+        }
+
+        std::string line = remaining.substr(0, cut);
+        
+        // If we're at the last allowed line but still have more text
+        if ((int)lines.size() == maxLines - 1 && cut < (int)remaining.length()) {
+           if (ellipsis) {
+             line = renderer.truncatedText(fontId, remaining.c_str(), absW);
+           }
+           lines.push_back(line);
+           break;
+        }
+        
+        lines.push_back(line);
+        // Advance
+        if (cut < (int)remaining.length()) {
+             // Skip the space if check
+              if (remaining[cut] == ' ') cut++;
+              remaining = remaining.substr(cut);
+        } else {
+             remaining = "";
+        }
+      }
+    } else {
+      // Single line handling (truncate if needed)
+      if (ellipsis && textWidth > absW && absW > 0) {
+        finalText = renderer.truncatedText(fontId, finalText.c_str(), absW);
+      }
+      lines.push_back(finalText);
     }
-
-    int drawX = absX;
-    int drawY = absY;
-
+    
+    // Draw lines
+    int totalTextHeight = lines.size() * lineHeight;
+    int startY = absY;
+    
     // Vertical centering
-    if (absH > 0 && lineHeight > 0) {
-      drawY = absY + (absH - lineHeight) / 2;
+    if (absH > 0 && totalTextHeight < absH) {
+      startY = absY + (absH - totalTextHeight) / 2;
     }
 
-    // Horizontal alignment
-    if (alignment == Alignment::Center && absW > 0) {
-      drawX = absX + (absW - textWidth) / 2;
-    } else if (alignment == Alignment::Right && absW > 0) {
-      drawX = absX + absW - textWidth;
+    for (size_t i = 0; i < lines.size(); i++) {
+        int lineWidth = renderer.getTextWidth(fontId, lines[i].c_str());
+        int drawX = absX;
+        
+        if (alignment == Alignment::Center && absW > 0) {
+            drawX = absX + (absW - lineWidth) / 2;
+        } else if (alignment == Alignment::Right && absW > 0) {
+            drawX = absX + absW - lineWidth;
+        }
+        
+        renderer.drawText(fontId, drawX, startY + i * lineHeight, lines[i].c_str(), black);
     }
-
-    renderer.drawText(fontId, drawX, drawY, finalText.c_str(), black);
+    
     markClean();
   }
 };
