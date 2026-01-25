@@ -367,6 +367,74 @@ void HomeActivity::render() {
   context.setBool("HasCover", hasContinueReading && hasCoverImage && !coverBmpPath.empty());
   context.setBool("ShowInfoBox", true);
 
+  // Default values
+  std::string chapterTitle = "";
+  std::string currentPageStr = "-";
+  std::string totalPagesStr = "-";
+  int progressPercent = 0;
+
+  if (hasContinueReading) {
+    if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
+      Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
+      epub.load(false);
+
+      // Read progress
+      FsFile f;
+      if (SdMan.openFileForRead("HOME", epub.getCachePath() + "/progress.bin", f)) {
+        uint8_t data[4];
+        if (f.read(data, 4) == 4) {
+          int spineIndex = data[0] + (data[1] << 8);
+          int spineCount = epub.getSpineItemsCount();
+          
+          currentPageStr = std::to_string(spineIndex + 1); // Display 1-based
+          totalPagesStr = std::to_string(spineCount);
+          
+          if (spineCount > 0) {
+            progressPercent = (spineIndex * 100) / spineCount;
+          }
+
+          // Resolve Chapter Title
+          auto spineEntry = epub.getSpineItem(spineIndex);
+          if (spineEntry.tocIndex != -1) {
+             auto tocEntry = epub.getTocItem(spineEntry.tocIndex);
+             chapterTitle = tocEntry.title;
+          }
+        }
+        f.close();
+      }
+    } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
+               StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
+      Xtc xtc(APP_STATE.openEpubPath, "/.crosspoint");
+      if (xtc.load()) {
+         // Read progress
+        FsFile f;
+        if (SdMan.openFileForRead("HOME", xtc.getCachePath() + "/progress.bin", f)) {
+          uint8_t data[4];
+          if (f.read(data, 4) == 4) {
+             uint32_t currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+             uint32_t totalPages = xtc.getPageCount();
+
+             currentPageStr = std::to_string(currentPage + 1); // 1-based
+             totalPagesStr = std::to_string(totalPages);
+
+             if (totalPages > 0) {
+               progressPercent = (currentPage * 100) / totalPages;
+             }
+             
+             chapterTitle = "Page " + currentPageStr;
+          }
+          f.close();
+        }
+      }
+    }
+  }
+
+  context.setString("BookChapter", chapterTitle);
+  context.setString("BookCurrentPage", currentPageStr);
+  context.setString("BookTotalPages", totalPagesStr);
+  context.setInt("BookProgressPercent", progressPercent);
+  context.setString("BookProgressPercentStr", std::to_string(progressPercent));
+
   // --- Main Menu Data ---
   // Menu items start after the book slot
   const int menuStartIdx = navBookCount;
