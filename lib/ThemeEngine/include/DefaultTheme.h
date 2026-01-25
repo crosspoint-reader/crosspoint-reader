@@ -96,29 +96,53 @@ Height = 15
 BgColor = {IsBookSelected ? "black" : "white"}
 
 ; Title centered in card
-[BookTitle]
+[BookCover]
 Parent = BookCard
+Type = Bitmap
+X = 0
+Y = 0
+Width = 240
+Height = 400
+Src = {BookCoverPath}
+ScaleToFit = true
+PreserveAspect = true
+Visible = {HasCover}
+
+; White box for text overlay
+[InfoBox]
+Parent = BookCard
+Type = Container
+X = 20
+Y = 120
+Width = 200
+Height = 150
+BgColor = white
+Border = true
+
+[BookTitle]
+Parent = InfoBox
 Type = Label
 Font = UI_12
 Text = {BookTitle}
-X = 20
-Y = 150
-Width = 200
-Height = 60
-Color = {IsBookSelected ? "white" : "black"}
+X = 10
+Y = 10
+Width = 180
+Height = 80
+Color = black
 Align = center
 Ellipsis = true
+MaxLines = 3
 
 [BookAuthor]
-Parent = BookCard
+Parent = InfoBox
 Type = Label
 Font = UI_10
 Text = {BookAuthor}
-X = 20
-Y = 210
-Width = 200
-Height = 25
-Color = {IsBookSelected ? "white" : "black"}
+X = 10
+Y = 100
+Width = 180
+Height = 40
+Color = black
 Align = center
 Ellipsis = true
 
@@ -134,6 +158,7 @@ Width = 200
 Height = 25
 Color = {IsBookSelected ? "white" : "black"}
 Align = center
+Visible = {HasBook}
 
 ; --- No Book Message ---
 [NoBookCard]
