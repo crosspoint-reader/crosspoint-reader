@@ -14,13 +14,11 @@ struct Dimension {
   Dimension(int v, DimensionUnit u) : value(v), unit(u) {}
   Dimension() : value(0), unit(DimensionUnit::PIXELS) {}
 
-  static Dimension parse(const std::string &str) {
-    if (str.empty())
-      return Dimension(0, DimensionUnit::PIXELS);
+  static Dimension parse(const std::string& str) {
+    if (str.empty()) return Dimension(0, DimensionUnit::PIXELS);
 
     if (str.back() == '%') {
-      return Dimension(std::stoi(str.substr(0, str.length() - 1)),
-                       DimensionUnit::PERCENT);
+      return Dimension(std::stoi(str.substr(0, str.length() - 1)), DimensionUnit::PERCENT);
     }
     return Dimension(std::stoi(str), DimensionUnit::PIXELS);
   }
@@ -34,20 +32,16 @@ struct Dimension {
 };
 
 struct Color {
-  uint8_t value; // For E-Ink: 0 (Black) to 255 (White), or simplified palette
+  uint8_t value;  // For E-Ink: 0 (Black) to 255 (White), or simplified palette
 
   Color(uint8_t v) : value(v) {}
   Color() : value(0) {}
 
-  static Color parse(const std::string &str) {
-    if (str.empty())
-      return Color(0);
-    if (str == "black")
-      return Color(0x00);
-    if (str == "white")
-      return Color(0xFF);
-    if (str == "gray" || str == "grey")
-      return Color(0x80);
+  static Color parse(const std::string& str) {
+    if (str.empty()) return Color(0);
+    if (str == "black") return Color(0x00);
+    if (str == "white") return Color(0xFF);
+    if (str == "gray" || str == "grey") return Color(0x80);
     if (str.size() > 2 && str.substr(0, 2) == "0x") {
       return Color((uint8_t)std::strtol(str.c_str(), nullptr, 16));
     }
@@ -64,16 +58,13 @@ struct Rect {
 
   bool isEmpty() const { return w <= 0 || h <= 0; }
 
-  bool intersects(const Rect &other) const {
-    return !(x + w <= other.x || other.x + other.w <= x || y + h <= other.y ||
-             other.y + other.h <= y);
+  bool intersects(const Rect& other) const {
+    return !(x + w <= other.x || other.x + other.w <= x || y + h <= other.y || other.y + other.h <= y);
   }
 
-  Rect unite(const Rect &other) const {
-    if (isEmpty())
-      return other;
-    if (other.isEmpty())
-      return *this;
+  Rect unite(const Rect& other) const {
+    if (isEmpty()) return other;
+    if (other.isEmpty()) return *this;
     int nx = std::min(x, other.x);
     int ny = std::min(y, other.y);
     int nx2 = std::max(x + w, other.x + other.w);
@@ -82,4 +73,4 @@ struct Rect {
   }
 };
 
-} // namespace ThemeEngine
+}  // namespace ThemeEngine

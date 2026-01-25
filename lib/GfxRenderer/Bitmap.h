@@ -29,18 +29,16 @@ enum class BmpReaderError : uint8_t {
 };
 
 class Bitmap {
-public:
-  static const char *errorToString(BmpReaderError err);
+ public:
+  static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(FsFile &file, bool dithering = false)
-      : file(&file), dithering(dithering) {}
-  explicit Bitmap(const uint8_t *buffer, size_t size, bool dithering = false)
-      : file(nullptr), memoryBuffer(buffer), memorySize(size),
-        dithering(dithering) {}
+  explicit Bitmap(FsFile& file, bool dithering = false) : file(&file), dithering(dithering) {}
+  explicit Bitmap(const uint8_t* buffer, size_t size, bool dithering = false)
+      : file(nullptr), memoryBuffer(buffer), memorySize(size), dithering(dithering) {}
 
   ~Bitmap();
   BmpReaderError parseHeaders();
-  BmpReaderError readNextRow(uint8_t *data, uint8_t *rowBuffer) const;
+  BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
   BmpReaderError rewindToData() const;
 
   // Getters
@@ -52,19 +50,19 @@ public:
   bool is1Bit() const { return bpp == 1; }
   uint16_t getBpp() const { return bpp; }
 
-private:
+ private:
   // Internal IO helpers
   int readByte() const;
-  size_t readBytes(void *buf, size_t count) const;
+  size_t readBytes(void* buf, size_t count) const;
   bool seekSet(uint32_t pos) const;
-  bool seekCur(int32_t offset) const; // Only needed for skip?
+  bool seekCur(int32_t offset) const;  // Only needed for skip?
 
   uint16_t readLE16();
   uint32_t readLE32();
 
   // Source (one is valid)
-  FsFile *file = nullptr;
-  const uint8_t *memoryBuffer = nullptr;
+  FsFile* file = nullptr;
+  const uint8_t* memoryBuffer = nullptr;
   size_t memorySize = 0;
   mutable size_t bufferPos = 0;
 
@@ -78,10 +76,10 @@ private:
   uint8_t paletteLum[256] = {};
 
   // Floyd-Steinberg dithering state (mutable for const methods)
-  mutable int16_t *errorCurRow = nullptr;
-  mutable int16_t *errorNextRow = nullptr;
-  mutable int prevRowY = -1; // Track row progression for error propagation
+  mutable int16_t* errorCurRow = nullptr;
+  mutable int16_t* errorNextRow = nullptr;
+  mutable int prevRowY = -1;  // Track row progression for error propagation
 
-  mutable AtkinsonDitherer *atkinsonDitherer = nullptr;
-  mutable FloydSteinbergDitherer *fsDitherer = nullptr;
+  mutable AtkinsonDitherer* atkinsonDitherer = nullptr;
+  mutable FloydSteinbergDitherer* fsDitherer = nullptr;
 };

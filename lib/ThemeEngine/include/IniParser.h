@@ -24,17 +24,15 @@ struct IniSection {
 };
 
 class IniParser {
-public:
+ public:
   // Parse a stream (File, Serial, etc.)
-  static std::map<std::string, std::map<std::string, std::string>>
-  parse(Stream &stream);
+  static std::map<std::string, std::map<std::string, std::string>> parse(Stream& stream);
 
   // Parse a string buffer (useful for testing)
-  static std::map<std::string, std::map<std::string, std::string>>
-  parseString(const std::string &content);
+  static std::map<std::string, std::map<std::string, std::string>> parseString(const std::string& content);
 
-private:
-  static void trim(std::string &s);
+ private:
+  static void trim(std::string& s);
 };
 
-} // namespace ThemeEngine
+}  // namespace ThemeEngine

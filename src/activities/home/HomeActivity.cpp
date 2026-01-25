@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
+#include <ThemeManager.h>
 #include <Xtc.h>
 
 #include <cstring>
@@ -17,17 +18,15 @@
 #include "ScreenComponents.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
-#include <ThemeManager.h>
 
-void HomeActivity::taskTrampoline(void *param) {
-  auto *self = static_cast<HomeActivity *>(param);
+void HomeActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<HomeActivity*>(param);
   self->displayTaskLoop();
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 3; // Browse Files, File Transfer, Settings
-  if (hasOpdsUrl)
-    count++; // + Calibre Library
+  int count = 3;            // Browse Files, File Transfer, Settings
+  if (hasOpdsUrl) count++;  // + Calibre Library
   return count;
 }
 
@@ -43,8 +42,7 @@ void HomeActivity::onEnter() {
   selectorIndex = 0;  // Start at first item (first book if any, else first menu)
 
   // Check if we have a book to continue reading
-  hasContinueReading = !APP_STATE.openEpubPath.empty() &&
-                       SdMan.exists(APP_STATE.openEpubPath.c_str());
+  hasContinueReading = !APP_STATE.openEpubPath.empty() && SdMan.exists(APP_STATE.openEpubPath.c_str());
 
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
@@ -99,7 +97,7 @@ void HomeActivity::onEnter() {
   }
 
   selectorIndex = 0;
-  lastBatteryCheck = 0; // Force update on first render
+  lastBatteryCheck = 0;  // Force update on first render
   coverRendered = false;
   coverBufferStored = false;
 
@@ -110,25 +108,25 @@ void HomeActivity::onEnter() {
   updateRequired = true;
 
   xTaskCreate(&HomeActivity::taskTrampoline, "HomeActivityTask",
-              4096, // Stack size (increased for cover image rendering)
-              this, // Parameters
-              1,    // Priority
-              &displayTaskHandle // Task handle
+              4096,               // Stack size (increased for cover image rendering)
+              this,               // Parameters
+              1,                  // Priority
+              &displayTaskHandle  // Task handle
   );
 }
 
 void HomeActivity::loadRecentBooksData() {
   cachedRecentBooks.clear();
-  
-  const auto &recentBooks = RECENT_BOOKS.getBooks();
+
+  const auto& recentBooks = RECENT_BOOKS.getBooks();
   const int maxRecentBooks = 3;
   int recentCount = std::min(static_cast<int>(recentBooks.size()), maxRecentBooks);
-  
+
   for (int i = 0; i < recentCount; i++) {
-    const std::string &bookPath = recentBooks[i];
+    const std::string& bookPath = recentBooks[i];
     CachedBookInfo info;
     info.path = bookPath;  // Store the full path
-    
+
     // Extract title from path
     info.title = bookPath;
     size_t lastSlash = info.title.find_last_of('/');
@@ -139,7 +137,7 @@ void HomeActivity::loadRecentBooksData() {
     if (lastDot != std::string::npos) {
       info.title = info.title.substr(0, lastDot);
     }
-    
+
     if (StringUtils::checkFileExtension(bookPath, ".epub")) {
       Epub epub(bookPath, "/.crosspoint");
       epub.load(false);
@@ -149,7 +147,7 @@ void HomeActivity::loadRecentBooksData() {
       if (epub.generateThumbBmp()) {
         info.coverPath = epub.getThumbBmpPath();
       }
-      
+
       // Read progress
       FsFile f;
       if (SdMan.openFileForRead("HOME", epub.getCachePath() + "/progress.bin", f)) {
@@ -173,7 +171,7 @@ void HomeActivity::loadRecentBooksData() {
         if (xtc.generateThumbBmp()) {
           info.coverPath = xtc.getThumbBmpPath();
         }
-        
+
         // Read progress
         FsFile f;
         if (SdMan.openFileForRead("HOME", xtc.getCachePath() + "/progress.bin", f)) {
@@ -189,12 +187,12 @@ void HomeActivity::loadRecentBooksData() {
         }
       }
     }
-    
-    Serial.printf("[HOME] Book %d: title='%s', cover='%s', progress=%d%%\n", 
-                  i, info.title.c_str(), info.coverPath.c_str(), info.progressPercent);
+
+    Serial.printf("[HOME] Book %d: title='%s', cover='%s', progress=%d%%\n", i, info.title.c_str(),
+                  info.coverPath.c_str(), info.progressPercent);
     cachedRecentBooks.push_back(info);
   }
-  
+
   Serial.printf("[HOME] Loaded %d recent books\n", (int)cachedRecentBooks.size());
 }
 
@@ -216,7 +214,7 @@ void HomeActivity::onExit() {
 }
 
 bool HomeActivity::storeCoverBuffer() {
-  uint8_t *frameBuffer = renderer.getFrameBuffer();
+  uint8_t* frameBuffer = renderer.getFrameBuffer();
   if (!frameBuffer) {
     return false;
   }
@@ -225,7 +223,7 @@ bool HomeActivity::storeCoverBuffer() {
   freeCoverBuffer();
 
   const size_t bufferSize = GfxRenderer::getBufferSize();
-  coverBuffer = static_cast<uint8_t *>(malloc(bufferSize));
+  coverBuffer = static_cast<uint8_t*>(malloc(bufferSize));
   if (!coverBuffer) {
     return false;
   }
@@ -239,7 +237,7 @@ bool HomeActivity::restoreCoverBuffer() {
     return false;
   }
 
-  uint8_t *frameBuffer = renderer.getFrameBuffer();
+  uint8_t* frameBuffer = renderer.getFrameBuffer();
   if (!frameBuffer) {
     return false;
   }
@@ -258,12 +256,10 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
-  const bool prevPressed =
-      mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left);
-  const bool nextPressed =
-      mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Right);
+  const bool prevPressed = mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+                           mappedInput.wasPressed(MappedInputManager::Button::Left);
+  const bool nextPressed = mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+                           mappedInput.wasPressed(MappedInputManager::Button::Right);
   const bool confirmPressed = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
 
   // Navigation uses theme-configured book slots (limited by actual books available)
@@ -324,8 +320,7 @@ void HomeActivity::displayTaskLoop() {
 void HomeActivity::render() {
   // Battery check logic (only update every 60 seconds)
   const uint32_t now = millis();
-  const bool needBatteryUpdate =
-      (now - lastBatteryCheck > 60000) || (lastBatteryCheck == 0);
+  const bool needBatteryUpdate = (now - lastBatteryCheck > 60000) || (lastBatteryCheck == 0);
   if (needBatteryUpdate) {
     cachedBatteryLevel = battery.readPercentage();
     lastBatteryCheck = now;
@@ -339,8 +334,7 @@ void HomeActivity::render() {
   // --- Bind Global Data ---
   context.setString("BatteryPercent", std::to_string(cachedBatteryLevel));
   context.setBool("ShowBatteryPercent",
-                  SETTINGS.hideBatteryPercentage !=
-                      CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
+                  SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
 
   // --- Navigation counts (must match loop()) ---
   const int recentCount = static_cast<int>(cachedRecentBooks.size());
@@ -354,9 +348,9 @@ void HomeActivity::render() {
   context.setInt("SelectedBookIndex", isBookSelected ? selectorIndex : -1);
 
   for (int i = 0; i < recentCount; i++) {
-    const auto &book = cachedRecentBooks[i];
+    const auto& book = cachedRecentBooks[i];
     std::string prefix = "RecentBooks." + std::to_string(i) + ".";
-    
+
     context.setString(prefix + "Title", book.title);
     context.setString(prefix + "Image", book.coverPath);
     context.setString(prefix + "Progress", std::to_string(book.progressPercent));
@@ -370,14 +364,13 @@ void HomeActivity::render() {
   context.setString("BookTitle", lastBookTitle);
   context.setString("BookAuthor", lastBookAuthor);
   context.setString("BookCoverPath", coverBmpPath);
-  context.setBool("HasCover",
-                  hasContinueReading && hasCoverImage && !coverBmpPath.empty());
+  context.setBool("HasCover", hasContinueReading && hasCoverImage && !coverBmpPath.empty());
   context.setBool("ShowInfoBox", true);
 
   // --- Main Menu Data ---
   // Menu items start after the book slot
   const int menuStartIdx = navBookCount;
-  
+
   int idx = 0;
   const int myLibraryIdx = menuStartIdx + idx++;
   const int opdsLibraryIdx = hasOpdsUrl ? menuStartIdx + idx++ : -1;

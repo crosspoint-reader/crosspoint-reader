@@ -11,22 +11,21 @@ namespace ThemeEngine {
 struct ExpressionToken {
   enum Type { LITERAL, VARIABLE };
   Type type;
-  std::string value; // Literal text or variable name
+  std::string value;  // Literal text or variable name
 };
 
 // Pre-parsed expression for efficient repeated evaluation
 struct Expression {
   std::vector<ExpressionToken> tokens;
-  std::string rawExpr; // Original expression string for complex evaluation
+  std::string rawExpr;  // Original expression string for complex evaluation
 
   bool empty() const { return tokens.empty() && rawExpr.empty(); }
 
-  static Expression parse(const std::string &str) {
+  static Expression parse(const std::string& str) {
     Expression expr;
     expr.rawExpr = str;
 
-    if (str.empty())
-      return expr;
+    if (str.empty()) return expr;
 
     size_t start = 0;
     while (start < str.length()) {
@@ -39,8 +38,7 @@ struct Expression {
 
       if (open > start) {
         // Literal before variable
-        expr.tokens.push_back(
-            {ExpressionToken::LITERAL, str.substr(start, open - start)});
+        expr.tokens.push_back({ExpressionToken::LITERAL, str.substr(start, open - start)});
       }
 
       size_t close = str.find('}', open);
@@ -51,8 +49,7 @@ struct Expression {
       }
 
       // Variable
-      expr.tokens.push_back(
-          {ExpressionToken::VARIABLE, str.substr(open + 1, close - open - 1)});
+      expr.tokens.push_back({ExpressionToken::VARIABLE, str.substr(open + 1, close - open - 1)});
       start = close + 1;
     }
     return expr;
@@ -60,115 +57,94 @@ struct Expression {
 };
 
 class ThemeContext {
-private:
+ private:
   std::map<std::string, std::string> strings;
   std::map<std::string, int> ints;
   std::map<std::string, bool> bools;
 
-  const ThemeContext *parent = nullptr;
+  const ThemeContext* parent = nullptr;
 
   // Helper to trim whitespace
-  static std::string trim(const std::string &s) {
+  static std::string trim(const std::string& s) {
     size_t start = s.find_first_not_of(" \t\n\r");
-    if (start == std::string::npos)
-      return "";
+    if (start == std::string::npos) return "";
     size_t end = s.find_last_not_of(" \t\n\r");
     return s.substr(start, end - start + 1);
   }
 
   // Helper to check if string is a number
-  static bool isNumber(const std::string &s) {
-    if (s.empty())
-      return false;
+  static bool isNumber(const std::string& s) {
+    if (s.empty()) return false;
     size_t start = (s[0] == '-') ? 1 : 0;
     for (size_t i = start; i < s.length(); i++) {
-      if (!isdigit(s[i]))
-        return false;
+      if (!isdigit(s[i])) return false;
     }
     return start < s.length();
   }
 
-public:
-  ThemeContext(const ThemeContext *parent = nullptr) : parent(parent) {}
+ public:
+  ThemeContext(const ThemeContext* parent = nullptr) : parent(parent) {}
 
-  void setString(const std::string &key, const std::string &value) {
-    strings[key] = value;
-  }
-  void setInt(const std::string &key, int value) { ints[key] = value; }
-  void setBool(const std::string &key, bool value) { bools[key] = value; }
+  void setString(const std::string& key, const std::string& value) { strings[key] = value; }
+  void setInt(const std::string& key, int value) { ints[key] = value; }
+  void setBool(const std::string& key, bool value) { bools[key] = value; }
 
-  std::string getString(const std::string &key,
-                        const std::string &defaultValue = "") const {
+  std::string getString(const std::string& key, const std::string& defaultValue = "") const {
     auto it = strings.find(key);
-    if (it != strings.end())
-      return it->second;
-    if (parent)
-      return parent->getString(key, defaultValue);
+    if (it != strings.end()) return it->second;
+    if (parent) return parent->getString(key, defaultValue);
     return defaultValue;
   }
 
-  int getInt(const std::string &key, int defaultValue = 0) const {
+  int getInt(const std::string& key, int defaultValue = 0) const {
     auto it = ints.find(key);
-    if (it != ints.end())
-      return it->second;
-    if (parent)
-      return parent->getInt(key, defaultValue);
+    if (it != ints.end()) return it->second;
+    if (parent) return parent->getInt(key, defaultValue);
     return defaultValue;
   }
 
-  bool getBool(const std::string &key, bool defaultValue = false) const {
+  bool getBool(const std::string& key, bool defaultValue = false) const {
     auto it = bools.find(key);
-    if (it != bools.end())
-      return it->second;
-    if (parent)
-      return parent->getBool(key, defaultValue);
+    if (it != bools.end()) return it->second;
+    if (parent) return parent->getBool(key, defaultValue);
     return defaultValue;
   }
 
-  bool hasKey(const std::string &key) const {
-    if (strings.count(key) || ints.count(key) || bools.count(key))
-      return true;
-    if (parent)
-      return parent->hasKey(key);
+  bool hasKey(const std::string& key) const {
+    if (strings.count(key) || ints.count(key) || bools.count(key)) return true;
+    if (parent) return parent->hasKey(key);
     return false;
   }
 
   // Get any value as string
-  std::string getAnyAsString(const std::string &key) const {
+  std::string getAnyAsString(const std::string& key) const {
     // Check strings first
     auto sit = strings.find(key);
-    if (sit != strings.end())
-      return sit->second;
+    if (sit != strings.end()) return sit->second;
 
     // Check ints
     auto iit = ints.find(key);
-    if (iit != ints.end())
-      return std::to_string(iit->second);
+    if (iit != ints.end()) return std::to_string(iit->second);
 
     // Check bools
     auto bit = bools.find(key);
-    if (bit != bools.end())
-      return bit->second ? "true" : "false";
+    if (bit != bools.end()) return bit->second ? "true" : "false";
 
     // Check parent
-    if (parent)
-      return parent->getAnyAsString(key);
+    if (parent) return parent->getAnyAsString(key);
 
     return "";
   }
 
   // Evaluate a complex boolean expression
   // Supports: !, &&, ||, ==, !=, <, >, <=, >=, parentheses
-  bool evaluateBool(const std::string &expression) const {
+  bool evaluateBool(const std::string& expression) const {
     std::string expr = trim(expression);
-    if (expr.empty())
-      return false;
+    if (expr.empty()) return false;
 
     // Handle literal true/false
-    if (expr == "true" || expr == "1")
-      return true;
-    if (expr == "false" || expr == "0")
-      return false;
+    if (expr == "true" || expr == "1") return true;
+    if (expr == "false" || expr == "0") return false;
 
     // Handle {var} wrapper
     if (expr.size() > 2 && expr.front() == '{' && expr.back() == '}') {
@@ -185,10 +161,8 @@ public:
       int depth = 1;
       size_t closePos = 1;
       while (closePos < expr.length() && depth > 0) {
-        if (expr[closePos] == '(')
-          depth++;
-        if (expr[closePos] == ')')
-          depth--;
+        if (expr[closePos] == '(') depth++;
+        if (expr[closePos] == ')') depth--;
         closePos++;
       }
       if (closePos <= expr.length()) {
@@ -212,14 +186,11 @@ public:
     size_t orPos = expr.find("||");
 
     // Process || first (lower precedence than &&)
-    if (orPos != std::string::npos &&
-        (andPos == std::string::npos || orPos < andPos)) {
-      return evaluateBool(expr.substr(0, orPos)) ||
-             evaluateBool(expr.substr(orPos + 2));
+    if (orPos != std::string::npos && (andPos == std::string::npos || orPos < andPos)) {
+      return evaluateBool(expr.substr(0, orPos)) || evaluateBool(expr.substr(orPos + 2));
     }
     if (andPos != std::string::npos) {
-      return evaluateBool(expr.substr(0, andPos)) &&
-             evaluateBool(expr.substr(andPos + 2));
+      return evaluateBool(expr.substr(0, andPos)) && evaluateBool(expr.substr(andPos + 2));
     }
 
     // Handle comparisons
@@ -270,7 +241,7 @@ public:
   }
 
   // Compare two values (handles variables, numbers, strings)
-  int compareValues(const std::string &left, const std::string &right) const {
+  int compareValues(const std::string& left, const std::string& right) const {
     std::string leftVal = resolveValue(left);
     std::string rightVal = resolveValue(right);
 
@@ -286,7 +257,7 @@ public:
   }
 
   // Resolve a value (variable name -> value, or literal)
-  std::string resolveValue(const std::string &val) const {
+  std::string resolveValue(const std::string& val) const {
     std::string v = trim(val);
 
     // Remove quotes for string literals
@@ -298,8 +269,7 @@ public:
     }
 
     // If it's a number, return as-is
-    if (isNumber(v))
-      return v;
+    if (isNumber(v)) return v;
 
     // Check for hex color literals (0x00, 0xFF, etc.)
     if (v.size() > 2 && v[0] == '0' && (v[1] == 'x' || v[1] == 'X')) {
@@ -326,12 +296,11 @@ public:
   }
 
   // Evaluate a string expression with variable substitution
-  std::string evaluatestring(const Expression &expr) const {
-    if (expr.empty())
-      return "";
+  std::string evaluatestring(const Expression& expr) const {
+    if (expr.empty()) return "";
 
     std::string result;
-    for (const auto &token : expr.tokens) {
+    for (const auto& token : expr.tokens) {
       if (token.type == ExpressionToken::LITERAL) {
         result += token.value;
       } else {
@@ -339,10 +308,8 @@ public:
         std::string varName = token.value;
 
         // If the variable contains comparison operators, evaluate as condition
-        if (varName.find("==") != std::string::npos ||
-            varName.find("!=") != std::string::npos ||
-            varName.find("&&") != std::string::npos ||
-            varName.find("||") != std::string::npos) {
+        if (varName.find("==") != std::string::npos || varName.find("!=") != std::string::npos ||
+            varName.find("&&") != std::string::npos || varName.find("||") != std::string::npos) {
           result += evaluateBool(varName) ? "true" : "false";
           continue;
         }
@@ -355,7 +322,7 @@ public:
             std::string condition = trim(varName.substr(0, qPos));
             std::string trueVal = trim(varName.substr(qPos + 1, cPos - qPos - 1));
             std::string falseVal = trim(varName.substr(cPos + 1));
-            
+
             bool condResult = evaluateBool(condition);
             result += resolveValue(condResult ? trueVal : falseVal);
             continue;
@@ -371,12 +338,11 @@ public:
   }
 
   // Legacy method for backward compatibility
-  std::string evaluateString(const std::string &expression) const {
-    if (expression.empty())
-      return "";
+  std::string evaluateString(const std::string& expression) const {
+    if (expression.empty()) return "";
     Expression expr = Expression::parse(expression);
     return evaluatestring(expr);
   }
 };
 
-} // namespace ThemeEngine
+}  // namespace ThemeEngine

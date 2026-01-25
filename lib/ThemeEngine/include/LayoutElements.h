@@ -1,22 +1,23 @@
 #pragma once
 
+#include <vector>
+
 #include "BasicElements.h"
 #include "ThemeContext.h"
 #include "ThemeTypes.h"
 #include "UIElement.h"
-#include <vector>
 
 namespace ThemeEngine {
 
 // --- HStack: Horizontal Stack Layout ---
 // Children are arranged horizontally with optional spacing
 class HStack : public Container {
-  int spacing = 0;      // Gap between children
-  int padding = 0;      // Internal padding
+  int spacing = 0;  // Gap between children
+  int padding = 0;  // Internal padding
   bool centerVertical = false;
 
-public:
-  HStack(const std::string &id) : Container(id) {}
+ public:
+  HStack(const std::string& id) : Container(id) {}
   ElementType getType() const override { return ElementType::HStack; }
 
   void setSpacing(int s) {
@@ -32,8 +33,7 @@ public:
     markDirty();
   }
 
-  void layout(const ThemeContext &context, int parentX, int parentY,
-              int parentW, int parentH) override {
+  void layout(const ThemeContext& context, int parentX, int parentY, int parentW, int parentH) override {
     UIElement::layout(context, parentX, parentY, parentW, parentH);
 
     int currentX = absX + padding;
@@ -68,8 +68,8 @@ class VStack : public Container {
   int padding = 0;
   bool centerHorizontal = false;
 
-public:
-  VStack(const std::string &id) : Container(id) {}
+ public:
+  VStack(const std::string& id) : Container(id) {}
   ElementType getType() const override { return ElementType::VStack; }
 
   void setSpacing(int s) {
@@ -85,8 +85,7 @@ public:
     markDirty();
   }
 
-  void layout(const ThemeContext &context, int parentX, int parentY,
-              int parentW, int parentH) override {
+  void layout(const ThemeContext& context, int parentX, int parentY, int parentW, int parentH) override {
     UIElement::layout(context, parentX, parentY, parentW, parentH);
 
     int currentY = absY + padding;
@@ -120,8 +119,8 @@ class Grid : public Container {
   int colSpacing = 10;
   int padding = 0;
 
-public:
-  Grid(const std::string &id) : Container(id) {}
+ public:
+  Grid(const std::string& id) : Container(id) {}
   ElementType getType() const override { return ElementType::Grid; }
 
   void setColumns(int c) {
@@ -141,12 +140,10 @@ public:
     markDirty();
   }
 
-  void layout(const ThemeContext &context, int parentX, int parentY,
-              int parentW, int parentH) override {
+  void layout(const ThemeContext& context, int parentX, int parentY, int parentW, int parentH) override {
     UIElement::layout(context, parentX, parentY, parentW, parentH);
 
-    if (children.empty())
-      return;
+    if (children.empty()) return;
 
     int availableW = absW - 2 * padding - (columns - 1) * colSpacing;
     int cellW = availableW / columns;
@@ -162,8 +159,7 @@ public:
       // Pass cell dimensions to avoid clamping issues
       child->layout(context, cellX, currentY, cellW, availableH);
       int childH = child->getAbsH();
-      if (childH > maxRowHeight)
-        maxRowHeight = childH;
+      if (childH > maxRowHeight) maxRowHeight = childH;
 
       col++;
       if (col >= columns) {
@@ -184,27 +180,27 @@ class Badge : public UIElement {
   Expression bgColorExpr;
   Expression fgColorExpr;
   int fontId = 0;
-  int paddingH = 8; // Horizontal padding
-  int paddingV = 4; // Vertical padding
+  int paddingH = 8;  // Horizontal padding
+  int paddingV = 4;  // Vertical padding
   int cornerRadius = 0;
 
-public:
-  Badge(const std::string &id) : UIElement(id) {
-    bgColorExpr = Expression::parse("0x00"); // Black background
-    fgColorExpr = Expression::parse("0xFF"); // White text
+ public:
+  Badge(const std::string& id) : UIElement(id) {
+    bgColorExpr = Expression::parse("0x00");  // Black background
+    fgColorExpr = Expression::parse("0xFF");  // White text
   }
 
   ElementType getType() const override { return ElementType::Badge; }
 
-  void setText(const std::string &expr) {
+  void setText(const std::string& expr) {
     textExpr = Expression::parse(expr);
     markDirty();
   }
-  void setBgColor(const std::string &expr) {
+  void setBgColor(const std::string& expr) {
     bgColorExpr = Expression::parse(expr);
     markDirty();
   }
-  void setFgColor(const std::string &expr) {
+  void setFgColor(const std::string& expr) {
     fgColorExpr = Expression::parse(expr);
     markDirty();
   }
@@ -221,9 +217,8 @@ public:
     markDirty();
   }
 
-  void draw(const GfxRenderer &renderer, const ThemeContext &context) override {
-    if (!isVisible(context))
-      return;
+  void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
+    if (!isVisible(context)) return;
 
     std::string text = context.evaluatestring(textExpr);
     if (text.empty()) {
@@ -238,10 +233,8 @@ public:
     int badgeH = textH + 2 * paddingV;
 
     // Use absX, absY as position, but we may auto-size
-    if (absW == 0)
-      absW = badgeW;
-    if (absH == 0)
-      absH = badgeH;
+    if (absW == 0) absW = badgeW;
+    if (absH == 0) absH = badgeH;
 
     // Draw background
     std::string bgStr = context.evaluatestring(bgColorExpr);
@@ -264,31 +257,31 @@ public:
 
 // --- Toggle: On/Off Switch ---
 class Toggle : public UIElement {
-  Expression valueExpr; // Boolean expression
+  Expression valueExpr;  // Boolean expression
   Expression onColorExpr;
   Expression offColorExpr;
   int trackWidth = 44;
   int trackHeight = 24;
   int knobSize = 20;
 
-public:
-  Toggle(const std::string &id) : UIElement(id) {
+ public:
+  Toggle(const std::string& id) : UIElement(id) {
     valueExpr = Expression::parse("false");
-    onColorExpr = Expression::parse("0x00");  // Black when on
-    offColorExpr = Expression::parse("0xFF"); // White when off
+    onColorExpr = Expression::parse("0x00");   // Black when on
+    offColorExpr = Expression::parse("0xFF");  // White when off
   }
 
   ElementType getType() const override { return ElementType::Toggle; }
 
-  void setValue(const std::string &expr) {
+  void setValue(const std::string& expr) {
     valueExpr = Expression::parse(expr);
     markDirty();
   }
-  void setOnColor(const std::string &expr) {
+  void setOnColor(const std::string& expr) {
     onColorExpr = Expression::parse(expr);
     markDirty();
   }
-  void setOffColor(const std::string &expr) {
+  void setOffColor(const std::string& expr) {
     offColorExpr = Expression::parse(expr);
     markDirty();
   }
@@ -305,15 +298,13 @@ public:
     markDirty();
   }
 
-  void draw(const GfxRenderer &renderer, const ThemeContext &context) override {
-    if (!isVisible(context))
-      return;
+  void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
+    if (!isVisible(context)) return;
 
     bool isOn = context.evaluateBool(valueExpr.rawExpr);
 
     // Get colors
-    std::string colorStr =
-        isOn ? context.evaluatestring(onColorExpr) : context.evaluatestring(offColorExpr);
+    std::string colorStr = isOn ? context.evaluatestring(onColorExpr) : context.evaluatestring(offColorExpr);
     uint8_t trackColor = Color::parse(colorStr).value;
 
     // Draw track
@@ -324,8 +315,7 @@ public:
 
     // Draw knob
     int knobMargin = (trackHeight - knobSize) / 2;
-    int knobX = isOn ? (trackX + trackWidth - knobSize - knobMargin)
-                     : (trackX + knobMargin);
+    int knobX = isOn ? (trackX + trackWidth - knobSize - knobMargin) : (trackX + knobMargin);
     int knobY = trackY + knobMargin;
 
     // Knob is opposite color of track
@@ -338,17 +328,17 @@ public:
 
 // --- TabBar: Horizontal tab selection ---
 class TabBar : public Container {
-  Expression selectedExpr; // Currently selected tab index or name
+  Expression selectedExpr;  // Currently selected tab index or name
   int tabSpacing = 0;
   int padding = 0;
   int indicatorHeight = 3;
   bool showIndicator = true;
 
-public:
-  TabBar(const std::string &id) : Container(id) {}
+ public:
+  TabBar(const std::string& id) : Container(id) {}
   ElementType getType() const override { return ElementType::TabBar; }
 
-  void setSelected(const std::string &expr) {
+  void setSelected(const std::string& expr) {
     selectedExpr = Expression::parse(expr);
     markDirty();
   }
@@ -369,12 +359,10 @@ public:
     markDirty();
   }
 
-  void layout(const ThemeContext &context, int parentX, int parentY,
-              int parentW, int parentH) override {
+  void layout(const ThemeContext& context, int parentX, int parentY, int parentW, int parentH) override {
     UIElement::layout(context, parentX, parentY, parentW, parentH);
 
-    if (children.empty())
-      return;
+    if (children.empty()) return;
 
     // Distribute tabs evenly
     int numTabs = children.size();
@@ -389,9 +377,8 @@ public:
     }
   }
 
-  void draw(const GfxRenderer &renderer, const ThemeContext &context) override {
-    if (!isVisible(context))
-      return;
+  void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
+    if (!isVisible(context)) return;
 
     // Draw background if set
     if (hasBg) {
@@ -419,7 +406,7 @@ public:
       }
 
       if (selectedIdx >= 0 && selectedIdx < static_cast<int>(children.size())) {
-        UIElement *tab = children[selectedIdx];
+        UIElement* tab = children[selectedIdx];
         int indX = tab->getAbsX();
         int indY = absY + absH - indicatorHeight;
         int indW = tab->getAbsW();
@@ -437,25 +424,25 @@ public:
 // --- Icon: Small symbolic image ---
 // Can be a built-in icon name or a path to a BMP
 class Icon : public UIElement {
-  Expression srcExpr; // Icon name or path
+  Expression srcExpr;  // Icon name or path
   Expression colorExpr;
   int iconSize = 24;
 
   // Built-in icon names and their simple representations
   // In a real implementation, these would be actual bitmap data
 
-public:
-  Icon(const std::string &id) : UIElement(id) {
-    colorExpr = Expression::parse("0x00"); // Black by default
+ public:
+  Icon(const std::string& id) : UIElement(id) {
+    colorExpr = Expression::parse("0x00");  // Black by default
   }
 
   ElementType getType() const override { return ElementType::Icon; }
 
-  void setSrc(const std::string &expr) {
+  void setSrc(const std::string& expr) {
     srcExpr = Expression::parse(expr);
     markDirty();
   }
-  void setColorExpr(const std::string &expr) {
+  void setColorExpr(const std::string& expr) {
     colorExpr = Expression::parse(expr);
     markDirty();
   }
@@ -464,18 +451,18 @@ public:
     markDirty();
   }
 
-  void draw(const GfxRenderer &renderer, const ThemeContext &context) override;
+  void draw(const GfxRenderer& renderer, const ThemeContext& context) override;
 };
 
 // --- ScrollIndicator: Visual scroll position ---
 class ScrollIndicator : public UIElement {
-  Expression positionExpr; // 0.0 to 1.0
-  Expression totalExpr;    // Total items
-  Expression visibleExpr;  // Visible items
+  Expression positionExpr;  // 0.0 to 1.0
+  Expression totalExpr;     // Total items
+  Expression visibleExpr;   // Visible items
   int trackWidth = 4;
 
-public:
-  ScrollIndicator(const std::string &id) : UIElement(id) {
+ public:
+  ScrollIndicator(const std::string& id) : UIElement(id) {
     positionExpr = Expression::parse("0");
     totalExpr = Expression::parse("1");
     visibleExpr = Expression::parse("1");
@@ -483,15 +470,15 @@ public:
 
   ElementType getType() const override { return ElementType::ScrollIndicator; }
 
-  void setPosition(const std::string &expr) {
+  void setPosition(const std::string& expr) {
     positionExpr = Expression::parse(expr);
     markDirty();
   }
-  void setTotal(const std::string &expr) {
+  void setTotal(const std::string& expr) {
     totalExpr = Expression::parse(expr);
     markDirty();
   }
-  void setVisibleCount(const std::string &expr) {
+  void setVisibleCount(const std::string& expr) {
     visibleExpr = Expression::parse(expr);
     markDirty();
   }
@@ -500,9 +487,8 @@ public:
     markDirty();
   }
 
-  void draw(const GfxRenderer &renderer, const ThemeContext &context) override {
-    if (!isVisible(context))
-      return;
+  void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
+    if (!isVisible(context)) return;
 
     // Get values
     std::string posStr = context.evaluatestring(positionExpr);
@@ -526,8 +512,7 @@ public:
     // Calculate thumb size and position
     float ratio = static_cast<float>(visible) / static_cast<float>(total);
     int thumbH = static_cast<int>(absH * ratio);
-    if (thumbH < 20)
-      thumbH = 20; // Minimum thumb size
+    if (thumbH < 20) thumbH = 20;  // Minimum thumb size
 
     int maxScroll = total - visible;
     float scrollRatio = maxScroll > 0 ? position / maxScroll : 0;
@@ -540,4 +525,4 @@ public:
   }
 };
 
-} // namespace ThemeEngine
+}  // namespace ThemeEngine

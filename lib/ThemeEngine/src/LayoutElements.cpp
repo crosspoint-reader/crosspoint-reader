@@ -1,12 +1,14 @@
 #include "LayoutElements.h"
-#include "ThemeManager.h"
+
 #include <Bitmap.h>
+
+#include "ThemeManager.h"
 
 namespace ThemeEngine {
 
 // Built-in icon drawing
 // These are simple geometric representations of common icons
-void Icon::draw(const GfxRenderer &renderer, const ThemeContext &context) {
+void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
   if (!isVisible(context)) {
     markClean();
     return;
@@ -29,15 +31,14 @@ void Icon::draw(const GfxRenderer &renderer, const ThemeContext &context) {
   int cy = absY + h / 2;
 
   // Check if it's a path to a BMP file
-  if (iconName.find('/') != std::string::npos ||
-      iconName.find('.') != std::string::npos) {
+  if (iconName.find('/') != std::string::npos || iconName.find('.') != std::string::npos) {
     // Try to load as bitmap
     std::string path = iconName;
     if (path[0] != '/') {
       path = ThemeManager::get().getAssetPath(iconName);
     }
 
-    const std::vector<uint8_t> *data = ThemeManager::get().getCachedAsset(path);
+    const std::vector<uint8_t>* data = ThemeManager::get().getCachedAsset(path);
     if (data && !data->empty()) {
       Bitmap bmp(data->data(), data->size());
       if (bmp.parseHeaders() == BmpReaderError::Ok) {
@@ -170,4 +171,4 @@ void Icon::draw(const GfxRenderer &renderer, const ThemeContext &context) {
   markClean();
 }
 
-} // namespace ThemeEngine
+}  // namespace ThemeEngine
