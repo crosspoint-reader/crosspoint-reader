@@ -1,42 +1,47 @@
 #include "GfxRenderer.h"
 
 #include <Utf8.h>
+#include <algorithm>
 
-void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
+void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
+  fontMap.insert({fontId, font});
+}
 
-void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
+void GfxRenderer::rotateCoordinates(const int x, const int y, int *rotatedX,
+                                    int *rotatedY) const {
   switch (orientation) {
-    case Portrait: {
-      // Logical portrait (480x800) → panel (800x480)
-      // Rotation: 90 degrees clockwise
-      *rotatedX = y;
-      *rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
-      break;
-    }
-    case LandscapeClockwise: {
-      // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and left/right)
-      *rotatedX = EInkDisplay::DISPLAY_WIDTH - 1 - x;
-      *rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - y;
-      break;
-    }
-    case PortraitInverted: {
-      // Logical portrait (480x800) → panel (800x480)
-      // Rotation: 90 degrees counter-clockwise
-      *rotatedX = EInkDisplay::DISPLAY_WIDTH - 1 - y;
-      *rotatedY = x;
-      break;
-    }
-    case LandscapeCounterClockwise: {
-      // Logical landscape (800x480) aligned with panel orientation
-      *rotatedX = x;
-      *rotatedY = y;
-      break;
-    }
+  case Portrait: {
+    // Logical portrait (480x800) → panel (800x480)
+    // Rotation: 90 degrees clockwise
+    *rotatedX = y;
+    *rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
+    break;
+  }
+  case LandscapeClockwise: {
+    // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and
+    // left/right)
+    *rotatedX = EInkDisplay::DISPLAY_WIDTH - 1 - x;
+    *rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - y;
+    break;
+  }
+  case PortraitInverted: {
+    // Logical portrait (480x800) → panel (800x480)
+    // Rotation: 90 degrees counter-clockwise
+    *rotatedX = EInkDisplay::DISPLAY_WIDTH - 1 - y;
+    *rotatedY = x;
+    break;
+  }
+  case LandscapeCounterClockwise: {
+    // Logical landscape (800x480) aligned with panel orientation
+    *rotatedX = x;
+    *rotatedY = y;
+    break;
+  }
   }
 }
 
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
-  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
 
   // Early return if no framebuffer is set
   if (!frameBuffer) {
@@ -51,22 +56,25 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   // Bounds checking against physical panel dimensions
   if (rotatedX < 0 || rotatedX >= EInkDisplay::DISPLAY_WIDTH || rotatedY < 0 ||
       rotatedY >= EInkDisplay::DISPLAY_HEIGHT) {
-    Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n", millis(), x, y, rotatedX, rotatedY);
+    Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n",
+                  millis(), x, y, rotatedX, rotatedY);
     return;
   }
 
   // Calculate byte position and bit position
-  const uint16_t byteIndex = rotatedY * EInkDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
-  const uint8_t bitPosition = 7 - (rotatedX % 8);  // MSB first
+  const uint16_t byteIndex =
+      rotatedY * EInkDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
+  const uint8_t bitPosition = 7 - (rotatedX % 8); // MSB first
 
   if (state) {
-    frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit
+    frameBuffer[byteIndex] &= ~(1 << bitPosition); // Clear bit
   } else {
-    frameBuffer[byteIndex] |= 1 << bitPosition;  // Set bit
+    frameBuffer[byteIndex] |= 1 << bitPosition; // Set bit
   }
 }
 
-int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+int GfxRenderer::getTextWidth(const int fontId, const char *text,
+                              const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return 0;
@@ -77,13 +85,15 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   return w;
 }
 
-void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,
+void GfxRenderer::drawCenteredText(const int fontId, const int y,
+                                   const char *text, const bool black,
                                    const EpdFontFamily::Style style) const {
   const int x = (getScreenWidth() - getTextWidth(fontId, text, style)) / 2;
   drawText(fontId, x, y, text, black, style);
 }
 
-void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
+void GfxRenderer::drawText(const int fontId, const int x, const int y,
+                           const char *text, const bool black,
                            const EpdFontFamily::Style style) const {
   const int yPos = y + getFontAscenderSize(fontId);
   int xpos = x;
@@ -105,46 +115,155 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 
   uint32_t cp;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t **>(&text)))) {
     renderChar(font, cp, &xpos, &yPos, black, style);
   }
 }
 
-void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
-  if (x1 == x2) {
-    if (y2 < y1) {
-      std::swap(y1, y2);
+void GfxRenderer::drawLine(int x1, int y1, int x2, int y2,
+                           const bool state) const {
+  // Bresenham's line algorithm
+  int dx = abs(x2 - x1);
+  int dy = abs(y2 - y1);
+  int sx = (x1 < x2) ? 1 : -1;
+  int sy = (y1 < y2) ? 1 : -1;
+  int err = dx - dy;
+
+  while (true) {
+    drawPixel(x1, y1, state);
+    
+    if (x1 == x2 && y1 == y2) break;
+    
+    int e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      x1 += sx;
     }
-    for (int y = y1; y <= y2; y++) {
-      drawPixel(x1, y, state);
+    if (e2 < dx) {
+      err += dx;
+      y1 += sy;
     }
-  } else if (y1 == y2) {
-    if (x2 < x1) {
-      std::swap(x1, x2);
-    }
-    for (int x = x1; x <= x2; x++) {
-      drawPixel(x, y1, state);
-    }
-  } else {
-    // TODO: Implement
-    Serial.printf("[%lu] [GFX] Line drawing not supported\n", millis());
   }
 }
 
-void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const bool state) const {
+void GfxRenderer::drawRect(const int x, const int y, const int width,
+                           const int height, const bool state) const {
   drawLine(x, y, x + width - 1, y, state);
   drawLine(x + width - 1, y, x + width - 1, y + height - 1, state);
   drawLine(x + width - 1, y + height - 1, x, y + height - 1, state);
   drawLine(x, y, x, y + height - 1, state);
 }
 
-void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
-  for (int fillY = y; fillY < y + height; fillY++) {
-    drawLine(x, fillY, x + width - 1, fillY, state);
+void GfxRenderer::fillRect(const int x, const int y, const int width,
+                           const int height, const bool state) const {
+  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer) {
+    return;
+  }
+
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+
+  // Clip to screen bounds
+  const int x1 = std::max(0, x);
+  const int y1 = std::max(0, y);
+  const int x2 = std::min(screenWidth - 1, x + width - 1);
+  const int y2 = std::min(screenHeight - 1, y + height - 1);
+
+  if (x1 > x2 || y1 > y2)
+    return;
+
+  // Optimized path for Portrait mode (most common)
+  if (orientation == Portrait) {
+    for (int sy = y1; sy <= y2; sy++) {
+      // In Portrait: logical (x, y) -> physical (y, DISPLAY_HEIGHT - 1 - x)
+      const int physX = sy;
+      const uint8_t physXByte = physX / 8;
+      const uint8_t physXBit = 7 - (physX % 8);
+      const uint8_t mask = 1 << physXBit;
+
+      for (int sx = x1; sx <= x2; sx++) {
+        const int physY = EInkDisplay::DISPLAY_HEIGHT - 1 - sx;
+        const uint16_t byteIndex =
+            physY * EInkDisplay::DISPLAY_WIDTH_BYTES + physXByte;
+
+        if (state) {
+          frameBuffer[byteIndex] &= ~mask; // Black
+        } else {
+          frameBuffer[byteIndex] |= mask; // White
+        }
+      }
+    }
+    return;
+  }
+
+  // Optimized path for PortraitInverted
+  if (orientation == PortraitInverted) {
+    for (int sy = y1; sy <= y2; sy++) {
+      const int physX = EInkDisplay::DISPLAY_WIDTH - 1 - sy;
+      const uint8_t physXByte = physX / 8;
+      const uint8_t physXBit = 7 - (physX % 8);
+      const uint8_t mask = 1 << physXBit;
+
+      for (int sx = x1; sx <= x2; sx++) {
+        const int physY = sx;
+        const uint16_t byteIndex =
+            physY * EInkDisplay::DISPLAY_WIDTH_BYTES + physXByte;
+
+        if (state) {
+          frameBuffer[byteIndex] &= ~mask;
+        } else {
+          frameBuffer[byteIndex] |= mask;
+        }
+      }
+    }
+    return;
+  }
+
+  // Optimized horizontal line fill for Landscape modes
+  if (orientation == LandscapeCounterClockwise) {
+    for (int sy = y1; sy <= y2; sy++) {
+      const int physY = sy;
+      const uint16_t rowOffset = physY * EInkDisplay::DISPLAY_WIDTH_BYTES;
+
+      // Fill full bytes where possible
+      const int physX1 = x1;
+      const int physX2 = x2;
+      const int byteStart = physX1 / 8;
+      const int byteEnd = physX2 / 8;
+
+      for (int bx = byteStart; bx <= byteEnd; bx++) {
+        uint8_t mask = 0xFF;
+
+        // Mask out bits before start on first byte
+        if (bx == byteStart) {
+          const int startBit = physX1 % 8;
+          mask &= (0xFF >> startBit);
+        }
+        // Mask out bits after end on last byte
+        if (bx == byteEnd) {
+          const int endBit = physX2 % 8;
+          mask &= (0xFF << (7 - endBit));
+        }
+
+        if (state) {
+          frameBuffer[rowOffset + bx] &= ~mask;
+        } else {
+          frameBuffer[rowOffset + bx] |= mask;
+        }
+      }
+    }
+    return;
+  }
+
+  // Fallback for LandscapeClockwise and any other cases
+  for (int fillY = y1; fillY <= y2; fillY++) {
+    drawLine(x1, fillY, x2, fillY, state);
   }
 }
 
-void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
+void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y,
+                            const int width, const int height) const {
   // TODO: Rotate bits
   int rotatedX = 0;
   int rotatedY = 0;
@@ -152,9 +271,11 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   einkDisplay.drawImage(bitmap, rotatedX, rotatedY, width, height);
 }
 
-void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
+void GfxRenderer::drawBitmap(const Bitmap &bitmap, const int x, const int y,
+                             const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
-  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
+  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for
+  // 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
     return;
@@ -164,46 +285,50 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   bool isScaled = false;
   int cropPixX = std::floor(bitmap.getWidth() * cropX / 2.0f);
   int cropPixY = std::floor(bitmap.getHeight() * cropY / 2.0f);
-  Serial.printf("[%lu] [GFX] Cropping %dx%d by %dx%d pix, is %s\n", millis(), bitmap.getWidth(), bitmap.getHeight(),
-                cropPixX, cropPixY, bitmap.isTopDown() ? "top-down" : "bottom-up");
 
   if (maxWidth > 0 && (1.0f - cropX) * bitmap.getWidth() > maxWidth) {
-    scale = static_cast<float>(maxWidth) / static_cast<float>((1.0f - cropX) * bitmap.getWidth());
+    scale = static_cast<float>(maxWidth) /
+            static_cast<float>((1.0f - cropX) * bitmap.getWidth());
     isScaled = true;
   }
   if (maxHeight > 0 && (1.0f - cropY) * bitmap.getHeight() > maxHeight) {
-    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>((1.0f - cropY) * bitmap.getHeight()));
+    scale = std::min(
+        scale, static_cast<float>(maxHeight) /
+                   static_cast<float>((1.0f - cropY) * bitmap.getHeight()));
     isScaled = true;
   }
-  Serial.printf("[%lu] [GFX] Scaling by %f - %s\n", millis(), scale, isScaled ? "scaled" : "not scaled");
 
   // Calculate output row size (2 bits per pixel, packed into bytes)
-  // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
+  // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels
+  // wide
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
-  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+  auto *outputRow = static_cast<uint8_t *>(malloc(outputRowSize));
+  auto *rowBytes = static_cast<uint8_t *>(malloc(bitmap.getRowBytes()));
 
   if (!outputRow || !rowBytes) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate BMP row buffers\n", millis());
+    Serial.printf("[%lu] [GFX] !! Failed to allocate BMP row buffers\n",
+                  millis());
     free(outputRow);
     free(rowBytes);
     return;
   }
 
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
-    // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
-    // Screen's (0, 0) is the top-left corner.
-    int screenY = -cropPixY + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
+    // The BMP's (0, 0) is the bottom-left corner (if the height is positive,
+    // top-left if negative). Screen's (0, 0) is the top-left corner.
+    int screenY =
+        -cropPixY + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
     if (isScaled) {
       screenY = std::floor(screenY * scale);
     }
-    screenY += y;  // the offset should not be scaled
+    screenY += y; // the offset should not be scaled
     if (screenY >= getScreenHeight()) {
       break;
     }
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
-      Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
+      Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(),
+                    bmpY);
       free(outputRow);
       free(rowBytes);
       return;
@@ -223,7 +348,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       if (isScaled) {
         screenX = std::floor(screenX * scale);
       }
-      screenX += x;  // the offset should not be scaled
+      screenX += x; // the offset should not be scaled
       if (screenX >= getScreenWidth()) {
         break;
       }
@@ -247,26 +372,170 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   free(rowBytes);
 }
 
-void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
+void GfxRenderer::draw2BitImage(const uint8_t data[], int x, int y, int w,
+                                int h) const {
+  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer) {
+    return;
+  }
+
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+
+  // Pre-compute row byte width for 2-bit packed data (4 pixels per byte)
+  const int srcRowBytes = (w + 3) / 4;
+
+  // Optimized path for Portrait mode with BW rendering (most common case)
+  // In Portrait: logical (x, y) -> physical (y, DISPLAY_HEIGHT - 1 - x)
+  if (orientation == Portrait && renderMode == BW) {
+    for (int row = 0; row < h; row++) {
+      const int screenY = y + row;
+      if (screenY < 0 || screenY >= screenHeight)
+        continue;
+
+      // In Portrait, screenY maps to physical X coordinate
+      const int physX = screenY;
+      const uint8_t *srcRow = data + row * srcRowBytes;
+
+      for (int col = 0; col < w; col++) {
+        const int screenX = x + col;
+        if (screenX < 0 || screenX >= screenWidth)
+          continue;
+
+        // Extract 2-bit value (4 pixels per byte)
+        const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
+
+        // val < 3 means black pixel in 2-bit representation
+        if (val < 3) {
+          // In Portrait: physical Y = DISPLAY_HEIGHT - 1 - screenX
+          const int physY = EInkDisplay::DISPLAY_HEIGHT - 1 - screenX;
+          const uint16_t byteIndex =
+              physY * EInkDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+          const uint8_t bitPosition = 7 - (physX % 8);
+          frameBuffer[byteIndex] &= ~(1 << bitPosition); // Clear bit = black
+        }
+      }
+    }
+    return;
+  }
+
+  // Optimized path for PortraitInverted mode with BW rendering
+  if (orientation == PortraitInverted && renderMode == BW) {
+    for (int row = 0; row < h; row++) {
+      const int screenY = y + row;
+      if (screenY < 0 || screenY >= screenHeight)
+        continue;
+
+      const uint8_t *srcRow = data + row * srcRowBytes;
+
+      for (int col = 0; col < w; col++) {
+        const int screenX = x + col;
+        if (screenX < 0 || screenX >= screenWidth)
+          continue;
+
+        const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
+
+        if (val < 3) {
+          // PortraitInverted: physical X = DISPLAY_WIDTH - 1 - screenY
+          // physical Y = screenX
+          const int physX = EInkDisplay::DISPLAY_WIDTH - 1 - screenY;
+          const int physY = screenX;
+          const uint16_t byteIndex =
+              physY * EInkDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+          const uint8_t bitPosition = 7 - (physX % 8);
+          frameBuffer[byteIndex] &= ~(1 << bitPosition);
+        }
+      }
+    }
+    return;
+  }
+
+  // Optimized path for Landscape modes with BW rendering
+  if ((orientation == LandscapeClockwise ||
+       orientation == LandscapeCounterClockwise) &&
+      renderMode == BW) {
+    for (int row = 0; row < h; row++) {
+      const int screenY = y + row;
+      if (screenY < 0 || screenY >= screenHeight)
+        continue;
+
+      const uint8_t *srcRow = data + row * srcRowBytes;
+
+      for (int col = 0; col < w; col++) {
+        const int screenX = x + col;
+        if (screenX < 0 || screenX >= screenWidth)
+          continue;
+
+        const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
+
+        if (val < 3) {
+          int physX, physY;
+          if (orientation == LandscapeClockwise) {
+            physX = EInkDisplay::DISPLAY_WIDTH - 1 - screenX;
+            physY = EInkDisplay::DISPLAY_HEIGHT - 1 - screenY;
+          } else {
+            physX = screenX;
+            physY = screenY;
+          }
+          const uint16_t byteIndex =
+              physY * EInkDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+          const uint8_t bitPosition = 7 - (physX % 8);
+          frameBuffer[byteIndex] &= ~(1 << bitPosition);
+        }
+      }
+    }
+    return;
+  }
+
+  // Fallback: generic path for grayscale modes
+  for (int row = 0; row < h; row++) {
+    const int screenY = y + row;
+    if (screenY < 0 || screenY >= screenHeight)
+      continue;
+
+    const uint8_t *srcRow = data + row * srcRowBytes;
+
+    for (int col = 0; col < w; col++) {
+      const int screenX = x + col;
+      if (screenX < 0 || screenX >= screenWidth)
+        continue;
+
+      const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
+
+      if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+        drawPixel(screenX, screenY, false);
+      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+        drawPixel(screenX, screenY, false);
+      }
+    }
+  }
+}
+
+void GfxRenderer::drawBitmap1Bit(const Bitmap &bitmap, const int x, const int y,
+                                 const int maxWidth,
                                  const int maxHeight) const {
   float scale = 1.0f;
   bool isScaled = false;
   if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
-    scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
+    scale =
+        static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
     isScaled = true;
   }
   if (maxHeight > 0 && bitmap.getHeight() > maxHeight) {
-    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
+    scale = std::min(scale, static_cast<float>(maxHeight) /
+                                static_cast<float>(bitmap.getHeight()));
     isScaled = true;
   }
 
-  // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
+  // For 1-bit BMP, output is still 2-bit packed (for consistency with
+  // readNextRow)
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
-  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+  auto *outputRow = static_cast<uint8_t *>(malloc(outputRowSize));
+  auto *rowBytes = static_cast<uint8_t *>(malloc(bitmap.getRowBytes()));
 
   if (!outputRow || !rowBytes) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate 1-bit BMP row buffers\n", millis());
+    Serial.printf("[%lu] [GFX] !! Failed to allocate 1-bit BMP row buffers\n",
+                  millis());
     free(outputRow);
     free(rowBytes);
     return;
@@ -275,24 +544,29 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
-      Serial.printf("[%lu] [GFX] Failed to read row %d from 1-bit bitmap\n", millis(), bmpY);
+      Serial.printf("[%lu] [GFX] Failed to read row %d from 1-bit bitmap\n",
+                    millis(), bmpY);
       free(outputRow);
       free(rowBytes);
       return;
     }
 
     // Calculate screen Y based on whether BMP is top-down or bottom-up
-    const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
-    int screenY = y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale)) : bmpYOffset);
+    const int bmpYOffset =
+        bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
+    int screenY =
+        y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale))
+                      : bmpYOffset);
     if (screenY >= getScreenHeight()) {
-      continue;  // Continue reading to keep row counter in sync
+      continue; // Continue reading to keep row counter in sync
     }
     if (screenY < 0) {
       continue;
     }
 
     for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
-      int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
+      int screenX =
+          x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
       if (screenX >= getScreenWidth()) {
         break;
       }
@@ -316,24 +590,31 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   free(rowBytes);
 }
 
-void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state) const {
-  if (numPoints < 3) return;
+void GfxRenderer::fillPolygon(const int *xPoints, const int *yPoints,
+                              int numPoints, bool state) const {
+  if (numPoints < 3)
+    return;
 
   // Find bounding box
   int minY = yPoints[0], maxY = yPoints[0];
   for (int i = 1; i < numPoints; i++) {
-    if (yPoints[i] < minY) minY = yPoints[i];
-    if (yPoints[i] > maxY) maxY = yPoints[i];
+    if (yPoints[i] < minY)
+      minY = yPoints[i];
+    if (yPoints[i] > maxY)
+      maxY = yPoints[i];
   }
 
   // Clip to screen
-  if (minY < 0) minY = 0;
-  if (maxY >= getScreenHeight()) maxY = getScreenHeight() - 1;
+  if (minY < 0)
+    minY = 0;
+  if (maxY >= getScreenHeight())
+    maxY = getScreenHeight() - 1;
 
   // Allocate node buffer for scanline algorithm
-  auto* nodeX = static_cast<int*>(malloc(numPoints * sizeof(int)));
+  auto *nodeX = static_cast<int *>(malloc(numPoints * sizeof(int)));
   if (!nodeX) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate polygon node buffer\n", millis());
+    Serial.printf("[%lu] [GFX] !! Failed to allocate polygon node buffer\n",
+                  millis());
     return;
   }
 
@@ -344,11 +625,13 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
     // Find all intersection points with edges
     int j = numPoints - 1;
     for (int i = 0; i < numPoints; i++) {
-      if ((yPoints[i] < scanY && yPoints[j] >= scanY) || (yPoints[j] < scanY && yPoints[i] >= scanY)) {
+      if ((yPoints[i] < scanY && yPoints[j] >= scanY) ||
+          (yPoints[j] < scanY && yPoints[i] >= scanY)) {
         // Calculate X intersection using fixed-point to avoid float
         int dy = yPoints[j] - yPoints[i];
         if (dy != 0) {
-          nodeX[nodes++] = xPoints[i] + (scanY - yPoints[i]) * (xPoints[j] - xPoints[i]) / dy;
+          nodeX[nodes++] = xPoints[i] + (scanY - yPoints[i]) *
+                                            (xPoints[j] - xPoints[i]) / dy;
         }
       }
       j = i;
@@ -371,8 +654,10 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
       int endX = nodeX[i + 1];
 
       // Clip to screen
-      if (startX < 0) startX = 0;
-      if (endX >= getScreenWidth()) endX = getScreenWidth() - 1;
+      if (startX < 0)
+        startX = 0;
+      if (endX >= getScreenWidth())
+        endX = getScreenWidth() - 1;
 
       // Draw horizontal line
       for (int x = startX; x <= endX; x++) {
@@ -384,10 +669,148 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   free(nodeX);
 }
 
-void GfxRenderer::clearScreen(const uint8_t color) const { einkDisplay.clearScreen(color); }
+uint8_t *GfxRenderer::captureRegion(int x, int y, int width, int height,
+                                    size_t *outSize) const {
+  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer || width <= 0 || height <= 0) {
+    if (outSize)
+      *outSize = 0;
+    return nullptr;
+  }
+
+  // Clip to screen bounds
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+  if (x < 0) {
+    width += x;
+    x = 0;
+  }
+  if (y < 0) {
+    height += y;
+    y = 0;
+  }
+  if (x + width > screenWidth)
+    width = screenWidth - x;
+  if (y + height > screenHeight)
+    height = screenHeight - y;
+
+  if (width <= 0 || height <= 0) {
+    if (outSize)
+      *outSize = 0;
+    return nullptr;
+  }
+
+  // Pack as 1-bit: ceil(width/8) bytes per row
+  const size_t rowBytes = (width + 7) / 8;
+  const size_t bufferSize = rowBytes * height + 4 * sizeof(int); // +header
+  uint8_t *buffer = static_cast<uint8_t *>(malloc(bufferSize));
+  if (!buffer) {
+    if (outSize)
+      *outSize = 0;
+    return nullptr;
+  }
+
+  // Store dimensions in header
+  int *header = reinterpret_cast<int *>(buffer);
+  header[0] = x;
+  header[1] = y;
+  header[2] = width;
+  header[3] = height;
+  uint8_t *data = buffer + 4 * sizeof(int);
+
+  // Extract pixels - this is orientation-dependent
+  for (int row = 0; row < height; row++) {
+    const int screenY = y + row;
+    uint8_t *destRow = data + row * rowBytes;
+    memset(destRow, 0xFF, rowBytes); // Start with white
+
+    for (int col = 0; col < width; col++) {
+      const int screenX = x + col;
+
+      // Get physical coordinates
+      int physX, physY;
+      rotateCoordinates(screenX, screenY, &physX, &physY);
+
+      // Read pixel from framebuffer
+      const uint16_t byteIndex =
+          physY * EInkDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+      const uint8_t bitPosition = 7 - (physX % 8);
+      const bool isBlack = !(frameBuffer[byteIndex] & (1 << bitPosition));
+
+      // Store in destination
+      if (isBlack) {
+        destRow[col / 8] &= ~(1 << (7 - (col % 8)));
+      }
+    }
+  }
+
+  if (outSize)
+    *outSize = bufferSize;
+  return buffer;
+}
+
+void GfxRenderer::restoreRegion(const uint8_t *buffer, int x, int y, int width,
+                                int height) const {
+  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer || !buffer || width <= 0 || height <= 0) {
+    return;
+  }
+
+  const size_t rowBytes = (width + 7) / 8;
+  const uint8_t *data = buffer + 4 * sizeof(int); // Skip header
+
+  // Optimized path for Portrait mode
+  if (orientation == Portrait) {
+    for (int row = 0; row < height; row++) {
+      const int screenY = y + row;
+      if (screenY < 0 || screenY >= getScreenHeight())
+        continue;
+
+      const uint8_t *srcRow = data + row * rowBytes;
+      const int physX = screenY;
+      const uint8_t physXByte = physX / 8;
+      const uint8_t physXBit = 7 - (physX % 8);
+      const uint8_t mask = 1 << physXBit;
+
+      for (int col = 0; col < width; col++) {
+        const int screenX = x + col;
+        if (screenX < 0 || screenX >= getScreenWidth())
+          continue;
+
+        const bool isBlack = !(srcRow[col / 8] & (1 << (7 - (col % 8))));
+        const int physY = EInkDisplay::DISPLAY_HEIGHT - 1 - screenX;
+        const uint16_t byteIndex =
+            physY * EInkDisplay::DISPLAY_WIDTH_BYTES + physXByte;
+
+        if (isBlack) {
+          frameBuffer[byteIndex] &= ~mask;
+        } else {
+          frameBuffer[byteIndex] |= mask;
+        }
+      }
+    }
+    return;
+  }
+
+  // Generic fallback using drawPixel
+  for (int row = 0; row < height; row++) {
+    const int screenY = y + row;
+    const uint8_t *srcRow = data + row * rowBytes;
+
+    for (int col = 0; col < width; col++) {
+      const int screenX = x + col;
+      const bool isBlack = !(srcRow[col / 8] & (1 << (7 - (col % 8))));
+      drawPixel(screenX, screenY, isBlack);
+    }
+  }
+}
+
+void GfxRenderer::clearScreen(const uint8_t color) const {
+  einkDisplay.clearScreen(color);
+}
 
 void GfxRenderer::invertScreen() const {
-  uint8_t* buffer = einkDisplay.getFrameBuffer();
+  uint8_t *buffer = einkDisplay.getFrameBuffer();
   if (!buffer) {
     Serial.printf("[%lu] [GFX] !! No framebuffer in invertScreen\n", millis());
     return;
@@ -397,11 +820,13 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
-void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode) const {
+void GfxRenderer::displayBuffer(
+    const EInkDisplay::RefreshMode refreshMode) const {
   einkDisplay.displayBuffer(refreshMode);
 }
 
-std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
+std::string GfxRenderer::truncatedText(const int fontId, const char *text,
+                                       const int maxWidth,
                                        const EpdFontFamily::Style style) const {
   std::string item = text;
   int itemWidth = getTextWidth(fontId, item.c_str(), style);
@@ -412,31 +837,32 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   return item;
 }
 
-// Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
+// Note: Internal driver treats screen in command orientation; this library
+// exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
   switch (orientation) {
-    case Portrait:
-    case PortraitInverted:
-      // 480px wide in portrait logical coordinates
-      return EInkDisplay::DISPLAY_HEIGHT;
-    case LandscapeClockwise:
-    case LandscapeCounterClockwise:
-      // 800px wide in landscape logical coordinates
-      return EInkDisplay::DISPLAY_WIDTH;
+  case Portrait:
+  case PortraitInverted:
+    // 480px wide in portrait logical coordinates
+    return EInkDisplay::DISPLAY_HEIGHT;
+  case LandscapeClockwise:
+  case LandscapeCounterClockwise:
+    // 800px wide in landscape logical coordinates
+    return EInkDisplay::DISPLAY_WIDTH;
   }
   return EInkDisplay::DISPLAY_HEIGHT;
 }
 
 int GfxRenderer::getScreenHeight() const {
   switch (orientation) {
-    case Portrait:
-    case PortraitInverted:
-      // 800px tall in portrait logical coordinates
-      return EInkDisplay::DISPLAY_WIDTH;
-    case LandscapeClockwise:
-    case LandscapeCounterClockwise:
-      // 480px tall in landscape logical coordinates
-      return EInkDisplay::DISPLAY_HEIGHT;
+  case Portrait:
+  case PortraitInverted:
+    // 800px tall in portrait logical coordinates
+    return EInkDisplay::DISPLAY_WIDTH;
+  case LandscapeClockwise:
+  case LandscapeCounterClockwise:
+    // 480px tall in landscape logical coordinates
+    return EInkDisplay::DISPLAY_HEIGHT;
   }
   return EInkDisplay::DISPLAY_WIDTH;
 }
@@ -468,18 +894,19 @@ int GfxRenderer::getLineHeight(const int fontId) const {
   return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
 }
 
-void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
-                                  const char* btn4) {
+void GfxRenderer::drawButtonHints(const int fontId, const char *btn1,
+                                  const char *btn2, const char *btn3,
+                                  const char *btn4) {
   const Orientation orig_orientation = getOrientation();
   setOrientation(Orientation::Portrait);
 
   const int pageHeight = getScreenHeight();
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = 40;
-  constexpr int buttonY = 40;     // Distance from bottom
-  constexpr int textYOffset = 7;  // Distance from top of button to text baseline
+  constexpr int buttonY = 40;    // Distance from bottom
+  constexpr int textYOffset = 7; // Distance from top of button to text baseline
   constexpr int buttonPositions[] = {25, 130, 245, 350};
-  const char* labels[] = {btn1, btn2, btn3, btn4};
+  const char *labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < 4; i++) {
     // Only draw if the label is non-empty
@@ -496,37 +923,44 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
   setOrientation(orig_orientation);
 }
 
-void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, const char* bottomBtn) const {
+void GfxRenderer::drawSideButtonHints(const int fontId, const char *topBtn,
+                                      const char *bottomBtn) const {
   const int screenWidth = getScreenWidth();
-  constexpr int buttonWidth = 40;   // Width on screen (height when rotated)
-  constexpr int buttonHeight = 80;  // Height on screen (width when rotated)
-  constexpr int buttonX = 5;        // Distance from right edge
+  constexpr int buttonWidth = 40;  // Width on screen (height when rotated)
+  constexpr int buttonHeight = 80; // Height on screen (width when rotated)
+  constexpr int buttonX = 5;       // Distance from right edge
   // Position for the button group - buttons share a border so they're adjacent
-  constexpr int topButtonY = 345;  // Top button position
+  constexpr int topButtonY = 345; // Top button position
 
-  const char* labels[] = {topBtn, bottomBtn};
+  const char *labels[] = {topBtn, bottomBtn};
 
   // Draw the shared border for both buttons as one unit
   const int x = screenWidth - buttonX - buttonWidth;
 
   // Draw top button outline (3 sides, bottom open)
   if (topBtn != nullptr && topBtn[0] != '\0') {
-    drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);                                       // Top
-    drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);                                      // Left
-    drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);  // Right
+    drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);  // Top
+    drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1); // Left
+    drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1,
+             topButtonY + buttonHeight - 1); // Right
   }
 
   // Draw shared middle border
-  if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
-    drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);  // Shared border
+  if ((topBtn != nullptr && topBtn[0] != '\0') ||
+      (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
+    drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1,
+             topButtonY + buttonHeight); // Shared border
   }
 
   // Draw bottom button outline (3 sides, top is shared)
   if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-    drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);  // Left
-    drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1,
-             topButtonY + 2 * buttonHeight - 1);                                                             // Right
-    drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);  // Bottom
+    drawLine(x, topButtonY + buttonHeight, x,
+             topButtonY + 2 * buttonHeight - 1); // Left
+    drawLine(x + buttonWidth - 1, topButtonY + buttonHeight,
+             x + buttonWidth - 1,
+             topButtonY + 2 * buttonHeight - 1); // Right
+    drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1,
+             topButtonY + 2 * buttonHeight - 1); // Bottom
   }
 
   // Draw text for each button
@@ -555,7 +989,9 @@ int GfxRenderer::getTextHeight(const int fontId) const {
   return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
 }
 
-void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
+void GfxRenderer::drawTextRotated90CW(const int fontId, const int x,
+                                      const int y, const char *text,
+                                      const bool black,
                                       const EpdFontFamily::Style style) const {
   // Cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
@@ -577,11 +1013,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
   // Text reads from bottom to top
 
-  int yPos = y;  // Current Y position (decreases as we draw characters)
+  int yPos = y; // Current Y position (decreases as we draw characters)
 
   uint32_t cp;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t **>(&text)))) {
+    const EpdGlyph *glyph = font.getGlyph(cp, style);
     if (!glyph) {
       glyph = font.getGlyph(REPLACEMENT_GLYPH, style);
     }
@@ -596,7 +1032,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     const int left = glyph->left;
     const int top = glyph->top;
 
-    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
+    const uint8_t *bitmap = &font.getData(style)->bitmap[offset];
 
     if (bitmap != nullptr) {
       for (int glyphY = 0; glyphY < height; glyphY++) {
@@ -606,7 +1042,8 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
           // 90° clockwise rotation transformation:
           // screenX = x + (ascender - top + glyphY)
           // screenY = yPos - (left + glyphX)
-          const int screenX = x + (font.getData(style)->ascender - top + glyphY);
+          const int screenX =
+              x + (font.getData(style)->ascender - top + glyphY);
           const int screenY = yPos - left - glyphX;
 
           if (is2Bit) {
@@ -616,7 +1053,8 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
             if (renderMode == BW && bmpVal < 3) {
               drawPixel(screenX, screenY, black);
-            } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+            } else if (renderMode == GRAYSCALE_MSB &&
+                       (bmpVal == 1 || bmpVal == 2)) {
               drawPixel(screenX, screenY, false);
             } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
               drawPixel(screenX, screenY, false);
@@ -638,20 +1076,26 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   }
 }
 
-uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
+uint8_t *GfxRenderer::getFrameBuffer() const {
+  return einkDisplay.getFrameBuffer();
+}
 
 size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
 
 void GfxRenderer::grayscaleRevert() const { einkDisplay.grayscaleRevert(); }
 
-void GfxRenderer::copyGrayscaleLsbBuffers() const { einkDisplay.copyGrayscaleLsbBuffers(einkDisplay.getFrameBuffer()); }
+void GfxRenderer::copyGrayscaleLsbBuffers() const {
+  einkDisplay.copyGrayscaleLsbBuffers(einkDisplay.getFrameBuffer());
+}
 
-void GfxRenderer::copyGrayscaleMsbBuffers() const { einkDisplay.copyGrayscaleMsbBuffers(einkDisplay.getFrameBuffer()); }
+void GfxRenderer::copyGrayscaleMsbBuffers() const {
+  einkDisplay.copyGrayscaleMsbBuffers(einkDisplay.getFrameBuffer());
+}
 
 void GfxRenderer::displayGrayBuffer() const { einkDisplay.displayGrayBuffer(); }
 
 void GfxRenderer::freeBwBufferChunks() {
-  for (auto& bwBufferChunk : bwBufferChunks) {
+  for (auto &bwBufferChunk : bwBufferChunks) {
     if (bwBufferChunk) {
       free(bwBufferChunk);
       bwBufferChunk = nullptr;
@@ -661,12 +1105,13 @@ void GfxRenderer::freeBwBufferChunks() {
 
 /**
  * This should be called before grayscale buffers are populated.
- * A `restoreBwBuffer` call should always follow the grayscale render if this method was called.
- * Uses chunked allocation to avoid needing 48KB of contiguous memory.
- * Returns true if buffer was stored successfully, false if allocation failed.
+ * A `restoreBwBuffer` call should always follow the grayscale render if this
+ * method was called. Uses chunked allocation to avoid needing 48KB of
+ * contiguous memory. Returns true if buffer was stored successfully, false if
+ * allocation failed.
  */
 bool GfxRenderer::storeBwBuffer() {
-  const uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  const uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
   if (!frameBuffer) {
     Serial.printf("[%lu] [GFX] !! No framebuffer in storeBwBuffer\n", millis());
     return false;
@@ -676,18 +1121,20 @@ bool GfxRenderer::storeBwBuffer() {
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if any chunks are already allocated
     if (bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk\n",
+      Serial.printf("[%lu] [GFX] !! BW buffer chunk %zu already stored - this "
+                    "is likely a bug, freeing chunk\n",
                     millis(), i);
       free(bwBufferChunks[i]);
       bwBufferChunks[i] = nullptr;
     }
 
     const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
-    bwBufferChunks[i] = static_cast<uint8_t*>(malloc(BW_BUFFER_CHUNK_SIZE));
+    bwBufferChunks[i] = static_cast<uint8_t *>(malloc(BW_BUFFER_CHUNK_SIZE));
 
     if (!bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! Failed to allocate BW buffer chunk %zu (%zu bytes)\n", millis(), i,
-                    BW_BUFFER_CHUNK_SIZE);
+      Serial.printf(
+          "[%lu] [GFX] !! Failed to allocate BW buffer chunk %zu (%zu bytes)\n",
+          millis(), i, BW_BUFFER_CHUNK_SIZE);
       // Free previously allocated chunks
       freeBwBufferChunks();
       return false;
@@ -696,20 +1143,20 @@ bool GfxRenderer::storeBwBuffer() {
     memcpy(bwBufferChunks[i], frameBuffer + offset, BW_BUFFER_CHUNK_SIZE);
   }
 
-  Serial.printf("[%lu] [GFX] Stored BW buffer in %zu chunks (%zu bytes each)\n", millis(), BW_BUFFER_NUM_CHUNKS,
-                BW_BUFFER_CHUNK_SIZE);
+  Serial.printf("[%lu] [GFX] Stored BW buffer in %zu chunks (%zu bytes each)\n",
+                millis(), BW_BUFFER_NUM_CHUNKS, BW_BUFFER_CHUNK_SIZE);
   return true;
 }
 
 /**
- * This can only be called if `storeBwBuffer` was called prior to the grayscale render.
- * It should be called to restore the BW buffer state after grayscale rendering is complete.
- * Uses chunked restoration to match chunked storage.
+ * This can only be called if `storeBwBuffer` was called prior to the grayscale
+ * render. It should be called to restore the BW buffer state after grayscale
+ * rendering is complete. Uses chunked restoration to match chunked storage.
  */
 void GfxRenderer::restoreBwBuffer() {
   // Check if any all chunks are allocated
   bool missingChunks = false;
-  for (const auto& bwBufferChunk : bwBufferChunks) {
+  for (const auto &bwBufferChunk : bwBufferChunks) {
     if (!bwBufferChunk) {
       missingChunks = true;
       break;
@@ -721,9 +1168,10 @@ void GfxRenderer::restoreBwBuffer() {
     return;
   }
 
-  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
   if (!frameBuffer) {
-    Serial.printf("[%lu] [GFX] !! No framebuffer in restoreBwBuffer\n", millis());
+    Serial.printf("[%lu] [GFX] !! No framebuffer in restoreBwBuffer\n",
+                  millis());
     freeBwBufferChunks();
     return;
   }
@@ -731,7 +1179,9 @@ void GfxRenderer::restoreBwBuffer() {
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if chunk is missing
     if (!bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! BW buffer chunks not stored - this is likely a bug\n", millis());
+      Serial.printf(
+          "[%lu] [GFX] !! BW buffer chunks not stored - this is likely a bug\n",
+          millis());
       freeBwBufferChunks();
       return;
     }
@@ -751,15 +1201,16 @@ void GfxRenderer::restoreBwBuffer() {
  * Use this when BW buffer was re-rendered instead of stored/restored.
  */
 void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
-  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
   if (frameBuffer) {
     einkDisplay.cleanupGrayscaleBuffers(frameBuffer);
   }
 }
 
-void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
-                             const bool pixelState, const EpdFontFamily::Style style) const {
-  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+void GfxRenderer::renderChar(const EpdFontFamily &fontFamily, const uint32_t cp,
+                             int *x, const int *y, const bool pixelState,
+                             const EpdFontFamily::Style style) const {
+  const EpdGlyph *glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
     glyph = fontFamily.getGlyph(REPLACEMENT_GLYPH, style);
   }
@@ -776,7 +1227,7 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
   const uint8_t height = glyph->height;
   const int left = glyph->left;
 
-  const uint8_t* bitmap = nullptr;
+  const uint8_t *bitmap = nullptr;
   bitmap = &fontFamily.getData(style)->bitmap[offset];
 
   if (bitmap != nullptr) {
@@ -789,17 +1240,20 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
         if (is2Bit) {
           const uint8_t byte = bitmap[pixelPosition / 4];
           const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
-          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
-          // we swap this to better match the way images and screen think about colors:
-          // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
+          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 ->
+          // dark gray, 3 -> black we swap this to better match the way images
+          // and screen think about colors: 0 -> black, 1 -> dark grey, 2 ->
+          // light grey, 3 -> white
           const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
 
           if (renderMode == BW && bmpVal < 3) {
             // Black (also paints over the grays in BW mode)
             drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
+          } else if (renderMode == GRAYSCALE_MSB &&
+                     (bmpVal == 1 || bmpVal == 2)) {
+            // Light gray (also mark the MSB if it's going to be a dark gray
+            // too) We have to flag pixels in reverse for the gray buffers, as 0
+            // leave alone, 1 update
             drawPixel(screenX, screenY, false);
           } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
             // Dark gray
@@ -820,31 +1274,32 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
   *x += glyph->advanceX;
 }
 
-void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
+void GfxRenderer::getOrientedViewableTRBL(int *outTop, int *outRight,
+                                          int *outBottom, int *outLeft) const {
   switch (orientation) {
-    case Portrait:
-      *outTop = VIEWABLE_MARGIN_TOP;
-      *outRight = VIEWABLE_MARGIN_RIGHT;
-      *outBottom = VIEWABLE_MARGIN_BOTTOM;
-      *outLeft = VIEWABLE_MARGIN_LEFT;
-      break;
-    case LandscapeClockwise:
-      *outTop = VIEWABLE_MARGIN_LEFT;
-      *outRight = VIEWABLE_MARGIN_TOP;
-      *outBottom = VIEWABLE_MARGIN_RIGHT;
-      *outLeft = VIEWABLE_MARGIN_BOTTOM;
-      break;
-    case PortraitInverted:
-      *outTop = VIEWABLE_MARGIN_BOTTOM;
-      *outRight = VIEWABLE_MARGIN_LEFT;
-      *outBottom = VIEWABLE_MARGIN_TOP;
-      *outLeft = VIEWABLE_MARGIN_RIGHT;
-      break;
-    case LandscapeCounterClockwise:
-      *outTop = VIEWABLE_MARGIN_RIGHT;
-      *outRight = VIEWABLE_MARGIN_BOTTOM;
-      *outBottom = VIEWABLE_MARGIN_LEFT;
-      *outLeft = VIEWABLE_MARGIN_TOP;
-      break;
+  case Portrait:
+    *outTop = VIEWABLE_MARGIN_TOP;
+    *outRight = VIEWABLE_MARGIN_RIGHT;
+    *outBottom = VIEWABLE_MARGIN_BOTTOM;
+    *outLeft = VIEWABLE_MARGIN_LEFT;
+    break;
+  case LandscapeClockwise:
+    *outTop = VIEWABLE_MARGIN_LEFT;
+    *outRight = VIEWABLE_MARGIN_TOP;
+    *outBottom = VIEWABLE_MARGIN_RIGHT;
+    *outLeft = VIEWABLE_MARGIN_BOTTOM;
+    break;
+  case PortraitInverted:
+    *outTop = VIEWABLE_MARGIN_BOTTOM;
+    *outRight = VIEWABLE_MARGIN_LEFT;
+    *outBottom = VIEWABLE_MARGIN_TOP;
+    *outLeft = VIEWABLE_MARGIN_RIGHT;
+    break;
+  case LandscapeCounterClockwise:
+    *outTop = VIEWABLE_MARGIN_RIGHT;
+    *outRight = VIEWABLE_MARGIN_BOTTOM;
+    *outBottom = VIEWABLE_MARGIN_LEFT;
+    *outLeft = VIEWABLE_MARGIN_TOP;
+    break;
   }
 }

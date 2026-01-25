@@ -14,9 +14,9 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 20;
+constexpr uint8_t SETTINGS_COUNT = 21;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
-}  // namespace
+} // namespace
 
 bool CrossPointSettings::saveToFile() const {
   // Make sure the directory exists
@@ -49,6 +49,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, hideBatteryPercentage);
   serialization::writePod(outputFile, longPressChapterSkip);
   serialization::writePod(outputFile, hyphenationEnabled);
+  serialization::writeString(outputFile, std::string(themeName));
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -64,7 +65,8 @@ bool CrossPointSettings::loadFromFile() {
   uint8_t version;
   serialization::readPod(inputFile, version);
   if (version != SETTINGS_FILE_VERSION) {
-    Serial.printf("[%lu] [CPS] Deserialization failed: Unknown version %u\n", millis(), version);
+    Serial.printf("[%lu] [CPS] Deserialization failed: Unknown version %u\n",
+                  millis(), version);
     inputFile.close();
     return false;
   }
@@ -76,50 +78,78 @@ bool CrossPointSettings::loadFromFile() {
   uint8_t settingsRead = 0;
   do {
     serialization::readPod(inputFile, sleepScreen);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, extraParagraphSpacing);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, shortPwrBtn);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, statusBar);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, orientation);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, frontButtonLayout);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, sideButtonLayout);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, fontFamily);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, fontSize);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, lineSpacing);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, paragraphAlignment);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, sleepTimeout);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, refreshFrequency);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, screenMargin);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, sleepScreenCoverMode);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     {
       std::string urlStr;
       serialization::readString(inputFile, urlStr);
       strncpy(opdsServerUrl, urlStr.c_str(), sizeof(opdsServerUrl) - 1);
       opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
     }
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, textAntiAliasing);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, hideBatteryPercentage);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, longPressChapterSkip);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
     serialization::readPod(inputFile, hyphenationEnabled);
-    if (++settingsRead >= fileSettingsCount) break;
+    if (++settingsRead >= fileSettingsCount)
+      break;
+    {
+      std::string themeStr;
+      serialization::readString(inputFile, themeStr);
+      strncpy(themeName, themeStr.c_str(), sizeof(themeName) - 1);
+      themeName[sizeof(themeName) - 1] = '\0';
+    }
+    if (++settingsRead >= fileSettingsCount)
+      break;
   } while (false);
 
   inputFile.close();
@@ -129,110 +159,110 @@ bool CrossPointSettings::loadFromFile() {
 
 float CrossPointSettings::getReaderLineCompression() const {
   switch (fontFamily) {
-    case BOOKERLY:
+  case BOOKERLY:
+  default:
+    switch (lineSpacing) {
+    case TIGHT:
+      return 0.95f;
+    case NORMAL:
     default:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.95f;
-        case NORMAL:
-        default:
-          return 1.0f;
-        case WIDE:
-          return 1.1f;
-      }
-    case NOTOSANS:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.90f;
-        case NORMAL:
-        default:
-          return 0.95f;
-        case WIDE:
-          return 1.0f;
-      }
-    case OPENDYSLEXIC:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.90f;
-        case NORMAL:
-        default:
-          return 0.95f;
-        case WIDE:
-          return 1.0f;
-      }
+      return 1.0f;
+    case WIDE:
+      return 1.1f;
+    }
+  case NOTOSANS:
+    switch (lineSpacing) {
+    case TIGHT:
+      return 0.90f;
+    case NORMAL:
+    default:
+      return 0.95f;
+    case WIDE:
+      return 1.0f;
+    }
+  case OPENDYSLEXIC:
+    switch (lineSpacing) {
+    case TIGHT:
+      return 0.90f;
+    case NORMAL:
+    default:
+      return 0.95f;
+    case WIDE:
+      return 1.0f;
+    }
   }
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
   switch (sleepTimeout) {
-    case SLEEP_1_MIN:
-      return 1UL * 60 * 1000;
-    case SLEEP_5_MIN:
-      return 5UL * 60 * 1000;
-    case SLEEP_10_MIN:
-    default:
-      return 10UL * 60 * 1000;
-    case SLEEP_15_MIN:
-      return 15UL * 60 * 1000;
-    case SLEEP_30_MIN:
-      return 30UL * 60 * 1000;
+  case SLEEP_1_MIN:
+    return 1UL * 60 * 1000;
+  case SLEEP_5_MIN:
+    return 5UL * 60 * 1000;
+  case SLEEP_10_MIN:
+  default:
+    return 10UL * 60 * 1000;
+  case SLEEP_15_MIN:
+    return 15UL * 60 * 1000;
+  case SLEEP_30_MIN:
+    return 30UL * 60 * 1000;
   }
 }
 
 int CrossPointSettings::getRefreshFrequency() const {
   switch (refreshFrequency) {
-    case REFRESH_1:
-      return 1;
-    case REFRESH_5:
-      return 5;
-    case REFRESH_10:
-      return 10;
-    case REFRESH_15:
-    default:
-      return 15;
-    case REFRESH_30:
-      return 30;
+  case REFRESH_1:
+    return 1;
+  case REFRESH_5:
+    return 5;
+  case REFRESH_10:
+    return 10;
+  case REFRESH_15:
+  default:
+    return 15;
+  case REFRESH_30:
+    return 30;
   }
 }
 
 int CrossPointSettings::getReaderFontId() const {
   switch (fontFamily) {
-    case BOOKERLY:
+  case BOOKERLY:
+  default:
+    switch (fontSize) {
+    case SMALL:
+      return BOOKERLY_12_FONT_ID;
+    case MEDIUM:
     default:
-      switch (fontSize) {
-        case SMALL:
-          return BOOKERLY_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return BOOKERLY_14_FONT_ID;
-        case LARGE:
-          return BOOKERLY_16_FONT_ID;
-        case EXTRA_LARGE:
-          return BOOKERLY_18_FONT_ID;
-      }
-    case NOTOSANS:
-      switch (fontSize) {
-        case SMALL:
-          return NOTOSANS_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return NOTOSANS_14_FONT_ID;
-        case LARGE:
-          return NOTOSANS_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSANS_18_FONT_ID;
-      }
-    case OPENDYSLEXIC:
-      switch (fontSize) {
-        case SMALL:
-          return OPENDYSLEXIC_8_FONT_ID;
-        case MEDIUM:
-        default:
-          return OPENDYSLEXIC_10_FONT_ID;
-        case LARGE:
-          return OPENDYSLEXIC_12_FONT_ID;
-        case EXTRA_LARGE:
-          return OPENDYSLEXIC_14_FONT_ID;
-      }
+      return BOOKERLY_14_FONT_ID;
+    case LARGE:
+      return BOOKERLY_16_FONT_ID;
+    case EXTRA_LARGE:
+      return BOOKERLY_18_FONT_ID;
+    }
+  case NOTOSANS:
+    switch (fontSize) {
+    case SMALL:
+      return NOTOSANS_12_FONT_ID;
+    case MEDIUM:
+    default:
+      return NOTOSANS_14_FONT_ID;
+    case LARGE:
+      return NOTOSANS_16_FONT_ID;
+    case EXTRA_LARGE:
+      return NOTOSANS_18_FONT_ID;
+    }
+  case OPENDYSLEXIC:
+    switch (fontSize) {
+    case SMALL:
+      return OPENDYSLEXIC_8_FONT_ID;
+    case MEDIUM:
+    default:
+      return OPENDYSLEXIC_10_FONT_ID;
+    case LARGE:
+      return OPENDYSLEXIC_12_FONT_ID;
+    case EXTRA_LARGE:
+      return OPENDYSLEXIC_14_FONT_ID;
+    }
   }
 }
