@@ -3,6 +3,7 @@
  * name: bookerly_18_italic
  * size: 18
  * mode: 2-bit
+ * Command used: fontconvert.py bookerly_18_italic 18 ../builtinFonts/source/Bookerly/Bookerly-Italic.ttf --2bit
  */
 #pragma once
 #include "EpdFontData.h"
