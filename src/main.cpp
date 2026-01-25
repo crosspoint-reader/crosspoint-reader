@@ -344,6 +344,7 @@ void setup() {
   ThemeEngine::ThemeManager::get().begin();
   ThemeEngine::ThemeManager::get().registerFont("UI_12", UI_12_FONT_ID);
   ThemeEngine::ThemeManager::get().registerFont("UI_10", UI_10_FONT_ID);
+  ThemeEngine::ThemeManager::get().registerFont("Small", SMALL_FONT_ID);
   ThemeEngine::ThemeManager::get().loadTheme(SETTINGS.themeName);
 
   exitActivity();

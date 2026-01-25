@@ -440,4 +440,73 @@ public:
   }
 };
 
+// --- BatteryIcon ---
+class BatteryIcon : public UIElement {
+  Expression valueExpr;
+  Expression colorExpr;
+
+public:
+  BatteryIcon(const std::string &id) : UIElement(id) {
+    valueExpr = Expression::parse("0");
+    colorExpr = Expression::parse("0x00"); // Black by default
+  }
+
+  ElementType getType() const override { return ElementType::BatteryIcon; }
+
+  void setValue(const std::string &expr) {
+    valueExpr = Expression::parse(expr);
+    markDirty();
+  }
+
+  void setColor(const std::string &expr) {
+    colorExpr = Expression::parse(expr);
+    markDirty();
+  }
+
+  void draw(const GfxRenderer &renderer, const ThemeContext &context) override {
+    if (!isVisible(context))
+      return;
+
+    std::string valStr = context.evaluatestring(valueExpr);
+    int percentage = valStr.empty() ? 0 : std::stoi(valStr);
+
+    std::string colStr = context.evaluatestring(colorExpr);
+    uint8_t color = Color::parse(colStr).value;
+    bool black = (color == 0x00);
+
+    constexpr int batteryWidth = 15;
+    constexpr int batteryHeight = 12;
+
+    int x = absX;
+    int y = absY;
+
+    if (absW > batteryWidth)
+      x += (absW - batteryWidth) / 2;
+    if (absH > batteryHeight)
+      y += (absH - batteryHeight) / 2;
+
+    renderer.drawLine(x + 1, y, x + batteryWidth - 3, y, black);
+    renderer.drawLine(x + 1, y + batteryHeight - 1, x + batteryWidth - 3,
+                      y + batteryHeight - 1, black);
+    renderer.drawLine(x, y + 1, x, y + batteryHeight - 2, black);
+    renderer.drawLine(x + batteryWidth - 2, y + 1, x + batteryWidth - 2,
+                      y + batteryHeight - 2, black);
+
+    renderer.drawPixel(x + batteryWidth - 1, y + 3, black);
+    renderer.drawPixel(x + batteryWidth - 1, y + batteryHeight - 4, black);
+    renderer.drawLine(x + batteryWidth - 0, y + 4, x + batteryWidth - 0,
+                      y + batteryHeight - 5, black);
+
+    if (percentage > 0) {
+      int filledWidth = percentage * (batteryWidth - 5) / 100 + 1;
+      if (filledWidth > batteryWidth - 5) {
+        filledWidth = batteryWidth - 5;
+      }
+      renderer.fillRect(x + 2, y + 2, filledWidth, batteryHeight - 4, black);
+    }
+
+    markClean();
+  }
+};
+
 } // namespace ThemeEngine
