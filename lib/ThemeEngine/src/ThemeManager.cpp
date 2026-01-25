@@ -474,11 +474,10 @@ uint32_t ThemeManager::computeContextHash(const ThemeContext &context,
 void ThemeManager::loadTheme(const std::string &themeName) {
   unloadTheme();
   currentThemeName = themeName;
-  Serial.printf("[ThemeManager] Loading theme: %s\n", themeName.c_str());
 
   std::map<std::string, std::map<std::string, std::string>> sections;
 
-  if (themeName == "Default") {
+  if (themeName == "Default" || themeName.empty()) {
     std::string path = "/themes/Default/theme.ini";
     if (SdMan.exists(path.c_str())) {
       FsFile file;
@@ -489,21 +488,30 @@ void ThemeManager::loadTheme(const std::string &themeName) {
       }
     } else {
       Serial.println("[ThemeManager] Using embedded Default theme");
-      sections = IniParser::parseString(DEFAULT_THEME_INI);
+      sections = IniParser::parseString(getDefaultThemeIni());
     }
+    currentThemeName = "Default";
   } else {
     std::string path = "/themes/" + themeName + "/theme.ini";
-    FsFile file;
-    if (SdMan.openFileForRead("Theme", path, file)) {
-      sections = IniParser::parse(file);
-      file.close();
-      Serial.printf("[ThemeManager] Loaded theme: %s\n", themeName.c_str());
-    } else {
-      Serial.printf("[ThemeManager] ERR: Could not load theme %s, falling back "
-                    "to Default\n",
-                    themeName.c_str());
-      sections = IniParser::parseString(DEFAULT_THEME_INI);
+    Serial.printf("[ThemeManager] Checking path: %s\n", path.c_str());
+    
+    if (!SdMan.exists(path.c_str())) {
+      Serial.printf("[ThemeManager] Theme %s not found, using Default\n", themeName.c_str());
+      sections = IniParser::parseString(getDefaultThemeIni());
       currentThemeName = "Default";
+    } else {
+      FsFile file;
+      if (SdMan.openFileForRead("Theme", path, file)) {
+        Serial.printf("[ThemeManager] Parsing theme file...\n");
+        sections = IniParser::parse(file);
+        file.close();
+        Serial.printf("[ThemeManager] Parsed %d sections from %s\n", 
+                      (int)sections.size(), themeName.c_str());
+      } else {
+        Serial.printf("[ThemeManager] Failed to open %s, using Default\n", path.c_str());
+        sections = IniParser::parseString(getDefaultThemeIni());
+        currentThemeName = "Default";
+      }
     }
   }
 
