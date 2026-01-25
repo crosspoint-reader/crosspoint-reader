@@ -515,6 +515,17 @@ void ThemeManager::loadTheme(const std::string &themeName) {
     }
   }
 
+  // Read theme configuration from [Global] section
+  navBookCount = 1; // Default
+  if (sections.count("Global")) {
+    const auto &global = sections.at("Global");
+    if (global.count("NavBookCount")) {
+      navBookCount = std::stoi(global.at("NavBookCount"));
+      if (navBookCount < 1) navBookCount = 1;
+      if (navBookCount > 10) navBookCount = 10; // Reasonable max
+    }
+  }
+
   // Pass 1: Creation
   for (const auto &sec : sections) {
     std::string id = sec.first;

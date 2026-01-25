@@ -20,9 +20,7 @@ struct CachedBookInfo {
 class HomeActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
-  int selectorIndex = 0;      // Menu item index
-  int bookSelectorIndex = 0;  // Book selection index (0-2 for recent books)
-  bool inBookSelection = true; // True = selecting books, False = selecting menu
+  int selectorIndex = 0;  // Unified index: 0..bookCount-1 = books, bookCount+ = menu
   bool updateRequired = false;
   bool hasContinueReading = false;
   bool hasOpdsUrl = false;
