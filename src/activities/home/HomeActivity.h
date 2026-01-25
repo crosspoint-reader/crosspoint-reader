@@ -47,7 +47,7 @@ class HomeActivity final : public Activity {
   void render();
   int getMenuItemCount() const;
   bool storeCoverBuffer();     // Store frame buffer for cover image
-  bool restoreCoverBuffer();   // Restore frame buffer from stored cover
+
   void freeCoverBuffer();      // Free the stored cover buffer
   void loadRecentBooksData();  // Load and cache recent books data
 

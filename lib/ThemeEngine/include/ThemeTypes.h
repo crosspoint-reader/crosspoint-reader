@@ -34,7 +34,7 @@ struct Dimension {
 struct Color {
   uint8_t value;  // For E-Ink: 0 (Black) to 255 (White), or simplified palette
 
-  Color(uint8_t v) : value(v) {}
+  explicit Color(uint8_t v) : value(v) {}
   Color() : value(0) {}
 
   static Color parse(const std::string& str) {

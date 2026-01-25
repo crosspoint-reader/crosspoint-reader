@@ -232,20 +232,7 @@ bool HomeActivity::storeCoverBuffer() {
   return true;
 }
 
-bool HomeActivity::restoreCoverBuffer() {
-  if (!coverBuffer) {
-    return false;
-  }
 
-  uint8_t* frameBuffer = renderer.getFrameBuffer();
-  if (!frameBuffer) {
-    return false;
-  }
-
-  const size_t bufferSize = GfxRenderer::getBufferSize();
-  memcpy(frameBuffer, coverBuffer, bufferSize);
-  return true;
-}
 
 void HomeActivity::freeCoverBuffer() {
   if (coverBuffer) {

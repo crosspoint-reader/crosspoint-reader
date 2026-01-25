@@ -45,7 +45,7 @@ class UIElement {
   }
 
  public:
-  UIElement(const std::string& id) : id(id) { visibleExpr = Expression::parse("true"); }
+  UIElement(const std::string& id) : id(id), visibleExpr(Expression::parse("true")) {}
 
   virtual ~UIElement() {
     if (cachedRender) {
