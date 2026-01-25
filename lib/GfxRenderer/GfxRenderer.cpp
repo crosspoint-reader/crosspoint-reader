@@ -584,7 +584,13 @@ void GfxRenderer::drawBitmap(const Bitmap &bitmap, const int x, const int y,
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
-      if (renderMode == BW && val < 3) {
+      // In BW mode:
+      // 0 = Black (< 45)
+      // 1 = Dark Gray (< 70)
+      // 2 = Light Gray (< 140)
+      // 3 = White
+      // Draw black for val < 2 (everything below 70), treating Light Gray as White.
+      if (renderMode == BW && val < 2) {
         drawPixel(screenX, screenY);
       } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
         drawPixel(screenX, screenY, false);
@@ -631,8 +637,9 @@ void GfxRenderer::draw2BitImage(const uint8_t data[], int x, int y, int w,
         // Extract 2-bit value (4 pixels per byte)
         const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
 
-        // val < 3 means black pixel in 2-bit representation
-        if (val < 3) {
+        // val < 2 means black pixel in 2-bit representation (0=Black, 1=DarkGray)
+        // 2=LightGray, 3=White -> Treat as White
+        if (val < 2) {
           // In Portrait: physical Y = DISPLAY_HEIGHT - 1 - screenX
           const int physY = HalDisplay::DISPLAY_HEIGHT - 1 - screenX;
           const uint16_t byteIndex =

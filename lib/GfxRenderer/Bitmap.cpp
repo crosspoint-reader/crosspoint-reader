@@ -155,6 +155,11 @@ BmpReaderError Bitmap::parseHeaders() {
   if (colorsUsed > 256u) return BmpReaderError::PaletteTooLarge;
   seekCur(4);
 
+  // Robustness Fix: Skip extended header bytes (V4/V5)
+  if (biSize > 40) {
+    seekCur(biSize - 40);
+  }
+
   if (width <= 0 || height <= 0) return BmpReaderError::BadDimensions;
 
   constexpr int MAX_IMAGE_WIDTH = 2048;
@@ -165,11 +170,33 @@ BmpReaderError Bitmap::parseHeaders() {
 
   rowBytes = (width * bpp + 31) / 32 * 4;
 
-  for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
-  if (colorsUsed > 0) {
-    for (uint32_t i = 0; i < colorsUsed; i++) {
+  // Initialize safe default palette
+  if (bpp == 1) {
+    // For 1-bit, default to Black(0) and White(1)
+    paletteLum[0] = 0;
+    paletteLum[1] = 255;
+  } else if (bpp <= 8) {
+    int maxIdx = (1 << bpp) - 1;
+    for (int i = 0; i <= maxIdx; i++) {
+      paletteLum[i] = (i * 255) / maxIdx;
+    }
+  } else {
+    for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
+  }
+
+  // If indexed color (<=8bpp), we MUST load the palette.
+  // The palette is located AFTER the DIB header.
+  if (bpp <= 8) {
+    // Explicit seek to palette start
+    if (!seekSet(14 + biSize)) return BmpReaderError::SeekStartFailed;
+
+    uint32_t colorsToRead = colorsUsed;
+    if (colorsToRead == 0) colorsToRead = 1 << bpp;
+    if (colorsToRead > 256) colorsToRead = 256;
+
+    for (uint32_t i = 0; i < colorsToRead; i++) {
       uint8_t rgb[4];
-      readBytes(rgb, 4);
+      if (readBytes(rgb, 4) != 4) break;
       paletteLum[i] = (77u * rgb[2] + 150u * rgb[1] + 29u * rgb[0]) >> 8;
     }
   }
@@ -224,7 +251,14 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
     case 32: {
       const uint8_t* p = rowBuffer;
       for (int x = 0; x < width; x++) {
-        uint8_t lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+        uint8_t lum;  // Declare lum here
+        // Handle Alpha channel (byte 3). If transparent (<128), treat as White.
+        // This fixes 32-bit icons appearing as black squares on white backgrounds.
+        if (p[3] < 128) {
+          lum = 255;
+        } else {
+          lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+        }
         packPixel(lum);
         p += 4;
       }
