@@ -10,6 +10,7 @@
 #include "CrossPointState.h"
 #include "fontIds.h"
 #include "images/CrossLarge.h"
+#include "images/MoonIcon.h"
 #include "util/StringUtils.h"
 
 void SleepActivity::onEnter() {
@@ -277,17 +278,9 @@ void SleepActivity::renderCoverSleepScreen() const {
 }
 
 void SleepActivity::renderLastScreenSleepScreen() const {
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, "SLEEPING...", EpdFontFamily::BOLD);
-  constexpr int margin = 20;
-  const int x = (renderer.getScreenWidth() - textWidth - margin * 2) / 2;
-  const int w = textWidth + margin * 2;
-  const int h = renderer.getLineHeight(UI_12_FONT_ID) + margin * 2;
-  const int y = renderer.getScreenHeight() - h - margin;
+  const auto pageHeight = renderer.getScreenHeight();
 
-  renderer.fillRect(x - 5, y - 5, w + 10, h + 10, true);
-  renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
-  renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, "SLEEPING...", true, EpdFontFamily::BOLD);
-
+  renderer.drawImage(MoonIcon, 48, pageHeight - 48, 48, 48);
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
 
