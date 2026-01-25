@@ -1,10 +1,11 @@
 #include "BasicElements.h"
 
+#include <GfxRenderer.h>
+
 #include "Bitmap.h"
 #include "ListElement.h"
 #include "ThemeManager.h"
 #include "ThemeTypes.h"
-#include <GfxRenderer.h>
 
 namespace ThemeEngine {
 
@@ -23,7 +24,7 @@ void BitmapElement::draw(const GfxRenderer& renderer, const ThemeContext& contex
 
   // Resolve simplified or relative paths
   if (path.find('/') == std::string::npos || (path.length() > 0 && path[0] != '/')) {
-     path = ThemeManager::get().getAssetPath(path);
+    path = ThemeManager::get().getAssetPath(path);
   }
 
   // 1. Check if we have a cached 1-bit render
@@ -47,46 +48,46 @@ void BitmapElement::draw(const GfxRenderer& renderer, const ThemeContext& contex
 
   // 2. Try Streaming (Absolute paths, large images)
   if (path.length() > 0 && path[0] == '/') {
-      FsFile file;
-      if (SdMan.openFileForRead("HOME", path, file)) {
-          Bitmap bmp(file, true); // (file, dithering=true)
-          if (bmp.parseHeaders() == BmpReaderError::Ok) {
-              // Center logic
-              int drawX = absX;
-              int drawY = absY;
-              if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
-              if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
-              
-              if (borderRadius > 0) {
-                  renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
-              } else {
-                  renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
-              }
-              drawSuccess = true;
-          }
-          file.close();
+    FsFile file;
+    if (SdMan.openFileForRead("HOME", path, file)) {
+      Bitmap bmp(file, true);  // (file, dithering=true)
+      if (bmp.parseHeaders() == BmpReaderError::Ok) {
+        // Center logic
+        int drawX = absX;
+        int drawY = absY;
+        if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
+        if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
+
+        if (borderRadius > 0) {
+          renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
+        } else {
+          renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+        }
+        drawSuccess = true;
       }
+      file.close();
+    }
   }
 
   // 3. Fallback to RAM Cache (Standard method)
   if (!drawSuccess) {
-     const std::vector<uint8_t>* data = ThemeManager::get().getCachedAsset(path);
-     if (data && !data->empty()) {
-        Bitmap bmp(data->data(), data->size());
-        if (bmp.parseHeaders() == BmpReaderError::Ok) {
-            int drawX = absX;
-            int drawY = absY;
-            if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
-            if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
-            
-            if (borderRadius > 0) {
-                renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
-            } else {
-                renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
-            }
-            drawSuccess = true;
+    const std::vector<uint8_t>* data = ThemeManager::get().getCachedAsset(path);
+    if (data && !data->empty()) {
+      Bitmap bmp(data->data(), data->size());
+      if (bmp.parseHeaders() == BmpReaderError::Ok) {
+        int drawX = absX;
+        int drawY = absY;
+        if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
+        if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
+
+        if (borderRadius > 0) {
+          renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
+        } else {
+          renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
         }
-     }
+        drawSuccess = true;
+      }
+    }
   }
 
   // 4. Cache result if successful
