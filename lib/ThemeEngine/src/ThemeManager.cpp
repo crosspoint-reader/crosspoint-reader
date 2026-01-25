@@ -22,7 +22,11 @@ std::string ThemeManager::getAssetPath(const std::string& assetName) {
   // Check if absolute path
   if (!assetName.empty() && assetName[0] == '/') return assetName;
 
-  // Otherwise relative to theme assets
+  // Otherwise relative to theme root
+  std::string rootPath = "/themes/" + currentThemeName + "/" + assetName;
+  if (SdMan.exists(rootPath.c_str())) return rootPath;
+
+  // Fallback to assets/ subfolder
   return "/themes/" + currentThemeName + "/assets/" + assetName;
 }
 
