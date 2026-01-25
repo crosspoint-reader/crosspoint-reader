@@ -83,7 +83,7 @@ class ThemeContext {
   }
 
  public:
-  ThemeContext(const ThemeContext* parent = nullptr) : parent(parent) {}
+  explicit ThemeContext(const ThemeContext* parent = nullptr) : parent(parent) {}
 
   void setString(const std::string& key, const std::string& value) { strings[key] = value; }
   void setInt(const std::string& key, int value) { ints[key] = value; }

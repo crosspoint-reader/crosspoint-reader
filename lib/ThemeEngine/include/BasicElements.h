@@ -23,7 +23,7 @@ class Container : public UIElement {
   int borderRadius = 0;   // Corner radius (for future rounded rect support)
 
  public:
-  Container(const std::string& id) : UIElement(id) { bgColorExpr = Expression::parse("0xFF"); }
+  explicit Container(const std::string& id) : UIElement(id), bgColorExpr(Expression::parse("0xFF")) {}
   virtual ~Container() {
     for (auto child : children) delete child;
   }
@@ -145,7 +145,7 @@ class Rectangle : public UIElement {
   Expression colorExpr;
 
  public:
-  Rectangle(const std::string& id) : UIElement(id) { colorExpr = Expression::parse("0x00"); }
+  explicit Rectangle(const std::string& id) : UIElement(id), colorExpr(Expression::parse("0x00")) {}
   ElementType getType() const override { return ElementType::Rectangle; }
 
   void setFill(bool f) {
@@ -199,7 +199,7 @@ class Label : public UIElement {
   bool ellipsis = true;  // Truncate with ... if too long
 
  public:
-  Label(const std::string& id) : UIElement(id) { colorExpr = Expression::parse("0x00"); }
+  explicit Label(const std::string& id) : UIElement(id), colorExpr(Expression::parse("0x00")) {}
   ElementType getType() const override { return ElementType::Label; }
 
   void setText(const std::string& expr) {
@@ -367,7 +367,7 @@ class BitmapElement : public UIElement {
   int borderRadius = 0;
 
  public:
-  BitmapElement(const std::string& id) : UIElement(id) {
+  explicit BitmapElement(const std::string& id) : UIElement(id) {
     cacheable = true;  // Bitmaps benefit from caching
   }
   ElementType getType() const override { return ElementType::Bitmap; }
@@ -407,12 +407,13 @@ class ProgressBar : public UIElement {
   int borderWidth = 1;
 
  public:
-  ProgressBar(const std::string& id) : UIElement(id) {
-    valueExpr = Expression::parse("0");
-    maxExpr = Expression::parse("100");
-    fgColorExpr = Expression::parse("0x00");  // Black fill
-    bgColorExpr = Expression::parse("0xFF");  // White background
-  }
+  explicit ProgressBar(const std::string& id)
+      : UIElement(id),
+        valueExpr(Expression::parse("0")),
+        maxExpr(Expression::parse("100")),
+        fgColorExpr(Expression::parse("0x00")),  // Black fill
+        bgColorExpr(Expression::parse("0xFF"))   // White background
+  {}
 
   ElementType getType() const override { return ElementType::ProgressBar; }
 
@@ -480,7 +481,7 @@ class Divider : public UIElement {
   int thickness = 1;
 
  public:
-  Divider(const std::string& id) : UIElement(id) { colorExpr = Expression::parse("0x00"); }
+  explicit Divider(const std::string& id) : UIElement(id), colorExpr(Expression::parse("0x00")) {}
 
   ElementType getType() const override { return ElementType::Divider; }
 
@@ -524,9 +525,9 @@ class BatteryIcon : public UIElement {
   Expression colorExpr;
 
  public:
-  BatteryIcon(const std::string& id) : UIElement(id) {
-    valueExpr = Expression::parse("0");
-    colorExpr = Expression::parse("0x00");  // Black by default
+  explicit BatteryIcon(const std::string& id)
+      : UIElement(id), valueExpr(Expression::parse("0")), colorExpr(Expression::parse("0x00")) {
+    // Black by default
   }
 
   ElementType getType() const override { return ElementType::BatteryIcon; }
