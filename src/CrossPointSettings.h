@@ -20,7 +20,7 @@ class CrossPointSettings {
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1 };
 
   // Status bar display type enum
-  enum STATUS_BAR_MODE { NONE = 0, NO_PROGRESS = 1, FULL = 2, FULL_WITH_PROGRESS_BAR = 3 };
+  enum STATUS_BAR_MODE { NONE = 0, NO_PROGRESS = 1, FULL = 2, FULL_WITH_PROGRESS_BAR = 3, PROGRESS_BAR = 4 };
 
   enum ORIENTATION {
     PORTRAIT = 0,      // 480x800 logical coordinates (current default)
