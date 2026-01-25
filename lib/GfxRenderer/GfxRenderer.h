@@ -8,15 +8,17 @@
 #include "Bitmap.h"
 
 class GfxRenderer {
- public:
+public:
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
 
   // Logical screen orientation from the perspective of callers
   enum Orientation {
-    Portrait,                  // 480x800 logical coordinates (current default)
-    LandscapeClockwise,        // 800x480 logical coordinates, rotated 180° (swap top/bottom)
-    PortraitInverted,          // 480x800 logical coordinates, inverted
-    LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
+    Portrait,           // 480x800 logical coordinates (current default)
+    LandscapeClockwise, // 800x480 logical coordinates, rotated 180° (swap
+                        // top/bottom)
+    PortraitInverted,   // 480x800 logical coordinates, inverted
+    LandscapeCounterClockwise // 800x480 logical coordinates, native panel
+                              // orientation
   };
 
  private:
@@ -28,12 +30,13 @@ class GfxRenderer {
   HalDisplay& display;
   RenderMode renderMode;
   Orientation orientation;
-  uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
+  uint8_t *bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
-  void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
+  void renderChar(const EpdFontFamily &fontFamily, uint32_t cp, int *x,
+                  const int *y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
-  void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
+  void rotateCoordinates(int x, int y, int *rotatedX, int *rotatedY) const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay) : display(halDisplay), renderMode(BW), orientation(Portrait) {}
@@ -47,7 +50,8 @@ class GfxRenderer {
   // Setup
   void insertFont(int fontId, EpdFontFamily font);
 
-  // Orientation control (affects logical width/height and coordinate transforms)
+  // Orientation control (affects logical width/height and coordinate
+  // transforms)
   void setOrientation(const Orientation o) { orientation = o; }
   Orientation getOrientation() const { return orientation; }
 
@@ -65,47 +69,67 @@ class GfxRenderer {
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
-  void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
-  void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
-                  float cropY = 0) const;
-  void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
-  void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
+  void drawImage(const uint8_t bitmap[], int x, int y, int width,
+                 int height) const;
+  void drawBitmap(const Bitmap &bitmap, int x, int y, int maxWidth,
+                  int maxHeight, float cropX = 0, float cropY = 0) const;
+  void drawBitmap1Bit(const Bitmap &bitmap, int x, int y, int maxWidth,
+                      int maxHeight) const;
+  void draw2BitImage(const uint8_t data[], int x, int y, int w, int h) const;
+  void fillPolygon(const int *xPoints, const int *yPoints, int numPoints,
+                   bool state = true) const;
+
+  // Region caching - copies a rectangular region to/from a buffer
+  // Returns allocated buffer on success, nullptr on failure. Caller owns the
+  // memory.
+  uint8_t *captureRegion(int x, int y, int width, int height,
+                         size_t *outSize) const;
+  // Restores a previously captured region. Buffer must match dimensions.
+  void restoreRegion(const uint8_t *buffer, int x, int y, int width,
+                     int height) const;
 
   // Text
-  int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  void drawCenteredText(int fontId, int y, const char* text, bool black = true,
-                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  void drawText(int fontId, int x, int y, const char* text, bool black = true,
+  int getTextWidth(int fontId, const char *text,
+                   EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  void
+  drawCenteredText(int fontId, int y, const char *text, bool black = true,
+                   EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  void drawText(int fontId, int x, int y, const char *text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getSpaceWidth(int fontId) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
-  std::string truncatedText(int fontId, const char* text, int maxWidth,
-                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  std::string
+  truncatedText(int fontId, const char *text, int maxWidth,
+                EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
   // UI Components
-  void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4);
-  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn) const;
+  void drawButtonHints(int fontId, const char *btn1, const char *btn2,
+                       const char *btn3, const char *btn4);
+  void drawSideButtonHints(int fontId, const char *topBtn,
+                           const char *bottomBtn) const;
 
- private:
+private:
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
-  void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
-                           EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  void drawTextRotated90CW(
+      int fontId, int x, int y, const char *text, bool black = true,
+      EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
 
- public:
+public:
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;
-  bool storeBwBuffer();    // Returns true if buffer was stored successfully
-  void restoreBwBuffer();  // Restore and free the stored buffer
+  bool storeBwBuffer();   // Returns true if buffer was stored successfully
+  void restoreBwBuffer(); // Restore and free the stored buffer
   void cleanupGrayscaleWithFrameBuffer() const;
 
   // Low level functions
-  uint8_t* getFrameBuffer() const;
+  uint8_t *getFrameBuffer() const;
   static size_t getBufferSize();
   void grayscaleRevert() const;
-  void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
+  void getOrientedViewableTRBL(int *outTop, int *outRight, int *outBottom,
+                               int *outLeft) const;
 };
