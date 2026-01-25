@@ -20,16 +20,26 @@ void BitmapElement::draw(const GfxRenderer &renderer,
     return;
   }
 
-  // 1. Try Processed Cache in ThemeManager (keyed by path + target dimensions)
+  // Check if we have a cached 1-bit render of this bitmap at this size
   const ProcessedAsset *processed =
       ThemeManager::get().getProcessedAsset(path, renderer.getOrientation(), absW, absH);
   if (processed && processed->w == absW && processed->h == absH) {
-    renderer.draw2BitImage(processed->data.data(), absX, absY, absW, absH);
+    // Draw cached 1-bit data directly
+    const int rowBytes = (absW + 7) / 8;
+    for (int y = 0; y < absH; y++) {
+      const uint8_t *srcRow = processed->data.data() + y * rowBytes;
+      for (int x = 0; x < absW; x++) {
+        bool isBlack = !(srcRow[x / 8] & (1 << (7 - (x % 8))));
+        if (isBlack) {
+          renderer.drawPixel(absX + x, absY + y, true);
+        }
+      }
+    }
     markClean();
     return;
   }
 
-  // 2. Try raw asset cache, then process and cache
+  // Load raw asset from cache (file data cached in memory)
   const std::vector<uint8_t> *data = ThemeManager::get().getCachedAsset(path);
   if (!data || data->empty()) {
     markClean();
@@ -45,38 +55,28 @@ void BitmapElement::draw(const GfxRenderer &renderer,
   // Draw the bitmap (handles scaling internally)
   renderer.drawBitmap(bmp, absX, absY, absW, absH);
   
-  // After drawing, capture the rendered region and cache it for next time
+  // Cache the result as 1-bit packed data for next time
   ProcessedAsset asset;
   asset.w = absW;
   asset.h = absH;
   asset.orientation = renderer.getOrientation();
   
-  // Capture the rendered region from framebuffer
-  uint8_t *frameBuffer = renderer.getFrameBuffer();
-  if (frameBuffer) {
-    const int screenW = renderer.getScreenWidth();
-    const int bytesPerRow = (absW + 3) / 4;
-    asset.data.resize(bytesPerRow * absH);
-    
-    for (int y = 0; y < absH; y++) {
-      int srcOffset = ((absY + y) * screenW + absX) / 4;
-      int dstOffset = y * bytesPerRow;
-      // Copy 2-bit packed pixels
-      for (int x = 0; x < absW; x++) {
-        int sx = absX + x;
-        int srcByteIdx = ((absY + y) * screenW + sx) / 4;
-        int srcBitIdx = (sx % 4) * 2;
-        int dstByteIdx = dstOffset + x / 4;
-        int dstBitIdx = (x % 4) * 2;
-        
-        uint8_t pixel = (frameBuffer[srcByteIdx] >> (6 - srcBitIdx)) & 0x03;
-        asset.data[dstByteIdx] &= ~(0x03 << (6 - dstBitIdx));
-        asset.data[dstByteIdx] |= (pixel << (6 - dstBitIdx));
+  const int rowBytes = (absW + 7) / 8;
+  asset.data.resize(rowBytes * absH, 0xFF); // Initialize to white
+  
+  // Capture pixels using renderer's coordinate system
+  for (int y = 0; y < absH; y++) {
+    uint8_t *dstRow = asset.data.data() + y * rowBytes;
+    for (int x = 0; x < absW; x++) {
+      // Read pixel from framebuffer (this handles orientation)
+      bool isBlack = renderer.readPixel(absX + x, absY + y);
+      if (isBlack) {
+        dstRow[x / 8] &= ~(1 << (7 - (x % 8)));
       }
     }
-    
-    ThemeManager::get().cacheProcessedAsset(path, asset, absW, absH);
   }
+  
+  ThemeManager::get().cacheProcessedAsset(path, asset, absW, absH);
 
   markClean();
 }

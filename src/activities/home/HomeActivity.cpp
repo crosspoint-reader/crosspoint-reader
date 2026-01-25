@@ -25,11 +25,9 @@ void HomeActivity::taskTrampoline(void *param) {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4; // My Library, Files, Transfer, Settings
-  if (hasContinueReading)
-    count++;
+  int count = 4; // Books, Files, Transfer, Settings
   if (hasOpdsUrl)
-    count++;
+    count++; // + Calibre Library
   return count;
 }
 
@@ -123,6 +121,7 @@ void HomeActivity::loadRecentBooksData() {
   for (int i = 0; i < recentCount; i++) {
     const std::string &bookPath = recentBooks[i];
     CachedBookInfo info;
+    info.path = bookPath;  // Store the full path
     
     // Extract title from path
     info.title = bookPath;
@@ -253,44 +252,86 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
-  const bool prevPressed =
-      mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left);
-  const bool nextPressed =
-      mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Right);
+  const bool upPressed = mappedInput.wasPressed(MappedInputManager::Button::Up);
+  const bool downPressed = mappedInput.wasPressed(MappedInputManager::Button::Down);
+  const bool leftPressed = mappedInput.wasPressed(MappedInputManager::Button::Left);
+  const bool rightPressed = mappedInput.wasPressed(MappedInputManager::Button::Right);
+  const bool confirmPressed = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
 
+  const int bookCount = static_cast<int>(cachedRecentBooks.size());
   const int menuCount = getMenuItemCount();
+  const bool hasBooks = bookCount > 0;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    // Calculate dynamic indices based on which options are available
-    int idx = 0;
-    const int continueIdx = hasContinueReading ? idx++ : -1;
-    const int myLibraryIdx = idx++;
-    const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
-    const int filesIdx = idx++;
-    const int transferIdx = idx++;
-    const int settingsIdx = idx;
-
-    if (selectorIndex == continueIdx) {
+  if (confirmPressed) {
+    if (inBookSelection && hasBooks && bookSelectorIndex < bookCount) {
+      // Open selected book - set the path and trigger continue reading
+      APP_STATE.openEpubPath = cachedRecentBooks[bookSelectorIndex].path;
       onContinueReading();
-    } else if (selectorIndex == myLibraryIdx) {
-      onMyLibraryOpen();
-    } else if (selectorIndex == opdsLibraryIdx) {
-      onOpdsBrowserOpen();
-    } else if (selectorIndex == filesIdx) {
-      onMyLibraryOpen(); // Files = file browser
-    } else if (selectorIndex == transferIdx) {
-      onFileTransferOpen(); // Transfer = web transfer
-    } else if (selectorIndex == settingsIdx) {
-      onSettingsOpen();
+      return;
+    } else if (!inBookSelection) {
+      // Menu selection - calculate which action
+      int idx = 0;
+      const int myLibraryIdx = idx++;
+      const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
+      const int filesIdx = idx++;
+      const int transferIdx = idx++;
+      const int settingsIdx = idx;
+
+      if (selectorIndex == myLibraryIdx) {
+        onMyLibraryOpen();
+      } else if (selectorIndex == opdsLibraryIdx) {
+        onOpdsBrowserOpen();
+      } else if (selectorIndex == filesIdx) {
+        onMyLibraryOpen(); // Files = file browser
+      } else if (selectorIndex == transferIdx) {
+        onFileTransferOpen(); // Transfer = web transfer
+      } else if (selectorIndex == settingsIdx) {
+        onSettingsOpen();
+      }
     }
-  } else if (prevPressed) {
-    selectorIndex = (selectorIndex + menuCount - 1) % menuCount;
-    updateRequired = true;
-  } else if (nextPressed) {
-    selectorIndex = (selectorIndex + 1) % menuCount;
-    updateRequired = true;
+    return;
+  }
+
+  if (inBookSelection && hasBooks) {
+    // Book selection mode
+    if (leftPressed) {
+      bookSelectorIndex = (bookSelectorIndex + bookCount - 1) % bookCount;
+      updateRequired = true;
+    } else if (rightPressed) {
+      bookSelectorIndex = (bookSelectorIndex + 1) % bookCount;
+      updateRequired = true;
+    } else if (downPressed) {
+      // Move to menu selection
+      inBookSelection = false;
+      selectorIndex = 0;
+      updateRequired = true;
+    }
+  } else {
+    // Menu selection mode
+    if (upPressed) {
+      if (selectorIndex == 0 && hasBooks) {
+        // Move back to book selection
+        inBookSelection = true;
+        updateRequired = true;
+      } else if (selectorIndex > 0) {
+        selectorIndex--;
+        updateRequired = true;
+      }
+    } else if (downPressed) {
+      if (selectorIndex < menuCount - 1) {
+        selectorIndex++;
+        updateRequired = true;
+      }
+    } else if (leftPressed || rightPressed) {
+      // In menu, left/right can also navigate (for 2-column layout)
+      if (leftPressed && selectorIndex > 0) {
+        selectorIndex--;
+        updateRequired = true;
+      } else if (rightPressed && selectorIndex < menuCount - 1) {
+        selectorIndex++;
+        updateRequired = true;
+      }
+    }
   }
 }
 
@@ -316,16 +357,8 @@ void HomeActivity::render() {
     lastBatteryCheck = now;
   }
 
-  // Optimization: If we have a cached framebuffer from a previous full render,
-  // and only the selection changed (no battery update), restore it first.
-  const bool canRestoreBuffer = coverBufferStored && coverRendered;
-  const bool isSelectionOnlyChange = !needBatteryUpdate && canRestoreBuffer;
-
-  if (isSelectionOnlyChange) {
-    restoreCoverBuffer();
-  } else {
-    renderer.clearScreen();
-  }
+  // Always clear screen - ThemeEngine handles caching internally
+  renderer.clearScreen();
 
   ThemeEngine::ThemeContext context;
 
@@ -348,7 +381,8 @@ void HomeActivity::render() {
     context.setString(prefix + "Title", book.title);
     context.setString(prefix + "Image", book.coverPath);
     context.setString(prefix + "Progress", std::to_string(book.progressPercent));
-    context.setBool(prefix + "Selected", false);
+    // Book is selected if we're in book selection mode and this is the selected index
+    context.setBool(prefix + "Selected", inBookSelection && i == bookSelectorIndex);
   }
 
   // --- Book Card Data (for legacy theme) ---
@@ -360,43 +394,46 @@ void HomeActivity::render() {
                   hasContinueReading && hasCoverImage && !coverBmpPath.empty());
   context.setBool("ShowInfoBox", true);
 
-  // --- Selection Logic ---
+  // --- Selection Logic (for menu items, books handled separately) ---
   int idx = 0;
-  const int continueIdx = hasContinueReading ? idx++ : -1;
   const int myLibraryIdx = idx++;
   const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
   const int filesIdx = idx++;
   const int transferIdx = idx++;
   const int settingsIdx = idx;
 
-  context.setBool("IsBookSelected", selectorIndex == continueIdx);
+  // IsBookSelected is true when we're in book selection mode
+  context.setBool("IsBookSelected", inBookSelection);
 
   // --- Main Menu Data ---
   std::vector<std::string> menuLabels;
   std::vector<std::string> menuIcons;
   std::vector<bool> menuSelected;
 
+  // Menu items are only selected when NOT in book selection mode
+  const bool menuActive = !inBookSelection;
+
   menuLabels.push_back("Books");
   menuIcons.push_back("book");
-  menuSelected.push_back(selectorIndex == myLibraryIdx);
+  menuSelected.push_back(menuActive && selectorIndex == myLibraryIdx);
 
   if (hasOpdsUrl) {
     menuLabels.push_back("OPDS Browser");
     menuIcons.push_back("library");
-    menuSelected.push_back(selectorIndex == opdsLibraryIdx);
+    menuSelected.push_back(menuActive && selectorIndex == opdsLibraryIdx);
   }
 
   menuLabels.push_back("Files");
   menuIcons.push_back("folder");
-  menuSelected.push_back(selectorIndex == filesIdx);
+  menuSelected.push_back(menuActive && selectorIndex == filesIdx);
 
   menuLabels.push_back("Transfer");
   menuIcons.push_back("transfer");
-  menuSelected.push_back(selectorIndex == transferIdx);
+  menuSelected.push_back(menuActive && selectorIndex == transferIdx);
 
   menuLabels.push_back("Settings");
   menuIcons.push_back("settings");
-  menuSelected.push_back(selectorIndex == settingsIdx);
+  menuSelected.push_back(menuActive && selectorIndex == settingsIdx);
 
   context.setInt("MainMenu.Count", menuLabels.size());
   for (size_t i = 0; i < menuLabels.size(); ++i) {

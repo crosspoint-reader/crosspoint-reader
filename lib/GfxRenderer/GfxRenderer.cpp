@@ -69,6 +69,30 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   }
 }
 
+bool GfxRenderer::readPixel(const int x, const int y) const {
+  uint8_t *frameBuffer = display.getFrameBuffer();
+  if (!frameBuffer) {
+    return false;
+  }
+
+  int rotatedX = 0;
+  int rotatedY = 0;
+  rotateCoordinates(x, y, &rotatedX, &rotatedY);
+
+  // Bounds checking against physical panel dimensions
+  if (rotatedX < 0 || rotatedX >= HalDisplay::DISPLAY_WIDTH || 
+      rotatedY < 0 || rotatedY >= HalDisplay::DISPLAY_HEIGHT) {
+    return false;
+  }
+
+  const uint16_t byteIndex =
+      rotatedY * HalDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
+  const uint8_t bitPosition = 7 - (rotatedX % 8);
+
+  // Bit cleared = black, bit set = white
+  return !(frameBuffer[byteIndex] & (1 << bitPosition));
+}
+
 int GfxRenderer::getTextWidth(const int fontId, const char *text,
                               const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
@@ -152,7 +176,7 @@ void GfxRenderer::drawRect(const int x, const int y, const int width,
 
 void GfxRenderer::fillRect(const int x, const int y, const int width,
                            const int height, const bool state) const {
-  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
+  uint8_t *frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
     return;
   }
@@ -179,9 +203,9 @@ void GfxRenderer::fillRect(const int x, const int y, const int width,
       const uint8_t mask = 1 << physXBit;
 
       for (int sx = x1; sx <= x2; sx++) {
-        const int physY = EInkDisplay::DISPLAY_HEIGHT - 1 - sx;
+        const int physY = HalDisplay::DISPLAY_HEIGHT - 1 - sx;
         const uint16_t byteIndex =
-            physY * EInkDisplay::DISPLAY_WIDTH_BYTES + physXByte;
+            physY * HalDisplay::DISPLAY_WIDTH_BYTES + physXByte;
 
         if (state) {
           frameBuffer[byteIndex] &= ~mask; // Black
@@ -196,7 +220,7 @@ void GfxRenderer::fillRect(const int x, const int y, const int width,
   // Optimized path for PortraitInverted
   if (orientation == PortraitInverted) {
     for (int sy = y1; sy <= y2; sy++) {
-      const int physX = EInkDisplay::DISPLAY_WIDTH - 1 - sy;
+      const int physX = HalDisplay::DISPLAY_WIDTH - 1 - sy;
       const uint8_t physXByte = physX / 8;
       const uint8_t physXBit = 7 - (physX % 8);
       const uint8_t mask = 1 << physXBit;
@@ -204,7 +228,7 @@ void GfxRenderer::fillRect(const int x, const int y, const int width,
       for (int sx = x1; sx <= x2; sx++) {
         const int physY = sx;
         const uint16_t byteIndex =
-            physY * EInkDisplay::DISPLAY_WIDTH_BYTES + physXByte;
+            physY * HalDisplay::DISPLAY_WIDTH_BYTES + physXByte;
 
         if (state) {
           frameBuffer[byteIndex] &= ~mask;
@@ -220,7 +244,7 @@ void GfxRenderer::fillRect(const int x, const int y, const int width,
   if (orientation == LandscapeCounterClockwise) {
     for (int sy = y1; sy <= y2; sy++) {
       const int physY = sy;
-      const uint16_t rowOffset = physY * EInkDisplay::DISPLAY_WIDTH_BYTES;
+      const uint16_t rowOffset = physY * HalDisplay::DISPLAY_WIDTH_BYTES;
 
       // Fill full bytes where possible
       const int physX1 = x1;
@@ -255,6 +279,198 @@ void GfxRenderer::fillRect(const int x, const int y, const int width,
   // Fallback for LandscapeClockwise and any other cases
   for (int fillY = y1; fillY <= y2; fillY++) {
     drawLine(x1, fillY, x2, fillY, state);
+  }
+}
+
+void GfxRenderer::fillRectDithered(const int x, const int y, const int width,
+                                   const int height, const uint8_t grayLevel) const {
+  // Simulate grayscale using dithering patterns
+  // 0x00 = black, 0xFF = white, values in between = dithered
+
+  if (grayLevel == 0x00) {
+    fillRect(x, y, width, height, true);  // Solid black
+    return;
+  }
+  if (grayLevel >= 0xF0) {
+    fillRect(x, y, width, height, false); // Solid white
+    return;
+  }
+
+  // Use ordered dithering (Bayer matrix 2x2)
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+
+  const int x1 = std::max(0, x);
+  const int y1 = std::max(0, y);
+  const int x2 = std::min(screenWidth - 1, x + width - 1);
+  const int y2 = std::min(screenHeight - 1, y + height - 1);
+
+  if (x1 > x2 || y1 > y2) return;
+
+  int threshold = (grayLevel * 4) / 255;
+
+  for (int sy = y1; sy <= y2; sy++) {
+    for (int sx = x1; sx <= x2; sx++) {
+      int bayerValue;
+      int px = sx % 2;
+      int py = sy % 2;
+      if (px == 0 && py == 0) bayerValue = 0;
+      else if (px == 1 && py == 0) bayerValue = 2;
+      else if (px == 0 && py == 1) bayerValue = 3;
+      else bayerValue = 1;
+
+      bool isBlack = bayerValue >= threshold;
+      drawPixel(sx, sy, isBlack);
+    }
+  }
+}
+
+void GfxRenderer::drawRoundedRect(const int x, const int y, const int width,
+                                  const int height, const int radius, const bool state) const {
+  if (radius <= 0) {
+    drawRect(x, y, width, height, state);
+    return;
+  }
+
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  int cx, cy;
+  int px = 0, py = r;
+  int d = 1 - r;
+
+  while (px <= py) {
+    cx = x + r; cy = y + r;
+    drawPixel(cx - py, cy - px, state);
+    drawPixel(cx - px, cy - py, state);
+
+    cx = x + width - 1 - r; cy = y + r;
+    drawPixel(cx + py, cy - px, state);
+    drawPixel(cx + px, cy - py, state);
+
+    cx = x + r; cy = y + height - 1 - r;
+    drawPixel(cx - py, cy + px, state);
+    drawPixel(cx - px, cy + py, state);
+
+    cx = x + width - 1 - r; cy = y + height - 1 - r;
+    drawPixel(cx + py, cy + px, state);
+    drawPixel(cx + px, cy + py, state);
+
+    if (d < 0) {
+      d += 2 * px + 3;
+    } else {
+      d += 2 * (px - py) + 5;
+      py--;
+    }
+    px++;
+  }
+
+  drawLine(x + r, y, x + width - 1 - r, y, state);
+  drawLine(x + r, y + height - 1, x + width - 1 - r, y + height - 1, state);
+  drawLine(x, y + r, x, y + height - 1 - r, state);
+  drawLine(x + width - 1, y + r, x + width - 1, y + height - 1 - r, state);
+}
+
+void GfxRenderer::fillRoundedRect(const int x, const int y, const int width,
+                                  const int height, const int radius, const bool state) const {
+  if (radius <= 0) {
+    fillRect(x, y, width, height, state);
+    return;
+  }
+
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  fillRect(x + r, y, width - 2 * r, height, state);
+  fillRect(x, y + r, r, height - 2 * r, state);
+  fillRect(x + width - r, y + r, r, height - 2 * r, state);
+
+  int px = 0, py = r;
+  int d = 1 - r;
+
+  while (px <= py) {
+    drawLine(x + r - py, y + r - px, x + r, y + r - px, state);
+    drawLine(x + width - 1 - r, y + r - px, x + width - 1 - r + py, y + r - px, state);
+    drawLine(x + r - px, y + r - py, x + r, y + r - py, state);
+    drawLine(x + width - 1 - r, y + r - py, x + width - 1 - r + px, y + r - py, state);
+
+    drawLine(x + r - py, y + height - 1 - r + px, x + r, y + height - 1 - r + px, state);
+    drawLine(x + width - 1 - r, y + height - 1 - r + px, x + width - 1 - r + py, y + height - 1 - r + px, state);
+    drawLine(x + r - px, y + height - 1 - r + py, x + r, y + height - 1 - r + py, state);
+    drawLine(x + width - 1 - r, y + height - 1 - r + py, x + width - 1 - r + px, y + height - 1 - r + py, state);
+
+    if (d < 0) {
+      d += 2 * px + 3;
+    } else {
+      d += 2 * (px - py) + 5;
+      py--;
+    }
+    px++;
+  }
+}
+
+void GfxRenderer::fillRoundedRectDithered(const int x, const int y, const int width,
+                                          const int height, const int radius,
+                                          const uint8_t grayLevel) const {
+  if (grayLevel == 0x00) {
+    fillRoundedRect(x, y, width, height, radius, true);
+    return;
+  }
+  if (grayLevel >= 0xF0) {
+    fillRoundedRect(x, y, width, height, radius, false);
+    return;
+  }
+
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  if (r <= 0) {
+    fillRectDithered(x, y, width, height, grayLevel);
+    return;
+  }
+
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+  int threshold = (grayLevel * 4) / 255;
+
+  auto isInside = [&](int px, int py) -> bool {
+    if (px < x + r && py < y + r) {
+      int dx = px - (x + r);
+      int dy = py - (y + r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px >= x + width - r && py < y + r) {
+      int dx = px - (x + width - 1 - r);
+      int dy = py - (y + r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px < x + r && py >= y + height - r) {
+      int dx = px - (x + r);
+      int dy = py - (y + height - 1 - r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px >= x + width - r && py >= y + height - r) {
+      int dx = px - (x + width - 1 - r);
+      int dy = py - (y + height - 1 - r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    return px >= x && px < x + width && py >= y && py < y + height;
+  };
+
+  const int x1 = std::max(0, x);
+  const int y1 = std::max(0, y);
+  const int x2 = std::min(screenWidth - 1, x + width - 1);
+  const int y2 = std::min(screenHeight - 1, y + height - 1);
+
+  for (int sy = y1; sy <= y2; sy++) {
+    for (int sx = x1; sx <= x2; sx++) {
+      if (!isInside(sx, sy)) continue;
+
+      int bayerValue;
+      int bx = sx % 2;
+      int by = sy % 2;
+      if (bx == 0 && by == 0) bayerValue = 0;
+      else if (bx == 1 && by == 0) bayerValue = 2;
+      else if (bx == 0 && by == 1) bayerValue = 3;
+      else bayerValue = 1;
+
+      bool isBlack = bayerValue >= threshold;
+      drawPixel(sx, sy, isBlack);
+    }
   }
 }
 
@@ -384,7 +600,7 @@ void GfxRenderer::drawBitmap(const Bitmap &bitmap, const int x, const int y,
 
 void GfxRenderer::draw2BitImage(const uint8_t data[], int x, int y, int w,
                                 int h) const {
-  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
+  uint8_t *frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
     return;
   }
@@ -418,9 +634,9 @@ void GfxRenderer::draw2BitImage(const uint8_t data[], int x, int y, int w,
         // val < 3 means black pixel in 2-bit representation
         if (val < 3) {
           // In Portrait: physical Y = DISPLAY_HEIGHT - 1 - screenX
-          const int physY = EInkDisplay::DISPLAY_HEIGHT - 1 - screenX;
+          const int physY = HalDisplay::DISPLAY_HEIGHT - 1 - screenX;
           const uint16_t byteIndex =
-              physY * EInkDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+              physY * HalDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
           const uint8_t bitPosition = 7 - (physX % 8);
           frameBuffer[byteIndex] &= ~(1 << bitPosition); // Clear bit = black
         }
@@ -448,10 +664,10 @@ void GfxRenderer::draw2BitImage(const uint8_t data[], int x, int y, int w,
         if (val < 3) {
           // PortraitInverted: physical X = DISPLAY_WIDTH - 1 - screenY
           // physical Y = screenX
-          const int physX = EInkDisplay::DISPLAY_WIDTH - 1 - screenY;
+          const int physX = HalDisplay::DISPLAY_WIDTH - 1 - screenY;
           const int physY = screenX;
           const uint16_t byteIndex =
-              physY * EInkDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+              physY * HalDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
           const uint8_t bitPosition = 7 - (physX % 8);
           frameBuffer[byteIndex] &= ~(1 << bitPosition);
         }
@@ -481,14 +697,14 @@ void GfxRenderer::draw2BitImage(const uint8_t data[], int x, int y, int w,
         if (val < 3) {
           int physX, physY;
           if (orientation == LandscapeClockwise) {
-            physX = EInkDisplay::DISPLAY_WIDTH - 1 - screenX;
-            physY = EInkDisplay::DISPLAY_HEIGHT - 1 - screenY;
+            physX = HalDisplay::DISPLAY_WIDTH - 1 - screenX;
+            physY = HalDisplay::DISPLAY_HEIGHT - 1 - screenY;
           } else {
             physX = screenX;
             physY = screenY;
           }
           const uint16_t byteIndex =
-              physY * EInkDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+              physY * HalDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
           const uint8_t bitPosition = 7 - (physX % 8);
           frameBuffer[byteIndex] &= ~(1 << bitPosition);
         }

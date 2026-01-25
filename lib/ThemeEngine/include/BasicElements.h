@@ -17,6 +17,8 @@ protected:
   bool hasBg = false;
   bool border = false;
   Expression borderExpr; // Dynamic border based on expression
+  int padding = 0;       // Inner padding for children
+  int borderRadius = 0;  // Corner radius (for future rounded rect support)
 
 public:
   Container(const std::string &id) : UIElement(id) {
@@ -52,12 +54,31 @@ public:
   }
 
   bool hasBorderExpr() const { return !borderExpr.empty(); }
+  
+  void setPadding(int p) {
+    padding = p;
+    markDirty();
+  }
+  
+  int getPadding() const { return padding; }
+  
+  void setBorderRadius(int r) {
+    borderRadius = r;
+    markDirty();
+  }
+  
+  int getBorderRadius() const { return borderRadius; }
 
   void layout(const ThemeContext &context, int parentX, int parentY,
               int parentW, int parentH) override {
     UIElement::layout(context, parentX, parentY, parentW, parentH);
+    // Children are laid out with padding offset
+    int childX = absX + padding;
+    int childY = absY + padding;
+    int childW = absW - 2 * padding;
+    int childH = absH - 2 * padding;
     for (auto child : children) {
-      child->layout(context, absX, absY, absW, absH);
+      child->layout(context, childX, childY, childW, childH);
     }
   }
 
@@ -75,7 +96,27 @@ public:
     if (hasBg) {
       std::string colStr = context.evaluatestring(bgColorExpr);
       uint8_t color = Color::parse(colStr).value;
-      renderer.fillRect(absX, absY, absW, absH, color == 0x00);
+      // Use dithered fill for grayscale values, solid fill for black/white
+      // Use rounded rect if borderRadius > 0
+      if (color == 0x00) {
+        if (borderRadius > 0) {
+          renderer.fillRoundedRect(absX, absY, absW, absH, borderRadius, true);
+        } else {
+          renderer.fillRect(absX, absY, absW, absH, true);
+        }
+      } else if (color >= 0xF0) {
+        if (borderRadius > 0) {
+          renderer.fillRoundedRect(absX, absY, absW, absH, borderRadius, false);
+        } else {
+          renderer.fillRect(absX, absY, absW, absH, false);
+        }
+      } else {
+        if (borderRadius > 0) {
+          renderer.fillRoundedRectDithered(absX, absY, absW, absH, borderRadius, color);
+        } else {
+          renderer.fillRectDithered(absX, absY, absW, absH, color);
+        }
+      }
     }
 
     // Handle dynamic border expression
@@ -85,7 +126,11 @@ public:
     }
 
     if (drawBorder) {
-      renderer.drawRect(absX, absY, absW, absH, true);
+      if (borderRadius > 0) {
+        renderer.drawRoundedRect(absX, absY, absW, absH, borderRadius, true);
+      } else {
+        renderer.drawRect(absX, absY, absW, absH, true);
+      }
     }
 
     for (auto child : children) {

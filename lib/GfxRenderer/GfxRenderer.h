@@ -66,9 +66,14 @@ public:
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
+  bool readPixel(int x, int y) const; // Returns true if pixel is black
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
+  void fillRectDithered(int x, int y, int width, int height, uint8_t grayLevel) const;
+  void drawRoundedRect(int x, int y, int width, int height, int radius, bool state = true) const;
+  void fillRoundedRect(int x, int y, int width, int height, int radius, bool state = true) const;
+  void fillRoundedRectDithered(int x, int y, int width, int height, int radius, uint8_t grayLevel) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width,
                  int height) const;
   void drawBitmap(const Bitmap &bitmap, int x, int y, int maxWidth,
