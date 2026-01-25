@@ -882,6 +882,114 @@ void GfxRenderer::drawTransparentBitmap(const Bitmap& bitmap, const int x, const
   free(rowBytes);
 }
 
+void GfxRenderer::drawRoundedBitmap(const Bitmap& bitmap, const int x, const int y, const int w, const int h,
+                                    const int radius) const {
+  if (radius <= 0) {
+    drawBitmap(bitmap, x, y, w, h);
+    return;
+  }
+
+  float scale = 1.0f;
+  bool isScaled = false;
+  if (w > 0 && bitmap.getWidth() > w) {
+    scale = static_cast<float>(w) / static_cast<float>(bitmap.getWidth());
+    isScaled = true;
+  }
+  if (h > 0 && bitmap.getHeight() > h) {
+    scale = std::min(scale, static_cast<float>(h) / static_cast<float>(bitmap.getHeight()));
+    isScaled = true;
+  }
+
+  // Pre-calculate squared radius for containment checks
+  const int r2 = radius * radius;
+
+  // Lambda to check if a pixel is inside the rounded rect
+  // We use relative coordinates (px, py) from the top-left of the destination rect
+  auto isVisible = [&](int px, int py) -> bool {
+    // Top-left
+    if (px < radius && py < radius) {
+      int dx = radius - px;
+      int dy = radius - py;
+      return (dx * dx + dy * dy) <= r2;
+    }
+    // Top-right
+    if (px >= w - radius && py < radius) {
+      int dx = px - (w - 1 - radius);
+      int dy = radius - py;
+      return (dx * dx + dy * dy) <= r2;
+    }
+    // Bottom-left
+    if (px < radius && py >= h - radius) {
+      int dx = radius - px;
+      int dy = py - (h - 1 - radius);
+      return (dx * dx + dy * dy) <= r2;
+    }
+    // Bottom-right
+    if (px >= w - radius && py >= h - radius) {
+      int dx = px - (w - 1 - radius);
+      int dy = py - (h - 1 - radius);
+      return (dx * dx + dy * dy) <= r2;
+    }
+    return true;  // Safe center area
+  };
+
+  const int outputRowSize = (bitmap.getWidth() + 3) / 4;
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
+  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+
+  if (!outputRow || !rowBytes) {
+    Serial.printf("[%lu] [GFX] !! Failed to allocate BMP row buffers\n", millis());
+    free(outputRow);
+    free(rowBytes);
+    return;
+  }
+
+  for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
+    if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+      free(outputRow);
+      free(rowBytes);
+      return;
+    }
+
+    const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
+    int screenY = y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale)) : bmpYOffset);
+
+    if (screenY >= getScreenHeight()) continue;
+    if (screenY < 0) continue;
+
+    // Relative Y for rounded check
+    int relY = screenY - y;
+    if (relY < 0 || relY >= h) continue;
+
+    for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
+      int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
+
+      if (screenX >= getScreenWidth()) break;
+      if (screenX < 0) continue;
+
+      // Relative X for rounded check
+      int relX = screenX - x;
+      if (relX < 0 || relX >= w) continue;
+
+      // Check mask
+      if (!isVisible(relX, relY)) continue;
+
+      const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+
+      if (renderMode == BW) {
+        drawPixel(screenX, screenY, val < 2);
+      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+        drawPixel(screenX, screenY, false);
+      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+        drawPixel(screenX, screenY, false);
+      }
+    }
+  }
+
+  free(outputRow);
+  free(rowBytes);
+}
+
 void GfxRenderer::fillPolygon(const int *xPoints, const int *yPoints,
                               int numPoints, bool state) const {
   if (numPoints < 3)

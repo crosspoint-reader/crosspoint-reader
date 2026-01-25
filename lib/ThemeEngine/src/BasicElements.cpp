@@ -57,7 +57,11 @@ void BitmapElement::draw(const GfxRenderer& renderer, const ThemeContext& contex
               if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
               if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
               
-              renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+              if (borderRadius > 0) {
+                  renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
+              } else {
+                  renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+              }
               drawSuccess = true;
           }
           file.close();
@@ -75,7 +79,11 @@ void BitmapElement::draw(const GfxRenderer& renderer, const ThemeContext& contex
             if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
             if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
             
-            renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+            if (borderRadius > 0) {
+                renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
+            } else {
+                renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+            }
             drawSuccess = true;
         }
      }
