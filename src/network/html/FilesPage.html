@@ -586,6 +586,7 @@
   <div class="action-buttons">
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
+    <button class="action-btn" style="background-color:#e74c3c" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
   </div>
 </div>
 
@@ -652,13 +653,11 @@
 <div class="modal-overlay" id="deleteModal">
   <div class="modal">
     <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
-    <h3>🗑️ Delete Item</h3>
+    <h3>🗑️ Delete Item(s)</h3>
     <div class="folder-form">
       <p class="delete-warning">⚠️ This action cannot be undone!</p>
-      <p class="file-info">Are you sure you want to delete:</p>
-      <p class="delete-item-name" id="deleteItemName"></p>
-      <input type="hidden" id="deleteItemPath">
-      <input type="hidden" id="deleteItemType">
+      <p class="file-info">Are you sure you want to delete the following item(s)?</p>
+      <div id="deleteItemList" style="max-height:240px; overflow:auto; margin-bottom:10px;"></div>
       <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
       <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
     </div>
@@ -739,7 +738,10 @@
       fileTable.innerHTML = '<div class="no-files">This folder is empty</div>';
     } else {
       let fileTableContent = '<table class="file-table">';
-      fileTableContent += '<tr><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
+      
+				// Add select-all checkbox column
+      fileTableContent += '<tr><th style="width:40px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
+
 
       const sortedFiles = files.sort((a, b) => {
         // Directories first, then epub files, then other files, alphabetically within each group
@@ -756,9 +758,11 @@
           if (!folderPath.endsWith("/")) folderPath += "/";
           folderPath += file.name;
 
-          fileTableContent += '<tr class="folder-row">';
+         // Checkbox cell + folder row
+          fileTableContent += `<tr class="folder-row">`;
+          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
           fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a><span class="folder-badge">FOLDER</span></td>`;
-          fileTableContent += '<td>Folder</td>';
+           fileTableContent += '<td>Folder</td>';
           fileTableContent += '<td>-</td>';
           fileTableContent += `<td class="actions-col"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></td>`;
           fileTableContent += '</tr>';
@@ -767,7 +771,9 @@
           if (!filePath.endsWith("/")) filePath += "/";
           filePath += file.name;
 
+          // Checkbox cell + file row
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
+          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
           fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>${escapeHtml(file.name)}`;
           if (file.isEpub) fileTableContent += '<span class="epub-badge">EPUB</span>';
           fileTableContent += '</td>';
@@ -806,6 +812,92 @@
 
   function closeFolderModal() {
     document.getElementById('folderModal').classList.remove('open');
+  }
+
+  // Toggle select-all checkbox
+  function toggleSelectAll(master) {
+    const checked = master.checked;
+    document.querySelectorAll('.select-item').forEach(cb => {
+      cb.checked = checked;
+    });
+  }
+
+  function getSelectedItems() {
+    const items = [];
+    document.querySelectorAll('.select-item:checked').forEach(cb => {
+      items.push({
+        name: cb.dataset.name || decodeURIComponent(cb.dataset.path).split('/').pop(),
+        path: decodeURIComponent(cb.dataset.path),
+        isFolder: cb.dataset.type === 'folder'
+      });
+    });
+    return items;
+  }
+
+  // Open delete modal for currently selected checkboxes
+  function openDeleteSelectedModal() {
+    const items = getSelectedItems();
+    if (items.length === 0) {
+      alert('Please select at least one item to delete.');
+      return;
+    }
+    openDeleteModalForItems(items);
+  }
+
+  // Open delete modal for a single item (keeps backwards compatibility with per-row delete button)
+  function openDeleteModal(name, path, isFolder) {
+    openDeleteModalForItems([{ name: name, path: path, isFolder: !!isFolder }]);
+  }
+
+  let deleteItemsGlobal = [];
+
+  function openDeleteModalForItems(items) {
+    deleteItemsGlobal = items;
+    const listEl = document.getElementById('deleteItemList');
+    listEl.innerHTML = '';
+    items.forEach(it => {
+      const div = document.createElement('div');
+      div.style.marginBottom = '6px';
+      div.textContent = (it.isFolder ? '📁 ' : '📄 ') + it.path;
+      listEl.appendChild(div);
+    });
+    document.getElementById('deleteModal').classList.add('open');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('open');
+  }
+
+  function confirmDelete() {
+    if (!deleteItemsGlobal || deleteItemsGlobal.length === 0) {
+      closeDeleteModal();
+      return;
+    }
+
+    const paths = deleteItemsGlobal.map(it => {
+      // Ensure path starts with /
+      let p = it.path;
+      if (!p.startsWith('/')) p = '/' + p;
+      return p;
+    });
+
+    const body = 'paths=' + encodeURIComponent(JSON.stringify(paths));
+    fetch('/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body
+    }).then(async res => {
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        const text = await res.text();
+        alert('Failed to delete: ' + text);
+        closeDeleteModal();
+      }
+    }).catch(() => {
+      alert('Failed to delete - network error');
+      closeDeleteModal();
+    });
   }
 
   function validateFile() {
@@ -1174,47 +1266,6 @@ function retryAllFailedUploads() {
 
     xhr.send(formData);
   }
-
-  // Delete functions
-  function openDeleteModal(name, path, isFolder) {
-    document.getElementById('deleteItemName').textContent = (isFolder ? '📁 ' : '📄 ') + name;
-    document.getElementById('deleteItemPath').value = path;
-    document.getElementById('deleteItemType').value = isFolder ? 'folder' : 'file';
-    document.getElementById('deleteModal').classList.add('open');
-  }
-
-  function closeDeleteModal() {
-    document.getElementById('deleteModal').classList.remove('open');
-  }
-
-  function confirmDelete() {
-    const path = document.getElementById('deleteItemPath').value;
-    const itemType = document.getElementById('deleteItemType').value;
-
-    const formData = new FormData();
-    formData.append('path', path);
-    formData.append('type', itemType);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/delete', true);
-
-    xhr.onload = function() {
-      if (xhr.status === 200) {
-        window.location.reload();
-      } else {
-        alert('Failed to delete: ' + xhr.responseText);
-        closeDeleteModal();
-      }
-    };
-
-    xhr.onerror = function() {
-      alert('Failed to delete - network error');
-      closeDeleteModal();
-    };
-
-    xhr.send(formData);
-  }
-
   hydrate();
 </script>
 </body>

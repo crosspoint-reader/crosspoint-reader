@@ -706,84 +706,108 @@ void CrossPointWebServer::handleCreateFolder() const {
 }
 
 void CrossPointWebServer::handleDelete() const {
-  // Get path from form data
-  if (!server->hasArg("path")) {
-    server->send(400, "text/plain", "Missing path");
+  // Check if 'paths' argument is provided
+  if (!server->hasArg("paths")) {
+    server->send(400, "text/plain", "Missing paths");
     return;
   }
 
-  String itemPath = server->arg("path");
-  const String itemType = server->hasArg("type") ? server->arg("type") : "file";
-
-  // Validate path
-  if (itemPath.isEmpty() || itemPath == "/") {
-    server->send(400, "text/plain", "Cannot delete root directory");
+  // Parse paths
+  String pathsArg = server->arg("paths");
+  DynamicJsonDocument doc(2048);
+  DeserializationError error = deserializeJson(doc, pathsArg);
+  if (error) {
+    server->send(400, "text/plain", "Invalid paths format");
     return;
   }
 
-  // Ensure path starts with /
-  if (!itemPath.startsWith("/")) {
-    itemPath = "/" + itemPath;
-  }
-
-  // Security check: prevent deletion of protected items
-  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-
-  // Check if item starts with a dot (hidden/system file)
-  if (itemName.startsWith(".")) {
-    Serial.printf("[%lu] [WEB] Delete rejected - hidden/system item: %s\n", millis(), itemPath.c_str());
-    server->send(403, "text/plain", "Cannot delete system files");
+  JsonArray paths = doc.as<JsonArray>();
+  if (paths.isNull() || paths.size() == 0) {
+    server->send(400, "text/plain", "No paths provided");
     return;
   }
 
-  // Check against explicitly protected items
-  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-    if (itemName.equals(HIDDEN_ITEMS[i])) {
-      Serial.printf("[%lu] [WEB] Delete rejected - protected item: %s\n", millis(), itemPath.c_str());
-      server->send(403, "text/plain", "Cannot delete protected items");
-      return;
+  // Iterate over paths and delete each item
+  bool allSuccess = true;
+  String failedItems;
+
+  for (const auto& p : paths) {
+    String itemPath = p.as<String>();
+
+    // Validate path
+    if (itemPath.isEmpty() || itemPath == "/") {
+      failedItems += itemPath + " (cannot delete root); ";
+      allSuccess = false;
+      continue;
     }
-  }
 
-  // Check if item exists
-  if (!SdMan.exists(itemPath.c_str())) {
-    Serial.printf("[%lu] [WEB] Delete failed - item not found: %s\n", millis(), itemPath.c_str());
-    server->send(404, "text/plain", "Item not found");
-    return;
-  }
+    // Ensure path starts with /
+    if (!itemPath.startsWith("/")) {
+      itemPath = "/" + itemPath;
+    }
 
-  Serial.printf("[%lu] [WEB] Attempting to delete %s: %s\n", millis(), itemType.c_str(), itemPath.c_str());
+    // Security check: prevent deletion of protected items
+    const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
 
-  bool success = false;
+    // Hidden/system files are protected
+    if (itemName.startsWith(".")) {
+      failedItems += itemPath + " (hidden/system file); ";
+      allSuccess = false;
+      continue;
+    }
 
-  if (itemType == "folder") {
-    // For folders, try to remove (will fail if not empty)
-    FsFile dir = SdMan.open(itemPath.c_str());
-    if (dir && dir.isDirectory()) {
-      // Check if folder is empty
-      FsFile entry = dir.openNextFile();
-      if (entry) {
-        // Folder is not empty
-        entry.close();
-        dir.close();
-        Serial.printf("[%lu] [WEB] Delete failed - folder not empty: %s\n", millis(), itemPath.c_str());
-        server->send(400, "text/plain", "Folder is not empty. Delete contents first.");
-        return;
+    // Check against explicitly protected items
+    bool isProtected = false;
+    for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+      if (itemName.equals(HIDDEN_ITEMS[i])) {
+        isProtected = true;
+        break;
       }
-      dir.close();
     }
-    success = SdMan.rmdir(itemPath.c_str());
-  } else {
-    // For files, use remove
-    success = SdMan.remove(itemPath.c_str());
+    if (isProtected) {
+      failedItems += itemPath + " (protected file); ";
+      allSuccess = false;
+      continue;
+    }
+
+    // Check if item exists
+    if (!SdMan.exists(itemPath.c_str())) {
+      failedItems += itemPath + " (not found); ";
+      allSuccess = false;
+      continue;
+    }
+
+    // Decide whether it's a directory or file by opening it
+    bool success = false;
+    FsFile f = SdMan.open(itemPath.c_str());
+    if (f && f.isDirectory()) {
+      // For folders, ensure empty before removing
+      FsFile entry = f.openNextFile();
+      if (entry) {
+        entry.close();
+        f.close();
+        failedItems += itemPath + " (folder not empty); ";
+        allSuccess = false;
+        continue;
+      }
+      f.close();
+      success = SdMan.rmdir(itemPath.c_str());
+    } else {
+      // It's a file (or couldn't open as dir) — remove file
+      if (f) f.close();
+      success = SdMan.remove(itemPath.c_str());
+    }
+
+    if (!success) {
+      failedItems += itemPath + " (deletion failed); ";
+      allSuccess = false;
+    }
   }
 
-  if (success) {
-    Serial.printf("[%lu] [WEB] Successfully deleted: %s\n", millis(), itemPath.c_str());
-    server->send(200, "text/plain", "Deleted successfully");
+  if (allSuccess) {
+    server->send(200, "text/plain", "All items deleted successfully");
   } else {
-    Serial.printf("[%lu] [WEB] Failed to delete: %s\n", millis(), itemPath.c_str());
-    server->send(500, "text/plain", "Failed to delete item");
+    server->send(500, "text/plain", "Failed to delete some items: " + failedItems);
   }
 }
 
