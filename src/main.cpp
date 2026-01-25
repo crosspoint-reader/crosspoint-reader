@@ -14,10 +14,12 @@
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
+#include "activities/home/MyLibraryActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
@@ -211,12 +213,13 @@ void enterDeepSleep() {
 }
 
 void onGoHome();
-void onGoToReader(const std::string& initialEpubPath) {
+void onGoToMyLibraryWithTab(const std::string& path, MyLibraryActivity::Tab tab);
+void onGoToReader(const std::string& initialEpubPath, MyLibraryActivity::Tab fromTab) {
   exitActivity();
-  enterNewActivity(new ReaderActivity(renderer, mappedInputManager, initialEpubPath, onGoHome));
+  enterNewActivity(
+      new ReaderActivity(renderer, mappedInputManager, initialEpubPath, fromTab, onGoHome, onGoToMyLibraryWithTab));
 }
-void onGoToReaderHome() { onGoToReader(std::string()); }
-void onContinueReading() { onGoToReader(APP_STATE.openEpubPath); }
+void onContinueReading() { onGoToReader(APP_STATE.openEpubPath, MyLibraryActivity::Tab::Recent); }
 
 void onGoToFileTransfer() {
   exitActivity();
@@ -228,6 +231,16 @@ void onGoToSettings() {
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToMyLibrary() {
+  exitActivity();
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+}
+
+void onGoToMyLibraryWithTab(const std::string& path, MyLibraryActivity::Tab tab) {
+  exitActivity();
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, tab, path));
+}
+
 void onGoToBrowser() {
   exitActivity();
   enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
@@ -235,7 +248,7 @@ void onGoToBrowser() {
 
 void onGoHome() {
   exitActivity();
-  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToReaderHome, onGoToSettings,
+  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToMyLibrary, onGoToSettings,
                                     onGoToFileTransfer, onGoToBrowser));
 }
 
@@ -263,13 +276,30 @@ void setupDisplayAndFonts() {
   Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 
+bool isUsbConnected() {
+  // U0RXD/GPIO20 reads HIGH when USB is connected
+  return digitalRead(UART0_RXD) == HIGH;
+}
+
+bool isWakeupAfterFlashing() {
+  const auto wakeupCause = esp_sleep_get_wakeup_cause();
+  const auto resetReason = esp_reset_reason();
+
+  return isUsbConnected() && (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_UNKNOWN);
+}
+
 void setup() {
   t1 = millis();
 
   // Only start serial if USB connected
   pinMode(UART0_RXD, INPUT);
-  if (digitalRead(UART0_RXD) == HIGH) {
+  if (isUsbConnected()) {
     Serial.begin(115200);
+    // Wait up to 3 seconds for Serial to be ready to catch early logs
+    unsigned long start = millis();
+    while (!Serial && (millis() - start) < 3000) {
+      delay(10);
+    }
   }
 
   inputManager.begin();
@@ -292,8 +322,10 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
-  // verify power button press duration after we've read settings.
-  verifyWakeupLongPress();
+  if (!isWakeupAfterFlashing()) {
+    // For normal wakeups (not immediately after flashing), verify long press
+    verifyWakeupLongPress();
+  }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
@@ -304,6 +336,8 @@ void setup() {
   enterNewActivity(new BootActivity(renderer, mappedInputManager));
 
   APP_STATE.loadFromFile();
+  RECENT_BOOKS.loadFromFile();
+
   if (APP_STATE.openEpubPath.empty()) {
     onGoHome();
   } else {
@@ -312,7 +346,7 @@ void setup() {
     APP_STATE.openEpubPath = "";
     APP_STATE.lastSleepImage = 0;
     APP_STATE.saveToFile();
-    onGoToReader(path);
+    onGoToReader(path, MyLibraryActivity::Tab::Recent);
   }
 
   // Ensure we're not still holding the power button before leaving setup
