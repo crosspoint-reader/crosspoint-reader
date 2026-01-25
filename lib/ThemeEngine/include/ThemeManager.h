@@ -38,6 +38,7 @@ class ThemeManager {
 private:
   std::map<std::string, UIElement *> elements; // All elements by ID
   std::string currentThemeName;
+  int navBookCount = 1;  // Number of navigable book slots (from theme [Global] section)
   std::map<std::string, int> fontMap;
 
   // Screen-level caching for fast redraw
@@ -70,6 +71,9 @@ public:
 
   // Get current theme name
   const std::string &getCurrentTheme() const { return currentThemeName; }
+
+  // Get number of navigable book slots (from theme config, default 1)
+  int getNavBookCount() const { return navBookCount; }
 
   // Render a screen
   void renderScreen(const std::string &screenName, const GfxRenderer &renderer,

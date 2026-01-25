@@ -25,7 +25,7 @@ void HomeActivity::taskTrampoline(void *param) {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4; // Books, Files, Transfer, Settings
+  int count = 3; // Browse Files, File Transfer, Settings
   if (hasOpdsUrl)
     count++; // + Calibre Library
   return count;
@@ -35,6 +35,12 @@ void HomeActivity::onEnter() {
   Activity::onEnter();
 
   renderingMutex = xSemaphoreCreateMutex();
+
+  // Reset render and selection state
+  coverRendered = false;
+  coverBufferStored = false;
+  freeCoverBuffer();
+  selectorIndex = 0;  // Start at first item (first book if any, else first menu)
 
   // Check if we have a book to continue reading
   hasContinueReading = !APP_STATE.openEpubPath.empty() &&
@@ -252,86 +258,54 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
-  const bool upPressed = mappedInput.wasPressed(MappedInputManager::Button::Up);
-  const bool downPressed = mappedInput.wasPressed(MappedInputManager::Button::Down);
-  const bool leftPressed = mappedInput.wasPressed(MappedInputManager::Button::Left);
-  const bool rightPressed = mappedInput.wasPressed(MappedInputManager::Button::Right);
+  const bool prevPressed =
+      mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Left);
+  const bool nextPressed =
+      mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Right);
   const bool confirmPressed = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
 
-  const int bookCount = static_cast<int>(cachedRecentBooks.size());
+  // Navigation uses theme-configured book slots (limited by actual books available)
+  const int maxBooks = static_cast<int>(cachedRecentBooks.size());
+  const int themeBookCount = ThemeEngine::ThemeManager::get().getNavBookCount();
+  const int navBookCount = std::min(themeBookCount, maxBooks);
   const int menuCount = getMenuItemCount();
-  const bool hasBooks = bookCount > 0;
+  const int totalCount = navBookCount + menuCount;
 
   if (confirmPressed) {
-    if (inBookSelection && hasBooks && bookSelectorIndex < bookCount) {
-      // Open selected book - set the path and trigger continue reading
-      APP_STATE.openEpubPath = cachedRecentBooks[bookSelectorIndex].path;
+    if (selectorIndex < navBookCount && selectorIndex < maxBooks) {
+      // Book selected - open the selected book
+      APP_STATE.openEpubPath = cachedRecentBooks[selectorIndex].path;
       onContinueReading();
-      return;
-    } else if (!inBookSelection) {
-      // Menu selection - calculate which action
+    } else {
+      // Menu item selected
+      const int menuIdx = selectorIndex - navBookCount;
       int idx = 0;
       const int myLibraryIdx = idx++;
       const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
-      const int filesIdx = idx++;
-      const int transferIdx = idx++;
+      const int fileTransferIdx = idx++;
       const int settingsIdx = idx;
 
-      if (selectorIndex == myLibraryIdx) {
+      if (menuIdx == myLibraryIdx) {
         onMyLibraryOpen();
-      } else if (selectorIndex == opdsLibraryIdx) {
+      } else if (menuIdx == opdsLibraryIdx) {
         onOpdsBrowserOpen();
-      } else if (selectorIndex == filesIdx) {
-        onMyLibraryOpen(); // Files = file browser
-      } else if (selectorIndex == transferIdx) {
-        onFileTransferOpen(); // Transfer = web transfer
-      } else if (selectorIndex == settingsIdx) {
+      } else if (menuIdx == fileTransferIdx) {
+        onFileTransferOpen();
+      } else if (menuIdx == settingsIdx) {
         onSettingsOpen();
       }
     }
     return;
   }
 
-  if (inBookSelection && hasBooks) {
-    // Book selection mode
-    if (leftPressed) {
-      bookSelectorIndex = (bookSelectorIndex + bookCount - 1) % bookCount;
-      updateRequired = true;
-    } else if (rightPressed) {
-      bookSelectorIndex = (bookSelectorIndex + 1) % bookCount;
-      updateRequired = true;
-    } else if (downPressed) {
-      // Move to menu selection
-      inBookSelection = false;
-      selectorIndex = 0;
-      updateRequired = true;
-    }
-  } else {
-    // Menu selection mode
-    if (upPressed) {
-      if (selectorIndex == 0 && hasBooks) {
-        // Move back to book selection
-        inBookSelection = true;
-        updateRequired = true;
-      } else if (selectorIndex > 0) {
-        selectorIndex--;
-        updateRequired = true;
-      }
-    } else if (downPressed) {
-      if (selectorIndex < menuCount - 1) {
-        selectorIndex++;
-        updateRequired = true;
-      }
-    } else if (leftPressed || rightPressed) {
-      // In menu, left/right can also navigate (for 2-column layout)
-      if (leftPressed && selectorIndex > 0) {
-        selectorIndex--;
-        updateRequired = true;
-      } else if (rightPressed && selectorIndex < menuCount - 1) {
-        selectorIndex++;
-        updateRequired = true;
-      }
-    }
+  if (prevPressed) {
+    selectorIndex = (selectorIndex + totalCount - 1) % totalCount;
+    updateRequired = true;
+  } else if (nextPressed) {
+    selectorIndex = (selectorIndex + 1) % totalCount;
+    updateRequired = true;
   }
 }
 
@@ -368,11 +342,16 @@ void HomeActivity::render() {
                   SETTINGS.hideBatteryPercentage !=
                       CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
 
-  // --- Recent Books Data (use cached data for performance) ---
-  int recentCount = static_cast<int>(cachedRecentBooks.size());
-  
+  // --- Navigation counts (must match loop()) ---
+  const int recentCount = static_cast<int>(cachedRecentBooks.size());
+  const int themeBookCount = ThemeEngine::ThemeManager::get().getNavBookCount();
+  const int navBookCount = std::min(themeBookCount, recentCount);
+  const bool isBookSelected = selectorIndex < navBookCount;
+
+  // --- Recent Books Data ---
   context.setBool("HasRecentBooks", recentCount > 0);
   context.setInt("RecentBooks.Count", recentCount);
+  context.setInt("SelectedBookIndex", isBookSelected ? selectorIndex : -1);
 
   for (int i = 0; i < recentCount; i++) {
     const auto &book = cachedRecentBooks[i];
@@ -381,11 +360,12 @@ void HomeActivity::render() {
     context.setString(prefix + "Title", book.title);
     context.setString(prefix + "Image", book.coverPath);
     context.setString(prefix + "Progress", std::to_string(book.progressPercent));
-    // Book is selected if we're in book selection mode and this is the selected index
-    context.setBool(prefix + "Selected", inBookSelection && i == bookSelectorIndex);
+    // Book is selected if selectorIndex matches
+    context.setBool(prefix + "Selected", selectorIndex == i);
   }
 
-  // --- Book Card Data (for legacy theme) ---
+  // --- Book Card Data (for themes with single book) ---
+  context.setBool("IsBookSelected", isBookSelected);
   context.setBool("HasBook", hasContinueReading);
   context.setString("BookTitle", lastBookTitle);
   context.setString("BookAuthor", lastBookAuthor);
@@ -394,46 +374,37 @@ void HomeActivity::render() {
                   hasContinueReading && hasCoverImage && !coverBmpPath.empty());
   context.setBool("ShowInfoBox", true);
 
-  // --- Selection Logic (for menu items, books handled separately) ---
-  int idx = 0;
-  const int myLibraryIdx = idx++;
-  const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
-  const int filesIdx = idx++;
-  const int transferIdx = idx++;
-  const int settingsIdx = idx;
-
-  // IsBookSelected is true when we're in book selection mode
-  context.setBool("IsBookSelected", inBookSelection);
-
   // --- Main Menu Data ---
+  // Menu items start after the book slot
+  const int menuStartIdx = navBookCount;
+  
+  int idx = 0;
+  const int myLibraryIdx = menuStartIdx + idx++;
+  const int opdsLibraryIdx = hasOpdsUrl ? menuStartIdx + idx++ : -1;
+  const int fileTransferIdx = menuStartIdx + idx++;
+  const int settingsIdx = menuStartIdx + idx;
+
   std::vector<std::string> menuLabels;
   std::vector<std::string> menuIcons;
   std::vector<bool> menuSelected;
 
-  // Menu items are only selected when NOT in book selection mode
-  const bool menuActive = !inBookSelection;
-
-  menuLabels.push_back("Books");
-  menuIcons.push_back("book");
-  menuSelected.push_back(menuActive && selectorIndex == myLibraryIdx);
+  menuLabels.push_back("Browse Files");
+  menuIcons.push_back("folder");
+  menuSelected.push_back(selectorIndex == myLibraryIdx);
 
   if (hasOpdsUrl) {
     menuLabels.push_back("OPDS Browser");
     menuIcons.push_back("library");
-    menuSelected.push_back(menuActive && selectorIndex == opdsLibraryIdx);
+    menuSelected.push_back(selectorIndex == opdsLibraryIdx);
   }
 
-  menuLabels.push_back("Files");
-  menuIcons.push_back("folder");
-  menuSelected.push_back(menuActive && selectorIndex == filesIdx);
-
-  menuLabels.push_back("Transfer");
+  menuLabels.push_back("File Transfer");
   menuIcons.push_back("transfer");
-  menuSelected.push_back(menuActive && selectorIndex == transferIdx);
+  menuSelected.push_back(selectorIndex == fileTransferIdx);
 
   menuLabels.push_back("Settings");
   menuIcons.push_back("settings");
-  menuSelected.push_back(menuActive && selectorIndex == settingsIdx);
+  menuSelected.push_back(selectorIndex == settingsIdx);
 
   context.setInt("MainMenu.Count", menuLabels.size());
   for (size_t i = 0; i < menuLabels.size(); ++i) {
