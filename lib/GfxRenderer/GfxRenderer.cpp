@@ -73,6 +73,30 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   }
 }
 
+bool GfxRenderer::readPixel(const int x, const int y) const {
+  uint8_t *frameBuffer = einkDisplay.getFrameBuffer();
+  if (!frameBuffer) {
+    return false;
+  }
+
+  int rotatedX = 0;
+  int rotatedY = 0;
+  rotateCoordinates(x, y, &rotatedX, &rotatedY);
+
+  // Bounds checking against physical panel dimensions
+  if (rotatedX < 0 || rotatedX >= EInkDisplay::DISPLAY_WIDTH || 
+      rotatedY < 0 || rotatedY >= EInkDisplay::DISPLAY_HEIGHT) {
+    return false;
+  }
+
+  const uint16_t byteIndex =
+      rotatedY * EInkDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
+  const uint8_t bitPosition = 7 - (rotatedX % 8);
+
+  // Bit cleared = black, bit set = white
+  return !(frameBuffer[byteIndex] & (1 << bitPosition));
+}
+
 int GfxRenderer::getTextWidth(const int fontId, const char *text,
                               const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
@@ -259,6 +283,226 @@ void GfxRenderer::fillRect(const int x, const int y, const int width,
   // Fallback for LandscapeClockwise and any other cases
   for (int fillY = y1; fillY <= y2; fillY++) {
     drawLine(x1, fillY, x2, fillY, state);
+  }
+}
+
+void GfxRenderer::fillRectDithered(const int x, const int y, const int width,
+                                   const int height, const uint8_t grayLevel) const {
+  // Simulate grayscale using dithering patterns
+  // 0x00 = black, 0xFF = white, values in between = dithered
+  
+  if (grayLevel == 0x00) {
+    fillRect(x, y, width, height, true);  // Solid black
+    return;
+  }
+  if (grayLevel >= 0xF0) {
+    fillRect(x, y, width, height, false); // Solid white
+    return;
+  }
+  
+  // Use ordered dithering (Bayer matrix 2x2)
+  // Gray levels: 0x00=black, 0x55=25%, 0xAA=50%, 0xD5=75%, 0xFF=white
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+  
+  const int x1 = std::max(0, x);
+  const int y1 = std::max(0, y);
+  const int x2 = std::min(screenWidth - 1, x + width - 1);
+  const int y2 = std::min(screenHeight - 1, y + height - 1);
+  
+  if (x1 > x2 || y1 > y2) return;
+  
+  // Determine threshold based on gray level
+  // Lower gray = more black pixels, higher gray = more white pixels
+  int threshold = (grayLevel * 4) / 255; // 0-4 range
+  
+  // 2x2 Bayer matrix thresholds: 0, 2, 3, 1
+  for (int sy = y1; sy <= y2; sy++) {
+    for (int sx = x1; sx <= x2; sx++) {
+      int bayerValue;
+      int px = sx % 2;
+      int py = sy % 2;
+      if (px == 0 && py == 0) bayerValue = 0;
+      else if (px == 1 && py == 0) bayerValue = 2;
+      else if (px == 0 && py == 1) bayerValue = 3;
+      else bayerValue = 1;
+      
+      // Draw black if bayer value < threshold (inverted for darker = more black)
+      bool isBlack = bayerValue >= threshold;
+      drawPixel(sx, sy, isBlack);
+    }
+  }
+}
+
+void GfxRenderer::drawRoundedRect(const int x, const int y, const int width,
+                                  const int height, const int radius, const bool state) const {
+  if (radius <= 0) {
+    drawRect(x, y, width, height, state);
+    return;
+  }
+  
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  
+  // Draw 4 corner arcs using midpoint circle algorithm
+  int cx, cy;
+  int px = 0, py = r;
+  int d = 1 - r;
+  
+  while (px <= py) {
+    // Top-left corner
+    cx = x + r; cy = y + r;
+    drawPixel(cx - py, cy - px, state);
+    drawPixel(cx - px, cy - py, state);
+    
+    // Top-right corner  
+    cx = x + width - 1 - r; cy = y + r;
+    drawPixel(cx + py, cy - px, state);
+    drawPixel(cx + px, cy - py, state);
+    
+    // Bottom-left corner
+    cx = x + r; cy = y + height - 1 - r;
+    drawPixel(cx - py, cy + px, state);
+    drawPixel(cx - px, cy + py, state);
+    
+    // Bottom-right corner
+    cx = x + width - 1 - r; cy = y + height - 1 - r;
+    drawPixel(cx + py, cy + px, state);
+    drawPixel(cx + px, cy + py, state);
+    
+    if (d < 0) {
+      d += 2 * px + 3;
+    } else {
+      d += 2 * (px - py) + 5;
+      py--;
+    }
+    px++;
+  }
+  
+  // Draw straight edges
+  drawLine(x + r, y, x + width - 1 - r, y, state);                    // Top
+  drawLine(x + r, y + height - 1, x + width - 1 - r, y + height - 1, state); // Bottom
+  drawLine(x, y + r, x, y + height - 1 - r, state);                    // Left
+  drawLine(x + width - 1, y + r, x + width - 1, y + height - 1 - r, state); // Right
+}
+
+void GfxRenderer::fillRoundedRect(const int x, const int y, const int width,
+                                  const int height, const int radius, const bool state) const {
+  if (radius <= 0) {
+    fillRect(x, y, width, height, state);
+    return;
+  }
+  
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  
+  // Fill the center rectangle
+  fillRect(x + r, y, width - 2 * r, height, state);
+  
+  // Fill left and right rectangles (excluding corners)
+  fillRect(x, y + r, r, height - 2 * r, state);
+  fillRect(x + width - r, y + r, r, height - 2 * r, state);
+  
+  // Fill corners using circle algorithm
+  int px = 0, py = r;
+  int d = 1 - r;
+  
+  while (px <= py) {
+    // Fill horizontal lines for each corner
+    // Top-left and top-right
+    drawLine(x + r - py, y + r - px, x + r, y + r - px, state);
+    drawLine(x + width - 1 - r, y + r - px, x + width - 1 - r + py, y + r - px, state);
+    drawLine(x + r - px, y + r - py, x + r, y + r - py, state);
+    drawLine(x + width - 1 - r, y + r - py, x + width - 1 - r + px, y + r - py, state);
+    
+    // Bottom-left and bottom-right
+    drawLine(x + r - py, y + height - 1 - r + px, x + r, y + height - 1 - r + px, state);
+    drawLine(x + width - 1 - r, y + height - 1 - r + px, x + width - 1 - r + py, y + height - 1 - r + px, state);
+    drawLine(x + r - px, y + height - 1 - r + py, x + r, y + height - 1 - r + py, state);
+    drawLine(x + width - 1 - r, y + height - 1 - r + py, x + width - 1 - r + px, y + height - 1 - r + py, state);
+    
+    if (d < 0) {
+      d += 2 * px + 3;
+    } else {
+      d += 2 * (px - py) + 5;
+      py--;
+    }
+    px++;
+  }
+}
+
+void GfxRenderer::fillRoundedRectDithered(const int x, const int y, const int width,
+                                          const int height, const int radius, 
+                                          const uint8_t grayLevel) const {
+  if (grayLevel == 0x00) {
+    fillRoundedRect(x, y, width, height, radius, true);
+    return;
+  }
+  if (grayLevel >= 0xF0) {
+    fillRoundedRect(x, y, width, height, radius, false);
+    return;
+  }
+  
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  if (r <= 0) {
+    fillRectDithered(x, y, width, height, grayLevel);
+    return;
+  }
+  
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+  
+  int threshold = (grayLevel * 4) / 255;
+  
+  // Check if a point is inside the rounded rectangle
+  auto isInside = [&](int px, int py) -> bool {
+    // Check corners
+    if (px < x + r && py < y + r) {
+      // Top-left corner
+      int dx = px - (x + r);
+      int dy = py - (y + r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px >= x + width - r && py < y + r) {
+      // Top-right corner
+      int dx = px - (x + width - 1 - r);
+      int dy = py - (y + r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px < x + r && py >= y + height - r) {
+      // Bottom-left corner
+      int dx = px - (x + r);
+      int dy = py - (y + height - 1 - r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px >= x + width - r && py >= y + height - r) {
+      // Bottom-right corner
+      int dx = px - (x + width - 1 - r);
+      int dy = py - (y + height - 1 - r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    // Inside the non-corner region
+    return px >= x && px < x + width && py >= y && py < y + height;
+  };
+  
+  const int x1 = std::max(0, x);
+  const int y1 = std::max(0, y);
+  const int x2 = std::min(screenWidth - 1, x + width - 1);
+  const int y2 = std::min(screenHeight - 1, y + height - 1);
+  
+  for (int sy = y1; sy <= y2; sy++) {
+    for (int sx = x1; sx <= x2; sx++) {
+      if (!isInside(sx, sy)) continue;
+      
+      int bayerValue;
+      int bx = sx % 2;
+      int by = sy % 2;
+      if (bx == 0 && by == 0) bayerValue = 0;
+      else if (bx == 1 && by == 0) bayerValue = 2;
+      else if (bx == 0 && by == 1) bayerValue = 3;
+      else bayerValue = 1;
+      
+      bool isBlack = bayerValue >= threshold;
+      drawPixel(sx, sy, isBlack);
+    }
   }
 }
 

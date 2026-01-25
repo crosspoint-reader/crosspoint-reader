@@ -128,14 +128,20 @@ void ThemeManager::applyProperties(
         }
       }
     } else if (key == "Padding") {
-      if (elemType == UIElement::ElementType::HStack) {
-        static_cast<HStack *>(elem)->setPadding(std::stoi(val));
-      } else if (elemType == UIElement::ElementType::VStack) {
-        static_cast<VStack *>(elem)->setPadding(std::stoi(val));
-      } else if (elemType == UIElement::ElementType::Grid) {
-        static_cast<Grid *>(elem)->setPadding(std::stoi(val));
+      if (elemType == UIElement::ElementType::Container ||
+          elemType == UIElement::ElementType::HStack ||
+          elemType == UIElement::ElementType::VStack ||
+          elemType == UIElement::ElementType::Grid) {
+        static_cast<Container *>(elem)->setPadding(std::stoi(val));
       } else if (elemType == UIElement::ElementType::TabBar) {
         static_cast<TabBar *>(elem)->setPadding(std::stoi(val));
+      }
+    } else if (key == "BorderRadius") {
+      if (elemType == UIElement::ElementType::Container ||
+          elemType == UIElement::ElementType::HStack ||
+          elemType == UIElement::ElementType::VStack ||
+          elemType == UIElement::ElementType::Grid) {
+        static_cast<Container *>(elem)->setBorderRadius(std::stoi(val));
       }
     } else if (key == "Spacing") {
       if (elemType == UIElement::ElementType::HStack) {
@@ -283,6 +289,11 @@ void ThemeManager::applyProperties(
         static_cast<ProgressBar *>(elem)->setBgColor(val);
       } else if (elemType == UIElement::ElementType::Badge) {
         static_cast<Badge *>(elem)->setBgColor(val);
+      } else if (elemType == UIElement::ElementType::Container ||
+                 elemType == UIElement::ElementType::HStack ||
+                 elemType == UIElement::ElementType::VStack ||
+                 elemType == UIElement::ElementType::Grid) {
+        static_cast<Container *>(elem)->setBackgroundColorExpr(val);
       }
     } else if (key == "ShowBorder") {
       if (elemType == UIElement::ElementType::ProgressBar) {
