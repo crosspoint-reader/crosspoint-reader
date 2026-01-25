@@ -364,6 +364,7 @@ class BitmapElement : public UIElement {
   Expression srcExpr;
   bool scaleToFit = true;
   bool preserveAspect = true;
+  int borderRadius = 0;
 
  public:
   BitmapElement(const std::string& id) : UIElement(id) {
@@ -384,6 +385,13 @@ class BitmapElement : public UIElement {
   void setPreserveAspect(bool preserve) {
     preserveAspect = preserve;
     invalidateCache();
+  }
+
+  void setBorderRadius(int r) {
+    borderRadius = r;
+    // Radius doesn't affect cache key unless we baked it in (we don't currently),
+    // but we should redraw.
+    markDirty();
   }
 
   void draw(const GfxRenderer& renderer, const ThemeContext& context) override;

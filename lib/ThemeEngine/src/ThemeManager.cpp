@@ -125,6 +125,8 @@ void ThemeManager::applyProperties(UIElement* elem, const std::map<std::string, 
       if (elemType == UIElement::ElementType::Container || elemType == UIElement::ElementType::HStack ||
           elemType == UIElement::ElementType::VStack || elemType == UIElement::ElementType::Grid) {
         static_cast<Container*>(elem)->setBorderRadius(std::stoi(val));
+      } else if (elemType == UIElement::ElementType::Bitmap) {
+        static_cast<BitmapElement*>(elem)->setBorderRadius(std::stoi(val));
       }
     } else if (key == "Spacing") {
       if (elemType == UIElement::ElementType::HStack) {

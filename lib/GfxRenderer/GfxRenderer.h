@@ -78,6 +78,7 @@ class GfxRenderer {
                   float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight) const;
   void drawTransparentBitmap(const Bitmap& bitmap, const int x, const int y, const int w, const int h) const;
+  void drawRoundedBitmap(const Bitmap& bitmap, const int x, const int y, const int w, const int h, const int radius) const;
   void draw2BitImage(const uint8_t data[], int x, int y, int w, int h) const;
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 
