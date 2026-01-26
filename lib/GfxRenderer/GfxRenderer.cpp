@@ -2,7 +2,13 @@
 
 #include <Utf8.h>
 
-void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
+void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap[fontId] = font; }
+
+void GfxRenderer::clearCustomFonts(const int startId) {
+  for (auto it = fontMap.lower_bound(startId); it != fontMap.end();) {
+    it = fontMap.erase(it);
+  }
+}
 
 void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
   switch (orientation) {
@@ -77,6 +83,15 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   return w;
 }
 
+int GfxRenderer::getTextAdvance(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  if (fontMap.count(fontId) == 0) {
+    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    return 0;
+  }
+
+  return fontMap.at(fontId).getTextAdvance(text, style);
+}
+
 void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,
                                    const EpdFontFamily::Style style) const {
   const int x = (getScreenWidth() - getTextWidth(fontId, text, style)) / 2;
@@ -101,10 +116,12 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
   // no printable characters
   if (!font.hasPrintableChars(text, style)) {
+    Serial.printf("[%lu] [GFX] text '%s' has no printable chars\n", millis(), text);
     return;
   }
 
   uint32_t cp;
+  const char* p = text;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     renderChar(font, cp, &xpos, &yPos, black, style);
   }
@@ -164,8 +181,6 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   bool isScaled = false;
   int cropPixX = std::floor(bitmap.getWidth() * cropX / 2.0f);
   int cropPixY = std::floor(bitmap.getHeight() * cropY / 2.0f);
-  Serial.printf("[%lu] [GFX] Cropping %dx%d by %dx%d pix, is %s\n", millis(), bitmap.getWidth(), bitmap.getHeight(),
-                cropPixX, cropPixY, bitmap.isTopDown() ? "top-down" : "bottom-up");
 
   if (maxWidth > 0 && (1.0f - cropX) * bitmap.getWidth() > maxWidth) {
     scale = static_cast<float>(maxWidth) / static_cast<float>((1.0f - cropX) * bitmap.getWidth());
@@ -175,7 +190,6 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>((1.0f - cropY) * bitmap.getHeight()));
     isScaled = true;
   }
-  Serial.printf("[%lu] [GFX] Scaling by %f - %s\n", millis(), scale, isScaled ? "scaled" : "not scaled");
 
   // Calculate output row size (2 bits per pixel, packed into bytes)
   // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
@@ -447,7 +461,16 @@ int GfxRenderer::getSpaceWidth(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
+  const EpdGlyph* glyph = fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR);
+  if (!glyph) {
+    // Serial.printf("[%lu] [GFX] Font %d (Regular) has no space glyph! Using fallback.\n", millis(), fontId);
+    const EpdFontData* data = fontMap.at(fontId).getData(EpdFontFamily::REGULAR);
+    if (data) {
+      return data->ascender / 3;
+    }
+    return 0;
+  }
+  return glyph->advanceX;
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
@@ -456,7 +479,13 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  const EpdFontData* data = fontMap.at(fontId).getData(EpdFontFamily::REGULAR);
+  if (!data) {
+    Serial.printf("[%lu] [GFX] Font %d (Regular) has no data!\n", millis(), fontId);
+    return 0;
+  }
+
+  return data->ascender;
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
@@ -465,7 +494,13 @@ int GfxRenderer::getLineHeight(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  const EpdFontData* data = fontMap.at(fontId).getData(EpdFontFamily::REGULAR);
+  if (!data) {
+    Serial.printf("[%lu] [GFX] Font %d (Regular) has no data!\n", millis(), fontId);
+    return 0;
+  }
+
+  return data->advanceY;
 }
 
 void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
@@ -596,7 +631,9 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     const int left = glyph->left;
     const int top = glyph->top;
 
-    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
+    // Use loadGlyphBitmap to support both static and custom (SD-based) fonts
+    uint8_t* buffer = nullptr;  // Not used for now, as we expect a pointer or cache
+    const uint8_t* bitmap = font.loadGlyphBitmap(glyph, buffer, style);
 
     if (bitmap != nullptr) {
       for (int glyphY = 0; glyphY < height; glyphY++) {
@@ -696,8 +733,6 @@ bool GfxRenderer::storeBwBuffer() {
     memcpy(bwBufferChunks[i], frameBuffer + offset, BW_BUFFER_CHUNK_SIZE);
   }
 
-  Serial.printf("[%lu] [GFX] Stored BW buffer in %zu chunks (%zu bytes each)\n", millis(), BW_BUFFER_NUM_CHUNKS,
-                BW_BUFFER_CHUNK_SIZE);
   return true;
 }
 
@@ -743,7 +778,6 @@ void GfxRenderer::restoreBwBuffer() {
   einkDisplay.cleanupGrayscaleBuffers(frameBuffer);
 
   freeBwBufferChunks();
-  Serial.printf("[%lu] [GFX] Restored and freed BW buffer chunks\n", millis());
 }
 
 /**
@@ -764,20 +798,22 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
     glyph = fontFamily.getGlyph(REPLACEMENT_GLYPH, style);
   }
 
-  // no glyph?
   if (!glyph) {
     Serial.printf("[%lu] [GFX] No glyph for codepoint %d\n", millis(), cp);
     return;
   }
 
-  const int is2Bit = fontFamily.getData(style)->is2Bit;
-  const uint32_t offset = glyph->dataOffset;
+  const EpdFont* font = fontFamily.getFont(style);
+  if (!font) return;
+  const EpdFontData* data = font->getData(style);
+  if (!data) return;
+
+  const int is2Bit = data->is2Bit;
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
 
-  const uint8_t* bitmap = nullptr;
-  bitmap = &fontFamily.getData(style)->bitmap[offset];
+  const uint8_t* bitmap = font->loadGlyphBitmap(glyph, nullptr, style);
 
   if (bitmap != nullptr) {
     for (int glyphY = 0; glyphY < height; glyphY++) {

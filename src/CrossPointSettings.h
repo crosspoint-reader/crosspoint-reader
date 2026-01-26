@@ -40,7 +40,7 @@ class CrossPointSettings {
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1 };
 
   // Font family options
-  enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, OPENDYSLEXIC = 2 };
+  enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_CUSTOM = 3 };
   // Font size options
   enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3 };
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2 };
@@ -77,7 +77,9 @@ class CrossPointSettings {
   uint8_t sideButtonLayout = PREV_NEXT;
   // Reader font settings
   uint8_t fontFamily = BOOKERLY;
+  char customFontFamily[64] = "";
   uint8_t fontSize = MEDIUM;
+  uint8_t customFontSize = 0;  // 0 means use enum mapping
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes)

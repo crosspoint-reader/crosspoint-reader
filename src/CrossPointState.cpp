@@ -38,7 +38,9 @@ bool CrossPointState::loadFromFile() {
     return false;
   }
 
+  Serial.printf("[%lu] [CPS] Reading OpenEpubPath\n", millis());
   serialization::readString(inputFile, openEpubPath);
+  Serial.printf("[%lu] [CPS] Read OpenEpubPath: %s\n", millis(), openEpubPath.c_str());
   if (version >= 2) {
     serialization::readPod(inputFile, lastSleepImage);
   } else {

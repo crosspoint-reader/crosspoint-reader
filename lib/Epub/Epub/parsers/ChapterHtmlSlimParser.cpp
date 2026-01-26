@@ -55,6 +55,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style) {
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
+  // Serial.printf("startElement: %s\n", name);
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
   // Middle of skip
@@ -253,9 +254,16 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 }
 
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
-  startNewTextBlock((TextBlock::Style)this->paragraphAlignment);
+  Serial.printf("[%lu] [EHP] parseAndBuildPages start. Heap: %u\n", millis(), ESP.getFreeHeap());
 
+  Serial.printf("[%lu] [EHP] Calling startNewTextBlock\n", millis());
+  startNewTextBlock((TextBlock::Style)this->paragraphAlignment);
+  Serial.printf("[%lu] [EHP] startNewTextBlock returned\n", millis());
+
+  Serial.printf("[%lu] [EHP] Creating XML parser\n", millis());
   const XML_Parser parser = XML_ParserCreate(nullptr);
+  if (parser) Serial.printf("[%lu] [EHP] Parser created\n", millis());
+
   int done;
 
   if (!parser) {
@@ -291,6 +299,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     }
 
     const size_t len = file.read(buf, 1024);
+    // Serial.printf("[%lu] [EHP] Read %d bytes\n", millis(), len);
 
     if (len == 0 && file.available() > 0) {
       Serial.printf("[%lu] [EHP] File read error\n", millis());
@@ -316,6 +325,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     done = file.available() == 0;
 
     if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
+      Serial.printf("[%lu] [EHP] XML_ParseBuffer returned error\n", millis());
       Serial.printf("[%lu] [EHP] Parse error at line %lu:\n%s\n", millis(), XML_GetCurrentLineNumber(parser),
                     XML_ErrorString(XML_GetErrorCode(parser)));
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
@@ -325,6 +335,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       file.close();
       return false;
     }
+    vTaskDelay(1);
   } while (!done);
 
   XML_StopParser(parser, XML_FALSE);                // Stop any pending processing

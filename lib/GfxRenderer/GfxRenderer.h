@@ -2,8 +2,10 @@
 
 #include <EInkDisplay.h>
 #include <EpdFontFamily.h>
+#include <EpdFontStyles.h>
 
 #include <map>
+#include <string>
 
 #include "Bitmap.h"
 
@@ -46,6 +48,7 @@ class GfxRenderer {
 
   // Setup
   void insertFont(int fontId, EpdFontFamily font);
+  void clearCustomFonts(int startId = 1000);
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
@@ -72,16 +75,17 @@ class GfxRenderer {
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 
   // Text
-  int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
+  int getTextAdvance(int fontId, const char* text, EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,
-                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                        EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
-                EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
   int getSpaceWidth(int fontId) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
-                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                            EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
 
   // UI Components
   void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4);
@@ -90,7 +94,7 @@ class GfxRenderer {
  private:
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
-                           EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                           EpdFontFamily::Style style = EpdFontStyles::REGULAR) const;
   int getTextHeight(int fontId) const;
 
  public:

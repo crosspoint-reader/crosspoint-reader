@@ -14,7 +14,7 @@ CrossPointSettings CrossPointSettings::instance;
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 20;
+constexpr uint8_t SETTINGS_COUNT = 22;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -48,6 +48,8 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, hideBatteryPercentage);
   serialization::writePod(outputFile, longPressChapterSkip);
+  serialization::writeString(outputFile, std::string(customFontFamily));
+  serialization::writePod(outputFile, customFontSize);
   serialization::writePod(outputFile, hyphenationEnabled);
   outputFile.close();
 
@@ -118,6 +120,14 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, longPressChapterSkip);
     if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string fontStr;
+      serialization::readString(inputFile, fontStr);
+      strncpy(customFontFamily, fontStr.c_str(), sizeof(customFontFamily) - 1);
+      customFontFamily[sizeof(customFontFamily) - 1] = '\0';
+    }
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, customFontSize);
     serialization::readPod(inputFile, hyphenationEnabled);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
@@ -195,7 +205,33 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
+#include <EpdFontLoader.h>
+
 int CrossPointSettings::getReaderFontId() const {
+  if (fontFamily == FONT_CUSTOM) {
+    uint8_t targetSize = customFontSize;
+    if (targetSize == 0) {
+      switch (fontSize) {
+        case SMALL:
+          targetSize = 12;
+          break;
+        case MEDIUM:
+        default:
+          targetSize = 14;
+          break;
+        case LARGE:
+          targetSize = 16;
+          break;
+        case EXTRA_LARGE:
+          targetSize = 18;
+          break;
+      }
+    }
+    int id = EpdFontLoader::getBestFontId(customFontFamily, targetSize);
+    if (id != -1) return id;
+    // Fallback if custom font not found
+  }
+
   switch (fontFamily) {
     case BOOKERLY:
     default:

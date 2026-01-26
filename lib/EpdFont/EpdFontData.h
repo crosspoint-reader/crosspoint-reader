@@ -11,7 +11,7 @@ typedef struct {
   uint8_t advanceX;     ///< Distance to advance cursor (x axis)
   int16_t left;         ///< X dist from cursor pos to UL corner
   int16_t top;          ///< Y dist from cursor pos to UL corner
-  uint16_t dataLength;  ///< Size of the font data.
+  uint32_t dataLength;  ///< Size of the font data.
   uint32_t dataOffset;  ///< Pointer into EpdFont->bitmap
 } EpdGlyph;
 

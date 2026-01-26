@@ -16,6 +16,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   auto wordXposIt = wordXpos.begin();
 
   for (size_t i = 0; i < words.size(); i++) {
+    Serial.printf("[%lu] [TXB] Rendering word: %s\n", millis(), wordIt->c_str());
     renderer.drawText(fontId, *wordXposIt + x, y, wordIt->c_str(), true, *wordStylesIt);
 
     std::advance(wordIt, 1);
@@ -52,6 +53,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
 
   // Word count
   serialization::readPod(file, wc);
+  Serial.printf("[%lu] [TXB] Deserializing TextBlock: %u words\n", millis(), wc);
 
   // Sanity check: prevent allocation of unreasonably large lists (max 10000 words per block)
   if (wc > 10000) {
@@ -63,7 +65,13 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   words.resize(wc);
   wordXpos.resize(wc);
   wordStyles.resize(wc);
-  for (auto& w : words) serialization::readString(file, w);
+  wordStyles.resize(wc);
+  int i = 0;
+  for (auto& w : words) {
+    if (i % 100 == 0 && i > 0) Serial.printf("[%lu] [TXB] Reading word %d/%d\n", millis(), i, wc);
+    serialization::readString(file, w);
+    i++;
+  }
   for (auto& x : wordXpos) serialization::readPod(file, x);
   for (auto& s : wordStyles) serialization::readPod(file, s);
 

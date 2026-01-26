@@ -1,10 +1,12 @@
 #include "SettingsActivity.h"
 
+#include <EpdFontLoader.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 
 #include "CategorySettingsActivity.h"
 #include "CrossPointSettings.h"
+#include "FontSelectionActivity.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
@@ -21,9 +23,10 @@ const SettingInfo displaySettings[displaySettingsCount] = {
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"})};
 
-constexpr int readerSettingsCount = 9;
+constexpr int readerSettingsCount = 10;
 const SettingInfo readerSettings[readerSettingsCount] = {
-    SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"}),
+    SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic", "Custom"}),
+    SettingInfo::Action("Set Custom Font Family"),
     SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
     SettingInfo::Enum("Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}),
     SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
@@ -102,6 +105,8 @@ void SettingsActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     SETTINGS.saveToFile();
+    // Reload fonts to make sure the newly selected font settings are loaded
+    EpdFontLoader::loadFontsFromSd(renderer);
     onGoHome();
     return;
   }

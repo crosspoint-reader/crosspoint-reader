@@ -1,11 +1,12 @@
 #include "EpdFont.h"
 
+#include <Arduino.h>
 #include <Utf8.h>
 
 #include <algorithm>
 
 void EpdFont::getTextBounds(const char* string, const int startX, const int startY, int* minX, int* minY, int* maxX,
-                            int* maxY) const {
+                            int* maxY, const EpdFontStyles::Style style) const {
   *minX = startX;
   *minY = startY;
   *maxX = startX;
@@ -19,14 +20,13 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   const int cursorY = startY;
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
-    const EpdGlyph* glyph = getGlyph(cp);
+    const EpdGlyph* glyph = getGlyph(cp, style);
 
     if (!glyph) {
       glyph = getGlyph(REPLACEMENT_GLYPH);
     }
 
     if (!glyph) {
-      // TODO: Better handle this?
       continue;
     }
 
@@ -38,31 +38,51 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   }
 }
 
-void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
+void EpdFont::getTextDimensions(const char* string, int* w, int* h, const EpdFontStyles::Style style) const {
   int minX = 0, minY = 0, maxX = 0, maxY = 0;
 
-  getTextBounds(string, 0, 0, &minX, &minY, &maxX, &maxY);
+  getTextBounds(string, 0, 0, &minX, &minY, &maxX, &maxY, style);
 
   *w = maxX - minX;
   *h = maxY - minY;
 }
 
-bool EpdFont::hasPrintableChars(const char* string) const {
+int EpdFont::getTextAdvance(const char* string, const EpdFontStyles::Style style) const {
+  if (string == nullptr || *string == '\0') {
+    return 0;
+  }
+
+  int advance = 0;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
+    const EpdGlyph* glyph = getGlyph(cp, style);
+    if (!glyph) {
+      glyph = getGlyph('?', style);
+    }
+    if (glyph) {
+      advance += glyph->advanceX;
+    }
+  }
+  return advance;
+}
+
+bool EpdFont::hasPrintableChars(const char* string, const EpdFontStyles::Style style) const {
   int w = 0, h = 0;
 
-  getTextDimensions(string, &w, &h);
+  getTextDimensions(string, &w, &h, style);
 
   return w > 0 || h > 0;
 }
 
-const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
+const EpdGlyph* EpdFont::getGlyph(const uint32_t cp, const EpdFontStyles::Style style) const {
+  const EpdFontData* data = getData(style);
+  if (!data) return nullptr;
+
   const EpdUnicodeInterval* intervals = data->intervals;
   const int count = data->intervalCount;
 
   if (count == 0) return nullptr;
 
-  // Binary search for O(log n) lookup instead of O(n)
-  // Critical for Korean fonts with many unicode intervals
   int left = 0;
   int right = count - 1;
 
@@ -75,10 +95,19 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
     } else if (cp > interval->last) {
       left = mid + 1;
     } else {
-      // Found: cp >= interval->first && cp <= interval->last
-      return &data->glyph[interval->offset + (cp - interval->first)];
+      if (data->glyph) {
+        return &data->glyph[interval->offset + (cp - interval->first)];
+      }
+      return nullptr;
     }
   }
 
   return nullptr;
+}
+
+const uint8_t* EpdFont::loadGlyphBitmap(const EpdGlyph* glyph, uint8_t* buffer,
+                                        const EpdFontStyles::Style style) const {
+  const EpdFontData* data = getData(style);
+  if (!data || !data->bitmap) return nullptr;
+  return data->bitmap + glyph->dataOffset;
 }

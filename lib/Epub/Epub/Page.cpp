@@ -52,6 +52,11 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   uint16_t count;
   serialization::readPod(file, count);
 
+  if (count > 1000) {
+    Serial.printf("[%lu] [PGE] WARNING: Suspicious element count %d\n", millis(), count);
+    return nullptr;
+  }
+
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
     serialization::readPod(file, tag);
@@ -60,7 +65,7 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
       auto pl = PageLine::deserialize(file);
       page->elements.push_back(std::move(pl));
     } else {
-      Serial.printf("[%lu] [PGE] Deserialization failed: Unknown tag %u\n", millis(), tag);
+      Serial.printf("[%lu] [PGE] Deserialization failed: Unknown tag %u at index %d\n", millis(), tag, i);
       return nullptr;
     }
   }

@@ -25,7 +25,6 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
     Serial.printf("[%lu] [SCT] Failed to serialize page %d\n", millis(), pageCount);
     return 0;
   }
-  Serial.printf("[%lu] [SCT] Page %d processed\n", millis(), pageCount);
 
   pageCount++;
   return position;
@@ -100,14 +99,13 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
 
   serialization::readPod(file, pageCount);
   file.close();
-  Serial.printf("[%lu] [SCT] Deserialization succeeded: %d pages\n", millis(), pageCount);
+
   return true;
 }
 
 // Your updated class method (assuming you are using the 'SD' object, which is a wrapper for a specific filesystem)
 bool Section::clearCache() const {
   if (!SdMan.exists(filePath.c_str())) {
-    Serial.printf("[%lu] [SCT] Cache does not exist, no action needed\n", millis());
     return true;
   }
 
@@ -116,7 +114,6 @@ bool Section::clearCache() const {
     return false;
   }
 
-  Serial.printf("[%lu] [SCT] Cache cleared successfully\n", millis());
   return true;
 }
 
@@ -168,8 +165,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     Serial.printf("[%lu] [SCT] Failed to stream item contents to temp file after retries\n", millis());
     return false;
   }
-
-  Serial.printf("[%lu] [SCT] Streamed temp HTML to %s (%d bytes)\n", millis(), tmpHtmlPath.c_str(), fileSize);
 
   // Only show progress bar for larger chapters where rendering overhead is worth it
   if (progressSetupFn && fileSize >= MIN_SIZE_FOR_PROGRESS) {
@@ -233,9 +228,23 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   file.seek(HEADER_SIZE - sizeof(uint32_t));
   uint32_t lutOffset;
   serialization::readPod(file, lutOffset);
+
+  if (lutOffset > file.size() || lutOffset < HEADER_SIZE) {
+    Serial.printf("[%lu] [SCT] Invalid LUT offset %u (file size %u)\n", millis(), lutOffset, file.size());
+    file.close();
+    return nullptr;
+  }
+
   file.seek(lutOffset + sizeof(uint32_t) * currentPage);
   uint32_t pagePos;
   serialization::readPod(file, pagePos);
+
+  if (pagePos > file.size()) {
+    Serial.printf("[%lu] [SCT] Invalid page pos %u for page %d\n", millis(), pagePos, currentPage);
+    file.close();
+    return nullptr;
+  }
+
   file.seek(pagePos);
 
   auto page = Page::deserialize(file);

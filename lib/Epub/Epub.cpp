@@ -320,11 +320,16 @@ bool Epub::clearCache() const {
 }
 
 void Epub::setupCacheDir() const {
-  if (SdMan.exists(cachePath.c_str())) {
-    return;
+  // Always try to create, just in case.
+  if (!SdMan.mkdir(cachePath.c_str())) {
+    // If mkdir failed, it might already exist. Check if it's a directory.
+    // SdMan doesn't allow checking type easily without opening.
+    // But let's log the detailed failure state.
+    bool exists = SdMan.exists(cachePath.c_str());
+    Serial.printf("[%lu] [EBP] mkdir failed for %s. Exists? %s\n", millis(), cachePath.c_str(), exists ? "YES" : "NO");
+  } else {
+    // Serial.printf("[%lu] [EBP] Created cache directory: %s\n", millis(), cachePath.c_str());
   }
-
-  SdMan.mkdir(cachePath.c_str());
 }
 
 const std::string& Epub::getCachePath() const { return cachePath; }
