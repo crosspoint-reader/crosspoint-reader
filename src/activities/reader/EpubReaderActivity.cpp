@@ -498,20 +498,19 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   // Position status bar near the bottom of the logical screen, regardless of orientation
   const auto screenHeight = renderer.getScreenHeight();
   const auto textY = screenHeight - orientedMarginBottom - 4;
-  int progressTextWidth = 0;
+  
 
   if (showProgress) {
     // Calculate progress in book
+    // TODO: use progress values for UI
+
+    // cppcheck-suppress unreadVariable
     const float sectionChapterProg = static_cast<float>(section->currentPage) / section->pageCount;
+    // cppcheck-suppress unreadVariable
     const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
+  }
 
   // Left aligned battery icon and percentage
-  if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft + 1, textY, showBatteryPercentage);
-  }
-
-  }
-
   if (showBattery) {
     ScreenComponents::drawBattery(renderer, orientedMarginLeft + 1, textY, showBatteryPercentage);
   }
@@ -521,6 +520,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     // Page width minus existing content with 30px padding on each side
     const int rendererableScreenWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
 
+    int progressTextWidth = 0;
     const int batterySize = showBattery ? (showBatteryPercentage ? 50 : 20) : 0;
     const int titleMarginLeft = batterySize + 30;
     const int titleMarginRight = progressTextWidth + 30;
@@ -630,8 +630,8 @@ void EpubReaderActivity::navigateToHref(const char* href, bool savePosition) {
 
     BookMetadataCache::SpineEntry entry = epub->getSpineItem(i);
     std::string spineItem = entry.href;
-    size_t lastSlash = spineItem.find_last_of('/');
-    std::string spineFilename = (lastSlash != std::string::npos) ? spineItem.substr(lastSlash + 1) : spineItem;
+    size_t lastslash = spineItem.find_last_of('/');
+    std::string spineFilename = (lastslash != std::string::npos) ? spineItem.substr(lastslash + 1) : spineItem;
 
     if (spineFilename == filename) {
       targetSpineIndex = i;

@@ -14,23 +14,7 @@ constexpr int SKIP_PAGE_MS = 700;
 
 bool EpubReaderChapterSelectionActivity::hasSyncOption() const { return KOREADER_STORE.hasCredentials(); }
 
-int EpubReaderChapterSelectionActivity::getTotalItems() const {
-  // Add 2 for sync options (top and bottom) if credentials are configured
-  const int syncCount = hasSyncOption() ? 2 : 0;
-  return epub->getTocItemsCount() + syncCount;
-}
 
-bool EpubReaderChapterSelectionActivity::isSyncItem(int index) const {
-  if (!hasSyncOption()) return false;
-  // First item and last item are sync options
-  return index == 0 || index == getTotalItems() - 1;
-}
-
-int EpubReaderChapterSelectionActivity::tocIndexFromItemIndex(int itemIndex) const {
-  // Account for the sync option at the top
-  const int offset = hasSyncOption() ? 1 : 0;
-  return itemIndex - offset;
-}
 
 int EpubReaderChapterSelectionActivity::getPageItems() const {
   // Layout constants used in renderScreen
