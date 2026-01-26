@@ -226,6 +226,8 @@ bool Epub::load(const bool buildIfMissing) {
   Serial.printf("[%lu] [EBP] Cache not found, building spine/TOC cache\n", millis());
   setupCacheDir();
 
+  const uint32_t indexingStart = millis();
+
   // Begin building cache - stream entries to disk immediately
   if (!bookMetadataCache->beginWrite()) {
     Serial.printf("[%lu] [EBP] Could not begin writing cache\n", millis());
@@ -233,6 +235,7 @@ bool Epub::load(const bool buildIfMissing) {
   }
 
   // OPF Pass
+  const uint32_t opfStart = millis();
   BookMetadataCache::BookMetadata bookMetadata;
   if (!bookMetadataCache->beginContentOpfPass()) {
     Serial.printf("[%lu] [EBP] Could not begin writing content.opf pass\n", millis());
@@ -246,8 +249,10 @@ bool Epub::load(const bool buildIfMissing) {
     Serial.printf("[%lu] [EBP] Could not end writing content.opf pass\n", millis());
     return false;
   }
+  Serial.printf("[%lu] [EBP] OPF pass completed in %lu ms\n", millis(), millis() - opfStart);
 
   // TOC Pass - try EPUB 3 nav first, fall back to NCX
+  const uint32_t tocStart = millis();
   if (!bookMetadataCache->beginTocPass()) {
     Serial.printf("[%lu] [EBP] Could not begin writing toc pass\n", millis());
     return false;
@@ -276,6 +281,7 @@ bool Epub::load(const bool buildIfMissing) {
     Serial.printf("[%lu] [EBP] Could not end writing toc pass\n", millis());
     return false;
   }
+  Serial.printf("[%lu] [EBP] TOC pass completed in %lu ms\n", millis(), millis() - tocStart);
 
   // Close the cache files
   if (!bookMetadataCache->endWrite()) {
@@ -284,10 +290,13 @@ bool Epub::load(const bool buildIfMissing) {
   }
 
   // Build final book.bin
+  const uint32_t buildStart = millis();
   if (!bookMetadataCache->buildBookBin(filepath, bookMetadata)) {
     Serial.printf("[%lu] [EBP] Could not update mappings and sizes\n", millis());
     return false;
   }
+  Serial.printf("[%lu] [EBP] buildBookBin completed in %lu ms\n", millis(), millis() - buildStart);
+  Serial.printf("[%lu] [EBP] Total indexing completed in %lu ms\n", millis(), millis() - indexingStart);
 
   if (!bookMetadataCache->cleanupTmpFiles()) {
     Serial.printf("[%lu] [EBP] Could not cleanup tmp files - ignoring\n", millis());
@@ -320,16 +329,11 @@ bool Epub::clearCache() const {
 }
 
 void Epub::setupCacheDir() const {
-  // Always try to create, just in case.
-  if (!SdMan.mkdir(cachePath.c_str())) {
-    // If mkdir failed, it might already exist. Check if it's a directory.
-    // SdMan doesn't allow checking type easily without opening.
-    // But let's log the detailed failure state.
-    bool exists = SdMan.exists(cachePath.c_str());
-    Serial.printf("[%lu] [EBP] mkdir failed for %s. Exists? %s\n", millis(), cachePath.c_str(), exists ? "YES" : "NO");
-  } else {
-    // Serial.printf("[%lu] [EBP] Created cache directory: %s\n", millis(), cachePath.c_str());
+  if (SdMan.exists(cachePath.c_str())) {
+    return;
   }
+
+  SdMan.mkdir(cachePath.c_str());
 }
 
 const std::string& Epub::getCachePath() const { return cachePath; }
