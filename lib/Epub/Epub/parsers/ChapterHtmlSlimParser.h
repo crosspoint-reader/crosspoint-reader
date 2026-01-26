@@ -3,7 +3,6 @@
 #include <expat.h>
 
 #include <climits>
-#include <cstddef>
 #include <functional>
 #include <memory>
 
