@@ -1,10 +1,10 @@
 #include "EpubReaderMenuActivity.h"
 
-#include <GfxRenderer.h>
 #include <EpdFontFamily.h>
+#include <GfxRenderer.h>
 
-#include "fontIds.h"
 #include "MappedInputManager.h"
+#include "fontIds.h"
 
 constexpr int MENU_ITEMS_COUNT = 2;
 
@@ -39,10 +39,10 @@ void EpubReaderMenuActivity::onExit() {
 }
 
 void EpubReaderMenuActivity::loop() {
-  const bool prevReleased =
-      mappedInput.wasReleased(MappedInputManager::Button::Up) || mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextReleased =
-      mappedInput.wasReleased(MappedInputManager::Button::Down) || mappedInput.wasReleased(MappedInputManager::Button::Right);
+  const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
+                            mappedInput.wasReleased(MappedInputManager::Button::Left);
+  const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+                            mappedInput.wasReleased(MappedInputManager::Button::Right);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     onSelectOption(static_cast<MenuOption>(selectorIndex));

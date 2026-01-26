@@ -54,7 +54,7 @@ const char* getAttribute(const XML_Char** atts, const char* attrName) {
 std::string replaceHtmlEntities(const char* text) {
   if (!text) return "";
   std::string s(text);
-  
+
   // Replace common entities
   size_t pos = 0;
   while ((pos = s.find("&lt;", pos)) != std::string::npos) {
@@ -273,7 +273,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // PASS 2: Normal parsing
   // ============================================================================
 
-
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
     self->depth += 1;
@@ -293,9 +292,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       if (self->partWordBufferIndex > 0) {
         // Copy of the existing flush logic
         EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
-        if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth) fontStyle = EpdFontFamily::BOLD_ITALIC;
-        else if (self->boldUntilDepth < self->depth) fontStyle = EpdFontFamily::BOLD;
-        else if (self->italicUntilDepth < self->depth) fontStyle = EpdFontFamily::ITALIC;
+        if (self->boldUntilDepth < self->depth && self->italicUntilDepth < self->depth)
+          fontStyle = EpdFontFamily::BOLD_ITALIC;
+        else if (self->boldUntilDepth < self->depth)
+          fontStyle = EpdFontFamily::BOLD;
+        else if (self->italicUntilDepth < self->depth)
+          fontStyle = EpdFontFamily::ITALIC;
 
         self->partWordBuffer[self->partWordBufferIndex] = '\0';
         self->currentTextBlock->addWord(std::move(replaceHtmlEntities(self->partWordBuffer)), fontStyle);
@@ -389,7 +391,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       return;
     }
   }
-  
+
   // Special handling for tables - show placeholder text instead of dropping silently
   if (strcmp(name, "table") == 0) {
     // Add placeholder text
@@ -611,7 +613,6 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
-
   // Closing paragraph note in Pass 1
   if (strcmp(name, "p") == 0 && self->insideParagraphNote && self->depth - 1 == self->paragraphNoteDepth) {
     if (self->isPass1CollectingAsides && self->currentParagraphNoteTextLen > 0 && self->paragraphNoteCount < 32 &&
@@ -691,7 +692,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // [MODIFIED] 2. Handle 'a' tags (Anchors/Footnotes)
   // We check "a" generally now, to handle both Noterefs AND resetting regular links
   if (strcmp(name, "a") == 0) {
-
     // Track if this was a noteref so we can return early later
     bool wasNoteref = self->insideNoteref;
 
@@ -757,7 +757,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       return;
     }
   }
-
 
   if (self->partWordBufferIndex > 0) {
     const bool shouldBreakText =
@@ -844,7 +843,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       file.close();
       return false;
     }
-    
+
     done = file.available() == 0;
 
     if (XML_ParseBuffer(parser1, static_cast<int>(len), done) == XML_STATUS_ERROR) {
@@ -925,7 +924,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       file.close();
       return false;
     }
-    
+
     // Update progress (call every 10% change to avoid too frequent updates)
     // Only show progress for larger chapters where rendering overhead is worth it
     bytesRead += len;
@@ -989,7 +988,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
-  if (currentPage && currentPage->elements.size() < 24) { // Assuming generic capacity check or vector size
+  if (currentPage && currentPage->elements.size() < 24) {  // Assuming generic capacity check or vector size
     currentPage->elements.push_back(std::make_shared<PageLine>(line, 0, currentPageNextY));
     currentPageNextY += lineHeight;
   } else if (currentPage) {

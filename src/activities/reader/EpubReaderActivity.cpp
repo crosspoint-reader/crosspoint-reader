@@ -8,10 +8,8 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
-
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderMenuActivity.h"
-
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "ScreenComponents.h"
@@ -140,9 +138,9 @@ void EpubReaderActivity::loop() {
         [this, currentPage, totalPages](EpubReaderMenuActivity::MenuOption option) {
           // onSelectOption - handle menu choice
           if (option == EpubReaderMenuActivity::CHAPTERS) {
-             // Show chapter selection
-             exitActivity();
-             enterNewActivity(new EpubReaderChapterSelectionActivity(
+            // Show chapter selection
+            exitActivity();
+            enterNewActivity(new EpubReaderChapterSelectionActivity(
                 this->renderer, this->mappedInput, epub, epub->getPath(), currentSpineIndex, currentPage, totalPages,
                 [this] {
                   exitActivity();
@@ -205,7 +203,6 @@ void EpubReaderActivity::loop() {
       onGoBack();
       return;
     }
-
   }
 
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
@@ -414,17 +411,18 @@ void EpubReaderActivity::renderScreen() {
       return renderScreen();
     }
 
-    Serial.printf("[%lu] [ERS] Page loaded: %d elements, %d footnotes\n", millis(), p->elements.size(), p->footnotes.size());
+    Serial.printf("[%lu] [ERS] Page loaded: %d elements, %d footnotes\n", millis(), p->elements.size(),
+                  p->footnotes.size());
 
     // Copy footnotes from page to currentPageFootnotes
     currentPageFootnotes.clear();
     int maxFootnotes = (p->footnotes.size() < 8) ? p->footnotes.size() : 8;
 
     for (int i = 0; i < maxFootnotes; i++) {
-        const FootnoteEntry& footnote = p->footnotes[i];
-        if (footnote.href[0] != '\0') {
-            currentPageFootnotes.addFootnote(footnote.number, footnote.href);
-        }
+      const FootnoteEntry& footnote = p->footnotes[i];
+      if (footnote.href[0] != '\0') {
+        currentPageFootnotes.addFootnote(footnote.number, footnote.href);
+      }
     }
     Serial.printf("[%lu] [ERS] Loaded %d footnotes for current page\n", millis(), p->footnotes.size());
 
@@ -498,7 +496,6 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   // Position status bar near the bottom of the logical screen, regardless of orientation
   const auto screenHeight = renderer.getScreenHeight();
   const auto textY = screenHeight - orientedMarginBottom - 4;
-  
 
   if (showProgress) {
     // Calculate progress in book

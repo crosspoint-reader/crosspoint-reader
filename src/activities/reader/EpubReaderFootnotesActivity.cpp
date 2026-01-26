@@ -1,10 +1,10 @@
 #include "EpubReaderFootnotesActivity.h"
 
-#include <GfxRenderer.h>
 #include <EpdFontFamily.h>
+#include <GfxRenderer.h>
 
-#include "fontIds.h"
 #include "MappedInputManager.h"
+#include "fontIds.h"
 
 void EpubReaderFootnotesActivity::onEnter() {
   selectedIndex = 0;

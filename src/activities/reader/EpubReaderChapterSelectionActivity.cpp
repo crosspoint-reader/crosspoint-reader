@@ -14,8 +14,6 @@ constexpr int SKIP_PAGE_MS = 700;
 
 bool EpubReaderChapterSelectionActivity::hasSyncOption() const { return KOREADER_STORE.hasCredentials(); }
 
-
-
 int EpubReaderChapterSelectionActivity::getPageItems() const {
   // Layout constants used in renderScreen
   constexpr int startY = 60;
@@ -90,9 +88,9 @@ void EpubReaderChapterSelectionActivity::onEnter() {
   // The master logic used TOC indices directly.
   // Let's adapt: We will display the filtered list.
   // If sync is enabled, we prepend/append it to the selector range.
-  
+
   if (hasSyncOption()) {
-      selectorIndex += 1; // Offset for top sync option
+    selectorIndex += 1;  // Offset for top sync option
   }
 
   // Trigger first update
@@ -149,7 +147,7 @@ void EpubReaderChapterSelectionActivity::loop() {
 
   const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = getPageItems();
-  
+
   // Total items = filtered chapters + sync options
   const int syncCount = hasSyncOption() ? 2 : 0;
   const int totalItems = filteredSpineIndices.size() + syncCount;
@@ -157,15 +155,15 @@ void EpubReaderChapterSelectionActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Check if sync option is selected
     if (hasSyncOption()) {
-        if (selectorIndex == 0 || selectorIndex == totalItems - 1) {
-            launchSyncActivity();
-            return;
-        }
+      if (selectorIndex == 0 || selectorIndex == totalItems - 1) {
+        launchSyncActivity();
+        return;
+      }
     }
 
     // It's a chapter. Calculate index in filtered list.
     int filteredIndex = selectorIndex;
-    if (hasSyncOption()) filteredIndex -= 1; // Remove top sync offset
+    if (hasSyncOption()) filteredIndex -= 1;  // Remove top sync offset
 
     if (filteredIndex >= 0 && filteredIndex < filteredSpineIndices.size()) {
       onSelectSpineIndex(filteredSpineIndices[filteredIndex]);
@@ -206,7 +204,7 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const int pageItems = getPageItems();
-  
+
   const int syncCount = hasSyncOption() ? 2 : 0;
   const int totalItems = filteredSpineIndices.size() + syncCount;
 
@@ -225,33 +223,33 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
 
   for (int i = pageStartIndex; i < totalItems && i < pageStartIndex + pageItems; i++) {
     const int displayY = 60 + (i % pageItems) * 30;
-    const bool isSelected = (i == selectorIndex); // Use i for comparison
+    const bool isSelected = (i == selectorIndex);  // Use i for comparison
 
     // Check for sync item
     bool isSync = false;
     if (hasSyncOption()) {
-        if (i == 0 || i == totalItems - 1) isSync = true;
+      if (i == 0 || i == totalItems - 1) isSync = true;
     }
 
     if (isSync) {
-        renderer.drawText(UI_10_FONT_ID, 20, displayY, ">> Sync Progress", !isSelected);
+      renderer.drawText(UI_10_FONT_ID, 20, displayY, ">> Sync Progress", !isSelected);
     } else {
-        // It's a filtered chapter
-        int filteredIndex = i;
-        if (hasSyncOption()) filteredIndex -= 1;
+      // It's a filtered chapter
+      int filteredIndex = i;
+      if (hasSyncOption()) filteredIndex -= 1;
 
-        const int actualSpineIndex = filteredSpineIndices[filteredIndex];
-        const int tocIndex = epub->getTocIndexForSpineIndex(actualSpineIndex);
+      const int actualSpineIndex = filteredSpineIndices[filteredIndex];
+      const int tocIndex = epub->getTocIndexForSpineIndex(actualSpineIndex);
 
-        if (tocIndex == -1) {
-             renderer.drawText(UI_10_FONT_ID, 20, displayY, "Unnamed", !isSelected);
-        } else {
-            auto item = epub->getTocItem(tocIndex);
-            const int indentSize = 20 + (item.level - 1) * 15;
-            const std::string chapterName =
-                renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), pageWidth - 40 - indentSize);
-            renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
-        }
+      if (tocIndex == -1) {
+        renderer.drawText(UI_10_FONT_ID, 20, displayY, "Unnamed", !isSelected);
+      } else {
+        auto item = epub->getTocItem(tocIndex);
+        const int indentSize = 20 + (item.level - 1) * 15;
+        const std::string chapterName =
+            renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), pageWidth - 40 - indentSize);
+        renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
+      }
     }
   }
   const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");

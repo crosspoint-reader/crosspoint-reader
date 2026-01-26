@@ -689,9 +689,9 @@ int Epub::addVirtualSpineItem(const std::string& path) {
   return newIndex;
 }
 
-bool Epub::isVirtualSpineItem(int spineIndex) const { 
-    int currentSpineSize = bookMetadataCache ? bookMetadataCache->getSpineCount() : 0;
-    return spineIndex >= currentSpineSize; 
+bool Epub::isVirtualSpineItem(int spineIndex) const {
+  int currentSpineSize = bookMetadataCache ? bookMetadataCache->getSpineCount() : 0;
+  return spineIndex >= currentSpineSize;
 }
 
 int Epub::findVirtualSpineIndex(const std::string& filename) const {

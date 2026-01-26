@@ -5,8 +5,8 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
-#include "activities/ActivityWithSubactivity.h"
 #include "EpubReaderFootnotesActivity.h"
+#include "activities/ActivityWithSubactivity.h"
 
 class EpubReaderActivity final : public ActivityWithSubactivity {
   std::shared_ptr<Epub> epub;

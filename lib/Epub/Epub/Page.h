@@ -1,7 +1,7 @@
 #include <SdFat.h>
-#include <vector>
 
 #include <utility>
+#include <vector>
 
 #include "FootnoteEntry.h"
 #include "blocks/TextBlock.h"
@@ -44,7 +44,7 @@ class Page {
     entry.number[2] = '\0';
     strncpy(entry.href, href, 63);
     entry.href[63] = '\0';
-    entry.isInline = false; // Default
+    entry.isInline = false;  // Default
     footnotes.push_back(entry);
   }
 

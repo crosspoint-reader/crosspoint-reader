@@ -163,8 +163,6 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   return true;
 }
 
-
-
 bool Section::clearCache() const {
   if (!SdMan.exists(filePath.c_str())) {
     Serial.printf("[%lu] [SCT] Cache does not exist, no action needed\n", millis());
@@ -203,33 +201,33 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   std::string fileToParse = tmpHtmlPath;
 
   if (isVirtual) {
-      Serial.printf("[%lu] [SCT] Processing virtual spine item: %s\n", millis(), localPath.c_str());
-      // For virtual items, the path is already on SD, e.g. /sd/cache/...
-      // But we need to make sure the parser can read it.
-      // If it starts with /sd/, we might need to strip it if using SdFat with root?
-      // Assuming absolute path is fine.
-      fileToParse = localPath;
-      success = true;
-      fileSize = 0; // Don't check size for progress bar on virtual items
+    Serial.printf("[%lu] [SCT] Processing virtual spine item: %s\n", millis(), localPath.c_str());
+    // For virtual items, the path is already on SD, e.g. /sd/cache/...
+    // But we need to make sure the parser can read it.
+    // If it starts with /sd/, we might need to strip it if using SdFat with root?
+    // Assuming absolute path is fine.
+    fileToParse = localPath;
+    success = true;
+    fileSize = 0;  // Don't check size for progress bar on virtual items
   } else {
     // Normal file - stream from zip
     for (int attempt = 0; attempt < 3 && !success; attempt++) {
-        if (attempt > 0) delay(50);
+      if (attempt > 0) delay(50);
 
-        if (SdMan.exists(tmpHtmlPath.c_str())) SdMan.remove(tmpHtmlPath.c_str());
+      if (SdMan.exists(tmpHtmlPath.c_str())) SdMan.remove(tmpHtmlPath.c_str());
 
-        FsFile tmpHtml;
-        if (!SdMan.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) continue;
-        success = epub->readItemContentsToStream(localPath, tmpHtml, 1024);
-        fileSize = tmpHtml.size();
-        tmpHtml.close();
+      FsFile tmpHtml;
+      if (!SdMan.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) continue;
+      success = epub->readItemContentsToStream(localPath, tmpHtml, 1024);
+      fileSize = tmpHtml.size();
+      tmpHtml.close();
 
-        if (!success && SdMan.exists(tmpHtmlPath.c_str())) SdMan.remove(tmpHtmlPath.c_str());
+      if (!success && SdMan.exists(tmpHtmlPath.c_str())) SdMan.remove(tmpHtmlPath.c_str());
     }
 
     if (!success) {
-        Serial.printf("[%lu] [SCT] Failed to stream item contents\n", millis());
-        return false;
+      Serial.printf("[%lu] [SCT] Failed to stream item contents\n", millis());
+      return false;
     }
   }
 
@@ -250,7 +248,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       viewportHeight, hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
       progressFn));
-  
+
   Hyphenator::setPreferredLanguage(epub->getLanguage());
 
   // Track which inline footnotes AND paragraph notes are actually referenced in this file
@@ -291,7 +289,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   // --- Footnote Generation Logic (Merged from HEAD) ---
-  
+
   // Inline footnotes
   for (int i = 0; i < visitor->inlineFootnoteCount; i++) {
     const char* inlineId = visitor->inlineFootnotes[i].id;

@@ -53,7 +53,6 @@ bool Page::serialize(FsFile& file) const {
     file.write(&isInlineFlag, 1);
   }
 
-
   return true;
 }
 
@@ -78,7 +77,7 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
 
   int32_t footnoteCount;
   serialization::readPod(file, footnoteCount);
-  
+
   for (int i = 0; i < footnoteCount; i++) {
     FootnoteEntry entry;
     file.read(entry.number, 3);
