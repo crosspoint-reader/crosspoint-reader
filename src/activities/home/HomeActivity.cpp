@@ -239,8 +239,8 @@ void HomeActivity::render() {
   // Use 400px height as specified, with proportional width
   constexpr int CARD_HEIGHT = 400;
   const int cardWidth = (coverWidth > 0 && coverHeight > 0)
-                        ? (CARD_HEIGHT * coverWidth) / coverHeight
-                        : 240;  // Fallback to 240px width if no image (maintain aspect ratio)
+                            ? (CARD_HEIGHT * coverWidth) / coverHeight
+                            : 240;  // Fallback to 240px width if no image (maintain aspect ratio)
 
   const int bookX = (pageWidth - cardWidth) / 2;
   constexpr int bookY = 30;

@@ -421,7 +421,6 @@ bool Epub::generateCoverBmp(bool cropped) const {
 
 std::string Epub::getCoverHomeBmpPath() const { return cachePath + "/cover_home.bmp"; }
 
-
 bool Epub::generateCoverHomeBmp() const {
   // Already generated, return true
   if (SdMan.exists(getCoverHomeBmpPath().c_str())) {
@@ -485,8 +484,7 @@ bool Epub::generateCoverHomeBmp() const {
     const int targetWidth = (400 * jpegWidth) / jpegHeight;
 
     const bool success =
-        JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, homeBmp, targetWidth,
-                                                           HOME_TARGET_HEIGHT);
+        JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, homeBmp, targetWidth, HOME_TARGET_HEIGHT);
     coverJpg.close();
     homeBmp.close();
     SdMan.remove(coverJpgTempPath.c_str());
