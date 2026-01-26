@@ -3,7 +3,6 @@
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
-#include <ScreenComponents.h>
 #include <expat.h>
 
 #include "../Page.h"
@@ -271,8 +270,8 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   }
 
   // Get file size to decide whether to show indexing popup.
-  if (file.size() >= MIN_SIZE_FOR_POPUP) {
-    ScreenComponents::drawPopup(renderer, "Indexing...");
+  if (popupFn && file.size() >= MIN_SIZE_FOR_POPUP) {
+    popupFn();
   }
 
   XML_SetUserData(parser, this);
