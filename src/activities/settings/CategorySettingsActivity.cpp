@@ -11,6 +11,7 @@
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "FontSelectionActivity.h"
 #include "fontIds.h"
 
 void CategorySettingsActivity::taskTrampoline(void* param) {
@@ -127,6 +128,14 @@ void CategorySettingsActivity::toggleCurrentSetting() {
         updateRequired = true;
       }));
       xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Set Custom Font Family") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new FontSelectionActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
     }
   } else {
     return;
@@ -176,6 +185,11 @@ void CategorySettingsActivity::render() const {
       valueText = settingsList[i].enumValues[value];
     } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
       valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
+    } else if (settingsList[i].type == SettingType::ACTION &&
+               strcmp(settingsList[i].name, "Set Custom Font Family") == 0) {
+      if (SETTINGS.fontFamily == CrossPointSettings::FONT_CUSTOM) {
+        valueText = SETTINGS.customFontFamily;
+      }
     }
     if (!valueText.empty()) {
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
