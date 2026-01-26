@@ -6,6 +6,7 @@
 #include "HyphenationCommon.h"
 #include "generated/hyph-de.trie.h"
 #include "generated/hyph-en.trie.h"
+#include "generated/hyph-es.trie.h"
 #include "generated/hyph-fr.trie.h"
 #include "generated/hyph-ru.trie.h"
 
@@ -16,14 +17,16 @@ LanguageHyphenator englishHyphenator(en_us_patterns, isLatinLetter, toLowerLatin
 LanguageHyphenator frenchHyphenator(fr_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator germanHyphenator(de_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator russianHyphenator(ru_ru_patterns, isCyrillicLetter, toLowerCyrillic);
+LanguageHyphenator spanishHyphenator(es_patterns, isLatinLetter, toLowerLatin);
 
-using EntryArray = std::array<LanguageEntry, 4>;
+using EntryArray = std::array<LanguageEntry, 5>;
 
 const EntryArray& entries() {
   static const EntryArray kEntries = {{{"english", "en", &englishHyphenator},
                                        {"french", "fr", &frenchHyphenator},
                                        {"german", "de", &germanHyphenator},
-                                       {"russian", "ru", &russianHyphenator}}};
+                                       {"russian", "ru", &russianHyphenator},
+                                       {"spanish", "es", &spanishHyphenator}}};
   return kEntries;
 }
 
