@@ -58,10 +58,54 @@ intervals = [
     # Russian, Ukrainian, Bulgarian, etc.
     (0x0400, 0x04FF),
     ### Math Symbols (common subset) ###
+    # Superscripts and Subscripts
+    (0x2070, 0x209F),
     # General math operators
     (0x2200, 0x22FF),
     # Arrows
     (0x2190, 0x21FF),
+    ### CJK ###
+    # Core Unified Ideographs
+    # (0x4E00, 0x9FFF),
+    # # Extension A
+    # (0x3400, 0x4DBF),
+    # # Extension B
+    # (0x20000, 0x2A6DF),
+    # # Extension C–F
+    # (0x2A700, 0x2EBEF),
+    # # Extension G
+    # (0x30000, 0x3134F),
+    # # Hiragana
+    # (0x3040, 0x309F),
+    # # Katakana
+    # (0x30A0, 0x30FF),
+    # # Katakana Phonetic Extensions
+    # (0x31F0, 0x31FF),
+    # # Halfwidth Katakana
+    # (0xFF60, 0xFF9F),
+    # # Hangul Syllables
+    # (0xAC00, 0xD7AF),
+    # # Hangul Jamo
+    # (0x1100, 0x11FF),
+    # # Hangul Compatibility Jamo
+    # (0x3130, 0x318F),
+    # # Hangul Jamo Extended-A
+    # (0xA960, 0xA97F),
+    # # Hangul Jamo Extended-B
+    # (0xD7B0, 0xD7FF),
+    # # CJK Radicals Supplement
+    # (0x2E80, 0x2EFF),
+    # # Kangxi Radicals
+    # (0x2F00, 0x2FDF),
+    # # CJK Symbols and Punctuation
+    # (0x3000, 0x303F),
+    # # CJK Compatibility Forms
+    # (0xFE30, 0xFE4F),
+    # # CJK Compatibility Ideographs
+    # (0xF900, 0xFAFF),
+    ### Specials
+    # Replacement Character
+    (0xFFFD, 0xFFFD),
 ]
 
 add_ints = []

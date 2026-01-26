@@ -1,4 +1,5 @@
 #pragma once
+#include <Print.h>
 #include <expat.h>
 
 #include <string>
@@ -42,28 +43,30 @@ using OpdsBook = OpdsEntry;
  *     }
  *   }
  */
-class OpdsParser {
+class OpdsParser final : public Print {
  public:
-  OpdsParser() = default;
+  OpdsParser();
   ~OpdsParser();
 
   // Disable copy
   OpdsParser(const OpdsParser&) = delete;
   OpdsParser& operator=(const OpdsParser&) = delete;
 
-  /**
-   * Parse an OPDS XML feed.
-   * @param xmlData Pointer to the XML data
-   * @param length Length of the XML data
-   * @return true if parsing succeeded, false on error
-   */
-  bool parse(const char* xmlData, size_t length);
+  size_t write(uint8_t) override;
+  size_t write(const uint8_t*, size_t) override;
+
+  void flush() override;
+
+  bool error() const;
+
+  operator bool() { return !error(); }
 
   /**
    * Get the parsed entries (both navigation and book entries).
    * @return Vector of OpdsEntry entries
    */
-  const std::vector<OpdsEntry>& getEntries() const { return entries; }
+  const std::vector<OpdsEntry>& getEntries() const& { return entries; }
+  std::vector<OpdsEntry> getEntries() && { return std::move(entries); }
 
   /**
    * Get only book entries (legacy compatibility).
@@ -96,4 +99,6 @@ class OpdsParser {
   bool inAuthor = false;
   bool inAuthorName = false;
   bool inId = false;
+
+  bool errorOccured = false;
 };
