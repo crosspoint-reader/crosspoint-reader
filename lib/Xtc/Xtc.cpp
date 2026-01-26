@@ -331,8 +331,8 @@ bool Xtc::generateCoverHomeBmp() const {
   // Calculate proportional width for 400px height
   const uint16_t targetWidth = static_cast<uint16_t>((HOME_TARGET_HEIGHT * pageInfo.width) / pageInfo.height);
 
-  Serial.printf("[%lu] [XTC] Generating home BMP: %dx%d -> %dx%d\n", millis(), pageInfo.width,
-                pageInfo.height, targetWidth, HOME_TARGET_HEIGHT);
+  Serial.printf("[%lu] [XTC] Generating home BMP: %dx%d -> %dx%d\n", millis(), pageInfo.width, pageInfo.height,
+                targetWidth, HOME_TARGET_HEIGHT);
 
   Serial.printf("[%lu] [XTC] Generating thumb BMP: %dx%d -> %dx%d (scale: %.3f)\n", millis(), pageInfo.width,
                 pageInfo.height, targetWidth, HOME_TARGET_HEIGHT);
