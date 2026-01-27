@@ -19,6 +19,9 @@ void addAuthHeaders(HTTPClient& http) {
   http.addHeader("Accept", "application/vnd.koreader.v1+json");
   http.addHeader("x-auth-user", KOREADER_STORE.getUsername().c_str());
   http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password().c_str());
+
+  // [FIXME] FB hack per mio CWA che non autentica con x-auth-user
+  http.setAuthorization(KOREADER_STORE.getUsername().c_str(), KOREADER_STORE.getPassword().c_str());
 }
 
 bool isHttpsUrl(const std::string& url) { return url.rfind("https://", 0) == 0; }
