@@ -205,6 +205,15 @@ void waitForPowerRelease() {
   }
 }
 
+// TDO: move this to HAL in the future
+void hwDeepSleepStart() {
+  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
+  waitForPowerRelease();
+  // Enter Deep Sleep
+  esp_deep_sleep_start();
+}
+
 // Enter deep sleep mode
 void enterDeepSleep() {
   exitActivity();
@@ -213,11 +222,7 @@ void enterDeepSleep() {
   einkDisplay.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
-  waitForPowerRelease();
-  // Enter Deep Sleep
-  esp_deep_sleep_start();
+  hwDeepSleepStart();
 }
 
 void onGoHome();
@@ -299,6 +304,13 @@ bool isWakeupByPowerButton() {
   }
 }
 
+bool isWakeupAfterFlashing() {
+  const auto wakeupCause = esp_sleep_get_wakeup_cause();
+  const auto resetReason = esp_reset_reason();
+
+  return isUsbConnected() && (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_UNKNOWN);
+}
+
 void setup() {
   t1 = millis();
 
@@ -337,6 +349,11 @@ void setup() {
     // For normal wakeups, verify power button press duration
     Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
     verifyPowerButtonDuration();
+  } else if (!isWakeupAfterFlashing()) {
+    // Case: when USB is first connected, do not wake up automatically
+    hwDeepSleepStart();
+    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    return;
   }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
