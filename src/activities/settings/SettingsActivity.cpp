@@ -21,20 +21,19 @@ namespace {
 constexpr int displaySettingsCount = 6;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
-    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
+    SettingInfo::Action("Sleep Screen"),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
     SettingInfo::Action("Select Sleep BMP"),
     SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}),
     SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"}),
-    SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
-                      {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"})};
+    SettingInfo::Action("Refresh Frequency")};
 
 constexpr int readerSettingsCount = 9;
 const SettingInfo readerSettings[readerSettingsCount] = {
     SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"}),
     SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
     SettingInfo::Enum("Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}),
-    SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
+    SettingInfo::Action("Screen Margin"),
     SettingInfo::Enum("Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
                       {"Justify", "Left", "Center", "Right"}),
     SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled),
@@ -54,8 +53,7 @@ const SettingInfo controlsSettings[controlsSettingsCount] = {
 
 constexpr int systemSettingsCount = 5;
 const SettingInfo systemSettings[systemSettingsCount] = {
-    SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
-                      {"1 min", "5 min", "10 min", "15 min", "30 min"}),
+    SettingInfo::Action("Time to Sleep"),
     SettingInfo::Action("KOReader Sync"), SettingInfo::Action("Calibre Settings"), SettingInfo::Action("Clear Cache"),
     SettingInfo::Action("Check for updates")};
 }  // namespace

@@ -1,34 +1,20 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
-
 #include <functional>
 #include <string>
 #include <vector>
 
-#include "../Activity.h"
+#include "../ListSelectionActivity.h"
 
-class SleepBmpSelectionActivity final : public Activity {
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
+class SleepBmpSelectionActivity final : public ListSelectionActivity {
   std::vector<std::string> files;  // Sorted list of valid BMP filenames ("Random" at index 0)
-  size_t selectorIndex = 0;
-  bool updateRequired = false;
-  unsigned long enterTime = 0;  // Time when activity was entered
-  const std::function<void()> onBack;
-
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render() const;
   void loadFiles();  // Load and sort all valid BMP files
+
+ protected:
+  void loadItems() override;  // Called by base class onEnter
 
  public:
   explicit SleepBmpSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                      const std::function<void()>& onBack)
-      : Activity("SleepBmpSelection", renderer, mappedInput), onBack(onBack) {}
-  void onEnter() override;
+                                     const std::function<void()>& onBack);
   void onExit() override;
-  void loop() override;
 };
 

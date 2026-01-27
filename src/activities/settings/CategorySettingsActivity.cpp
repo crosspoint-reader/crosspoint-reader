@@ -11,7 +11,11 @@
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "RefreshFrequencySelectionActivity.h"
+#include "ScreenMarginSelectionActivity.h"
 #include "SleepBmpSelectionActivity.h"
+#include "SleepScreenSelectionActivity.h"
+#include "SleepTimeoutSelectionActivity.h"
 #include "fontIds.h"
 
 void CategorySettingsActivity::taskTrampoline(void* param) {
@@ -104,16 +108,6 @@ void CategorySettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
-    
-    // If sleep screen changed away from CUSTOM, adjust selection if needed
-    if (setting.valuePtr == &CrossPointSettings::sleepScreen) {
-      const int visibleCount = getVisibleSettingsCount();
-      // If current selection is now hidden or out of bounds, adjust it
-      const int currentActual = mapVisibleIndexToActualIndex(selectedSettingIndex);
-      if (!shouldShowSetting(currentActual) || selectedSettingIndex >= visibleCount) {
-        selectedSettingIndex = visibleCount > 0 ? visibleCount - 1 : 0;
-      }
-    }
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
@@ -150,6 +144,38 @@ void CategorySettingsActivity::toggleCurrentSetting() {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Sleep Screen") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new SleepScreenSelectionActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Refresh Frequency") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new RefreshFrequencySelectionActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Screen Margin") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new ScreenMarginSelectionActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Time to Sleep") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new SleepTimeoutSelectionActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
@@ -280,6 +306,15 @@ void CategorySettingsActivity::render() const {
       valueText = settingsList[i].enumValues[value];
     } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
       valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
+    } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Sleep Screen") == 0) {
+      valueText = CrossPointSettings::getSleepScreenString(SETTINGS.sleepScreen);
+    } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Refresh Frequency") == 0) {
+      valueText = CrossPointSettings::getRefreshFrequencyString(SETTINGS.refreshFrequency);
+    } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Screen Margin") == 0) {
+      // Format margin value as "X px"
+      valueText = std::to_string(SETTINGS.screenMargin) + " px";
+    } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Time to Sleep") == 0) {
+      valueText = CrossPointSettings::getSleepTimeoutString(SETTINGS.sleepTimeout);
     } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Select Sleep BMP") == 0) {
       if (SETTINGS.selectedSleepBmp[0] != '\0') {
         valueText = SETTINGS.selectedSleepBmp;

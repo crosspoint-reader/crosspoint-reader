@@ -244,3 +244,45 @@ int CrossPointSettings::getReaderFontId() const {
       }
   }
 }
+
+const char* CrossPointSettings::getRefreshFrequencyString(uint8_t value) {
+  static const char* options[] = {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"};
+  static constexpr size_t count = sizeof(options) / sizeof(options[0]);
+  if (value < count) {
+    return options[value];
+  }
+  return options[REFRESH_15];  // Default
+}
+
+size_t CrossPointSettings::getRefreshFrequencyCount() {
+  static const char* options[] = {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"};
+  return sizeof(options) / sizeof(options[0]);
+}
+
+const char* CrossPointSettings::getSleepScreenString(uint8_t value) {
+  static const char* options[] = {"Dark", "Light", "Custom", "Cover", "None"};
+  static constexpr size_t count = sizeof(options) / sizeof(options[0]);
+  if (value < count) {
+    return options[value];
+  }
+  return options[DARK];  // Default
+}
+
+size_t CrossPointSettings::getSleepScreenCount() {
+  static const char* options[] = {"Dark", "Light", "Custom", "Cover", "None"};
+  return sizeof(options) / sizeof(options[0]);
+}
+
+const char* CrossPointSettings::getSleepTimeoutString(uint8_t value) {
+  static const char* options[] = {"1 min", "5 min", "10 min", "15 min", "30 min"};
+  static constexpr size_t count = sizeof(options) / sizeof(options[0]);
+  if (value < count) {
+    return options[value];
+  }
+  return options[SLEEP_10_MIN];  // Default
+}
+
+size_t CrossPointSettings::getSleepTimeoutCount() {
+  static const char* options[] = {"1 min", "5 min", "10 min", "15 min", "30 min"};
+  return sizeof(options) / sizeof(options[0]);
+}

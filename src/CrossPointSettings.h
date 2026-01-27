@@ -110,6 +110,14 @@ class CrossPointSettings {
   bool saveToFile() const;
   bool loadFromFile();
 
+  // Helper functions to get option strings from enum values
+  static const char* getRefreshFrequencyString(uint8_t value);
+  static size_t getRefreshFrequencyCount();
+  static const char* getSleepScreenString(uint8_t value);
+  static size_t getSleepScreenCount();
+  static const char* getSleepTimeoutString(uint8_t value);
+  static size_t getSleepTimeoutCount();
+
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
