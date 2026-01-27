@@ -298,15 +298,15 @@ class Badge : public UIElement {
 // Fully themable toggle with track and knob
 // Supports rounded or square appearance based on BorderRadius
 class Toggle : public UIElement {
-  Expression valueExpr;       // Boolean expression for on/off state
-  Expression onColorExpr;     // Track color when ON
-  Expression offColorExpr;    // Track color when OFF
-  Expression knobColorExpr;   // Knob color (optional, defaults to opposite of track)
+  Expression valueExpr;      // Boolean expression for on/off state
+  Expression onColorExpr;    // Track color when ON
+  Expression offColorExpr;   // Track color when OFF
+  Expression knobColorExpr;  // Knob color (optional, defaults to opposite of track)
   int trackWidth = 44;
   int trackHeight = 24;
   int knobSize = 20;
-  int borderRadius = 0;       // 0 = square, >0 = rounded (use trackHeight/2 for pill shape)
-  int knobRadius = 0;         // Knob corner radius
+  int borderRadius = 0;  // 0 = square, >0 = rounded (use trackHeight/2 for pill shape)
+  int knobRadius = 0;    // Knob corner radius
 
  public:
   Toggle(const std::string& id) : UIElement(id) {

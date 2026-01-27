@@ -56,9 +56,7 @@ UIElement* ThemeManager::createElement(const std::string& id, const std::string&
 }
 
 // Parse integer safely - returns 0 on error
-static int parseIntSafe(const std::string& val) {
-  return static_cast<int>(std::strtol(val.c_str(), nullptr, 10));
-}
+static int parseIntSafe(const std::string& val) { return static_cast<int>(std::strtol(val.c_str(), nullptr, 10)); }
 
 void ThemeManager::applyProperties(UIElement* elem, const std::map<std::string, std::string>& props) {
   const auto elemType = elem->getType();
