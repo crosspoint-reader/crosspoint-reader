@@ -59,8 +59,8 @@ void HomeActivity::onEnter() {
         lastBookAuthor = std::string(epub.getAuthor());
       }
       // Try to generate thumbnail image for Continue Reading card
-      if (epub.generateThumbBmp()) {
-        coverBmpPath = epub.getThumbBmpPath();
+      if (epub.generateCoverHomeBmp()) {
+        coverBmpPath = epub.getCoverHomeBmpPath();
         hasCoverImage = true;
       }
     } else if (StringUtils::checkFileExtension(lastBookTitle, ".xtch") ||
@@ -75,8 +75,8 @@ void HomeActivity::onEnter() {
           lastBookAuthor = std::string(xtc.getAuthor());
         }
         // Try to generate thumbnail image for Continue Reading card
-        if (xtc.generateThumbBmp()) {
-          coverBmpPath = xtc.getThumbBmpPath();
+        if (xtc.generateCoverHomeBmp()) {
+          coverBmpPath = xtc.getCoverHomeBmpPath();
           hasCoverImage = true;
         }
       }
@@ -223,10 +223,32 @@ void HomeActivity::render() {
   constexpr int bottomMargin = 60;
 
   // --- Top "book" card for the current title (selectorIndex == 0) ---
-  const int bookWidth = pageWidth / 2;
-  const int bookHeight = pageHeight / 2;
-  const int bookX = (pageWidth - bookWidth) / 2;
+  // Load cover image to get its dimensions
+  int coverWidth = 0;
+  int coverHeight = 0;
+  if (hasContinueReading && hasCoverImage && !coverBmpPath.empty()) {
+    FsFile coverFile;
+    if (SdMan.openFileForRead("HOME", coverBmpPath, coverFile)) {
+      Bitmap testBitmap(coverFile);
+      if (testBitmap.parseHeaders() == BmpReaderError::Ok) {
+        coverWidth = testBitmap.getWidth();
+        coverHeight = testBitmap.getHeight();
+      }
+      coverFile.close();
+    }
+  }
+
+  // Calculate card dimensions based on cover image
+  // Use 400px height as specified, with proportional width
+  constexpr int CARD_HEIGHT = 400;
+  const int cardWidth = (coverWidth > 0 && coverHeight > 0)
+                            ? (CARD_HEIGHT * coverWidth) / coverHeight
+                            : 240;  // Fallback to 240px width if no image (maintain aspect ratio)
+
+  const int bookX = (pageWidth - cardWidth) / 2;
   constexpr int bookY = 30;
+  const int bookWidth = cardWidth;
+  const int bookHeight = CARD_HEIGHT;
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
 
   // Bookmark dimensions (used in multiple places)
@@ -245,27 +267,9 @@ void HomeActivity::render() {
       if (SdMan.openFileForRead("HOME", coverBmpPath, file)) {
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          // Calculate position to center image within the book card
-          int coverX, coverY;
-
-          if (bitmap.getWidth() > bookWidth || bitmap.getHeight() > bookHeight) {
-            const float imgRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
-            const float boxRatio = static_cast<float>(bookWidth) / static_cast<float>(bookHeight);
-
-            if (imgRatio > boxRatio) {
-              coverX = bookX;
-              coverY = bookY + (bookHeight - static_cast<int>(bookWidth / imgRatio)) / 2;
-            } else {
-              coverX = bookX + (bookWidth - static_cast<int>(bookHeight * imgRatio)) / 2;
-              coverY = bookY;
-            }
-          } else {
-            coverX = bookX + (bookWidth - bitmap.getWidth()) / 2;
-            coverY = bookY + (bookHeight - bitmap.getHeight()) / 2;
-          }
-
-          // Draw the cover image centered within the book card
-          renderer.drawBitmap(bitmap, coverX, coverY, bookWidth, bookHeight);
+          // Since the book card already has the exact same size as the image,
+          // we can draw it at the same position with the same dimensions
+          renderer.drawBitmap(bitmap, bookX, bookY, bookWidth, bookHeight);
 
           // Draw border around the card
           renderer.drawRect(bookX, bookY, bookWidth, bookHeight);

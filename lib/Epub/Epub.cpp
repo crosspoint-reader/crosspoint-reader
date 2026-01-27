@@ -428,28 +428,28 @@ bool Epub::generateCoverBmp(bool cropped) const {
   return false;
 }
 
-std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Epub::getCoverHomeBmpPath() const { return cachePath + "/cover_home.bmp"; }
 
-bool Epub::generateThumbBmp() const {
+bool Epub::generateCoverHomeBmp() const {
   // Already generated, return true
-  if (SdMan.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getCoverHomeBmpPath().c_str())) {
     return true;
   }
 
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    Serial.printf("[%lu] [EBP] Cannot generate thumb BMP, cache not loaded\n", millis());
+    Serial.printf("[%lu] [EBP] Cannot generate home BMP, cache not loaded\n", millis());
     return false;
   }
 
   const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
   if (coverImageHref.empty()) {
-    Serial.printf("[%lu] [EBP] No known cover image for thumbnail\n", millis());
+    Serial.printf("[%lu] [EBP] No known cover image for home screen\n", millis());
     return false;
   }
 
   if (coverImageHref.substr(coverImageHref.length() - 4) == ".jpg" ||
       coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
-    Serial.printf("[%lu] [EBP] Generating thumb BMP from JPG cover image\n", millis());
+    Serial.printf("[%lu] [EBP] Generating home BMP from JPG cover image\n", millis());
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
     FsFile coverJpg;
@@ -463,30 +463,50 @@ bool Epub::generateThumbBmp() const {
       return false;
     }
 
-    FsFile thumbBmp;
-    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(), thumbBmp)) {
+    FsFile homeBmp;
+    if (!SdMan.openFileForWrite("EBP", getCoverHomeBmpPath(), homeBmp)) {
       coverJpg.close();
       return false;
     }
-    // Use smaller target size for Continue Reading card (half of screen: 240x400)
+
+    // For home screen, use 400px height with proportional width for optimal performance
     // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-    constexpr int THUMB_TARGET_WIDTH = 240;
-    constexpr int THUMB_TARGET_HEIGHT = 400;
-    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
-                                                                             THUMB_TARGET_HEIGHT);
+    constexpr int HOME_TARGET_HEIGHT = 400;
+
+    FsFile tempJpg;
+    if (!SdMan.openFileForRead("EBP", coverJpgTempPath, tempJpg)) {
+      coverJpg.close();
+      return false;
+    }
+
+    // First get JPEG dimensions to calculate proper width
+    int jpegWidth, jpegHeight;
+    if (!JpegToBmpConverter::getJpegDimensions(tempJpg, &jpegWidth, &jpegHeight)) {
+      Serial.printf("[%lu] [EBP] Failed to get JPEG dimensions for home cover\n", millis());
+      coverJpg.close();
+      tempJpg.close();
+      return false;
+    }
+    tempJpg.close();
+
+    // Calculate proportional width for 400px height
+    const int targetWidth = (400 * jpegWidth) / jpegHeight;
+
+    const bool success =
+        JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, homeBmp, targetWidth, HOME_TARGET_HEIGHT);
     coverJpg.close();
-    thumbBmp.close();
+    homeBmp.close();
     SdMan.remove(coverJpgTempPath.c_str());
 
     if (!success) {
-      Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
-      SdMan.remove(getThumbBmpPath().c_str());
+      Serial.printf("[%lu] [EBP] Failed to generate home BMP from JPG cover image\n", millis());
+      SdMan.remove(getCoverHomeBmpPath().c_str());
     }
-    Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
+    Serial.printf("[%lu] [EBP] Generated home BMP from JPG cover image, success: %s\n", millis(),
                   success ? "yes" : "no");
     return success;
   } else {
-    Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping thumbnail\n", millis());
+    Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping home screen\n", millis());
   }
 
   return false;

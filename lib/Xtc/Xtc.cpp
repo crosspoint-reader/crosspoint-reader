@@ -301,11 +301,11 @@ bool Xtc::generateCoverBmp() const {
   return true;
 }
 
-std::string Xtc::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Xtc::getCoverHomeBmpPath() const { return cachePath + "/cover_home.bmp"; }
 
-bool Xtc::generateThumbBmp() const {
+bool Xtc::generateCoverHomeBmp() const {
   // Already generated
-  if (SdMan.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getCoverHomeBmpPath().c_str())) {
     return true;
   }
 
@@ -332,43 +332,18 @@ bool Xtc::generateThumbBmp() const {
   // Get bit depth
   const uint8_t bitDepth = parser->getBitDepth();
 
-  // Calculate target dimensions for thumbnail (fit within 240x400 Continue Reading card)
-  constexpr int THUMB_TARGET_WIDTH = 240;
-  constexpr int THUMB_TARGET_HEIGHT = 400;
+  // For home screen, use 400px height with proportional width for optimal performance
+  // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
+  constexpr int HOME_TARGET_HEIGHT = 400;
 
-  // Calculate scale factor
-  float scaleX = static_cast<float>(THUMB_TARGET_WIDTH) / pageInfo.width;
-  float scaleY = static_cast<float>(THUMB_TARGET_HEIGHT) / pageInfo.height;
-  float scale = (scaleX < scaleY) ? scaleX : scaleY;
+  // Calculate proportional width for 400px height
+  const uint16_t targetWidth = static_cast<uint16_t>((HOME_TARGET_HEIGHT * pageInfo.width) / pageInfo.height);
 
-  // Only scale down, never up
-  if (scale >= 1.0f) {
-    // Page is already small enough, just use cover.bmp
-    // Copy cover.bmp to thumb.bmp
-    if (generateCoverBmp()) {
-      FsFile src, dst;
-      if (SdMan.openFileForRead("XTC", getCoverBmpPath(), src)) {
-        if (SdMan.openFileForWrite("XTC", getThumbBmpPath(), dst)) {
-          uint8_t buffer[512];
-          while (src.available()) {
-            size_t bytesRead = src.read(buffer, sizeof(buffer));
-            dst.write(buffer, bytesRead);
-          }
-          dst.close();
-        }
-        src.close();
-      }
-      Serial.printf("[%lu] [XTC] Copied cover to thumb (no scaling needed)\n", millis());
-      return SdMan.exists(getThumbBmpPath().c_str());
-    }
-    return false;
-  }
-
-  uint16_t thumbWidth = static_cast<uint16_t>(pageInfo.width * scale);
-  uint16_t thumbHeight = static_cast<uint16_t>(pageInfo.height * scale);
+  Serial.printf("[%lu] [XTC] Generating home BMP: %dx%d -> %dx%d\n", millis(), pageInfo.width, pageInfo.height,
+                targetWidth, HOME_TARGET_HEIGHT);
 
   Serial.printf("[%lu] [XTC] Generating thumb BMP: %dx%d -> %dx%d (scale: %.3f)\n", millis(), pageInfo.width,
-                pageInfo.height, thumbWidth, thumbHeight, scale);
+                pageInfo.height, targetWidth, HOME_TARGET_HEIGHT);
 
   // Allocate buffer for page data
   size_t bitmapSize;
@@ -393,15 +368,15 @@ bool Xtc::generateThumbBmp() const {
 
   // Create thumbnail BMP file - use 1-bit format for fast home screen rendering (no gray passes)
   FsFile thumbBmp;
-  if (!SdMan.openFileForWrite("XTC", getThumbBmpPath(), thumbBmp)) {
+  if (!SdMan.openFileForWrite("XTC", getCoverHomeBmpPath(), thumbBmp)) {
     Serial.printf("[%lu] [XTC] Failed to create thumb BMP file\n", millis());
     free(pageBuffer);
     return false;
   }
 
   // Write 1-bit BMP header for fast home screen rendering
-  const uint32_t rowSize = (thumbWidth + 31) / 32 * 4;  // 1 bit per pixel, aligned to 4 bytes
-  const uint32_t imageSize = rowSize * thumbHeight;
+  const uint32_t rowSize = (targetWidth + 31) / 32 * 4;  // 1 bit per pixel, aligned to 4 bytes
+  const uint32_t imageSize = rowSize * HOME_TARGET_HEIGHT;
   const uint32_t fileSize = 14 + 40 + 8 + imageSize;  // 8 bytes for 2-color palette
 
   // File header
@@ -416,9 +391,9 @@ bool Xtc::generateThumbBmp() const {
   // DIB header
   uint32_t dibHeaderSize = 40;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&dibHeaderSize), 4);
-  int32_t widthVal = thumbWidth;
+  int32_t widthVal = targetWidth;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&widthVal), 4);
-  int32_t heightVal = -static_cast<int32_t>(thumbHeight);  // Negative for top-down
+  int32_t heightVal = -static_cast<int32_t>(HOME_TARGET_HEIGHT);  // Negative for top-down
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&heightVal), 4);
   uint16_t planes = 1;
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&planes), 2);
@@ -451,8 +426,8 @@ bool Xtc::generateThumbBmp() const {
     return false;
   }
 
-  // Fixed-point scale factor (16.16)
-  uint32_t scaleInv_fp = static_cast<uint32_t>(65536.0f / scale);
+  // Fixed-point scale factor (16.16) - scale to fit 400px height
+  uint32_t scaleInv_fp = static_cast<uint32_t>(65536.0f * static_cast<float>(pageInfo.height) / HOME_TARGET_HEIGHT);
 
   // Pre-calculate plane info for 2-bit mode
   const size_t planeSize = (bitDepth == 2) ? ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) : 0;
@@ -461,7 +436,7 @@ bool Xtc::generateThumbBmp() const {
   const size_t colBytes = (bitDepth == 2) ? ((pageInfo.height + 7) / 8) : 0;
   const size_t srcRowBytes = (bitDepth == 1) ? ((pageInfo.width + 7) / 8) : 0;
 
-  for (uint16_t dstY = 0; dstY < thumbHeight; dstY++) {
+  for (uint16_t dstY = 0; dstY < HOME_TARGET_HEIGHT; dstY++) {
     memset(rowBuffer, 0xFF, rowSize);  // Start with all white (bit 1)
 
     // Calculate source Y range with bounds checking
@@ -472,7 +447,7 @@ bool Xtc::generateThumbBmp() const {
     if (srcYEnd <= srcYStart) srcYEnd = srcYStart + 1;
     if (srcYEnd > pageInfo.height) srcYEnd = pageInfo.height;
 
-    for (uint16_t dstX = 0; dstX < thumbWidth; dstX++) {
+    for (uint16_t dstX = 0; dstX < targetWidth; dstX++) {
       // Calculate source X range with bounds checking
       uint32_t srcXStart = (static_cast<uint32_t>(dstX) * scaleInv_fp) >> 16;
       uint32_t srcXEnd = (static_cast<uint32_t>(dstX + 1) * scaleInv_fp) >> 16;
@@ -557,8 +532,8 @@ bool Xtc::generateThumbBmp() const {
   thumbBmp.close();
   free(pageBuffer);
 
-  Serial.printf("[%lu] [XTC] Generated thumb BMP (%dx%d): %s\n", millis(), thumbWidth, thumbHeight,
-                getThumbBmpPath().c_str());
+  Serial.printf("[%lu] [XTC] Generated home BMP (%dx%d): %s\n", millis(), targetWidth, HOME_TARGET_HEIGHT,
+                getCoverHomeBmpPath().c_str());
   return true;
 }
 

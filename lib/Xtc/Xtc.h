@@ -63,9 +63,9 @@ class Xtc {
   // Cover image support (for sleep screen)
   std::string getCoverBmpPath() const;
   bool generateCoverBmp() const;
-  // Thumbnail support (for Continue Reading card)
-  std::string getThumbBmpPath() const;
-  bool generateThumbBmp() const;
+  // Home screen support (optimized 400px height covers for Continue Reading card)
+  std::string getCoverHomeBmpPath() const;
+  bool generateCoverHomeBmp() const;
 
   // Page access
   uint32_t getPageCount() const;

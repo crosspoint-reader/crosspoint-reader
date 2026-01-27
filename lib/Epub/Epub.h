@@ -47,8 +47,9 @@ class Epub {
   const std::string& getLanguage() const;
   std::string getCoverBmpPath(bool cropped = false) const;
   bool generateCoverBmp(bool cropped = false) const;
-  std::string getThumbBmpPath() const;
-  bool generateThumbBmp() const;
+  // Home screen support (optimized 400px height covers for Continue Reading card)
+  std::string getCoverHomeBmpPath() const;
+  bool generateCoverHomeBmp() const;
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize) const;
