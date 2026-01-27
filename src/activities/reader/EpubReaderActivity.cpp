@@ -8,7 +8,6 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
-#include "EpubReaderMenuActivity.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "ScreenComponents.h"
@@ -132,88 +131,8 @@ void EpubReaderActivity::loop() {
     const int totalPages = section ? section->pageCount : 0;
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
-        this->renderer, this->mappedInput,
-        [this]() {  // On Back
-          exitActivity();
-          updateRequired = true;
-        },
-        [this](EpubReaderMenuActivity::MenuAction action) {  // On Select
-          switch (action) {
-            case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
-              // Calculate values BEFORE we start destroying things
-              const int currentP = section ? section->currentPage : 0;
-              const int totalP = section ? section->pageCount : 0;
-              const int spineIdx = currentSpineIndex;
-              const std::string path = epub->getPath();
-
-              xSemaphoreTake(renderingMutex, portMAX_DELAY);
-
-              // 1. Close the menu
-              exitActivity();
-
-              // 2. Open the Chapter Selector
-              enterNewActivity(new EpubReaderChapterSelectionActivity(
-                  this->renderer, this->mappedInput, epub, path, spineIdx, currentP, totalP,
-                  [this] {
-                    exitActivity();
-                    updateRequired = true;
-                  },
-                  [this](const int newSpineIndex) {
-                    if (currentSpineIndex != newSpineIndex) {
-                      currentSpineIndex = newSpineIndex;
-                      nextPageNumber = 0;
-                      section.reset();
-                    }
-                    exitActivity();
-                    updateRequired = true;
-                  },
-                  [this](const int newSpineIndex, const int newPage) {
-                    if (currentSpineIndex != newSpineIndex || (section && section->currentPage != newPage)) {
-                      currentSpineIndex = newSpineIndex;
-                      nextPageNumber = newPage;
-                      section.reset();
-                    }
-                    exitActivity();
-                    updateRequired = true;
-                  }));
-
-              xSemaphoreGive(renderingMutex);
-              break;
-              break;
-            }
-            case EpubReaderMenuActivity::MenuAction::GO_HOME: {
-              // 2. Trigger the reader's "Go Home" callback
-              if (onGoHome) {
-                onGoHome();
-              }
-
-              break;
-            }
-            case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
-              xSemaphoreTake(renderingMutex, portMAX_DELAY);
-              if (epub) {
-                // 2. BACKUP: Read current progress
-                // We use the current variables that track our position
-                uint16_t backupSpine = currentSpineIndex;
-                uint16_t backupPage = section->currentPage;
-
-                section.reset();
-                // 3. WIPE: Clear the cache directory
-                epub->clearCache();
-
-                // 4. RESTORE: Re-setup the directory and rewrite the progress file
-                epub->setupCacheDir();
-
-                saveProgress(backupSpine, backupPage);
-              }
-              exitActivity();
-              updateRequired = true;
-              xSemaphoreGive(renderingMutex);
-              if (onGoHome) onGoHome();
-              break;
-            }
-          }
-        }));
+        this->renderer, this->mappedInput, [this]() { onReaderMenuBack(); },
+        [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
 
@@ -298,6 +217,88 @@ void EpubReaderActivity::loop() {
       xSemaphoreGive(renderingMutex);
     }
     updateRequired = true;
+  }
+}
+
+void EpubReaderActivity::onReaderMenuBack() {
+  exitActivity();
+  updateRequired = true;
+}
+
+void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
+  switch (action) {
+    case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
+      // Calculate values BEFORE we start destroying things
+      const int currentP = section ? section->currentPage : 0;
+      const int totalP = section ? section->pageCount : 0;
+      const int spineIdx = currentSpineIndex;
+      const std::string path = epub->getPath();
+
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+
+      // 1. Close the menu
+      exitActivity();
+
+      // 2. Open the Chapter Selector
+      enterNewActivity(new EpubReaderChapterSelectionActivity(
+          this->renderer, this->mappedInput, epub, path, spineIdx, currentP, totalP,
+          [this] {
+            exitActivity();
+            updateRequired = true;
+          },
+          [this](const int newSpineIndex) {
+            if (currentSpineIndex != newSpineIndex) {
+              currentSpineIndex = newSpineIndex;
+              nextPageNumber = 0;
+              section.reset();
+            }
+            exitActivity();
+            updateRequired = true;
+          },
+          [this](const int newSpineIndex, const int newPage) {
+            if (currentSpineIndex != newSpineIndex || (section && section->currentPage != newPage)) {
+              currentSpineIndex = newSpineIndex;
+              nextPageNumber = newPage;
+              section.reset();
+            }
+            exitActivity();
+            updateRequired = true;
+          }));
+
+      xSemaphoreGive(renderingMutex);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::GO_HOME: {
+      // 2. Trigger the reader's "Go Home" callback
+      if (onGoHome) {
+        onGoHome();
+      }
+
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      if (epub) {
+        // 2. BACKUP: Read current progress
+        // We use the current variables that track our position
+        uint16_t backupSpine = currentSpineIndex;
+        uint16_t backupPage = section->currentPage;
+
+        section.reset();
+        // 3. WIPE: Clear the cache directory
+        epub->clearCache();
+
+        // 4. RESTORE: Re-setup the directory and rewrite the progress file
+        epub->setupCacheDir();
+
+        saveProgress(backupSpine, backupPage);
+      }
+      exitActivity();
+      updateRequired = true;
+      xSemaphoreGive(renderingMutex);
+      if (onGoHome) onGoHome();
+      break;
+    }
   }
 }
 
