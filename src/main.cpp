@@ -15,6 +15,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/bluetooth/BluetoothActivity.h"
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
@@ -25,6 +26,7 @@
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 HalDisplay display;
 HalGPIO gpio;
@@ -216,6 +218,16 @@ void onGoToFileTransfer() {
   enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToBluetooth() {
+  exitActivity();
+  enterNewActivity(new BluetoothActivity(renderer, mappedInputManager, onGoHome, [](const std::string& filepath) {
+    Serial.printf("[%lu] [   ] File received over Bluetooth: %s\n", millis(), filepath.c_str());
+    if (StringUtils::readableFileExtension(filepath)) {
+      onGoToReader(filepath, MyLibraryActivity::Tab::Recent);
+    }
+  }));
+}
+
 void onGoToSettings() {
   exitActivity();
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
@@ -239,7 +251,7 @@ void onGoToBrowser() {
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToMyLibrary, onGoToSettings,
-                                    onGoToFileTransfer, onGoToBrowser));
+                                    onGoToFileTransfer, onGoToBluetooth, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {
