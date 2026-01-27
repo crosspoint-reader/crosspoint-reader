@@ -47,12 +47,7 @@ class HalGPIO {
   // Check if USB is connected
   bool isUsbConnected() const;
 
-  enum class WakeupReason {
-    PowerButton,
-    AfterFlash,
-    AfterUSBPower,
-    Other
-  };
+  enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
 
   WakeupReason getWakeupReason() const;
 

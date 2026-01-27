@@ -316,47 +316,6 @@ void setup() {
   Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
 
   setupDisplayAndFonts();
-
-  // log reset reason and wakeup cause
-  // log enum names as strings for easier reading in logs
-  // Convert enum values to readable strings for logs
-  auto resetReasonStr = [resetReason]() {
-    switch (resetReason) {
-      case ESP_RST_UNKNOWN: return "UNKNOWN";
-      case ESP_RST_POWERON: return "POWERON";
-      case ESP_RST_EXT:     return "EXT";
-      case ESP_RST_SW:      return "SW";
-      case ESP_RST_PANIC:   return "PANIC";
-      case ESP_RST_INT_WDT: return "INT_WDT";
-      case ESP_RST_TASK_WDT:return "TASK_WDT";
-      case ESP_RST_WDT:     return "WDT";
-      case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
-      case ESP_RST_BROWNOUT:  return "BROWNOUT";
-      case ESP_RST_SDIO:      return "SDIO";
-      default: return "OTHER";
-    }
-  }();
-
-  auto wakeupCauseStr = [wakeupCause]() {
-    switch (wakeupCause) {
-      case ESP_SLEEP_WAKEUP_UNDEFINED: return "UNDEFINED";
-      case ESP_SLEEP_WAKEUP_EXT0:      return "EXT0";
-      case ESP_SLEEP_WAKEUP_EXT1:      return "EXT1";
-      case ESP_SLEEP_WAKEUP_TIMER:     return "TIMER";
-      case ESP_SLEEP_WAKEUP_TOUCHPAD:  return "TOUCHPAD";
-      case ESP_SLEEP_WAKEUP_ULP:       return "ULP";
-      case ESP_SLEEP_WAKEUP_GPIO:      return "GPIO";
-      case ESP_SLEEP_WAKEUP_UART:      return "UART";
-      default: return "OTHER";
-    }
-  }();
-
-  const std::string resetInfo =
-      std::string("Reset: ") + resetReasonStr + " Wakeup: " + wakeupCauseStr + " USB: " + (usbConnected ? "Yes" : "No");
-  enterNewActivity(
-      new FullScreenMessageActivity(renderer, mappedInputManager, resetInfo, EpdFontFamily::REGULAR));
-  delay(10000);
-
   exitActivity();
   enterNewActivity(new BootActivity(renderer, mappedInputManager));
 
