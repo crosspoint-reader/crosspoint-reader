@@ -32,7 +32,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
     std::string label;
   };
 
-  const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, "Select Chapter"},
+  const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, "Go to Chapter"},
                                            {MenuAction::GO_HOME, "Go Home"},
                                            {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
 
