@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 class CrossPointSettings;
 
@@ -44,6 +45,7 @@ struct SettingInfo {
 class CategorySettingsActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
   int selectedSettingIndex = 0;
   const char* categoryName;
