@@ -15,6 +15,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "ThemeManager.h"
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
@@ -153,12 +154,14 @@ void enterNewActivity(Activity* activity) {
 
 // Verify long press on wake-up from deep sleep
 void verifyWakeupLongPress() {
-  // Give the user up to 1000ms to start holding the power button, and must hold for SETTINGS.getPowerButtonDuration()
+  // Give the user up to 1000ms to start holding the power button, and must hold
+  // for SETTINGS.getPowerButtonDuration()
   const auto start = millis();
   bool abort = false;
-  // Subtract the current time, because inputManager only starts counting the HeldTime from the first update()
-  // This way, we remove the time we already took to reach here from the duration,
-  // assuming the button was held until now from millis()==0 (i.e. device start time).
+  // Subtract the current time, because inputManager only starts counting the
+  // HeldTime from the first update() This way, we remove the time we already
+  // took to reach here from the duration, assuming the button was held until
+  // now from millis()==0 (i.e. device start time).
   const uint16_t calibration = start;
   const uint16_t calibratedPressDuration =
       (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
@@ -166,7 +169,8 @@ void verifyWakeupLongPress() {
   inputManager.update();
   // Verify the user has actually pressed
   while (!inputManager.isPressed(InputManager::BTN_POWER) && millis() - start < 1000) {
-    delay(10);  // only wait 10ms each iteration to not delay too much in case of short configured duration.
+    delay(10);  // only wait 10ms each iteration to not delay too much in case of
+                // short configured duration.
     inputManager.update();
   }
 
@@ -206,7 +210,8 @@ void enterDeepSleep() {
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
+  // Ensure that the power button has been released to avoid immediately turning
+  // back on if you're holding it
   waitForPowerRelease();
   // Enter Deep Sleep
   esp_deep_sleep_start();
@@ -288,6 +293,8 @@ bool isWakeupAfterFlashing() {
   return isUsbConnected() && (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_UNKNOWN);
 }
 
+bool isSoftwareRestart() { return esp_reset_reason() == ESP_RST_SW; }
+
 void setup() {
   t1 = millis();
 
@@ -322,15 +329,22 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
-  if (!isWakeupAfterFlashing()) {
-    // For normal wakeups (not immediately after flashing), verify long press
+  if (!isWakeupAfterFlashing() && !isSoftwareRestart()) {
+    // For normal wakeups (not immediately after flashing or software restart), verify long press
     verifyWakeupLongPress();
   }
 
-  // First serial output only here to avoid timing inconsistencies for power button press duration verification
+  // First serial output only here to avoid timing inconsistencies for power
+  // button press duration verification
   Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
 
   setupDisplayAndFonts();
+
+  ThemeEngine::ThemeManager::get().begin();
+  ThemeEngine::ThemeManager::get().registerFont("UI_12", UI_12_FONT_ID);
+  ThemeEngine::ThemeManager::get().registerFont("UI_10", UI_10_FONT_ID);
+  ThemeEngine::ThemeManager::get().registerFont("Small", SMALL_FONT_ID);
+  ThemeEngine::ThemeManager::get().loadTheme(SETTINGS.themeName);
 
   exitActivity();
   enterNewActivity(new BootActivity(renderer, mappedInputManager));
@@ -341,7 +355,8 @@ void setup() {
   if (APP_STATE.openEpubPath.empty()) {
     onGoHome();
   } else {
-    // Clear app state to avoid getting into a boot loop if the epub doesn't load
+    // Clear app state to avoid getting into a boot loop if the epub doesn't
+    // load
     const auto path = APP_STATE.openEpubPath;
     APP_STATE.openEpubPath = "";
     APP_STATE.lastSleepImage = 0;
@@ -366,7 +381,8 @@ void loop() {
     lastMemPrint = millis();
   }
 
-  // Check for any user activity (button press or release) or active background work
+  // Check for any user activity (button press or release) or active background
+  // work
   static unsigned long lastActivityTime = millis();
   if (inputManager.wasAnyPressed() || inputManager.wasAnyReleased() ||
       (currentActivity && currentActivity->preventAutoSleep())) {
@@ -404,8 +420,8 @@ void loop() {
   }
 
   // Add delay at the end of the loop to prevent tight spinning
-  // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
-  // Otherwise, use longer delay to save power
+  // When an activity requests skip loop delay (e.g., webserver running), use
+  // yield() for faster response Otherwise, use longer delay to save power
   if (currentActivity && currentActivity->skipLoopDelay()) {
     yield();  // Give FreeRTOS a chance to run tasks, but return immediately
   } else {

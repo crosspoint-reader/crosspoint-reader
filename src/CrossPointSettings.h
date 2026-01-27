@@ -75,7 +75,8 @@ class CrossPointSettings {
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // EPUB reading orientation settings
-  // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
+  // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 =
+  // landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
   // Button layouts
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
@@ -99,6 +100,7 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
+  char themeName[64] = "Default";
 
   ~CrossPointSettings() = default;
 
