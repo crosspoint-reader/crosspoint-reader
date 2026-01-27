@@ -85,6 +85,8 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
       return {previous, next, back, confirm};
     case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
       return {previous, back, confirm, next};
+    case CrossPointSettings::BACK_CONFIRM_RIGHT_LEFT:
+      return {back, confirm, next, previous};
     case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
     default:
       return {back, confirm, previous, next};
