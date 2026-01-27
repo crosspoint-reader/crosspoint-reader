@@ -6,10 +6,12 @@
 #include <functional>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 class HomeActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   bool updateRequired = false;
   bool hasContinueReading = false;
