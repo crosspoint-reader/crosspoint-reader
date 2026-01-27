@@ -208,6 +208,10 @@ bool Epub::parseTocNavFile() const {
 bool Epub::load(const bool buildIfMissing) {
   Serial.printf("[%lu] [EBP] Loading ePub: %s\n", millis(), filepath.c_str());
 
+  if (!footnotePages) {
+    footnotePages = new std::unordered_set<std::string>();
+  }
+
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
 
@@ -528,7 +532,8 @@ int Epub::getSpineItemsCount() const {
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     return 0;
   }
-  return bookMetadataCache->getSpineCount();
+  int virtualCount = virtualSpineItems ? virtualSpineItems->size() : 0;
+  return bookMetadataCache->getSpineCount() + virtualCount;
 }
 
 size_t Epub::getCumulativeSpineItemSize(const int spineIndex) const { return getSpineItem(spineIndex).cumulativeSize; }
@@ -537,6 +542,15 @@ BookMetadataCache::SpineEntry Epub::getSpineItem(const int spineIndex) const {
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     Serial.printf("[%lu] [EBP] getSpineItem called but cache not loaded\n", millis());
     return {};
+  }
+
+  // Virtual spine item
+  if (isVirtualSpineItem(spineIndex)) {
+    int virtualIndex = spineIndex - bookMetadataCache->getSpineCount();
+    if (virtualSpineItems && virtualIndex >= 0 && virtualIndex < static_cast<int>(virtualSpineItems->size())) {
+      // Create a dummy spine entry for virtual item
+      return BookMetadataCache::SpineEntry((*virtualSpineItems)[virtualIndex], 0, -1);
+    }
   }
 
   if (spineIndex < 0 || spineIndex >= bookMetadataCache->getSpineCount()) {
@@ -626,6 +640,83 @@ int Epub::getSpineIndexForTextReference() const {
   // This should not happen, as we checked for empty textReferenceHref earlier
   Serial.printf("[%lu] [EBP] Section not found for text reference\n", millis());
   return 0;
+}
+
+void Epub::markAsFootnotePage(const std::string& href) {
+  // Lazy initialization
+  if (!footnotePages) {
+    footnotePages = new std::unordered_set<std::string>();
+  }
+
+  // Extract filename from href (remove #anchor if present)
+  size_t hashPos = href.find('#');
+  std::string filename = (hashPos != std::string::npos) ? href.substr(0, hashPos) : href;
+
+  // Extract just the filename without path
+  size_t lastSlash = filename.find_last_of('/');
+  if (lastSlash != std::string::npos) {
+    filename = filename.substr(lastSlash + 1);
+  }
+
+  footnotePages->insert(filename);
+  Serial.printf("[%lu] [EPUB] Marked as footnote page: %s\n", millis(), filename.c_str());
+}
+
+bool Epub::isFootnotePage(const std::string& filename) const {
+  if (!footnotePages) return false;
+  return footnotePages->find(filename) != footnotePages->end();
+}
+
+bool Epub::shouldHideFromToc(int spineIndex) const {
+  // Always hide virtual spine items
+  if (isVirtualSpineItem(spineIndex)) {
+    return true;
+  }
+
+  BookMetadataCache::SpineEntry entry = getSpineItem(spineIndex);
+  const std::string& spineItem = entry.href;
+
+  // Extract filename from spine item
+  size_t lastSlash = spineItem.find_last_of('/');
+  std::string filename = (lastSlash != std::string::npos) ? spineItem.substr(lastSlash + 1) : spineItem;
+
+  return isFootnotePage(filename);
+}
+
+// Virtual spine items
+int Epub::addVirtualSpineItem(const std::string& path) {
+  // Lazy initialization
+  if (!virtualSpineItems) {
+    virtualSpineItems = new std::vector<std::string>();
+  }
+
+  virtualSpineItems->push_back(path);
+  // Fix: use cache spine count instead of spine.size()
+  int currentSpineSize = bookMetadataCache ? bookMetadataCache->getSpineCount() : 0;
+  int newIndex = currentSpineSize + virtualSpineItems->size() - 1;
+  Serial.printf("[%lu] [EPUB] Added virtual spine item: %s (index %d)\n", millis(), path.c_str(), newIndex);
+  return newIndex;
+}
+
+bool Epub::isVirtualSpineItem(int spineIndex) const {
+  int currentSpineSize = bookMetadataCache ? bookMetadataCache->getSpineCount() : 0;
+  return spineIndex >= currentSpineSize;
+}
+
+int Epub::findVirtualSpineIndex(const std::string& filename) const {
+  if (!virtualSpineItems) return -1;
+  int currentSpineSize = bookMetadataCache ? bookMetadataCache->getSpineCount() : 0;
+
+  for (size_t i = 0; i < virtualSpineItems->size(); i++) {
+    std::string virtualPath = (*virtualSpineItems)[i];
+    size_t lastSlash = virtualPath.find_last_of('/');
+    std::string virtualFilename = (lastSlash != std::string::npos) ? virtualPath.substr(lastSlash + 1) : virtualPath;
+
+    if (virtualFilename == filename) {
+      return currentSpineSize + i;
+    }
+  }
+  return -1;
 }
 
 // Calculate progress in book (returns 0.0-1.0)
