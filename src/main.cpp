@@ -151,8 +151,15 @@ void enterNewActivity(Activity* activity) {
   currentActivity->onEnter();
 }
 
-// Verify long press on wake-up from deep sleep
-void verifyWakeupLongPress() {
+// Verify power button press duration on wake-up from deep sleep
+// Pre-condition: isWakeupByPowerButton() == true
+void verifyPowerButtonDuration() {
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
+    // Fast path for short press
+    // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
+    return;
+  }
+
   // Give the user up to 1000ms to start holding the power button, and must hold for SETTINGS.getPowerButtonDuration()
   const auto start = millis();
   bool abort = false;
@@ -165,6 +172,7 @@ void verifyWakeupLongPress() {
 
   inputManager.update();
   // Verify the user has actually pressed
+  // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
   while (!inputManager.isPressed(InputManager::BTN_POWER) && millis() - start < 1000) {
     delay(10);  // only wait 10ms each iteration to not delay too much in case of short configured duration.
     inputManager.update();
@@ -281,11 +289,14 @@ bool isUsbConnected() {
   return digitalRead(UART0_RXD) == HIGH;
 }
 
-bool isWakeupAfterFlashing() {
+bool isWakeupByPowerButton() {
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
-
-  return isUsbConnected() && (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_UNKNOWN);
+  if (isUsbConnected()) {
+    return wakeupCause == ESP_SLEEP_WAKEUP_GPIO;
+  } else {
+    return (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_POWERON);
+  }
 }
 
 void setup() {
@@ -322,9 +333,10 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
-  if (!isWakeupAfterFlashing()) {
-    // For normal wakeups (not immediately after flashing), verify long press
-    verifyWakeupLongPress();
+  if (isWakeupByPowerButton()) {
+    // For normal wakeups, verify power button press duration
+    Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
+    verifyPowerButtonDuration();
   }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification

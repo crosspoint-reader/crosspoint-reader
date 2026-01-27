@@ -120,7 +120,8 @@ void MyLibraryActivity::loadFiles() {
     } else {
       auto filename = std::string(name);
       if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
-          StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt")) {
+          StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
+          StringUtils::checkFileExtension(filename, ".md")) {
         files.emplace_back(filename);
       }
     }

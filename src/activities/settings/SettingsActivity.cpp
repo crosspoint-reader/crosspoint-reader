@@ -11,12 +11,15 @@
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
 namespace {
-constexpr int displaySettingsCount = 5;
+constexpr int displaySettingsCount = 6;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
-    SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}),
+    SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
+                      {"None", "Contrast", "Inverted"}),
+    SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar,
+                      {"None", "No Progress", "Full w/ Percentage", "Full w/ Progress Bar", "Progress Bar"}),
     SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"})};
@@ -37,8 +40,9 @@ const SettingInfo readerSettings[readerSettingsCount] = {
 
 constexpr int controlsSettingsCount = 4;
 const SettingInfo controlsSettings[controlsSettingsCount] = {
-    SettingInfo::Enum("Front Button Layout", &CrossPointSettings::frontButtonLayout,
-                      {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght"}),
+    SettingInfo::Enum(
+        "Front Button Layout", &CrossPointSettings::frontButtonLayout,
+        {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght", "Bck, Cnfrm, Rght, Lft"}),
     SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
                       {"Prev, Next", "Next, Prev"}),
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
@@ -48,7 +52,7 @@ constexpr int systemSettingsCount = 5;
 const SettingInfo systemSettings[systemSettingsCount] = {
     SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
-    SettingInfo::Action("KOReader Sync"), SettingInfo::Action("Calibre Settings"), SettingInfo::Action("Clear Cache"),
+    SettingInfo::Action("KOReader Sync"), SettingInfo::Action("OPDS Browser"), SettingInfo::Action("Clear Cache"),
     SettingInfo::Action("Check for updates")};
 }  // namespace
 

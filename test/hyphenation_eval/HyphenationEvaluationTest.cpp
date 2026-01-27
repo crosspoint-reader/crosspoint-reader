@@ -42,6 +42,7 @@ const std::vector<LanguageConfig> kSupportedLanguages = {
     {"french", "test/hyphenation_eval/resources/french_hyphenation_tests.txt", "fr"},
     {"german", "test/hyphenation_eval/resources/german_hyphenation_tests.txt", "de"},
     {"russian", "test/hyphenation_eval/resources/russian_hyphenation_tests.txt", "ru"},
+    {"spanish", "test/hyphenation_eval/resources/spanish_hyphenation_tests.txt", "es"},
 };
 
 std::vector<size_t> expectedPositionsFromAnnotatedWord(const std::string& annotated) {

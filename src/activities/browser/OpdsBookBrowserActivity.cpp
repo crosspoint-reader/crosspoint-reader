@@ -18,7 +18,6 @@
 namespace {
 constexpr int PAGE_ITEMS = 23;
 constexpr int SKIP_PAGE_MS = 700;
-constexpr char OPDS_ROOT_PATH[] = "opds";  // No leading slash - relative to server URL
 }  // namespace
 
 void OpdsBookBrowserActivity::taskTrampoline(void* param) {
@@ -33,7 +32,7 @@ void OpdsBookBrowserActivity::onEnter() {
   state = BrowserState::CHECK_WIFI;
   entries.clear();
   navigationHistory.clear();
-  currentPath = OPDS_ROOT_PATH;
+  currentPath = "";  // Root path - user provides full URL in settings
   selectorIndex = 0;
   errorMessage.clear();
   statusMessage = "Checking WiFi...";
@@ -172,7 +171,7 @@ void OpdsBookBrowserActivity::render() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Calibre Library", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "OPDS Browser", true, EpdFontFamily::BOLD);
 
   if (state == BrowserState::CHECK_WIFI) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());

@@ -74,6 +74,17 @@ void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const Popu
   renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
 }
 
+void ScreenComponents::drawBookProgressBar(const GfxRenderer& renderer, const size_t bookProgress) {
+  int vieweableMarginTop, vieweableMarginRight, vieweableMarginBottom, vieweableMarginLeft;
+  renderer.getOrientedViewableTRBL(&vieweableMarginTop, &vieweableMarginRight, &vieweableMarginBottom,
+                                   &vieweableMarginLeft);
+
+  const int progressBarMaxWidth = renderer.getScreenWidth() - vieweableMarginLeft - vieweableMarginRight;
+  const int progressBarY = renderer.getScreenHeight() - vieweableMarginBottom - BOOK_PROGRESS_BAR_HEIGHT;
+  const int barWidth = progressBarMaxWidth * bookProgress / 100;
+  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BOOK_PROGRESS_BAR_HEIGHT, true);
+}
+
 int ScreenComponents::drawTabBar(const GfxRenderer& renderer, const int y, const std::vector<TabInfo>& tabs) {
   constexpr int tabPadding = 20;      // Horizontal padding between tabs
   constexpr int leftMargin = 20;      // Left margin for first tab
