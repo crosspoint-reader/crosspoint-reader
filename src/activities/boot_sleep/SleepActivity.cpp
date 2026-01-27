@@ -10,11 +10,20 @@
 #include "CrossPointState.h"
 #include "fontIds.h"
 #include "images/CrossLarge.h"
+#include "images/MoonIcon.h"
 #include "util/StringUtils.h"
 
 void SleepActivity::onEnter() {
+  const bool SHOW_SLEEP_SCREEN =
+      SETTINGS.showSleepScreen == CrossPointSettings::SHOW_SLEEP_SCREEN::ALWAYS ||
+      (!fromTimeout && SETTINGS.showSleepScreen == CrossPointSettings::SHOW_SLEEP_SCREEN::EXCEPT_TIMEOUT);
+
   Activity::onEnter();
-  renderPopup("Entering Sleep...");
+  if (SHOW_SLEEP_SCREEN) {
+    renderPopup("Entering Sleep...");
+  } else {
+    return renderLastScreenSleepScreen();
+  }
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();
@@ -267,6 +276,13 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   renderDefaultSleepScreen();
+}
+
+void SleepActivity::renderLastScreenSleepScreen() const {
+  const auto pageHeight = renderer.getScreenHeight();
+
+  renderer.drawImage(MoonIcon, 48, pageHeight - 48, 48, 48);
+  renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderBlankSleepScreen() const {
