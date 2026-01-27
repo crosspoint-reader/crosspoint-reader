@@ -3,6 +3,7 @@
  * name: notosans_12_bold
  * size: 12
  * mode: 2-bit
+ * Command used: fontconvert.py notosans_12_bold 12 ../builtinFonts/source/NotoSans/NotoSans-Bold.ttf --2bit
  */
 #pragma once
 #include "EpdFontData.h"

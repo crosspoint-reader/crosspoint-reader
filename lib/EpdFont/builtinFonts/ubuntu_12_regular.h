@@ -3,6 +3,7 @@
  * name: ubuntu_12_regular
  * size: 12
  * mode: 1-bit
+ * Command used: fontconvert.py ubuntu_12_regular 12 ../builtinFonts/source/Ubuntu/Ubuntu-Regular.ttf
  */
 #pragma once
 #include "EpdFontData.h"

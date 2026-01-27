@@ -25,5 +25,6 @@ class MappedInputManager {
 
  private:
   InputManager& inputManager;
-  decltype(InputManager::BTN_BACK) mapButton(Button button) const;
+
+  bool mapButton(Button button, bool (InputManager::*fn)(uint8_t) const) const;
 };
