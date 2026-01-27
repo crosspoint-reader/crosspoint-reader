@@ -553,7 +553,7 @@ void HomeActivity::render() {
   const uint16_t percentage = battery.readPercentage();
   const auto percentageText = showBatteryPercentage ? std::to_string(percentage) + "%" : "";
   const auto batteryX = pageWidth - 25 - renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-  ScreenComponents::drawBattery(renderer, batteryX, 10, showBatteryPercentage);
+  ScreenComponents::drawBattery(renderer, batteryX, 10, showBatteryPercentage, isCharging());
 
   renderer.displayBuffer();
 }

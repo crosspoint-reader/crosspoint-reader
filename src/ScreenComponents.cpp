@@ -9,7 +9,7 @@
 #include "fontIds.h"
 
 void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, const int top,
-                                   const bool showPercentage) {
+                                   const bool showPercentage, const bool charging) {
   // Left aligned battery icon and percentage
   const uint16_t percentage = battery.readPercentage();
   const auto percentageText = showPercentage ? std::to_string(percentage) + "%" : "";
@@ -34,12 +34,38 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   renderer.drawLine(x + batteryWidth - 0, y + 4, x + batteryWidth - 0, y + batteryHeight - 5);
 
   // The +1 is to round up, so that we always fill at least one pixel
-  int filledWidth = percentage * (batteryWidth - 5) / 100 + 1;
-  if (filledWidth > batteryWidth - 5) {
-    filledWidth = batteryWidth - 5;  // Ensure we don't overflow
+  constexpr int maxFillWidth = batteryWidth - 5;
+  int filledWidth = percentage * maxFillWidth / 100 + 1;
+  if (filledWidth > maxFillWidth) {
+    filledWidth = maxFillWidth;
+  }
+
+  // When charging, ensure minimum fill so lightning bolt is fully visible
+  constexpr int minFillForBolt = 8;  // Bolt extends 6px wide, needs padding
+  if (charging && filledWidth < minFillForBolt) {
+    filledWidth = minFillForBolt;
   }
 
   renderer.fillRect(x + 2, y + 2, filledWidth, batteryHeight - 4);
+
+  // Draw lightning bolt when charging (white/inverted on black fill for visibility)
+  if (charging) {
+    // Lightning bolt: 6px wide, 8px tall, centered in battery
+    const int boltX = x + 4;
+    const int boltY = y + 2;
+
+    // Draw bolt in white (state=false) for visibility on black fill
+    // Upper diagonal pointing right
+    renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, false);
+    renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, false);
+    renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, false);  // Wide middle
+    renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, false);
+    // Lower diagonal pointing left
+    renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, false);
+    renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, false);  // Wide middle
+    renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, false);
+    renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
+  }
 }
 
 int ScreenComponents::drawTabBar(const GfxRenderer& renderer, const int y, const std::vector<TabInfo>& tabs) {
