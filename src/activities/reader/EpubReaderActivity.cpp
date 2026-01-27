@@ -15,7 +15,6 @@
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
-constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 19;
 }  // namespace
@@ -163,6 +162,28 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Detect long-press and schedule skip immediately
+  const bool prevPressed = mappedInput.isPressed(MappedInputManager::Button::PageBack) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Left);
+  const bool nextPressed = mappedInput.isPressed(MappedInputManager::Button::PageForward) ||
+                           (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                            mappedInput.isPressed(MappedInputManager::Button::Power)) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Right);
+
+  if (SETTINGS.longPressChapterSkip && (prevPressed || nextPressed) &&
+      mappedInput.getHeldTime() >= SETTINGS.getLongPressDurationMs() && !delayedSkipPending &&
+      !awaitingReleaseAfterSkip) {
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    showSkipPopup("Skipping");
+    delayedSkipPending = true;
+    delayedSkipDir = nextPressed ? +1 : -1;
+    delayedSkipExecuteAtMs = millis() + 500;
+    xSemaphoreGive(renderingMutex);
+    // Block changing page until unpressed skip button
+    awaitingReleaseAfterSkip = true;
+    return;
+  }
+
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
@@ -174,23 +195,20 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (awaitingReleaseAfterSkip) {
+    awaitingReleaseAfterSkip = false;
+    skipUnpressed = true;
+    return;
+  }
+
+  if (delayedSkipPending) {
+    return;
+  }
+
   // any botton press when at end of the book goes back to the last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
     currentSpineIndex = epub->getSpineItemsCount() - 1;
     nextPageNumber = UINT16_MAX;
-    updateRequired = true;
-    return;
-  }
-
-  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
-
-  if (skipChapter) {
-    // We don't want to delete the section mid-render, so grab the semaphore
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    nextPageNumber = 0;
-    currentSpineIndex = nextReleased ? currentSpineIndex + 1 : currentSpineIndex - 1;
-    section.reset();
-    xSemaphoreGive(renderingMutex);
     updateRequired = true;
     return;
   }
@@ -230,11 +248,20 @@ void EpubReaderActivity::loop() {
 
 void EpubReaderActivity::displayTaskLoop() {
   while (true) {
+    const uint32_t now = millis();
     if (updateRequired) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       renderScreen();
       xSemaphoreGive(renderingMutex);
+    } else if (delayedSkipPending && now >= delayedSkipExecuteAtMs) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      nextPageNumber = 0;
+      currentSpineIndex += delayedSkipDir;
+      section.reset();
+      delayedSkipPending = false;
+      xSemaphoreGive(renderingMutex);
+      updateRequired = true;
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
@@ -384,6 +411,19 @@ void EpubReaderActivity::renderScreen() {
     f.write(data, 4);
     f.close();
   }
+}
+
+void EpubReaderActivity::showSkipPopup(const char* text) {
+  constexpr int boxMargin = 20;
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, text);
+  const int boxWidth = textWidth + boxMargin * 2;
+  const int boxHeight = renderer.getLineHeight(UI_12_FONT_ID) + boxMargin * 2;
+  const int boxX = (renderer.getScreenWidth() - boxWidth) / 2;
+  constexpr int boxY = 50;
+  renderer.fillRect(boxX, boxY, boxWidth, boxHeight, false);
+  renderer.drawText(UI_12_FONT_ID, boxX + boxMargin, boxY + boxMargin, text);
+  renderer.drawRect(boxX + 5, boxY + 5, boxWidth - 10, boxHeight - 10);
+  renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
 }
 
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,

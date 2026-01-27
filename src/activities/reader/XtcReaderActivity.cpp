@@ -19,7 +19,6 @@
 #include "fontIds.h"
 
 namespace {
-constexpr unsigned long skipPageMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 }  // namespace
 
@@ -111,6 +110,29 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  // Detect long-press and schedule skip immediately
+  const bool prevPressed = mappedInput.isPressed(MappedInputManager::Button::PageBack) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Left);
+  const bool nextPressed = mappedInput.isPressed(MappedInputManager::Button::PageForward) ||
+                           (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                            mappedInput.isPressed(MappedInputManager::Button::Power)) ||
+                           mappedInput.isPressed(MappedInputManager::Button::Right);
+
+  if (SETTINGS.longPressChapterSkip && (prevPressed || nextPressed) &&
+      mappedInput.getHeldTime() >= SETTINGS.getLongPressDurationMs() && !delayedSkipPending &&
+      !awaitingReleaseAfterSkip) {
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    showSkipPopup("Skipping");
+    delayedSkipPending = true;
+    delayedSkipDir = nextPressed ? +1 : -1;
+    delayedSkipAmount = 10;  // long-press skip amount
+    delayedSkipExecuteAtMs = millis() + 500;
+    xSemaphoreGive(renderingMutex);
+    // Block changing page until unpressed skip button
+    awaitingReleaseAfterSkip = true;
+    return;
+  }
+
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
@@ -122,6 +144,16 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  if (awaitingReleaseAfterSkip) {
+    awaitingReleaseAfterSkip = false;
+    skipUnpressed = true;
+    return;
+  }
+
+  if (delayedSkipPending) {
+    return;
+  }
+
   // Handle end of book
   if (currentPage >= xtc->getPageCount()) {
     currentPage = xtc->getPageCount() - 1;
@@ -129,18 +161,17 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipPageMs;
-  const int skipAmount = skipPages ? 10 : 1;
-
   if (prevReleased) {
-    if (currentPage >= static_cast<uint32_t>(skipAmount)) {
-      currentPage -= skipAmount;
+    // Short press: single page back
+    if (currentPage >= 1) {
+      currentPage -= 1;
     } else {
       currentPage = 0;
     }
     updateRequired = true;
   } else if (nextReleased) {
-    currentPage += skipAmount;
+    // Short press: single page forward
+    currentPage += 1;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }
@@ -150,11 +181,29 @@ void XtcReaderActivity::loop() {
 
 void XtcReaderActivity::displayTaskLoop() {
   while (true) {
+    const uint32_t now = millis();
     if (updateRequired) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       renderScreen();
       xSemaphoreGive(renderingMutex);
+    } else if (delayedSkipPending && now >= delayedSkipExecuteAtMs) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      if (delayedSkipDir < 0) {
+        if (currentPage >= delayedSkipAmount) {
+          currentPage -= delayedSkipAmount;
+        } else {
+          currentPage = 0;
+        }
+      } else {
+        currentPage += delayedSkipAmount;
+        if (currentPage >= xtc->getPageCount()) {
+          currentPage = xtc->getPageCount();
+        }
+      }
+      delayedSkipPending = false;
+      xSemaphoreGive(renderingMutex);
+      updateRequired = true;
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
@@ -176,6 +225,19 @@ void XtcReaderActivity::renderScreen() {
 
   renderPage();
   saveProgress();
+}
+
+void XtcReaderActivity::showSkipPopup(const char* text) {
+  constexpr int boxMargin = 20;
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, text);
+  const int boxWidth = textWidth + boxMargin * 2;
+  const int boxHeight = renderer.getLineHeight(UI_12_FONT_ID) + boxMargin * 2;
+  const int boxX = (renderer.getScreenWidth() - boxWidth) / 2;
+  constexpr int boxY = 50;
+  renderer.fillRect(boxX, boxY, boxWidth, boxHeight, false);
+  renderer.drawText(UI_12_FONT_ID, boxX + boxMargin, boxY + boxMargin, text);
+  renderer.drawRect(boxX + 5, boxY + 5, boxWidth - 10, boxHeight - 10);
+  renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
 }
 
 void XtcReaderActivity::renderPage() {
@@ -359,6 +421,8 @@ void XtcReaderActivity::renderPage() {
   Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (%u-bit)\n", millis(), currentPage + 1, xtc->getPageCount(),
                 bitDepth);
 }
+
+// scheduleSkipMessage removed: delayed skip now handled via delayedSkip* fields
 
 void XtcReaderActivity::saveProgress() const {
   FsFile f;

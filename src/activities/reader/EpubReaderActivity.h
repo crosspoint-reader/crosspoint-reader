@@ -16,6 +16,11 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   int nextPageNumber = 0;
   int pagesUntilFullRefresh = 0;
   bool updateRequired = false;
+  bool delayedSkipPending = false;
+  int delayedSkipDir = 0;
+  uint32_t delayedSkipExecuteAtMs = 0;
+  bool awaitingReleaseAfterSkip = false;
+  bool skipUnpressed = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
@@ -25,6 +30,7 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
+  void showSkipPopup(const char* text);
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
