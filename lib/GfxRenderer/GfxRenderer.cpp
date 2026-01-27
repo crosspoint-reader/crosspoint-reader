@@ -145,10 +145,25 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
 }
 
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
-  // TODO: Rotate bits
   int rotatedX = 0;
   int rotatedY = 0;
   rotateCoordinates(x, y, &rotatedX, &rotatedY);
+  // Rotate origin corner
+  switch (orientation) {
+    case Portrait:
+      rotatedY = rotatedY - height;
+      break;
+    case PortraitInverted:
+      rotatedX = rotatedX - width;
+      break;
+    case LandscapeClockwise:
+      rotatedY = rotatedY - height;
+      rotatedX = rotatedX - width;
+      break;
+    case LandscapeCounterClockwise:
+      break;
+  }
+  // TODO: Rotate bits
   einkDisplay.drawImage(bitmap, rotatedX, rotatedY, width, height);
 }
 

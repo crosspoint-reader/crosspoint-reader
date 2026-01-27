@@ -56,11 +56,16 @@ void EpubReaderActivity::onEnter() {
 
   FsFile f;
   if (SdMan.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
-    if (f.read(data, 4) == 4) {
+    uint8_t data[6];
+    int dataSize = f.read(data, 6);
+    if (dataSize == 4 || dataSize == 6) {
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
+      cachedSpineIndex = currentSpineIndex;
       Serial.printf("[%lu] [ERS] Loaded cache: %d, %d\n", millis(), currentSpineIndex, nextPageNumber);
+    }
+    if (dataSize == 6) {
+      cachedChapterTotalPageCount = data[4] + (data[5] << 8);
     }
     f.close();
   }
@@ -341,6 +346,17 @@ void EpubReaderActivity::renderScreen() {
     } else {
       section->currentPage = nextPageNumber;
     }
+
+    // handles changes in reader settings and reset to approximate position based on cached progress
+    if (cachedChapterTotalPageCount > 0) {
+      // only goes to relative position if spine index matches cached value
+      if (currentSpineIndex == cachedSpineIndex && section->pageCount != cachedChapterTotalPageCount) {
+        float progress = static_cast<float>(section->currentPage) / static_cast<float>(cachedChapterTotalPageCount);
+        int newPage = static_cast<int>(progress * section->pageCount);
+        section->currentPage = newPage;
+      }
+      cachedChapterTotalPageCount = 0;  // resets to 0 to prevent reading cached progress again
+    }
   }
 
   renderer.clearScreen();
@@ -376,12 +392,14 @@ void EpubReaderActivity::renderScreen() {
 
   FsFile f;
   if (SdMan.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
+    uint8_t data[6];
     data[0] = currentSpineIndex & 0xFF;
     data[1] = (currentSpineIndex >> 8) & 0xFF;
     data[2] = section->currentPage & 0xFF;
     data[3] = (section->currentPage >> 8) & 0xFF;
-    f.write(data, 4);
+    data[4] = section->pageCount & 0xFF;
+    data[5] = (section->pageCount >> 8) & 0xFF;
+    f.write(data, 6);
     f.close();
   }
 }
@@ -448,7 +466,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
 
     // Right aligned text for progress counter
     char progressStr[32];
-    snprintf(progressStr, sizeof(progressStr), "%d/%d  %.1f%%", section->currentPage + 1, section->pageCount,
+    snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", section->currentPage + 1, section->pageCount,
              bookProgress);
     const std::string progress = progressStr;
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progress.c_str());

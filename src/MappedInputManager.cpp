@@ -14,6 +14,9 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
         case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
           return InputManager::BTN_CONFIRM;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
+          /* fall through */
+        case CrossPointSettings::BACK_CONFIRM_RIGHT_LEFT:
+          /* fall through */
         default:
           return InputManager::BTN_BACK;
       }
@@ -24,15 +27,22 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
         case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
           return InputManager::BTN_LEFT;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
+          /* fall through */
+        case CrossPointSettings::BACK_CONFIRM_RIGHT_LEFT:
+          /* fall through */
         default:
           return InputManager::BTN_CONFIRM;
       }
     case Button::Left:
       switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
+          /* fall through */
         case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
           return InputManager::BTN_BACK;
+        case CrossPointSettings::BACK_CONFIRM_RIGHT_LEFT:
+          return InputManager::BTN_RIGHT;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
+          /* fall through */
         default:
           return InputManager::BTN_LEFT;
       }
@@ -40,8 +50,12 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
       switch (frontLayout) {
         case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
           return InputManager::BTN_CONFIRM;
+        case CrossPointSettings::BACK_CONFIRM_RIGHT_LEFT:
+          return InputManager::BTN_LEFT;
         case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
+          /* fall through */
         case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
+          /* fall through */
         default:
           return InputManager::BTN_RIGHT;
       }
@@ -56,6 +70,7 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
         case CrossPointSettings::NEXT_PREV:
           return InputManager::BTN_DOWN;
         case CrossPointSettings::PREV_NEXT:
+          /* fall through */
         default:
           return InputManager::BTN_UP;
       }
@@ -64,6 +79,7 @@ decltype(InputManager::BTN_BACK) MappedInputManager::mapButton(const Button butt
         case CrossPointSettings::NEXT_PREV:
           return InputManager::BTN_UP;
         case CrossPointSettings::PREV_NEXT:
+          /* fall through */
         default:
           return InputManager::BTN_DOWN;
       }

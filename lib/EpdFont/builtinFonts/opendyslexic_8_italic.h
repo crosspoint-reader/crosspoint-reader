@@ -3,6 +3,7 @@
  * name: opendyslexic_8_italic
  * size: 8
  * mode: 2-bit
+ * Command used: fontconvert.py opendyslexic_8_italic 8 ../builtinFonts/source/OpenDyslexic/OpenDyslexic-Italic.otf --2bit
  */
 #pragma once
 #include "EpdFontData.h"

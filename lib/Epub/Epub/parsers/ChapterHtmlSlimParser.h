@@ -39,6 +39,7 @@ class ChapterHtmlSlimParser {
   bool hyphenationEnabled;
 
   void startNewTextBlock(TextBlock::Style style);
+  void flushPartWordBuffer();
   void makePages();
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
