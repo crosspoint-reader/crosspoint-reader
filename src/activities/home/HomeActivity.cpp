@@ -3,7 +3,7 @@
 #include <Bitmap.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <Xtc.h>
 
 #include <cstring>

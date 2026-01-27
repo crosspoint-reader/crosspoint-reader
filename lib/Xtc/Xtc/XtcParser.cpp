@@ -9,7 +9,7 @@
 
 #include <FsHelpers.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include <cstring>
 

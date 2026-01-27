@@ -1,9 +1,9 @@
 #include <Arduino.h>
-#include <EInkDisplay.h>
+#include <HalDisplay.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <InputManager.h>
-#include <SDCardManager.h>
+#include <HalInput.h>
+#include <HalStorage.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
 
@@ -39,7 +39,7 @@
 
 #define SD_SPI_MISO 7
 
-EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
+HalDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 InputManager inputManager;
 MappedInputManager mappedInputManager(inputManager);
 GfxRenderer renderer(einkDisplay);
@@ -184,12 +184,14 @@ void verifyWakeupLongPress() {
   if (abort) {
     // Button released too early. Returning to sleep.
     // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-    esp_deep_sleep_start();
+    startDeepSleep(inputManager);
   }
 }
 
 void waitForPowerRelease() {
+  if (CROSSPOINT_EMULATED) {
+    return;
+  }
   inputManager.update();
   while (inputManager.isPressed(InputManager::BTN_POWER)) {
     delay(50);
@@ -205,11 +207,7 @@ void enterDeepSleep() {
   einkDisplay.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
-  waitForPowerRelease();
-  // Enter Deep Sleep
-  esp_deep_sleep_start();
+  startDeepSleep(inputManager);
 }
 
 void onGoHome();
@@ -278,10 +276,13 @@ void setupDisplayAndFonts() {
 
 bool isUsbConnected() {
   // U0RXD/GPIO20 reads HIGH when USB is connected
-  return digitalRead(UART0_RXD) == HIGH;
+  return CROSSPOINT_EMULATED || digitalRead(UART0_RXD) == HIGH;
 }
 
 bool isWakeupAfterFlashing() {
+  if (CROSSPOINT_EMULATED) {
+    return true;
+  }
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
 

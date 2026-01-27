@@ -1,7 +1,7 @@
 #include "JpegToBmpConverter.h"
 
 #include <HardwareSerial.h>
-#include <SdFat.h>
+#include <HalStorage.h>
 #include <picojpeg.h>
 
 #include <cstdio>

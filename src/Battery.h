@@ -3,4 +3,16 @@
 
 #define BAT_GPIO0 0  // Battery voltage
 
-static BatteryMonitor battery(BAT_GPIO0);
+class Battery {
+ public:
+  uint16_t readPercentage() const {
+#if CROSSPOINT_EMULATED == 0
+    static const BatteryMonitor hwBattery = BatteryMonitor(BAT_GPIO0);
+    return hwBattery.readPercentage();
+#else
+    return 100;
+#endif
+  }
+};
+
+static Battery battery;

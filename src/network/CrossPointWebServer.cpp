@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 

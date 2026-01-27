@@ -10,19 +10,19 @@ void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees clockwise
       *rotatedX = y;
-      *rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
+      *rotatedY = HalDisplay::DISPLAY_HEIGHT - 1 - x;
       break;
     }
     case LandscapeClockwise: {
       // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and left/right)
-      *rotatedX = EInkDisplay::DISPLAY_WIDTH - 1 - x;
-      *rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - y;
+      *rotatedX = HalDisplay::DISPLAY_WIDTH - 1 - x;
+      *rotatedY = HalDisplay::DISPLAY_HEIGHT - 1 - y;
       break;
     }
     case PortraitInverted: {
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees counter-clockwise
-      *rotatedX = EInkDisplay::DISPLAY_WIDTH - 1 - y;
+      *rotatedX = HalDisplay::DISPLAY_WIDTH - 1 - y;
       *rotatedY = x;
       break;
     }
@@ -49,14 +49,14 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   rotateCoordinates(x, y, &rotatedX, &rotatedY);
 
   // Bounds checking against physical panel dimensions
-  if (rotatedX < 0 || rotatedX >= EInkDisplay::DISPLAY_WIDTH || rotatedY < 0 ||
-      rotatedY >= EInkDisplay::DISPLAY_HEIGHT) {
+  if (rotatedX < 0 || rotatedX >= HalDisplay::DISPLAY_WIDTH || rotatedY < 0 ||
+      rotatedY >= HalDisplay::DISPLAY_HEIGHT) {
     Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n", millis(), x, y, rotatedX, rotatedY);
     return;
   }
 
   // Calculate byte position and bit position
-  const uint16_t byteIndex = rotatedY * EInkDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
+  const uint16_t byteIndex = rotatedY * HalDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
   const uint8_t bitPosition = 7 - (rotatedX % 8);  // MSB first
 
   if (state) {
@@ -392,12 +392,12 @@ void GfxRenderer::invertScreen() const {
     Serial.printf("[%lu] [GFX] !! No framebuffer in invertScreen\n", millis());
     return;
   }
-  for (int i = 0; i < EInkDisplay::BUFFER_SIZE; i++) {
+  for (int i = 0; i < HalDisplay::BUFFER_SIZE; i++) {
     buffer[i] = ~buffer[i];
   }
 }
 
-void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode) const {
+void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   einkDisplay.displayBuffer(refreshMode);
 }
 
@@ -418,13 +418,13 @@ int GfxRenderer::getScreenWidth() const {
     case Portrait:
     case PortraitInverted:
       // 480px wide in portrait logical coordinates
-      return EInkDisplay::DISPLAY_HEIGHT;
+      return HalDisplay::DISPLAY_HEIGHT;
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
       // 800px wide in landscape logical coordinates
-      return EInkDisplay::DISPLAY_WIDTH;
+      return HalDisplay::DISPLAY_WIDTH;
   }
-  return EInkDisplay::DISPLAY_HEIGHT;
+  return HalDisplay::DISPLAY_HEIGHT;
 }
 
 int GfxRenderer::getScreenHeight() const {
@@ -432,13 +432,13 @@ int GfxRenderer::getScreenHeight() const {
     case Portrait:
     case PortraitInverted:
       // 800px tall in portrait logical coordinates
-      return EInkDisplay::DISPLAY_WIDTH;
+      return HalDisplay::DISPLAY_WIDTH;
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
       // 480px tall in landscape logical coordinates
-      return EInkDisplay::DISPLAY_HEIGHT;
+      return HalDisplay::DISPLAY_HEIGHT;
   }
-  return EInkDisplay::DISPLAY_WIDTH;
+  return HalDisplay::DISPLAY_WIDTH;
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId) const {
@@ -640,9 +640,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
 uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
-size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
-
-void GfxRenderer::grayscaleRevert() const { einkDisplay.grayscaleRevert(); }
+size_t GfxRenderer::getBufferSize() { return HalDisplay::BUFFER_SIZE; }
 
 void GfxRenderer::copyGrayscaleLsbBuffers() const { einkDisplay.copyGrayscaleLsbBuffers(einkDisplay.getFrameBuffer()); }
 

@@ -2,7 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <WiFi.h>
 
 #include <cstring>

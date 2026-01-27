@@ -1,6 +1,6 @@
 #pragma once
 
-#include <InputManager.h>
+#include <HalInput.h>
 
 class MappedInputManager {
  public:

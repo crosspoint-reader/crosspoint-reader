@@ -3,7 +3,7 @@
 #include <FsHelpers.h>
 #include <HardwareSerial.h>
 #include <JpegToBmpConverter.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <ZipFile.h>
 
 #include "Epub/parsers/ContainerParser.h"

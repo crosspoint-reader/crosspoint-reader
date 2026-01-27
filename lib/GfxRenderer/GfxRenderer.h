@@ -1,6 +1,6 @@
 #pragma once
 
-#include <EInkDisplay.h>
+#include <HalDisplay.h>
 #include <EpdFontFamily.h>
 
 #include <map>
@@ -21,11 +21,11 @@ class GfxRenderer {
 
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
-  static constexpr size_t BW_BUFFER_NUM_CHUNKS = EInkDisplay::BUFFER_SIZE / BW_BUFFER_CHUNK_SIZE;
-  static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == EInkDisplay::BUFFER_SIZE,
+  static constexpr size_t BW_BUFFER_NUM_CHUNKS = HalDisplay::BUFFER_SIZE / BW_BUFFER_CHUNK_SIZE;
+  static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == HalDisplay::BUFFER_SIZE,
                 "BW buffer chunking does not line up with display buffer size");
 
-  EInkDisplay& einkDisplay;
+  HalDisplay& einkDisplay;
   RenderMode renderMode;
   Orientation orientation;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
@@ -36,7 +36,7 @@ class GfxRenderer {
   void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
 
  public:
-  explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW), orientation(Portrait) {}
+  explicit GfxRenderer(HalDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW), orientation(Portrait) {}
   ~GfxRenderer() { freeBwBufferChunks(); }
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
@@ -54,7 +54,7 @@ class GfxRenderer {
   // Screen ops
   int getScreenWidth() const;
   int getScreenHeight() const;
-  void displayBuffer(EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH) const;
+  void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
@@ -106,6 +106,6 @@ class GfxRenderer {
   // Low level functions
   uint8_t* getFrameBuffer() const;
   static size_t getBufferSize();
-  void grayscaleRevert() const;
+  // void grayscaleRevert() const; // unused
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
 };

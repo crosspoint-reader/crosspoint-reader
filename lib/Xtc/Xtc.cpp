@@ -9,7 +9,7 @@
 
 #include <FsHelpers.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 bool Xtc::load() {
   Serial.printf("[%lu] [XTC] Loading XTC: %s\n", millis(), filepath.c_str());

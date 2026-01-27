@@ -1,7 +1,7 @@
 #include "RecentBooksStore.h"
 
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <Serialization.h>
 
 #include <algorithm>
