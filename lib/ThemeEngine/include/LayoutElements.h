@@ -19,6 +19,7 @@ class HStack : public Container {
  public:
   HStack(const std::string& id) : Container(id) {}
   ElementType getType() const override { return ElementType::HStack; }
+  const char* getTypeName() const override { return "HStack"; }
 
   void setSpacing(int s) {
     spacing = s;
@@ -71,6 +72,7 @@ class VStack : public Container {
  public:
   VStack(const std::string& id) : Container(id) {}
   ElementType getType() const override { return ElementType::VStack; }
+  const char* getTypeName() const override { return "VStack"; }
 
   void setSpacing(int s) {
     spacing = s;
@@ -122,6 +124,7 @@ class Grid : public Container {
  public:
   Grid(const std::string& id) : Container(id) {}
   ElementType getType() const override { return ElementType::Grid; }
+  const char* getTypeName() const override { return "Grid"; }
 
   void setColumns(int c) {
     columns = c > 0 ? c : 1;
@@ -182,7 +185,7 @@ class Badge : public UIElement {
   int fontId = 0;
   int paddingH = 8;  // Horizontal padding
   int paddingV = 4;  // Vertical padding
-  int cornerRadius = 0;
+  int borderRadius = 0;
 
  public:
   Badge(const std::string& id) : UIElement(id) {
@@ -191,6 +194,7 @@ class Badge : public UIElement {
   }
 
   ElementType getType() const override { return ElementType::Badge; }
+  const char* getTypeName() const override { return "Badge"; }
 
   void setText(const std::string& expr) {
     textExpr = Expression::parse(expr);
@@ -217,6 +221,11 @@ class Badge : public UIElement {
     markDirty();
   }
 
+  void setBorderRadius(int r) {
+    borderRadius = r;
+    markDirty();
+  }
+
   void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
     if (!isVisible(context)) return;
 
@@ -226,29 +235,59 @@ class Badge : public UIElement {
       return;
     }
 
-    // Calculate badge size based on text
+    // Calculate badge size based on text content - always auto-sizes
     int textW = renderer.getTextWidth(fontId, text.c_str());
     int textH = renderer.getLineHeight(fontId);
     int badgeW = textW + 2 * paddingH;
     int badgeH = textH + 2 * paddingV;
 
-    // Use absX, absY as position, but we may auto-size
-    if (absW == 0) absW = badgeW;
-    if (absH == 0) absH = badgeH;
+    // Badge always auto-sizes to content
+    int drawW = badgeW;
+    int drawH = badgeH;
+
+    // Position the badge within its container
+    // If absW/absH are set, use them as bounding box for alignment
+    int drawX = absX;
+    int drawY = absY;
+
+    // Right-align badge within bounding box if width is specified
+    if (absW > 0 && absW > drawW) {
+      drawX = absX + absW - drawW;
+    }
+    // Vertically center badge within bounding box if height is specified
+    if (absH > 0 && absH > drawH) {
+      drawY = absY + (absH - drawH) / 2;
+    }
 
     // Draw background
     std::string bgStr = context.evaluatestring(bgColorExpr);
     uint8_t bgColor = Color::parse(bgStr).value;
-    renderer.fillRect(absX, absY, absW, absH, bgColor == 0x00);
+    if (borderRadius > 0) {
+      if (bgColor == 0x00) {
+        renderer.fillRoundedRect(drawX, drawY, drawW, drawH, borderRadius, true);
+      } else if (bgColor >= 0xF0) {
+        renderer.fillRoundedRect(drawX, drawY, drawW, drawH, borderRadius, false);
+      } else {
+        renderer.fillRoundedRectDithered(drawX, drawY, drawW, drawH, borderRadius, bgColor);
+      }
+    } else {
+      renderer.fillRect(drawX, drawY, drawW, drawH, bgColor == 0x00);
+    }
 
-    // Draw border for contrast
-    renderer.drawRect(absX, absY, absW, absH, bgColor != 0x00);
+    // Draw border for contrast (only if not black background)
+    if (bgColor != 0x00) {
+      if (borderRadius > 0) {
+        renderer.drawRoundedRect(drawX, drawY, drawW, drawH, borderRadius, true);
+      } else {
+        renderer.drawRect(drawX, drawY, drawW, drawH, true);
+      }
+    }
 
-    // Draw text centered
+    // Draw text centered within the badge
     std::string fgStr = context.evaluatestring(fgColorExpr);
     uint8_t fgColor = Color::parse(fgStr).value;
-    int textX = absX + (absW - textW) / 2;
-    int textY = absY + (absH - textH) / 2;
+    int textX = drawX + paddingH;
+    int textY = drawY + paddingV;
     renderer.drawText(fontId, textX, textY, text.c_str(), fgColor == 0x00);
 
     markClean();
@@ -256,22 +295,28 @@ class Badge : public UIElement {
 };
 
 // --- Toggle: On/Off Switch ---
+// Fully themable toggle with track and knob
+// Supports rounded or square appearance based on BorderRadius
 class Toggle : public UIElement {
-  Expression valueExpr;  // Boolean expression
-  Expression onColorExpr;
-  Expression offColorExpr;
+  Expression valueExpr;       // Boolean expression for on/off state
+  Expression onColorExpr;     // Track color when ON
+  Expression offColorExpr;    // Track color when OFF
+  Expression knobColorExpr;   // Knob color (optional, defaults to opposite of track)
   int trackWidth = 44;
   int trackHeight = 24;
   int knobSize = 20;
+  int borderRadius = 0;       // 0 = square, >0 = rounded (use trackHeight/2 for pill shape)
+  int knobRadius = 0;         // Knob corner radius
 
  public:
   Toggle(const std::string& id) : UIElement(id) {
     valueExpr = Expression::parse("false");
     onColorExpr = Expression::parse("0x00");   // Black when on
-    offColorExpr = Expression::parse("0xFF");  // White when off
+    offColorExpr = Expression::parse("0xCC");  // Light gray when off
   }
 
   ElementType getType() const override { return ElementType::Toggle; }
+  const char* getTypeName() const override { return "Toggle"; }
 
   void setValue(const std::string& expr) {
     valueExpr = Expression::parse(expr);
@@ -283,6 +328,10 @@ class Toggle : public UIElement {
   }
   void setOffColor(const std::string& expr) {
     offColorExpr = Expression::parse(expr);
+    markDirty();
+  }
+  void setKnobColor(const std::string& expr) {
+    knobColorExpr = Expression::parse(expr);
     markDirty();
   }
   void setTrackWidth(int w) {
@@ -297,30 +346,109 @@ class Toggle : public UIElement {
     knobSize = s;
     markDirty();
   }
+  void setBorderRadius(int r) {
+    borderRadius = r;
+    markDirty();
+  }
+  void setKnobRadius(int r) {
+    knobRadius = r;
+    markDirty();
+  }
 
   void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
     if (!isVisible(context)) return;
 
-    bool isOn = context.evaluateBool(valueExpr.rawExpr);
+    // Evaluate the value - handle simple variable references directly
+    bool isOn = false;
+    std::string rawExpr = valueExpr.rawExpr;
 
-    // Get colors
+    // If it's a simple {variable} reference, resolve it directly
+    if (rawExpr.size() > 2 && rawExpr.front() == '{' && rawExpr.back() == '}') {
+      std::string varName = rawExpr.substr(1, rawExpr.size() - 2);
+      // Trim whitespace
+      size_t start = varName.find_first_not_of(" \t");
+      size_t end = varName.find_last_not_of(" \t");
+      if (start != std::string::npos) {
+        varName = varName.substr(start, end - start + 1);
+      }
+      isOn = context.getAnyAsBool(varName, false);
+    } else {
+      isOn = context.evaluateBool(rawExpr);
+    }
+
+    // Get track color based on state
     std::string colorStr = isOn ? context.evaluatestring(onColorExpr) : context.evaluatestring(offColorExpr);
     uint8_t trackColor = Color::parse(colorStr).value;
 
-    // Draw track
+    // Calculate track position (centered vertically in bounding box)
     int trackX = absX;
     int trackY = absY + (absH - trackHeight) / 2;
-    renderer.fillRect(trackX, trackY, trackWidth, trackHeight, trackColor == 0x00);
-    renderer.drawRect(trackX, trackY, trackWidth, trackHeight, true);
 
-    // Draw knob
+    // Calculate effective border radius (capped at half height for pill shape)
+    int effectiveRadius = borderRadius;
+    if (effectiveRadius > trackHeight / 2) {
+      effectiveRadius = trackHeight / 2;
+    }
+
+    // Draw track
+    if (effectiveRadius > 0) {
+      // Rounded track
+      if (trackColor == 0x00) {
+        renderer.fillRoundedRect(trackX, trackY, trackWidth, trackHeight, effectiveRadius, true);
+      } else if (trackColor >= 0xF0) {
+        renderer.fillRoundedRect(trackX, trackY, trackWidth, trackHeight, effectiveRadius, false);
+        renderer.drawRoundedRect(trackX, trackY, trackWidth, trackHeight, effectiveRadius, true);
+      } else {
+        renderer.fillRoundedRectDithered(trackX, trackY, trackWidth, trackHeight, effectiveRadius, trackColor);
+        renderer.drawRoundedRect(trackX, trackY, trackWidth, trackHeight, effectiveRadius, true);
+      }
+    } else {
+      // Square track
+      if (trackColor == 0x00) {
+        renderer.fillRect(trackX, trackY, trackWidth, trackHeight, true);
+      } else if (trackColor >= 0xF0) {
+        renderer.fillRect(trackX, trackY, trackWidth, trackHeight, false);
+        renderer.drawRect(trackX, trackY, trackWidth, trackHeight, true);
+      } else {
+        renderer.fillRectDithered(trackX, trackY, trackWidth, trackHeight, trackColor);
+        renderer.drawRect(trackX, trackY, trackWidth, trackHeight, true);
+      }
+    }
+
+    // Calculate knob position
     int knobMargin = (trackHeight - knobSize) / 2;
     int knobX = isOn ? (trackX + trackWidth - knobSize - knobMargin) : (trackX + knobMargin);
     int knobY = trackY + knobMargin;
 
-    // Knob is opposite color of track
-    renderer.fillRect(knobX, knobY, knobSize, knobSize, trackColor != 0x00);
-    renderer.drawRect(knobX, knobY, knobSize, knobSize, true);
+    // Determine knob color
+    bool knobBlack;
+    if (!knobColorExpr.empty()) {
+      std::string knobStr = context.evaluatestring(knobColorExpr);
+      uint8_t knobColor = Color::parse(knobStr).value;
+      knobBlack = (knobColor == 0x00);
+    } else {
+      // Default: knob is opposite color of track
+      knobBlack = (trackColor >= 0x80);
+    }
+
+    // Calculate effective knob radius
+    int effectiveKnobRadius = knobRadius;
+    if (effectiveKnobRadius > knobSize / 2) {
+      effectiveKnobRadius = knobSize / 2;
+    }
+
+    // Draw knob
+    if (effectiveKnobRadius > 0) {
+      renderer.fillRoundedRect(knobX, knobY, knobSize, knobSize, effectiveKnobRadius, knobBlack);
+      if (!knobBlack) {
+        renderer.drawRoundedRect(knobX, knobY, knobSize, knobSize, effectiveKnobRadius, true);
+      }
+    } else {
+      renderer.fillRect(knobX, knobY, knobSize, knobSize, knobBlack);
+      if (!knobBlack) {
+        renderer.drawRect(knobX, knobY, knobSize, knobSize, true);
+      }
+    }
 
     markClean();
   }
@@ -337,6 +465,7 @@ class TabBar : public Container {
  public:
   TabBar(const std::string& id) : Container(id) {}
   ElementType getType() const override { return ElementType::TabBar; }
+  const char* getTypeName() const override { return "TabBar"; }
 
   void setSelected(const std::string& expr) {
     selectedExpr = Expression::parse(expr);
@@ -414,9 +543,6 @@ class TabBar : public Container {
       }
     }
 
-    // Draw bottom border
-    renderer.drawLine(absX, absY + absH - 1, absX + absW - 1, absY + absH - 1, true);
-
     markClean();
   }
 };
@@ -437,6 +563,7 @@ class Icon : public UIElement {
   }
 
   ElementType getType() const override { return ElementType::Icon; }
+  const char* getTypeName() const override { return "Icon"; }
 
   void setSrc(const std::string& expr) {
     srcExpr = Expression::parse(expr);
@@ -469,6 +596,7 @@ class ScrollIndicator : public UIElement {
   }
 
   ElementType getType() const override { return ElementType::ScrollIndicator; }
+  const char* getTypeName() const override { return "ScrollIndicator"; }
 
   void setPosition(const std::string& expr) {
     positionExpr = Expression::parse(expr);

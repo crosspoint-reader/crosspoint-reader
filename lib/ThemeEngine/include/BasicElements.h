@@ -24,15 +24,16 @@ class Container : public UIElement {
 
  public:
   explicit Container(const std::string& id) : UIElement(id), bgColorExpr(Expression::parse("0xFF")) {}
-  virtual ~Container() {
-    for (auto child : children) delete child;
-  }
+  virtual ~Container() = default;
 
   Container* asContainer() override { return this; }
 
   ElementType getType() const override { return ElementType::Container; }
+  const char* getTypeName() const override { return "Container"; }
 
   void addChild(UIElement* child) { children.push_back(child); }
+
+  void clearChildren() { children.clear(); }
 
   const std::vector<UIElement*>& getChildren() const { return children; }
 
@@ -87,55 +88,7 @@ class Container : public UIElement {
     }
   }
 
-  void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
-    if (!isVisible(context)) return;
-
-    if (hasBg) {
-      std::string colStr = context.evaluatestring(bgColorExpr);
-      uint8_t color = Color::parse(colStr).value;
-      // Use dithered fill for grayscale values, solid fill for black/white
-      // Use rounded rect if borderRadius > 0
-      if (color == 0x00) {
-        if (borderRadius > 0) {
-          renderer.fillRoundedRect(absX, absY, absW, absH, borderRadius, true);
-        } else {
-          renderer.fillRect(absX, absY, absW, absH, true);
-        }
-      } else if (color >= 0xF0) {
-        if (borderRadius > 0) {
-          renderer.fillRoundedRect(absX, absY, absW, absH, borderRadius, false);
-        } else {
-          renderer.fillRect(absX, absY, absW, absH, false);
-        }
-      } else {
-        if (borderRadius > 0) {
-          renderer.fillRoundedRectDithered(absX, absY, absW, absH, borderRadius, color);
-        } else {
-          renderer.fillRectDithered(absX, absY, absW, absH, color);
-        }
-      }
-    }
-
-    // Handle dynamic border expression
-    bool drawBorder = border;
-    if (hasBorderExpr()) {
-      drawBorder = context.evaluateBool(borderExpr.rawExpr);
-    }
-
-    if (drawBorder) {
-      if (borderRadius > 0) {
-        renderer.drawRoundedRect(absX, absY, absW, absH, borderRadius, true);
-      } else {
-        renderer.drawRect(absX, absY, absW, absH, true);
-      }
-    }
-
-    for (auto child : children) {
-      child->draw(renderer, context);
-    }
-
-    markClean();
-  }
+  void draw(const GfxRenderer& renderer, const ThemeContext& context) override;
 };
 
 // --- Rectangle ---
@@ -143,10 +96,12 @@ class Rectangle : public UIElement {
   bool fill = false;
   Expression fillExpr;  // Dynamic fill based on expression
   Expression colorExpr;
+  int borderRadius = 0;
 
  public:
   explicit Rectangle(const std::string& id) : UIElement(id), colorExpr(Expression::parse("0x00")) {}
   ElementType getType() const override { return ElementType::Rectangle; }
+  const char* getTypeName() const override { return "Rectangle"; }
 
   void setFill(bool f) {
     fill = f;
@@ -163,26 +118,12 @@ class Rectangle : public UIElement {
     markDirty();
   }
 
-  void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
-    if (!isVisible(context)) return;
-
-    std::string colStr = context.evaluatestring(colorExpr);
-    uint8_t color = Color::parse(colStr).value;
-    bool black = (color == 0x00);
-
-    bool shouldFill = fill;
-    if (!fillExpr.empty()) {
-      shouldFill = context.evaluateBool(fillExpr.rawExpr);
-    }
-
-    if (shouldFill) {
-      renderer.fillRect(absX, absY, absW, absH, black);
-    } else {
-      renderer.drawRect(absX, absY, absW, absH, black);
-    }
-
-    markClean();
+  void setBorderRadius(int r) {
+    borderRadius = r;
+    markDirty();
   }
+
+  void draw(const GfxRenderer& renderer, const ThemeContext& context) override;
 };
 
 // --- Label ---
@@ -201,6 +142,7 @@ class Label : public UIElement {
  public:
   explicit Label(const std::string& id) : UIElement(id), colorExpr(Expression::parse("0x00")) {}
   ElementType getType() const override { return ElementType::Label; }
+  const char* getTypeName() const override { return "Label"; }
 
   void setText(const std::string& expr) {
     textExpr = Expression::parse(expr);
@@ -231,132 +173,7 @@ class Label : public UIElement {
     markDirty();
   }
 
-  void draw(const GfxRenderer& renderer, const ThemeContext& context) override {
-    if (!isVisible(context)) return;
-
-    std::string finalText = context.evaluatestring(textExpr);
-    if (finalText.empty()) {
-      markClean();
-      return;
-    }
-
-    std::string colStr = context.evaluatestring(colorExpr);
-    uint8_t color = Color::parse(colStr).value;
-    bool black = (color == 0x00);
-
-    int textWidth = renderer.getTextWidth(fontId, finalText.c_str());
-    int lineHeight = renderer.getLineHeight(fontId);
-
-    // Split text into lines based on width
-    std::vector<std::string> lines;
-    if (absW > 0 && textWidth > absW && maxLines > 1) {
-      // Logic to wrap text
-      std::string remaining = finalText;
-      while (!remaining.empty() && (int)lines.size() < maxLines) {
-        // If it fits, add entire line
-        if (renderer.getTextWidth(fontId, remaining.c_str()) <= absW) {
-          lines.push_back(remaining);
-          break;
-        }
-
-        // Binary search for cut point
-        int len = remaining.length();
-        int cut = len;
-
-        // Find split point
-        // Optimistic start: approximate chars that fit
-        int avgCharWidth = renderer.getTextWidth(fontId, "a");
-        if (avgCharWidth < 1) avgCharWidth = 8;
-        int approxChars = absW / avgCharWidth;
-        if (approxChars < 1) approxChars = 1;
-        if (approxChars >= len) approxChars = len - 1;
-
-        // Refine from approxChars
-        int w = renderer.getTextWidth(fontId, remaining.substr(0, approxChars).c_str());
-        if (w < absW) {
-          // Grow
-          for (int i = approxChars; i <= len; i++) {
-            if (renderer.getTextWidth(fontId, remaining.substr(0, i).c_str()) > absW) {
-              cut = i - 1;
-              break;
-            }
-            cut = i;
-          }
-        } else {
-          // Shrink
-          for (int i = approxChars; i > 0; i--) {
-            if (renderer.getTextWidth(fontId, remaining.substr(0, i).c_str()) <= absW) {
-              cut = i;
-              break;
-            }
-          }
-        }
-
-        // Find last space before cut
-        if (cut < (int)remaining.length()) {
-          int space = -1;
-          for (int i = cut; i > 0; i--) {
-            if (remaining[i] == ' ') {
-              space = i;
-              break;
-            }
-          }
-          if (space != -1) cut = space;
-        }
-
-        std::string line = remaining.substr(0, cut);
-
-        // If we're at the last allowed line but still have more text
-        if ((int)lines.size() == maxLines - 1 && cut < (int)remaining.length()) {
-          if (ellipsis) {
-            line = renderer.truncatedText(fontId, remaining.c_str(), absW);
-          }
-          lines.push_back(line);
-          break;
-        }
-
-        lines.push_back(line);
-        // Advance
-        if (cut < (int)remaining.length()) {
-          // Skip the space if check
-          if (remaining[cut] == ' ') cut++;
-          remaining = remaining.substr(cut);
-        } else {
-          remaining = "";
-        }
-      }
-    } else {
-      // Single line handling (truncate if needed)
-      if (ellipsis && textWidth > absW && absW > 0) {
-        finalText = renderer.truncatedText(fontId, finalText.c_str(), absW);
-      }
-      lines.push_back(finalText);
-    }
-
-    // Draw lines
-    int totalTextHeight = lines.size() * lineHeight;
-    int startY = absY;
-
-    // Vertical centering
-    if (absH > 0 && totalTextHeight < absH) {
-      startY = absY + (absH - totalTextHeight) / 2;
-    }
-
-    for (size_t i = 0; i < lines.size(); i++) {
-      int lineWidth = renderer.getTextWidth(fontId, lines[i].c_str());
-      int drawX = absX;
-
-      if (alignment == Alignment::Center && absW > 0) {
-        drawX = absX + (absW - lineWidth) / 2;
-      } else if (alignment == Alignment::Right && absW > 0) {
-        drawX = absX + absW - lineWidth;
-      }
-
-      renderer.drawText(fontId, drawX, startY + i * lineHeight, lines[i].c_str(), black);
-    }
-
-    markClean();
-  }
+  void draw(const GfxRenderer& renderer, const ThemeContext& context) override;
 };
 
 // --- BitmapElement ---
@@ -371,6 +188,7 @@ class BitmapElement : public UIElement {
     cacheable = true;  // Bitmaps benefit from caching
   }
   ElementType getType() const override { return ElementType::Bitmap; }
+  const char* getTypeName() const override { return "Bitmap"; }
 
   void setSrc(const std::string& src) {
     srcExpr = Expression::parse(src);
@@ -416,6 +234,7 @@ class ProgressBar : public UIElement {
   {}
 
   ElementType getType() const override { return ElementType::ProgressBar; }
+  const char* getTypeName() const override { return "ProgressBar"; }
 
   void setValue(const std::string& expr) {
     valueExpr = Expression::parse(expr);
@@ -484,6 +303,7 @@ class Divider : public UIElement {
   explicit Divider(const std::string& id) : UIElement(id), colorExpr(Expression::parse("0x00")) {}
 
   ElementType getType() const override { return ElementType::Divider; }
+  const char* getTypeName() const override { return "Divider"; }
 
   void setColorExpr(const std::string& expr) {
     colorExpr = Expression::parse(expr);
@@ -531,6 +351,7 @@ class BatteryIcon : public UIElement {
   }
 
   ElementType getType() const override { return ElementType::BatteryIcon; }
+  const char* getTypeName() const override { return "BatteryIcon"; }
 
   void setValue(const std::string& expr) {
     valueExpr = Expression::parse(expr);

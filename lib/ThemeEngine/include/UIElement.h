@@ -150,6 +150,7 @@ class UIElement {
   };
 
   virtual ElementType getType() const { return ElementType::Base; }
+  virtual const char* getTypeName() const { return "UIElement"; }
 
   int getLayoutHeight() const { return absH; }
   int getLayoutWidth() const { return absW; }

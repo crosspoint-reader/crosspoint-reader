@@ -1,11 +1,16 @@
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
 
+#include "Battery.h"
+#include "CalibreSettingsActivity.h"
 #include "CategorySettingsActivity.h"
+#include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
+#include "OtaUpdateActivity.h"
+#include "ThemeSelectionActivity.h"
 #include "fontIds.h"
 
 const char *SettingsActivity::categoryNames[categoryCount] = {
@@ -14,7 +19,6 @@ const char *SettingsActivity::categoryNames[categoryCount] = {
 namespace {
 constexpr int displaySettingsCount = 7;
 const SettingInfo displaySettings[displaySettingsCount] = {
-    // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
     SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
@@ -67,7 +71,58 @@ const SettingInfo systemSettings[systemSettingsCount] = {
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
     SettingInfo::Action("KOReader Sync"), SettingInfo::Action("OPDS Browser"), SettingInfo::Action("Clear Cache"),
     SettingInfo::Action("Check for updates")};
-} // namespace
+
+// All categories with their settings
+struct CategoryData {
+  const char* name;
+  const SettingInfo* settings;
+  int count;
+};
+
+const CategoryData allCategories[4] = {
+    {"Display", displaySettings, displaySettingsCount},
+    {"Reader", readerSettings, readerSettingsCount},
+    {"Controls", controlsSettings, controlsSettingsCount},
+    {"System", systemSettings, systemSettingsCount}};
+
+void updateContextForSetting(ThemeEngine::ThemeContext& ctx, const std::string& prefix, int i, const SettingInfo& info,
+                             bool isSelected, bool fullUpdate) {
+  if (fullUpdate) {
+    ctx.setListItem(prefix, i, "Name", info.name);
+    ctx.setListItem(prefix, i, "Type",
+                    info.type == SettingType::TOGGLE   ? "Toggle"
+                    : info.type == SettingType::ENUM   ? "Enum"
+                    : info.type == SettingType::ACTION ? "Action"
+                    : info.type == SettingType::VALUE  ? "Value"
+                                                       : "Unknown");
+  }
+  ctx.setListItem(prefix, i, "Selected", isSelected);
+
+  // Values definitely need update
+  if (info.type == SettingType::TOGGLE && info.valuePtr) {
+    bool val = SETTINGS.*(info.valuePtr);
+    ctx.setListItem(prefix, i, "Value", val);
+    ctx.setListItem(prefix, i, "ValueLabel", val ? "On" : "Off");
+  } else if (info.type == SettingType::ENUM && info.valuePtr) {
+    uint8_t val = SETTINGS.*(info.valuePtr);
+    if (val < info.enumValues.size()) {
+      ctx.setListItem(prefix, i, "Value", info.enumValues[val]);
+      ctx.setListItem(prefix, i, "ValueLabel", info.enumValues[val]);
+      ctx.setListItem(prefix, i, "ValueIndex", static_cast<int>(val));
+    }
+  } else if (info.type == SettingType::VALUE && info.valuePtr) {
+    int val = SETTINGS.*(info.valuePtr);
+    ctx.setListItem(prefix, i, "Value", val);
+    ctx.setListItem(prefix, i, "ValueLabel", std::to_string(val));
+  } else if (info.type == SettingType::ACTION) {
+    if (fullUpdate) {
+      ctx.setListItem(prefix, i, "Value", "");
+      ctx.setListItem(prefix, i, "ValueLabel", "");
+    }
+  }
+}
+}  // namespace
+>>>>>>> e6b3ecc (feat: Enhance ThemeEngine and apply new theming to SettingsActivity)
 
 void SettingsActivity::taskTrampoline(void *param) {
   auto *self = static_cast<SettingsActivity *>(param);
@@ -77,11 +132,14 @@ void SettingsActivity::taskTrampoline(void *param) {
 void SettingsActivity::onEnter() {
   Activity::onEnter();
   renderingMutex = xSemaphoreCreateMutex();
-
-  // Reset selection to first category
   selectedCategoryIndex = 0;
+  selectedSettingIndex = 0;
 
-  // Trigger first update
+  // For themed mode, provide all data upfront
+  if (ThemeEngine::ThemeManager::get().getElement("Settings")) {
+    updateThemeContext(true); // Full update
+  }
+
   updateRequired = true;
 
   xTaskCreate(&SettingsActivity::taskTrampoline, "SettingsActivityTask",
@@ -95,8 +153,6 @@ void SettingsActivity::onEnter() {
 void SettingsActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
-  // Wait until not rendering to delete task to avoid killing mid-instruction to
-  // EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
     vTaskDelete(displayTaskHandle);
@@ -107,14 +163,26 @@ void SettingsActivity::onExit() {
 }
 
 void SettingsActivity::loop() {
+  if (subActivityExitPending) {
+    subActivityExitPending = false;
+    exitActivity();
+    updateThemeContext(true);
+    updateRequired = true;
+  }
+
   if (subActivity) {
     subActivity->loop();
     return;
   }
 
-  // Handle category selection
+  if (ThemeEngine::ThemeManager::get().getElement("Settings")) {
+    handleThemeInput();
+    return;
+  }
+
+  // Legacy mode
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    enterCategory(selectedCategoryIndex);
+    enterCategoryLegacy(selectedCategoryIndex);
     return;
   }
 
@@ -124,7 +192,6 @@ void SettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     // Move selection up (with wrap-around)
@@ -142,39 +209,15 @@ void SettingsActivity::loop() {
   }
 }
 
-void SettingsActivity::enterCategory(int categoryIndex) {
-  if (categoryIndex < 0 || categoryIndex >= categoryCount) {
-    return;
-  }
+void SettingsActivity::enterCategoryLegacy(int categoryIndex) {
+  if (categoryIndex < 0 || categoryIndex >= categoryCount) return;
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   exitActivity();
-
-  const SettingInfo *settingsList = nullptr;
-  int settingsCount = 0;
-
-  switch (categoryIndex) {
-  case 0: // Display
-    settingsList = displaySettings;
-    settingsCount = displaySettingsCount;
-    break;
-  case 1: // Reader
-    settingsList = readerSettings;
-    settingsCount = readerSettingsCount;
-    break;
-  case 2: // Controls
-    settingsList = controlsSettings;
-    settingsCount = controlsSettingsCount;
-    break;
-  case 3: // System
-    settingsList = systemSettings;
-    settingsCount = systemSettingsCount;
-    break;
-  }
-
   enterNewActivity(new CategorySettingsActivity(
-      renderer, mappedInput, categoryNames[categoryIndex], settingsList,
-      settingsCount, [this] {
+      renderer, mappedInput, allCategories[categoryIndex].name,
+      allCategories[categoryIndex].settings, allCategories[categoryIndex].count,
+      [this] {
         exitActivity();
         updateRequired = true;
       }));
@@ -185,9 +228,11 @@ void SettingsActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired && !subActivity) {
       updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
+
+      if (xSemaphoreTake(renderingMutex, portMAX_DELAY) == pdTRUE) {
+        render();
+        xSemaphoreGive(renderingMutex);
+      }
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
@@ -196,6 +241,13 @@ void SettingsActivity::displayTaskLoop() {
 void SettingsActivity::render() const {
   renderer.clearScreen();
 
+  if (ThemeEngine::ThemeManager::get().getElement("Settings")) {
+    ThemeEngine::ThemeManager::get().renderScreen("Settings", renderer, themeContext);
+    renderer.displayBuffer();
+    return;
+  }
+
+  // Legacy rendering
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -206,7 +258,6 @@ void SettingsActivity::render() const {
   // Draw selection
   renderer.fillRect(0, 60 + selectedCategoryIndex * 30 - 2, pageWidth - 1, 30);
 
-  // Draw all categories
   for (int i = 0; i < categoryCount; i++) {
     const int categoryY = 60 + i * 30; // 30 pixels between categories
 
@@ -221,11 +272,134 @@ void SettingsActivity::render() const {
       pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
       pageHeight - 60, CROSSPOINT_VERSION);
 
-  // Draw help text
   const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3,
                            labels.btn4);
 
-  // Always use standard refresh for settings screen
   renderer.displayBuffer();
+}
+
+void SettingsActivity::updateThemeContext(bool fullUpdate) {
+  themeContext.setInt("System.Battery", battery.readPercentage());
+
+  // Categories
+  if (fullUpdate) {
+    themeContext.setInt("Categories.Count", categoryCount);
+  }
+  
+  themeContext.setInt("Categories.Selected", selectedCategoryIndex);
+
+  for (int i = 0; i < categoryCount; i++) {
+    if (fullUpdate) {
+      themeContext.setListItem("Categories", i, "Name", allCategories[i].name);
+      themeContext.setListItem("Categories", i, "SettingsCount", allCategories[i].count);
+    }
+    themeContext.setListItem("Categories", i, "Selected", i == selectedCategoryIndex);
+  }
+
+  // Provide ALL settings for ALL categories
+  // Format: Category0.Settings.0.Name, Category0.Settings.1.Name, etc.
+  for (int cat = 0; cat < categoryCount; cat++) {
+    std::string catPrefix = "Category" + std::to_string(cat) + ".Settings";
+    for (int i = 0; i < allCategories[cat].count; i++) {
+      bool isSelected = (cat == selectedCategoryIndex && i == selectedSettingIndex);
+      updateContextForSetting(themeContext, catPrefix, i, allCategories[cat].settings[i], isSelected, fullUpdate);
+    }
+  }
+
+  // Also provide current category's settings as "Settings" for simpler themes
+  if (fullUpdate) {
+     themeContext.setInt("Settings.Count", allCategories[selectedCategoryIndex].count);
+  }
+  
+  for (int i = 0; i < allCategories[selectedCategoryIndex].count; i++) {
+    updateContextForSetting(themeContext, "Settings", i, allCategories[selectedCategoryIndex].settings[i],
+                            i == selectedSettingIndex, fullUpdate);
+  }
+}
+
+void SettingsActivity::handleThemeInput() {
+  const int currentCategorySettingsCount = allCategories[selectedCategoryIndex].count;
+
+  // Up/Down navigates settings within current category
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (currentCategorySettingsCount - 1);
+    updateThemeContext(false); // Partial update
+    updateRequired = true;
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+    selectedSettingIndex = (selectedSettingIndex < currentCategorySettingsCount - 1) ? (selectedSettingIndex + 1) : 0;
+    updateThemeContext(false); // Partial update
+    updateRequired = true;
+    return;
+  }
+
+  // Left/Right/PageBack/PageForward switches categories
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left) ||
+      mappedInput.wasPressed(MappedInputManager::Button::PageBack)) {
+    selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
+    selectedSettingIndex = 0;  // Reset to first setting in new category
+    updateThemeContext(true); // Full update (category changed)
+    updateRequired = true;
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Right) ||
+      mappedInput.wasPressed(MappedInputManager::Button::PageForward)) {
+    selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
+    selectedSettingIndex = 0;
+    updateThemeContext(true); // Full update
+    updateRequired = true;
+    return;
+  }
+
+  // Confirm toggles/activates current setting
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    toggleCurrentSetting();
+    updateThemeContext(false); // Values changed, partial update is enough (names don't change)
+    updateRequired = true;
+    return;
+  }
+
+  // Back exits
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    SETTINGS.saveToFile();
+    onGoHome();
+  }
+}
+
+void SettingsActivity::toggleCurrentSetting() {
+  const auto& setting = allCategories[selectedCategoryIndex].settings[selectedSettingIndex];
+
+  if (setting.type == SettingType::TOGGLE && setting.valuePtr) {
+    bool currentVal = SETTINGS.*(setting.valuePtr);
+    SETTINGS.*(setting.valuePtr) = !currentVal;
+  } else if (setting.type == SettingType::ENUM && setting.valuePtr) {
+    uint8_t val = SETTINGS.*(setting.valuePtr);
+    SETTINGS.*(setting.valuePtr) = (val + 1) % static_cast<uint8_t>(setting.enumValues.size());
+  } else if (setting.type == SettingType::VALUE && setting.valuePtr) {
+    int8_t val = SETTINGS.*(setting.valuePtr);
+    if (val + setting.valueRange.step > setting.valueRange.max) {
+      SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
+    } else {
+      SETTINGS.*(setting.valuePtr) = val + setting.valueRange.step;
+    }
+  } else if (setting.type == SettingType::ACTION) {
+    if (strcmp(setting.name, "KOReader Sync") == 0) {
+      enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] { subActivityExitPending = true; }));
+    } else if (strcmp(setting.name, "Calibre Settings") == 0) {
+      enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] { subActivityExitPending = true; }));
+    } else if (strcmp(setting.name, "Clear Cache") == 0) {
+      enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] { subActivityExitPending = true; }));
+    } else if (strcmp(setting.name, "Check for updates") == 0) {
+      enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] { subActivityExitPending = true; }));
+    } else if (strcmp(setting.name, "Theme") == 0) {
+      enterNewActivity(new ThemeSelectionActivity(renderer, mappedInput, [this] { subActivityExitPending = true; }));
+    }
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+  }
+
+  SETTINGS.saveToFile();
 }

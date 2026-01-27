@@ -4,9 +4,9 @@
 #include <freertos/task.h>
 
 #include <functional>
-#include <string>
-#include <vector>
 
+#include "ThemeContext.h"
+#include "ThemeManager.h"
 #include "activities/ActivityWithSubactivity.h"
 
 class CrossPointSettings;
@@ -16,7 +16,9 @@ class SettingsActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
-  int selectedCategoryIndex = 0;  // Currently selected category
+  bool subActivityExitPending = false;
+  int selectedCategoryIndex = 0;
+  int selectedSettingIndex = 0;
   const std::function<void()> onGoHome;
 
   static constexpr int categoryCount = 4;
@@ -25,7 +27,13 @@ class SettingsActivity final : public ActivityWithSubactivity {
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void render() const;
-  void enterCategory(int categoryIndex);
+  void enterCategoryLegacy(int categoryIndex);
+
+  // Theme support
+  ThemeEngine::ThemeContext themeContext;
+  void updateThemeContext(bool fullUpdate = false);
+  void handleThemeInput();
+  void toggleCurrentSetting();
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

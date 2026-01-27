@@ -21,11 +21,8 @@ void IniParser::trim(std::string& s) {
 
 std::map<std::string, std::map<std::string, std::string>> IniParser::parse(Stream& stream) {
   std::map<std::string, std::map<std::string, std::string>> sections;
-  // stream check not strictly possible like file, can rely on available()
-
-  std::string currentSection = "";
-  String line;  // Use Arduino String for easy file reading, then convert to
-                // std::string
+  std::string currentSection;
+  String line;
 
   while (stream.available()) {
     line = stream.readStringUntil('\n');
@@ -33,7 +30,7 @@ std::map<std::string, std::map<std::string, std::string>> IniParser::parse(Strea
     trim(sLine);
 
     if (sLine.empty() || sLine[0] == ';' || sLine[0] == '#') {
-      continue;  // Skip comments and empty lines
+      continue;
     }
 
     if (sLine.front() == '[' && sLine.back() == ']') {
@@ -65,7 +62,7 @@ std::map<std::string, std::map<std::string, std::string>> IniParser::parseString
   std::map<std::string, std::map<std::string, std::string>> sections;
   std::stringstream ss(content);
   std::string line;
-  std::string currentSection = "";
+  std::string currentSection;
 
   while (std::getline(ss, line)) {
     trim(line);
