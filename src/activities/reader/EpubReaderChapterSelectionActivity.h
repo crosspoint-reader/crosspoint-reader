@@ -22,10 +22,6 @@ class EpubReaderChapterSelectionActivity final : public ActivityWithSubactivity 
   const std::function<void(int newSpineIndex)> onSelectSpineIndex;
   const std::function<void(int newSpineIndex, int newPage)> onSyncPosition;
 
-  // Number of items that fit on a page, derived from logical screen height.
-  // This adapts automatically when switching between portrait and landscape.
-  int getPageItems() const;
-
   // Total items including sync options (top and bottom)
   int getTotalItems() const;
 

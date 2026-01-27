@@ -105,10 +105,10 @@ void NetworkModeSelectionActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, marginTop, "File Transfer", true, EpdFontFamily::BOLD);
 
   // Draw subtitle
-  renderer.drawCenteredText(UI_10_FONT_ID, 50, "How would you like to connect?");
+  renderer.drawCenteredText(UI_10_FONT_ID, marginTop + 35, "How would you like to connect?");
 
   // Draw menu items centered on screen
   constexpr int itemHeight = 50;  // Height for each menu item (including description)
@@ -120,13 +120,13 @@ void NetworkModeSelectionActivity::render() const {
 
     // Draw selection highlight (black fill) for selected item
     if (isSelected) {
-      renderer.fillRect(20, itemY - 2, pageWidth - 40, itemHeight - 6);
+      renderer.fillRect(marginLeft, itemY - 2, pageWidth - marginLeft - marginRight, itemHeight - 6);
     }
 
     // Draw text: black=false (white text) when selected (on black background)
     //            black=true (black text) when not selected (on white background)
-    renderer.drawText(UI_10_FONT_ID, 30, itemY, MENU_ITEMS[i], /*black=*/!isSelected);
-    renderer.drawText(SMALL_FONT_ID, 30, itemY + 22, MENU_DESCRIPTIONS[i], /*black=*/!isSelected);
+    renderer.drawText(UI_10_FONT_ID, marginLeft + 10, itemY, MENU_ITEMS[i], /*black=*/!isSelected);
+    renderer.drawText(SMALL_FONT_ID, marginLeft + 10, itemY + 22, MENU_DESCRIPTIONS[i], /*black=*/!isSelected);
   }
 
   // Draw help text at bottom

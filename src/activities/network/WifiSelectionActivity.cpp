@@ -513,7 +513,7 @@ void WifiSelectionActivity::renderNetworkList() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "WiFi Networks", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, marginTop, "WiFi Networks", true, EpdFontFamily::BOLD);
 
   if (networks.empty()) {
     // No networks found or scan failed
@@ -523,8 +523,8 @@ void WifiSelectionActivity::renderNetworkList() const {
     renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, "Press OK to scan again");
   } else {
     // Calculate how many networks we can display
-    constexpr int startY = 60;
-    constexpr int lineHeight = 25;
+    const int startY = contentStartY;
+    constexpr int lineHeight = 25;  // tighter spacing than normal menus
     const int maxVisibleNetworks = (pageHeight - startY - 40) / lineHeight;
 
     // Calculate scroll offset to keep selected item visible
@@ -541,7 +541,7 @@ void WifiSelectionActivity::renderNetworkList() const {
 
       // Draw selection indicator
       if (static_cast<int>(i) == selectedNetworkIndex) {
-        renderer.drawText(UI_10_FONT_ID, 5, networkY, ">");
+        renderer.drawText(UI_10_FONT_ID, marginLeft - 15, networkY, ">");
       }
 
       // Draw network name (truncate if too long)
@@ -549,42 +549,47 @@ void WifiSelectionActivity::renderNetworkList() const {
       if (displayName.length() > 16) {
         displayName.replace(13, displayName.length() - 13, "...");
       }
-      renderer.drawText(UI_10_FONT_ID, 20, networkY, displayName.c_str());
+      renderer.drawText(UI_10_FONT_ID, marginLeft, networkY, displayName.c_str());
 
       // Draw signal strength indicator
       std::string signalStr = getSignalStrengthIndicator(network.rssi);
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 90, networkY, signalStr.c_str());
+      renderer.drawText(UI_10_FONT_ID, pageWidth - marginRight - 90, networkY, signalStr.c_str());
 
       // Draw saved indicator (checkmark) for networks with saved passwords
       if (network.hasSavedPassword) {
-        renderer.drawText(UI_10_FONT_ID, pageWidth - 50, networkY, "+");
+        renderer.drawText(UI_10_FONT_ID, pageWidth - marginRight - 50, networkY, "+");
       }
 
       // Draw lock icon for encrypted networks
       if (network.isEncrypted) {
-        renderer.drawText(UI_10_FONT_ID, pageWidth - 30, networkY, "*");
+        renderer.drawText(UI_10_FONT_ID, pageWidth - marginRight - 30, networkY, "*");
       }
     }
 
     // Draw scroll indicators if needed
     if (scrollOffset > 0) {
-      renderer.drawText(SMALL_FONT_ID, pageWidth - 15, startY - 10, "^");
+      renderer.drawText(SMALL_FONT_ID, pageWidth - marginRight - 15, startY - 10, "^");
     }
     if (scrollOffset + maxVisibleNetworks < static_cast<int>(networks.size())) {
-      renderer.drawText(SMALL_FONT_ID, pageWidth - 15, startY + maxVisibleNetworks * lineHeight, "v");
+      renderer.drawText(SMALL_FONT_ID, pageWidth - marginRight - 15, startY + maxVisibleNetworks * lineHeight, "v");
     }
 
     // Show network count
     char countStr[32];
     snprintf(countStr, sizeof(countStr), "%zu networks found", networks.size());
-    renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 90, countStr);
+    renderer.drawText(SMALL_FONT_ID, pageWidth - marginRight - renderer.getTextWidth(SMALL_FONT_ID, countStr) - 95,
+                      pageHeight - 90, countStr);
   }
 
   // Show MAC address above the network count and legend
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 105, cachedMacAddress.c_str());
+  renderer.drawText(SMALL_FONT_ID,
+                    pageWidth - marginRight - renderer.getTextWidth(SMALL_FONT_ID, cachedMacAddress.c_str()) - 95,
+                    pageHeight - 105, cachedMacAddress.c_str());
 
   // Draw help text
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 75, "* = Encrypted | + = Saved");
+  const char helpLabel[] = "* = Encrypted | + = Saved";
+  renderer.drawText(SMALL_FONT_ID, pageWidth - marginRight - renderer.getTextWidth(SMALL_FONT_ID, helpLabel) - 95,
+                    pageHeight - 75, helpLabel);
   const auto labels = mappedInput.mapLabels("« Back", "Connect", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
