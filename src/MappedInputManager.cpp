@@ -100,6 +100,21 @@ bool MappedInputManager::wasAnyReleased() const { return inputManager.wasAnyRele
 
 unsigned long MappedInputManager::getHeldTime() const { return inputManager.getHeldTime(); }
 
+void MappedInputManager::injectButton(Button button) {
+  // Get the physical button mapping
+  auto physicalButton = mapButton(button);
+  
+  // Note: InputManager implementation would need to support injection
+  // For now, we'll store injected state for next update cycle
+  // This would require extending InputManager to accept external button states
+  
+  // Placeholder for injection logic
+  // In a complete implementation, this would interface with InputManager
+  // to simulate button presses
+  
+  (void)physicalButton; // Suppress unused variable warning for now
+}
+
 MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const char* confirm, const char* previous,
                                                          const char* next) const {
   const auto layout = static_cast<CrossPointSettings::FRONT_BUTTON_LAYOUT>(SETTINGS.frontButtonLayout);

@@ -3,6 +3,10 @@
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 
+#include <cstring>
+
+#include "BluetoothManager.h"
+#include "CalibreSettingsActivity.h"
 #include "CategorySettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -11,6 +15,8 @@
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
 namespace {
+constexpr int settingsCount = 24;
+const SettingInfo settingsList[settingsCount] = {
 constexpr int displaySettingsCount = 5;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
@@ -49,7 +55,12 @@ constexpr int systemSettingsCount = 5;
 const SettingInfo systemSettings[systemSettingsCount] = {
     SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
-    SettingInfo::Action("KOReader Sync"), SettingInfo::Action("Calibre Settings"), SettingInfo::Action("Clear Cache"),
+    SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
+                      {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
+    SettingInfo::Enum("Bluetooth", &CrossPointSettings::bluetoothEnabled, {"Off", "On"}),
+    SettingInfo::Enum("Bluetooth Keyboard", &CrossPointSettings::bluetoothKeyboardEnabled, {"Disabled", "Enabled"}),
+    SettingInfo::Action("KOReader Sync"),
+    SettingInfo::Action("Calibre Settings"),
     SettingInfo::Action("Check for updates")};
 }  // namespace
 
@@ -126,6 +137,107 @@ void SettingsActivity::enterCategory(int categoryIndex) {
     return;
   }
 
+  const auto& setting = settingsList[selectedSettingIndex];
+
+  if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+    // Toggle the boolean value using the member pointer
+    const bool currentValue = SETTINGS.*(setting.valuePtr);
+    SETTINGS.*(setting.valuePtr) = !currentValue;
+  } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+    const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
+    const uint8_t newValue = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+    SETTINGS.*(setting.valuePtr) = newValue;
+    
+    // Handle Bluetooth toggle specifically
+    if (strcmp(setting.name, "Bluetooth") == 0) {
+      if (newValue == CrossPointSettings::BLUETOOTH_MODE::ON) {
+        // Enable Bluetooth
+        if (!BLUETOOTH_MANAGER.isInitialized()) {
+          if (BLUETOOTH_MANAGER.initialize()) {
+            BLUETOOTH_MANAGER.startAdvertising();
+          } else {
+            // Failed to initialize, revert to OFF
+            SETTINGS.*(setting.valuePtr) = CrossPointSettings::BLUETOOTH_MODE::OFF;
+          }
+        }
+      } else {
+        // Disable Bluetooth
+        if (BLUETOOTH_MANAGER.isInitialized()) {
+          BLUETOOTH_MANAGER.shutdown();
+        }
+      }
+    } else if (strcmp(setting.name, "Bluetooth Keyboard") == 0) {
+      if (newValue == CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::KBD_ENABLED) {
+        // Enable keyboard requires Bluetooth to be on
+        if (!BLUETOOTH_MANAGER.isInitialized()) {
+          // Force Bluetooth on first
+          SETTINGS.bluetoothEnabled = CrossPointSettings::BLUETOOTH_MODE::ON;
+          if (!BLUETOOTH_MANAGER.initialize()) {
+            // Failed, revert both to OFF
+            SETTINGS.bluetoothEnabled = CrossPointSettings::BLUETOOTH_MODE::OFF;
+            SETTINGS.*(setting.valuePtr) = CrossPointSettings::BLUETOOTH_KEYBOARD_MODE::KBD_DISABLED;
+          }
+        }
+        
+        // Initialize keyboard handler if not already done
+        auto* keyboardHandler = BLUETOOTH_MANAGER.getKeyboardHandler();
+        if (!keyboardHandler && BLUETOOTH_MANAGER.isInitialized()) {
+          // This will be handled by BluetoothManager on next init
+          BLUETOOTH_MANAGER.shutdown();
+          BLUETOOTH_MANAGER.initialize();
+        }
+      } else {
+        // Disable keyboard (but keep Bluetooth on)
+        auto* keyboardHandler = BLUETOOTH_MANAGER.getKeyboardHandler();
+        if (keyboardHandler) {
+          keyboardHandler->shutdown();
+          // Would need to reinit without keyboard to clean up properly
+          BLUETOOTH_MANAGER.shutdown();
+          BLUETOOTH_MANAGER.initialize();
+        }
+        
+        // Force garbage collection to free keyboard memory
+        BLUETOOTH_MANAGER.collectGarbage();
+      }
+    }
+  } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+    // Decreasing would also be nice for large ranges I think but oh well can't have everything
+    const int8_t currentValue = SETTINGS.*(setting.valuePtr);
+    // Wrap to minValue if exceeding setting value boundary
+    if (currentValue + setting.valueRange.step > setting.valueRange.max) {
+      SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
+    } else {
+      SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
+    }
+  } else if (setting.type == SettingType::ACTION) {
+    if (strcmp(setting.name, "KOReader Sync") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Calibre Settings") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Check for updates") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    }
+  } else {
+    // Only toggle if it's a toggle type and has a value pointer
+    return;
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   exitActivity();
 

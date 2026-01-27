@@ -63,6 +63,12 @@ class CrossPointSettings {
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2 };
 
+  // Bluetooth mode settings
+  enum BLUETOOTH_MODE { OFF = 0, ON = 1 };
+
+  // Bluetooth keyboard mode settings
+  enum BLUETOOTH_KEYBOARD_MODE { KBD_DISABLED = 0, KBD_ENABLED = 1 };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -99,6 +105,10 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
+  // Bluetooth enabled setting
+  uint8_t bluetoothEnabled = OFF;
+  // Bluetooth keyboard enabled setting
+  uint8_t bluetoothKeyboardEnabled = KBD_DISABLED;
 
   ~CrossPointSettings() = default;
 
