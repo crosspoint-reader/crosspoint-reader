@@ -71,6 +71,9 @@ void HomeActivity::onEnter() {
         if (!xtc.getTitle().empty()) {
           lastBookTitle = std::string(xtc.getTitle());
         }
+        if (!xtc.getAuthor().empty()) {
+          lastBookAuthor = std::string(xtc.getAuthor());
+        }
         // Try to generate thumbnail image for Continue Reading card
         if (xtc.generateThumbBmp()) {
           coverBmpPath = xtc.getThumbBmpPath();
