@@ -28,6 +28,10 @@ void SleepActivity::onEnter() {
     return renderCoverSleepScreen();
   }
 
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVERELSECUSTOM) {
+    return renderCoverElseCustomSleepScreen();
+  }
+
   renderDefaultSleepScreen();
 }
 
@@ -276,6 +280,75 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   renderDefaultSleepScreen();
+}
+
+void SleepActivity::renderCoverElseCustomSleepScreen() const {
+  if (APP_STATE.openEpubPath.empty()) {
+    return renderCustomSleepScreen();
+  }
+
+  std::string coverBmpPath;
+  bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+
+  // Check if the current book is XTC, TXT, or EPUB
+  if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
+      StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
+    // Handle XTC file
+    Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!lastXtc.load()) {
+      Serial.println("[SLP] Failed to load last XTC");
+      return renderCustomSleepScreen();
+    }
+
+    if (!lastXtc.generateCoverBmp()) {
+      Serial.println("[SLP] Failed to generate XTC cover bmp");
+      return renderCustomSleepScreen();
+    }
+
+    coverBmpPath = lastXtc.getCoverBmpPath();
+  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".txt")) {
+    // Handle TXT file - looks for cover image in the same folder
+    Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!lastTxt.load()) {
+      Serial.println("[SLP] Failed to load last TXT");
+      return renderCustomSleepScreen();
+    }
+
+    if (!lastTxt.generateCoverBmp()) {
+      Serial.println("[SLP] No cover image found for TXT file");
+      return renderCustomSleepScreen();
+    }
+
+    coverBmpPath = lastTxt.getCoverBmpPath();
+  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
+    // Handle EPUB file
+    Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!lastEpub.load()) {
+      Serial.println("[SLP] Failed to load last epub");
+      return renderCustomSleepScreen();
+    }
+
+    if (!lastEpub.generateCoverBmp(cropped)) {
+      Serial.println("[SLP] Failed to generate cover bmp");
+      return renderCustomSleepScreen();
+    }
+
+    coverBmpPath = lastEpub.getCoverBmpPath(cropped);
+  } else {
+    return renderCustomSleepScreen();
+  }
+
+  FsFile file;
+  if (SdMan.openFileForRead("SLP", coverBmpPath, file)) {
+    Bitmap bitmap(file);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      Serial.printf("[SLP] Rendering sleep cover: %s\n", coverBmpPath);
+      renderBitmapSleepScreen(bitmap);
+      return;
+    }
+  }
+
+  renderCustomSleepScreen();
 }
 
 void SleepActivity::renderBlankSleepScreen() const {
