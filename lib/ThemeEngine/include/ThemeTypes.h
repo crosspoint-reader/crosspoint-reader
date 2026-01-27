@@ -17,10 +17,17 @@ struct Dimension {
   static Dimension parse(const std::string& str) {
     if (str.empty()) return Dimension(0, DimensionUnit::PIXELS);
 
+    auto safeParseInt = [](const std::string& s) {
+      char* end = nullptr;
+      long v = std::strtol(s.c_str(), &end, 10);
+      if (!end || end == s.c_str()) return 0;
+      return static_cast<int>(v);
+    };
+
     if (str.back() == '%') {
-      return Dimension(std::stoi(str.substr(0, str.length() - 1)), DimensionUnit::PERCENT);
+      return Dimension(safeParseInt(str.substr(0, str.length() - 1)), DimensionUnit::PERCENT);
     }
-    return Dimension(std::stoi(str), DimensionUnit::PIXELS);
+    return Dimension(safeParseInt(str), DimensionUnit::PIXELS);
   }
 
   int resolve(int parentSize) const {
@@ -45,7 +52,8 @@ struct Color {
     if (str.size() > 2 && str.substr(0, 2) == "0x") {
       return Color((uint8_t)std::strtol(str.c_str(), nullptr, 16));
     }
-    return Color((uint8_t)std::stoi(str));
+    // Safe fallback using strtol (returns 0 on error, no exception)
+    return Color((uint8_t)std::strtol(str.c_str(), nullptr, 10));
   }
 };
 

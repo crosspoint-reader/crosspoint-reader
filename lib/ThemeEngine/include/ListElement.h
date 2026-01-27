@@ -34,6 +34,7 @@ class List : public Container {
   List(const std::string& id) : Container(id) {}
 
   ElementType getType() const override { return ElementType::List; }
+  const char* getTypeName() const override { return "List"; }
 
   void setSource(const std::string& s) {
     source = s;

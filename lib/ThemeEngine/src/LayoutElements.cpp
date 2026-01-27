@@ -22,13 +22,23 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
 
   std::string colStr = context.evaluatestring(colorExpr);
   uint8_t color = Color::parse(colStr).value;
-  bool black = (color == 0x00);
+  // Draw as black if color is dark (< 0x80), as white if light
+  // This allows grayscale colors to render visibly
+  bool black = (color < 0x80);
 
-  // Use absW/absH if set, otherwise use iconSize
-  int w = absW > 0 ? absW : iconSize;
-  int h = absH > 0 ? absH : iconSize;
-  int cx = absX + w / 2;
-  int cy = absY + h / 2;
+  // iconSize determines the actual drawn icon size
+  // absW/absH determine the bounding box for centering
+  int drawSize = iconSize;
+  int boundW = absW > 0 ? absW : iconSize;
+  int boundH = absH > 0 ? absH : iconSize;
+
+  // Center the icon within its bounding box
+  int iconX = absX + (boundW - drawSize) / 2;
+  int iconY = absY + (boundH - drawSize) / 2;
+  int w = drawSize;
+  int h = drawSize;
+  int cx = iconX + w / 2;
+  int cy = iconY + h / 2;
 
   // 1. Try to load as a theme asset (exact match or .bmp extension)
   std::string path = iconName;
@@ -45,13 +55,14 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
   if (data && !data->empty()) {
     Bitmap bmp(data->data(), data->size());
     if (bmp.parseHeaders() == BmpReaderError::Ok) {
-      renderer.drawTransparentBitmap(bmp, absX, absY, w, h);
+      renderer.drawTransparentBitmap(bmp, iconX, iconY, w, h);
       markClean();
       return;
     }
   }
 
   // 2. Built-in icons (simple geometric shapes) as fallback
+  // All icons use iconX, iconY, w, h, cx, cy for proper centering
   if (iconName == "heart" || iconName == "favorite") {
     // Simple heart shape approximation
     int s = w / 4;
@@ -66,8 +77,8 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
     // Book icon
     int bw = w * 2 / 3;
     int bh = h * 3 / 4;
-    int bx = absX + (w - bw) / 2;
-    int by = absY + (h - bh) / 2;
+    int bx = iconX + (w - bw) / 2;
+    int by = iconY + (h - bh) / 2;
     renderer.drawRect(bx, by, bw, bh, black);
     renderer.drawLine(bx + bw / 3, by, bx + bw / 3, by + bh - 1, black);
     // Pages
@@ -77,8 +88,8 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
     // Folder icon
     int fw = w * 3 / 4;
     int fh = h * 2 / 3;
-    int fx = absX + (w - fw) / 2;
-    int fy = absY + (h - fh) / 2;
+    int fx = iconX + (w - fw) / 2;
+    int fy = iconY + (h - fh) / 2;
     // Tab
     renderer.fillRect(fx, fy, fw / 3, fh / 6, black);
     // Body
@@ -93,15 +104,15 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
     renderer.drawRect(cx - ir, cy - ir, ir * 2, ir * 2, black);
     // Teeth
     int t = r / 3;
-    renderer.fillRect(cx - t / 2, absY, t, r - ir, black);
+    renderer.fillRect(cx - t / 2, iconY, t, r - ir, black);
     renderer.fillRect(cx - t / 2, cy + r, t, r - ir, black);
-    renderer.fillRect(absX, cy - t / 2, r - ir, t, black);
+    renderer.fillRect(iconX, cy - t / 2, r - ir, t, black);
     renderer.fillRect(cx + r, cy - t / 2, r - ir, t, black);
   } else if (iconName == "transfer" || iconName == "arrow" || iconName == "send") {
     // Arrow pointing right
     int aw = w / 2;
     int ah = h / 3;
-    int ax = absX + w / 4;
+    int ax = iconX + w / 4;
     int ay = cy - ah / 2;
     // Shaft
     renderer.fillRect(ax, ay, aw, ah, black);
@@ -114,8 +125,8 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
     // Device/tablet icon
     int dw = w * 2 / 3;
     int dh = h * 3 / 4;
-    int dx = absX + (w - dw) / 2;
-    int dy = absY + (h - dh) / 2;
+    int dx = iconX + (w - dw) / 2;
+    int dy = iconY + (h - dh) / 2;
     renderer.drawRect(dx, dy, dw, dh, black);
     // Screen
     renderer.drawRect(dx + 2, dy + 2, dw - 4, dh - 8, black);
@@ -125,18 +136,18 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
     // Battery icon
     int bw = w * 3 / 4;
     int bh = h / 2;
-    int bx = absX + (w - bw) / 2;
-    int by = absY + (h - bh) / 2;
+    int bx = iconX + (w - bw) / 2;
+    int by = iconY + (h - bh) / 2;
     renderer.drawRect(bx, by, bw - 3, bh, black);
     renderer.fillRect(bx + bw - 3, by + bh / 4, 3, bh / 2, black);
   } else if (iconName == "check" || iconName == "checkmark") {
-    // Checkmark
-    int x1 = absX + w / 4;
+    // Checkmark - use iconX/iconY for proper centering
+    int x1 = iconX + w / 4;
     int y1 = cy;
     int x2 = cx;
-    int y2 = absY + h * 3 / 4;
-    int x3 = absX + w * 3 / 4;
-    int y3 = absY + h / 4;
+    int y2 = iconY + h * 3 / 4;
+    int x3 = iconX + w * 3 / 4;
+    int y3 = iconY + h / 4;
     renderer.drawLine(x1, y1, x2, y2, black);
     renderer.drawLine(x2, y2, x3, y3, black);
     // Thicken
@@ -163,11 +174,18 @@ void Icon::draw(const GfxRenderer& renderer, const ThemeContext& context) {
       renderer.drawLine(cx, cy + s - i, cx - s + i, cy, black);
       renderer.drawLine(cx, cy + s - i, cx + s - i, cy, black);
     }
+  } else if (iconName == "right") {
+    // Right arrow
+    int s = w / 3;
+    for (int i = 0; i < s; i++) {
+      renderer.drawLine(cx + s - i, cy, cx, cy - s + i, black);
+      renderer.drawLine(cx + s - i, cy, cx, cy + s - i, black);
+    }
   } else {
     // Unknown icon - draw placeholder
-    renderer.drawRect(absX, absY, w, h, black);
-    renderer.drawLine(absX, absY, absX + w - 1, absY + h - 1, black);
-    renderer.drawLine(absX + w - 1, absY, absX, absY + h - 1, black);
+    renderer.drawRect(iconX, iconY, w, h, black);
+    renderer.drawLine(iconX, iconY, iconX + w - 1, iconY + h - 1, black);
+    renderer.drawLine(iconX + w - 1, iconY, iconX, iconY + h - 1, black);
   }
 
   markClean();
