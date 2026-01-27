@@ -256,8 +256,9 @@ void KeyboardEntryActivity::render() const {
   renderer.drawCenteredText(UI_10_FONT_ID, startY, title.c_str());
 
   // Draw input field
-  const int inputY = startY + 22;
-  renderer.drawText(UI_10_FONT_ID, 10, inputY, "[");
+  const int inputStartY = startY + 22;
+  int inputEndY = startY + 22;
+  renderer.drawText(UI_10_FONT_ID, 10, inputStartY, "[");
 
   std::string displayText;
   if (isPassword) {
@@ -269,19 +270,29 @@ void KeyboardEntryActivity::render() const {
   // Show cursor at end
   displayText += "_";
 
-  // Truncate if too long for display - use actual character width from font
-  int approxCharWidth = renderer.getSpaceWidth(UI_10_FONT_ID);
-  if (approxCharWidth < 1) approxCharWidth = 8;  // Fallback to approximate width
-  const int maxDisplayLen = (pageWidth - 40) / approxCharWidth;
-  if (displayText.length() > static_cast<size_t>(maxDisplayLen)) {
-    displayText = "..." + displayText.substr(displayText.length() - maxDisplayLen + 3);
-  }
+  // Render input text across multiple lines
+  int lineStartIdx = 0;
+  int lineEndIdx = displayText.length();
+  while (true) {
+    std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, lineText.c_str());
+    if (textWidth <= pageWidth - 40) {
+      renderer.drawText(UI_10_FONT_ID, 20, inputEndY, lineText.c_str());
+      if (lineEndIdx == displayText.length()) {
+        break;
+      }
 
-  renderer.drawText(UI_10_FONT_ID, 20, inputY, displayText.c_str());
-  renderer.drawText(UI_10_FONT_ID, pageWidth - 15, inputY, "]");
+      inputEndY += renderer.getLineHeight(UI_10_FONT_ID);
+      lineStartIdx = lineEndIdx;
+      lineEndIdx = displayText.length();
+    } else {
+      lineEndIdx -= 1;
+    }
+  }
+  renderer.drawText(UI_10_FONT_ID, pageWidth - 15, inputEndY, "]");
 
   // Draw keyboard - use compact spacing to fit 5 rows on screen
-  const int keyboardStartY = inputY + 25;
+  const int keyboardStartY = inputEndY + 25;
   constexpr int keyWidth = 18;
   constexpr int keyHeight = 18;
   constexpr int keySpacing = 3;
