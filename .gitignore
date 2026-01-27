@@ -7,3 +7,5 @@ lib/EpdFont/fontsrc
 .vs
 build
 **/__pycache__/
+/compile_commands.json
+/.cache
