@@ -22,6 +22,7 @@ constexpr FrontLayoutMap kFrontLayouts[] = {
     {InputManager::BTN_BACK, InputManager::BTN_CONFIRM, InputManager::BTN_LEFT, InputManager::BTN_RIGHT},
     {InputManager::BTN_LEFT, InputManager::BTN_RIGHT, InputManager::BTN_BACK, InputManager::BTN_CONFIRM},
     {InputManager::BTN_CONFIRM, InputManager::BTN_LEFT, InputManager::BTN_BACK, InputManager::BTN_RIGHT},
+    {InputManager::BTN_BACK, InputManager::BTN_CONFIRM, InputManager::BTN_RIGHT, InputManager::BTN_LEFT},
 };
 
 // Order matches CrossPointSettings::SIDE_BUTTON_LAYOUT.

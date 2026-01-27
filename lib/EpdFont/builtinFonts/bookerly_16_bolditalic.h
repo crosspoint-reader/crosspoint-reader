@@ -3,6 +3,7 @@
  * name: bookerly_16_bolditalic
  * size: 16
  * mode: 2-bit
+ * Command used: fontconvert.py bookerly_16_bolditalic 16 ../builtinFonts/source/Bookerly/Bookerly-BoldItalic.ttf --2bit
  */
 #pragma once
 #include "EpdFontData.h"

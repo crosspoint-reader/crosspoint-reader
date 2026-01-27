@@ -38,14 +38,16 @@ struct XtcHeader {
   uint8_t versionMajor;      // 0x04: Format version major (typically 1) (together with minor = 1.0)
   uint8_t versionMinor;      // 0x05: Format version minor (typically 0)
   uint16_t pageCount;        // 0x06: Total page count
-  uint32_t flags;            // 0x08: Flags/reserved
-  uint32_t headerSize;       // 0x0C: Size of header section (typically 88)
-  uint32_t reserved1;        // 0x10: Reserved
-  uint32_t tocOffset;        // 0x14: TOC offset (0 if unused) - 4 bytes, not 8!
+  uint8_t readDirection;     // 0x08: Reading direction (0-2)
+  uint8_t hasMetadata;       // 0x09: Has metadata (0-1)
+  uint8_t hasThumbnails;     // 0x0A: Has thumbnails (0-1)
+  uint8_t hasChapters;       // 0x0B: Has chapters (0-1)
+  uint32_t currentPage;      // 0x0C: Current page (1-based) (0-65535)
+  uint64_t metadataOffset;   // 0x10: Metadata offset (0 if unused)
   uint64_t pageTableOffset;  // 0x18: Page table offset
   uint64_t dataOffset;       // 0x20: First page data offset
-  uint64_t reserved2;        // 0x28: Reserved
-  uint32_t titleOffset;      // 0x30: Title string offset
+  uint64_t thumbOffset;      // 0x28: Thumbnail offset
+  uint32_t chapterOffset;    // 0x30: Chapter data offset
   uint32_t padding;          // 0x34: Padding to 56 bytes
 };
 #pragma pack(pop)

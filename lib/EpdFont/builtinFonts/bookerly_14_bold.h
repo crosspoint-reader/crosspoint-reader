@@ -3,6 +3,7 @@
  * name: bookerly_14_bold
  * size: 14
  * mode: 2-bit
+ * Command used: fontconvert.py bookerly_14_bold 14 ../builtinFonts/source/Bookerly/Bookerly-Bold.ttf --2bit
  */
 #pragma once
 #include "EpdFontData.h"
