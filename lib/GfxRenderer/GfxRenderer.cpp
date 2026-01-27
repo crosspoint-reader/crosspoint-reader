@@ -152,8 +152,17 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   einkDisplay.drawImage(bitmap, rotatedX, rotatedY, width, height);
 }
 
+void GfxRenderer::drawVal(const int x, const int y, const uint8_t val) const {
+  if (renderMode == BW && val < 3) {
+    drawPixel(x, y);
+  } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+    drawPixel(x, y, false);
+  } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+    drawPixel(x, y, false);
+  }
+}
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY) const {
+                             const float cropX, const float cropY, bool extend) const {
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
@@ -233,12 +242,85 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
-      if (renderMode == BW && val < 3) {
-        drawPixel(screenX, screenY);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+      drawVal(screenX, screenY, val);
+
+      // draw extended pixels
+      // amount of pixels taken from bitmap and repeated to extend.
+      // Trade-off between risk of repeating "edgy" content like text and more quality
+      int extendY = 20;
+      int extendX = 20;
+      int drawExtY = 0;
+      if (extend) {
+        int imgHeight = std::floor(scale * (bitmap.getHeight() - cropPixY));
+        int imgWidth = std::floor(scale * (bitmap.getWidth() - cropPixX));
+        // 1. TOP EXTENSION
+        // Check if the current pixel is within the strip to be mirrored
+        if (screenY >= y && screenY < y + extendY) {
+          // How many times do we need to mirror to fill the gap 'y'?
+          // Using +1 to ensure we cover fractional blocks at the screen edge
+          int numIterations = (y / extendY) + 1;
+
+          for (int ny = 0; ny < numIterations; ny++) {
+            // Compute 2 target rows t1, t2 for "accordeon" effect.
+            // Mirror Fold (e.g., pixel 0 goes to y-1, pixel 1 to y-2)
+            int t1 = y - 1 - (2 * ny * extendY + (screenY - y));
+            // Reverse Fold (creates the 'accordion' continuity)
+            int t2 = y - 1 - (2 * ny * extendY + (2 * extendY - 1 - (screenY - y)));
+
+            if (t1 >= 0 && t1 < y) drawVal(screenX, t1, val);
+            if (t2 >= 0 && t2 < y) drawVal(screenX, t2, val);
+          }
+        }
+
+        // 2. BOTTOM EXTENSION
+        int imgBottom = y + imgHeight;
+        int gapBottom = getScreenHeight() - imgBottom;
+
+        if (screenY >= imgBottom - extendY && screenY < imgBottom) {
+          int numIterations = (gapBottom / extendY) + 1;
+
+          for (int ny = 0; ny < numIterations; ny++) {
+            // Mirror Fold (pixel at imgBottom-1 goes to imgBottom)
+            int t1 = imgBottom + (2 * ny * extendY + (imgBottom - 1 - screenY));
+            // Reverse Fold
+            int t2 = imgBottom + (2 * ny * extendY + (2 * extendY - 1 - (imgBottom - 1 - screenY)));
+
+            if (t1 >= imgBottom && t1 < getScreenHeight()) drawVal(screenX, t1, val);
+            if (t2 >= imgBottom && t2 < getScreenHeight()) drawVal(screenX, t2, val);
+          }
+        }
+
+        // --- 2. LEFT EXTENSION ---
+        int imgRight = x + imgWidth;  // x is the left margin/offset
+        // If the current pixel is within the leftmost 'extendX' pixels of the image
+        if (screenX >= x && screenX < x + extendX) {
+          int numIterations = (x / extendX) + 1;
+          for (int nx = 0; nx < numIterations; nx++) {
+            // Mirror Fold (pixel at 'x' maps to 'x-1')
+            int t1 = x - 1 - (2 * nx * extendX + (screenX - x));
+            // Reverse Fold
+            int t2 = x - 1 - (2 * nx * extendX + (2 * extendX - 1 - (screenX - x)));
+
+            if (t1 >= 0 && t1 < x) drawVal(t1, screenY, val);
+            if (t2 >= 0 && t2 < x) drawVal(t2, screenY, val);
+          }
+        }
+
+        // --- 3. RIGHT EXTENSION ---
+        int gapRight = getScreenWidth() - imgRight;
+        // If the current pixel is within the rightmost 'extendX' pixels of the image
+        if (screenX >= imgRight - extendX && screenX < imgRight) {
+          int numIterations = (gapRight / extendX) + 1;
+          for (int nx = 0; nx < numIterations; nx++) {
+            // Mirror Fold (pixel at 'imgRight-1' maps to 'imgRight')
+            int t1 = imgRight + (2 * nx * extendX + (imgRight - 1 - screenX));
+            // Reverse Fold
+            int t2 = imgRight + (2 * nx * extendX + (2 * extendX - 1 - (imgRight - 1 - screenX)));
+
+            if (t1 >= imgRight && t1 < getScreenWidth()) drawVal(t1, screenY, val);
+            if (t2 >= imgRight && t2 < getScreenWidth()) drawVal(t2, screenY, val);
+          }
+        }
       }
     }
   }
