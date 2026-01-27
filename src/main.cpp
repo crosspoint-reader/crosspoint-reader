@@ -152,7 +152,7 @@ void enterNewActivity(Activity* activity) {
 }
 
 // Verify power button press duration on wake-up from deep sleep
-// Pre-condition: isWakeupByPowerButton() == true
+// Pre-condition: wakeByPowerButton == true
 void verifyPowerButtonDuration() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
     // Fast path for short press
@@ -289,16 +289,6 @@ bool isUsbConnected() {
   return digitalRead(UART0_RXD) == HIGH;
 }
 
-bool isWakeupByPowerButton() {
-  const auto wakeupCause = esp_sleep_get_wakeup_cause();
-  const auto resetReason = esp_reset_reason();
-  if (isUsbConnected()) {
-    return wakeupCause == ESP_SLEEP_WAKEUP_GPIO;
-  } else {
-    return (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_POWERON);
-  }
-}
-
 void setup() {
   t1 = millis();
 
@@ -333,10 +323,28 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
-  if (isWakeupByPowerButton()) {
+  const bool usbConnected = isUsbConnected();
+  const auto wakeupCause = esp_sleep_get_wakeup_cause();
+  const auto resetReason = esp_reset_reason();
+  const bool wakeByPowerButtonNoUSB = (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) &&
+                           !usbConnected;
+  const bool wakeByPowerButtonUSB = (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP) && usbConnected;
+  const bool wakeUpAfterFlash =
+      (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected);
+
+  if (wakeByPowerButtonNoUSB || wakeByPowerButtonUSB) {
     // For normal wakeups, verify power button press duration
     Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
     verifyPowerButtonDuration();
+  } else if (wakeUpAfterFlash) {
+    // After flashing, just proceed to boot
+    Serial.printf("[%lu] [   ] Wake up after flash detected, proceeding to boot\n", millis());
+  } else {
+    // If USB power caused a cold boot, go back to sleep
+    Serial.printf("[%lu] [   ] No valid wakeup detected, entering deep sleep\n", millis());
+    
+    esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+    esp_deep_sleep_start();
   }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
@@ -345,6 +353,47 @@ void setup() {
   setupDisplayAndFonts();
 
   exitActivity();
+
+  // // log reset reason and wakeup cause
+  // // log enum names as strings for easier reading in logs
+  // // Convert enum values to readable strings for logs
+  // auto resetReasonStr = [resetReason]() {
+  //   switch (resetReason) {
+  //     case ESP_RST_UNKNOWN: return "UNKNOWN";
+  //     case ESP_RST_POWERON: return "POWERON";
+  //     case ESP_RST_EXT:     return "EXT";
+  //     case ESP_RST_SW:      return "SW";
+  //     case ESP_RST_PANIC:   return "PANIC";
+  //     case ESP_RST_INT_WDT: return "INT_WDT";
+  //     case ESP_RST_TASK_WDT:return "TASK_WDT";
+  //     case ESP_RST_WDT:     return "WDT";
+  //     case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
+  //     case ESP_RST_BROWNOUT:  return "BROWNOUT";
+  //     case ESP_RST_SDIO:      return "SDIO";
+  //     default: return "OTHER";
+  //   }
+  // }();
+
+  // auto wakeupCauseStr = [wakeupCause]() {
+  //   switch (wakeupCause) {
+  //     case ESP_SLEEP_WAKEUP_UNDEFINED: return "UNDEFINED";
+  //     case ESP_SLEEP_WAKEUP_EXT0:      return "EXT0";
+  //     case ESP_SLEEP_WAKEUP_EXT1:      return "EXT1";
+  //     case ESP_SLEEP_WAKEUP_TIMER:     return "TIMER";
+  //     case ESP_SLEEP_WAKEUP_TOUCHPAD:  return "TOUCHPAD";
+  //     case ESP_SLEEP_WAKEUP_ULP:       return "ULP";
+  //     case ESP_SLEEP_WAKEUP_GPIO:      return "GPIO";
+  //     case ESP_SLEEP_WAKEUP_UART:      return "UART";
+  //     default: return "OTHER";
+  //   }
+  // }();
+
+  // const std::string resetInfo =
+  //     std::string("Reset: ") + resetReasonStr + " Wakeup: " + wakeupCauseStr + " USB: " + (usbConnected ? "Yes" : "No");
+  // enterNewActivity(
+  //     new FullScreenMessageActivity(renderer, mappedInputManager, resetInfo, EpdFontFamily::REGULAR));
+  // delay(10000);
+
   enterNewActivity(new BootActivity(renderer, mappedInputManager));
 
   APP_STATE.loadFromFile();
