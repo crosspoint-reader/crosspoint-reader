@@ -10,19 +10,19 @@ void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees clockwise
       *rotatedX = y;
-      *rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
+      *rotatedY = HalDisplay::DISPLAY_HEIGHT - 1 - x;
       break;
     }
     case LandscapeClockwise: {
       // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and left/right)
-      *rotatedX = EInkDisplay::DISPLAY_WIDTH - 1 - x;
-      *rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - y;
+      *rotatedX = HalDisplay::DISPLAY_WIDTH - 1 - x;
+      *rotatedY = HalDisplay::DISPLAY_HEIGHT - 1 - y;
       break;
     }
     case PortraitInverted: {
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees counter-clockwise
-      *rotatedX = EInkDisplay::DISPLAY_WIDTH - 1 - y;
+      *rotatedX = HalDisplay::DISPLAY_WIDTH - 1 - y;
       *rotatedY = x;
       break;
     }
@@ -36,7 +36,7 @@ void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int
 }
 
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
-  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  uint8_t* frameBuffer = display.getFrameBuffer();
 
   // Early return if no framebuffer is set
   if (!frameBuffer) {
@@ -49,14 +49,13 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   rotateCoordinates(x, y, &rotatedX, &rotatedY);
 
   // Bounds checking against physical panel dimensions
-  if (rotatedX < 0 || rotatedX >= EInkDisplay::DISPLAY_WIDTH || rotatedY < 0 ||
-      rotatedY >= EInkDisplay::DISPLAY_HEIGHT) {
+  if (rotatedX < 0 || rotatedX >= HalDisplay::DISPLAY_WIDTH || rotatedY < 0 || rotatedY >= HalDisplay::DISPLAY_HEIGHT) {
     Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n", millis(), x, y, rotatedX, rotatedY);
     return;
   }
 
   // Calculate byte position and bit position
-  const uint16_t byteIndex = rotatedY * EInkDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
+  const uint16_t byteIndex = rotatedY * HalDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
   const uint8_t bitPosition = 7 - (rotatedX % 8);  // MSB first
 
   if (state) {
@@ -164,7 +163,7 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
       break;
   }
   // TODO: Rotate bits
-  einkDisplay.drawImage(bitmap, rotatedX, rotatedY, width, height);
+  display.drawImage(bitmap, rotatedX, rotatedY, width, height);
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
@@ -399,22 +398,20 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   free(nodeX);
 }
 
-void GfxRenderer::clearScreen(const uint8_t color) const { einkDisplay.clearScreen(color); }
+void GfxRenderer::clearScreen(const uint8_t color) const { display.clearScreen(color); }
 
 void GfxRenderer::invertScreen() const {
-  uint8_t* buffer = einkDisplay.getFrameBuffer();
+  uint8_t* buffer = display.getFrameBuffer();
   if (!buffer) {
     Serial.printf("[%lu] [GFX] !! No framebuffer in invertScreen\n", millis());
     return;
   }
-  for (int i = 0; i < EInkDisplay::BUFFER_SIZE; i++) {
+  for (int i = 0; i < HalDisplay::BUFFER_SIZE; i++) {
     buffer[i] = ~buffer[i];
   }
 }
 
-void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode) const {
-  einkDisplay.displayBuffer(refreshMode);
-}
+void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const { display.displayBuffer(refreshMode); }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
                                        const EpdFontFamily::Style style) const {
@@ -433,13 +430,13 @@ int GfxRenderer::getScreenWidth() const {
     case Portrait:
     case PortraitInverted:
       // 480px wide in portrait logical coordinates
-      return EInkDisplay::DISPLAY_HEIGHT;
+      return HalDisplay::DISPLAY_HEIGHT;
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
       // 800px wide in landscape logical coordinates
-      return EInkDisplay::DISPLAY_WIDTH;
+      return HalDisplay::DISPLAY_WIDTH;
   }
-  return EInkDisplay::DISPLAY_HEIGHT;
+  return HalDisplay::DISPLAY_HEIGHT;
 }
 
 int GfxRenderer::getScreenHeight() const {
@@ -447,13 +444,13 @@ int GfxRenderer::getScreenHeight() const {
     case Portrait:
     case PortraitInverted:
       // 800px tall in portrait logical coordinates
-      return EInkDisplay::DISPLAY_WIDTH;
+      return HalDisplay::DISPLAY_WIDTH;
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
       // 480px tall in landscape logical coordinates
-      return EInkDisplay::DISPLAY_HEIGHT;
+      return HalDisplay::DISPLAY_HEIGHT;
   }
-  return EInkDisplay::DISPLAY_WIDTH;
+  return HalDisplay::DISPLAY_WIDTH;
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId) const {
@@ -653,17 +650,18 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   }
 }
 
-uint8_t* GfxRenderer::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
+uint8_t* GfxRenderer::getFrameBuffer() const { return display.getFrameBuffer(); }
 
-size_t GfxRenderer::getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
+size_t GfxRenderer::getBufferSize() { return HalDisplay::BUFFER_SIZE; }
 
-void GfxRenderer::grayscaleRevert() const { einkDisplay.grayscaleRevert(); }
+// unused
+// void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
 
-void GfxRenderer::copyGrayscaleLsbBuffers() const { einkDisplay.copyGrayscaleLsbBuffers(einkDisplay.getFrameBuffer()); }
+void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuffers(display.getFrameBuffer()); }
 
-void GfxRenderer::copyGrayscaleMsbBuffers() const { einkDisplay.copyGrayscaleMsbBuffers(einkDisplay.getFrameBuffer()); }
+void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(display.getFrameBuffer()); }
 
-void GfxRenderer::displayGrayBuffer() const { einkDisplay.displayGrayBuffer(); }
+void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(); }
 
 void GfxRenderer::freeBwBufferChunks() {
   for (auto& bwBufferChunk : bwBufferChunks) {
@@ -681,7 +679,7 @@ void GfxRenderer::freeBwBufferChunks() {
  * Returns true if buffer was stored successfully, false if allocation failed.
  */
 bool GfxRenderer::storeBwBuffer() {
-  const uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  const uint8_t* frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
     Serial.printf("[%lu] [GFX] !! No framebuffer in storeBwBuffer\n", millis());
     return false;
@@ -736,7 +734,7 @@ void GfxRenderer::restoreBwBuffer() {
     return;
   }
 
-  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  uint8_t* frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
     Serial.printf("[%lu] [GFX] !! No framebuffer in restoreBwBuffer\n", millis());
     freeBwBufferChunks();
@@ -755,7 +753,7 @@ void GfxRenderer::restoreBwBuffer() {
     memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
   }
 
-  einkDisplay.cleanupGrayscaleBuffers(frameBuffer);
+  display.cleanupGrayscaleBuffers(frameBuffer);
 
   freeBwBufferChunks();
   Serial.printf("[%lu] [GFX] Restored and freed BW buffer chunks\n", millis());
@@ -766,9 +764,9 @@ void GfxRenderer::restoreBwBuffer() {
  * Use this when BW buffer was re-rendered instead of stored/restored.
  */
 void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
-  uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  uint8_t* frameBuffer = display.getFrameBuffer();
   if (frameBuffer) {
-    einkDisplay.cleanupGrayscaleBuffers(frameBuffer);
+    display.cleanupGrayscaleBuffers(frameBuffer);
   }
 }
 

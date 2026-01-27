@@ -84,41 +84,42 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   if (strcmp(name, "table") == 0) {
     // Add placeholder text
     self->startNewTextBlock(TextBlock::CENTER_ALIGN);
-    if (self->currentTextBlock) {
-      self->currentTextBlock->addWord("[Table omitted]", EpdFontFamily::ITALIC);
-    }
 
-    // Skip table contents
-    self->skipUntilDepth = self->depth;
+    self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
+    // Advance depth before processing character data (like you would for a element with text)
     self->depth += 1;
+    self->characterData(userData, "[Table omitted]", strlen("[Table omitted]"));
+
+    // Skip table contents (skip until parent as we pre-advanced depth above)
+    self->skipUntilDepth = self->depth - 1;
     return;
   }
 
   if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
     // TODO: Start processing image tags
-    std::string alt;
+    std::string alt = "[Image]";
     if (atts != nullptr) {
       for (int i = 0; atts[i]; i += 2) {
         if (strcmp(atts[i], "alt") == 0) {
-          // add " " (counts as whitespace) at the end of alt
-          //  so the corresponding text block ends.
-          // TODO: A zero-width breaking space would be more appropriate (once/if we support it)
-          alt = "[Image: " + std::string(atts[i + 1]) + "] ";
+          if (strlen(atts[i + 1]) > 0) {
+            alt = "[Image: " + std::string(atts[i + 1]) + "]";
+          }
+          break;
         }
       }
-      Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
-
-      self->startNewTextBlock(TextBlock::CENTER_ALIGN);
-      self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
-      self->depth += 1;
-      self->characterData(userData, alt.c_str(), alt.length());
-      return;
-    } else {
-      // Skip for now
-      self->skipUntilDepth = self->depth;
-      self->depth += 1;
-      return;
     }
+
+    Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
+
+    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+    self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
+    // Advance depth before processing character data (like you would for a element with text)
+    self->depth += 1;
+    self->characterData(userData, alt.c_str(), alt.length());
+
+    // Skip table contents (skip until parent as we pre-advanced depth above)
+    self->skipUntilDepth = self->depth - 1;
+    return;
   }
 
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {
@@ -143,25 +144,43 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
     self->startNewTextBlock(TextBlock::CENTER_ALIGN);
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
-  } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
+    self->depth += 1;
+    return;
+  }
+
+  if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
       if (self->partWordBufferIndex > 0) {
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
       self->startNewTextBlock(self->currentTextBlock->getStyle());
-    } else {
-      self->startNewTextBlock((TextBlock::Style)self->paragraphAlignment);
-      if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
-      }
+      self->depth += 1;
+      return;
     }
-  } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
-    self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
-  } else if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
-    self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
+
+    self->startNewTextBlock(static_cast<TextBlock::Style>(self->paragraphAlignment));
+    if (strcmp(name, "li") == 0) {
+      self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+    }
+
+    self->depth += 1;
+    return;
   }
 
+  if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
+    self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
+    self->depth += 1;
+    return;
+  }
+
+  if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
+    self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
+    self->depth += 1;
+    return;
+  }
+
+  // Unprocessed tag, just increasing depth and continue forward
   self->depth += 1;
 }
 
@@ -227,7 +246,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     // text styling needs to be overhauled to fix it.
     const bool shouldBreakText =
         matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || matches(name, HEADER_TAGS, NUM_HEADER_TAGS) ||
-        matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) || self->depth == 1;
+        matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) ||
+        strcmp(name, "table") == 0 || matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) || self->depth == 1;
 
     if (shouldBreakText) {
       self->flushPartWordBuffer();
