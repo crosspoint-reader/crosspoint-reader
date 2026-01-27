@@ -131,7 +131,7 @@ void EpubReaderActivity::loop() {
     const int totalPages = section ? section->pageCount : 0;
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
-        this->renderer, this->mappedInput, [this]() { onReaderMenuBack(); },
+        this->renderer, this->mappedInput, epub->getTitle(), [this]() { onReaderMenuBack(); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }

@@ -15,9 +15,12 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  public:
   enum class MenuAction { SELECT_CHAPTER, GO_HOME, DELETE_CACHE };
 
-  explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+  explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const std::function<void()>& onBack, const std::function<void(MenuAction)>& onAction)
-      : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput), onBack(onBack), onAction(onAction) {}
+      : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
+        title(title),
+        onBack(onBack),
+        onAction(onAction) {}
 
   void onEnter() override;
   void onExit() override;
@@ -37,6 +40,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  std::string title = "Reader Menu";
 
   const std::function<void()> onBack;
   const std::function<void(MenuAction)> onAction;

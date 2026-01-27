@@ -76,22 +76,23 @@ void EpubReaderMenuActivity::renderScreen() {
   const auto pageWidth = renderer.getScreenWidth();
 
   // Title
-  renderer.drawCenteredText(UI_12_FONT_ID, 20, "Reader Menu", true, EpdFontFamily::BOLD);
-  // renderer.fillRect(0, 60 + (selectedIndex % menuItems.size()) * 30 - 2, pageWidth - 1, 30);
+  const std::string truncTitle =
+      renderer.truncatedText(UI_12_FONT_ID, title.c_str(), pageWidth - 40, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
   // Menu Items
-  constexpr int startY = 80;
-  constexpr int lineHeight = 40;
+  constexpr int startY = 60;
+  constexpr int lineHeight = 30;
 
   for (size_t i = 0; i < menuItems.size(); ++i) {
     const int displayY = startY + (i * lineHeight);
     const bool isSelected = (static_cast<int>(i) == selectedIndex);
 
     if (isSelected) {
-      renderer.fillRect(10, displayY - 5, pageWidth - 20, lineHeight, true);
+      renderer.fillRect(0, displayY, pageWidth - 1, lineHeight, true);
     }
 
-    renderer.drawText(UI_12_FONT_ID, 30, displayY + 5, menuItems[i].label.c_str(), !isSelected);
+    renderer.drawText(UI_10_FONT_ID, 20, displayY, menuItems[i].label.c_str(), !isSelected);
   }
 
   // Footer / Hints
