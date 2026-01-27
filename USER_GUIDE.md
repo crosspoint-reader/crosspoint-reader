@@ -41,8 +41,10 @@ Button layout can be customized in **[Settings](#35-settings)**.
 
 ### Power On / Off
 
-To turn the device on or off, **press and hold the Power button for approximately half a second**.
-In **[Settings](#35-settings)** you can configure the power button to turn the device off with a short press instead of a long one.
+To turn the device on or off, **press and hold the Power button for approximately half a second.**.
+In **[Settings](#35-settings)** you can adjust the hold duration and turn the device off with a short press instead of a long one.
+
+If the **Short Power Button Click** setting is set to "Sleep", a short press powers the device off and the hold duration setting is ignored.
 
 To reboot the device (for example if it's frozen, or after a firmware update), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
 
@@ -107,6 +109,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Ignore" - Require a long press to turn off the device
   - "Sleep" - A short press powers the device off
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
+- **Power Button Hold Duration**: Controls how long the Power button must be held to turn off the device when short click is not set to Sleep.
 - **Reading Orientation**: Set the screen orientation for reading EPUB files:
   - "Portrait" (default) - Standard portrait orientation
   - "Landscape CW" - Landscape, rotated clockwise
