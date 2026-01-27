@@ -36,6 +36,7 @@ class CrossPointSettings {
     BACK_CONFIRM_LEFT_RIGHT = 0,
     LEFT_RIGHT_BACK_CONFIRM = 1,
     LEFT_BACK_CONFIRM_RIGHT = 2,
+    BACK_CONFIRM_RIGHT_LEFT = 3,
     FRONT_BUTTON_LAYOUT_COUNT
   };
 
@@ -115,6 +116,8 @@ class CrossPointSettings {
   uint8_t screenMargin = 5;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
+  char opdsUsername[64] = "";
+  char opdsPassword[64] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons

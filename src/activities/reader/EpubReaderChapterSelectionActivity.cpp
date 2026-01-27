@@ -188,22 +188,23 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
   renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 - 2, pageWidth - 1, 30);
 
-  for (int itemIndex = pageStartIndex; itemIndex < totalItems && itemIndex < pageStartIndex + pageItems; itemIndex++) {
-    const int displayY = 60 + (itemIndex % pageItems) * 30;
+  for (int i = 0; i < pageItems; i++) {
+    int itemIndex = pageStartIndex + i;
+    if (itemIndex >= totalItems) break;
+    const int displayY = 60 + i * 30;
     const bool isSelected = (itemIndex == selectorIndex);
 
     if (isSyncItem(itemIndex)) {
-      // Draw sync option (at top or bottom)
       renderer.drawText(UI_10_FONT_ID, 20, displayY, ">> Sync Progress", !isSelected);
     } else {
-      // Draw TOC item (account for top sync offset)
       const int tocIndex = tocIndexFromItemIndex(itemIndex);
       auto item = epub->getTocItem(tocIndex);
+
       const int indentSize = 20 + (item.level - 1) * 15;
       const std::string chapterName =
           renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), pageWidth - 40 - indentSize);
-      renderer.drawText(UI_10_FONT_ID, indentSize, 60 + (tocIndex % pageItems) * 30, chapterName.c_str(),
-                        tocIndex != selectorIndex);
+
+      renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
     }
   }
 

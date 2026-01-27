@@ -3,6 +3,7 @@
  * name: ubuntu_10_bold
  * size: 10
  * mode: 1-bit
+ * Command used: fontconvert.py ubuntu_10_bold 10 ../builtinFonts/source/Ubuntu/Ubuntu-Bold.ttf
  */
 #pragma once
 #include "EpdFontData.h"

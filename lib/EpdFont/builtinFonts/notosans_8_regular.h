@@ -3,6 +3,7 @@
  * name: notosans_8_regular
  * size: 8
  * mode: 1-bit
+ * Command used: fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf
  */
 #pragma once
 #include "EpdFontData.h"
