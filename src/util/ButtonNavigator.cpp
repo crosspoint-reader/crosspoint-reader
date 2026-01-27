@@ -15,6 +15,10 @@ void ButtonNavigator::onNextPress(const Callback& callback) { onPress(getNextBut
 
 void ButtonNavigator::onPreviousPress(const Callback& callback) { onPress(getPreviousButtons(), callback); }
 
+void ButtonNavigator::onNextRelease(const Callback& callback) const { onRelease(getNextButtons(), callback); }
+
+void ButtonNavigator::onPreviousRelease(const Callback& callback) const { onRelease(getPreviousButtons(), callback); }
+
 void ButtonNavigator::onNextContinuous(const Callback& callback) { onContinuous(getNextButtons(), callback); }
 
 void ButtonNavigator::onPreviousContinuous(const Callback& callback) { onContinuous(getPreviousButtons(), callback); }
@@ -31,6 +35,21 @@ void ButtonNavigator::onPress(const Buttons& buttons, const Callback& callback) 
   }
 
   if (buttonPressed && !recentlyNavigatedContinuously()) {
+    callback();
+  }
+}
+void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback) const {
+  if (!mappedInput) return;
+
+  bool buttonReleased = false;
+  for (const MappedInputManager::Button button : buttons) {
+    if (mappedInput->wasReleased(button)) {
+      buttonReleased = true;
+      break;
+    }
+  }
+
+  if (buttonReleased && !recentlyNavigatedContinuously()) {
     callback();
   }
 }
@@ -82,4 +101,30 @@ int ButtonNavigator::previousIndex(const int currentIndex, const int totalItems)
 
   // Calculate the previous index with wrap-around
   return (currentIndex + totalItems - 1) % totalItems;
+}
+
+int ButtonNavigator::nextPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
+  if (totalItems <= 0 || itemsPerPage <= 0) return 0;
+
+  const int lastPageIndex = (totalItems - 1) / itemsPerPage;
+  const int currentPageIndex = currentIndex / itemsPerPage;
+
+  if (currentPageIndex < lastPageIndex) {
+    return (currentPageIndex + 1) * itemsPerPage;
+  }
+
+  return 0;
+}
+
+int ButtonNavigator::previousPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
+  if (totalItems <= 0 || itemsPerPage <= 0) return 0;
+
+  const int lastPageIndex = (totalItems - 1) / itemsPerPage;
+  const int currentPageIndex = currentIndex / itemsPerPage;
+
+  if (currentPageIndex > 0) {
+    return (currentPageIndex - 1) * itemsPerPage;
+  }
+
+  return lastPageIndex * itemsPerPage;
 }

@@ -38,10 +38,17 @@ class ButtonNavigator final {
   void onPreviousPress(const Callback& callback);
   void onPress(const Buttons& buttons, const Callback& callback);
 
+  void onNextRelease(const Callback& callback) const;
+  void onPreviousRelease(const Callback& callback) const;
+  void onRelease(const Buttons& buttons, const Callback& callback) const;
+
   void onNextContinuous(const Callback& callback);
   void onPreviousContinuous(const Callback& callback);
   void onContinuous(const Buttons& buttons, const Callback& callback);
 
   [[nodiscard]] static int nextIndex(int currentIndex, int totalItems);
   [[nodiscard]] static int previousIndex(int currentIndex, int totalItems);
+
+  [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
+  [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);
 };
