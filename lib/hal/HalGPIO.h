@@ -47,11 +47,14 @@ class HalGPIO {
   // Check if USB is connected
   bool isUsbConnected() const;
 
-  // Check if wakeup was caused by power button press
-  bool isWakeupByPowerButton() const;
+  enum class WakeupReason {
+    PowerButton,
+    AfterFlash,
+    AfterUSBPower,
+    Other
+  };
 
-  // Check if wakeup was caused by flashing (hard reset via RTS pin)
-  bool isWakeUpAfterFlash() const;
+  WakeupReason getWakeupReason() const;
 
   // Button indices
   static constexpr uint8_t BTN_BACK = 0;
