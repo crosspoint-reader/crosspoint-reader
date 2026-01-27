@@ -170,14 +170,21 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                            (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                             mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Right);
+  // When long-press chapter skip is disabled, turn pages on press instead of release.
+  const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
+  const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
+                                                    mappedInput.wasPressed(MappedInputManager::Button::Left))
+                                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                                                    mappedInput.wasReleased(MappedInputManager::Button::Left));
+  const bool powerPageTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                             mappedInput.wasReleased(MappedInputManager::Button::Power);
+  const bool nextTriggered = usePressForPageTurn
+                                 ? (mappedInput.wasPressed(MappedInputManager::Button::PageForward) || powerPageTurn ||
+                                    mappedInput.wasPressed(MappedInputManager::Button::Right))
+                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
+                                    mappedInput.wasReleased(MappedInputManager::Button::Right));
 
-  if (!prevReleased && !nextReleased) {
+  if (!prevTriggered && !nextTriggered) {
     return;
   }
 
@@ -195,7 +202,7 @@ void EpubReaderActivity::loop() {
     // We don't want to delete the section mid-render, so grab the semaphore
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     nextPageNumber = 0;
-    currentSpineIndex = nextReleased ? currentSpineIndex + 1 : currentSpineIndex - 1;
+    currentSpineIndex = nextTriggered ? currentSpineIndex + 1 : currentSpineIndex - 1;
     section.reset();
     xSemaphoreGive(renderingMutex);
     updateRequired = true;
@@ -208,7 +215,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (prevReleased) {
+  if (prevTriggered) {
     if (section->currentPage > 0) {
       section->currentPage--;
     } else {

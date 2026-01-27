@@ -110,21 +110,28 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                            (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                             mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Right);
+  // When long-press chapter skip is disabled, turn pages on press instead of release.
+  const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
+  const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
+                                                    mappedInput.wasPressed(MappedInputManager::Button::Left))
+                                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                                                    mappedInput.wasReleased(MappedInputManager::Button::Left));
+  const bool powerPageTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                             mappedInput.wasReleased(MappedInputManager::Button::Power);
+  const bool nextTriggered = usePressForPageTurn
+                                 ? (mappedInput.wasPressed(MappedInputManager::Button::PageForward) || powerPageTurn ||
+                                    mappedInput.wasPressed(MappedInputManager::Button::Right))
+                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
+                                    mappedInput.wasReleased(MappedInputManager::Button::Right));
 
-  if (!prevReleased && !nextReleased) {
+  if (!prevTriggered && !nextTriggered) {
     return;
   }
 
-  if (prevReleased && currentPage > 0) {
+  if (prevTriggered && currentPage > 0) {
     currentPage--;
     updateRequired = true;
-  } else if (nextReleased && currentPage < totalPages - 1) {
+  } else if (nextTriggered && currentPage < totalPages - 1) {
     currentPage++;
     updateRequired = true;
   }
