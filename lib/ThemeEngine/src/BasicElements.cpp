@@ -117,7 +117,7 @@ void Label::draw(const GfxRenderer& renderer, const ThemeContext& context) {
     markClean();
     return;
   }
-  
+
   std::string colStr = context.evaluatestring(colorExpr);
   uint8_t color = Color::parse(colStr).value;
   bool black = (color == 0x00);
@@ -294,7 +294,7 @@ void BitmapElement::draw(const GfxRenderer& renderer, const ThemeContext& contex
     }
   }
 
-    // 3. Fallback to RAM Cache (Standard method)
+  // 3. Fallback to RAM Cache (Standard method)
   if (!drawSuccess) {
     const std::vector<uint8_t>* data = ThemeManager::get().getCachedAsset(path);
     if (data && !data->empty()) {

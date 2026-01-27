@@ -44,16 +44,16 @@ constexpr int controlsSettingsCount = 4;
 const SettingInfo controlsSettings[controlsSettingsCount] = {
     SettingInfo::Enum("Front Button Layout", &CrossPointSettings::frontButtonLayout,
                       {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght"}),
-    SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout, {"Prev, Next", "Next, Prev"}),
+    SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
+                      {"Prev, Next", "Next, Prev"}),
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
     SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
 
 constexpr int systemSettingsCount = 5;
 const SettingInfo systemSettings[systemSettingsCount] = {
-    SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout, {"1 min", "5 min", "10 min", "15 min", "30 min"}),
-    SettingInfo::Action("KOReader Sync"),
-    SettingInfo::Action("Calibre Settings"),
-    SettingInfo::Action("Clear Cache"),
+    SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
+                      {"1 min", "5 min", "10 min", "15 min", "30 min"}),
+    SettingInfo::Action("KOReader Sync"), SettingInfo::Action("Calibre Settings"), SettingInfo::Action("Clear Cache"),
     SettingInfo::Action("Check for updates")};
 
 // All categories with their settings
@@ -63,11 +63,10 @@ struct CategoryData {
   int count;
 };
 
-const CategoryData allCategories[4] = {
-    {"Display", displaySettings, displaySettingsCount},
-    {"Reader", readerSettings, readerSettingsCount},
-    {"Controls", controlsSettings, controlsSettingsCount},
-    {"System", systemSettings, systemSettingsCount}};
+const CategoryData allCategories[4] = {{"Display", displaySettings, displaySettingsCount},
+                                       {"Reader", readerSettings, readerSettingsCount},
+                                       {"Controls", controlsSettings, controlsSettingsCount},
+                                       {"System", systemSettings, systemSettingsCount}};
 
 void updateContextForSetting(ThemeEngine::ThemeContext& ctx, const std::string& prefix, int i, const SettingInfo& info,
                              bool isSelected, bool fullUpdate) {
@@ -120,7 +119,7 @@ void SettingsActivity::onEnter() {
 
   // For themed mode, provide all data upfront
   if (ThemeEngine::ThemeManager::get().getElement("Settings")) {
-    updateThemeContext(true); // Full update
+    updateThemeContext(true);  // Full update
   }
 
   updateRequired = true;
@@ -186,8 +185,8 @@ void SettingsActivity::enterCategoryLegacy(int categoryIndex) {
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   exitActivity();
   enterNewActivity(new CategorySettingsActivity(renderer, mappedInput, allCategories[categoryIndex].name,
-                                                allCategories[categoryIndex].settings, allCategories[categoryIndex].count,
-                                                [this] {
+                                                allCategories[categoryIndex].settings,
+                                                allCategories[categoryIndex].count, [this] {
                                                   exitActivity();
                                                   updateRequired = true;
                                                 }));
@@ -244,7 +243,7 @@ void SettingsActivity::updateThemeContext(bool fullUpdate) {
   if (fullUpdate) {
     themeContext.setInt("Categories.Count", categoryCount);
   }
-  
+
   themeContext.setInt("Categories.Selected", selectedCategoryIndex);
 
   for (int i = 0; i < categoryCount; i++) {
@@ -267,9 +266,9 @@ void SettingsActivity::updateThemeContext(bool fullUpdate) {
 
   // Also provide current category's settings as "Settings" for simpler themes
   if (fullUpdate) {
-     themeContext.setInt("Settings.Count", allCategories[selectedCategoryIndex].count);
+    themeContext.setInt("Settings.Count", allCategories[selectedCategoryIndex].count);
   }
-  
+
   for (int i = 0; i < allCategories[selectedCategoryIndex].count; i++) {
     updateContextForSetting(themeContext, "Settings", i, allCategories[selectedCategoryIndex].settings[i],
                             i == selectedSettingIndex, fullUpdate);
@@ -282,14 +281,14 @@ void SettingsActivity::handleThemeInput() {
   // Up/Down navigates settings within current category
   if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (currentCategorySettingsCount - 1);
-    updateThemeContext(false); // Partial update
+    updateThemeContext(false);  // Partial update
     updateRequired = true;
     return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     selectedSettingIndex = (selectedSettingIndex < currentCategorySettingsCount - 1) ? (selectedSettingIndex + 1) : 0;
-    updateThemeContext(false); // Partial update
+    updateThemeContext(false);  // Partial update
     updateRequired = true;
     return;
   }
@@ -299,7 +298,7 @@ void SettingsActivity::handleThemeInput() {
       mappedInput.wasPressed(MappedInputManager::Button::PageBack)) {
     selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
     selectedSettingIndex = 0;  // Reset to first setting in new category
-    updateThemeContext(true); // Full update (category changed)
+    updateThemeContext(true);  // Full update (category changed)
     updateRequired = true;
     return;
   }
@@ -308,7 +307,7 @@ void SettingsActivity::handleThemeInput() {
       mappedInput.wasPressed(MappedInputManager::Button::PageForward)) {
     selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
     selectedSettingIndex = 0;
-    updateThemeContext(true); // Full update
+    updateThemeContext(true);  // Full update
     updateRequired = true;
     return;
   }
@@ -316,7 +315,7 @@ void SettingsActivity::handleThemeInput() {
   // Confirm toggles/activates current setting
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     toggleCurrentSetting();
-    updateThemeContext(false); // Values changed, partial update is enough (names don't change)
+    updateThemeContext(false);  // Values changed, partial update is enough (names don't change)
     updateRequired = true;
     return;
   }
