@@ -32,7 +32,7 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderPopup(const char* message) const {
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, CrossPointFont::BOLD);
   constexpr int margin = 20;
   const int x = (renderer.getScreenWidth() - textWidth - margin * 2) / 2;
   constexpr int y = 117;
@@ -41,7 +41,7 @@ void SleepActivity::renderPopup(const char* message) const {
   // renderer.clearScreen();
   renderer.fillRect(x - 5, y - 5, w + 10, h + 10, true);
   renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
-  renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, message, true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, message, true, CrossPointFont::BOLD);
   renderer.displayBuffer();
 }
 
@@ -125,7 +125,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
 
   renderer.clearScreen();
   renderer.drawImage(CrossLarge, (pageWidth - 128) / 2, (pageHeight - 128) / 2, 128, 128);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "CrossPoint", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "CrossPoint", true, CrossPointFont::BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "SLEEPING");
 
   // Make sleep screen dark unless light is selected in settings

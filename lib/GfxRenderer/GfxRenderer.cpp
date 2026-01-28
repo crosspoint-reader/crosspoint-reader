@@ -2,7 +2,34 @@
 
 #include <Utf8.h>
 
-void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
+#include "Group5/g5dec.inl"
+
+// TODO: Build this into the format
+#define FONT_SCALE 2
+
+namespace {
+// Number of set bits from 0->15
+uint8_t bitCount[] = {
+    0,  // 0b0000,
+    1,  // 0b0001,
+    1,  // 0b0010,
+    2,  // 0b0011,
+    1,  // 0b0100,
+    2,  // 0b0101,
+    2,  // 0b0110,
+    3,  // 0b0111,
+    1,  // 0b1000,
+    2,  // 0b1001,
+    2,  // 0b1010,
+    3,  // 0b1011,
+    2,  // 0b1100,
+    3,  // 0b1101,
+    3,  // 0b1110,
+    4,  // 0b1111,
+};
+}  // namespace
+
+void GfxRenderer::insertFont(const int fontId, CrossPointFont font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
   switch (orientation) {
@@ -65,28 +92,25 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   }
 }
 
-int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+int GfxRenderer::getTextWidth(const int fontId, const char* text, const CrossPointFont::Style style) const {
   if (fontMap.count(fontId) == 0) {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return 0;
   }
 
   int w = 0, h = 0;
-  fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
+  fontMap.at(fontId).getTextDimensions(text, style, &w, &h);
   return w;
 }
 
 void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,
-                                   const EpdFontFamily::Style style) const {
+                                   const CrossPointFont::Style style) {
   const int x = (getScreenWidth() - getTextWidth(fontId, text, style)) / 2;
   drawText(fontId, x, y, text, black, style);
 }
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
-                           const EpdFontFamily::Style style) const {
-  const int yPos = y + getFontAscenderSize(fontId);
-  int xpos = x;
-
+                           const CrossPointFont::Style style) {
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -96,16 +120,15 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+  const auto cpFont = fontMap.at(fontId);
 
-  // no printable characters
-  if (!font.hasPrintableChars(text, style)) {
-    return;
-  }
+  // TODO: REPLACE FONT_SCALE
+  int xpos = x;
+  const int yPos = y + cpFont.data.header.ascender / FONT_SCALE;
 
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    renderChar(font, cp, &xpos, &yPos, black, style);
+    renderChar(cpFont, cp, &xpos, yPos, black, style);
   }
 }
 
@@ -414,7 +437,7 @@ void GfxRenderer::invertScreen() const {
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const { display.displayBuffer(refreshMode); }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
-                                       const EpdFontFamily::Style style) const {
+                                       const CrossPointFont::Style style) const {
   std::string item = text;
   int itemWidth = getTextWidth(fontId, item.c_str(), style);
   while (itemWidth > maxWidth && item.length() > 8) {
@@ -459,7 +482,7 @@ int GfxRenderer::getSpaceWidth(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
+  return fontMap.at(fontId).getGlyph(' ', CrossPointFont::Style::REGULAR)->xAdvance / FONT_SCALE;
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
@@ -468,7 +491,7 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  return fontMap.at(fontId).data.header.ascender / FONT_SCALE;
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
@@ -477,7 +500,7 @@ int GfxRenderer::getLineHeight(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  return fontMap.at(fontId).data.header.height / FONT_SCALE;
 }
 
 void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
@@ -508,7 +531,7 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
   setOrientation(orig_orientation);
 }
 
-void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, const char* bottomBtn) const {
+void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, const char* bottomBtn) {
   const int screenWidth = getScreenWidth();
   constexpr int buttonWidth = 40;   // Width on screen (height when rotated)
   constexpr int buttonHeight = 80;  // Height on screen (width when rotated)
@@ -564,98 +587,18 @@ int GfxRenderer::getTextHeight(const int fontId) const {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return 0;
   }
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  return fontMap.at(fontId).data.header.ascender / FONT_SCALE;
 }
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
-                                      const EpdFontFamily::Style style) const {
-  // Cannot draw a NULL / empty string
-  if (text == nullptr || *text == '\0') {
-    return;
-  }
-
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
-    return;
-  }
-  const auto font = fontMap.at(fontId);
-
-  // No printable characters
-  if (!font.hasPrintableChars(text, style)) {
-    return;
-  }
-
-  // For 90° clockwise rotation:
-  // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
-  // Text reads from bottom to top
-
-  int yPos = y;  // Current Y position (decreases as we draw characters)
-
-  uint32_t cp;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (!glyph) {
-      glyph = font.getGlyph(REPLACEMENT_GLYPH, style);
-    }
-    if (!glyph) {
-      continue;
-    }
-
-    const int is2Bit = font.getData(style)->is2Bit;
-    const uint32_t offset = glyph->dataOffset;
-    const uint8_t width = glyph->width;
-    const uint8_t height = glyph->height;
-    const int left = glyph->left;
-    const int top = glyph->top;
-
-    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
-
-    if (bitmap != nullptr) {
-      for (int glyphY = 0; glyphY < height; glyphY++) {
-        for (int glyphX = 0; glyphX < width; glyphX++) {
-          const int pixelPosition = glyphY * width + glyphX;
-
-          // 90° clockwise rotation transformation:
-          // screenX = x + (ascender - top + glyphY)
-          // screenY = yPos - (left + glyphX)
-          const int screenX = x + (font.getData(style)->ascender - top + glyphY);
-          const int screenY = yPos - left - glyphX;
-
-          if (is2Bit) {
-            const uint8_t byte = bitmap[pixelPosition / 4];
-            const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
-            const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
-
-            if (renderMode == BW && bmpVal < 3) {
-              drawPixel(screenX, screenY, black);
-            } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-              drawPixel(screenX, screenY, false);
-            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
-              drawPixel(screenX, screenY, false);
-            }
-          } else {
-            const uint8_t byte = bitmap[pixelPosition / 8];
-            const uint8_t bit_index = 7 - (pixelPosition % 8);
-
-            if ((byte >> bit_index) & 1) {
-              drawPixel(screenX, screenY, black);
-            }
-          }
-        }
-      }
-    }
-
-    // Move to next character position (going up, so decrease Y)
-    yPos -= glyph->advanceX;
-  }
+                                      const CrossPointFont::Style style) {
+  // Stubbed
+  // TODO: Set orientation, draw text, set orientation back
 }
 
 uint8_t* GfxRenderer::getFrameBuffer() const { return display.getFrameBuffer(); }
 
 size_t GfxRenderer::getBufferSize() { return HalDisplay::BUFFER_SIZE; }
-
-// unused
-// void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
 
 void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuffers(display.getFrameBuffer()); }
 
@@ -764,74 +707,106 @@ void GfxRenderer::restoreBwBuffer() {
  * Use this when BW buffer was re-rendered instead of stored/restored.
  */
 void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
-  uint8_t* frameBuffer = display.getFrameBuffer();
+  const uint8_t* frameBuffer = display.getFrameBuffer();
   if (frameBuffer) {
     display.cleanupGrayscaleBuffers(frameBuffer);
   }
 }
 
-void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
-                             const bool pixelState, const EpdFontFamily::Style style) const {
-  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
-  if (!glyph) {
-    glyph = fontFamily.getGlyph(REPLACEMENT_GLYPH, style);
+void GfxRenderer::renderChar(const CrossPointFont& cpFont, const uint32_t cp, int* x, const int y,
+                             const bool pixelState, const CrossPointFont::Style style) {
+  int rc, end_y, dx, dy, ty, tw;
+  uint8_t* s;
+
+  const CrossPointFontGlyph* pGlyph = cpFont.getGlyph(cp, style);
+
+  if (!pGlyph) {
+    pGlyph = cpFont.getGlyph(REPLACEMENT_GLYPH, style);
   }
 
-  // no glyph?
-  if (!glyph) {
-    Serial.printf("[%lu] [GFX] No glyph for codepoint %d\n", millis(), cp);
+  int w = pGlyph->width;
+  int h = pGlyph->height;
+  uint32_t bitmapOffet = pGlyph->bitmapOffset;
+  uint32_t xAdvance = pGlyph->xAdvance / FONT_SCALE;
+  int16_t xOffset = pGlyph->xOffset / FONT_SCALE;
+  int16_t yOffset = pGlyph->yOffset / FONT_SCALE;
+
+  // skip if drawing a space
+  if (w <= 1) {
+    *x += xAdvance;
     return;
   }
 
-  const int is2Bit = fontFamily.getData(style)->is2Bit;
-  const uint32_t offset = glyph->dataOffset;
-  const uint8_t width = glyph->width;
-  const uint8_t height = glyph->height;
-  const int left = glyph->left;
+  s = cpFont.data.bitmap + bitmapOffet;
 
-  const uint8_t* bitmap = nullptr;
-  bitmap = &fontFamily.getData(style)->bitmap[offset];
+  dx = *x + xOffset;
+  dy = y - yOffset;
+  end_y = dy + h / FONT_SCALE;
+  ty = pGlyph[1].bitmapOffset - bitmapOffet;
 
-  if (bitmap != nullptr) {
-    for (int glyphY = 0; glyphY < height; glyphY++) {
-      const int screenY = *y - glyph->top + glyphY;
-      for (int glyphX = 0; glyphX < width; glyphX++) {
-        const int pixelPosition = glyphY * width + glyphX;
-        const int screenX = *x + left + glyphX;
+  if (ty < 0 || ty > 4096) {
+    Serial.printf("[%lu] [GFX] Invalid glyph compressed size: %d\n", millis(), ty);
+    return;
+  }
+  rc = g5_decode_init(&g5dec, w, h, s, ty);
+  if (rc != G5_SUCCESS) {
+    return;  // corrupt data?
+  }
+  tw = w / FONT_SCALE;
 
-        if (is2Bit) {
-          const uint8_t byte = bitmap[pixelPosition / 4];
-          const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
-          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
-          // we swap this to better match the way images and screen think about colors:
-          // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
-          const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
+  static_assert(FONT_SCALE == 2, "All this code depends on FONT_SCALE being 2");
+  for (ty = dy; ty < end_y; ty++) {
+    g5_decode_line(&g5dec, u8Cache);
+    s = u8Cache;
+    uint8_t u8 = *s++;
+    g5_decode_line(&g5dec, u8Cache2);
+    uint8_t* s2 = u8Cache2;
+    uint8_t u82 = *s2++;
+    uint8_t u8Count = 8;
+    if (ty >= 0) {
+      uint8_t bmpVal;
+      for (int tx = dx; tx < dx + tw; tx++) {
+        const uint8_t blkCnt = bitCount[(u8 & 0xC0 | (u82 & 0xC0) >> 2) >> 4];
+        u8 <<= FONT_SCALE;
+        u82 <<= FONT_SCALE;
+        u8Count -= FONT_SCALE;
 
-          if (renderMode == BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
-            drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
-            drawPixel(screenX, screenY, false);
-          } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
-            drawPixel(screenX, screenY, false);
-          }
-        } else {
-          const uint8_t byte = bitmap[pixelPosition / 8];
-          const uint8_t bit_index = 7 - (pixelPosition % 8);
+        // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
+        // We're mapping from 0 = white to 4 = black, from 5 states to 4 states
+        if (blkCnt == 4)
+          bmpVal = 0;
+        else if (blkCnt == 3 || blkCnt == 2)
+          bmpVal = 1;
+        else if (blkCnt == 1)
+          bmpVal = 2;
+        else
+          bmpVal = 3;
 
-          if ((byte >> bit_index) & 1) {
-            drawPixel(screenX, screenY, pixelState);
-          }
+        if (renderMode == BW && bmpVal < 3) {
+          // Black (also paints over the grays in BW mode)
+          drawPixel(tx, ty, pixelState);
+        } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+          // Light gray (also mark the MSB if it's going to be a dark gray too)
+          // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
+          drawPixel(tx, ty, false);
+        } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+          // Dark gray
+          drawPixel(tx, ty, false);
+        }
+
+        if (u8Count == 0) {
+          u8Count = 8;
+          u8 = *s++;
+          u82 = *s2++;
         }
       }
     }
   }
 
-  *x += glyph->advanceX;
+  *x += xAdvance;  // width of this character
 }
+
+inline unsigned short readWord(const void* data) { return *static_cast<const unsigned short*>(data); }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
   switch (orientation) {

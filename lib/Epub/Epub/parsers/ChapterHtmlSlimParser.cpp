@@ -43,13 +43,13 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
 // flush the contents of partWordBuffer to currentTextBlock
 void ChapterHtmlSlimParser::flushPartWordBuffer() {
   // determine font style
-  EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
+  CrossPointFont::Style fontStyle = CrossPointFont::REGULAR;
   if (boldUntilDepth < depth && italicUntilDepth < depth) {
-    fontStyle = EpdFontFamily::BOLD_ITALIC;
+    fontStyle = CrossPointFont::BOLD_ITALIC;
   } else if (boldUntilDepth < depth) {
-    fontStyle = EpdFontFamily::BOLD;
+    fontStyle = CrossPointFont::BOLD;
   } else if (italicUntilDepth < depth) {
-    fontStyle = EpdFontFamily::ITALIC;
+    fontStyle = CrossPointFont::ITALIC;
   }
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
@@ -161,7 +161,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
     self->startNewTextBlock(static_cast<TextBlock::Style>(self->paragraphAlignment));
     if (strcmp(name, "li") == 0) {
-      self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+      self->currentTextBlock->addWord("\xe2\x80\xa2", CrossPointFont::REGULAR);
     }
 
     self->depth += 1;

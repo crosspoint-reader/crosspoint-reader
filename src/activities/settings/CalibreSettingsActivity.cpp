@@ -153,7 +153,7 @@ void CalibreSettingsActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "OPDS Browser", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "OPDS Browser", true, CrossPointFont::BOLD);
 
   // Draw info text about Calibre
   renderer.drawCenteredText(UI_10_FONT_ID, 40, "For Calibre, add /opds to your URL");

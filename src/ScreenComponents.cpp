@@ -8,8 +8,7 @@
 #include "Battery.h"
 #include "fontIds.h"
 
-void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, const int top,
-                                   const bool showPercentage) {
+void ScreenComponents::drawBattery(GfxRenderer& renderer, const int left, const int top, const bool showPercentage) {
   // Left aligned battery icon and percentage
   const uint16_t percentage = battery.readPercentage();
   const auto percentageText = showPercentage ? std::to_string(percentage) + "%" : "";
@@ -53,7 +52,7 @@ void ScreenComponents::drawBookProgressBar(const GfxRenderer& renderer, const si
   renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BOOK_PROGRESS_BAR_HEIGHT, true);
 }
 
-int ScreenComponents::drawTabBar(const GfxRenderer& renderer, const int y, const std::vector<TabInfo>& tabs) {
+int ScreenComponents::drawTabBar(GfxRenderer& renderer, const int y, const std::vector<TabInfo>& tabs) {
   constexpr int tabPadding = 20;      // Horizontal padding between tabs
   constexpr int leftMargin = 20;      // Left margin for first tab
   constexpr int underlineHeight = 2;  // Height of selection underline
@@ -66,11 +65,11 @@ int ScreenComponents::drawTabBar(const GfxRenderer& renderer, const int y, const
 
   for (const auto& tab : tabs) {
     const int textWidth =
-        renderer.getTextWidth(UI_12_FONT_ID, tab.label, tab.selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+        renderer.getTextWidth(UI_12_FONT_ID, tab.label, tab.selected ? CrossPointFont::BOLD : CrossPointFont::REGULAR);
 
     // Draw tab label
     renderer.drawText(UI_12_FONT_ID, currentX, y, tab.label, true,
-                      tab.selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+                      tab.selected ? CrossPointFont::BOLD : CrossPointFont::REGULAR);
 
     // Draw underline for selected tab
     if (tab.selected) {
@@ -83,7 +82,7 @@ int ScreenComponents::drawTabBar(const GfxRenderer& renderer, const int y, const
   return tabBarHeight;
 }
 
-void ScreenComponents::drawScrollIndicator(const GfxRenderer& renderer, const int currentPage, const int totalPages,
+void ScreenComponents::drawScrollIndicator(GfxRenderer& renderer, const int currentPage, const int totalPages,
                                            const int contentTop, const int contentHeight) {
   if (totalPages <= 1) {
     return;  // No need for indicator if only one page
@@ -122,7 +121,7 @@ void ScreenComponents::drawScrollIndicator(const GfxRenderer& renderer, const in
   renderer.drawText(SMALL_FONT_ID, textX, textY, pageText.c_str());
 }
 
-void ScreenComponents::drawProgressBar(const GfxRenderer& renderer, const int x, const int y, const int width,
+void ScreenComponents::drawProgressBar(GfxRenderer& renderer, const int x, const int y, const int width,
                                        const int height, const size_t current, const size_t total) {
   if (total == 0) {
     return;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <EpdFontFamily.h>
+#include <CrossPointFont.h>
 #include <HalDisplay.h>
 
 #include <map>
@@ -20,18 +20,23 @@ class GfxRenderer {
   };
 
  private:
+  // TODO: Cleanup?
+  G5DECIMAGE g5dec;
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
   static constexpr size_t BW_BUFFER_NUM_CHUNKS = HalDisplay::BUFFER_SIZE / BW_BUFFER_CHUNK_SIZE;
   static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == HalDisplay::BUFFER_SIZE,
                 "BW buffer chunking does not line up with display buffer size");
 
+  // TODO: Cleanup?
+  uint8_t u8Cache[128];
+  uint8_t u8Cache2[128];
   HalDisplay& display;
   RenderMode renderMode;
   Orientation orientation;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
-  std::map<int, EpdFontFamily> fontMap;
-  void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
-                  EpdFontFamily::Style style) const;
+  std::map<int, CrossPointFont> fontMap;
+  void renderChar(const CrossPointFont& cpFont, uint32_t cp, int* x, int y, bool pixelState,
+                  CrossPointFont::Style style);
   void freeBwBufferChunks();
   void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
 
@@ -45,7 +50,7 @@ class GfxRenderer {
   static constexpr int VIEWABLE_MARGIN_LEFT = 3;
 
   // Setup
-  void insertFont(int fontId, EpdFontFamily font);
+  void insertFont(int fontId, CrossPointFont font);
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
@@ -72,25 +77,25 @@ class GfxRenderer {
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 
   // Text
-  int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  int getTextWidth(int fontId, const char* text, CrossPointFont::Style style = CrossPointFont::Style::REGULAR) const;
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,
-                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                        CrossPointFont::Style style = CrossPointFont::Style::REGULAR);
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
-                EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                CrossPointFont::Style style = CrossPointFont::Style::REGULAR);
   int getSpaceWidth(int fontId) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
-                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                            CrossPointFont::Style style = CrossPointFont::Style::REGULAR) const;
 
   // UI Components
   void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4);
-  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn) const;
+  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn);
 
  private:
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
-                           EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                           CrossPointFont::Style style = CrossPointFont::Style::REGULAR);
   int getTextHeight(int fontId) const;
 
  public:
@@ -106,6 +111,5 @@ class GfxRenderer {
   // Low level functions
   uint8_t* getFrameBuffer() const;
   static size_t getBufferSize();
-  void grayscaleRevert() const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
 };

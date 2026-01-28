@@ -1,5 +1,5 @@
 #pragma once
-#include <EpdFontFamily.h>
+#include <CrossPointFont.h>
 #include <HalDisplay.h>
 
 #include <string>
@@ -9,12 +9,12 @@
 
 class FullScreenMessageActivity final : public Activity {
   std::string text;
-  EpdFontFamily::Style style;
+  CrossPointFont::Style style;
   HalDisplay::RefreshMode refreshMode;
 
  public:
   explicit FullScreenMessageActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string text,
-                                     const EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                                     const CrossPointFont::Style style = CrossPointFont::REGULAR,
                                      const HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH)
       : Activity("FullScreenMessage", renderer, mappedInput),
         text(std::move(text)),

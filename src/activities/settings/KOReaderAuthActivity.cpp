@@ -123,16 +123,16 @@ void KOReaderAuthActivity::render() {
   }
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Auth", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Auth", true, CrossPointFont::BOLD);
 
   if (state == AUTHENTICATING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, CrossPointFont::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Success!", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Success!", true, CrossPointFont::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 320, "KOReader sync is ready to use");
 
     const auto labels = mappedInput.mapLabels("Done", "", "", "");
@@ -142,7 +142,7 @@ void KOReaderAuthActivity::render() {
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Authentication Failed", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Authentication Failed", true, CrossPointFont::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 320, errorMessage.c_str());
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");

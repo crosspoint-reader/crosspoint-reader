@@ -3,7 +3,7 @@
 #include <GfxRenderer.h>
 #include <Serialization.h>
 
-void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
+void TextBlock::render(GfxRenderer& renderer, const int fontId, const int x, const int y) const {
   // Validate iterator bounds before rendering
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
     Serial.printf("[%lu] [TXB] Render skipped: size mismatch (words=%u, xpos=%u, styles=%u)\n", millis(),
@@ -47,7 +47,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   uint16_t wc;
   std::list<std::string> words;
   std::list<uint16_t> wordXpos;
-  std::list<EpdFontFamily::Style> wordStyles;
+  std::list<CrossPointFont::Style> wordStyles;
   Style style;
 
   // Word count

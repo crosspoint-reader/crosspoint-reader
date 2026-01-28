@@ -56,12 +56,12 @@ void ClearCacheActivity::render() {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Clear Cache", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Clear Cache", true, CrossPointFont::BOLD);
 
   if (state == WARNING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 60, "This will clear all cached book data.", true);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 30, "All reading progress will be lost!", true,
-                              EpdFontFamily::BOLD);
+                              CrossPointFont::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, "Books will need to be re-indexed", true);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, "when opened again.", true);
 
@@ -72,13 +72,13 @@ void ClearCacheActivity::render() {
   }
 
   if (state == CLEARING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Clearing cache...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Clearing cache...", true, CrossPointFont::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Cache Cleared", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Cache Cleared", true, CrossPointFont::BOLD);
     String resultText = String(clearedCount) + " items removed";
     if (failedCount > 0) {
       resultText += ", " + String(failedCount) + " failed";
@@ -92,7 +92,7 @@ void ClearCacheActivity::render() {
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Failed to clear cache", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Failed to clear cache", true, CrossPointFont::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, "Check serial output for details");
 
     const auto labels = mappedInput.mapLabels("« Back", "", "", "");

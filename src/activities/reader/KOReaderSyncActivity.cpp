@@ -259,10 +259,10 @@ void KOReaderSyncActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Sync", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Sync", true, CrossPointFont::BOLD);
 
   if (state == NO_CREDENTIALS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "No credentials configured", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, "No credentials configured", true, CrossPointFont::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 320, "Set up KOReader account in Settings");
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
@@ -272,14 +272,14 @@ void KOReaderSyncActivity::render() {
   }
 
   if (state == SYNCING || state == UPLOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, CrossPointFont::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == SHOWING_RESULT) {
     // Show comparison
-    renderer.drawCenteredText(UI_10_FONT_ID, 120, "Progress found!", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 120, "Progress found!", true, CrossPointFont::BOLD);
 
     // Get chapter names from TOC
     const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
@@ -345,7 +345,7 @@ void KOReaderSyncActivity::render() {
   }
 
   if (state == NO_REMOTE_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "No remote progress found", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, "No remote progress found", true, CrossPointFont::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 320, "Upload current position?");
 
     const auto labels = mappedInput.mapLabels("Cancel", "Upload", "", "");
@@ -355,7 +355,7 @@ void KOReaderSyncActivity::render() {
   }
 
   if (state == UPLOAD_COMPLETE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Progress uploaded!", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Progress uploaded!", true, CrossPointFont::BOLD);
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
     renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -364,7 +364,7 @@ void KOReaderSyncActivity::render() {
   }
 
   if (state == SYNC_FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Sync failed", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Sync failed", true, CrossPointFont::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 320, statusMessage.c_str());
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");

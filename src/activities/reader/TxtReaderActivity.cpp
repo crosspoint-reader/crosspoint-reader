@@ -403,14 +403,14 @@ void TxtReaderActivity::renderScreen() {
   // Initialize reader if not done
   if (!initialized) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Indexing...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Indexing...", true, CrossPointFont::BOLD);
     renderer.displayBuffer();
     initializeReader();
   }
 
   if (pageOffsets.empty()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty file", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty file", true, CrossPointFont::BOLD);
     renderer.displayBuffer();
     return;
   }

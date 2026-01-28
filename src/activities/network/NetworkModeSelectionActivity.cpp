@@ -105,7 +105,7 @@ void NetworkModeSelectionActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, CrossPointFont::BOLD);
 
   // Draw subtitle
   renderer.drawCenteredText(UI_10_FONT_ID, 50, "How would you like to connect?");

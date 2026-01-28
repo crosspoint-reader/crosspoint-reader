@@ -30,8 +30,8 @@ void stripSoftHyphensInPlace(std::string& word) {
 }
 
 // Returns the rendered width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
-uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                          const EpdFontFamily::Style style, const bool appendHyphen = false) {
+uint16_t measureWordWidth(GfxRenderer& renderer, const int fontId, const std::string& word,
+                          const CrossPointFont::Style style, const bool appendHyphen = false) {
   const bool hasSoftHyphen = containsSoftHyphen(word);
   if (!hasSoftHyphen && !appendHyphen) {
     return renderer.getTextWidth(fontId, word.c_str(), style);
@@ -49,7 +49,7 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 
 }  // namespace
 
-void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle) {
+void ParsedText::addWord(std::string word, const CrossPointFont::Style fontStyle) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
@@ -57,7 +57,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle)
 }
 
 // Consumes data to minimize memory usage
-void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
+void ParsedText::layoutAndExtractLines(GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                                        const bool includeLastLine) {
   if (words.empty()) {
@@ -84,7 +84,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
 }
 
-std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int fontId) {
+std::vector<uint16_t> ParsedText::calculateWordWidths(GfxRenderer& renderer, const int fontId) {
   const size_t totalWordCount = words.size();
 
   std::vector<uint16_t> wordWidths;
@@ -103,7 +103,7 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   return wordWidths;
 }
 
-std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId, const int pageWidth,
+std::vector<size_t> ParsedText::computeLineBreaks(GfxRenderer& renderer, const int fontId, const int pageWidth,
                                                   const int spaceWidth, std::vector<uint16_t>& wordWidths) {
   if (words.empty()) {
     return {};
@@ -206,7 +206,7 @@ void ParsedText::applyParagraphIndent() {
 }
 
 // Builds break indices while opportunistically splitting the word that would overflow the current line.
-std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const int fontId,
+std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(GfxRenderer& renderer, const int fontId,
                                                             const int pageWidth, const int spaceWidth,
                                                             std::vector<uint16_t>& wordWidths) {
   std::vector<size_t> lineBreakIndices;
@@ -257,7 +257,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
 
 // Splits words[wordIndex] into prefix (adding a hyphen only when needed) and remainder when a legal breakpoint fits the
 // available width.
-bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availableWidth, const GfxRenderer& renderer,
+bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availableWidth, GfxRenderer& renderer,
                                       const int fontId, std::vector<uint16_t>& wordWidths,
                                       const bool allowFallbackBreaks) {
   // Guard against invalid indices or zero available width before attempting to split.
@@ -375,7 +375,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
-  std::list<EpdFontFamily::Style> lineWordStyles;
+  std::list<CrossPointFont::Style> lineWordStyles;
   lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
 
   for (auto& word : lineWords) {

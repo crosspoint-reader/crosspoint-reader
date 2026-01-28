@@ -15,5 +15,6 @@ fi
 # Additionally exclude files in 'lib/EpdFont/builtinFonts/' as they are script-generated.
 git ls-files  --exclude-standard ${GIT_LS_FILES_FLAGS} \
     | grep -E '\.(c|cpp|h|hpp)$' \
-    | grep -v -E '^lib/EpdFont/builtinFonts/' \
+    | grep -v -E '^lib/CrossPointFont/builtinFonts/' \
+    | grep -v -E '^lib/CrossPointFont/Group5' \
     | xargs -r clang-format -style=file -i
