@@ -94,7 +94,7 @@ jobs:
             const marker = '<!-- firmware-stats -->';
             const ram = `${{ steps.fw_stats.outputs.ram_line }}`.trim();
             const flash = `${{ steps.fw_stats.outputs.flash_line }}`.trim();
-            const body = `${marker}\n**Firmware build stats**\n\n- ${ram || 'RAM: not found'}\n- ${flash || 'Flash: not found'}`;
+            const body = `${marker}\n**Firmware build stats**\n\n\`\`\`\n${ram || 'RAM: not found'}\n${flash || 'Flash: not found'}\n\`\`\``;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
