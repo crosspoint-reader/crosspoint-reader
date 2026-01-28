@@ -138,37 +138,24 @@ void KeyboardEntryActivity::handleKeyPress() {
 }
 
 void KeyboardEntryActivity::loop() {
-  // Navigation
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-    if (selectedRow > 0) {
-      selectedRow--;
-      // Clamp column to valid range for new row
-      const int maxCol = getRowLength(selectedRow) - 1;
-      if (selectedCol > maxCol) selectedCol = maxCol;
-    } else {
-      // Wrap to bottom row
-      selectedRow = NUM_ROWS - 1;
-      const int maxCol = getRowLength(selectedRow) - 1;
-      if (selectedCol > maxCol) selectedCol = maxCol;
-    }
-    updateRequired = true;
-  }
+  // Handle navigation
+  const auto upButtonCallback = [this] {
+    selectedRow = ButtonNavigator::previousIndex(selectedRow, NUM_ROWS);
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    if (selectedRow < NUM_ROWS - 1) {
-      selectedRow++;
-      const int maxCol = getRowLength(selectedRow) - 1;
-      if (selectedCol > maxCol) selectedCol = maxCol;
-    } else {
-      // Wrap to top row
-      selectedRow = 0;
-      const int maxCol = getRowLength(selectedRow) - 1;
-      if (selectedCol > maxCol) selectedCol = maxCol;
-    }
+    const int maxCol = getRowLength(selectedRow) - 1;
+    if (selectedCol > maxCol) selectedCol = maxCol;
     updateRequired = true;
-  }
+  };
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+  const auto downButtonCallback = [this] {
+    selectedRow = ButtonNavigator::nextIndex(selectedRow, NUM_ROWS);
+
+    const int maxCol = getRowLength(selectedRow) - 1;
+    if (selectedCol > maxCol) selectedCol = maxCol;
+    updateRequired = true;
+  };
+
+  const auto leftButtonCallback = [this] {
     const int maxCol = getRowLength(selectedRow) - 1;
 
     // Special bottom row case
@@ -187,20 +174,14 @@ void KeyboardEntryActivity::loop() {
         // At done button, move to backspace
         selectedCol = BACKSPACE_COL;
       }
-      updateRequired = true;
-      return;
-    }
-
-    if (selectedCol > 0) {
-      selectedCol--;
     } else {
-      // Wrap to end of current row
-      selectedCol = maxCol;
+      selectedCol = ButtonNavigator::previousIndex(selectedCol, maxCol + 1);
     }
-    updateRequired = true;
-  }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    updateRequired = true;
+  };
+
+  const auto rightButtonCallback = [this] {
     const int maxCol = getRowLength(selectedRow) - 1;
 
     // Special bottom row case
@@ -219,18 +200,28 @@ void KeyboardEntryActivity::loop() {
         // At done button, wrap to beginning of row
         selectedCol = SHIFT_COL;
       }
-      updateRequired = true;
-      return;
-    }
-
-    if (selectedCol < maxCol) {
-      selectedCol++;
     } else {
-      // Wrap to beginning of current row
-      selectedCol = 0;
+      selectedCol = ButtonNavigator::nextIndex(selectedCol, maxCol + 1);
     }
     updateRequired = true;
-  }
+  };
+
+  constexpr auto upButton = MappedInputManager::Button::Up;
+  constexpr auto downButton = MappedInputManager::Button::Down;
+  constexpr auto leftButton = MappedInputManager::Button::Left;
+  constexpr auto rightButton = MappedInputManager::Button::Right;
+
+  buttonNavigator.onPress({upButton}, upButtonCallback);
+  buttonNavigator.onContinuous({upButton}, upButtonCallback);
+
+  buttonNavigator.onPress({downButton}, downButtonCallback);
+  buttonNavigator.onContinuous({downButton}, downButtonCallback);
+
+  buttonNavigator.onPress({leftButton}, leftButtonCallback);
+  buttonNavigator.onContinuous({leftButton}, leftButtonCallback);
+
+  buttonNavigator.onPress({rightButton}, rightButtonCallback);
+  buttonNavigator.onContinuous({rightButton}, rightButtonCallback);
 
   // Selection
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
