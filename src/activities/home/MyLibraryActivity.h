@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "../Activity.h"
+#include "RecentBooksStore.h"
 
 class MyLibraryActivity final : public Activity {
  public:
@@ -22,8 +23,7 @@ class MyLibraryActivity final : public Activity {
   bool updateRequired = false;
 
   // Recent tab state
-  std::vector<std::string> bookTitles;  // Display titles for each book
-  std::vector<std::string> bookPaths;   // Paths for each visible book (excludes missing)
+  std::vector<RecentBook> recentBooks;
 
   // Files tab state (from FileSelectionActivity)
   std::string basepath = "/";

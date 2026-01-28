@@ -2,7 +2,9 @@
 
 #include <SDCardManager.h>
 
+#include <algorithm>
 #include <string>
+#include <vector>
 
 class BookMetadataCache {
  public:
@@ -52,6 +54,27 @@ class BookMetadataCache {
   // Temp file handles during build
   FsFile spineFile;
   FsFile tocFile;
+
+  // Index for fast href→spineIndex lookup (used only for large EPUBs)
+  struct SpineHrefIndexEntry {
+    uint64_t hrefHash;  // FNV-1a 64-bit hash
+    uint16_t hrefLen;   // length for collision reduction
+    int16_t spineIndex;
+  };
+  std::vector<SpineHrefIndexEntry> spineHrefIndex;
+  bool useSpineHrefIndex = false;
+
+  static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
+
+  // FNV-1a 64-bit hash function
+  static uint64_t fnvHash64(const std::string& s) {
+    uint64_t hash = 14695981039346656037ull;
+    for (char c : s) {
+      hash ^= static_cast<uint8_t>(c);
+      hash *= 1099511628211ull;
+    }
+    return hash;
+  }
 
   uint32_t writeSpineEntry(FsFile& file, const SpineEntry& entry) const;
   uint32_t writeTocEntry(FsFile& file, const TocEntry& entry) const;

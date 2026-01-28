@@ -3,6 +3,7 @@
  * name: notosans_14_bolditalic
  * size: 14
  * mode: 2-bit
+ * Command used: fontconvert.py notosans_14_bolditalic 14 ../builtinFonts/source/NotoSans/NotoSans-BoldItalic.ttf --2bit
  */
 #pragma once
 #include "EpdFontData.h"
