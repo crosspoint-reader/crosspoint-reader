@@ -89,6 +89,8 @@ void TxtReaderActivity::onExit() {
   renderingMutex = nullptr;
   pageOffsets.clear();
   currentPageLines.clear();
+  APP_STATE.readerActivityLoadCount = 0;
+  APP_STATE.saveToFile();
   txt.reset();
 }
 

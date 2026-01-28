@@ -9,6 +9,7 @@ class CrossPointState {
  public:
   std::string openEpubPath;
   uint8_t lastSleepImage;
+  uint8_t readerActivityLoadCount = 0;
   ~CrossPointState() = default;
 
   // Get singleton instance

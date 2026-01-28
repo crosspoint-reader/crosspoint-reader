@@ -69,6 +69,8 @@ void XtcReaderActivity::onExit() {
   }
   vSemaphoreDelete(renderingMutex);
   renderingMutex = nullptr;
+  APP_STATE.readerActivityLoadCount = 0;
+  APP_STATE.saveToFile();
   xtc.reset();
 }
 

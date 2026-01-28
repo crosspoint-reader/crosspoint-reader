@@ -21,6 +21,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [System Navigation](#system-navigation)
   - [5. Chapter Selection Screen](#5-chapter-selection-screen)
   - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
+  - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
 
 
 ## 1. Hardware Overview
@@ -220,3 +221,15 @@ Accessible by pressing **Confirm** while inside a book.
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
 * **Images:** Embedded images in e-books will not render.
+
+---
+
+## 7. Troubleshooting Issues & Escaping Bootloop
+
+If an issue or crash is encountered while using Crosspoint, feel free to raise an issue ticket and attach the serial monitor logs. The logs can be obtained by connecting the device to a computer and starting a serial monitor. Either [Serial Monitor](https://www.serialmonitor.org/) or the following command can be used:
+
+```
+pio device monitor
+```
+
+If the device is stuck in a bootloop, press and release the Reset button. Then, press and hold on to the configured Back button and the Power Button to boot to the Home Screen.
