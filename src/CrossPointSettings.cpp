@@ -198,21 +198,7 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
-unsigned long CrossPointSettings::getLongPressDurationMs() const {
-  switch (longPressDuration) {
-    case LONG_PRESS_DURATION::LP_1S:
-      return 1UL * 1000;
-    case LONG_PRESS_DURATION::LP_2S:
-    default:
-      return 2UL * 1000;
-    case LONG_PRESS_DURATION::LP_3S:
-      return 3UL * 1000;
-    case LONG_PRESS_DURATION::LP_5S:
-      return 5UL * 1000;
-    case LONG_PRESS_DURATION::LP_10S:
-      return 10UL * 1000;
-  }
-}
+unsigned long CrossPointSettings::getLongPressDurationMs() const { return 1500UL; }
 
 int CrossPointSettings::getReaderFontId() const {
   switch (fontFamily) {
