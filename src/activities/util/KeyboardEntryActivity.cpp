@@ -139,23 +139,23 @@ void KeyboardEntryActivity::handleKeyPress() {
 
 void KeyboardEntryActivity::loop() {
   // Handle navigation
-  const auto upButtonCallback = [this] {
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] {
     selectedRow = ButtonNavigator::previousIndex(selectedRow, NUM_ROWS);
 
     const int maxCol = getRowLength(selectedRow) - 1;
     if (selectedCol > maxCol) selectedCol = maxCol;
     updateRequired = true;
-  };
+  });
 
-  const auto downButtonCallback = [this] {
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] {
     selectedRow = ButtonNavigator::nextIndex(selectedRow, NUM_ROWS);
 
     const int maxCol = getRowLength(selectedRow) - 1;
     if (selectedCol > maxCol) selectedCol = maxCol;
     updateRequired = true;
-  };
+  });
 
-  const auto leftButtonCallback = [this] {
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] {
     const int maxCol = getRowLength(selectedRow) - 1;
 
     // Special bottom row case
@@ -179,9 +179,9 @@ void KeyboardEntryActivity::loop() {
     }
 
     updateRequired = true;
-  };
+  });
 
-  const auto rightButtonCallback = [this] {
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] {
     const int maxCol = getRowLength(selectedRow) - 1;
 
     // Special bottom row case
@@ -204,24 +204,7 @@ void KeyboardEntryActivity::loop() {
       selectedCol = ButtonNavigator::nextIndex(selectedCol, maxCol + 1);
     }
     updateRequired = true;
-  };
-
-  constexpr auto upButton = MappedInputManager::Button::Up;
-  constexpr auto downButton = MappedInputManager::Button::Down;
-  constexpr auto leftButton = MappedInputManager::Button::Left;
-  constexpr auto rightButton = MappedInputManager::Button::Right;
-
-  buttonNavigator.onPress({upButton}, upButtonCallback);
-  buttonNavigator.onContinuous({upButton}, upButtonCallback);
-
-  buttonNavigator.onPress({downButton}, downButtonCallback);
-  buttonNavigator.onContinuous({downButton}, downButtonCallback);
-
-  buttonNavigator.onPress({leftButton}, leftButtonCallback);
-  buttonNavigator.onContinuous({leftButton}, leftButtonCallback);
-
-  buttonNavigator.onPress({rightButton}, rightButtonCallback);
-  buttonNavigator.onContinuous({rightButton}, rightButtonCallback);
+  });
 
   // Selection
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {

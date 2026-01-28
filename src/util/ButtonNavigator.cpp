@@ -6,9 +6,15 @@ void ButtonNavigator::onNext(const Callback& callback) {
   onNextPress(callback);
   onNextContinuous(callback);
 }
+
 void ButtonNavigator::onPrevious(const Callback& callback) {
   onPreviousPress(callback);
   onPreviousContinuous(callback);
+}
+
+void ButtonNavigator::onPressAndContinuous(const Buttons& buttons, const Callback& callback) {
+  onPress(buttons, callback);
+  onContinuous(buttons, callback);
 }
 
 void ButtonNavigator::onNextPress(const Callback& callback) { onPress(getNextButtons(), callback); }

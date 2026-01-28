@@ -12,18 +12,9 @@ class ButtonNavigator final {
   const uint16_t continuousStartMs;
   const uint16_t continuousIntervalMs;
   uint32_t lastContinuousNavTime = 0;
-  bool continuousNavHold = false;
-
   static const MappedInputManager* mappedInput;
 
   [[nodiscard]] bool shouldNavigateContinuously() const;
-
-  [[nodiscard]] static Buttons getNextButtons() {
-    return {MappedInputManager::Button::Down, MappedInputManager::Button::Right};
-  }
-  [[nodiscard]] static Buttons getPreviousButtons() {
-    return {MappedInputManager::Button::Up, MappedInputManager::Button::Left};
-  }
 
  public:
   explicit ButtonNavigator(const uint16_t continuousIntervalMs = 500, const uint16_t continuousStartMs = 500)
@@ -33,6 +24,7 @@ class ButtonNavigator final {
 
   void onNext(const Callback& callback);
   void onPrevious(const Callback& callback);
+  void onPressAndContinuous(const Buttons& buttons, const Callback& callback);
 
   void onNextPress(const Callback& callback);
   void onPreviousPress(const Callback& callback);
@@ -51,4 +43,11 @@ class ButtonNavigator final {
 
   [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
   [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);
+
+  [[nodiscard]] static Buttons getNextButtons() {
+    return {MappedInputManager::Button::Down, MappedInputManager::Button::Right};
+  }
+  [[nodiscard]] static Buttons getPreviousButtons() {
+    return {MappedInputManager::Button::Up, MappedInputManager::Button::Left};
+  }
 };
