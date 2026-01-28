@@ -8,6 +8,7 @@
 
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
+constexpr char MEDIA_TYPE_CSS[] = "text/css";
 constexpr char itemCacheFile[] = "/.items.bin";
 }  // namespace
 
@@ -216,6 +217,11 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         Serial.printf("[%lu] [COF] Warning: Multiple NCX files found in manifest. Ignoring duplicate: %s\n", millis(),
                       href.c_str());
       }
+    }
+
+    // Collect CSS files
+    if (mediaType == MEDIA_TYPE_CSS) {
+      self->cssFiles.push_back(href);
     }
 
     // EPUB 3: Check for nav document (properties contains "nav")

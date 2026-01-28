@@ -9,7 +9,7 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 5;
+constexpr uint8_t BOOK_CACHE_VERSION = 6;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -115,9 +115,14 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
   constexpr uint32_t headerASize =
       sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
+  // Calculate CSS files size: count + each string (length + data)
+  uint32_t cssFilesSize = sizeof(uint16_t);  // count
+  for (const auto& css : metadata.cssFiles) {
+    cssFilesSize += sizeof(uint32_t) + css.size();
+  }
   const uint32_t metadataSize = metadata.title.size() + metadata.author.size() + metadata.language.size() +
                                 metadata.coverItemHref.size() + metadata.textReferenceHref.size() +
-                                sizeof(uint32_t) * 5;
+                                sizeof(uint32_t) * 5 + cssFilesSize;
   const uint32_t lutSize = sizeof(uint32_t) * spineCount + sizeof(uint32_t) * tocCount;
   const uint32_t lutOffset = headerASize + metadataSize;
 
@@ -132,6 +137,11 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   serialization::writeString(bookFile, metadata.language);
   serialization::writeString(bookFile, metadata.coverItemHref);
   serialization::writeString(bookFile, metadata.textReferenceHref);
+  // CSS files
+  serialization::writePod(bookFile, static_cast<uint16_t>(metadata.cssFiles.size()));
+  for (const auto& css : metadata.cssFiles) {
+    serialization::writeString(bookFile, css);
+  }
 
   // Loop through spine entries, writing LUT positions
   spineFile.seek(0);
@@ -385,6 +395,16 @@ bool BookMetadataCache::load() {
   serialization::readString(bookFile, coreMetadata.language);
   serialization::readString(bookFile, coreMetadata.coverItemHref);
   serialization::readString(bookFile, coreMetadata.textReferenceHref);
+  // CSS files
+  uint16_t cssCount;
+  serialization::readPod(bookFile, cssCount);
+  coreMetadata.cssFiles.clear();
+  coreMetadata.cssFiles.reserve(cssCount);
+  for (uint16_t i = 0; i < cssCount; i++) {
+    std::string cssPath;
+    serialization::readString(bookFile, cssPath);
+    coreMetadata.cssFiles.push_back(std::move(cssPath));
+  }
 
   loaded = true;
   Serial.printf("[%lu] [BMC] Loaded cache data: %d spine, %d TOC entries\n", millis(), spineCount, tocCount);

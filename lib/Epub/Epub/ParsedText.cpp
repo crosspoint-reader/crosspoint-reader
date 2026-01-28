@@ -49,11 +49,12 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 
 }  // namespace
 
-void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle) {
+void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
   wordStyles.push_back(fontStyle);
+  wordUnderlines.push_back(underline);
 }
 
 // Consumes data to minimize memory usage
@@ -92,9 +93,21 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
 
   auto wordsIt = words.begin();
   auto wordStylesIt = wordStyles.begin();
+  bool isFirst = true;
 
   while (wordsIt != words.end()) {
-    wordWidths.push_back(measureWordWidth(renderer, fontId, *wordsIt, *wordStylesIt));
+    uint16_t width = measureWordWidth(renderer, fontId, *wordsIt, *wordStylesIt);
+
+    // Add CSS text-indent to first word width
+    if (isFirst && blockStyle.textIndent > 0 && (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) &&
+        !extraParagraphSpacing) {
+      width += static_cast<uint16_t>(blockStyle.textIndent);
+      isFirst = false;
+    } else {
+      isFirst = false;
+    }
+
+    wordWidths.push_back(width);
 
     std::advance(wordsIt, 1);
     std::advance(wordStylesIt, 1);
@@ -200,7 +213,10 @@ void ParsedText::applyParagraphIndent() {
     return;
   }
 
-  if (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) {
+  if (blockStyle.textIndent > 0) {
+    // CSS text-indent is handled via first word width adjustment
+    // We'll add the indent value directly to the first word's width
+  } else if (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) {
     words.front().insert(0, "\xe2\x80\x83");
   }
 }
@@ -369,14 +385,18 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Iterators always start at the beginning as we are moving content with splice below
   auto wordEndIt = words.begin();
   auto wordStyleEndIt = wordStyles.begin();
+  auto wordUnderlineEndIt = wordUnderlines.begin();
   std::advance(wordEndIt, lineWordCount);
   std::advance(wordStyleEndIt, lineWordCount);
+  std::advance(wordUnderlineEndIt, lineWordCount);
 
   // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
   std::list<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
+  std::list<bool> lineWordUnderlines;
+  lineWordUnderlines.splice(lineWordUnderlines.begin(), wordUnderlines, wordUnderlines.begin(), wordUnderlineEndIt);
 
   for (auto& word : lineWords) {
     if (containsSoftHyphen(word)) {
@@ -384,5 +404,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style));
+  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style,
+                                          blockStyle, std::move(lineWordUnderlines)));
 }

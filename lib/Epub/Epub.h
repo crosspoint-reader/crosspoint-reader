@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Epub/BookMetadataCache.h"
+#include "Epub/css/CssParser.h"
 
 class ZipFile;
 
@@ -24,11 +25,14 @@ class Epub {
   std::string cachePath;
   // Spine and TOC cache
   std::unique_ptr<BookMetadataCache> bookMetadataCache;
+  // CSS parser for styling
+  std::unique_ptr<CssParser> cssParser;
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
+  bool parseCssFiles();
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
@@ -64,4 +68,5 @@ class Epub {
 
   size_t getBookSize() const;
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
+  const CssParser* getCssParser() const { return cssParser.get(); }
 };

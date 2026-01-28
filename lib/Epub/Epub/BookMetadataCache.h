@@ -14,6 +14,7 @@ class BookMetadataCache {
     std::string language;
     std::string coverItemHref;
     std::string textReferenceHref;
+    std::vector<std::string> cssFiles;
   };
 
   struct SpineEntry {
