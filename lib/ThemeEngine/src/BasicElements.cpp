@@ -126,6 +126,7 @@ void Label::draw(const GfxRenderer& renderer, const ThemeContext& context) {
   int lineHeight = renderer.getLineHeight(fontId);
 
   std::vector<std::string> lines;
+  lines.reserve(maxLines);  // Pre-allocate to avoid reallocations
   if (absW > 0 && textWidth > absW && maxLines > 1) {
     // Logic to wrap text
     std::string remaining = finalStr;
@@ -374,6 +375,13 @@ void List::draw(const GfxRenderer& renderer, const ThemeContext& context) {
   int itemW = getItemWidth();
   int itemH = getItemHeight();
 
+  // Pre-allocate string buffers to avoid repeated allocations
+  std::string prefix;
+  prefix.reserve(source.length() + 16);
+  std::string key;
+  key.reserve(source.length() + 32);
+  char numBuf[12];
+
   // Handle different layout modes
   if (direction == Direction::Horizontal || layoutMode == LayoutMode::Grid) {
     // Horizontal or Grid layout
@@ -389,9 +397,16 @@ void List::draw(const GfxRenderer& renderer, const ThemeContext& context) {
     }
 
     for (int i = 0; i < count; ++i) {
+      // Build prefix efficiently: "source.i."
+      prefix.clear();
+      prefix += source;
+      prefix += '.';
+      snprintf(numBuf, sizeof(numBuf), "%d", i);
+      prefix += numBuf;
+      prefix += '.';
+
       // Create item context with scoped variables
       ThemeContext itemContext(&context);
-      std::string prefix = source + "." + std::to_string(i) + ".";
 
       // Standard list item variables - include all properties for full flexibility
       std::string nameVal = context.getString(prefix + "Name");
@@ -470,9 +485,16 @@ void List::draw(const GfxRenderer& renderer, const ThemeContext& context) {
         break;
       }
 
+      // Build prefix efficiently: "source.i."
+      prefix.clear();
+      prefix += source;
+      prefix += '.';
+      snprintf(numBuf, sizeof(numBuf), "%d", i);
+      prefix += numBuf;
+      prefix += '.';
+
       // Create item context with scoped variables
       ThemeContext itemContext(&context);
-      std::string prefix = source + "." + std::to_string(i) + ".";
 
       // Standard list item variables - include all properties for full flexibility
       std::string nameVal = context.getString(prefix + "Name");

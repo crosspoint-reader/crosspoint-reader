@@ -26,11 +26,43 @@ struct ScreenCache {
   uint32_t contextHash = 0;  // Hash of context data to detect changes
   bool valid = false;
 
+  ScreenCache() = default;
   ~ScreenCache() {
     if (buffer) {
       free(buffer);
       buffer = nullptr;
     }
+  }
+
+  // Prevent double-free from copy
+  ScreenCache(const ScreenCache&) = delete;
+  ScreenCache& operator=(const ScreenCache&) = delete;
+
+  // Allow move
+  ScreenCache(ScreenCache&& other) noexcept
+      : buffer(other.buffer),
+        bufferSize(other.bufferSize),
+        screenName(std::move(other.screenName)),
+        contextHash(other.contextHash),
+        valid(other.valid) {
+    other.buffer = nullptr;
+    other.bufferSize = 0;
+    other.valid = false;
+  }
+
+  ScreenCache& operator=(ScreenCache&& other) noexcept {
+    if (this != &other) {
+      if (buffer) free(buffer);
+      buffer = other.buffer;
+      bufferSize = other.bufferSize;
+      screenName = std::move(other.screenName);
+      contextHash = other.contextHash;
+      valid = other.valid;
+      other.buffer = nullptr;
+      other.bufferSize = 0;
+      other.valid = false;
+    }
+    return *this;
   }
 
   void invalidate() { valid = false; }
