@@ -565,8 +565,8 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
 
     std::string title = txt->getTitle();
     int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-    while (titleWidth > availableTextWidth && title.length() > 11) {
-      title.replace(title.length() - 8, 8, "...");
+    if (titleWidth > availableTextWidth) {
+      title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), availableTextWidth);
       titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     }
 

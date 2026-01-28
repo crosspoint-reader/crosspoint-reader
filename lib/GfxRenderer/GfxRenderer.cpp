@@ -2,6 +2,18 @@
 
 #include <Utf8.h>
 
+namespace {
+size_t utf8RemoveLastChar(std::string& str) {
+  if (str.empty()) return 0;
+  size_t pos = str.size() - 1;
+  while (pos > 0 && (static_cast<unsigned char>(str[pos]) & 0xC0) == 0x80) {
+    --pos;
+  }
+  str.resize(pos);
+  return pos;
+}
+}  // namespace
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
@@ -415,13 +427,32 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
                                        const EpdFontFamily::Style style) const {
-  std::string item = text;
+  std::string item = text ? text : "";
+  if (maxWidth <= 0) {
+    return "";
+  }
+
   int itemWidth = getTextWidth(fontId, item.c_str(), style);
-  while (itemWidth > maxWidth && item.length() > 8) {
-    item.replace(item.length() - 5, 5, "...");
+  if (itemWidth <= maxWidth) {
+    return item;
+  }
+
+  const char* ellipsis = "...";
+  const int ellipsisWidth = getTextWidth(fontId, ellipsis, style);
+  if (ellipsisWidth > maxWidth) {
+    return "";
+  }
+
+  while (!item.empty() && itemWidth + ellipsisWidth > maxWidth) {
+    utf8RemoveLastChar(item);
     itemWidth = getTextWidth(fontId, item.c_str(), style);
   }
-  return item;
+
+  if (item.empty()) {
+    return ellipsis;
+  }
+
+  return item + ellipsis;
 }
 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
