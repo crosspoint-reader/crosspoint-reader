@@ -9,6 +9,7 @@ on:
 
 permissions:
   statuses: write
+  pull-requests: write
 
 jobs:
   title-check:
@@ -21,6 +22,44 @@ jobs:
           egress-policy: audit
 
       - name: Check PR Title
+        id: title_check
         uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment with changelog hint on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- pr-title-check -->';
+            const error =
+              `${{ steps.title_check.outputs.error_message || steps.title_check.outputs.error || '' }}`.trim();
+            const details = error ? `\n\n**Error:** ${error}` : '\n\n**Error:** See workflow logs.';
+            const body = `${marker}
+            **PR title check failed**
+
+            Please use a Conventional Commit-style prefix (e.g., \`feat:\`, \`fix:\`, \`docs:\`, \`chore:\`).
+            If this change should appear in release notes, ensure the title reflects the correct category.${details}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

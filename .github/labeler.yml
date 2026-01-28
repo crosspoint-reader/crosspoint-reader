@@ -1,0 +1,38 @@
+firmware:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/**
+          - lib/**
+          - open-x4-sdk/**
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/activities/**
+          - src/network/html/**
+          - docs/images/**
+
+epub:
+  - changed-files:
+      - any-glob-to-any-file:
+          - lib/Epub/**
+
+network:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/network/**
+          - src/util/UrlUtils.*
+          - lib/OpdsParser/**
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - README*
+          - CHANGELOG*
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - test/**
+          - scripts/**
