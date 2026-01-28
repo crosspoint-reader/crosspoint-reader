@@ -28,7 +28,9 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
-void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode) { einkDisplay.displayBuffer(convertRefreshMode(mode)); }
+void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
+}
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
@@ -48,4 +50,4 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
-void HalDisplay::displayGrayBuffer() { einkDisplay.displayGrayBuffer(); }
+void HalDisplay::displayGrayBuffer(bool turnOffScreen) { einkDisplay.displayGrayBuffer(turnOffScreen); }
