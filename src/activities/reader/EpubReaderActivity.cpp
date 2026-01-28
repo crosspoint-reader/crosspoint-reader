@@ -291,8 +291,9 @@ void EpubReaderActivity::renderScreen() {
     // Add additional margin for status bar if progress bar is shown
     const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR ||
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_PROGRESS_BAR;
-    orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
-                            (showProgressBar ? (ScreenComponents::BOOK_PROGRESS_BAR_HEIGHT + progressBarMarginTop) : 0);
+    orientedMarginBottom +=
+        statusBarMargin - SETTINGS.screenMargin +
+        (showProgressBar ? (ScreenComponents::BOOK_PROGRESS_BAR_HEIGHT() + progressBarMarginTop) : 0);
   }
 
   if (!section) {

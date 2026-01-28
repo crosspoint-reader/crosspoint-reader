@@ -6,6 +6,7 @@
 #include <string>
 
 #include "Battery.h"
+#include "CrossPointSettings.h"
 #include "fontIds.h"
 
 void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, const int top,
@@ -48,9 +49,21 @@ void ScreenComponents::drawBookProgressBar(const GfxRenderer& renderer, const si
                                    &vieweableMarginLeft);
 
   const int progressBarMaxWidth = renderer.getScreenWidth() - vieweableMarginLeft - vieweableMarginRight;
-  const int progressBarY = renderer.getScreenHeight() - vieweableMarginBottom - BOOK_PROGRESS_BAR_HEIGHT;
+  const int progressBarY = renderer.getScreenHeight() - vieweableMarginBottom - BOOK_PROGRESS_BAR_HEIGHT();
   const int barWidth = progressBarMaxWidth * bookProgress / 100;
-  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BOOK_PROGRESS_BAR_HEIGHT, true);
+  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BOOK_PROGRESS_BAR_HEIGHT(), true);
+}
+
+int ScreenComponents::BOOK_PROGRESS_BAR_HEIGHT() {
+  const auto orientation = SETTINGS.orientation;
+  const bool isVertical = (orientation == CrossPointSettings::ORIENTATION::PORTRAIT ||
+                           orientation == CrossPointSettings::ORIENTATION::INVERTED);
+
+  if (isVertical) {
+    return 4;
+  } else {
+    return 2;
+  }
 }
 
 int ScreenComponents::drawTabBar(const GfxRenderer& renderer, const int y, const std::vector<TabInfo>& tabs) {
