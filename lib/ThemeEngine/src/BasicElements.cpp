@@ -382,8 +382,8 @@ void List::draw(const GfxRenderer& renderer, const ThemeContext& context) {
     int currentX = absX;
     int currentY = absY;
 
-    // For grid, calculate item width based on columns
-    if (layoutMode == LayoutMode::Grid && columns > 1) {
+    // For grid, calculate item width based on columns only if not explicitly set
+    if (layoutMode == LayoutMode::Grid && columns > 1 && itemWidth == 0) {
       int totalSpacing = (columns - 1) * spacing;
       itemW = (absW - totalSpacing) / columns;
     }

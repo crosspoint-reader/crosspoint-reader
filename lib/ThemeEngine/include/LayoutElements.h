@@ -12,9 +12,13 @@ namespace ThemeEngine {
 // --- HStack: Horizontal Stack Layout ---
 // Children are arranged horizontally with optional spacing
 class HStack : public Container {
+ public:
+  enum class VAlign { Top, Center, Bottom };
+
+ private:
   int spacing = 0;  // Gap between children
   int padding = 0;  // Internal padding
-  bool centerVertical = false;
+  VAlign vAlign = VAlign::Top;
 
  public:
   HStack(const std::string& id) : Container(id) {}
@@ -29,8 +33,18 @@ class HStack : public Container {
     padding = p;
     markDirty();
   }
-  void setCenterVertical(bool c) {
-    centerVertical = c;
+  void setVAlign(VAlign a) {
+    vAlign = a;
+    markDirty();
+  }
+  void setVAlignFromString(const std::string& s) {
+    if (s == "center" || s == "Center") {
+      vAlign = VAlign::Center;
+    } else if (s == "bottom" || s == "Bottom") {
+      vAlign = VAlign::Bottom;
+    } else {
+      vAlign = VAlign::Top;
+    }
     markDirty();
   }
 
@@ -48,11 +62,28 @@ class HStack : public Container {
       int childW = child->getAbsW();
       int childH = child->getAbsH();
 
-      // Re-layout with proper position
+      // Extract child's own Y offset (from first layout pass)
+      int childYOffset = child->getAbsY() - (absY + padding);
+
+      // Calculate base position based on vertical alignment
       int childY = absY + padding;
-      if (centerVertical && childH < availableH) {
-        childY = absY + padding + (availableH - childH) / 2;
+      if (childH < availableH) {
+        switch (vAlign) {
+          case VAlign::Center:
+            childY = absY + padding + (availableH - childH) / 2;
+            break;
+          case VAlign::Bottom:
+            childY = absY + padding + (availableH - childH);
+            break;
+          case VAlign::Top:
+          default:
+            childY = absY + padding;
+            break;
+        }
       }
+
+      // Add child's own Y offset to the calculated position
+      childY += childYOffset;
 
       child->layout(context, currentX, childY, childW, childH);
       currentX += childW + spacing;
@@ -65,9 +96,13 @@ class HStack : public Container {
 // --- VStack: Vertical Stack Layout ---
 // Children are arranged vertically with optional spacing
 class VStack : public Container {
+ public:
+  enum class HAlign { Left, Center, Right };
+
+ private:
   int spacing = 0;
   int padding = 0;
-  bool centerHorizontal = false;
+  HAlign hAlign = HAlign::Left;
 
  public:
   VStack(const std::string& id) : Container(id) {}
@@ -82,8 +117,18 @@ class VStack : public Container {
     padding = p;
     markDirty();
   }
-  void setCenterHorizontal(bool c) {
-    centerHorizontal = c;
+  void setHAlign(HAlign a) {
+    hAlign = a;
+    markDirty();
+  }
+  void setHAlignFromString(const std::string& s) {
+    if (s == "center" || s == "Center") {
+      hAlign = HAlign::Center;
+    } else if (s == "right" || s == "Right") {
+      hAlign = HAlign::Right;
+    } else {
+      hAlign = HAlign::Left;
+    }
     markDirty();
   }
 
@@ -100,10 +145,28 @@ class VStack : public Container {
       int childW = child->getAbsW();
       int childH = child->getAbsH();
 
+      // Extract child's own X offset (from first layout pass)
+      int childXOffset = child->getAbsX() - (absX + padding);
+
+      // Calculate base position based on horizontal alignment
       int childX = absX + padding;
-      if (centerHorizontal && childW < availableW) {
-        childX = absX + padding + (availableW - childW) / 2;
+      if (childW < availableW) {
+        switch (hAlign) {
+          case HAlign::Center:
+            childX = absX + padding + (availableW - childW) / 2;
+            break;
+          case HAlign::Right:
+            childX = absX + padding + (availableW - childW);
+            break;
+          case HAlign::Left:
+          default:
+            childX = absX + padding;
+            break;
+        }
       }
+
+      // Add child's own X offset to the calculated position
+      childX += childXOffset;
 
       child->layout(context, childX, currentY, childW, childH);
       currentY += childH + spacing;

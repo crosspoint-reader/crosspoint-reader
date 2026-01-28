@@ -144,13 +144,13 @@ void ThemeManager::applyProperties(UIElement* elem, const std::map<std::string, 
       } else if (elemType == UIElement::ElementType::List) {
         static_cast<List*>(elem)->setSpacing(parseIntSafe(val));
       }
-    } else if (key == "CenterVertical") {
+    } else if (key == "VAlign") {
       if (elemType == UIElement::ElementType::HStack) {
-        static_cast<HStack*>(elem)->setCenterVertical(val == "true" || val == "1");
+        static_cast<HStack*>(elem)->setVAlignFromString(val);
       }
-    } else if (key == "CenterHorizontal") {
+    } else if (key == "HAlign") {
       if (elemType == UIElement::ElementType::VStack) {
-        static_cast<VStack*>(elem)->setCenterHorizontal(val == "true" || val == "1");
+        static_cast<VStack*>(elem)->setHAlignFromString(val);
       }
     }
 
