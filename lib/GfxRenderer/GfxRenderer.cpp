@@ -2,18 +2,6 @@
 
 #include <Utf8.h>
 
-namespace {
-size_t utf8RemoveLastChar(std::string& str) {
-  if (str.empty()) return 0;
-  size_t pos = str.size() - 1;
-  while (pos > 0 && (static_cast<unsigned char>(str[pos]) & 0xC0) == 0x80) {
-    --pos;
-  }
-  str.resize(pos);
-  return pos;
-}
-}  // namespace
-
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
