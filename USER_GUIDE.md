@@ -105,6 +105,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
   - "Crop" - Scale the image down and crop as necessary to try to to fill the screen (Note: this is experimental and may not work as expected)
+- **Sleep Screen Cover Filter**: What filter will be applied to the book cover when "Cover" sleep screen is selected 
+  - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
+  - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
+  - "Inverted" - The image will be inverted as in white&black and will be displayed without grayscale conversion
 - **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress

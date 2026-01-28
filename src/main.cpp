@@ -1,8 +1,8 @@
 #include <Arduino.h>
-#include <EInkDisplay.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <InputManager.h>
+#include <HalDisplay.h>
+#include <HalGPIO.h>
 #include <SDCardManager.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
@@ -26,23 +26,10 @@
 #include "activities/util/FullScreenMessageActivity.h"
 #include "fontIds.h"
 
-#define SPI_FQ 40000000
-// Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
-#define EPD_SCLK 8   // SPI Clock
-#define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
-#define EPD_CS 21    // Chip Select
-#define EPD_DC 4     // Data/Command
-#define EPD_RST 5    // Reset
-#define EPD_BUSY 6   // Busy
-
-#define UART0_RXD 20  // Used for USB connection detection
-
-#define SD_SPI_MISO 7
-
-EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
-InputManager inputManager;
-MappedInputManager mappedInputManager(inputManager);
-GfxRenderer renderer(einkDisplay);
+HalDisplay display;
+HalGPIO gpio;
+MappedInputManager mappedInputManager(gpio);
+GfxRenderer renderer(display);
 Activity* currentActivity;
 
 // Fonts
@@ -170,21 +157,20 @@ void verifyPowerButtonDuration() {
   const uint16_t calibratedPressDuration =
       (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
 
-  inputManager.update();
-  // Verify the user has actually pressed
+  gpio.update();
   // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
-  while (!inputManager.isPressed(InputManager::BTN_POWER) && millis() - start < 1000) {
+  while (!gpio.isPressed(HalGPIO::BTN_POWER) && millis() - start < 1000) {
     delay(10);  // only wait 10ms each iteration to not delay too much in case of short configured duration.
-    inputManager.update();
+    gpio.update();
   }
 
   t2 = millis();
-  if (inputManager.isPressed(InputManager::BTN_POWER)) {
+  if (gpio.isPressed(HalGPIO::BTN_POWER)) {
     do {
       delay(10);
-      inputManager.update();
-    } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() < calibratedPressDuration);
-    abort = inputManager.getHeldTime() < calibratedPressDuration;
+      gpio.update();
+    } while (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() < calibratedPressDuration);
+    abort = gpio.getHeldTime() < calibratedPressDuration;
   } else {
     abort = true;
   }
@@ -192,16 +178,15 @@ void verifyPowerButtonDuration() {
   if (abort) {
     // Button released too early. Returning to sleep.
     // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-    esp_deep_sleep_start();
+    gpio.startDeepSleep();
   }
 }
 
 void waitForPowerRelease() {
-  inputManager.update();
-  while (inputManager.isPressed(InputManager::BTN_POWER)) {
+  gpio.update();
+  while (gpio.isPressed(HalGPIO::BTN_POWER)) {
     delay(50);
-    inputManager.update();
+    gpio.update();
   }
 }
 
@@ -210,14 +195,11 @@ void enterDeepSleep() {
   exitActivity();
   enterNewActivity(new SleepActivity(renderer, mappedInputManager));
 
-  einkDisplay.deepSleep();
+  display.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
-  waitForPowerRelease();
-  // Enter Deep Sleep
-  esp_deep_sleep_start();
+
+  gpio.startDeepSleep();
 }
 
 void onGoHome();
@@ -261,7 +243,7 @@ void onGoHome() {
 }
 
 void setupDisplayAndFonts() {
-  einkDisplay.begin();
+  display.begin();
   Serial.printf("[%lu] [   ] Display initialized\n", millis());
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
@@ -284,27 +266,13 @@ void setupDisplayAndFonts() {
   Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 
-bool isUsbConnected() {
-  // U0RXD/GPIO20 reads HIGH when USB is connected
-  return digitalRead(UART0_RXD) == HIGH;
-}
-
-bool isWakeupByPowerButton() {
-  const auto wakeupCause = esp_sleep_get_wakeup_cause();
-  const auto resetReason = esp_reset_reason();
-  if (isUsbConnected()) {
-    return wakeupCause == ESP_SLEEP_WAKEUP_GPIO;
-  } else {
-    return (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_POWERON);
-  }
-}
-
 void setup() {
   t1 = millis();
 
+  gpio.begin();
+
   // Only start serial if USB connected
-  pinMode(UART0_RXD, INPUT);
-  if (isUsbConnected()) {
+  if (gpio.isUsbConnected()) {
     Serial.begin(115200);
     // Wait up to 3 seconds for Serial to be ready to catch early logs
     unsigned long start = millis();
@@ -312,13 +280,6 @@ void setup() {
       delay(10);
     }
   }
-
-  inputManager.begin();
-  // Initialize pins
-  pinMode(BAT_GPIO0, INPUT);
-
-  // Initialize SPI with custom pins
-  SPI.begin(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, EPD_CS);
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
@@ -333,7 +294,7 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
-  if (isWakeupByPowerButton()) {
+  if (gpio.isWakeupByPowerButton()) {
     // For normal wakeups, verify power button press duration
     Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
     verifyPowerButtonDuration();
@@ -370,7 +331,7 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-  inputManager.update();
+  gpio.update();
 
   if (Serial && millis() - lastMemPrint >= 10000) {
     Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
@@ -380,8 +341,7 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (inputManager.wasAnyPressed() || inputManager.wasAnyReleased() ||
-      (currentActivity && currentActivity->preventAutoSleep())) {
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || (currentActivity && currentActivity->preventAutoSleep())) {
     lastActivityTime = millis();  // Reset inactivity timer
   }
 
@@ -393,8 +353,7 @@ void loop() {
     return;
   }
 
-  if (inputManager.isPressed(InputManager::BTN_POWER) &&
-      inputManager.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
