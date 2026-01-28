@@ -542,8 +542,8 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
         availableTitleSpace = rendererableScreenWidth - titleMarginLeft - titleMarginRight;
         titleMarginLeftAdjusted = titleMarginLeft;
       }
-      while (titleWidth > availableTitleSpace && title.length() > 11) {
-        title.replace(title.length() - 8, 8, "...");
+      if (titleWidth > availableTitleSpace) {
+        title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), availableTitleSpace);
         titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
       }
     }

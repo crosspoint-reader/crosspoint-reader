@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
+#include <Utf8.h>
 #include <Xtc.h>
 
 #include <cstring>
@@ -366,7 +367,7 @@ void HomeActivity::render() {
         while (!lines.back().empty() && renderer.getTextWidth(UI_12_FONT_ID, lines.back().c_str()) > maxLineWidth) {
           // Remove "..." first, then remove one UTF-8 char, then add "..." back
           lines.back().resize(lines.back().size() - 3);  // Remove "..."
-          StringUtils::utf8RemoveLastChar(lines.back());
+          utf8RemoveLastChar(lines.back());
           lines.back().append("...");
         }
         break;
@@ -375,7 +376,7 @@ void HomeActivity::render() {
       int wordWidth = renderer.getTextWidth(UI_12_FONT_ID, i.c_str());
       while (wordWidth > maxLineWidth && !i.empty()) {
         // Word itself is too long, trim it (UTF-8 safe)
-        StringUtils::utf8RemoveLastChar(i);
+        utf8RemoveLastChar(i);
         // Check if we have room for ellipsis
         std::string withEllipsis = i + "...";
         wordWidth = renderer.getTextWidth(UI_12_FONT_ID, withEllipsis.c_str());
@@ -428,7 +429,7 @@ void HomeActivity::render() {
       if (!lastBookAuthor.empty()) {
         std::string trimmedAuthor = lastBookAuthor;
         while (renderer.getTextWidth(UI_10_FONT_ID, trimmedAuthor.c_str()) > maxLineWidth && !trimmedAuthor.empty()) {
-          StringUtils::utf8RemoveLastChar(trimmedAuthor);
+          utf8RemoveLastChar(trimmedAuthor);
         }
         if (renderer.getTextWidth(UI_10_FONT_ID, trimmedAuthor.c_str()) <
             renderer.getTextWidth(UI_10_FONT_ID, lastBookAuthor.c_str())) {
@@ -462,14 +463,14 @@ void HomeActivity::render() {
       // Trim author if too long (UTF-8 safe)
       bool wasTrimmed = false;
       while (renderer.getTextWidth(UI_10_FONT_ID, trimmedAuthor.c_str()) > maxLineWidth && !trimmedAuthor.empty()) {
-        StringUtils::utf8RemoveLastChar(trimmedAuthor);
+        utf8RemoveLastChar(trimmedAuthor);
         wasTrimmed = true;
       }
       if (wasTrimmed && !trimmedAuthor.empty()) {
         // Make room for ellipsis
         while (renderer.getTextWidth(UI_10_FONT_ID, (trimmedAuthor + "...").c_str()) > maxLineWidth &&
                !trimmedAuthor.empty()) {
-          StringUtils::utf8RemoveLastChar(trimmedAuthor);
+          utf8RemoveLastChar(trimmedAuthor);
         }
         trimmedAuthor.append("...");
       }
