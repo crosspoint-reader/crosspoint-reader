@@ -415,32 +415,17 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
                                        const EpdFontFamily::Style style) const {
-  std::string item = text ? text : "";
-  if (maxWidth <= 0) {
-    return "";
-  }
+  if (!text || maxWidth <= 0) return "";
 
-  int itemWidth = getTextWidth(fontId, item.c_str(), style);
-  if (itemWidth <= maxWidth) {
-    return item;
-  }
-
+  std::string item = text;
   const char* ellipsis = "...";
-  const int ellipsisWidth = getTextWidth(fontId, ellipsis, style);
-  if (ellipsisWidth > maxWidth) {
-    return "";
-  }
+  int ellipsisWidth = getTextWidth(fontId, ellipsis, style);
 
-  while (!item.empty() && itemWidth + ellipsisWidth > maxWidth) {
+  while (!item.empty() && getTextWidth(fontId, (item + ellipsis).c_str(), style) > maxWidth) {
     utf8RemoveLastChar(item);
-    itemWidth = getTextWidth(fontId, item.c_str(), style);
   }
 
-  if (item.empty()) {
-    return ellipsis;
-  }
-
-  return item + ellipsis;
+  return item.empty() ? ellipsis : item + ellipsis;
 }
 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
