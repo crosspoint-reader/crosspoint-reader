@@ -25,6 +25,7 @@
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "fontIds.h"
+#include "util/ButtonNavigator.h"
 
 HalDisplay display;
 HalGPIO gpio;
@@ -293,6 +294,7 @@ void setup() {
 
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
+  ButtonNavigator::setMappedInputManager(mappedInputManager);
 
   if (gpio.isWakeupByPowerButton()) {
     // For normal wakeups, verify power button press duration

@@ -6,6 +6,7 @@
 #include <functional>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Submenu for OPDS Browser settings.
@@ -24,6 +25,7 @@ class CalibreSettingsActivity final : public ActivityWithSubactivity {
  private:
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
 
   int selectedIndex = 0;

@@ -111,17 +111,15 @@ void SettingsActivity::loop() {
   }
 
   // Handle navigation
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    // Move selection up (with wrap-around)
-    selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
+  buttonNavigator.onNext([this] {
+    selectedCategoryIndex = (selectedCategoryIndex + 1) % categoryCount;
     updateRequired = true;
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    // Move selection down (with wrap around)
-    selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
+  });
+
+  buttonNavigator.onPrevious([this] {
+    selectedCategoryIndex = (selectedCategoryIndex + categoryCount - 1) % categoryCount;
     updateRequired = true;
-  }
+  });
 }
 
 void SettingsActivity::enterCategory(int categoryIndex) {

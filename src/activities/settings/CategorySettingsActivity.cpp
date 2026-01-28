@@ -62,15 +62,15 @@ void CategorySettingsActivity::loop() {
   }
 
   // Handle navigation
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount - 1);
+  buttonNavigator.onNext([this] {
+    selectedSettingIndex = (selectedSettingIndex + 1) % settingsCount;
     updateRequired = true;
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    selectedSettingIndex = (selectedSettingIndex < settingsCount - 1) ? (selectedSettingIndex + 1) : 0;
+  });
+
+  buttonNavigator.onPrevious([this] {
+    selectedSettingIndex = (selectedSettingIndex + settingsCount - 1) % settingsCount;
     updateRequired = true;
-  }
+  });
 }
 
 void CategorySettingsActivity::toggleCurrentSetting() {
