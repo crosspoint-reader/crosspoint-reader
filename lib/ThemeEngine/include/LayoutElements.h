@@ -85,7 +85,11 @@ class HStack : public Container {
       // Add child's own Y offset to the calculated position
       childY += childYOffset;
 
-      child->layout(context, currentX, childY, childW, childH);
+      // Only do second layout pass if position changed from first pass
+      int firstPassY = child->getAbsY();
+      if (childY != firstPassY) {
+        child->layout(context, currentX, childY, childW, childH);
+      }
       currentX += childW + spacing;
       availableW -= (childW + spacing);
       if (availableW < 0) availableW = 0;
@@ -168,7 +172,11 @@ class VStack : public Container {
       // Add child's own X offset to the calculated position
       childX += childXOffset;
 
-      child->layout(context, childX, currentY, childW, childH);
+      // Only do second layout pass if position changed from first pass
+      int firstPassX = child->getAbsX();
+      if (childX != firstPassX) {
+        child->layout(context, childX, currentY, childW, childH);
+      }
       currentY += childH + spacing;
       availableH -= (childH + spacing);
       if (availableH < 0) availableH = 0;
@@ -211,8 +219,10 @@ class Grid : public Container {
 
     if (children.empty()) return;
 
-    int availableW = absW - 2 * padding - (columns - 1) * colSpacing;
-    int cellW = availableW / columns;
+    // Guard against division by zero
+    int cols = columns > 0 ? columns : 1;
+    int availableW = absW - 2 * padding - (cols - 1) * colSpacing;
+    int cellW = availableW / cols;
     int availableH = absH - 2 * padding;
 
     int row = 0, col = 0;
@@ -228,7 +238,7 @@ class Grid : public Container {
       if (childH > maxRowHeight) maxRowHeight = childH;
 
       col++;
-      if (col >= columns) {
+      if (col >= cols) {
         col = 0;
         row++;
         currentY += maxRowHeight + rowSpacing;
@@ -587,15 +597,7 @@ class TabBar : public Container {
     // Draw selection indicator
     if (showIndicator && !children.empty()) {
       std::string selStr = context.evaluatestring(selectedExpr);
-      int selectedIdx = 0;
-      if (!selStr.empty()) {
-        // Try to parse as number
-        try {
-          selectedIdx = std::stoi(selStr);
-        } catch (...) {
-          selectedIdx = 0;
-        }
-      }
+      int selectedIdx = parseIntSafe(selStr, 0);
 
       if (selectedIdx >= 0 && selectedIdx < static_cast<int>(children.size())) {
         UIElement* tab = children[selectedIdx];
@@ -686,9 +688,9 @@ class ScrollIndicator : public UIElement {
     std::string totalStr = context.evaluatestring(totalExpr);
     std::string visStr = context.evaluatestring(visibleExpr);
 
-    float position = posStr.empty() ? 0 : std::stof(posStr);
-    int total = totalStr.empty() ? 1 : std::stoi(totalStr);
-    int visible = visStr.empty() ? 1 : std::stoi(visStr);
+    float position = parseFloatSafe(posStr, 0.0f);
+    int total = parseIntSafe(totalStr, 1);
+    int visible = parseIntSafe(visStr, 1);
 
     if (total <= visible) {
       // No need to show scrollbar

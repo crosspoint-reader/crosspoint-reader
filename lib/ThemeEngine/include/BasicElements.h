@@ -11,6 +11,22 @@
 
 namespace ThemeEngine {
 
+// Safe integer parsing (no exceptions)
+inline int parseIntSafe(const std::string& s, int defaultVal = 0) {
+  if (s.empty()) return defaultVal;
+  char* end;
+  long val = strtol(s.c_str(), &end, 10);
+  return (end != s.c_str()) ? static_cast<int>(val) : defaultVal;
+}
+
+// Safe float parsing (no exceptions)
+inline float parseFloatSafe(const std::string& s, float defaultVal = 0.0f) {
+  if (s.empty()) return defaultVal;
+  char* end;
+  float val = strtof(s.c_str(), &end);
+  return (end != s.c_str()) ? val : defaultVal;
+}
+
 // --- Container ---
 class Container : public UIElement {
  protected:
@@ -263,8 +279,8 @@ class ProgressBar : public UIElement {
     std::string valStr = context.evaluatestring(valueExpr);
     std::string maxStr = context.evaluatestring(maxExpr);
 
-    int value = valStr.empty() ? 0 : std::stoi(valStr);
-    int maxVal = maxStr.empty() ? 100 : std::stoi(maxStr);
+    int value = parseIntSafe(valStr, 0);
+    int maxVal = parseIntSafe(maxStr, 100);
     if (maxVal <= 0) maxVal = 100;
 
     float ratio = static_cast<float>(value) / static_cast<float>(maxVal);
@@ -367,7 +383,7 @@ class BatteryIcon : public UIElement {
     if (!isVisible(context)) return;
 
     std::string valStr = context.evaluatestring(valueExpr);
-    int percentage = valStr.empty() ? 0 : std::stoi(valStr);
+    int percentage = parseIntSafe(valStr, 0);
 
     std::string colStr = context.evaluatestring(colorExpr);
     uint8_t color = Color::parse(colStr).value;
