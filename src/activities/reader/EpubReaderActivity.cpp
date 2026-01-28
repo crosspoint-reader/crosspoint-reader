@@ -293,7 +293,7 @@ void EpubReaderActivity::renderScreen() {
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_PROGRESS_BAR;
     orientedMarginBottom +=
         statusBarMargin - SETTINGS.screenMargin +
-        (showProgressBar ? (ScreenComponents::BOOK_PROGRESS_BAR_HEIGHT() + progressBarMarginTop) : 0);
+        (showProgressBar ? (ScreenComponents::bookProgressBarHeight() + progressBarMarginTop) : 0);
   }
 
   if (!section) {

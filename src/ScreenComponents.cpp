@@ -49,12 +49,12 @@ void ScreenComponents::drawBookProgressBar(const GfxRenderer& renderer, const si
                                    &vieweableMarginLeft);
 
   const int progressBarMaxWidth = renderer.getScreenWidth() - vieweableMarginLeft - vieweableMarginRight;
-  const int progressBarY = renderer.getScreenHeight() - vieweableMarginBottom - BOOK_PROGRESS_BAR_HEIGHT();
+  const int progressBarY = renderer.getScreenHeight() - vieweableMarginBottom - bookProgressBarHeight();
   const int barWidth = progressBarMaxWidth * bookProgress / 100;
-  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BOOK_PROGRESS_BAR_HEIGHT(), true);
+  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, bookProgressBarHeight(), true);
 }
 
-int ScreenComponents::BOOK_PROGRESS_BAR_HEIGHT() {
+int ScreenComponents::bookProgressBarHeight() {
   const auto orientation = SETTINGS.orientation;
   const bool isVertical = (orientation == CrossPointSettings::ORIENTATION::PORTRAIT ||
                            orientation == CrossPointSettings::ORIENTATION::INVERTED);
