@@ -5,6 +5,7 @@
 #include <HalGPIO.h>
 #include <SDCardManager.h>
 #include <SPI.h>
+#include <ResourcesFS.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -266,6 +267,63 @@ void setupDisplayAndFonts() {
   Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 
+void demoResourcesFS() {
+  static const char* RESOURCES_FILE = "/resources.bin";
+  FsFile file = SdMan.open(RESOURCES_FILE, O_RDONLY);
+  if (!file) {
+    Serial.printf("[%lu] [   ] No custom resources to flash\n", millis());
+    return;
+  }
+  const size_t fileSize = file.size();
+  Serial.printf("[%lu] [   ] Flashing custom resources (%u bytes)\n", millis(), fileSize);
+
+  if (!Resources.erase(fileSize)) {
+    return; // failed
+  }
+
+  static constexpr size_t CHUNK_SIZE = 4096;
+  uint8_t buffer[CHUNK_SIZE];
+  size_t bytesFlashed = 0;
+  while (bytesFlashed < fileSize) {
+    size_t toRead = std::min(CHUNK_SIZE, fileSize - bytesFlashed);
+    int bytesRead = file.read(buffer, toRead);
+    if (bytesRead <= 0) {
+      Serial.printf("[%lu] [   ] Error reading resources file\n", millis());
+      return;
+    }
+    auto ok = Resources.write(bytesFlashed, buffer, bytesRead);
+    if (!ok) {
+      return;
+    }
+    bytesFlashed += bytesRead;
+  }
+  Serial.printf("[%lu] [   ] Finished flashing custom resources\n", millis());
+  SdMan.remove(RESOURCES_FILE); // remove the file after flashing
+  file.close();
+
+  // attempt to remount
+  if (!Resources.begin(true)) {
+    Serial.printf("[%lu] [   ] Error mounting flashed resources\n", millis());
+    return;
+  }
+
+  // try to list all files
+  Serial.printf("[%lu] [   ] Listing flashed resources:\n", millis());
+  const auto* root = Resources.getRoot();
+  for (size_t i = 0; i < ResourcesFS::MAX_FILES; i++) {
+    const auto& entry = root->entries[i];
+    if (entry.type != ResourcesFS::FILETYPE_INVALID) {
+      Serial.printf("  - Name: %s, Type: %u, Size: %u bytes\n", entry.name, entry.type, entry.size);
+      Serial.printf("    First 8 bytes of the file: ");
+      const auto* data = Resources.mmap(&entry);
+      for (size_t j = 0; j < std::min((size_t)8, (size_t)entry.size); j++) {
+        Serial.printf("%02X ", data[j]);
+      }
+      Serial.printf("\n");
+    }
+  }
+}
+
 void setup() {
   t1 = millis();
 
@@ -290,6 +348,9 @@ void setup() {
     enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, "SD card error", EpdFontFamily::BOLD));
     return;
   }
+
+  Resources.begin();
+  demoResourcesFS();
 
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
