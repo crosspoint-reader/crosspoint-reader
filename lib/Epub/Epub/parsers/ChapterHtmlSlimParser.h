@@ -7,14 +7,17 @@
 #include <memory>
 
 #include "../ParsedText.h"
+#include "../blocks/ImageBlock.h"
 #include "../blocks/TextBlock.h"
 
 class Page;
 class GfxRenderer;
+class Epub;
 
 #define MAX_WORD_SIZE 200
 
 class ChapterHtmlSlimParser {
+  std::shared_ptr<Epub> epub;
   const std::string& filepath;
   GfxRenderer& renderer;
   std::function<void(std::unique_ptr<Page>)> completePageFn;
@@ -37,6 +40,7 @@ class ChapterHtmlSlimParser {
   uint16_t viewportWidth;
   uint16_t viewportHeight;
   bool hyphenationEnabled;
+  int imageCounter = 0;
 
   void startNewTextBlock(TextBlock::Style style);
   void flushPartWordBuffer();
@@ -47,13 +51,14 @@ class ChapterHtmlSlimParser {
   static void XMLCALL endElement(void* userData, const XML_Char* name);
 
  public:
-  explicit ChapterHtmlSlimParser(const std::string& filepath, GfxRenderer& renderer, const int fontId,
-                                 const float lineCompression, const bool extraParagraphSpacing,
+  explicit ChapterHtmlSlimParser(std::shared_ptr<Epub> epub, const std::string& filepath, GfxRenderer& renderer,
+                                 const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const std::function<void(int)>& progressFn = nullptr)
-      : filepath(filepath),
+      : epub(epub),
+        filepath(filepath),
         renderer(renderer),
         fontId(fontId),
         lineCompression(lineCompression),
