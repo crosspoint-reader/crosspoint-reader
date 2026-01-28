@@ -9,6 +9,7 @@
 
 #include "../Activity.h"
 #include "RecentBooksStore.h"
+#include "util/ButtonNavigator.h"
 
 class MyLibraryActivity final : public Activity {
  public:
@@ -17,6 +18,7 @@ class MyLibraryActivity final : public Activity {
  private:
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
 
   Tab currentTab = Tab::Recent;
   int selectorIndex = 0;
