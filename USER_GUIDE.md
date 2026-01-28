@@ -133,6 +133,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - Left, Right, Back, Confirm
   - Left, Back, Confirm, Right
   - Back, Confirm, Right, Left
+  - Back, Left, Right, Confirm
 - **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
 - **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skip to the next/previous chapter.
   - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
