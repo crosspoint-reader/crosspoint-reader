@@ -235,8 +235,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
               LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
 
-              // Create page for image
-              if (self->currentPage && !self->currentPage->elements.empty()) {
+              // Create page for image - only break if image won't fit remaining space
+              if (self->currentPage && !self->currentPage->elements.empty() &&
+                  (self->currentPageNextY + displayHeight > self->viewportHeight)) {
                 self->completePageFn(std::move(self->currentPage));
                 self->currentPage.reset(new Page());
                 if (!self->currentPage) {
