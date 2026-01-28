@@ -16,19 +16,16 @@ void SleepActivity::onEnter() {
   Activity::onEnter();
   renderPopup("Entering Sleep...");
 
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
-    return renderBlankSleepScreen();
+  switch (SETTINGS.sleepScreen) {
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
+      return renderBlankSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
+      return renderCustomSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
+      return renderCoverSleepScreen();
+    default:
+      return renderDefaultSleepScreen();
   }
-
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
-    return renderCustomSleepScreen();
-  }
-
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER) {
-    return renderCoverSleepScreen();
-  }
-
-  renderDefaultSleepScreen();
 }
 
 void SleepActivity::renderPopup(const char* message) const {
