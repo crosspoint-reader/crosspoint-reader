@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
+#include <Utf8.h>
 #include <Xtc.h>
 
 #include <cstring>
@@ -16,8 +17,6 @@
 #include "ScreenComponents.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
-
-#include <Utf8.h>
 
 void HomeActivity::taskTrampoline(void* param) {
   auto* self = static_cast<HomeActivity*>(param);
