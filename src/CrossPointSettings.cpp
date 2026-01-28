@@ -198,7 +198,7 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
-unsigned long CrossPointSettings::getLongPressDurationMs() const { return 1500UL; }
+unsigned long CrossPointSettings::getLongPressDurationMs() const { return 2000UL; }
 
 int CrossPointSettings::getReaderFontId() const {
   switch (fontFamily) {
