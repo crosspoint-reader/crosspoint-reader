@@ -7,38 +7,14 @@
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "activities/ActivityWithSubactivity.h"
 
-class CrossPointSettings;
-
-enum class SettingType { TOGGLE, ENUM, ACTION, VALUE };
-
-struct SettingInfo {
+// Action items for the System category
+struct ActionItem {
   const char* name;
-  SettingType type;
-  uint8_t CrossPointSettings::* valuePtr;
-  std::vector<std::string> enumValues;
-
-  struct ValueRange {
-    uint8_t min;
-    uint8_t max;
-    uint8_t step;
-  };
-  ValueRange valueRange;
-
-  static SettingInfo Toggle(const char* name, uint8_t CrossPointSettings::* ptr) {
-    return {name, SettingType::TOGGLE, ptr};
-  }
-
-  static SettingInfo Enum(const char* name, uint8_t CrossPointSettings::* ptr, std::vector<std::string> values) {
-    return {name, SettingType::ENUM, ptr, std::move(values)};
-  }
-
-  static SettingInfo Action(const char* name) { return {name, SettingType::ACTION, nullptr}; }
-
-  static SettingInfo Value(const char* name, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange) {
-    return {name, SettingType::VALUE, ptr, {}, valueRange};
-  }
+  enum class Type { KOREADER_SYNC, CALIBRE_SETTINGS, CLEAR_CACHE, CHECK_UPDATES };
+  Type type;
 };
 
 class CategorySettingsActivity final : public ActivityWithSubactivity {
@@ -47,8 +23,8 @@ class CategorySettingsActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   int selectedSettingIndex = 0;
   const char* categoryName;
-  const SettingInfo* settingsList;
-  int settingsCount;
+  const std::vector<const SettingDescriptor*> descriptors;
+  const std::vector<ActionItem> actionItems;
   const std::function<void()> onGoBack;
 
   static void taskTrampoline(void* param);
@@ -58,11 +34,12 @@ class CategorySettingsActivity final : public ActivityWithSubactivity {
 
  public:
   CategorySettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* categoryName,
-                           const SettingInfo* settingsList, int settingsCount, const std::function<void()>& onGoBack)
+                           const std::vector<const SettingDescriptor*>& descriptors,
+                           const std::vector<ActionItem>& actionItems, const std::function<void()>& onGoBack)
       : ActivityWithSubactivity("CategorySettings", renderer, mappedInput),
         categoryName(categoryName),
-        settingsList(settingsList),
-        settingsCount(settingsCount),
+        descriptors(descriptors),
+        actionItems(actionItems),
         onGoBack(onGoBack) {}
   void onEnter() override;
   void onExit() override;

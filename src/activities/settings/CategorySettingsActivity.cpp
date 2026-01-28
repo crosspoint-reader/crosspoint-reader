@@ -62,77 +62,84 @@ void CategorySettingsActivity::loop() {
   }
 
   // Handle navigation
+  const int totalItemsCount = descriptors.size() + actionItems.size();
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount - 1);
+    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (totalItemsCount - 1);
     updateRequired = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    selectedSettingIndex = (selectedSettingIndex < settingsCount - 1) ? (selectedSettingIndex + 1) : 0;
+    selectedSettingIndex = (selectedSettingIndex < totalItemsCount - 1) ? (selectedSettingIndex + 1) : 0;
     updateRequired = true;
   }
 }
 
 void CategorySettingsActivity::toggleCurrentSetting() {
-  if (selectedSettingIndex < 0 || selectedSettingIndex >= settingsCount) {
+  const int totalItemsCount = descriptors.size() + actionItems.size();
+
+  if (selectedSettingIndex < 0 || selectedSettingIndex >= totalItemsCount) {
     return;
   }
 
-  const auto& setting = settingsList[selectedSettingIndex];
+  // Check if it's a descriptor or an action item
+  if (selectedSettingIndex < static_cast<int>(descriptors.size())) {
+    // Handle descriptor
+    const auto* desc = descriptors[selectedSettingIndex];
 
-  if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
-    // Toggle the boolean value using the member pointer
-    const bool currentValue = SETTINGS.*(setting.valuePtr);
-    SETTINGS.*(setting.valuePtr) = !currentValue;
-  } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
-    const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
-    SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
-  } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    const int8_t currentValue = SETTINGS.*(setting.valuePtr);
-    if (currentValue + setting.valueRange.step > setting.valueRange.max) {
-      SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
-    } else {
-      SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
+    if (desc->type == SettingType::TOGGLE) {
+      uint8_t currentValue = desc->getValue(SETTINGS);
+      desc->setValue(SETTINGS, !currentValue);
+    } else if (desc->type == SettingType::ENUM) {
+      uint8_t currentValue = desc->getValue(SETTINGS);
+      desc->setValue(SETTINGS, (currentValue + 1) % desc->enumData.count);
+    } else if (desc->type == SettingType::VALUE) {
+      uint8_t currentValue = desc->getValue(SETTINGS);
+      if (currentValue + desc->valueRange.step > desc->valueRange.max) {
+        desc->setValue(SETTINGS, desc->valueRange.min);
+      } else {
+        desc->setValue(SETTINGS, currentValue + desc->valueRange.step);
+      }
     }
-  } else if (setting.type == SettingType::ACTION) {
-    if (strcmp(setting.name, "KOReader Sync") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
-      enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "OPDS Browser") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
-      enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "Clear Cache") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
-      enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "Check for updates") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
-      enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      xSemaphoreGive(renderingMutex);
-    }
+
+    SETTINGS.saveToFile();
   } else {
-    return;
-  }
+    // Handle action item
+    const int actionIndex = selectedSettingIndex - descriptors.size();
+    const auto& action = actionItems[actionIndex];
 
-  SETTINGS.saveToFile();
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    exitActivity();
+
+    switch (action.type) {
+      case ActionItem::Type::KOREADER_SYNC:
+        enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
+          exitActivity();
+          updateRequired = true;
+        }));
+        break;
+      case ActionItem::Type::CALIBRE_SETTINGS:
+        enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
+          exitActivity();
+          updateRequired = true;
+        }));
+        break;
+      case ActionItem::Type::CLEAR_CACHE:
+        enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
+          exitActivity();
+          updateRequired = true;
+        }));
+        break;
+      case ActionItem::Type::CHECK_UPDATES:
+        enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
+          exitActivity();
+          updateRequired = true;
+        }));
+        break;
+    }
+
+    xSemaphoreGive(renderingMutex);
+  }
 }
 
 void CategorySettingsActivity::displayTaskLoop() {
@@ -153,29 +160,31 @@ void CategorySettingsActivity::render() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
+  // Draw header with category name
   renderer.drawCenteredText(UI_12_FONT_ID, 15, categoryName, true, EpdFontFamily::BOLD);
 
   // Draw selection highlight
   renderer.fillRect(0, 60 + selectedSettingIndex * 30 - 2, pageWidth - 1, 30);
 
-  // Draw all settings
-  for (int i = 0; i < settingsCount; i++) {
-    const int settingY = 60 + i * 30;  // 30 pixels between settings
+  // Draw all descriptors
+  for (size_t i = 0; i < descriptors.size(); i++) {
+    const auto* desc = descriptors[i];
+    const int settingY = 60 + i * 30;
     const bool isSelected = (i == selectedSettingIndex);
 
     // Draw setting name
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, !isSelected);
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, desc->name, !isSelected);
 
     // Draw value based on setting type
     std::string valueText;
-    if (settingsList[i].type == SettingType::TOGGLE && settingsList[i].valuePtr != nullptr) {
-      const bool value = SETTINGS.*(settingsList[i].valuePtr);
+    if (desc->type == SettingType::TOGGLE) {
+      const bool value = desc->getValue(SETTINGS);
       valueText = value ? "ON" : "OFF";
-    } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
-      const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
-      valueText = settingsList[i].enumValues[value];
-    } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
-      valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
+    } else if (desc->type == SettingType::ENUM) {
+      const uint8_t value = desc->getValue(SETTINGS);
+      valueText = desc->getEnumValueString(value);
+    } else if (desc->type == SettingType::VALUE) {
+      valueText = std::to_string(desc->getValue(SETTINGS));
     }
     if (!valueText.empty()) {
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
@@ -183,9 +192,22 @@ void CategorySettingsActivity::render() const {
     }
   }
 
+  // Draw all action items
+  for (size_t i = 0; i < actionItems.size(); i++) {
+    const auto& action = actionItems[i];
+    const int itemIndex = descriptors.size() + i;
+    const int settingY = 60 + itemIndex * 30;
+    const bool isSelected = (itemIndex == selectedSettingIndex);
+
+    // Draw action name
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, action.name, !isSelected);
+  }
+
+  // Draw version text above button hints
   renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
                     pageHeight - 60, CROSSPOINT_VERSION);
 
+  // Draw help text
   const auto labels = mappedInput.mapLabels("« Back", "Toggle", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
