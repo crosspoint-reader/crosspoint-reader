@@ -32,8 +32,17 @@ class RecentBooksStore {
   int getCount() const { return static_cast<int>(recentBooks.size()); }
 
   bool saveToFile() const;
-
   bool loadFromFile();
+
+  /**
+   * Update the path of a book in the recent list.
+   * Useful when moving/renaming files or entire directories.
+   * If oldPath is a directory, all books within will have their paths updated.
+   * 
+   * @param oldPath Original absolute path
+   * @param newPath New absolute path
+   */
+  void updatePath(const std::string& oldPath, const std::string& newPath);
 };
 
 // Helper macro to access recent books store
