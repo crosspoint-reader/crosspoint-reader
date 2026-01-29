@@ -27,7 +27,7 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
-    //分批缓存
+    //pages once load
   uint32_t m_loadedMax = 499;
 
   static void taskTrampoline(void* param);
@@ -36,7 +36,7 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   void renderPage();
   void saveProgress() const;
   void loadProgress();
-//新增
+//new 
 void gotoPage(uint32_t targetPage);
 
  public:
