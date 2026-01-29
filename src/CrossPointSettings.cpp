@@ -37,7 +37,7 @@ bool CrossPointSettings::saveToFile() const {
 
   serialization::writePod(outputFile, SETTINGS_FILE_VERSION);
   serialization::writePod(outputFile, SETTINGS_COUNT);
-  serialization::writePod(outputFile, sleepScreen);
+  serialization::writePod(outputFile, sleepScreenMode);
   serialization::writePod(outputFile, extraParagraphSpacing);
   serialization::writePod(outputFile, shortPwrBtn);
   serialization::writePod(outputFile, statusBar);
@@ -51,7 +51,6 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, sleepTimeout);
   serialization::writePod(outputFile, refreshFrequency);
   serialization::writePod(outputFile, screenMargin);
-  serialization::writePod(outputFile, sleepScreenCoverMode);
   serialization::writeString(outputFile, std::string(opdsServerUrl));
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, hideBatteryPercentage);
@@ -59,7 +58,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, hyphenationEnabled);
   serialization::writeString(outputFile, std::string(opdsUsername));
   serialization::writeString(outputFile, std::string(opdsPassword));
-  serialization::writePod(outputFile, sleepScreenCoverFilter);
+  serialization::writePod(outputFile, sleepScreenFilter);
   // New fields added at end for backward compatibility
   outputFile.close();
 
@@ -87,7 +86,7 @@ bool CrossPointSettings::loadFromFile() {
   // load settings that exist (support older files with fewer fields)
   uint8_t settingsRead = 0;
   do {
-    readAndValidate(inputFile, sleepScreen, SLEEP_SCREEN_MODE_COUNT);
+    readAndValidate(inputFile, sleepScreenMode, SLEEP_SCREEN_MODE_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, extraParagraphSpacing);
     if (++settingsRead >= fileSettingsCount) break;
@@ -114,8 +113,6 @@ bool CrossPointSettings::loadFromFile() {
     readAndValidate(inputFile, refreshFrequency, REFRESH_FREQUENCY_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, screenMargin);
-    if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, sleepScreenCoverMode, SLEEP_SCREEN_COVER_MODE_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     {
       std::string urlStr;
@@ -146,7 +143,7 @@ bool CrossPointSettings::loadFromFile() {
       opdsPassword[sizeof(opdsPassword) - 1] = '\0';
     }
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, sleepScreenCoverFilter, SLEEP_SCREEN_COVER_FILTER_COUNT);
+    readAndValidate(inputFile, sleepScreenFilter, SLEEP_SCREEN_FILTER_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
   } while (false);

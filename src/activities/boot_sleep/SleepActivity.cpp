@@ -16,15 +16,16 @@ void SleepActivity::onEnter() {
   Activity::onEnter();
   renderPopup("Entering Sleep...");
 
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
+  if (SETTINGS.sleepScreenMode == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();
   }
 
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
+  if (SETTINGS.sleepScreenMode == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
     return renderCustomSleepScreen();
   }
 
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER) {
+  if (SETTINGS.sleepScreenMode == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP ||
+      SETTINGS.sleepScreenMode == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_FIT) {
     return renderCoverSleepScreen();
   }
 
@@ -128,8 +129,8 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "CrossPoint", true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "SLEEPING");
 
-  // Make sleep screen dark unless light is selected in settings
-  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
+  // Make sleep screen negative
+  if (SETTINGS.sleepScreenFilter == CrossPointSettings::SLEEP_SCREEN_FILTER::NEGATIVE) {
     renderer.invertScreen();
   }
 
@@ -152,7 +153,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     Serial.printf("[%lu] [SLP] bitmap ratio: %f, screen ratio: %f\n", millis(), ratio, screenRatio);
     if (ratio > screenRatio) {
       // image wider than viewport ratio, scaled down image needs to be centered vertically
-      if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
+      if (SETTINGS.sleepScreenMode == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP) {
         cropX = 1.0f - (screenRatio / ratio);
         Serial.printf("[%lu] [SLP] Cropping bitmap x: %f\n", millis(), cropX);
         ratio = (1.0f - cropX) * static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
@@ -162,7 +163,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
       Serial.printf("[%lu] [SLP] Centering with ratio %f to y=%d\n", millis(), ratio, y);
     } else {
       // image taller than viewport ratio, scaled down image needs to be centered horizontally
-      if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
+      if (SETTINGS.sleepScreenMode == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP) {
         cropY = 1.0f - (ratio / screenRatio);
         Serial.printf("[%lu] [SLP] Cropping bitmap y: %f\n", millis(), cropY);
         ratio = static_cast<float>(bitmap.getWidth()) / ((1.0f - cropY) * static_cast<float>(bitmap.getHeight()));
@@ -181,11 +182,11 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   renderer.clearScreen();
 
   const bool hasGreyscale = bitmap.hasGreyscale() &&
-                            SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+                            SETTINGS.sleepScreenFilter == CrossPointSettings::SLEEP_SCREEN_FILTER::ORIGINAL;
 
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
 
-  if (SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
+  if (SETTINGS.sleepScreenFilter == CrossPointSettings::SLEEP_SCREEN_FILTER::NEGATIVE) {
     renderer.invertScreen();
   }
 
@@ -215,7 +216,7 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   std::string coverBmpPath;
-  bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+  bool cropped = SETTINGS.sleepScreenMode == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP;
 
   // Check if the current book is XTC, TXT, or EPUB
   if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
