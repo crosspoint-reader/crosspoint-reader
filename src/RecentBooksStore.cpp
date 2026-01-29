@@ -104,3 +104,21 @@ bool RecentBooksStore::loadFromFile() {
   Serial.printf("[%lu] [RBS] Recent books loaded from file (%d entries)\n", millis(), recentBooks.size());
   return true;
 }
+
+void RecentBooksStore::updatePath(const std::string& oldPath, const std::string& newPath) {
+  bool changed = false;
+  for (auto& book : recentBooks) {
+    if (book.path == oldPath) {
+      book.path = newPath;
+      changed = true;
+    } else if (book.path.find(oldPath + "/") == 0) {
+      // It's a directory move/rename
+      book.path = newPath + book.path.substr(oldPath.length());
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    saveToFile();
+  }
+}
