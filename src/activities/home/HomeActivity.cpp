@@ -47,51 +47,93 @@ void HomeActivity::onEnter() {
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
 
+  // Load and cache recent books data FIRST (loads each book only once)
+  loadRecentBooksData();
+
   if (hasContinueReading) {
-    // Extract filename from path for display
-    lastBookTitle = APP_STATE.openEpubPath;
-    const size_t lastSlash = lastBookTitle.find_last_of('/');
-    if (lastSlash != std::string::npos) {
-      lastBookTitle = lastBookTitle.substr(lastSlash + 1);
+    // Initialize defaults
+    cachedChapterTitle = "";
+    cachedCurrentPage = "-";
+    cachedTotalPages = "-";
+    cachedProgressPercent = 0;
+
+    // Check if current book is in recent books - use cached data instead of reloading
+    bool foundInRecent = false;
+    for (const auto& book : cachedRecentBooks) {
+      if (book.path == APP_STATE.openEpubPath) {
+        lastBookTitle = book.title;
+        coverBmpPath = book.coverPath;
+        hasCoverImage = !book.coverPath.empty();
+        cachedProgressPercent = book.progressPercent;
+        foundInRecent = true;
+        break;
+      }
     }
 
-    // If epub, try to load the metadata for title/author and cover
-    if (StringUtils::checkFileExtension(lastBookTitle, ".epub")) {
-      Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
-      epub.load(false);
-      if (!epub.getTitle().empty()) {
-        lastBookTitle = std::string(epub.getTitle());
+    if (!foundInRecent) {
+      // Book not in recent list, need to load it
+      lastBookTitle = APP_STATE.openEpubPath;
+      const size_t lastSlash = lastBookTitle.find_last_of('/');
+      if (lastSlash != std::string::npos) {
+        lastBookTitle = lastBookTitle.substr(lastSlash + 1);
       }
-      if (!epub.getAuthor().empty()) {
-        lastBookAuthor = std::string(epub.getAuthor());
-      }
-      // Try to generate thumbnail image for Continue Reading card
-      if (epub.generateThumbBmp()) {
-        coverBmpPath = epub.getThumbBmpPath();
-        hasCoverImage = true;
-      }
-    } else if (StringUtils::checkFileExtension(lastBookTitle, ".xtch") ||
-               StringUtils::checkFileExtension(lastBookTitle, ".xtc")) {
-      // Handle XTC file
-      Xtc xtc(APP_STATE.openEpubPath, "/.crosspoint");
-      if (xtc.load()) {
-        if (!xtc.getTitle().empty()) {
-          lastBookTitle = std::string(xtc.getTitle());
-        }
-        if (!xtc.getAuthor().empty()) {
-          lastBookAuthor = std::string(xtc.getAuthor());
-        }
-        // Try to generate thumbnail image for Continue Reading card
-        if (xtc.generateThumbBmp()) {
-          coverBmpPath = xtc.getThumbBmpPath();
+
+      if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
+        Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
+        epub.load(false);
+        if (!epub.getTitle().empty()) lastBookTitle = epub.getTitle();
+        if (!epub.getAuthor().empty()) lastBookAuthor = epub.getAuthor();
+        if (epub.generateThumbBmp()) {
+          coverBmpPath = epub.getThumbBmpPath();
           hasCoverImage = true;
         }
-      }
-      // Remove extension from title if we don't have metadata
-      if (StringUtils::checkFileExtension(lastBookTitle, ".xtch")) {
-        lastBookTitle.resize(lastBookTitle.length() - 5);
-      } else if (StringUtils::checkFileExtension(lastBookTitle, ".xtc")) {
-        lastBookTitle.resize(lastBookTitle.length() - 4);
+        // Get progress info from the same loaded epub
+        FsFile f;
+        if (SdMan.openFileForRead("HOME", epub.getCachePath() + "/progress.bin", f)) {
+          uint8_t data[4];
+          if (f.read(data, 4) == 4) {
+            int spineIndex = data[0] + (data[1] << 8);
+            int spineCount = epub.getSpineItemsCount();
+            cachedCurrentPage = std::to_string(spineIndex + 1);
+            cachedTotalPages = std::to_string(spineCount);
+            if (spineCount > 0) cachedProgressPercent = (spineIndex * 100) / spineCount;
+            auto spineEntry = epub.getSpineItem(spineIndex);
+            if (spineEntry.tocIndex != -1) {
+              cachedChapterTitle = epub.getTocItem(spineEntry.tocIndex).title;
+            }
+          }
+          f.close();
+        }
+      } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
+                 StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
+        Xtc xtc(APP_STATE.openEpubPath, "/.crosspoint");
+        if (xtc.load()) {
+          if (!xtc.getTitle().empty()) lastBookTitle = xtc.getTitle();
+          if (xtc.generateThumbBmp()) {
+            coverBmpPath = xtc.getThumbBmpPath();
+            hasCoverImage = true;
+          }
+          // Get progress from same loaded xtc
+          FsFile f;
+          if (SdMan.openFileForRead("HOME", xtc.getCachePath() + "/progress.bin", f)) {
+            uint8_t data[4];
+            if (f.read(data, 4) == 4) {
+              uint32_t currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+              uint32_t totalPages = xtc.getPageCount();
+              cachedCurrentPage = std::to_string(currentPage + 1);
+              cachedTotalPages = std::to_string(totalPages);
+              if (totalPages > 0) cachedProgressPercent = (currentPage * 100) / totalPages;
+              cachedChapterTitle = "Page " + cachedCurrentPage;
+            }
+            f.close();
+          }
+        }
+        // Remove extension from title if we don't have metadata
+        if (StringUtils::checkFileExtension(lastBookTitle, ".xtch")) {
+          lastBookTitle.resize(lastBookTitle.length() - 5);
+        } else if (StringUtils::checkFileExtension(lastBookTitle, ".xtc")) {
+          lastBookTitle.resize(lastBookTitle.length() - 4);
+        }
       }
     }
   }
@@ -100,9 +142,6 @@ void HomeActivity::onEnter() {
   lastBatteryCheck = 0;  // Force update on first render
   coverRendered = false;
   coverBufferStored = false;
-
-  // Load and cache recent books data (slow operation, do once)
-  loadRecentBooksData();
 
   // Trigger first update
   updateRequired = true;
@@ -311,7 +350,7 @@ void HomeActivity::render() {
     lastBatteryCheck = now;
   }
 
-  // Always clear screen - ThemeEngine handles caching internally
+  // Always clear screen - required because parent containers draw backgrounds
   renderer.clearScreen();
 
   ThemeEngine::ThemeContext context;
@@ -352,73 +391,12 @@ void HomeActivity::render() {
   context.setBool("HasCover", hasContinueReading && hasCoverImage && !coverBmpPath.empty());
   context.setBool("ShowInfoBox", true);
 
-  // Default values
-  std::string chapterTitle = "";
-  std::string currentPageStr = "-";
-  std::string totalPagesStr = "-";
-  int progressPercent = 0;
-
-  if (hasContinueReading) {
-    if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
-      Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
-      epub.load(false);
-
-      // Read progress
-      FsFile f;
-      if (SdMan.openFileForRead("HOME", epub.getCachePath() + "/progress.bin", f)) {
-        uint8_t data[4];
-        if (f.read(data, 4) == 4) {
-          int spineIndex = data[0] + (data[1] << 8);
-          int spineCount = epub.getSpineItemsCount();
-
-          currentPageStr = std::to_string(spineIndex + 1);  // Display 1-based
-          totalPagesStr = std::to_string(spineCount);
-
-          if (spineCount > 0) {
-            progressPercent = (spineIndex * 100) / spineCount;
-          }
-
-          // Resolve Chapter Title
-          auto spineEntry = epub.getSpineItem(spineIndex);
-          if (spineEntry.tocIndex != -1) {
-            auto tocEntry = epub.getTocItem(spineEntry.tocIndex);
-            chapterTitle = tocEntry.title;
-          }
-        }
-        f.close();
-      }
-    } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
-               StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
-      Xtc xtc(APP_STATE.openEpubPath, "/.crosspoint");
-      if (xtc.load()) {
-        // Read progress
-        FsFile f;
-        if (SdMan.openFileForRead("HOME", xtc.getCachePath() + "/progress.bin", f)) {
-          uint8_t data[4];
-          if (f.read(data, 4) == 4) {
-            uint32_t currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
-            uint32_t totalPages = xtc.getPageCount();
-
-            currentPageStr = std::to_string(currentPage + 1);  // 1-based
-            totalPagesStr = std::to_string(totalPages);
-
-            if (totalPages > 0) {
-              progressPercent = (currentPage * 100) / totalPages;
-            }
-
-            chapterTitle = "Page " + currentPageStr;
-          }
-          f.close();
-        }
-      }
-    }
-  }
-
-  context.setString("BookChapter", chapterTitle);
-  context.setString("BookCurrentPage", currentPageStr);
-  context.setString("BookTotalPages", totalPagesStr);
-  context.setInt("BookProgressPercent", progressPercent);
-  context.setString("BookProgressPercentStr", std::to_string(progressPercent));
+  // Use cached values (loaded in onEnter, NOT every render)
+  context.setString("BookChapter", cachedChapterTitle);
+  context.setString("BookCurrentPage", cachedCurrentPage);
+  context.setString("BookTotalPages", cachedTotalPages);
+  context.setInt("BookProgressPercent", cachedProgressPercent);
+  context.setString("BookProgressPercentStr", std::to_string(cachedProgressPercent));
 
   // --- Main Menu Data ---
   // Menu items start after the book slot

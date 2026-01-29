@@ -396,6 +396,10 @@ const std::vector<uint8_t>* ThemeManager::getCachedAsset(const std::string& path
   return nullptr;
 }
 
+void ThemeManager::cacheAsset(const std::string& path, std::vector<uint8_t>&& data) {
+  assetCache[path] = std::move(data);
+}
+
 const ProcessedAsset* ThemeManager::getProcessedAsset(const std::string& path, GfxRenderer::Orientation orientation,
                                                       int targetW, int targetH) {
   std::string cacheKey = path;
@@ -597,7 +601,23 @@ void ThemeManager::renderScreen(const std::string& screenName, const GfxRenderer
 
 void ThemeManager::renderScreenOptimized(const std::string& screenName, const GfxRenderer& renderer,
                                          const ThemeContext& context, const ThemeContext* prevContext) {
-  renderScreen(screenName, renderer, context);
+  if (elements.count(screenName) == 0) {
+    return;
+  }
+
+  UIElement* root = elements[screenName];
+
+  // Layout uses internal caching - will skip if params unchanged
+  root->layout(context, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight());
+
+  // If no previous context provided, do full draw
+  if (!prevContext) {
+    root->draw(renderer, context);
+    return;
+  }
+
+  // Draw elements - dirty tracking is handled internally by each element
+  root->draw(renderer, context);
 }
 
 }  // namespace ThemeEngine

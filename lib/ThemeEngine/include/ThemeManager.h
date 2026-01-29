@@ -130,6 +130,7 @@ class ThemeManager {
 
   // Asset caching
   const std::vector<uint8_t>* getCachedAsset(const std::string& path);
+  void cacheAsset(const std::string& path, std::vector<uint8_t>&& data);
   const ProcessedAsset* getProcessedAsset(const std::string& path, GfxRenderer::Orientation orientation,
                                           int targetW = 0, int targetH = 0);
   void cacheProcessedAsset(const std::string& path, const ProcessedAsset& asset, int targetW = 0, int targetH = 0);

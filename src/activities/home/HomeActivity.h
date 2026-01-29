@@ -28,11 +28,19 @@ class HomeActivity final : public Activity {
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
+  bool needsFullRender = true;     // Force full render (first time or after layout changes)
+  int lastSelectorIndex = -1;      // Track selection for incremental updates
   std::string lastBookTitle;
   std::string lastBookAuthor;
   std::string coverBmpPath;
   uint8_t cachedBatteryLevel = 0;
   uint32_t lastBatteryCheck = 0;
+
+  // Cached "continue reading" info (loaded once in onEnter, NOT every render!)
+  std::string cachedChapterTitle;
+  std::string cachedCurrentPage;
+  std::string cachedTotalPages;
+  int cachedProgressPercent = 0;
 
   // Cached recent books data (loaded once in onEnter)
   std::vector<CachedBookInfo> cachedRecentBooks;

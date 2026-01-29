@@ -29,6 +29,10 @@ class UIElement {
   // Recomputed every layout pass
   int absX = 0, absY = 0, absW = 0, absH = 0;
 
+  // Layout caching - track last params to skip redundant layout
+  int lastParentX = -1, lastParentY = -1, lastParentW = -1, lastParentH = -1;
+  bool layoutValid = false;
+
   // Caching support
   bool cacheable = false;   // Set true for expensive elements like bitmaps
   bool cacheValid = false;  // Is the cached render still valid?
@@ -84,6 +88,7 @@ class UIElement {
   virtual void markDirty() {
     dirty = true;
     cacheValid = false;
+    layoutValid = false;
   }
 
   void markClean() { dirty = false; }
@@ -97,6 +102,18 @@ class UIElement {
 
   // Calculate absolute position based on parent
   virtual void layout(const ThemeContext& context, int parentX, int parentY, int parentW, int parentH) {
+    // Skip layout if params unchanged and layout is still valid
+    if (layoutValid && parentX == lastParentX && parentY == lastParentY && parentW == lastParentW &&
+        parentH == lastParentH) {
+      return;
+    }
+
+    lastParentX = parentX;
+    lastParentY = parentY;
+    lastParentW = parentW;
+    lastParentH = parentH;
+    layoutValid = true;
+
     int newX = parentX + x.resolve(parentW);
     int newY = parentY + y.resolve(parentH);
     int newW = width.resolve(parentW);

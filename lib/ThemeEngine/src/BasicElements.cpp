@@ -137,38 +137,18 @@ void Label::draw(const GfxRenderer& renderer, const ThemeContext& context) {
         break;
       }
 
-      // Binary search for cut point
+      // Binary search for maximum characters that fit (O(log n) instead of O(n))
       int len = remaining.length();
-      int cut = len;
-
-      // Find split point
-      // Optimistic start: approximate chars that fit
-      int avgCharWidth = renderer.getTextWidth(fontId, "a");
-      if (avgCharWidth < 1) avgCharWidth = 8;
-      int approxChars = absW / avgCharWidth;
-      if (approxChars < 1) approxChars = 1;
-      if (approxChars >= len) approxChars = len - 1;
-
-      // Refine from approxChars
-      int w = renderer.getTextWidth(fontId, remaining.substr(0, approxChars).c_str());
-      if (w < absW) {
-        // Grow
-        for (int i = approxChars; i <= len; i++) {
-          if (renderer.getTextWidth(fontId, remaining.substr(0, i).c_str()) > absW) {
-            cut = i - 1;
-            break;
-          }
-          cut = i;
-        }
-      } else {
-        // Shrink
-        for (int i = approxChars; i > 0; i--) {
-          if (renderer.getTextWidth(fontId, remaining.substr(0, i).c_str()) <= absW) {
-            cut = i;
-            break;
-          }
+      int lo = 1, hi = len;
+      while (lo < hi) {
+        int mid = (lo + hi + 1) / 2;
+        if (renderer.getTextWidth(fontId, remaining.substr(0, mid).c_str()) <= absW) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
         }
       }
+      int cut = lo;
 
       // Find last space before cut
       if (cut < (int)remaining.length()) {
@@ -249,95 +229,85 @@ void BitmapElement::draw(const GfxRenderer& renderer, const ThemeContext& contex
     return;
   }
 
-  // Resolve simplified or relative paths
   if (path.find('/') == std::string::npos || (path.length() > 0 && path[0] != '/')) {
     path = ThemeManager::get().getAssetPath(path);
   }
 
-  // 1. Check if we have a cached 1-bit render
+  // Fast path: use cached 1-bit render
   const ProcessedAsset* processed = ThemeManager::get().getProcessedAsset(path, renderer.getOrientation(), absW, absH);
   if (processed && processed->w == absW && processed->h == absH) {
-    const int rowBytes = (absW + 7) / 8;
-    for (int y = 0; y < absH; y++) {
-      const uint8_t* srcRow = processed->data.data() + y * rowBytes;
-      for (int x = 0; x < absW; x++) {
-        // Cached 1-bit data: 0=Black, 1=White
-        bool isBlack = !(srcRow[x / 8] & (1 << (7 - (x % 8))));
-        // Draw opaque (true=black, false=white)
-        renderer.drawPixel(absX + x, absY + y, isBlack);
-      }
-    }
+    renderer.restoreRegion(processed->data.data(), absX, absY, absW, absH);
     markClean();
     return;
   }
 
+  // Helper to draw bitmap with centering and optional rounded corners
+  auto drawBmp = [&](Bitmap& bmp) {
+    int drawX = absX;
+    int drawY = absY;
+    if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
+    if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
+    if (borderRadius > 0) {
+      renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
+    } else {
+      renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+    }
+  };
+
   bool drawSuccess = false;
 
-  // 2. Try Streaming (Absolute paths, large images)
-  if (path.length() > 0 && path[0] == '/') {
+  // Try RAM cache first
+  const std::vector<uint8_t>* cachedData = ThemeManager::get().getCachedAsset(path);
+  if (cachedData && !cachedData->empty()) {
+    Bitmap bmp(cachedData->data(), cachedData->size());
+    if (bmp.parseHeaders() == BmpReaderError::Ok) {
+      drawBmp(bmp);
+      drawSuccess = true;
+    }
+  }
+
+  // Fallback: load from SD card
+  if (!drawSuccess && path.length() > 0 && path[0] == '/') {
     FsFile file;
     if (SdMan.openFileForRead("HOME", path, file)) {
-      Bitmap bmp(file, true);  // (file, dithering=true)
-      if (bmp.parseHeaders() == BmpReaderError::Ok) {
-        int drawX = absX;
-        int drawY = absY;
-        if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
-        if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
-
-        if (borderRadius > 0) {
-          renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
-        } else {
-          renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
+      size_t fileSize = file.size();
+      if (fileSize > 0 && fileSize < 100000) {
+        std::vector<uint8_t> fileData(fileSize);
+        if (file.read(fileData.data(), fileSize) == fileSize) {
+          ThemeManager::get().cacheAsset(path, std::move(fileData));
+          const std::vector<uint8_t>* newCachedData = ThemeManager::get().getCachedAsset(path);
+          if (newCachedData && !newCachedData->empty()) {
+            Bitmap bmp(newCachedData->data(), newCachedData->size());
+            if (bmp.parseHeaders() == BmpReaderError::Ok) {
+              drawBmp(bmp);
+              drawSuccess = true;
+            }
+          }
         }
-        drawSuccess = true;
+      } else {
+        Bitmap bmp(file, true);
+        if (bmp.parseHeaders() == BmpReaderError::Ok) {
+          drawBmp(bmp);
+          drawSuccess = true;
+        }
       }
       file.close();
     }
   }
 
-  // 3. Fallback to RAM Cache (Standard method)
-  if (!drawSuccess) {
-    const std::vector<uint8_t>* data = ThemeManager::get().getCachedAsset(path);
-    if (data && !data->empty()) {
-      Bitmap bmp(data->data(), data->size());
-      if (bmp.parseHeaders() == BmpReaderError::Ok) {
-        int drawX = absX;
-        int drawY = absY;
-        if (bmp.getWidth() < absW) drawX += (absW - bmp.getWidth()) / 2;
-        if (bmp.getHeight() < absH) drawY += (absH - bmp.getHeight()) / 2;
-
-        if (borderRadius > 0) {
-          renderer.drawRoundedBitmap(bmp, drawX, drawY, absW, absH, borderRadius);
-        } else {
-          renderer.drawBitmap(bmp, drawX, drawY, absW, absH);
-        }
-        drawSuccess = true;
-      }
+  // Cache rendered result for fast subsequent draws using captureRegion
+  if (drawSuccess && absW * absH <= 40000) {
+    size_t capturedSize = 0;
+    uint8_t* captured = renderer.captureRegion(absX, absY, absW, absH, &capturedSize);
+    if (captured && capturedSize > 0) {
+      ProcessedAsset asset;
+      asset.w = absW;
+      asset.h = absH;
+      asset.orientation = renderer.getOrientation();
+      asset.data.assign(captured, captured + capturedSize);
+      free(captured);
+      ThemeManager::get().cacheProcessedAsset(path, asset, absW, absH);
     }
-  }
-
-  // 4. Cache result if successful
-  if (drawSuccess) {
-    ProcessedAsset asset;
-    asset.w = absW;
-    asset.h = absH;
-    asset.orientation = renderer.getOrientation();
-
-    const int rowBytes = (absW + 7) / 8;
-    asset.data.resize(rowBytes * absH, 0xFF);  // Initialize to 0xFF (White)
-
-    for (int y = 0; y < absH; y++) {
-      uint8_t* dstRow = asset.data.data() + y * rowBytes;
-      for (int x = 0; x < absW; x++) {
-        // Read precise pixel state from framebuffer
-        bool isBlack = renderer.readPixel(absX + x, absY + y);
-        if (isBlack) {
-          // Clear bit for black (0)
-          dstRow[x / 8] &= ~(1 << (7 - (x % 8)));
-        }
-      }
-    }
-    ThemeManager::get().cacheProcessedAsset(path, asset, absW, absH);
   }
 
   markClean();
@@ -421,12 +391,6 @@ void List::draw(const GfxRenderer& renderer, const ThemeContext& context) {
       itemContext.setString("Item.Icon", context.getString(prefix + "Icon"));
       itemContext.setString("Item.Image", context.getString(prefix + "Image"));
       itemContext.setString("Item.Progress", context.getString(prefix + "Progress"));
-      itemContext.setInt("Item.Index", i);
-      itemContext.setInt("Item.Count", count);
-      // ValueIndex may not exist for all item types, so check first
-      if (context.hasKey(prefix + "ValueIndex")) {
-        itemContext.setInt("Item.ValueIndex", context.getInt(prefix + "ValueIndex"));
-      }
 
       // Viewport check
       if (direction == Direction::Horizontal) {
@@ -448,6 +412,12 @@ void List::draw(const GfxRenderer& renderer, const ThemeContext& context) {
           continue;
         }
         if (currentY > absY + absH) break;
+      }
+      itemContext.setInt("Item.Index", i);
+      itemContext.setInt("Item.Count", count);
+      // ValueIndex may not exist for all item types, so check first
+      if (context.hasKey(prefix + "ValueIndex")) {
+        itemContext.setInt("Item.ValueIndex", context.getInt(prefix + "ValueIndex"));
       }
 
       // Layout and draw
