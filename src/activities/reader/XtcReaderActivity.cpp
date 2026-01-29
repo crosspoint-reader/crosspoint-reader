@@ -202,21 +202,21 @@ void XtcReaderActivity::renderPage() {
     pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
   }
 
-   // ✅✅✅ 修复：删除重复定义的缓冲区，复用全局缓冲区，节省内存
+   // This part defines global variables to reduce memory usage, but the effect seems to be mediocre.
   uint8_t* pageBuffer = s_pageBuffer;
 
-  // 继续加载页面数据
+  // load new page
   size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
   if (bytesRead == 0) {
     Serial.printf("[%lu] [提示] 页码%lu加载中...\n", millis(), currentPage);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, "Loading...", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
-    updateRequired = true; // ❌❌❌ 【修改4】新增此行，加载中自动触发重试，不会卡Loading界面
+    updateRequired = true; // for some bugs
     return;
   }
 
-  // ✅ 以下渲染逻辑完全不变！灰度显示、刷新策略、进度保存都正常！
+  // keep
   renderer.clearScreen();
   const uint16_t maxSrcY = pageHeight;
 
@@ -332,13 +332,13 @@ void XtcReaderActivity::gotoPage(uint32_t targetPage) {
 void XtcReaderActivity::saveProgress() const {
   FsFile f;
   if (SdMan.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[8]; // 8字节，前4字节存页码，后4字节存页表上限
-    // 前4字节：保存当前阅读页码 currentPage
+    uint8_t data[8]; // for 2 data:currentPage and m_loadedMax
+    // currentPage
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;
     data[2] = (currentPage >> 16) & 0xFF;
     data[3] = (currentPage >> 24) & 0xFF;
-    // 后4字节：保存当前页表上限 m_loadedMax
+    // m_loadedMax
     data[4] = m_loadedMax & 0xFF;
     data[5] = (m_loadedMax >> 8) & 0xFF;
     data[6] = (m_loadedMax >> 16) & 0xFF;
@@ -349,6 +349,8 @@ void XtcReaderActivity::saveProgress() const {
     Serial.printf("[%lu] [进度] 保存成功 → 页码: %lu | 页表上限: %lu\n", millis(), currentPage, m_loadedMax);
   }
 }
+
+//2data to load
 
 void XtcReaderActivity::loadProgress() {
   FsFile f;
@@ -366,7 +368,7 @@ void XtcReaderActivity::loadProgress() {
       if (currentPage >= totalPages) currentPage = totalPages - 1;
       if (currentPage < 0) currentPage = 0;
 
-      
+      // Determine whether loading is required and which batch of tables to load.
       uint32_t targetBatchStart = (currentPage / loadedMaxPage_per) * loadedMaxPage_per;
       xtc->loadPageBatchByStart(targetBatchStart); 
       
