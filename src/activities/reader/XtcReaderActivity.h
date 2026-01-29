@@ -30,6 +30,8 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   void renderPage();
   void saveProgress() const;
   void loadProgress();
+//新增
+void gotoPage(uint32_t targetPage);
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,
