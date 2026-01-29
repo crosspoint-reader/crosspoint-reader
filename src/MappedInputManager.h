@@ -1,6 +1,6 @@
 #pragma once
 
-#include <InputManager.h>
+#include <HalGPIO.h>
 
 class MappedInputManager {
  public:
@@ -13,7 +13,7 @@ class MappedInputManager {
     const char* btn4;
   };
 
-  explicit MappedInputManager(InputManager& inputManager) : inputManager(inputManager) {}
+  explicit MappedInputManager(HalGPIO& gpio) : gpio(gpio) {}
 
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
@@ -24,7 +24,7 @@ class MappedInputManager {
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
 
  private:
-  InputManager& inputManager;
+  HalGPIO& gpio;
 
-  bool mapButton(Button button, bool (InputManager::*fn)(uint8_t) const) const;
+  bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
 };
