@@ -7,6 +7,7 @@
 #include <ThemeManager.h>
 #include <Xtc.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -58,19 +59,16 @@ void HomeActivity::onEnter() {
     cachedProgressPercent = 0;
 
     // Check if current book is in recent books - use cached data instead of reloading
-    bool foundInRecent = false;
-    for (const auto& book : cachedRecentBooks) {
-      if (book.path == APP_STATE.openEpubPath) {
-        lastBookTitle = book.title;
-        coverBmpPath = book.coverPath;
-        hasCoverImage = !book.coverPath.empty();
-        cachedProgressPercent = book.progressPercent;
-        foundInRecent = true;
-        break;
-      }
-    }
+    const auto& openPath = APP_STATE.openEpubPath;
+    auto it = std::find_if(cachedRecentBooks.begin(), cachedRecentBooks.end(),
+                           [&openPath](const CachedBookInfo& book) { return book.path == openPath; });
 
-    if (!foundInRecent) {
+    if (it != cachedRecentBooks.end()) {
+      lastBookTitle = it->title;
+      coverBmpPath = it->coverPath;
+      hasCoverImage = !it->coverPath.empty();
+      cachedProgressPercent = it->progressPercent;
+    } else {
       // Book not in recent list, need to load it
       lastBookTitle = APP_STATE.openEpubPath;
       const size_t lastSlash = lastBookTitle.find_last_of('/');
