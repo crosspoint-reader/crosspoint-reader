@@ -22,9 +22,9 @@ XtcParser::XtcParser()
       m_bitDepth(1),
       m_hasChapters(false),
       m_lastError(XtcError::OK),
-      m_loadBatchSize(500),  // ✅ 修改：批次大小改为2000（你的要求）
+      m_loadBatchSize(500),  // 500 for one load
       m_loadedMaxPage(0),
-      m_loadedStartPage(0) {  // ✅ 新增：只加这1个变量，记录当前页表的起始页
+      m_loadedStartPage(0) {  // page_start
   memset(&m_header, 0, sizeof(m_header));
 }
 
@@ -53,7 +53,7 @@ XtcError XtcParser::open(const char* filepath) {
   // Read title if available
   readTitle();
 
-  // Read page table (默认只加载第一批：前10页)
+  // Read page table 
   m_lastError = readPageTable();
   if (m_lastError != XtcError::OK) {
     Serial.printf("[%lu] [XTC] Failed to read page table: %s\n", millis(), errorToString(m_lastError));
@@ -61,7 +61,7 @@ XtcError XtcParser::open(const char* filepath) {
     return m_lastError;
   }
 
-  // Read chapters if present (单章节逻辑不变)
+  // Read chapters if present (to make it work, just keep the old readchapters)
   m_lastError = readChapters();
   if (m_lastError != XtcError::OK) {
     Serial.printf("[%lu] [XTC] Failed to read chapters: %s\n", millis(), errorToString(m_lastError));
@@ -134,7 +134,7 @@ XtcError XtcParser::readTitle() {
   return XtcError::OK;
 }
 
-//加载下一部分
+//load the next pagetable (for XtcReadActivity.cpp)
 XtcError XtcParser::readPageTable() {
   m_pageTable.clear();          
   m_pageTable.shrink_to_fit();  
@@ -148,13 +148,13 @@ XtcError XtcParser::readPageTable() {
     return XtcError::READ_ERROR;
   }
 
-  // 初始加载：从第0页开始，加载第一批10页
+  // for the first
   uint16_t startPage = 0;
   uint16_t endPage = startPage + m_loadBatchSize - 1;
   if(endPage >= m_header.pageCount) endPage = m_header.pageCount - 1;
   uint16_t loadCount = endPage - startPage + 1;
 
-  m_pageTable.resize(endPage + 1); // 扩容vector，保留已加载数据
+  m_pageTable.resize(endPage + 1); 
 
   for (uint16_t i = startPage; i <= endPage; i++) {
     PageTableEntry entry;
@@ -176,12 +176,12 @@ XtcError XtcParser::readPageTable() {
     }
   }
 
-  m_loadedMaxPage = endPage; // 更新已加载的最大页码
+  m_loadedMaxPage = endPage; 
   Serial.printf("[%lu] [XTC] 初始化加载页表: 成功加载 [0~%u] 共%u页\n", millis(), m_loadedMaxPage, loadCount);
   return XtcError::OK;
 }
 
-// 原函数不变，保证不崩溃
+
 XtcError XtcParser::readChapters() {
   m_hasChapters = false;
   m_chapters.clear();
@@ -220,7 +220,7 @@ XtcError XtcParser::readChapters() {
     if (m_file.read(chapterBuf.data(), chapterSize) != chapterSize) {return XtcError::READ_ERROR;}
   }
 
-  // 单章节：名称=书名/全书，页码=0~总页数-1 (逻辑上包含全书，不影响阅读)
+
   std::string chapterName = m_title.empty() ? "全书" : m_title;
   ChapterInfo singleChapter{std::move(chapterName), 0, m_header.pageCount - 1};
   m_chapters.push_back(std::move(singleChapter));
@@ -231,7 +231,7 @@ XtcError XtcParser::readChapters() {
   return XtcError::OK;
 }
 
-// 主要更改部分
+// for the next pagetable
 XtcError XtcParser::loadNextPageBatch() {
   if(!m_isOpen) return XtcError::FILE_NOT_FOUND;
   if(m_loadedMaxPage >= m_header.pageCount - 1) {
@@ -266,7 +266,7 @@ bool XtcParser::getPageInfo(uint32_t pageIndex, PageInfo& info) const {
   return true;
 }
 
-//主要更改：利用现有规律提取需要的xtc页面
+//change:to get page
 size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) {
   if (!m_isOpen || pageIndex >= m_header.pageCount) { 
     m_lastError = (pageIndex >= m_header.pageCount) ? XtcError::PAGE_OUT_OF_RANGE : XtcError::FILE_NOT_FOUND;
@@ -278,7 +278,7 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
   }
 
   uint16_t idx = pageIndex - m_loadedStartPage;
-  const PageInfo& page = m_pageTable[idx]; // 替换原 m_pageTable[pageIndex]
+  const PageInfo& page = m_pageTable[idx]; 
   if (!m_file.seek(page.offset)) {
     Serial.printf("[%lu] [XTC] Failed to seek to page %u at offset %lu\n", millis(), pageIndex, page.offset);
     m_lastError = XtcError::READ_ERROR;
@@ -367,11 +367,11 @@ bool XtcParser::isValidXtcFile(const char* filepath) {
   file.close();
   return (bytesRead == sizeof(magic)) && (magic == XTC_MAGIC || magic == XTCH_MAGIC);
 }
-//换用新函数来提取章节
+//charge to get chapters separately
 XtcError XtcParser::readChapters_gd(uint16_t chapterStart) {
     chapterActualCount = 0;
     memset(ChapterList, 0, sizeof(ChapterList));
-    Serial.printf("[Memory] ✅ 解析前：所有章节数据内存已彻底释放\n");
+    Serial.printf("[Memory] memset memory \n");
 
   uint8_t hasChaptersFlag = 0;
   if (!m_file.seek(0x0B)) {
@@ -383,7 +383,7 @@ XtcError XtcParser::readChapters_gd(uint16_t chapterStart) {
   if (hasChaptersFlag != 1) {
     return XtcError::OK;
   }
-      Serial.printf("[%lu] [XTC] 位置1");
+     // Serial.printf("[%lu] [XTC] 位置1");//for debug
 
   uint64_t chapterOffset = 0;
   if (!m_file.seek(0x30)) {
@@ -395,7 +395,7 @@ XtcError XtcParser::readChapters_gd(uint16_t chapterStart) {
   if (chapterOffset == 0) {
     return XtcError::OK;
   }
-      Serial.printf("[%lu] [XTC] 位置2");
+     // Serial.printf("[%lu] [XTC] 位置2");//for debug
 
   const uint64_t fileSize = m_file.size();
   if (chapterOffset < sizeof(XtcHeader) || chapterOffset >= fileSize || chapterOffset + 96 > fileSize) {
@@ -418,39 +418,38 @@ XtcError XtcParser::readChapters_gd(uint16_t chapterStart) {
   if (chapterCount == 0) {
     return XtcError::OK;
   }
-    Serial.printf("[%lu] [XTC] 位置3");
-  // 计算起始章节的偏移：章节区开头 + 起始章节索引 * 单章96字节
+   // Serial.printf("[%lu] [XTC] 位置3"); //for debug
+  // find the start offset
   uint64_t startReadOffset = chapterOffset + (chapterStart * chapterSize);
-  if (!m_file.seek(startReadOffset)) { // 跳到要读取的起始章节位置
+  if (!m_file.seek(startReadOffset)) { 
     return XtcError::READ_ERROR;
   }
     Serial.printf("[%lu] [XTC] 位置4");
 
   std::vector<uint8_t> chapterBuf(chapterSize);
-  int readCount = 0; // 已读取的章节数，最多读25章
-  size_t currentChapterIdx = chapterStart; // 当前读到的章节索引
+  int readCount = 0;  
+  size_t currentChapterIdx = chapterStart; 
 
-  // 循环条件：最多读25章 + 不超过总章节数
+  // 25 chapters once
   Serial.printf("[%lu] [XTC] readCount:%d,currentChapterIdx:%d, chapterCount %u\n", millis(), readCount, currentChapterIdx,chapterCount);
   while (readCount < 25 && currentChapterIdx < chapterCount) {
     if (m_file.read(chapterBuf.data(), chapterSize) != chapterSize) {
-      break; // 读失败则退出，不返回错误，保证能读到已读的有效章节
+      break; 
     }
 
-    // 解析章节名：原版逻辑
+    //no changes
     char nameBuf[81];
     memcpy(nameBuf, chapterBuf.data(), 80);
     nameBuf[80] = '\0';
     const size_t nameLen = strnlen(nameBuf, 80);
     std::string name(nameBuf, nameLen);
 
-    // 解析页码：原版逻辑
+    
     uint16_t startPage = 0;
     uint16_t endPage = 0;
     memcpy(&startPage, chapterBuf.data() + 0x50, sizeof(startPage));
     memcpy(&endPage, chapterBuf.data() + 0x52, sizeof(endPage));
 
-    // 无效章节过滤：原版逻辑
     if (name.empty() && startPage == 0 && endPage == 0) {
       currentChapterIdx++;
       continue;
@@ -469,15 +468,15 @@ XtcError XtcParser::readChapters_gd(uint16_t chapterStart) {
       endPage = m_header.pageCount - 1;
     }
 
-    // 存入数组：当前读取的章节 → 数组的第readCount位
+    
   strncpy(ChapterList[readCount].shortTitle, name.c_str(), 63);
   ChapterList[readCount].shortTitle[63] = '\0';
   ChapterList[readCount].startPage = startPage;
   ChapterList[readCount].chapterIndex = currentChapterIdx;
     
     Serial.printf("[%lu] [XTC] 第%d章，名字为:%s %u\n", millis(), readCount, ChapterList[readCount].shortTitle);
-    readCount++;        // 数组索引+1
-    currentChapterIdx++; // 章节索引+1
+    readCount++;        // getpages
+    currentChapterIdx++; 
 
   }
 
@@ -499,11 +498,11 @@ XtcError XtcParser::loadPageBatchByStart(uint16_t startPage) {
   if(endPage >= m_header.pageCount) endPage = m_header.pageCount - 1;
   uint16_t loadCount = endPage - startPage + 1;
 
-  // 定位到指定批次的页表位置
+  // find the offset for new table
   uint64_t seekOffset = m_header.pageTableOffset + (startPage * sizeof(PageTableEntry));
   if(!m_file.seek(seekOffset)) return XtcError::READ_ERROR;
 
-  // 加载新批次数据（只存2000页，内存恒定）
+  // load
   m_pageTable.resize(loadCount);
   for(uint16_t i = startPage; i <= endPage; i++) {
     PageTableEntry entry;
