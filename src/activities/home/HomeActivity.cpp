@@ -253,6 +253,9 @@ void HomeActivity::onExit() {
 
   // Free the stored cover buffer if any
   freeCoverBuffer();
+
+  // Free ThemeEngine caches to ensure enough memory for reader's grayscale buffers
+  ThemeEngine::ThemeManager::get().clearAssetCaches();
 }
 
 bool HomeActivity::storeCoverBuffer() {
