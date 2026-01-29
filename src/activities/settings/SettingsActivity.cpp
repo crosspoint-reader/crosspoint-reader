@@ -13,8 +13,7 @@
 #include "ThemeSelectionActivity.h"
 #include "fontIds.h"
 
-const char *SettingsActivity::categoryNames[categoryCount] = {
-    "Display", "Reader", "Controls", "System"};
+const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
 namespace {
 constexpr int displaySettingsCount = 7;
@@ -32,25 +31,17 @@ const SettingInfo displaySettings[displaySettingsCount] = {
 
 constexpr int readerSettingsCount = 9;
 const SettingInfo readerSettings[readerSettingsCount] = {
-    SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily,
-                      {"Bookerly", "Noto Sans", "Open Dyslexic"}),
-    SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize,
-                      {"Small", "Medium", "Large", "X Large"}),
-    SettingInfo::Enum("Line Spacing", &CrossPointSettings::lineSpacing,
-                      {"Tight", "Normal", "Wide"}),
-    SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin,
-                       {5, 40, 5}),
-    SettingInfo::Enum("Paragraph Alignment",
-                      &CrossPointSettings::paragraphAlignment,
+    SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"}),
+    SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
+    SettingInfo::Enum("Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}),
+    SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
+    SettingInfo::Enum("Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
                       {"Justify", "Left", "Center", "Right"}),
     SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled),
-    SettingInfo::Enum(
-        "Reading Orientation", &CrossPointSettings::orientation,
-        {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
-    SettingInfo::Toggle("Extra Paragraph Spacing",
-                        &CrossPointSettings::extraParagraphSpacing),
-    SettingInfo::Toggle("Text Anti-Aliasing",
-                        &CrossPointSettings::textAntiAliasing)};
+    SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
+                      {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
+    SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
+    SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing)};
 
 constexpr int controlsSettingsCount = 4;
 const SettingInfo controlsSettings[controlsSettingsCount] = {
@@ -59,11 +50,8 @@ const SettingInfo controlsSettings[controlsSettingsCount] = {
         {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght", "Bck, Cnfrm, Rght, Lft"}),
     SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
                       {"Prev, Next", "Next, Prev"}),
-    SettingInfo::Toggle("Long-press Chapter Skip",
-                        &CrossPointSettings::longPressChapterSkip),
-    SettingInfo::Enum("Short Power Button Click",
-                      &CrossPointSettings::shortPwrBtn,
-                      {"Ignore", "Sleep", "Page Turn"})};
+    SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
+    SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
 
 constexpr int systemSettingsCount = 5;
 const SettingInfo systemSettings[systemSettingsCount] = {
@@ -79,11 +67,10 @@ struct CategoryData {
   int count;
 };
 
-const CategoryData allCategories[4] = {
-    {"Display", displaySettings, displaySettingsCount},
-    {"Reader", readerSettings, readerSettingsCount},
-    {"Controls", controlsSettings, controlsSettingsCount},
-    {"System", systemSettings, systemSettingsCount}};
+const CategoryData allCategories[4] = {{"Display", displaySettings, displaySettingsCount},
+                                       {"Reader", readerSettings, readerSettingsCount},
+                                       {"Controls", controlsSettings, controlsSettingsCount},
+                                       {"System", systemSettings, systemSettingsCount}};
 
 void updateContextForSetting(ThemeEngine::ThemeContext& ctx, const std::string& prefix, int i, const SettingInfo& info,
                              bool isSelected, bool fullUpdate) {
@@ -123,8 +110,8 @@ void updateContextForSetting(ThemeEngine::ThemeContext& ctx, const std::string& 
 }
 }  // namespace
 
-void SettingsActivity::taskTrampoline(void *param) {
-  auto *self = static_cast<SettingsActivity *>(param);
+void SettingsActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<SettingsActivity*>(param);
   self->displayTaskLoop();
 }
 
@@ -136,16 +123,16 @@ void SettingsActivity::onEnter() {
 
   // For themed mode, provide all data upfront
   if (ThemeEngine::ThemeManager::get().getElement("Settings")) {
-    updateThemeContext(true); // Full update
+    updateThemeContext(true);  // Full update
   }
 
   updateRequired = true;
 
   xTaskCreate(&SettingsActivity::taskTrampoline, "SettingsActivityTask",
-              4096,              // Stack size
-              this,              // Parameters
-              1,                 // Priority
-              &displayTaskHandle // Task handle
+              4096,               // Stack size
+              this,               // Parameters
+              1,                  // Priority
+              &displayTaskHandle  // Task handle
   );
 }
 
@@ -194,16 +181,12 @@ void SettingsActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     // Move selection up (with wrap-around)
-    selectedCategoryIndex = (selectedCategoryIndex > 0)
-                                ? (selectedCategoryIndex - 1)
-                                : (categoryCount - 1);
+    selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
     updateRequired = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     // Move selection down (with wrap around)
-    selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1)
-                                ? (selectedCategoryIndex + 1)
-                                : 0;
+    selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
     updateRequired = true;
   }
 }
@@ -213,13 +196,12 @@ void SettingsActivity::enterCategoryLegacy(int categoryIndex) {
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   exitActivity();
-  enterNewActivity(new CategorySettingsActivity(
-      renderer, mappedInput, allCategories[categoryIndex].name,
-      allCategories[categoryIndex].settings, allCategories[categoryIndex].count,
-      [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
+  enterNewActivity(new CategorySettingsActivity(renderer, mappedInput, allCategories[categoryIndex].name,
+                                                allCategories[categoryIndex].settings,
+                                                allCategories[categoryIndex].count, [this] {
+                                                  exitActivity();
+                                                  updateRequired = true;
+                                                }));
   xSemaphoreGive(renderingMutex);
 }
 
@@ -251,29 +233,24 @@ void SettingsActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true,
-                            EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Settings", true, EpdFontFamily::BOLD);
 
   // Draw selection
   renderer.fillRect(0, 60 + selectedCategoryIndex * 30 - 2, pageWidth - 1, 30);
 
   for (int i = 0; i < categoryCount; i++) {
-    const int categoryY = 60 + i * 30; // 30 pixels between categories
+    const int categoryY = 60 + i * 30;  // 30 pixels between categories
 
     // Draw category name
-    renderer.drawText(UI_10_FONT_ID, 20, categoryY, categoryNames[i],
-                      i != selectedCategoryIndex);
+    renderer.drawText(UI_10_FONT_ID, 20, categoryY, categoryNames[i], i != selectedCategoryIndex);
   }
 
   // Draw version text above button hints
-  renderer.drawText(
-      SMALL_FONT_ID,
-      pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
-      pageHeight - 60, CROSSPOINT_VERSION);
+  renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
+                    pageHeight - 60, CROSSPOINT_VERSION);
 
   const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3,
-                           labels.btn4);
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }
@@ -285,7 +262,7 @@ void SettingsActivity::updateThemeContext(bool fullUpdate) {
   if (fullUpdate) {
     themeContext.setInt("Categories.Count", categoryCount);
   }
-  
+
   themeContext.setInt("Categories.Selected", selectedCategoryIndex);
 
   for (int i = 0; i < categoryCount; i++) {
@@ -308,9 +285,9 @@ void SettingsActivity::updateThemeContext(bool fullUpdate) {
 
   // Also provide current category's settings as "Settings" for simpler themes
   if (fullUpdate) {
-     themeContext.setInt("Settings.Count", allCategories[selectedCategoryIndex].count);
+    themeContext.setInt("Settings.Count", allCategories[selectedCategoryIndex].count);
   }
-  
+
   for (int i = 0; i < allCategories[selectedCategoryIndex].count; i++) {
     updateContextForSetting(themeContext, "Settings", i, allCategories[selectedCategoryIndex].settings[i],
                             i == selectedSettingIndex, fullUpdate);
@@ -323,14 +300,14 @@ void SettingsActivity::handleThemeInput() {
   // Up/Down navigates settings within current category
   if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (currentCategorySettingsCount - 1);
-    updateThemeContext(false); // Partial update
+    updateThemeContext(false);  // Partial update
     updateRequired = true;
     return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     selectedSettingIndex = (selectedSettingIndex < currentCategorySettingsCount - 1) ? (selectedSettingIndex + 1) : 0;
-    updateThemeContext(false); // Partial update
+    updateThemeContext(false);  // Partial update
     updateRequired = true;
     return;
   }
@@ -340,7 +317,7 @@ void SettingsActivity::handleThemeInput() {
       mappedInput.wasPressed(MappedInputManager::Button::PageBack)) {
     selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
     selectedSettingIndex = 0;  // Reset to first setting in new category
-    updateThemeContext(true); // Full update (category changed)
+    updateThemeContext(true);  // Full update (category changed)
     updateRequired = true;
     return;
   }
@@ -349,7 +326,7 @@ void SettingsActivity::handleThemeInput() {
       mappedInput.wasPressed(MappedInputManager::Button::PageForward)) {
     selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
     selectedSettingIndex = 0;
-    updateThemeContext(true); // Full update
+    updateThemeContext(true);  // Full update
     updateRequired = true;
     return;
   }
@@ -357,7 +334,7 @@ void SettingsActivity::handleThemeInput() {
   // Confirm toggles/activates current setting
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     toggleCurrentSetting();
-    updateThemeContext(false); // Values changed, partial update is enough (names don't change)
+    updateThemeContext(false);  // Values changed, partial update is enough (names don't change)
     updateRequired = true;
     return;
   }

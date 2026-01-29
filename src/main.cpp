@@ -38,94 +38,78 @@ EpdFont bookerly14RegularFont(&bookerly_14_regular);
 EpdFont bookerly14BoldFont(&bookerly_14_bold);
 EpdFont bookerly14ItalicFont(&bookerly_14_italic);
 EpdFont bookerly14BoldItalicFont(&bookerly_14_bolditalic);
-EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont,
-                                   &bookerly14ItalicFont,
+EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
                                    &bookerly14BoldItalicFont);
 #ifndef OMIT_FONTS
 EpdFont bookerly12RegularFont(&bookerly_12_regular);
 EpdFont bookerly12BoldFont(&bookerly_12_bold);
 EpdFont bookerly12ItalicFont(&bookerly_12_italic);
 EpdFont bookerly12BoldItalicFont(&bookerly_12_bolditalic);
-EpdFontFamily bookerly12FontFamily(&bookerly12RegularFont, &bookerly12BoldFont,
-                                   &bookerly12ItalicFont,
+EpdFontFamily bookerly12FontFamily(&bookerly12RegularFont, &bookerly12BoldFont, &bookerly12ItalicFont,
                                    &bookerly12BoldItalicFont);
 EpdFont bookerly16RegularFont(&bookerly_16_regular);
 EpdFont bookerly16BoldFont(&bookerly_16_bold);
 EpdFont bookerly16ItalicFont(&bookerly_16_italic);
 EpdFont bookerly16BoldItalicFont(&bookerly_16_bolditalic);
-EpdFontFamily bookerly16FontFamily(&bookerly16RegularFont, &bookerly16BoldFont,
-                                   &bookerly16ItalicFont,
+EpdFontFamily bookerly16FontFamily(&bookerly16RegularFont, &bookerly16BoldFont, &bookerly16ItalicFont,
                                    &bookerly16BoldItalicFont);
 EpdFont bookerly18RegularFont(&bookerly_18_regular);
 EpdFont bookerly18BoldFont(&bookerly_18_bold);
 EpdFont bookerly18ItalicFont(&bookerly_18_italic);
 EpdFont bookerly18BoldItalicFont(&bookerly_18_bolditalic);
-EpdFontFamily bookerly18FontFamily(&bookerly18RegularFont, &bookerly18BoldFont,
-                                   &bookerly18ItalicFont,
+EpdFontFamily bookerly18FontFamily(&bookerly18RegularFont, &bookerly18BoldFont, &bookerly18ItalicFont,
                                    &bookerly18BoldItalicFont);
 
 EpdFont notosans12RegularFont(&notosans_12_regular);
 EpdFont notosans12BoldFont(&notosans_12_bold);
 EpdFont notosans12ItalicFont(&notosans_12_italic);
 EpdFont notosans12BoldItalicFont(&notosans_12_bolditalic);
-EpdFontFamily notosans12FontFamily(&notosans12RegularFont, &notosans12BoldFont,
-                                   &notosans12ItalicFont,
+EpdFontFamily notosans12FontFamily(&notosans12RegularFont, &notosans12BoldFont, &notosans12ItalicFont,
                                    &notosans12BoldItalicFont);
 EpdFont notosans14RegularFont(&notosans_14_regular);
 EpdFont notosans14BoldFont(&notosans_14_bold);
 EpdFont notosans14ItalicFont(&notosans_14_italic);
 EpdFont notosans14BoldItalicFont(&notosans_14_bolditalic);
-EpdFontFamily notosans14FontFamily(&notosans14RegularFont, &notosans14BoldFont,
-                                   &notosans14ItalicFont,
+EpdFontFamily notosans14FontFamily(&notosans14RegularFont, &notosans14BoldFont, &notosans14ItalicFont,
                                    &notosans14BoldItalicFont);
 EpdFont notosans16RegularFont(&notosans_16_regular);
 EpdFont notosans16BoldFont(&notosans_16_bold);
 EpdFont notosans16ItalicFont(&notosans_16_italic);
 EpdFont notosans16BoldItalicFont(&notosans_16_bolditalic);
-EpdFontFamily notosans16FontFamily(&notosans16RegularFont, &notosans16BoldFont,
-                                   &notosans16ItalicFont,
+EpdFontFamily notosans16FontFamily(&notosans16RegularFont, &notosans16BoldFont, &notosans16ItalicFont,
                                    &notosans16BoldItalicFont);
 EpdFont notosans18RegularFont(&notosans_18_regular);
 EpdFont notosans18BoldFont(&notosans_18_bold);
 EpdFont notosans18ItalicFont(&notosans_18_italic);
 EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
-EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont,
-                                   &notosans18ItalicFont,
+EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
                                    &notosans18BoldItalicFont);
 
 EpdFont opendyslexic8RegularFont(&opendyslexic_8_regular);
 EpdFont opendyslexic8BoldFont(&opendyslexic_8_bold);
 EpdFont opendyslexic8ItalicFont(&opendyslexic_8_italic);
 EpdFont opendyslexic8BoldItalicFont(&opendyslexic_8_bolditalic);
-EpdFontFamily opendyslexic8FontFamily(&opendyslexic8RegularFont,
-                                      &opendyslexic8BoldFont,
-                                      &opendyslexic8ItalicFont,
+EpdFontFamily opendyslexic8FontFamily(&opendyslexic8RegularFont, &opendyslexic8BoldFont, &opendyslexic8ItalicFont,
                                       &opendyslexic8BoldItalicFont);
 EpdFont opendyslexic10RegularFont(&opendyslexic_10_regular);
 EpdFont opendyslexic10BoldFont(&opendyslexic_10_bold);
 EpdFont opendyslexic10ItalicFont(&opendyslexic_10_italic);
 EpdFont opendyslexic10BoldItalicFont(&opendyslexic_10_bolditalic);
-EpdFontFamily opendyslexic10FontFamily(&opendyslexic10RegularFont,
-                                       &opendyslexic10BoldFont,
-                                       &opendyslexic10ItalicFont,
+EpdFontFamily opendyslexic10FontFamily(&opendyslexic10RegularFont, &opendyslexic10BoldFont, &opendyslexic10ItalicFont,
                                        &opendyslexic10BoldItalicFont);
 EpdFont opendyslexic12RegularFont(&opendyslexic_12_regular);
 EpdFont opendyslexic12BoldFont(&opendyslexic_12_bold);
 EpdFont opendyslexic12ItalicFont(&opendyslexic_12_italic);
 EpdFont opendyslexic12BoldItalicFont(&opendyslexic_12_bolditalic);
-EpdFontFamily opendyslexic12FontFamily(&opendyslexic12RegularFont,
-                                       &opendyslexic12BoldFont,
-                                       &opendyslexic12ItalicFont,
+EpdFontFamily opendyslexic12FontFamily(&opendyslexic12RegularFont, &opendyslexic12BoldFont, &opendyslexic12ItalicFont,
                                        &opendyslexic12BoldItalicFont);
 EpdFont opendyslexic14RegularFont(&opendyslexic_14_regular);
 EpdFont opendyslexic14BoldFont(&opendyslexic_14_bold);
 EpdFont opendyslexic14ItalicFont(&opendyslexic_14_italic);
 EpdFont opendyslexic14BoldItalicFont(&opendyslexic_14_bolditalic);
-EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont,
-                                       &opendyslexic14BoldFont,
-                                       &opendyslexic14ItalicFont,
+EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic14BoldFont, &opendyslexic14ItalicFont,
                                        &opendyslexic14BoldItalicFont);
-#endif // OMIT_FONTS
+#endif  // OMIT_FONTS
 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
@@ -150,7 +134,7 @@ void exitActivity() {
   }
 }
 
-void enterNewActivity(Activity *activity) {
+void enterNewActivity(Activity* activity) {
   currentActivity = activity;
   currentActivity->onEnter();
 }
@@ -173,9 +157,7 @@ void verifyPowerButtonDuration() {
   // now from millis()==0 (i.e. device start time).
   const uint16_t calibration = start;
   const uint16_t calibratedPressDuration =
-      (calibration < SETTINGS.getPowerButtonDuration())
-          ? SETTINGS.getPowerButtonDuration() - calibration
-          : 1;
+      (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
 
   gpio.update();
   // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
@@ -223,55 +205,43 @@ void enterDeepSleep() {
 }
 
 void onGoHome();
-void onGoToMyLibraryWithTab(const std::string &path,
-                            MyLibraryActivity::Tab tab);
-void onGoToReader(const std::string &initialEpubPath,
-                  MyLibraryActivity::Tab fromTab) {
+void onGoToMyLibraryWithTab(const std::string& path, MyLibraryActivity::Tab tab);
+void onGoToReader(const std::string& initialEpubPath, MyLibraryActivity::Tab fromTab) {
   exitActivity();
-  enterNewActivity(new ReaderActivity(renderer, mappedInputManager,
-                                      initialEpubPath, fromTab, onGoHome,
-                                      onGoToMyLibraryWithTab));
+  enterNewActivity(
+      new ReaderActivity(renderer, mappedInputManager, initialEpubPath, fromTab, onGoHome, onGoToMyLibraryWithTab));
 }
-void onContinueReading() {
-  onGoToReader(APP_STATE.openEpubPath, MyLibraryActivity::Tab::Recent);
-}
+void onContinueReading() { onGoToReader(APP_STATE.openEpubPath, MyLibraryActivity::Tab::Recent); }
 
 void onGoToFileTransfer() {
   exitActivity();
-  enterNewActivity(
-      new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
+  enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
 }
 
 void onGoToSettings() {
   exitActivity();
-  enterNewActivity(
-      new SettingsActivity(renderer, mappedInputManager, onGoHome));
+  enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
 }
 
 void onGoToMyLibrary() {
   exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome,
-                                         onGoToReader));
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
 }
 
-void onGoToMyLibraryWithTab(const std::string &path,
-                            MyLibraryActivity::Tab tab) {
+void onGoToMyLibraryWithTab(const std::string& path, MyLibraryActivity::Tab tab) {
   exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome,
-                                         onGoToReader, tab, path));
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, tab, path));
 }
 
 void onGoToBrowser() {
   exitActivity();
-  enterNewActivity(
-      new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
+  enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
 }
 
 void onGoHome() {
   exitActivity();
-  enterNewActivity(new HomeActivity(
-      renderer, mappedInputManager, onContinueReading, onGoToMyLibrary,
-      onGoToSettings, onGoToFileTransfer, onGoToBrowser));
+  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToMyLibrary, onGoToSettings,
+                                    onGoToFileTransfer, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {
@@ -291,7 +261,7 @@ void setupDisplayAndFonts() {
   renderer.insertFont(OPENDYSLEXIC_10_FONT_ID, opendyslexic10FontFamily);
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
   renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
-#endif // OMIT_FONTS
+#endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
@@ -319,8 +289,7 @@ void setup() {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
     setupDisplayAndFonts();
     exitActivity();
-    enterNewActivity(new FullScreenMessageActivity(
-        renderer, mappedInputManager, "SD card error", EpdFontFamily::BOLD));
+    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, "SD card error", EpdFontFamily::BOLD));
     return;
   }
 
@@ -335,9 +304,7 @@ void setup() {
 
   // First serial output only here to avoid timing inconsistencies for power
   // button press duration verification
-  Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION
-                "\n",
-                millis());
+  Serial.printf("[%lu] [   ] Starting CrossPoint version " CROSSPOINT_VERSION "\n", millis());
 
   setupDisplayAndFonts();
 
@@ -377,9 +344,8 @@ void loop() {
   gpio.update();
 
   if (Serial && millis() - lastMemPrint >= 10000) {
-    Serial.printf(
-        "[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n",
-        millis(), ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getMinFreeHeap());
+    Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
+                  ESP.getHeapSize(), ESP.getMinFreeHeap());
     lastMemPrint = millis();
   }
 
@@ -392,9 +358,7 @@ void loop() {
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (millis() - lastActivityTime >= sleepTimeoutMs) {
-    Serial.printf(
-        "[%lu] [SLP] Auto-sleep triggered after %lu ms of inactivity\n",
-        millis(), sleepTimeoutMs);
+    Serial.printf("[%lu] [SLP] Auto-sleep triggered after %lu ms of inactivity\n", millis(), sleepTimeoutMs);
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
@@ -416,9 +380,8 @@ void loop() {
   if (loopDuration > maxLoopDuration) {
     maxLoopDuration = loopDuration;
     if (maxLoopDuration > 50) {
-      Serial.printf(
-          "[%lu] [LOOP] New max loop duration: %lu ms (activity: %lu ms)\n",
-          millis(), maxLoopDuration, activityDuration);
+      Serial.printf("[%lu] [LOOP] New max loop duration: %lu ms (activity: %lu ms)\n", millis(), maxLoopDuration,
+                    activityDuration);
     }
   }
 
@@ -426,8 +389,8 @@ void loop() {
   // When an activity requests skip loop delay (e.g., webserver running), use
   // yield() for faster response Otherwise, use longer delay to save power
   if (currentActivity && currentActivity->skipLoopDelay()) {
-    yield(); // Give FreeRTOS a chance to run tasks, but return immediately
+    yield();  // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
-    delay(10); // Normal delay when no activity requires fast response
+    delay(10);  // Normal delay when no activity requires fast response
   }
 }
