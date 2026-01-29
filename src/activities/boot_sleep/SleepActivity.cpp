@@ -181,8 +181,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   Serial.printf("[%lu] [SLP] drawing to %d x %d\n", millis(), x, y);
   renderer.clearScreen();
 
-  const bool hasGreyscale = bitmap.hasGreyscale() &&
-                            SETTINGS.sleepScreenFilter == CrossPointSettings::SLEEP_SCREEN_FILTER::ORIGINAL;
+  const bool hasGreyscale =
+      bitmap.hasGreyscale() && SETTINGS.sleepScreenFilter == CrossPointSettings::SLEEP_SCREEN_FILTER::ORIGINAL;
 
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
 

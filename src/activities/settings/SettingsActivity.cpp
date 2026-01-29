@@ -14,9 +14,9 @@ namespace {
 constexpr int displaySettingsCount = 5;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
-    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreenMode, {"Logo", "Custom", "Cover Crop", "Cover Fit", "None"}),
-    SettingInfo::Enum("Sleep Screen Filter", &CrossPointSettings::sleepScreenFilter,
-                      {"None", "Contrast", "Negative"}),
+    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreenMode,
+                      {"Logo", "Custom", "Cover Crop", "Cover Fit", "None"}),
+    SettingInfo::Enum("Sleep Screen Filter", &CrossPointSettings::sleepScreenFilter, {"None", "Contrast", "Negative"}),
     SettingInfo::Enum("Status Bar", &CrossPointSettings::statusBar,
                       {"None", "No Progress", "Full w/ Percentage", "Full w/ Progress Bar", "Progress Bar"}),
     SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"}),
