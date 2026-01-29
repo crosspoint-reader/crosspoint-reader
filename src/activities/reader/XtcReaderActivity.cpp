@@ -92,6 +92,7 @@ void XtcReaderActivity::loop() {
           },
           [this](const uint32_t newPage) {
             currentPage = newPage;
+            this->gotoPage(newPage);
             exitActivity();
             updateRequired = true;
           }));
@@ -367,32 +368,80 @@ void XtcReaderActivity::renderPage() {
                 bitDepth);
 }
 
+void XtcReaderActivity::gotoPage(uint32_t targetPage) {
+  const uint32_t totalPages = xtc->getPageCount();
+  if (targetPage >= totalPages) targetPage = totalPages - 1;
+  if (targetPage < 0) targetPage = 0;
+
+  uint32_t targetBatchStart = (targetPage / loadedMaxPage_per) * loadedMaxPage_per;
+  
+  xtc->loadPageBatchByStart(targetBatchStart);
+  
+  m_loadedMax = targetBatchStart + loadedMaxPage_per - 1; // Activity的最大值
+  if(m_loadedMax >= totalPages) m_loadedMax = totalPages - 1;
+
+
+  currentPage = targetPage;
+  updateRequired = true;
+  Serial.printf("[跳转] 目标页%lu → 加载批次[%lu~%lu] | 内存已释放\n", targetPage, targetBatchStart, m_loadedMax);
+}
+
+
+
 void XtcReaderActivity::saveProgress() const {
   FsFile f;
   if (SdMan.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
+    uint8_t data[8]; // 8字节，前4字节存页码，后4字节存页表上限
+    // 前4字节：保存当前阅读页码 currentPage
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;
     data[2] = (currentPage >> 16) & 0xFF;
     data[3] = (currentPage >> 24) & 0xFF;
-    f.write(data, 4);
+    // 后4字节：保存当前页表上限 m_loadedMax
+    data[4] = m_loadedMax & 0xFF;
+    data[5] = (m_loadedMax >> 8) & 0xFF;
+    data[6] = (m_loadedMax >> 16) & 0xFF;
+    data[7] = (m_loadedMax >> 24) & 0xFF;
+    
+    f.write(data, 8);
     f.close();
+    Serial.printf("[%lu] [进度] 保存成功 → 页码: %lu | 页表上限: %lu\n", millis(), currentPage, m_loadedMax);
   }
 }
 
 void XtcReaderActivity::loadProgress() {
   FsFile f;
   if (SdMan.openFileForRead("XTR", xtc->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
-    if (f.read(data, 4) == 4) {
+    uint8_t data[8];
+    if (f.read(data, 8) == 8) {
+    
       currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
-      Serial.printf("[%lu] [XTR] Loaded progress: page %lu\n", millis(), currentPage);
+      uint32_t savedLoadedMax = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24);
 
-      // Validate page number
-      if (currentPage >= xtc->getPageCount()) {
-        currentPage = 0;
-      }
+      Serial.printf("[%lu] [进度] 恢复成功 → 页码: %lu | 保存的页表上限: %lu\n", millis(), currentPage, savedLoadedMax);
+
+    
+      const uint32_t totalPages = xtc->getPageCount();
+      if (currentPage >= totalPages) currentPage = totalPages - 1;
+      if (currentPage < 0) currentPage = 0;
+
+      
+      uint32_t targetBatchStart = (currentPage / loadedMaxPage_per) * loadedMaxPage_per;
+      xtc->loadPageBatchByStart(targetBatchStart); 
+      
+     
+      m_loadedMax = targetBatchStart + loadedMaxPage_per - 1;
+      if(m_loadedMax >= totalPages) m_loadedMax = totalPages - 1;
+
+      Serial.printf("[进度] 恢复进度后加载批次 → 页码%lu → 批次[%lu~%lu]\n", currentPage, targetBatchStart, m_loadedMax);
     }
     f.close();
+  } else {
+ 
+    const uint32_t totalPages = xtc->getPageCount();
+    currentPage = 0;
+    m_loadedMax = loadedMaxPage_per - 1;
+    if(m_loadedMax >= totalPages) m_loadedMax = totalPages - 1;
+    Serial.printf("[%lu] [进度] 无进度文件 → 初始化页码: 0 | 页表上限: %lu\n", millis(), m_loadedMax);
   }
 }
