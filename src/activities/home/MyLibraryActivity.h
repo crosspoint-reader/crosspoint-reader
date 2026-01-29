@@ -19,7 +19,7 @@ class MyLibraryActivity final : public Activity {
   SemaphoreHandle_t renderingMutex = nullptr;
 
   Tab currentTab = Tab::Recent;
-  int selectorIndex = 0;
+  size_t selectorIndex = 0;
   bool updateRequired = false;
 
   // Recent tab state
@@ -30,26 +30,17 @@ class MyLibraryActivity final : public Activity {
   std::vector<std::string> files;
 
   // Callbacks
-  const std::function<void()> onGoHome;
   const std::function<void(const std::string& path, Tab fromTab)> onSelectBook;
+  const std::function<void()> onGoHome;
 
-  // Number of items that fit on a page
-  int getPageItems() const;
-  int getCurrentItemCount() const;
-  int getTotalPages() const;
-  int getCurrentPage() const;
+  static void taskTrampoline(void* param);
+  [[noreturn]] void displayTaskLoop();
+  void render() const;
 
   // Data loading
   void loadRecentBooks();
   void loadFiles();
   size_t findEntry(const std::string& name) const;
-
-  // Rendering
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render() const;
-  void renderRecentTab() const;
-  void renderFilesTab() const;
 
  public:
   explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -57,10 +48,10 @@ class MyLibraryActivity final : public Activity {
                              const std::function<void(const std::string& path, Tab fromTab)>& onSelectBook,
                              Tab initialTab = Tab::Recent, std::string initialPath = "/")
       : Activity("MyLibrary", renderer, mappedInput),
-        currentTab(initialTab),
         basepath(initialPath.empty() ? "/" : std::move(initialPath)),
-        onGoHome(onGoHome),
-        onSelectBook(onSelectBook) {}
+        currentTab(initialTab),
+        onSelectBook(onSelectBook),
+        onGoHome(onGoHome) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

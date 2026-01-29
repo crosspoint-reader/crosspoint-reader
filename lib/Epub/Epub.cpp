@@ -428,11 +428,11 @@ bool Epub::generateCoverBmp(bool cropped) const {
   return false;
 }
 
-std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Epub::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
 
-bool Epub::generateThumbBmp() const {
+bool Epub::generateThumbBmp(int height) const {
   // Already generated, return true
-  if (SdMan.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getThumbBmpPath(height).c_str())) {
     return true;
   }
 
@@ -444,11 +444,8 @@ bool Epub::generateThumbBmp() const {
   const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
   if (coverImageHref.empty()) {
     Serial.printf("[%lu] [EBP] No known cover image for thumbnail\n", millis());
-    return false;
-  }
-
-  if (coverImageHref.substr(coverImageHref.length() - 4) == ".jpg" ||
-      coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
+  } else if (coverImageHref.substr(coverImageHref.length() - 4) == ".jpg" ||
+             coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
     Serial.printf("[%lu] [EBP] Generating thumb BMP from JPG cover image\n", millis());
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
@@ -464,14 +461,14 @@ bool Epub::generateThumbBmp() const {
     }
 
     FsFile thumbBmp;
-    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(), thumbBmp)) {
+    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
       coverJpg.close();
       return false;
     }
     // Use smaller target size for Continue Reading card (half of screen: 240x400)
     // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-    constexpr int THUMB_TARGET_WIDTH = 240;
-    constexpr int THUMB_TARGET_HEIGHT = 400;
+    int THUMB_TARGET_WIDTH = height * 0.6;
+    int THUMB_TARGET_HEIGHT = height;
     const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
                                                                              THUMB_TARGET_HEIGHT);
     coverJpg.close();
@@ -480,7 +477,7 @@ bool Epub::generateThumbBmp() const {
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
-      SdMan.remove(getThumbBmpPath().c_str());
+      SdMan.remove(getThumbBmpPath(height).c_str());
     }
     Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
                   success ? "yes" : "no");
@@ -489,6 +486,10 @@ bool Epub::generateThumbBmp() const {
     Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping thumbnail\n", millis());
   }
 
+  // Write an empty bmp file to avoid generation attempts in the future
+  FsFile thumbBmp;
+  SdMan.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp);
+  thumbBmp.close();
   return false;
 }
 

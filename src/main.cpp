@@ -24,6 +24,7 @@
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 HalDisplay display;
@@ -209,7 +210,6 @@ void onGoToReader(const std::string& initialEpubPath, MyLibraryActivity::Tab fro
   enterNewActivity(
       new ReaderActivity(renderer, mappedInputManager, initialEpubPath, fromTab, onGoHome, onGoToMyLibraryWithTab));
 }
-void onContinueReading() { onGoToReader(APP_STATE.openEpubPath, MyLibraryActivity::Tab::Recent); }
 
 void onGoToFileTransfer() {
   exitActivity();
@@ -238,7 +238,7 @@ void onGoToBrowser() {
 
 void onGoHome() {
   exitActivity();
-  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToMyLibrary, onGoToSettings,
+  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToSettings,
                                     onGoToFileTransfer, onGoToBrowser));
 }
 
@@ -293,6 +293,7 @@ void setup() {
 
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
+  UITheme::initialize();
 
   if (gpio.isWakeupByPowerButton()) {
     // For normal wakeups, verify power button press duration

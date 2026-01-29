@@ -10,6 +10,11 @@ struct RecentBook {
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
 
+struct RecentBookWithCover {
+  RecentBook book;
+  std::string coverBmpPath;
+};
+
 class RecentBooksStore {
   // Static instance
   static RecentBooksStore instance;
