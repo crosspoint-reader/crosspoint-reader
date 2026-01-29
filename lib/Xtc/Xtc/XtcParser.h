@@ -61,20 +61,20 @@ class XtcParser {
 
 
 /**
- * @brief 动态加载下一批页
- * @return XtcError 加载状态：OK=加载成功，PAGE_OUT_OF_RANGE=无更多页可加载，其他=加载失败
+ * @brief 
+ * @return XtcError Loading status: OK = success, PAGE_OUT_OF_RANGE = no more pages to load, others = loading failed.
  */
 XtcError loadNextPageBatch();
 
 /**
- * @brief 获取当前已经加载的最大页码
- * @return uint16_t 当前加载的最大有效页码
+ * @brief Get the maximum page number that has been loaded currently.
+ * @return uint16_t The maximum valid page number loaded currently.
  */
 uint16_t getLoadedMaxPage() const;
 
 /**
- * @brief 获取每次动态加载的页数（批次大小）
- * @return uint16_t 批次页数，默认10
+ * @brief Get the number of pages loaded dynamically each time (batch size).
+ * @return uint16_t Page batch size, default is 10.
  */
 uint16_t getPageBatchSize() const;
 
@@ -84,20 +84,19 @@ uint32_t getChapterstartpage(int chapterIndex) {
             return ChapterList[i].startPage;
         }
     }
-    return 0; // 无此章节返回0
+    return 0; // Return 0 if the chapter does not exist.
 }
 
 std::string getChapterTitleByIndex(int chapterIndex) {
-    Serial.printf("[%lu] [XTC] 已进入getChapterTitleByIndex，chapterActualCount=%d\n", millis(),chapterActualCount);
+    Serial.printf("[%lu] [XTC] Entered getChapterTitleByIndex，chapterActualCount=%d\n", millis(),chapterActualCount);
     for(int i = 0; i < 25; i++) {
         if(ChapterList[i].chapterIndex == chapterIndex) {
             return std::string(ChapterList[i].shortTitle);
-            Serial.printf("[%lu] [XTC] getChapterTitleByIndex里第%d章，名字为:%s %u\n", millis(), i, ChapterList[i].shortTitle);
+            Serial.printf("[%lu] [XTC] In getChapterTitleByIndex, the title of chapter %d is: %s %u\n", millis(), i, ChapterList[i].shortTitle);
         }
     }
-    return ""; // 无此章节返回空字符串
+    return ""; // Return empty string if the chapter does not exist.
 }
-
 
 
   /**
@@ -152,8 +151,8 @@ std::string getChapterTitleByIndex(int chapterIndex) {
   XtcError readTitle();
   XtcError readAuthor();
   XtcError readChapters();
-  uint16_t m_loadBatchSize = 10;    // 每次加载的页数（核心配置，可改）
-  uint16_t m_loadedMaxPage = 0;     // 记录当前加载到的最大页码
+  uint16_t m_loadBatchSize = 10;    // pages for once load
+  uint16_t m_loadedMaxPage = 0;     // Record the maximum page currently loaded
 };
 
 }  // namespace xtc
