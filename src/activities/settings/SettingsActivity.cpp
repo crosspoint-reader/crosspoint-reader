@@ -122,7 +122,6 @@ void updateContextForSetting(ThemeEngine::ThemeContext& ctx, const std::string& 
   }
 }
 }  // namespace
->>>>>>> e6b3ecc (feat: Enhance ThemeEngine and apply new theming to SettingsActivity)
 
 void SettingsActivity::taskTrampoline(void *param) {
   auto *self = static_cast<SettingsActivity *>(param);

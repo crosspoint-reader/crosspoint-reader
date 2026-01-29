@@ -162,19 +162,24 @@ void HomeActivity::loadRecentBooksData() {
   int recentCount = std::min(static_cast<int>(recentBooks.size()), maxRecentBooks);
 
   for (int i = 0; i < recentCount; i++) {
-    const std::string& bookPath = recentBooks[i];
+    const RecentBook& recentBook = recentBooks[i];
+    const std::string& bookPath = recentBook.path;
     CachedBookInfo info;
     info.path = bookPath;  // Store the full path
 
-    // Extract title from path
-    info.title = bookPath;
-    size_t lastSlash = info.title.find_last_of('/');
-    if (lastSlash != std::string::npos) {
-      info.title = info.title.substr(lastSlash + 1);
-    }
-    size_t lastDot = info.title.find_last_of('.');
-    if (lastDot != std::string::npos) {
-      info.title = info.title.substr(0, lastDot);
+    // Use title from RecentBook if available, otherwise extract from path
+    if (!recentBook.title.empty()) {
+      info.title = recentBook.title;
+    } else {
+      info.title = bookPath;
+      size_t lastSlash = info.title.find_last_of('/');
+      if (lastSlash != std::string::npos) {
+        info.title = info.title.substr(lastSlash + 1);
+      }
+      size_t lastDot = info.title.find_last_of('.');
+      if (lastDot != std::string::npos) {
+        info.title = info.title.substr(0, lastDot);
+      }
     }
 
     if (StringUtils::checkFileExtension(bookPath, ".epub")) {
