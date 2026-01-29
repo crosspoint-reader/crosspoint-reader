@@ -7,6 +7,16 @@
 
 #include "Bitmap.h"
 
+// Color representation: uint8_t mapped to 4x4 Bayer matrix dithering levels
+// 0 = transparent, 1-16 = gray levels (white to black)
+using Color = uint8_t;
+
+constexpr Color COLOR_CLEAR = 0x00;
+constexpr Color COLOR_WHITE = 0x01;
+constexpr Color COLOR_LIGHT_GRAY = 0x05;
+constexpr Color COLOR_DARK_GRAY = 0x0A;
+constexpr Color COLOR_BLACK = 0x10;
+
 class GfxRenderer {
  public:
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
@@ -34,6 +44,8 @@ class GfxRenderer {
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
   void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
+  void drawPixelDither(int x, int y, Color color) const;
+  void fillArc(int maxRadius, int cx, int cy, int xDir, int yDir, Color color) const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay) : display(halDisplay), renderMode(BW), orientation(Portrait) {}
@@ -63,9 +75,20 @@ class GfxRenderer {
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
+  void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state) const;
+  void drawArc(int maxRadius, int cx, int cy, int xDir, int yDir, int lineWidth, bool state) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;
+  void drawRect(int x, int y, int width, int height, int lineWidth, bool state) const;
+  void drawRoundedRect(int x, int y, int width, int height, int lineWidth, int cornerRadius, bool state) const;
+  void drawRoundedRect(int x, int y, int width, int height, int lineWidth, int cornerRadius, bool roundTopLeft,
+                       bool roundTopRight, bool roundBottomLeft, bool roundBottomRight, bool state) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
+  void fillRectDither(int x, int y, int width, int height, Color color) const;
+  void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, Color color) const;
+  void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, bool roundTopLeft, bool roundTopRight,
+                       bool roundBottomLeft, bool roundBottomRight, Color color) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
+  void drawIcon(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
                   float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
@@ -83,17 +106,11 @@ class GfxRenderer {
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
-  // UI Components
-  void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4);
-  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn) const;
-
- private:
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
 
- public:
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   void copyGrayscaleLsbBuffers() const;
