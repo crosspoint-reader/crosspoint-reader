@@ -50,13 +50,7 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
 }
 
 bool ImageDecoderFactory::isFormatSupported(const std::string& imagePath) {
-  if (jpegDecoder && jpegDecoder->supportsFormat(imagePath)) {
-    return true;
-  }
-  if (pngDecoder && pngDecoder->supportsFormat(imagePath)) {
-    return true;
-  }
-  return false;
+  return getDecoder(imagePath) != nullptr;
 }
 
 std::vector<std::string> ImageDecoderFactory::getSupportedFormats() {
