@@ -72,6 +72,10 @@ jobs:
           set -euo pipefail
           pio run | tee pio.log
 
+      - name: Capture short SHA
+        id: short_sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Extract firmware stats
         id: fw_stats
         run: |
@@ -89,7 +93,7 @@ jobs:
       - name: Upload firmware.bin artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event_name == 'pull_request' && format('firmware-bin-pr-{0}-{1}', github.event.pull_request.number, github.sha) || format('firmware-bin-{0}', github.sha) }}
+          name: ${{ github.event_name == 'pull_request' && format('firmware-bin-pr-{0}-{1}', github.event.pull_request.number, steps.short_sha.outputs.short) || format('firmware-bin-{0}', steps.short_sha.outputs.short) }}
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
 
@@ -102,9 +106,10 @@ jobs:
             const ram = `${{ steps.fw_stats.outputs.ram_line }}`.trim();
             const flash = `${{ steps.fw_stats.outputs.flash_line }}`.trim();
             const prNumber = context.payload.pull_request?.number;
+            const shortSha = `${{ steps.short_sha.outputs.short }}`.trim() || context.sha.substring(0, 7);
             const artifactName = prNumber
-              ? `firmware-bin-pr-${prNumber}-${context.sha}`
-              : `firmware-bin-${context.sha}`;
+              ? `firmware-bin-pr-${prNumber}-${shortSha}`
+              : `firmware-bin-${shortSha}`;
             let firmwareLine = 'Firmware: artifact not found';
             try {
               const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({
@@ -115,7 +120,7 @@ jobs:
               const firmwareArtifact = artifacts.artifacts.find((artifact) => artifact.name === artifactName);
               if (firmwareArtifact) {
                 const artifactUiUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/artifacts/${firmwareArtifact.id}`;
-                firmwareLine = `Firmware: [firmware.bin artifact](${artifactUiUrl})`;
+                firmwareLine = `Firmware: [${artifactName}](${artifactUiUrl})`;
               } else {
                 firmwareLine = `Firmware: artifact not found (${artifactName})`;
               }
