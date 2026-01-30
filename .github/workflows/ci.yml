@@ -114,7 +114,8 @@ jobs:
               });
               const firmwareArtifact = artifacts.artifacts.find((artifact) => artifact.name === artifactName);
               if (firmwareArtifact) {
-                firmwareLine = `Firmware: [firmware.bin artifact](${firmwareArtifact.archive_download_url})`;
+                const artifactUiUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/artifacts/${firmwareArtifact.id}`;
+                firmwareLine = `Firmware: [firmware.bin artifact](${artifactUiUrl})`;
               } else {
                 firmwareLine = `Firmware: artifact not found (${artifactName})`;
               }
