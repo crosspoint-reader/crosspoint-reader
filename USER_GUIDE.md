@@ -81,6 +81,18 @@ See the [webserver docs](./docs/webserver.md) for more information on how to con
 > [!TIP]
 > Advanced users can also manage files programmatically or via the command line using `curl`. See the [webserver docs](./docs/webserver.md) for details.
 
+### 3.4.1 Calibre Wireless Transfers
+
+CrossPoint supports sending books from Calibre using the CrossPoint Reader device plugin.
+
+1. Install the plugin in Calibre:
+   - Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
+   - Download the zip file.
+   - Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
+2. On the device: File Transfer → Connect to Calibre → Join a network.
+3. Make sure your computer is on the same WiFi network.
+4. In Calibre, click "Send to device" to transfer books.
+
 ### 3.5 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
@@ -93,6 +105,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
   - "Crop" - Scale the image down and crop as necessary to try to to fill the screen (Note: this is experimental and may not work as expected)
+- **Sleep Screen Cover Filter**: What filter will be applied to the book cover when "Cover" sleep screen is selected 
+  - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
+  - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
+  - "Inverted" - The image will be inverted as in white&black and will be displayed without grayscale conversion
 - **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
@@ -116,6 +132,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - Back, Confirm, Left, Right (default)
   - Left, Right, Back, Confirm
   - Left, Back, Confirm, Right
+  - Back, Confirm, Right, Left
 - **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from Previous/Next to Next/Previous. This change is only in effect when reading.
 - **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skip to the next/previous chapter.
   - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
@@ -131,7 +148,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep.
 - **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting.
-- **Calibre Settings**: Set up integration for accessing a Calibre web library or connecting to Calibre as a wireless device.
+- **OPDS Browser**: Configure OPDS server settings for browsing and downloading books. Set the server URL (for Calibre Content Server, add `/opds` to the end), and optionally configure username and password for servers requiring authentication. Note: Only HTTP Basic authentication is supported. If using Calibre Content Server with authentication enabled, you must set it to use Basic authentication instead of the default Digest authentication.
 - **Check for updates**: Check for firmware updates over WiFi.
 
 ### 3.6 Sleep Screen
@@ -176,6 +193,15 @@ This feature can be disabled in **[Settings](#35-settings)** to help avoid chang
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
 * **Return to Home:** Press and **hold** the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)**.
+
+### Supported Languages
+
+CrossPoint renders text using the following Unicode character blocks, enabling support for a wide range of languages:
+
+*   **Latin Script (Basic, Supplement, Extended-A):** Covers English, German, French, Spanish, Portuguese, Italian, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Czech, Hungarian, Romanian, Slovak, Slovenian, Turkish, and others.
+*   **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
+
+What is not supported: Chinese, Japanese, Korean, Vietnamese, Hebrew, Arabic and Farsi.
 
 ---
 

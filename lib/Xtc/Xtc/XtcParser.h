@@ -67,8 +67,9 @@ class XtcParser {
                              std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                              size_t chunkSize = 1024);
 
-  // Get title from metadata
+  // Get title/author from metadata
   std::string getTitle() const { return m_title; }
+  std::string getAuthor() const { return m_author; }
 
   bool hasChapters() const { return m_hasChapters; }
   const std::vector<ChapterInfo>& getChapters() const { return m_chapters; }
@@ -86,6 +87,7 @@ class XtcParser {
   std::vector<PageInfo> m_pageTable;
   std::vector<ChapterInfo> m_chapters;
   std::string m_title;
+  std::string m_author;
   uint16_t m_defaultWidth;
   uint16_t m_defaultHeight;
   uint8_t m_bitDepth;  // 1 = XTC/XTG (1-bit), 2 = XTCH/XTH (2-bit)
@@ -96,6 +98,7 @@ class XtcParser {
   XtcError readHeader();
   XtcError readPageTable();
   XtcError readTitle();
+  XtcError readAuthor();
   XtcError readChapters();
 };
 

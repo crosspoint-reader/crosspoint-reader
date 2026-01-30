@@ -3,6 +3,7 @@
  * name: opendyslexic_10_bold
  * size: 10
  * mode: 2-bit
+ * Command used: fontconvert.py opendyslexic_10_bold 10 ../builtinFonts/source/OpenDyslexic/OpenDyslexic-Bold.otf --2bit
  */
 #pragma once
 #include "EpdFontData.h"

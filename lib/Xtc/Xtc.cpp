@@ -7,7 +7,6 @@
 
 #include "Xtc.h"
 
-#include <FsHelpers.h>
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
 
@@ -85,6 +84,15 @@ std::string Xtc::getTitle() const {
   }
 
   return filepath.substr(lastSlash, lastDot - lastSlash);
+}
+
+std::string Xtc::getAuthor() const {
+  if (!loaded || !parser) {
+    return "";
+  }
+
+  // Try to get author from XTC metadata
+  return parser->getAuthor();
 }
 
 bool Xtc::hasChapters() const {
