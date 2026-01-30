@@ -80,8 +80,8 @@ static int32_t pngSeekWithHandle(PNGFILE* pFile, int32_t pos) {
 static PNG png;
 
 bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
-  int rc = png.open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
-                    nullptr);
+  int rc =
+      png.open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle, nullptr);
 
   if (rc != 0) {
     Serial.printf("[%lu] [PNG] Failed to open PNG for dimensions: %d\n", millis(), rc);
