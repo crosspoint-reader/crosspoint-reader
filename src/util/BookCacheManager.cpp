@@ -1,8 +1,10 @@
 #include "BookCacheManager.h"
-#include "StringUtils.h"
+
 #include <HardwareSerial.h>
-#include "../RecentBooksStore.h"
+
 #include "../CrossPointState.h"
+#include "../RecentBooksStore.h"
+#include "StringUtils.h"
 
 bool BookCacheManager::migrateCache(const String& oldPath, const String& newPath) {
   if (oldPath == newPath) return true;
@@ -40,7 +42,7 @@ bool BookCacheManager::migrateCache(const String& oldPath, const String& newPath
 
       String subOldPath = oldPath + "/" + fileName;
       String subNewPath = newPath + "/" + fileName;
-      
+
       if (!migrateCache(subOldPath, subNewPath)) {
         success = false;
       }
@@ -52,7 +54,7 @@ bool BookCacheManager::migrateCache(const String& oldPath, const String& newPath
 
   // It's a file. check if it's a supported book type
   if (!isSupportedFile(oldPath)) {
-    return true; // Not a book, nothing to migrate
+    return true;  // Not a book, nothing to migrate
   }
 
   String oldCache = getCachePath(oldPath);
@@ -78,7 +80,7 @@ bool BookCacheManager::migrateCache(const String& oldPath, const String& newPath
     }
   }
 
-  return true; // No old cache to migrate
+  return true;  // No old cache to migrate
 }
 
 String BookCacheManager::getCachePath(const String& path) {
@@ -89,15 +91,13 @@ String BookCacheManager::getCachePath(const String& path) {
 }
 
 bool BookCacheManager::isSupportedFile(const String& path) {
-  return StringUtils::checkFileExtension(path, ".epub") ||
-         StringUtils::checkFileExtension(path, ".txt") ||
-         StringUtils::checkFileExtension(path, ".xtc") ||
-         StringUtils::checkFileExtension(path, ".xtg") ||
+  return StringUtils::checkFileExtension(path, ".epub") || StringUtils::checkFileExtension(path, ".txt") ||
+         StringUtils::checkFileExtension(path, ".xtc") || StringUtils::checkFileExtension(path, ".xtg") ||
          StringUtils::checkFileExtension(path, ".xth");
 }
 
 String BookCacheManager::getCachePrefix(const String& path) {
   if (StringUtils::checkFileExtension(path, ".epub")) return "epub";
   if (StringUtils::checkFileExtension(path, ".txt")) return "txt";
-  return "xtc"; // .xtc, .xtg, .xth
+  return "xtc";  // .xtc, .xtg, .xth
 }

@@ -80,5 +80,4 @@ class CrossPointWebServer {
   void handleDelete() const;
   void handleMove() const;
   void handleRename() const;
-
 };

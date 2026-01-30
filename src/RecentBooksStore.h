@@ -38,7 +38,7 @@ class RecentBooksStore {
    * Update the path of a book in the recent list.
    * Useful when moving/renaming files or entire directories.
    * If oldPath is a directory, all books within will have their paths updated.
-   * 
+   *
    * @param oldPath Original absolute path
    * @param newPath New absolute path
    */

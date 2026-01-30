@@ -1,7 +1,6 @@
 #include "CrossPointWebServer.h"
 
 #include <ArduinoJson.h>
-#include "util/BookCacheManager.h"
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <SDCardManager.h>
@@ -12,6 +11,7 @@
 
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "util/BookCacheManager.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -848,7 +848,7 @@ void CrossPointWebServer::handleRename() const {
   if (!newPath.startsWith("/")) newPath = "/" + newPath;
 
   // Security check: prevent renaming system files
-  if (oldPath.substring(oldPath.lastIndexOf('/') + 1).startsWith(".") || 
+  if (oldPath.substring(oldPath.lastIndexOf('/') + 1).startsWith(".") ||
       newPath.substring(newPath.lastIndexOf('/') + 1).startsWith(".")) {
     server->send(403, "text/plain", "Cannot rename system files");
     return;
@@ -874,8 +874,6 @@ void CrossPointWebServer::handleRename() const {
     server->send(500, "text/plain", "Rename failed");
   }
 }
-
-
 
 // WebSocket callback trampoline
 void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
