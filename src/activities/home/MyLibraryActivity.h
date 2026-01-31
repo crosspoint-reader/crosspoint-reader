@@ -31,9 +31,9 @@ class MyLibraryActivity final : public Activity {
   };
 
   ButtonState buttonState = ButtonState::Idle;
-  unsigned long firstPressTime = 0;      // Time of first PRESS
-  unsigned long firstReleaseTime = 0;    // Time of first RELEASE
-  bool isPrevButtonPressed = false;      // Which button was pressed first
+  unsigned long firstPressTime = 0;    // Time of first PRESS
+  unsigned long firstReleaseTime = 0;  // Time of first RELEASE
+  bool isPrevButtonPressed = false;    // Which button was pressed first
 
   // Action execution functions
   void executeMoveItem(bool isPrevButton);

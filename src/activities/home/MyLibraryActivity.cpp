@@ -20,8 +20,8 @@ constexpr int LEFT_MARGIN = 20;
 constexpr int RIGHT_MARGIN = 40;  // Extra space for scroll indicator
 
 // Timing thresholds for button behavior
-constexpr int LONG_PRESS_MS = 450;    // Long press: change tab
-constexpr int DOUBLE_PRESS_MS = 120;  // Double press: skip page
+constexpr int LONG_PRESS_MS = 450;          // Long press: change tab
+constexpr int DOUBLE_PRESS_MS = 120;        // Double press: skip page
 constexpr unsigned long GO_HOME_MS = 1000;  // Long press back: go to root
 
 void sortFileList(std::vector<std::string>& strs) {
