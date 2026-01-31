@@ -208,8 +208,11 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
     }
   }
 
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  // Skip button hints in landscape CW mode (they overlap content)
+  if (renderer.getOrientation() != GfxRenderer::LandscapeClockwise) {
+    const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
+    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 
   renderer.displayBuffer();
 }
