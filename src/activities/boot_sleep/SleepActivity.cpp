@@ -290,7 +290,7 @@ void SleepActivity::renderCoverSleepScreen() const {
 void SleepActivity::renderLastScreenSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
 
-  renderer.drawImage(MoonIcon, 48, pageHeight - 48, 48, 48);
+  renderer.drawImage(MoonIcon, 0, pageHeight - 48, 48, 48);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
