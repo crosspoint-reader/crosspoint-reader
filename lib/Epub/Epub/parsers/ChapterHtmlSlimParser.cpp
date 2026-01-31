@@ -43,21 +43,28 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
   return false;
 }
 
-// Create a BlockStyle from CSS style properties
-BlockStyle createBlockStyleFromCss(const CssStyle& cssStyle) {
+// Create a BlockStyle from CSS style properties, resolving CssLength values to pixels
+// emSize is the current font line height, used for em/rem unit conversion
+BlockStyle createBlockStyleFromCss(const CssStyle& cssStyle, const float emSize) {
   BlockStyle blockStyle;
+  // Resolve all CssLength values to pixels using the current font's em size
+  const int16_t marginTopPx = cssStyle.marginTop.toPixelsInt16(emSize);
+  const int16_t marginBottomPx = cssStyle.marginBottom.toPixelsInt16(emSize);
+  const int16_t paddingTopPx = cssStyle.paddingTop.toPixelsInt16(emSize);
+  const int16_t paddingBottomPx = cssStyle.paddingBottom.toPixelsInt16(emSize);
+
   // Vertical: combine margin and padding for top/bottom spacing
-  blockStyle.marginTop = static_cast<int16_t>(cssStyle.marginTop + cssStyle.paddingTop);
-  blockStyle.marginBottom = static_cast<int16_t>(cssStyle.marginBottom + cssStyle.paddingBottom);
-  blockStyle.paddingTop = cssStyle.paddingTop;
-  blockStyle.paddingBottom = cssStyle.paddingBottom;
+  blockStyle.marginTop = static_cast<int16_t>(marginTopPx + paddingTopPx);
+  blockStyle.marginBottom = static_cast<int16_t>(marginBottomPx + paddingBottomPx);
+  blockStyle.paddingTop = paddingTopPx;
+  blockStyle.paddingBottom = paddingBottomPx;
   // Horizontal: store margin and padding separately for layout calculations
-  blockStyle.marginLeft = cssStyle.marginLeft;
-  blockStyle.marginRight = cssStyle.marginRight;
-  blockStyle.paddingLeft = cssStyle.paddingLeft;
-  blockStyle.paddingRight = cssStyle.paddingRight;
+  blockStyle.marginLeft = cssStyle.marginLeft.toPixelsInt16(emSize);
+  blockStyle.marginRight = cssStyle.marginRight.toPixelsInt16(emSize);
+  blockStyle.paddingLeft = cssStyle.paddingLeft.toPixelsInt16(emSize);
+  blockStyle.paddingRight = cssStyle.paddingRight.toPixelsInt16(emSize);
   // Text indent
-  blockStyle.textIndent = static_cast<int16_t>(cssStyle.indentPixels);
+  blockStyle.textIndent = cssStyle.indent.toPixelsInt16(emSize);
   blockStyle.textIndentDefined = cssStyle.defined.indent;
   return blockStyle;
 }
@@ -244,7 +251,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
 
     self->currentBlockStyle = cssStyle;
-    self->startNewTextBlock(alignment, createBlockStyleFromCss(cssStyle));
+    self->startNewTextBlock(alignment, createBlockStyleFromCss(cssStyle, self->renderer.getLineHeight(self->fontId)));
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
@@ -277,7 +284,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
 
       self->currentBlockStyle = cssStyle;
-      self->startNewTextBlock(alignment, createBlockStyleFromCss(cssStyle));
+      self->startNewTextBlock(alignment, createBlockStyleFromCss(cssStyle, self->renderer.getLineHeight(self->fontId)));
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {

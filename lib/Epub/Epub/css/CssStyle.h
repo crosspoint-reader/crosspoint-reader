@@ -5,6 +5,37 @@
 // Text alignment options matching CSS text-align property
 enum class TextAlign : uint8_t { None = 0, Left = 1, Right = 2, Center = 3, Justify = 4 };
 
+// CSS length unit types
+enum class CssUnit : uint8_t { Pixels = 0, Em = 1, Rem = 2, Points = 3 };
+
+// Represents a CSS length value with its unit, allowing deferred resolution to pixels
+struct CssLength {
+  float value = 0.0f;
+  CssUnit unit = CssUnit::Pixels;
+
+  CssLength() = default;
+  CssLength(const float v, const CssUnit u) : value(v), unit(u) {}
+
+  // Convenience constructor for pixel values (most common case)
+  explicit CssLength(const float pixels) : value(pixels) {}
+
+  // Resolve to pixels given the current em size (font line height)
+  [[nodiscard]] float toPixels(const float emSize) const {
+    switch (unit) {
+      case CssUnit::Em:
+      case CssUnit::Rem:
+        return value * emSize;
+      case CssUnit::Points:
+        return value * 1.33f;  // Approximate pt to px conversion
+      default:
+        return value;
+    }
+  }
+
+  // Resolve to int16_t pixels (for BlockStyle fields)
+  [[nodiscard]] int16_t toPixelsInt16(const float emSize) const { return static_cast<int16_t>(toPixels(emSize)); }
+};
+
 // Font style options matching CSS font-style property
 enum class CssFontStyle : uint8_t { Normal = 0, Italic = 1 };
 
@@ -61,21 +92,22 @@ struct CssPropertyFlags {
 
 // Represents a collection of CSS style properties
 // Only stores properties relevant to e-ink text rendering
+// Length values are stored as CssLength (value + unit) for deferred resolution
 struct CssStyle {
   TextAlign alignment = TextAlign::None;
   CssFontStyle fontStyle = CssFontStyle::Normal;
   CssFontWeight fontWeight = CssFontWeight::Normal;
   CssTextDecoration decoration = CssTextDecoration::None;
 
-  float indentPixels = 0.0f;  // First-line indent in pixels
-  int16_t marginTop = 0;      // Vertical spacing before block (in pixels)
-  int16_t marginBottom = 0;   // Vertical spacing after block (in pixels)
-  int16_t marginLeft = 0;     // Horizontal spacing left of block (in pixels)
-  int16_t marginRight = 0;    // Horizontal spacing right of block (in pixels)
-  int16_t paddingTop = 0;     // Padding before (in pixels)
-  int16_t paddingBottom = 0;  // Padding after (in pixels)
-  int16_t paddingLeft = 0;    // Padding left (in pixels)
-  int16_t paddingRight = 0;   // Padding right (in pixels)
+  CssLength indent;        // First-line indent (deferred resolution)
+  CssLength marginTop;     // Vertical spacing before block
+  CssLength marginBottom;  // Vertical spacing after block
+  CssLength marginLeft;    // Horizontal spacing left of block
+  CssLength marginRight;   // Horizontal spacing right of block
+  CssLength paddingTop;    // Padding before
+  CssLength paddingBottom; // Padding after
+  CssLength paddingLeft;   // Padding left
+  CssLength paddingRight;  // Padding right
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
@@ -99,7 +131,7 @@ struct CssStyle {
       defined.decoration = 1;
     }
     if (base.defined.indent) {
-      indentPixels = base.indentPixels;
+      indent = base.indent;
       defined.indent = 1;
     }
     if (base.defined.marginTop) {
@@ -159,9 +191,9 @@ struct CssStyle {
     fontStyle = CssFontStyle::Normal;
     fontWeight = CssFontWeight::Normal;
     decoration = CssTextDecoration::None;
-    indentPixels = 0.0f;
-    marginTop = marginBottom = marginLeft = marginRight = 0;
-    paddingTop = paddingBottom = paddingLeft = paddingRight = 0;
+    indent = CssLength{};
+    marginTop = marginBottom = marginLeft = marginRight = CssLength{};
+    paddingTop = paddingBottom = paddingLeft = paddingRight = CssLength{};
     defined.clearAll();
   }
 };

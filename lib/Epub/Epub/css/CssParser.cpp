@@ -253,15 +253,12 @@ CssTextDecoration CssParser::interpretDecoration(const std::string& val) {
   return CssTextDecoration::None;
 }
 
-float CssParser::interpretLength(const std::string& val, const float emSize) {
+CssLength CssParser::interpretLength(const std::string& val) {
   const std::string v = normalized(val);
-  if (v.empty()) return 0.0f;
-
-  // Determine unit and multiplier
-  float multiplier = 1.0f;
-  size_t unitStart = v.size();
+  if (v.empty()) return CssLength{};
 
   // Find where the number ends
+  size_t unitStart = v.size();
   for (size_t i = 0; i < v.size(); ++i) {
     const char c = v[i];
     if (!std::isdigit(c) && c != '.' && c != '-' && c != '+') {
@@ -273,20 +270,23 @@ float CssParser::interpretLength(const std::string& val, const float emSize) {
   const std::string numPart = v.substr(0, unitStart);
   const std::string unitPart = v.substr(unitStart);
 
-  // Handle units
-  if (unitPart == "em" || unitPart == "rem") {
-    multiplier = emSize;
-  } else if (unitPart == "pt") {
-    multiplier = 1.33f;  // Approximate pt to px conversion
-  }
-  // px is default (multiplier = 1.0)
-
+  // Parse numeric value
   char* endPtr = nullptr;
   const float numericValue = std::strtof(numPart.c_str(), &endPtr);
+  if (endPtr == numPart.c_str()) return CssLength{};  // No number parsed
 
-  if (endPtr == numPart.c_str()) return 0.0f;  // No number parsed
+  // Determine unit type (preserve for deferred resolution)
+  auto unit = CssUnit::Pixels;
+  if (unitPart == "em") {
+    unit = CssUnit::Em;
+  } else if (unitPart == "rem") {
+    unit = CssUnit::Rem;
+  } else if (unitPart == "pt") {
+    unit = CssUnit::Points;
+  }
+  // px and unitless default to Pixels
 
-  return numericValue * multiplier;
+  return CssLength{numericValue, unit};
 }
 
 int8_t CssParser::interpretSpacing(const std::string& val) {
@@ -367,28 +367,28 @@ CssStyle CssParser::parseDeclarations(const std::string& declBlock) {
       style.decoration = interpretDecoration(propValue);
       style.defined.decoration = 1;
     } else if (propName == "text-indent") {
-      style.indentPixels = interpretLength(propValue);
+      style.indent = interpretLength(propValue);
       style.defined.indent = 1;
     } else if (propName == "margin-top") {
-      style.marginTop = static_cast<int16_t>(interpretLength(propValue));
+      style.marginTop = interpretLength(propValue);
       style.defined.marginTop = 1;
     } else if (propName == "margin-bottom") {
-      style.marginBottom = static_cast<int16_t>(interpretLength(propValue));
+      style.marginBottom = interpretLength(propValue);
       style.defined.marginBottom = 1;
     } else if (propName == "margin-left") {
-      style.marginLeft = static_cast<int16_t>(interpretLength(propValue));
+      style.marginLeft = interpretLength(propValue);
       style.defined.marginLeft = 1;
     } else if (propName == "margin-right") {
-      style.marginRight = static_cast<int16_t>(interpretLength(propValue));
+      style.marginRight = interpretLength(propValue);
       style.defined.marginRight = 1;
     } else if (propName == "margin") {
       // Shorthand: 1-4 values for top, right, bottom, left
       const auto values = splitWhitespace(propValue);
       if (!values.empty()) {
-        const auto top = static_cast<int16_t>(interpretLength(values[0]));
-        const int16_t right = values.size() >= 2 ? static_cast<int16_t>(interpretLength(values[1])) : top;
-        const int16_t bottom = values.size() >= 3 ? static_cast<int16_t>(interpretLength(values[2])) : top;
-        const int16_t left = values.size() >= 4 ? static_cast<int16_t>(interpretLength(values[3])) : right;
+        const CssLength top = interpretLength(values[0]);
+        const CssLength right = values.size() >= 2 ? interpretLength(values[1]) : top;
+        const CssLength bottom = values.size() >= 3 ? interpretLength(values[2]) : top;
+        const CssLength left = values.size() >= 4 ? interpretLength(values[3]) : right;
         style.marginTop = top;
         style.marginRight = right;
         style.marginBottom = bottom;
@@ -396,25 +396,25 @@ CssStyle CssParser::parseDeclarations(const std::string& declBlock) {
         style.defined.marginTop = style.defined.marginRight = style.defined.marginBottom = style.defined.marginLeft = 1;
       }
     } else if (propName == "padding-top") {
-      style.paddingTop = static_cast<int16_t>(interpretLength(propValue));
+      style.paddingTop = interpretLength(propValue);
       style.defined.paddingTop = 1;
     } else if (propName == "padding-bottom") {
-      style.paddingBottom = static_cast<int16_t>(interpretLength(propValue));
+      style.paddingBottom = interpretLength(propValue);
       style.defined.paddingBottom = 1;
     } else if (propName == "padding-left") {
-      style.paddingLeft = static_cast<int16_t>(interpretLength(propValue));
+      style.paddingLeft = interpretLength(propValue);
       style.defined.paddingLeft = 1;
     } else if (propName == "padding-right") {
-      style.paddingRight = static_cast<int16_t>(interpretLength(propValue));
+      style.paddingRight = interpretLength(propValue);
       style.defined.paddingRight = 1;
     } else if (propName == "padding") {
       // Shorthand: 1-4 values for top, right, bottom, left
       const auto values = splitWhitespace(propValue);
       if (!values.empty()) {
-        const auto top = static_cast<int16_t>(interpretLength(values[0]));
-        const int16_t right = values.size() >= 2 ? static_cast<int16_t>(interpretLength(values[1])) : top;
-        const int16_t bottom = values.size() >= 3 ? static_cast<int16_t>(interpretLength(values[2])) : top;
-        const int16_t left = values.size() >= 4 ? static_cast<int16_t>(interpretLength(values[3])) : right;
+        const CssLength top = interpretLength(values[0]);
+        const CssLength right = values.size() >= 2 ? interpretLength(values[1]) : top;
+        const CssLength bottom = values.size() >= 3 ? interpretLength(values[2]) : top;
+        const CssLength left = values.size() >= 4 ? interpretLength(values[3]) : right;
         style.paddingTop = top;
         style.paddingRight = right;
         style.paddingBottom = bottom;
