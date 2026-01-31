@@ -92,8 +92,26 @@ void KeyboardEntryActivity::handleKeyPress() {
   // Handle special row (bottom row with shift, space, backspace, done)
   if (selectedRow == SPECIAL_ROW) {
     if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
-      // Shift toggle
+      // Shift toggle (double-tap enables caps lock)
+      const unsigned long now = millis();
+      const bool isDoubleTap = (lastShiftTapMs != 0) && ((now - lastShiftTapMs) <= SHIFT_DOUBLE_TAP_MS);
+
+      if (capsLockActive) {
+        capsLockActive = false;
+        shiftActive = false;
+        lastShiftTapMs = 0;
+        return;
+      }
+
+      if (isDoubleTap) {
+        capsLockActive = true;
+        shiftActive = true;
+        lastShiftTapMs = 0;
+        return;
+      }
+
       shiftActive = !shiftActive;
+      lastShiftTapMs = now;
       return;
     }
 
@@ -131,8 +149,9 @@ void KeyboardEntryActivity::handleKeyPress() {
   if (maxLength == 0 || text.length() < maxLength) {
     text += c;
     // Auto-disable shift after typing a letter
-    if (shiftActive && ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) {
+    if (shiftActive && !capsLockActive && ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) {
       shiftActive = false;
+      lastShiftTapMs = 0;
     }
   }
 }
@@ -318,7 +337,8 @@ void KeyboardEntryActivity::render() const {
 
       // SHIFT key (logical col 0, spans 2 key widths)
       const bool shiftSelected = (selectedRow == 4 && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
-      renderItemWithSelector(currentX + 2, rowY, shiftActive ? "SHIFT" : "shift", shiftSelected);
+      const char* shiftLabel = capsLockActive ? "CAPS" : (shiftActive ? "SHIFT" : "shift");
+      renderItemWithSelector(currentX + 2, rowY, shiftLabel, shiftSelected);
       currentX += 2 * (keyWidth + keySpacing);
 
       // Space bar (logical cols 2-6, spans 5 key widths)

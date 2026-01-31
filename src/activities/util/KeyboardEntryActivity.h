@@ -71,6 +71,10 @@ class KeyboardEntryActivity : public Activity {
   int selectedRow = 0;
   int selectedCol = 0;
   bool shiftActive = false;
+  bool capsLockActive = false;
+  unsigned long lastShiftTapMs = 0;
+
+  static constexpr unsigned long SHIFT_DOUBLE_TAP_MS = 500;
 
   // Callbacks
   OnCompleteCallback onComplete;
