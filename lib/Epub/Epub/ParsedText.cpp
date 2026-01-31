@@ -23,8 +23,7 @@ constexpr size_t SOFT_HYPHEN_BYTES = 2;
 // (no space before it). Includes sentence punctuation and closing quotes.
 // Excludes brackets/parens to avoid false positives with decorative patterns like "[ 1 ]".
 bool isAttachingPunctuation(const char c) {
-  return c == '.' || c == ',' || c == '!' || c == '?' || c == ';' || c == ':' ||
-         c == '"' || c == '\'';
+  return c == '.' || c == ',' || c == '!' || c == '?' || c == ';' || c == ':' || c == '"' || c == '\'';
 }
 
 // Check if a word consists entirely of punctuation that should attach to the previous word
@@ -437,8 +436,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     // Add spacing after this word, unless the next word is attaching punctuation
     auto nextWordIt = wordIt;
     ++nextWordIt;
-    const bool nextIsAttachingPunctuation =
-        wordIdx + 1 < lineWordCount && isAttachingPunctuationWord(*nextWordIt);
+    const bool nextIsAttachingPunctuation = wordIdx + 1 < lineWordCount && isAttachingPunctuationWord(*nextWordIt);
 
     xpos += currentWordWidth + (nextIsAttachingPunctuation ? 0 : spacing);
     ++wordIt;

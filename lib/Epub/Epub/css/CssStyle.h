@@ -99,15 +99,15 @@ struct CssStyle {
   CssFontWeight fontWeight = CssFontWeight::Normal;
   CssTextDecoration decoration = CssTextDecoration::None;
 
-  CssLength indent;        // First-line indent (deferred resolution)
-  CssLength marginTop;     // Vertical spacing before block
-  CssLength marginBottom;  // Vertical spacing after block
-  CssLength marginLeft;    // Horizontal spacing left of block
-  CssLength marginRight;   // Horizontal spacing right of block
-  CssLength paddingTop;    // Padding before
-  CssLength paddingBottom; // Padding after
-  CssLength paddingLeft;   // Padding left
-  CssLength paddingRight;  // Padding right
+  CssLength indent;         // First-line indent (deferred resolution)
+  CssLength marginTop;      // Vertical spacing before block
+  CssLength marginBottom;   // Vertical spacing after block
+  CssLength marginLeft;     // Horizontal spacing left of block
+  CssLength marginRight;    // Horizontal spacing right of block
+  CssLength paddingTop;     // Padding before
+  CssLength paddingBottom;  // Padding after
+  CssLength paddingLeft;    // Padding left
+  CssLength paddingRight;   // Padding right
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
