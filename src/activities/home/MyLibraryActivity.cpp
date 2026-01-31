@@ -228,9 +228,6 @@ void MyLibraryActivity::onExit() {
 }
 
 void MyLibraryActivity::loop() {
-  const int itemCount = getCurrentItemCount();
-  const int pageItems = getPageItems();
-
   // Get current time for all timing operations
   unsigned long currentTime = millis();
 
