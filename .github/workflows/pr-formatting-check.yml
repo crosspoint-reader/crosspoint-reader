@@ -6,13 +6,9 @@ on:
       - opened
       - reopened
       - edited
-      - synchronize
 
 permissions:
-  contents: read
   statuses: write
-  pull-requests: write
-  issues: write
 
 jobs:
   title-check:
@@ -25,73 +21,6 @@ jobs:
           egress-policy: audit
 
       - name: Check PR Title
-        id: title_check
         uses: amannn/action-semantic-pull-request@v6
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Comment with changelog hint on failure
-        if: failure()
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const marker = '<!-- pr-title-check -->';
-            const error = `${{ steps.title_check.outputs.error_message || steps.title_check.outputs.error || '' }}`.trim();
-            const details = error ? `\n\n**Error:** ${error}` : '\n\n**Error:** See workflow logs.';
-            const body =
-              `${marker}\n**PR title check failed**\n\n` +
-              `Please use a Conventional Commit-style prefix (e.g., \`feat:\`, \`fix:\`, \`docs:\`, \`chore:\`).\n` +
-              `If this change should appear in release notes, ensure the title reflects the correct category.${details}`;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              per_page: 100,
-            });
-
-            const existing = comments.find((comment) => (comment.body || "").includes(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
-      - name: Remove failure comment on success
-        if: success()
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const marker = '<!-- pr-title-check -->';
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              per_page: 100,
-            });
-
-            const existing = comments.find((comment) => (comment.body || "").includes(marker));
-            if (!existing) {
-              core.info("No previous PR title failure comment found.");
-              return;
-            }
-
-            await github.rest.issues.deleteComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: existing.id,
-            });
-
-            core.info(`Deleted previous failure comment id=${existing.id}`);
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

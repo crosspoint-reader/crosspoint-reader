@@ -65,10 +65,7 @@ jobs:
         run: pip install --upgrade platformio
 
       - name: Build CrossPoint
-        run: |
-          set -euo pipefail
-          pio run | tee pio.log
-
+        run: pio run
 
       - name: Extract firmware stats
 
@@ -84,18 +81,9 @@ jobs:
             if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Upload both the binary and the stats/log so Stage 2 can read them without checkout.
       - name: Upload firmware.bin artifact
         uses: actions/upload-artifact@v6
         with:
-          name: firmware-bin
+          name: firmware.bin
           path: .pio/build/default/firmware.bin
-          if-no-files-found: error
-
-      - name: Upload build metadata artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: build-meta
-          path: |
-            pio.log
           if-no-files-found: error
