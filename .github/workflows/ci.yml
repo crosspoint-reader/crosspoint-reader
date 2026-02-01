@@ -4,10 +4,13 @@ name: CI
     branches: [master]
   pull_request:
 
-permissions:
-  contents: read
-  issues: write
-  pull-requests: write
+# permissions:
+#   contents: read
+#   issues: write
+#   pull-requests: write
+
+permissions: 
+  write-all
 
 
 jobs:
