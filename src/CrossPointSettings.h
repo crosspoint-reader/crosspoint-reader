@@ -114,12 +114,13 @@ class CrossPointSettings {
   };
 
 // Reader screen margin options (pixel values)
-#define SCREEN_MARGIN_DATA                                                           \
-  X(5, "5 px")                                                                       \
-  X(10, "10 px")                                                                     \
-  X(15, "15 px") X(20, "20 px") X(25, "25 px") X(30, "30 px") X(35, "35 px") X(40,   \
-                                                                               "40 " \
-                                                                               "px")
+#define SCREEN_MARGIN_DATA                                            \
+  X(5, "5 px")                                                        \
+  X(10, "10 px")                                                      \
+  X(15, "15 px")                                                      \
+  X(20, "20 px") X(25, "25 px") X(30, "30 px") X(35, "35 px") X(40,   \
+                                                                "40 " \
+                                                                "px")
 
   enum SCREEN_MARGIN {
 #define X(val, str) MARGIN_##val,
