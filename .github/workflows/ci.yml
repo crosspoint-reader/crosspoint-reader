@@ -101,7 +101,7 @@ jobs:
 
       - name: Comment PR with firmware stats and firmware.bin
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const marker = '<!-- firmware-stats -->';
