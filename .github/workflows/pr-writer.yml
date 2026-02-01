@@ -17,14 +17,14 @@ jobs:
       # Do NOT checkout PR head.
       - uses: actions/labeler@v5
 
-    comment_firmware:
+  comment_firmware:
     runs-on: ubuntu-latest
     steps:
-        - name: Find the matching CI run for this PR SHA
+      - name: Find the matching CI run for this PR SHA
         id: find_run
         uses: actions/github-script@v8
         with:
-            script: |
+          script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pr = context.payload.pull_request;
@@ -43,11 +43,11 @@ jobs:
             core.setOutput("run_id", String(run.id));
             core.setOutput("run_html_url", run.html_url);
 
-        - name: Locate artifact IDs in the CI run
+      - name: Locate artifact IDs in the CI run
         id: artifacts
         uses: actions/github-script@v8
         with:
-            script: |
+          script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const runId = Number("${{ steps.find_run.outputs.run_id }}");
@@ -68,45 +68,45 @@ jobs:
             core.setOutput("fw_id", fw ? String(fw.id) : "");
             core.setOutput("meta_id", String(meta.id));
 
-        - name: Download build-meta artifact zip and extract pio.log
+      - name: Download build-meta artifact zip and extract pio.log
         id: parse_log
         shell: bash
         env:
-            OWNER: ${{ github.repository_owner }}
-            REPO: ${{ github.event.repository.name }}
-            META_ID: ${{ steps.artifacts.outputs.meta_id }}
-            GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          META_ID: ${{ steps.artifacts.outputs.meta_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-            set -euo pipefail
+          set -euo pipefail
 
-            # Download artifact zip via GitHub API (will redirect to blob storage; -L follows)
-            api="https://api.github.com/repos/${OWNER}/${REPO}/actions/artifacts/${META_ID}/zip"
-            curl -sSL \
+          # Download artifact zip via GitHub API (will redirect to blob storage; -L follows)
+          api="https://api.github.com/repos/${OWNER}/${REPO}/actions/artifacts/${META_ID}/zip"
+          curl -sSL \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             -o build-meta.zip \
             "${api}"
 
-            mkdir -p build-meta
-            unzip -q build-meta.zip -d build-meta
+          mkdir -p build-meta
+          unzip -q build-meta.zip -d build-meta
 
-            if [[ ! -f build-meta/pio.log ]]; then
+          if [[ ! -f build-meta/pio.log ]]; then
             echo "pio.log not found inside build-meta artifact"
             echo "ram_line=" >> "$GITHUB_OUTPUT"
             echo "flash_line=" >> "$GITHUB_OUTPUT"
             exit 0
-            fi
+          fi
 
-            ram_line="$(grep -E "RAM:\s" -m1 build-meta/pio.log || true)"
-            flash_line="$(grep -E "Flash:\s" -m1 build-meta/pio.log || true)"
+          ram_line="$(grep -E "RAM:\\s" -m1 build-meta/pio.log || true)"
+          flash_line="$(grep -E "Flash:\\s" -m1 build-meta/pio.log || true)"
 
-            echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
-            echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
+          echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
+          echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
 
-        - name: Post/update PR comment with RAM/Flash + artifact links
+      - name: Post/update PR comment with RAM/Flash + artifact links
         uses: actions/github-script@v8
         with:
-            script: |
+          script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const prNumber = context.payload.pull_request.number;
@@ -140,25 +140,25 @@ ${flash || "Flash: not found"}
 `;
 
             const { data: comments } = await github.rest.issues.listComments({
-                owner,
-                repo,
-                issue_number: prNumber,
-                per_page: 100,
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100,
             });
 
             const existing = comments.find(c => (c.body || "").includes(marker));
             if (existing) {
-                await github.rest.issues.updateComment({
+              await github.rest.issues.updateComment({
                 owner,
                 repo,
                 comment_id: existing.id,
                 body,
-                });
+              });
             } else {
-                await github.rest.issues.createComment({
+              await github.rest.issues.createComment({
                 owner,
                 repo,
                 issue_number: prNumber,
                 body,
-                });
+              });
             }
