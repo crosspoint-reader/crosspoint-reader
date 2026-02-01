@@ -1,111 +1,130 @@
-comment_firmware:
-  runs-on: ubuntu-latest
-  steps:
-    - name: Find the matching CI run for this PR SHA
-      id: find_run
-      uses: actions/github-script@v8
-      with:
-        script: |
-          const owner = context.repo.owner;
-          const repo = context.repo.repo;
-          const pr = context.payload.pull_request;
-          const headSha = pr.head.sha;
+name: PR writes (label + comment)
 
-          const { data } = await github.rest.actions.listWorkflowRunsForRepo({
-            owner,
-            repo,
-            event: "pull_request",
-            per_page: 50,
-          });
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
 
-          const run = data.workflow_runs.find(r => r.head_sha === headSha && r.name === "CI (build)");
-          if (!run) core.setFailed(`No matching CI (build) run found for head_sha=${headSha}.`);
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 
-          core.setOutput("run_id", String(run.id));
-          core.setOutput("run_html_url", run.html_url);
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      # Safe: labeler reads files from the base repo by default in pull_request_target context.
+      # Do NOT checkout PR head.
+      - uses: actions/labeler@v5
 
-    - name: Locate artifact IDs in the CI run
-      id: artifacts
-      uses: actions/github-script@v8
-      with:
-        script: |
-          const owner = context.repo.owner;
-          const repo = context.repo.repo;
-          const runId = Number("${{ steps.find_run.outputs.run_id }}");
+    comment_firmware:
+    runs-on: ubuntu-latest
+    steps:
+        - name: Find the matching CI run for this PR SHA
+        id: find_run
+        uses: actions/github-script@v8
+        with:
+            script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.payload.pull_request;
+            const headSha = pr.head.sha;
 
-          const { data } = await github.rest.actions.listWorkflowRunArtifacts({
-            owner,
-            repo,
-            run_id: runId,
-            per_page: 100,
-          });
+            const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+                owner,
+                repo,
+                event: "pull_request",
+                per_page: 50,
+            });
 
-          const artifacts = data.artifacts || [];
-          const fw = artifacts.find(a => a.name === "firmware-bin");
-          const meta = artifacts.find(a => a.name === "build-meta");
+            const run = data.workflow_runs.find(r => r.head_sha === headSha && r.name === "CI (build)");
+            if (!run) core.setFailed(`No matching CI (build) run found for head_sha=${headSha}.`);
 
-          if (!meta) core.setFailed("build-meta artifact not found in CI run artifacts.");
-          // firmware-bin is nice-to-have for linking; fail if you want.
-          core.setOutput("fw_id", fw ? String(fw.id) : "");
-          core.setOutput("meta_id", String(meta.id));
+            core.setOutput("run_id", String(run.id));
+            core.setOutput("run_html_url", run.html_url);
 
-    - name: Download build-meta artifact zip and extract pio.log
-      id: parse_log
-      shell: bash
-      env:
-        OWNER: ${{ github.repository_owner }}
-        REPO: ${{ github.event.repository.name }}
-        META_ID: ${{ steps.artifacts.outputs.meta_id }}
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        set -euo pipefail
+        - name: Locate artifact IDs in the CI run
+        id: artifacts
+        uses: actions/github-script@v8
+        with:
+            script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runId = Number("${{ steps.find_run.outputs.run_id }}");
 
-        # Download artifact zip via GitHub API (will redirect to blob storage; -L follows)
-        api="https://api.github.com/repos/${OWNER}/${REPO}/actions/artifacts/${META_ID}/zip"
-        curl -sSL \
-          -H "Authorization: Bearer ${GH_TOKEN}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          -o build-meta.zip \
-          "${api}"
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: runId,
+                per_page: 100,
+            });
 
-        mkdir -p build-meta
-        unzip -q build-meta.zip -d build-meta
+            const artifacts = data.artifacts || [];
+            const fw = artifacts.find(a => a.name === "firmware-bin");
+            const meta = artifacts.find(a => a.name === "build-meta");
 
-        if [[ ! -f build-meta/pio.log ]]; then
-          echo "pio.log not found inside build-meta artifact"
-          echo "ram_line=" >> "$GITHUB_OUTPUT"
-          echo "flash_line=" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
+            if (!meta) core.setFailed("build-meta artifact not found in CI run artifacts.");
+            // firmware-bin is nice-to-have for linking; fail if you want.
+            core.setOutput("fw_id", fw ? String(fw.id) : "");
+            core.setOutput("meta_id", String(meta.id));
 
-        ram_line="$(grep -E "RAM:\s" -m1 build-meta/pio.log || true)"
-        flash_line="$(grep -E "Flash:\s" -m1 build-meta/pio.log || true)"
+        - name: Download build-meta artifact zip and extract pio.log
+        id: parse_log
+        shell: bash
+        env:
+            OWNER: ${{ github.repository_owner }}
+            REPO: ${{ github.event.repository.name }}
+            META_ID: ${{ steps.artifacts.outputs.meta_id }}
+            GH_TOKEN: ${{ github.token }}
+        run: |
+            set -euo pipefail
 
-        echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
-        echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
+            # Download artifact zip via GitHub API (will redirect to blob storage; -L follows)
+            api="https://api.github.com/repos/${OWNER}/${REPO}/actions/artifacts/${META_ID}/zip"
+            curl -sSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o build-meta.zip \
+            "${api}"
 
-    - name: Post/update PR comment with RAM/Flash + artifact links
-      uses: actions/github-script@v8
-      with:
-        script: |
-          const owner = context.repo.owner;
-          const repo = context.repo.repo;
-          const prNumber = context.payload.pull_request.number;
+            mkdir -p build-meta
+            unzip -q build-meta.zip -d build-meta
 
-          const runId = Number("${{ steps.find_run.outputs.run_id }}");
-          const runUrl = "${{ steps.find_run.outputs.run_html_url }}";
+            if [[ ! -f build-meta/pio.log ]]; then
+            echo "pio.log not found inside build-meta artifact"
+            echo "ram_line=" >> "$GITHUB_OUTPUT"
+            echo "flash_line=" >> "$GITHUB_OUTPUT"
+            exit 0
+            fi
 
-          const marker = '<!-- firmware-stats -->';
-          const ram = `${{ steps.parse_log.outputs.ram_line }}`.trim();
-          const flash = `${{ steps.parse_log.outputs.flash_line }}`.trim();
+            ram_line="$(grep -E "RAM:\s" -m1 build-meta/pio.log || true)"
+            flash_line="$(grep -E "Flash:\s" -m1 build-meta/pio.log || true)"
 
-          const fwId = `${{ steps.artifacts.outputs.fw_id }}`.trim();
-          const metaId = `${{ steps.artifacts.outputs.meta_id }}`.trim();
+            echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
+            echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
 
-          const fwUrl = fwId ? `https://github.com/${owner}/${repo}/actions/runs/${runId}/artifacts/${fwId}` : null;
-          const metaUrl = metaId ? `https://github.com/${owner}/${repo}/actions/runs/${runId}/artifacts/${metaId}` : null;
+        - name: Post/update PR comment with RAM/Flash + artifact links
+        uses: actions/github-script@v8
+        with:
+            script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.pull_request.number;
 
-          const body =
+            const runId = Number("${{ steps.find_run.outputs.run_id }}");
+            const runUrl = "${{ steps.find_run.outputs.run_html_url }}";
+
+            const marker = '<!-- firmware-stats -->';
+            const ram = `${{ steps.parse_log.outputs.ram_line }}`.trim();
+            const flash = `${{ steps.parse_log.outputs.flash_line }}`.trim();
+
+            const fwId = `${{ steps.artifacts.outputs.fw_id }}`.trim();
+            const metaId = `${{ steps.artifacts.outputs.meta_id }}`.trim();
+
+            const fwUrl = fwId ? `https://github.com/${owner}/${repo}/actions/runs/${runId}/artifacts/${fwId}` : null;
+            const metaUrl = metaId ? `https://github.com/${owner}/${repo}/actions/runs/${runId}/artifacts/${metaId}` : null;
+
+            const body =
 `${marker}
 **Firmware build stats**
 
@@ -120,26 +139,26 @@ ${flash || "Flash: not found"}
 - Build logs: ${metaUrl ? `[build-meta](${metaUrl})` : "artifact not found"}
 `;
 
-          const { data: comments } = await github.rest.issues.listComments({
-            owner,
-            repo,
-            issue_number: prNumber,
-            per_page: 100,
-          });
+            const { data: comments } = await github.rest.issues.listComments({
+                owner,
+                repo,
+                issue_number: prNumber,
+                per_page: 100,
+            });
 
-          const existing = comments.find(c => (c.body || "").includes(marker));
-          if (existing) {
-            await github.rest.issues.updateComment({
-              owner,
-              repo,
-              comment_id: existing.id,
-              body,
-            });
-          } else {
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: prNumber,
-              body,
-            });
-          }
+            const existing = comments.find(c => (c.body || "").includes(marker));
+            if (existing) {
+                await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+                });
+            } else {
+                await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body,
+                });
+            }
