@@ -7,7 +7,6 @@ name: CI
 permissions:
   contents: read
   pull-requests: write
-  repository-projects: write
 
 
 jobs:
