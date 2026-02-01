@@ -65,7 +65,9 @@ jobs:
         run: pip install --upgrade platformio
 
       - name: Build CrossPoint
-        run: pio run
+        run: |
+          set -euo pipefail
+          pio run | tee pio.log
 
       - name: Extract firmware stats
 
