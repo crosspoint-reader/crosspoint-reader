@@ -2,14 +2,18 @@
 
 #include <HTTPClient.h>
 #include <HardwareSerial.h>
+#include <StreamString.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
+#include <base64.h>
 
+#include <cstring>
 #include <memory>
 
+#include "CrossPointSettings.h"
 #include "util/UrlUtils.h"
 
-bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
+bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
   std::unique_ptr<WiFiClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
@@ -27,6 +31,13 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
+  // Add Basic HTTP auth if credentials are configured
+  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
+    std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
+    String encoded = base64::encode(credentials.c_str());
+    http.addHeader("Authorization", "Basic " + encoded);
+  }
+
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK) {
     Serial.printf("[%lu] [HTTP] Fetch failed: %d\n", millis(), httpCode);
@@ -34,10 +45,20 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
     return false;
   }
 
-  outContent = http.getString().c_str();
+  http.writeToStream(&outContent);
+
   http.end();
 
-  Serial.printf("[%lu] [HTTP] Fetched %zu bytes\n", millis(), outContent.size());
+  Serial.printf("[%lu] [HTTP] Fetch success\n", millis());
+  return true;
+}
+
+bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
+  StreamString stream;
+  if (!fetchUrl(url, stream)) {
+    return false;
+  }
+  outContent = stream.c_str();
   return true;
 }
 
@@ -60,6 +81,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+
+  // Add Basic HTTP auth if credentials are configured
+  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
+    std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
+    String encoded = base64::encode(credentials.c_str());
+    http.addHeader("Authorization", "Basic " + encoded);
+  }
 
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK) {

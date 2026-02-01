@@ -12,6 +12,7 @@
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
 #include "WifiSelectionActivity.h"
+#include "activities/network/CalibreConnectActivity.h"
 #include "fontIds.h"
 
 namespace {
@@ -125,14 +126,31 @@ void CrossPointWebServerActivity::onExit() {
 }
 
 void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) {
-  Serial.printf("[%lu] [WEBACT] Network mode selected: %s\n", millis(),
-                mode == NetworkMode::JOIN_NETWORK ? "Join Network" : "Create Hotspot");
+  const char* modeName = "Join Network";
+  if (mode == NetworkMode::CONNECT_CALIBRE) {
+    modeName = "Connect to Calibre";
+  } else if (mode == NetworkMode::CREATE_HOTSPOT) {
+    modeName = "Create Hotspot";
+  }
+  Serial.printf("[%lu] [WEBACT] Network mode selected: %s\n", millis(), modeName);
 
   networkMode = mode;
   isApMode = (mode == NetworkMode::CREATE_HOTSPOT);
 
   // Exit mode selection subactivity
   exitActivity();
+
+  if (mode == NetworkMode::CONNECT_CALIBRE) {
+    exitActivity();
+    enterNewActivity(new CalibreConnectActivity(renderer, mappedInput, [this] {
+      exitActivity();
+      state = WebServerActivityState::MODE_SELECTION;
+      enterNewActivity(new NetworkModeSelectionActivity(
+          renderer, mappedInput, [this](const NetworkMode nextMode) { onNetworkModeSelected(nextMode); },
+          [this]() { onGoBack(); }));
+    }));
+    return;
+  }
 
   if (mode == NetworkMode::JOIN_NETWORK) {
     // STA mode - launch WiFi selection

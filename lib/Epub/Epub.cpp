@@ -226,6 +226,8 @@ bool Epub::load(const bool buildIfMissing) {
   Serial.printf("[%lu] [EBP] Cache not found, building spine/TOC cache\n", millis());
   setupCacheDir();
 
+  const uint32_t indexingStart = millis();
+
   // Begin building cache - stream entries to disk immediately
   if (!bookMetadataCache->beginWrite()) {
     Serial.printf("[%lu] [EBP] Could not begin writing cache\n", millis());
@@ -233,6 +235,7 @@ bool Epub::load(const bool buildIfMissing) {
   }
 
   // OPF Pass
+  const uint32_t opfStart = millis();
   BookMetadataCache::BookMetadata bookMetadata;
   if (!bookMetadataCache->beginContentOpfPass()) {
     Serial.printf("[%lu] [EBP] Could not begin writing content.opf pass\n", millis());
@@ -246,8 +249,10 @@ bool Epub::load(const bool buildIfMissing) {
     Serial.printf("[%lu] [EBP] Could not end writing content.opf pass\n", millis());
     return false;
   }
+  Serial.printf("[%lu] [EBP] OPF pass completed in %lu ms\n", millis(), millis() - opfStart);
 
   // TOC Pass - try EPUB 3 nav first, fall back to NCX
+  const uint32_t tocStart = millis();
   if (!bookMetadataCache->beginTocPass()) {
     Serial.printf("[%lu] [EBP] Could not begin writing toc pass\n", millis());
     return false;
@@ -276,6 +281,7 @@ bool Epub::load(const bool buildIfMissing) {
     Serial.printf("[%lu] [EBP] Could not end writing toc pass\n", millis());
     return false;
   }
+  Serial.printf("[%lu] [EBP] TOC pass completed in %lu ms\n", millis(), millis() - tocStart);
 
   // Close the cache files
   if (!bookMetadataCache->endWrite()) {
@@ -284,10 +290,13 @@ bool Epub::load(const bool buildIfMissing) {
   }
 
   // Build final book.bin
+  const uint32_t buildStart = millis();
   if (!bookMetadataCache->buildBookBin(filepath, bookMetadata)) {
     Serial.printf("[%lu] [EBP] Could not update mappings and sizes\n", millis());
     return false;
   }
+  Serial.printf("[%lu] [EBP] buildBookBin completed in %lu ms\n", millis(), millis() - buildStart);
+  Serial.printf("[%lu] [EBP] Total indexing completed in %lu ms\n", millis(), millis() - indexingStart);
 
   if (!bookMetadataCache->cleanupTmpFiles()) {
     Serial.printf("[%lu] [EBP] Could not cleanup tmp files - ignoring\n", millis());
@@ -359,7 +368,7 @@ const std::string& Epub::getLanguage() const {
 }
 
 std::string Epub::getCoverBmpPath(bool cropped) const {
-  const auto coverFileName = "cover" + cropped ? "_crop" : "";
+  const auto coverFileName = std::string("cover") + (cropped ? "_crop" : "");
   return cachePath + "/" + coverFileName + ".bmp";
 }
 
@@ -382,7 +391,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
 
   if (coverImageHref.substr(coverImageHref.length() - 4) == ".jpg" ||
       coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
-    Serial.printf("[%lu] [EBP] Generating BMP from JPG cover image\n", millis());
+    Serial.printf("[%lu] [EBP] Generating BMP from JPG cover image (%s mode)\n", millis(), cropped ? "cropped" : "fit");
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
     FsFile coverJpg;
@@ -401,7 +410,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
       coverJpg.close();
       return false;
     }
-    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
+    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped);
     coverJpg.close();
     coverBmp.close();
     SdMan.remove(coverJpgTempPath.c_str());

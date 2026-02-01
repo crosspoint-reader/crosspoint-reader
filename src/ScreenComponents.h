@@ -13,7 +13,10 @@ struct TabInfo {
 
 class ScreenComponents {
  public:
+  static const int BOOK_PROGRESS_BAR_HEIGHT = 4;
+
   static void drawBattery(const GfxRenderer& renderer, int left, int top, bool showPercentage = true);
+  static void drawBookProgressBar(const GfxRenderer& renderer, size_t bookProgress);
 
   // Draw a horizontal tab bar with underline indicator for selected tab
   // Returns the height of the tab bar (for positioning content below)
