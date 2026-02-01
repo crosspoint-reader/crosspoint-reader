@@ -42,6 +42,38 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   renderer.fillRect(x + 2, y + 2, filledWidth, batteryHeight - 4);
 }
 
+ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& renderer, const char* message) {
+  constexpr int margin = 15;
+  constexpr int y = 60;
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
+  const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int w = textWidth + margin * 2;
+  const int h = textHeight + margin * 2;
+  const int x = (renderer.getScreenWidth() - w) / 2;
+
+  renderer.fillRect(x - 2, y - 2, w + 4, h + 4, true);  // frame thickness 2
+  renderer.fillRect(x, y, w, h, false);
+
+  const int textX = x + (w - textWidth) / 2;
+  const int textY = y + margin - 2;
+  renderer.drawText(UI_12_FONT_ID, textX, textY, message, true, EpdFontFamily::BOLD);
+  renderer.displayBuffer();
+  return {x, y, w, h};
+}
+
+void ScreenComponents::fillPopupProgress(const GfxRenderer& renderer, const PopupLayout& layout, const int progress) {
+  constexpr int barHeight = 4;
+  const int barWidth = layout.width - 30;  // twice the margin in drawPopup to match text width
+  const int barX = layout.x + (layout.width - barWidth) / 2;
+  const int barY = layout.y + layout.height - 10;
+
+  int fillWidth = barWidth * progress / 100;
+
+  renderer.fillRect(barX, barY, fillWidth, barHeight, true);
+
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+}
+
 void ScreenComponents::drawBookProgressBar(const GfxRenderer& renderer, const size_t bookProgress) {
   int vieweableMarginTop, vieweableMarginRight, vieweableMarginBottom, vieweableMarginLeft;
   renderer.getOrientedViewableTRBL(&vieweableMarginTop, &vieweableMarginRight, &vieweableMarginBottom,
