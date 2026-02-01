@@ -125,19 +125,12 @@ jobs:
             const metaUrl = metaId ? `https://github.com/${owner}/${repo}/actions/runs/${runId}/artifacts/${metaId}` : null;
 
             const body =
-`${marker}
-**Firmware build stats**
-
-\`\`\`
-${ram || "RAM: not found"}
-${flash || "Flash: not found"}
-\`\`\`
-
-**Artifacts**
-- CI run: ${runUrl}
-- Firmware binary: ${fwUrl ? `[firmware-bin](${fwUrl})` : "artifact not found"}
-- Build logs: ${metaUrl ? `[build-meta](${metaUrl})` : "artifact not found"}
-`;
+              `${marker}\n**Firmware build stats**\n\n` +
+              `\`\`\`\n${ram || "RAM: not found"}\n${flash || "Flash: not found"}\n\`\`\`\n\n` +
+              `**Artifacts**\n` +
+              `- CI run: ${runUrl}\n` +
+              `- Firmware binary: ${fwUrl ? `[firmware-bin](${fwUrl})` : "artifact not found"}\n` +
+              `- Build logs: ${metaUrl ? `[build-meta](${metaUrl})` : "artifact not found"}`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner,
