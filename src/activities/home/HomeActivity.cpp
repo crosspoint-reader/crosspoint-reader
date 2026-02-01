@@ -3,7 +3,7 @@
 #include <Bitmap.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <Xtc.h>
 
 #include <cstring>
@@ -35,7 +35,7 @@ void HomeActivity::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
 
   // Check if we have a book to continue reading
-  hasContinueReading = !APP_STATE.openEpubPath.empty() && SdMan.exists(APP_STATE.openEpubPath.c_str());
+  hasContinueReading = !APP_STATE.openEpubPath.empty() && Storage.exists(APP_STATE.openEpubPath.c_str());
 
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
@@ -241,8 +241,8 @@ void HomeActivity::render() {
     // Only load from SD on first render, then use stored buffer
     if (hasContinueReading && hasCoverImage && !coverBmpPath.empty() && !coverRendered) {
       // First time: load cover from SD and render
-      FsFile file;
-      if (SdMan.openFileForRead("HOME", coverBmpPath, file)) {
+      File file;
+      if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           // Calculate position to center image within the book card

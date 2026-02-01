@@ -1,7 +1,7 @@
 #include "MyLibraryActivity.h"
 
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include <algorithm>
 
@@ -72,7 +72,7 @@ void MyLibraryActivity::loadRecentBooks() {
 
   for (const auto& book : books) {
     // Skip if file no longer exists
-    if (!SdMan.exists(book.path.c_str())) {
+    if (!Storage.exists(book.path.c_str())) {
       continue;
     }
     recentBooks.push_back(book);
@@ -82,7 +82,7 @@ void MyLibraryActivity::loadRecentBooks() {
 void MyLibraryActivity::loadFiles() {
   files.clear();
 
-  auto root = SdMan.open(basepath.c_str());
+  auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
     if (root) root.close();
     return;

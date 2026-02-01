@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
@@ -25,7 +25,7 @@ constexpr uint16_t LOCAL_UDP_PORT = 8134;
 CrossPointWebServer* wsInstance = nullptr;
 
 // WebSocket upload state
-FsFile wsUploadFile;
+File wsUploadFile;
 String wsUploadFileName;
 String wsUploadPath;
 size_t wsUploadSize = 0;
@@ -280,7 +280,7 @@ void CrossPointWebServer::handleStatus() const {
 }
 
 void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
-  FsFile root = SdMan.open(path);
+  File root = Storage.open(path);
   if (!root) {
     Serial.printf("[%lu] [WEB] Failed to open directory: %s\n", millis(), path);
     return;
@@ -294,7 +294,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
   Serial.printf("[%lu] [WEB] Scanning files in: %s\n", millis(), path);
 
-  FsFile file = root.openNextFile();
+  File file = root.openNextFile();
   char name[500];
   while (file) {
     file.getName(name, sizeof(name));
@@ -422,12 +422,12 @@ void CrossPointWebServer::handleDownload() const {
     }
   }
 
-  if (!SdMan.exists(itemPath.c_str())) {
+  if (!Storage.exists(itemPath.c_str())) {
     server->send(404, "text/plain", "Item not found");
     return;
   }
 
-  FsFile file = SdMan.open(itemPath.c_str());
+  File file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -459,7 +459,7 @@ void CrossPointWebServer::handleDownload() const {
 }
 
 // Static variables for upload handling
-static FsFile uploadFile;
+static File uploadFile;
 static String uploadFileName;
 static String uploadPath = "/";
 static size_t uploadSize = 0;
@@ -553,15 +553,15 @@ void CrossPointWebServer::handleUpload() const {
 
     // Check if file already exists - SD operations can be slow
     esp_task_wdt_reset();
-    if (SdMan.exists(filePath.c_str())) {
+    if (Storage.exists(filePath.c_str())) {
       Serial.printf("[%lu] [WEB] [UPLOAD] Overwriting existing file: %s\n", millis(), filePath.c_str());
       esp_task_wdt_reset();
-      SdMan.remove(filePath.c_str());
+      Storage.remove(filePath.c_str());
     }
 
     // Open file for writing - this can be slow due to FAT cluster allocation
     esp_task_wdt_reset();
-    if (!SdMan.openFileForWrite("WEB", filePath, uploadFile)) {
+    if (!Storage.openFileForWrite("WEB", filePath, uploadFile)) {
       uploadError = "Failed to create file on SD card";
       Serial.printf("[%lu] [WEB] [UPLOAD] FAILED to create file: %s\n", millis(), filePath.c_str());
       return;
@@ -639,7 +639,7 @@ void CrossPointWebServer::handleUpload() const {
       String filePath = uploadPath;
       if (!filePath.endsWith("/")) filePath += "/";
       filePath += uploadFileName;
-      SdMan.remove(filePath.c_str());
+      Storage.remove(filePath.c_str());
     }
     uploadError = "Upload aborted";
     Serial.printf("[%lu] [WEB] Upload aborted\n", millis());
@@ -690,13 +690,13 @@ void CrossPointWebServer::handleCreateFolder() const {
   Serial.printf("[%lu] [WEB] Creating folder: %s\n", millis(), folderPath.c_str());
 
   // Check if already exists
-  if (SdMan.exists(folderPath.c_str())) {
+  if (Storage.exists(folderPath.c_str())) {
     server->send(400, "text/plain", "Folder already exists");
     return;
   }
 
   // Create the folder
-  if (SdMan.mkdir(folderPath.c_str())) {
+  if (Storage.mkdir(folderPath.c_str())) {
     Serial.printf("[%lu] [WEB] Folder created successfully: %s\n", millis(), folderPath.c_str());
     server->send(200, "text/plain", "Folder created: " + folderName);
   } else {
@@ -746,7 +746,7 @@ void CrossPointWebServer::handleDelete() const {
   }
 
   // Check if item exists
-  if (!SdMan.exists(itemPath.c_str())) {
+  if (!Storage.exists(itemPath.c_str())) {
     Serial.printf("[%lu] [WEB] Delete failed - item not found: %s\n", millis(), itemPath.c_str());
     server->send(404, "text/plain", "Item not found");
     return;
@@ -758,10 +758,10 @@ void CrossPointWebServer::handleDelete() const {
 
   if (itemType == "folder") {
     // For folders, try to remove (will fail if not empty)
-    FsFile dir = SdMan.open(itemPath.c_str());
+    File dir = Storage.open(itemPath.c_str());
     if (dir && dir.isDirectory()) {
       // Check if folder is empty
-      FsFile entry = dir.openNextFile();
+      File entry = dir.openNextFile();
       if (entry) {
         // Folder is not empty
         entry.close();
@@ -772,10 +772,10 @@ void CrossPointWebServer::handleDelete() const {
       }
       dir.close();
     }
-    success = SdMan.rmdir(itemPath.c_str());
+    success = Storage.rmdir(itemPath.c_str());
   } else {
     // For files, use remove
-    success = SdMan.remove(itemPath.c_str());
+    success = Storage.remove(itemPath.c_str());
   }
 
   if (success) {
@@ -811,7 +811,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        SdMan.remove(filePath.c_str());
+        Storage.remove(filePath.c_str());
         Serial.printf("[%lu] [WS] Deleted incomplete upload: %s\n", millis(), filePath.c_str());
       }
       wsUploadInProgress = false;
@@ -855,13 +855,13 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
           // Check if file exists and remove it
           esp_task_wdt_reset();
-          if (SdMan.exists(filePath.c_str())) {
-            SdMan.remove(filePath.c_str());
+          if (Storage.exists(filePath.c_str())) {
+            Storage.remove(filePath.c_str());
           }
 
           // Open file for writing
           esp_task_wdt_reset();
-          if (!SdMan.openFileForWrite("WS", filePath, wsUploadFile)) {
+          if (!Storage.openFileForWrite("WS", filePath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
             wsUploadInProgress = false;
             return;
