@@ -9,8 +9,8 @@ name: CI
 #   issues: write
 #   pull-requests: write
 
-permissions: 
-  write-all
+# permissions: 
+#   write-all
 
 
 jobs:
