@@ -1,6 +1,7 @@
 #pragma once
 #include <SdFat.h>
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -8,6 +9,7 @@
 
 enum PageElementTag : uint8_t {
   TAG_PageLine = 1,
+  TAG_PageImage = 2,
 };
 
 // represents something that has been added to a page
@@ -19,6 +21,7 @@ class PageElement {
   virtual ~PageElement() = default;
   virtual void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) = 0;
   virtual bool serialize(FsFile& file) = 0;
+  virtual PageElementTag tag() const = 0;
 };
 
 // a line from a block element
@@ -30,7 +33,20 @@ class PageLine final : public PageElement {
       : PageElement(xPos, yPos), block(std::move(block)) {}
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
   bool serialize(FsFile& file) override;
+  PageElementTag tag() const override { return TAG_PageLine; }
   static std::unique_ptr<PageLine> deserialize(FsFile& file);
+};
+
+class PageImage final : public PageElement {
+  std::string bmpPath;
+
+ public:
+  PageImage(std::string bmpPath, const int16_t xPos, const int16_t yPos)
+      : PageElement(xPos, yPos), bmpPath(std::move(bmpPath)) {}
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  bool serialize(FsFile& file) override;
+  PageElementTag tag() const override { return TAG_PageImage; }
+  static std::unique_ptr<PageImage> deserialize(FsFile& file);
 };
 
 class Page {

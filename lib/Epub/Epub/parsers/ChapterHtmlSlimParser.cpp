@@ -1,10 +1,14 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <JpegToBmpConverter.h>
 #include <SDCardManager.h>
+#include <ZipFile.h>
 #include <expat.h>
 
+#include "../../Epub.h"
 #include "../Page.h"
 
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
@@ -29,6 +33,27 @@ const char* SKIP_TAGS[] = {"head"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
+
+bool isJpegPath(const std::string& path) {
+  if (path.size() < 4) {
+    return false;
+  }
+  std::string lower = path;
+  for (auto& c : lower) {
+    if (c >= 'A' && c <= 'Z') {
+      c = static_cast<char>(c + ('a' - 'A'));
+    }
+  }
+  return lower.size() >= 4 && (lower.rfind(".jpg") == lower.size() - 4 || lower.rfind(".jpeg") == lower.size() - 5);
+}
+
+std::string getBaseDir(const std::string& path) {
+  const auto lastSlash = path.find_last_of('/');
+  if (lastSlash == std::string::npos) {
+    return "";
+  }
+  return path.substr(0, lastSlash + 1);
+}
 
 // given the start and end of a tag, check to see if it matches a known tag
 bool matches(const char* tag_name, const char* possible_tags[], const int possible_tag_count) {
@@ -71,6 +96,97 @@ void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style) {
   currentTextBlock.reset(new ParsedText(style, extraParagraphSpacing, hyphenationEnabled));
 }
 
+void ChapterHtmlSlimParser::addImageToPage(const std::string& bmpPath, const int bmpWidth, const int bmpHeight) {
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
+  if (currentPageNextY + bmpHeight > viewportHeight && currentPageNextY > 0) {
+    completePageFn(std::move(currentPage));
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
+  const int16_t xPos = static_cast<int16_t>(std::max(0, (static_cast<int>(viewportWidth) - bmpWidth) / 2));
+  currentPage->elements.push_back(std::make_shared<PageImage>(bmpPath, xPos, currentPageNextY));
+  currentPageNextY += bmpHeight;
+
+  if (extraParagraphSpacing) {
+    const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+    currentPageNextY += lineHeight / 2;
+  }
+}
+
+std::string ChapterHtmlSlimParser::resolveImageHref(const std::string& src) const {
+  if (src.empty()) {
+    return "";
+  }
+  if (src.rfind("http://", 0) == 0 || src.rfind("https://", 0) == 0 || src.rfind("data:", 0) == 0) {
+    return "";
+  }
+
+  if (!src.empty() && src[0] == '/') {
+    return FsHelpers::normalisePath(src.substr(1));
+  }
+
+  return FsHelpers::normalisePath(getBaseDir(chapterHref) + src);
+}
+
+bool ChapterHtmlSlimParser::generateImageBmp(const std::string& imageHref, std::string* outBmpPath) const {
+  if (!epub || imageHref.empty() || !outBmpPath) {
+    return false;
+  }
+
+  const auto cacheDir = epub->getCachePath() + "/images";
+  SdMan.mkdir(cacheDir.c_str());
+
+  const uint64_t hrefHash = ZipFile::fnvHash64(imageHref.c_str(), imageHref.size());
+  const auto bmpPath = cacheDir + "/img_" + std::to_string(hrefHash) + ".bmp";
+  *outBmpPath = bmpPath;
+
+  if (SdMan.exists(bmpPath.c_str())) {
+    return true;
+  }
+
+  const auto tmpJpgPath = cacheDir + "/.tmp_" + std::to_string(hrefHash) + ".jpg";
+  FsFile tmpJpg;
+  if (!SdMan.openFileForWrite("EHP", tmpJpgPath, tmpJpg)) {
+    return false;
+  }
+  const bool streamOk = epub->readItemContentsToStream(imageHref, tmpJpg, 1024);
+  tmpJpg.close();
+  if (!streamOk) {
+    SdMan.remove(tmpJpgPath.c_str());
+    return false;
+  }
+
+  FsFile jpgFile;
+  if (!SdMan.openFileForRead("EHP", tmpJpgPath, jpgFile)) {
+    SdMan.remove(tmpJpgPath.c_str());
+    return false;
+  }
+
+  FsFile bmpFile;
+  if (!SdMan.openFileForWrite("EHP", bmpPath, bmpFile)) {
+    jpgFile.close();
+    SdMan.remove(tmpJpgPath.c_str());
+    return false;
+  }
+
+  const bool success = JpegToBmpConverter::jpegFileToBmpStreamWithSize(jpgFile, bmpFile, viewportWidth, viewportHeight);
+  jpgFile.close();
+  bmpFile.close();
+  SdMan.remove(tmpJpgPath.c_str());
+
+  if (!success) {
+    SdMan.remove(bmpPath.c_str());
+    return false;
+  }
+
+  return true;
+}
+
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
@@ -96,29 +212,69 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
-    // TODO: Start processing image tags
+    std::string src;
     std::string alt = "[Image]";
     if (atts != nullptr) {
       for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "src") == 0 && atts[i + 1]) {
+          src = atts[i + 1];
+        }
         if (strcmp(atts[i], "alt") == 0) {
           if (strlen(atts[i + 1]) > 0) {
             alt = "[Image: " + std::string(atts[i + 1]) + "]";
           }
-          break;
         }
       }
     }
 
-    Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
+    const std::string imageHref = self->resolveImageHref(src);
+    bool renderedImage = false;
+    if (!imageHref.empty() && isJpegPath(imageHref)) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+      if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+        self->makePages();
+      }
 
-    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
-    self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
-    // Advance depth before processing character data (like you would for a element with text)
+      std::string bmpPath;
+      if (self->generateImageBmp(imageHref, &bmpPath)) {
+        FsFile bmpFile;
+        if (SdMan.openFileForRead("EHP", bmpPath, bmpFile)) {
+          Bitmap bitmap(bmpFile, true);
+          const auto err = bitmap.parseHeaders();
+          if (err == BmpReaderError::Ok) {
+            self->addImageToPage(bmpPath, bitmap.getWidth(), bitmap.getHeight());
+            renderedImage = true;
+          } else {
+            Serial.printf("[%lu] [EHP] Failed to parse bitmap %s: %s\n", millis(), bmpPath.c_str(),
+                          Bitmap::errorToString(err));
+          }
+          bmpFile.close();
+        }
+      } else {
+        Serial.printf("[%lu] [EHP] Failed to generate image bmp for %s\n", millis(), imageHref.c_str());
+      }
+
+      if (renderedImage) {
+        self->startNewTextBlock(static_cast<TextBlock::Style>(self->paragraphAlignment));
+      }
+    }
+
+    if (!renderedImage) {
+      Serial.printf("[%lu] [EHP] Image unsupported, alt: %s\n", millis(), alt.c_str());
+      self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+      self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
+      // Advance depth before processing character data (like you would for a element with text)
+      self->depth += 1;
+      self->characterData(userData, alt.c_str(), alt.length());
+
+      // Skip table contents (skip until parent as we pre-advanced depth above)
+      self->skipUntilDepth = self->depth - 1;
+      return;
+    }
+
     self->depth += 1;
-    self->characterData(userData, alt.c_str(), alt.length());
-
-    // Skip table contents (skip until parent as we pre-advanced depth above)
-    self->skipUntilDepth = self->depth - 1;
     return;
   }
 
