@@ -294,22 +294,10 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
-  switch (gpio.getWakeupReason()) {
-    case HalGPIO::WakeupReason::PowerButton:
-      // For normal wakeups, verify power button press duration
-      Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
-      verifyPowerButtonDuration();
-      break;
-    case HalGPIO::WakeupReason::AfterUSBPower:
-      // If USB power caused a cold boot, go back to sleep
-      Serial.printf("[%lu] [   ] Wakeup reason: After USB Power\n", millis());
-      gpio.startDeepSleep();
-      break;
-    case HalGPIO::WakeupReason::AfterFlash:
-      // After flashing, just proceed to boot
-    case HalGPIO::WakeupReason::Other:
-    default:
-      break;
+  if (gpio.isWakeupByPowerButton()) {
+    // For normal wakeups, verify power button press duration
+    Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
+    verifyPowerButtonDuration();
   }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
