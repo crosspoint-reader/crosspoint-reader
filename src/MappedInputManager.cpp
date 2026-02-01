@@ -18,12 +18,13 @@ struct SideLayoutMap {
 };
 
 // Order matches CrossPointSettings::FRONT_BUTTON_LAYOUT.
+// [back, confirm, left, right] are actioned by these physical buttons:
 constexpr FrontLayoutMap kFrontLayouts[] = {
     {HalGPIO::BTN_BACK, HalGPIO::BTN_CONFIRM, HalGPIO::BTN_LEFT, HalGPIO::BTN_RIGHT},
     {HalGPIO::BTN_LEFT, HalGPIO::BTN_RIGHT, HalGPIO::BTN_BACK, HalGPIO::BTN_CONFIRM},
     {HalGPIO::BTN_CONFIRM, HalGPIO::BTN_LEFT, HalGPIO::BTN_BACK, HalGPIO::BTN_RIGHT},
     {HalGPIO::BTN_BACK, HalGPIO::BTN_CONFIRM, HalGPIO::BTN_RIGHT, HalGPIO::BTN_LEFT},
-    {HalGPIO::BTN_BACK, HalGPIO::BTN_LEFT, HalGPIO::BTN_RIGHT, HalGPIO::BTN_CONFIRM},
+    {HalGPIO::BTN_BACK, HalGPIO::BTN_RIGHT, HalGPIO::BTN_CONFIRM, HalGPIO::BTN_LEFT},
 };
 
 // Order matches CrossPointSettings::SIDE_BUTTON_LAYOUT.
