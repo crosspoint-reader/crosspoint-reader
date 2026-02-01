@@ -37,10 +37,10 @@ jobs:
               `${{ steps.title_check.outputs.error_message || steps.title_check.outputs.error || '' }}`.trim();
             const details = error ? `\n\n**Error:** ${error}` : '\n\n**Error:** See workflow logs.';
             const body = `${marker}
-            **PR title check failed**
+**PR title check failed**
 
-            Please use a Conventional Commit-style prefix (e.g., \`feat:\`, \`fix:\`, \`docs:\`, \`chore:\`).
-            If this change should appear in release notes, ensure the title reflects the correct category.${details}`;
+Please use a Conventional Commit-style prefix (e.g., \`feat:\`, \`fix:\`, \`docs:\`, \`chore:\`).
+If this change should appear in release notes, ensure the title reflects the correct category.${details}`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
