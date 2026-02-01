@@ -14,7 +14,7 @@ ScreenMarginSelectionActivity::ScreenMarginSelectionActivity(GfxRenderer& render
             if (index >= options.size()) {
               return;
             }
-            SETTINGS.screenMargin = CrossPointSettings::SCREEN_MARGIN_VALUES[index];
+            SETTINGS.screenMargin = static_cast<uint8_t>(index);
             SETTINGS.saveToFile();
             onBack();
           },
@@ -25,9 +25,8 @@ ScreenMarginSelectionActivity::ScreenMarginSelectionActivity(GfxRenderer& render
 }
 
 void ScreenMarginSelectionActivity::loadItems() {
-  const int idx = CrossPointSettings::getScreenMarginIndex(SETTINGS.screenMargin);
-  if (idx >= 0 && static_cast<size_t>(idx) < options.size()) {
-    selectorIndex = static_cast<size_t>(idx);
+  if (SETTINGS.screenMargin < options.size()) {
+    selectorIndex = SETTINGS.screenMargin;
   } else {
     selectorIndex = 0;
   }

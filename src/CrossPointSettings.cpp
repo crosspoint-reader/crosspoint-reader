@@ -24,6 +24,21 @@ constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
 constexpr uint8_t SETTINGS_COUNT = 24;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
+
+const uint8_t SCREEN_MARGIN_PIXEL_VALUES[CrossPointSettings::SCREEN_MARGIN_COUNT] = {
+    #define X(val, str) val,
+    SCREEN_MARGIN_DATA
+    #undef X
+};
+
+int screenMarginPixelToIndex(uint8_t pixelValue) {
+  for (size_t i = 0; i < CrossPointSettings::SCREEN_MARGIN_COUNT; i++) {
+    if (SCREEN_MARGIN_PIXEL_VALUES[i] == pixelValue) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
 }  // namespace
 
 bool CrossPointSettings::saveToFile() const {
@@ -114,6 +129,11 @@ bool CrossPointSettings::loadFromFile() {
     readAndValidate(inputFile, refreshFrequency, REFRESH_FREQUENCY_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, screenMargin);
+    // Migrate old format: stored pixel value (5,10,15...) → index (0,1,2...)
+    if (screenMargin >= SCREEN_MARGIN_COUNT) {
+      const int idx = screenMarginPixelToIndex(screenMargin);
+      screenMargin = (idx >= 0) ? static_cast<uint8_t>(idx) : 0;
+    }
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, sleepScreenCoverMode, SLEEP_SCREEN_COVER_MODE_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
@@ -326,12 +346,10 @@ const char* CrossPointSettings::getScreenMarginString(uint8_t index) {
   return SCREEN_MARGIN_OPTIONS[MARGIN_5];
 }
 
-int CrossPointSettings::getScreenMarginIndex(uint8_t pixelValue) {
-  for (size_t i = 0; i < SCREEN_MARGIN_COUNT; i++) {
-    if (SCREEN_MARGIN_VALUES[i] == pixelValue) {
-      return static_cast<int>(i);
-    }
+uint8_t CrossPointSettings::getScreenMarginPixels() const {
+  if (screenMargin < SCREEN_MARGIN_COUNT) {
+    return SCREEN_MARGIN_PIXEL_VALUES[screenMargin];
   }
-  return -1;
+  return SCREEN_MARGIN_PIXEL_VALUES[MARGIN_5];
 }
 

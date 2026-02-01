@@ -156,7 +156,7 @@ void TxtReaderActivity::initializeReader() {
 
   // Store current settings for cache validation
   cachedFontId = SETTINGS.getReaderFontId();
-  cachedScreenMargin = SETTINGS.screenMargin;
+  cachedScreenMargin = SETTINGS.getScreenMarginPixels();
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 
   // Calculate viewport dimensions

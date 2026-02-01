@@ -312,7 +312,7 @@ void CategorySettingsActivity::render() const {
       valueText = CrossPointSettings::getRefreshFrequencyString(SETTINGS.refreshFrequency);
     } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Screen Margin") == 0) {
       // Format margin value as "X px"
-      valueText = std::to_string(SETTINGS.screenMargin) + " px";
+      valueText = CrossPointSettings::getScreenMarginString(SETTINGS.screenMargin);
     } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Time to Sleep") == 0) {
       valueText = CrossPointSettings::getSleepTimeoutString(SETTINGS.sleepTimeout);
     } else if (settingsList[i].type == SettingType::ACTION && strcmp(settingsList[i].name, "Select Sleep BMP") == 0) {

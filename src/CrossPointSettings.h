@@ -124,11 +124,6 @@ class CrossPointSettings {
       #undef X
       SCREEN_MARGIN_COUNT
   };
-  static inline constexpr uint8_t SCREEN_MARGIN_VALUES[SCREEN_MARGIN_COUNT] = {
-      #define X(val, str) val,
-      SCREEN_MARGIN_DATA
-      #undef X
-  };
 
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, SHORT_PWRBTN_COUNT };
@@ -166,8 +161,8 @@ class CrossPointSettings {
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
 
-  // Reader screen margin settings
-  uint8_t screenMargin = 5;
+  // Reader screen margin (enum index; use getScreenMarginPixels() for pixel value)
+  uint8_t screenMargin = MARGIN_5;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";
@@ -197,8 +192,8 @@ class CrossPointSettings {
   static const char* getSleepScreenString(uint8_t value);
   static const char* getSleepTimeoutString(uint8_t value);
   static const char* getScreenMarginString(uint8_t index);
-  /** Returns index for pixel value, or -1 if not in allowed list. */
-  static int getScreenMarginIndex(uint8_t pixelValue);
+  /** Returns pixel margin for current screenMargin index (e.g. 5, 10, 15...). */
+  uint8_t getScreenMarginPixels() const;
 
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
