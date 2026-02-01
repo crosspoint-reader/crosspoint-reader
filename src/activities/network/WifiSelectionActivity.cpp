@@ -266,9 +266,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
   }
 
   if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
-    connectionError = "Connection failed";
+    connectionError = "Error: General failure";
     if (status == WL_NO_SSID_AVAIL) {
-      connectionError = "Network not found";
+      connectionError = "Error: Network not found";
     }
     state = WifiSelectionState::CONNECTION_FAILED;
     updateRequired = true;
@@ -278,7 +278,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
   // Check for timeout
   if (millis() - connectionStartTime > CONNECTION_TIMEOUT_MS) {
     WiFi.disconnect();
-    connectionError = "Connection timeout";
+    connectionError = "Error: Connection timeout";
     state = WifiSelectionState::CONNECTION_FAILED;
     updateRequired = true;
     return;
@@ -689,7 +689,7 @@ void WifiSelectionActivity::renderForgetPrompt() const {
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Forget Network?", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connection Failed", true, EpdFontFamily::BOLD);
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
@@ -697,7 +697,7 @@ void WifiSelectionActivity::renderForgetPrompt() const {
   }
   renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
 
-  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, "Remove saved password?");
+  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, "Forget network and remove saved password?");
 
   // Draw Cancel/Forget network buttons
   const int buttonY = top + 80;
