@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vector>
 #include <SDCardManager.h>
+
+#include <vector>
 
 using File = FsFile;
 
@@ -39,7 +40,7 @@ class HalStorage {
   bool openFileForWrite(const char* moduleName, const String& path, File& file);
   bool removeDir(const char* path);
 
- static HalStorage& getInstance() { return instance; }
+  static HalStorage& getInstance() { return instance; }
 
  private:
   static HalStorage instance;
