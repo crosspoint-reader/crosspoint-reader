@@ -318,7 +318,7 @@ void CategorySettingsActivity::render() const {
       if (SETTINGS.selectedSleepBmp[0] != '\0') {
         valueText = SETTINGS.selectedSleepBmp;
         if (valueText.length() > 20) {
-          valueText = valueText.substr(0, 17) + "...";
+          valueText.replace(17, std::string::npos, "...");
         }
       } else {
         valueText = "Random";
