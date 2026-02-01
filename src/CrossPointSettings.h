@@ -15,18 +15,18 @@ class CrossPointSettings {
   CrossPointSettings(const CrossPointSettings&) = delete;
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
-  #define SLEEP_SCREEN_DATA \
-      X(DARK, 0, "Dark") \
-      X(LIGHT, 1, "Light") \
-      X(CUSTOM, 2, "Custom") \
-      X(COVER, 3, "Cover") \
-      X(BLANK, 4, "None")
+#define SLEEP_SCREEN_DATA \
+  X(DARK, 0, "Dark")      \
+  X(LIGHT, 1, "Light")    \
+  X(CUSTOM, 2, "Custom")  \
+  X(COVER, 3, "Cover")    \
+  X(BLANK, 4, "None")
 
   enum SLEEP_SCREEN_MODE {
-      #define X(name, val, str) name = val,
-      SLEEP_SCREEN_DATA
-      #undef X
-      SLEEP_SCREEN_MODE_COUNT
+#define X(name, val, str) name = val,
+    SLEEP_SCREEN_DATA
+#undef X
+        SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
@@ -83,46 +83,46 @@ class CrossPointSettings {
     PARAGRAPH_ALIGNMENT_COUNT
   };
 
-  // E-ink refresh frequency (pages between full refreshes)
-  #define REFRESH_DATA \
-      X(REFRESH_1, 0, "1 page") \
-      X(REFRESH_5, 1, "5 pages") \
-      X(REFRESH_10, 2, "10 pages") \
-      X(REFRESH_15, 3, "15 pages") \
-      X(REFRESH_30, 4, "30 pages")
+// E-ink refresh frequency (pages between full refreshes)
+#define REFRESH_DATA           \
+  X(REFRESH_1, 0, "1 page")    \
+  X(REFRESH_5, 1, "5 pages")   \
+  X(REFRESH_10, 2, "10 pages") \
+  X(REFRESH_15, 3, "15 pages") \
+  X(REFRESH_30, 4, "30 pages")
 
   enum REFRESH_FREQUENCY {
-      #define X(name, val, str) name = val,
-      REFRESH_DATA
-      #undef X
-      REFRESH_FREQUENCY_COUNT
+#define X(name, val, str) name = val,
+    REFRESH_DATA
+#undef X
+        REFRESH_FREQUENCY_COUNT
   };
 
-  // Auto-sleep timeout options (in minutes)
-  #define TIMEOUT_DATA \
-      X(SLEEP_1_MIN, 0, "1 min") \
-      X(SLEEP_5_MIN, 1, "5 min") \
-      X(SLEEP_10_MIN, 2, "10 min") \
-      X(SLEEP_15_MIN, 3, "15 min") \
-      X(SLEEP_30_MIN, 4, "30 min")
+// Auto-sleep timeout options (in minutes)
+#define TIMEOUT_DATA           \
+  X(SLEEP_1_MIN, 0, "1 min")   \
+  X(SLEEP_5_MIN, 1, "5 min")   \
+  X(SLEEP_10_MIN, 2, "10 min") \
+  X(SLEEP_15_MIN, 3, "15 min") \
+  X(SLEEP_30_MIN, 4, "30 min")
 
   enum SLEEP_TIMEOUT {
-      #define X(name, val, str) name = val,
-      TIMEOUT_DATA
-      #undef X
-      SLEEP_TIMEOUT_COUNT
+#define X(name, val, str) name = val,
+    TIMEOUT_DATA
+#undef X
+        SLEEP_TIMEOUT_COUNT
   };
 
-  // Reader screen margin options (pixel values)
-  #define SCREEN_MARGIN_DATA \
-      X(5, "5 px") X(10, "10 px") X(15, "15 px") X(20, "20 px") \
-      X(25, "25 px") X(30, "30 px") X(35, "35 px") X(40, "40 px")
+// Reader screen margin options (pixel values)
+#define SCREEN_MARGIN_DATA                                                                                           \
+  X(5, "5 px") X(10, "10 px") X(15, "15 px") X(20, "20 px") X(25, "25 px") X(30, "30 px") X(35, "35 px") X(40, "40 " \
+                                                                                                               "px")
 
   enum SCREEN_MARGIN {
-      #define X(val, str) MARGIN_##val,
-      SCREEN_MARGIN_DATA
-      #undef X
-      SCREEN_MARGIN_COUNT
+#define X(val, str) MARGIN_##val,
+    SCREEN_MARGIN_DATA
+#undef X
+        SCREEN_MARGIN_COUNT
   };
 
   // Short power button press actions

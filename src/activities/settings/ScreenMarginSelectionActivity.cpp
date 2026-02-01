@@ -7,8 +7,7 @@
 ScreenMarginSelectionActivity::ScreenMarginSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                              const std::function<void()>& onBack)
     : ListSelectionActivity(
-          "ScreenMarginSelection", renderer, mappedInput, "Select Screen Margin",
-          [this]() { return options.size(); },
+          "ScreenMarginSelection", renderer, mappedInput, "Select Screen Margin", [this]() { return options.size(); },
           [this](size_t index) { return options[index]; },
           [this, onBack](size_t index) {
             if (index >= options.size()) {

@@ -16,7 +16,7 @@ class SettingsActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
-  int selectedCategoryIndex = 0;  // Currently selected category
+  int selectedCategoryIndex = 0;    // Currently selected category
   bool hasSleepBmpsCached = false;  // Cached result of sleep BMP check
   const std::function<void()> onGoHome;
 

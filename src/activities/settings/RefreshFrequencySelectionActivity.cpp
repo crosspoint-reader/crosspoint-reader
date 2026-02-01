@@ -4,12 +4,12 @@
 
 #include "CrossPointSettings.h"
 
-RefreshFrequencySelectionActivity::RefreshFrequencySelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+RefreshFrequencySelectionActivity::RefreshFrequencySelectionActivity(GfxRenderer& renderer,
+                                                                     MappedInputManager& mappedInput,
                                                                      const std::function<void()>& onBack)
     : ListSelectionActivity(
           "RefreshFrequencySelection", renderer, mappedInput, "Select Refresh Frequency",
-          [this]() { return options.size(); },
-          [this](size_t index) { return options[index]; },
+          [this]() { return options.size(); }, [this](size_t index) { return options[index]; },
           [this, onBack](size_t index) {
             if (index >= options.size()) {
               return;

@@ -5,10 +5,9 @@
 #include "CrossPointSettings.h"
 
 SleepTimeoutSelectionActivity::SleepTimeoutSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                              const std::function<void()>& onBack)
+                                                             const std::function<void()>& onBack)
     : ListSelectionActivity(
-          "SleepTimeoutSelection", renderer, mappedInput, "Select Time to Sleep",
-          [this]() { return options.size(); },
+          "SleepTimeoutSelection", renderer, mappedInput, "Select Time to Sleep", [this]() { return options.size(); },
           [this](size_t index) { return options[index]; },
           [this, onBack](size_t index) {
             if (index >= options.size()) {

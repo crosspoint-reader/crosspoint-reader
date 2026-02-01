@@ -1,6 +1,7 @@
 #pragma once
-#include "../Activity.h"
 #include <SDCardManager.h>
+
+#include "../Activity.h"
 
 class Bitmap;
 

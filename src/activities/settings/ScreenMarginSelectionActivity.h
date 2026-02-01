@@ -13,5 +13,5 @@ class ScreenMarginSelectionActivity final : public ListSelectionActivity {
 
  public:
   explicit ScreenMarginSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        const std::function<void()>& onBack);
+                                         const std::function<void()>& onBack);
 };

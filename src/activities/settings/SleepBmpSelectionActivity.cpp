@@ -6,16 +6,15 @@
 #include <cctype>
 #include <cstring>
 
-#include "CrossPointSettings.h"
 #include "../../../lib/GfxRenderer/Bitmap.h"
+#include "CrossPointSettings.h"
 
 namespace {
 void sortFileList(std::vector<std::string>& strs) {
   std::sort(begin(strs), end(strs), [](const std::string& str1, const std::string& str2) {
-    return std::lexicographical_compare(begin(str1), end(str1), begin(str2), end(str2),
-                                       [](const char& char1, const char& char2) {
-                                         return std::tolower(char1) < std::tolower(char2);
-                                       });
+    return std::lexicographical_compare(
+        begin(str1), end(str1), begin(str2), end(str2),
+        [](const char& char1, const char& char2) { return std::tolower(char1) < std::tolower(char2); });
   });
 }
 }  // namespace
@@ -23,8 +22,7 @@ void sortFileList(std::vector<std::string>& strs) {
 SleepBmpSelectionActivity::SleepBmpSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                      const std::function<void()>& onBack)
     : ListSelectionActivity(
-          "SleepBmpSelection", renderer, mappedInput, "Select Sleep BMP",
-          [this]() { return files.size(); },
+          "SleepBmpSelection", renderer, mappedInput, "Select Sleep BMP", [this]() { return files.size(); },
           [this](size_t index) { return files[index]; },
           [this, onBack](size_t index) {
             if (index >= files.size()) {
@@ -45,29 +43,28 @@ SleepBmpSelectionActivity::SleepBmpSelectionActivity(GfxRenderer& renderer, Mapp
 
 void SleepBmpSelectionActivity::loadFiles() {
   files.clear();
-  
+
   std::vector<std::string> bmpFiles;
-  
+
   auto dir = SdMan.open("/sleep");
   if (dir && dir.isDirectory()) {
     dir.rewindDirectory();
     char name[500];
-    
+
     for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
       if (file.isDirectory()) {
         file.close();
         continue;
       }
-      
+
       file.getName(name, sizeof(name));
       auto filename = std::string(name);
-      
-      if (filename[0] == '.' || filename.length() < 4 || 
-          filename.substr(filename.length() - 4) != ".bmp") {
+
+      if (filename[0] == '.' || filename.length() < 4 || filename.substr(filename.length() - 4) != ".bmp") {
         file.close();
         continue;
       }
-      
+
       // Validate BMP
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() != BmpReaderError::Ok) {
@@ -75,15 +72,15 @@ void SleepBmpSelectionActivity::loadFiles() {
         continue;
       }
       file.close();
-      
+
       bmpFiles.emplace_back(filename);
     }
     dir.close();
-    
+
     // Sort alphabetically (case-insensitive)
     sortFileList(bmpFiles);
   }
-  
+
   // Add "Random" as first option, then sorted BMP files
   files.emplace_back("Random");
   files.insert(files.end(), bmpFiles.begin(), bmpFiles.end());
@@ -91,7 +88,7 @@ void SleepBmpSelectionActivity::loadFiles() {
 
 void SleepBmpSelectionActivity::loadItems() {
   loadFiles();
-  
+
   // Set initial selection based on saved setting
   if (SETTINGS.selectedSleepBmp[0] == '\0') {
     selectorIndex = 0;  // "Random" is at index 0
@@ -111,4 +108,3 @@ void SleepBmpSelectionActivity::onExit() {
   ListSelectionActivity::onExit();
   files.clear();
 }
-

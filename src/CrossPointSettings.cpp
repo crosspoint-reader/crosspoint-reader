@@ -26,9 +26,9 @@ constexpr uint8_t SETTINGS_COUNT = 24;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 
 const uint8_t SCREEN_MARGIN_PIXEL_VALUES[CrossPointSettings::SCREEN_MARGIN_COUNT] = {
-    #define X(val, str) val,
+#define X(val, str) val,
     SCREEN_MARGIN_DATA
-    #undef X
+#undef X
 };
 
 int screenMarginPixelToIndex(uint8_t pixelValue) {
@@ -294,27 +294,27 @@ int CrossPointSettings::getReaderFontId() const {
 
 namespace {
 const char* const REFRESH_FREQUENCY_OPTIONS[] = {
-    #define X(name, val, str) str,
+#define X(name, val, str) str,
     REFRESH_DATA
-    #undef X
+#undef X
 };
 
 const char* const SLEEP_SCREEN_OPTIONS[] = {
-    #define X(name, val, str) str,
+#define X(name, val, str) str,
     SLEEP_SCREEN_DATA
-    #undef X
+#undef X
 };
 
 const char* const SLEEP_TIMEOUT_OPTIONS[] = {
-    #define X(name, val, str) str,
+#define X(name, val, str) str,
     TIMEOUT_DATA
-    #undef X
+#undef X
 };
 
 const char* const SCREEN_MARGIN_OPTIONS[] = {
-    #define X(val, str) str,
+#define X(val, str) str,
     SCREEN_MARGIN_DATA
-    #undef X
+#undef X
 };
 }  // namespace
 
@@ -352,4 +352,3 @@ uint8_t CrossPointSettings::getScreenMarginPixels() const {
   }
   return SCREEN_MARGIN_PIXEL_VALUES[MARGIN_5];
 }
-

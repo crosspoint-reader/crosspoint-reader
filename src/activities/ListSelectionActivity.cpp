@@ -22,10 +22,10 @@ void ListSelectionActivity::onEnter() {
 
   renderingMutex = xSemaphoreCreateMutex();
   enterTime = millis();
-  
+
   // Load items (allows subclasses to populate data)
   loadItems();
-  
+
   // Ensure selector index is valid
   const size_t itemCount = getItemCount();
   if (selectorIndex >= itemCount && itemCount > 0) {
@@ -34,8 +34,7 @@ void ListSelectionActivity::onEnter() {
 
   updateRequired = true;
 
-  xTaskCreate(&ListSelectionActivity::taskTrampoline, "ListSelectionTask", 2048, this, 1,
-              &displayTaskHandle);
+  xTaskCreate(&ListSelectionActivity::taskTrampoline, "ListSelectionTask", 2048, this, 1, &displayTaskHandle);
 }
 
 void ListSelectionActivity::onExit() {

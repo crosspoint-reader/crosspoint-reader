@@ -17,4 +17,3 @@ class SleepBmpSelectionActivity final : public ListSelectionActivity {
                                      const std::function<void()>& onBack);
   void onExit() override;
 };
-

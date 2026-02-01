@@ -2,10 +2,9 @@
 
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <SDCardManager.h>
 
 #include <cstring>
-
-#include <SDCardManager.h>
 
 #include "CalibreSettingsActivity.h"
 #include "CategorySettingsActivity.h"

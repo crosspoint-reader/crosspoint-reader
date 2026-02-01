@@ -71,7 +71,7 @@ void CategorySettingsActivity::loop() {
   if (visibleCount == 0) {
     return;  // No visible settings
   }
-  
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     // Move to previous visible setting
@@ -213,8 +213,7 @@ bool CategorySettingsActivity::shouldShowSetting(int index) const {
     return false;
   }
   // Hide "Select Sleep BMP" if sleep screen is not set to CUSTOM
-  if (settingsList[index].type == SettingType::ACTION && 
-      strcmp(settingsList[index].name, "Select Sleep BMP") == 0) {
+  if (settingsList[index].type == SettingType::ACTION && strcmp(settingsList[index].name, "Select Sleep BMP") == 0) {
     return SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
   }
   return true;
@@ -270,7 +269,7 @@ void CategorySettingsActivity::render() const {
   // Calculate visible settings count and map selection
   const int visibleCount = getVisibleSettingsCount();
   const int actualSelectedIndex = mapVisibleIndexToActualIndex(selectedSettingIndex);
-  
+
   // Draw selection highlight
   int visibleIndex = 0;
   for (int i = 0; i < settingsCount; i++) {
@@ -289,7 +288,7 @@ void CategorySettingsActivity::render() const {
     if (!shouldShowSetting(i)) {
       continue;
     }
-    
+
     const int settingY = 60 + visibleIndex * 30;  // 30 pixels between settings
     const bool isSelected = (i == actualSelectedIndex);
 
@@ -329,7 +328,7 @@ void CategorySettingsActivity::render() const {
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
       renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), !isSelected);
     }
-    
+
     visibleIndex++;
   }
 

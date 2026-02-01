@@ -25,7 +25,7 @@ class ListSelectionActivity : public Activity {
   size_t selectorIndex = 0;
   bool updateRequired = false;
   unsigned long enterTime = 0;
-  
+
   // Configuration
   std::string title;
   std::string emptyMessage;
@@ -51,14 +51,11 @@ class ListSelectionActivity : public Activity {
 
  public:
   explicit ListSelectionActivity(const std::string& activityName, GfxRenderer& renderer,
-                                MappedInputManager& mappedInput, const std::string& title,
-                                std::function<size_t()> getItemCount,
-                                std::function<std::string(size_t)> getItemText,
-                                std::function<void(size_t)> onItemSelected,
-                                std::function<void()> onBack,
-                                const std::string& emptyMessage = "No items available",
-                                const std::string& backLabel = "« Back",
-                                const std::string& confirmLabel = "Select")
+                                 MappedInputManager& mappedInput, const std::string& title,
+                                 std::function<size_t()> getItemCount, std::function<std::string(size_t)> getItemText,
+                                 std::function<void(size_t)> onItemSelected, std::function<void()> onBack,
+                                 const std::string& emptyMessage = "No items available",
+                                 const std::string& backLabel = "« Back", const std::string& confirmLabel = "Select")
       : Activity(activityName, renderer, mappedInput),
         title(title),
         emptyMessage(emptyMessage),
@@ -68,13 +65,13 @@ class ListSelectionActivity : public Activity {
         getItemText(getItemText),
         onItemSelected(onItemSelected),
         onBack(onBack) {}
-  
+
   virtual ~ListSelectionActivity() = default;
-  
+
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  
+
   // Allow subclasses to set initial selection
   void setInitialSelection(size_t index) { selectorIndex = index; }
   size_t getCurrentSelection() const { return selectorIndex; }
