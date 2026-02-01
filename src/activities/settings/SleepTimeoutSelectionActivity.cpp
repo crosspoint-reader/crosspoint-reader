@@ -14,21 +14,17 @@ SleepTimeoutSelectionActivity::SleepTimeoutSelectionActivity(GfxRenderer& render
             if (index >= options.size()) {
               return;
             }
-            // Map option index to enum value (index matches enum value)
             SETTINGS.sleepTimeout = static_cast<uint8_t>(index);
             SETTINGS.saveToFile();
             onBack();
           },
           onBack, "No options available") {
-  // Initialize options from enum
-  for (uint8_t i = 0; i < CrossPointSettings::getSleepTimeoutCount(); i++) {
+  for (uint8_t i = 0; i < CrossPointSettings::SLEEP_TIMEOUT_COUNT; i++) {
     options.push_back(CrossPointSettings::getSleepTimeoutString(i));
   }
 }
 
 void SleepTimeoutSelectionActivity::loadItems() {
-  // Options are already set in constructor, just set initial selection
-  // Map current enum value to option index
   if (SETTINGS.sleepTimeout < options.size()) {
     selectorIndex = SETTINGS.sleepTimeout;
   } else {

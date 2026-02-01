@@ -6,11 +6,11 @@
 #include "../ListSelectionActivity.h"
 
 class SleepBmpSelectionActivity final : public ListSelectionActivity {
-  std::vector<std::string> files;  // Sorted list of valid BMP filenames ("Random" at index 0)
-  void loadFiles();  // Load and sort all valid BMP files
+  std::vector<std::string> files;
+  void loadFiles();
 
  protected:
-  void loadItems() override;  // Called by base class onEnter
+  void loadItems() override;
 
  public:
   explicit SleepBmpSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

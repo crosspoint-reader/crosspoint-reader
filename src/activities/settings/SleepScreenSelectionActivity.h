@@ -6,10 +6,10 @@
 #include "../ListSelectionActivity.h"
 
 class SleepScreenSelectionActivity final : public ListSelectionActivity {
-  std::vector<std::string> options;  // Sleep screen mode options
+  std::vector<std::string> options;
 
  protected:
-  void loadItems() override;  // Called by base class onEnter
+  void loadItems() override;
 
  public:
   explicit SleepScreenSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

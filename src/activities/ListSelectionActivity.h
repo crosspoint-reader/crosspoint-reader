@@ -17,7 +17,6 @@
  * - Automatic pagination based on screen size
  * - Page skipping when holding navigation buttons
  * - Configurable title, empty message, and button labels
- * - Customizable item rendering
  */
 class ListSelectionActivity : public Activity {
  protected:
@@ -36,8 +35,7 @@ class ListSelectionActivity : public Activity {
   std::function<std::string(size_t)> getItemText;
   std::function<void(size_t)> onItemSelected;
   std::function<void()> onBack;
-  std::function<void(size_t, int, int, bool)> customRenderItem;  // index, x, y, isSelected
-  
+
   // Constants
   static constexpr int SKIP_PAGE_MS = 700;
   static constexpr unsigned long IGNORE_INPUT_MS = 300;
@@ -80,9 +78,4 @@ class ListSelectionActivity : public Activity {
   // Allow subclasses to set initial selection
   void setInitialSelection(size_t index) { selectorIndex = index; }
   size_t getCurrentSelection() const { return selectorIndex; }
-  
-  // Allow custom item rendering
-  void setCustomItemRenderer(std::function<void(size_t, int, int, bool)> renderer) {
-    customRenderItem = renderer;
-  }
 };

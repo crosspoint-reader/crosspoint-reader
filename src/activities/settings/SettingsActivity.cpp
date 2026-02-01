@@ -11,7 +11,6 @@
 #include "CategorySettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "OtaUpdateActivity.h"
 #include "SleepBmpSelectionActivity.h"
 #include "fontIds.h"
 

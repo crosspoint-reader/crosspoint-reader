@@ -45,26 +45,30 @@ void SleepActivity::renderPopup(const char* message) const {
   renderer.displayBuffer();
 }
 
+bool SleepActivity::renderSelectedSleepBmp(FsFile& dir) const {
+  if (SETTINGS.selectedSleepBmp[0] == '\0') return false;
+  const std::string selectedFile = std::string(SETTINGS.selectedSleepBmp);
+  const std::string filename = "/sleep/" + selectedFile;
+  FsFile file;
+  if (!SdMan.openFileForRead("SLP", filename, file)) {
+    Serial.printf("[%lu] [SLP] Selected BMP not found or invalid, falling back to random\n", millis());
+    return false;
+  }
+  Bitmap bitmap(file);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+    file.close();
+    Serial.printf("[%lu] [SLP] Selected BMP not found or invalid, falling back to random\n", millis());
+    return false;
+  }
+  renderBitmapSleepScreen(bitmap);
+  dir.close();
+  return true;
+}
+
 void SleepActivity::renderCustomSleepScreen() const {
   auto dir = SdMan.open("/sleep");
   if (dir && dir.isDirectory()) {
-    if (SETTINGS.selectedSleepBmp[0] != '\0') {
-      const std::string selectedFile = std::string(SETTINGS.selectedSleepBmp);
-      const std::string filename = "/sleep/" + selectedFile;
-      FsFile file;
-      if (SdMan.openFileForRead("SLP", filename, file)) {
-        Bitmap bitmap(file);
-        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          Serial.printf("[%lu] [SLP] Loading selected: /sleep/%s\n", millis(), selectedFile.c_str());
-          delay(100);
-          renderBitmapSleepScreen(bitmap);
-          dir.close();
-          return;
-        }
-        file.close();
-      }
-      Serial.printf("[%lu] [SLP] Selected BMP not found or invalid, falling back to random\n", millis());
-    }
+    if (renderSelectedSleepBmp(dir)) return;
 
     std::vector<std::string> files;
     char name[500];

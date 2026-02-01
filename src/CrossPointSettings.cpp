@@ -290,6 +290,12 @@ const char* const SLEEP_TIMEOUT_OPTIONS[] = {
     TIMEOUT_DATA
     #undef X
 };
+
+const char* const SCREEN_MARGIN_OPTIONS[] = {
+    #define X(val, str) str,
+    SCREEN_MARGIN_DATA
+    #undef X
+};
 }  // namespace
 
 const char* CrossPointSettings::getRefreshFrequencyString(uint8_t value) {
@@ -299,19 +305,11 @@ const char* CrossPointSettings::getRefreshFrequencyString(uint8_t value) {
   return REFRESH_FREQUENCY_OPTIONS[REFRESH_15];
 }
 
-size_t CrossPointSettings::getRefreshFrequencyCount() {
-  return REFRESH_FREQUENCY_COUNT;
-}
-
 const char* CrossPointSettings::getSleepScreenString(uint8_t value) {
   if (value < SLEEP_SCREEN_MODE_COUNT) {
     return SLEEP_SCREEN_OPTIONS[value];
   }
   return SLEEP_SCREEN_OPTIONS[DARK];
-}
-
-size_t CrossPointSettings::getSleepScreenCount() {
-  return SLEEP_SCREEN_MODE_COUNT;
 }
 
 const char* CrossPointSettings::getSleepTimeoutString(uint8_t value) {
@@ -321,6 +319,19 @@ const char* CrossPointSettings::getSleepTimeoutString(uint8_t value) {
   return SLEEP_TIMEOUT_OPTIONS[SLEEP_10_MIN];
 }
 
-size_t CrossPointSettings::getSleepTimeoutCount() {
-  return SLEEP_TIMEOUT_COUNT;
+const char* CrossPointSettings::getScreenMarginString(uint8_t index) {
+  if (index < SCREEN_MARGIN_COUNT) {
+    return SCREEN_MARGIN_OPTIONS[index];
+  }
+  return SCREEN_MARGIN_OPTIONS[MARGIN_5];
 }
+
+int CrossPointSettings::getScreenMarginIndex(uint8_t pixelValue) {
+  for (size_t i = 0; i < SCREEN_MARGIN_COUNT; i++) {
+    if (SCREEN_MARGIN_VALUES[i] == pixelValue) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+

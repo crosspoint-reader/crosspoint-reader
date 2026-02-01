@@ -21,14 +21,12 @@ RefreshFrequencySelectionActivity::RefreshFrequencySelectionActivity(GfxRenderer
           },
           onBack, "No options available") {
   // Initialize options from enum
-  for (uint8_t i = 0; i < CrossPointSettings::getRefreshFrequencyCount(); i++) {
+  for (uint8_t i = 0; i < CrossPointSettings::REFRESH_FREQUENCY_COUNT; i++) {
     options.push_back(CrossPointSettings::getRefreshFrequencyString(i));
   }
 }
 
 void RefreshFrequencySelectionActivity::loadItems() {
-  // Options are already set in constructor, just set initial selection
-  // Map current enum value to option index
   if (SETTINGS.refreshFrequency < options.size()) {
     selectorIndex = SETTINGS.refreshFrequency;
   } else {

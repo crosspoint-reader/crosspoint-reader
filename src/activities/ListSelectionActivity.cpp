@@ -146,15 +146,9 @@ void ListSelectionActivity::render() const {
     const bool isSelected = (i == selectorIndex);
     const int itemY = START_Y + visibleIndex * LINE_HEIGHT;
 
-    if (customRenderItem) {
-      // Use custom renderer if provided
-      customRenderItem(i, 20, itemY, isSelected);
-    } else {
-      // Default rendering: truncate text and draw
-      const std::string itemText = getItemText(i);
-      auto truncated = renderer.truncatedText(UI_10_FONT_ID, itemText.c_str(), pageWidth - 40);
-      renderer.drawText(UI_10_FONT_ID, 20, itemY, truncated.c_str(), !isSelected);
-    }
+    const std::string itemText = getItemText(i);
+    auto truncated = renderer.truncatedText(UI_10_FONT_ID, itemText.c_str(), pageWidth - 40);
+    renderer.drawText(UI_10_FONT_ID, 20, itemY, truncated.c_str(), !isSelected);
     visibleIndex++;
   }
 

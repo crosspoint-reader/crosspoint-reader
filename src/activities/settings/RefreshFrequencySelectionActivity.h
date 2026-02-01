@@ -6,10 +6,10 @@
 #include "../ListSelectionActivity.h"
 
 class RefreshFrequencySelectionActivity final : public ListSelectionActivity {
-  std::vector<std::string> options;  // Refresh frequency options
+  std::vector<std::string> options;
 
  protected:
-  void loadItems() override;  // Called by base class onEnter
+  void loadItems() override;
 
  public:
   explicit RefreshFrequencySelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

@@ -113,6 +113,23 @@ class CrossPointSettings {
       SLEEP_TIMEOUT_COUNT
   };
 
+  // Reader screen margin options (pixel values)
+  #define SCREEN_MARGIN_DATA \
+      X(5, "5 px") X(10, "10 px") X(15, "15 px") X(20, "20 px") \
+      X(25, "25 px") X(30, "30 px") X(35, "35 px") X(40, "40 px")
+
+  enum SCREEN_MARGIN {
+      #define X(val, str) MARGIN_##val,
+      SCREEN_MARGIN_DATA
+      #undef X
+      SCREEN_MARGIN_COUNT
+  };
+  static inline constexpr uint8_t SCREEN_MARGIN_VALUES[SCREEN_MARGIN_COUNT] = {
+      #define X(val, str) val,
+      SCREEN_MARGIN_DATA
+      #undef X
+  };
+
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, SHORT_PWRBTN_COUNT };
 
@@ -177,11 +194,11 @@ class CrossPointSettings {
 
   // Helper functions to get option strings from enum values
   static const char* getRefreshFrequencyString(uint8_t value);
-  static size_t getRefreshFrequencyCount();
   static const char* getSleepScreenString(uint8_t value);
-  static size_t getSleepScreenCount();
   static const char* getSleepTimeoutString(uint8_t value);
-  static size_t getSleepTimeoutCount();
+  static const char* getScreenMarginString(uint8_t index);
+  /** Returns index for pixel value, or -1 if not in allowed list. */
+  static int getScreenMarginIndex(uint8_t pixelValue);
 
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;

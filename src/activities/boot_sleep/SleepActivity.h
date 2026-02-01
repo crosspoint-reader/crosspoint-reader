@@ -1,5 +1,6 @@
 #pragma once
 #include "../Activity.h"
+#include <SDCardManager.h>
 
 class Bitmap;
 
@@ -16,4 +17,5 @@ class SleepActivity final : public Activity {
   void renderCoverSleepScreen() const;
   void renderBitmapSleepScreen(const Bitmap& bitmap) const;
   void renderBlankSleepScreen() const;
+  bool renderSelectedSleepBmp(FsFile& dir) const;
 };

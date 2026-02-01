@@ -14,21 +14,17 @@ SleepScreenSelectionActivity::SleepScreenSelectionActivity(GfxRenderer& renderer
             if (index >= options.size()) {
               return;
             }
-            // Map option index to enum value (index matches enum value)
             SETTINGS.sleepScreen = static_cast<uint8_t>(index);
             SETTINGS.saveToFile();
             onBack();
           },
           onBack, "No options available") {
-  // Initialize options from enum
-  for (uint8_t i = 0; i < CrossPointSettings::getSleepScreenCount(); i++) {
+  for (uint8_t i = 0; i < CrossPointSettings::SLEEP_SCREEN_MODE_COUNT; i++) {
     options.push_back(CrossPointSettings::getSleepScreenString(i));
   }
 }
 
 void SleepScreenSelectionActivity::loadItems() {
-  // Options are already set in constructor, just set initial selection
-  // Map current enum value to option index
   if (SETTINGS.sleepScreen < options.size()) {
     selectorIndex = SETTINGS.sleepScreen;
   } else {

@@ -6,10 +6,10 @@
 #include "../ListSelectionActivity.h"
 
 class ScreenMarginSelectionActivity final : public ListSelectionActivity {
-  std::vector<std::string> options;  // Screen margin options
+  std::vector<std::string> options;
 
  protected:
-  void loadItems() override;  // Called by base class onEnter
+  void loadItems() override;
 
  public:
   explicit ScreenMarginSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
