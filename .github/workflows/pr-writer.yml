@@ -1,4 +1,4 @@
-name: PR writes (label + comment)
+name: PR writer (label + comment)
 
 on:
   pull_request_target:
@@ -16,6 +16,8 @@ jobs:
       # Safe: labeler reads files from the base repo by default in pull_request_target context.
       # Do NOT checkout PR head.
       - uses: actions/labeler@v5
+        with:
+          configuration-path: .github/labeler.yml
 
   comment_firmware:
     runs-on: ubuntu-latest
@@ -63,7 +65,10 @@ jobs:
             const fw = artifacts.find(a => a.name === "firmware-bin");
             const meta = artifacts.find(a => a.name === "build-meta");
 
-            if (!meta) core.setFailed("build-meta artifact not found in CI run artifacts.");
+            if (!meta) {
+            core.setFailed("build-meta artifact not found in CI run artifacts.");
+            return;
+            }
             // firmware-bin is nice-to-have for linking; fail if you want.
             core.setOutput("fw_id", fw ? String(fw.id) : "");
             core.setOutput("meta_id", String(meta.id));

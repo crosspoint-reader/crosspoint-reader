@@ -69,12 +69,9 @@ jobs:
           set -euo pipefail
           pio run | tee pio.log
 
-      - name: Capture short SHA
-        id: short_sha
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Extract firmware stats
-        id: fw_stats
+
         run: |
           set -euo pipefail
           ram_line="$(grep -E "RAM:\\s" -m1 pio.log || true)"
