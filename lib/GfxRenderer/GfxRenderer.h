@@ -14,9 +14,11 @@ class GfxRenderer {
   // Logical screen orientation from the perspective of callers
   enum Orientation {
     Portrait,                  // 480x800 logical coordinates (current default)
-    LandscapeClockwise,        // 800x480 logical coordinates, rotated 180° (swap top/bottom)
+    LandscapeClockwise,        // 800x480 logical coordinates, rotated 180° (swap
+                               // top/bottom)
     PortraitInverted,          // 480x800 logical coordinates, inverted
-    LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
+    LandscapeCounterClockwise  // 800x480 logical coordinates, native panel
+                               // orientation
   };
 
  private:
@@ -47,7 +49,8 @@ class GfxRenderer {
   // Setup
   void insertFont(int fontId, EpdFontFamily font);
 
-  // Orientation control (affects logical width/height and coordinate transforms)
+  // Orientation control (affects logical width/height and coordinate
+  // transforms)
   void setOrientation(const Orientation o) { orientation = o; }
   Orientation getOrientation() const { return orientation; }
 
@@ -62,14 +65,29 @@ class GfxRenderer {
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
+  bool readPixel(int x, int y) const;  // Returns true if pixel is black
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
+  void fillRectDithered(int x, int y, int width, int height, uint8_t grayLevel) const;
+  void drawRoundedRect(int x, int y, int width, int height, int radius, bool state = true) const;
+  void fillRoundedRect(int x, int y, int width, int height, int radius, bool state = true) const;
+  void fillRoundedRectDithered(int x, int y, int width, int height, int radius, uint8_t grayLevel) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
                   float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
+  void drawTransparentBitmap(const Bitmap& bitmap, int x, int y, int w, int h) const;
+  void drawRoundedBitmap(const Bitmap& bitmap, int x, int y, int w, int h, int radius) const;
+  void draw2BitImage(const uint8_t data[], int x, int y, int w, int h) const;
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
+
+  // Region caching - copies a rectangular region to/from a buffer
+  // Returns allocated buffer on success, nullptr on failure. Caller owns the
+  // memory.
+  uint8_t* captureRegion(int x, int y, int width, int height, size_t* outSize) const;
+  // Restores a previously captured region. Buffer must match dimensions.
+  void restoreRegion(const uint8_t* buffer, int x, int y, int width, int height) const;
 
   // Text
   int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;

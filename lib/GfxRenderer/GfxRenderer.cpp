@@ -2,6 +2,8 @@
 
 #include <Utf8.h>
 
+#include <algorithm>
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
@@ -65,6 +67,28 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   }
 }
 
+bool GfxRenderer::readPixel(const int x, const int y) const {
+  uint8_t* frameBuffer = display.getFrameBuffer();
+  if (!frameBuffer) {
+    return false;
+  }
+
+  int rotatedX = 0;
+  int rotatedY = 0;
+  rotateCoordinates(x, y, &rotatedX, &rotatedY);
+
+  // Bounds checking against physical panel dimensions
+  if (rotatedX < 0 || rotatedX >= HalDisplay::DISPLAY_WIDTH || rotatedY < 0 || rotatedY >= HalDisplay::DISPLAY_HEIGHT) {
+    return false;
+  }
+
+  const uint16_t byteIndex = rotatedY * HalDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
+  const uint8_t bitPosition = 7 - (rotatedX % 8);
+
+  // Bit cleared = black, bit set = white
+  return !(frameBuffer[byteIndex] & (1 << bitPosition));
+}
+
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
@@ -110,23 +134,27 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 }
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
-  if (x1 == x2) {
-    if (y2 < y1) {
-      std::swap(y1, y2);
+  // Bresenham's line algorithm
+  int dx = abs(x2 - x1);
+  int dy = abs(y2 - y1);
+  int sx = (x1 < x2) ? 1 : -1;
+  int sy = (y1 < y2) ? 1 : -1;
+  int err = dx - dy;
+
+  while (true) {
+    drawPixel(x1, y1, state);
+
+    if (x1 == x2 && y1 == y2) break;
+
+    int e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      x1 += sx;
     }
-    for (int y = y1; y <= y2; y++) {
-      drawPixel(x1, y, state);
+    if (e2 < dx) {
+      err += dx;
+      y1 += sy;
     }
-  } else if (y1 == y2) {
-    if (x2 < x1) {
-      std::swap(x1, x2);
-    }
-    for (int x = x1; x <= x2; x++) {
-      drawPixel(x, y1, state);
-    }
-  } else {
-    // TODO: Implement
-    Serial.printf("[%lu] [GFX] Line drawing not supported\n", millis());
   }
 }
 
@@ -138,8 +166,309 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 }
 
 void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
-  for (int fillY = y; fillY < y + height; fillY++) {
-    drawLine(x, fillY, x + width - 1, fillY, state);
+  uint8_t* frameBuffer = display.getFrameBuffer();
+  if (!frameBuffer) {
+    return;
+  }
+
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+
+  // Clip to screen bounds
+  const int x1 = std::max(0, x);
+  const int y1 = std::max(0, y);
+  const int x2 = std::min(screenWidth - 1, x + width - 1);
+  const int y2 = std::min(screenHeight - 1, y + height - 1);
+
+  if (x1 > x2 || y1 > y2) return;
+
+  // Optimized path for Portrait mode (most common)
+  if (orientation == Portrait) {
+    for (int sy = y1; sy <= y2; sy++) {
+      // In Portrait: logical (x, y) -> physical (y, DISPLAY_HEIGHT - 1 - x)
+      const int physX = sy;
+      const uint8_t physXByte = physX / 8;
+      const uint8_t physXBit = 7 - (physX % 8);
+      const uint8_t mask = 1 << physXBit;
+
+      for (int sx = x1; sx <= x2; sx++) {
+        const int physY = HalDisplay::DISPLAY_HEIGHT - 1 - sx;
+        const uint16_t byteIndex = physY * HalDisplay::DISPLAY_WIDTH_BYTES + physXByte;
+
+        if (state) {
+          frameBuffer[byteIndex] &= ~mask;  // Black
+        } else {
+          frameBuffer[byteIndex] |= mask;  // White
+        }
+      }
+    }
+    return;
+  }
+
+  // Optimized path for PortraitInverted
+  if (orientation == PortraitInverted) {
+    for (int sy = y1; sy <= y2; sy++) {
+      const int physX = HalDisplay::DISPLAY_WIDTH - 1 - sy;
+      const uint8_t physXByte = physX / 8;
+      const uint8_t physXBit = 7 - (physX % 8);
+      const uint8_t mask = 1 << physXBit;
+
+      for (int sx = x1; sx <= x2; sx++) {
+        const int physY = sx;
+        const uint16_t byteIndex = physY * HalDisplay::DISPLAY_WIDTH_BYTES + physXByte;
+
+        if (state) {
+          frameBuffer[byteIndex] &= ~mask;
+        } else {
+          frameBuffer[byteIndex] |= mask;
+        }
+      }
+    }
+    return;
+  }
+
+  // Optimized horizontal line fill for Landscape modes
+  if (orientation == LandscapeCounterClockwise) {
+    for (int sy = y1; sy <= y2; sy++) {
+      const int physY = sy;
+      const uint16_t rowOffset = physY * HalDisplay::DISPLAY_WIDTH_BYTES;
+
+      // Fill full bytes where possible
+      const int physX1 = x1;
+      const int physX2 = x2;
+      const int byteStart = physX1 / 8;
+      const int byteEnd = physX2 / 8;
+
+      for (int bx = byteStart; bx <= byteEnd; bx++) {
+        uint8_t mask = 0xFF;
+
+        // Mask out bits before start on first byte
+        if (bx == byteStart) {
+          const int startBit = physX1 % 8;
+          mask &= (0xFF >> startBit);
+        }
+        // Mask out bits after end on last byte
+        if (bx == byteEnd) {
+          const int endBit = physX2 % 8;
+          mask &= (0xFF << (7 - endBit));
+        }
+
+        if (state) {
+          frameBuffer[rowOffset + bx] &= ~mask;
+        } else {
+          frameBuffer[rowOffset + bx] |= mask;
+        }
+      }
+    }
+    return;
+  }
+
+  // Fallback for LandscapeClockwise and any other cases
+  for (int fillY = y1; fillY <= y2; fillY++) {
+    drawLine(x1, fillY, x2, fillY, state);
+  }
+}
+
+void GfxRenderer::fillRectDithered(const int x, const int y, const int width, const int height,
+                                   const uint8_t grayLevel) const {
+  // Simulate grayscale using dithering patterns
+  // 0x00 = black, 0xFF = white, values in between = dithered
+
+  if (grayLevel == 0x00) {
+    fillRect(x, y, width, height, true);  // Solid black
+    return;
+  }
+  if (grayLevel >= 0xF0) {
+    fillRect(x, y, width, height, false);  // Solid white
+    return;
+  }
+
+  // Use ordered dithering (Bayer matrix 2x2)
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+
+  const int x1 = std::max(0, x);
+  const int y1 = std::max(0, y);
+  const int x2 = std::min(screenWidth - 1, x + width - 1);
+  const int y2 = std::min(screenHeight - 1, y + height - 1);
+
+  if (x1 > x2 || y1 > y2) return;
+
+  int threshold = (grayLevel * 4) / 255;
+
+  for (int sy = y1; sy <= y2; sy++) {
+    for (int sx = x1; sx <= x2; sx++) {
+      int bayerValue;
+      int px = sx % 2;
+      int py = sy % 2;
+      if (px == 0 && py == 0)
+        bayerValue = 0;
+      else if (px == 1 && py == 0)
+        bayerValue = 2;
+      else if (px == 0 && py == 1)
+        bayerValue = 3;
+      else
+        bayerValue = 1;
+
+      bool isBlack = bayerValue >= threshold;
+      drawPixel(sx, sy, isBlack);
+    }
+  }
+}
+
+void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, const int radius,
+                                  const bool state) const {
+  if (radius <= 0) {
+    drawRect(x, y, width, height, state);
+    return;
+  }
+
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  int cx, cy;
+  int px = 0, py = r;
+  int d = 1 - r;
+
+  while (px <= py) {
+    cx = x + r;
+    cy = y + r;
+    drawPixel(cx - py, cy - px, state);
+    drawPixel(cx - px, cy - py, state);
+
+    cx = x + width - 1 - r;
+    cy = y + r;
+    drawPixel(cx + py, cy - px, state);
+    drawPixel(cx + px, cy - py, state);
+
+    cx = x + r;
+    cy = y + height - 1 - r;
+    drawPixel(cx - py, cy + px, state);
+    drawPixel(cx - px, cy + py, state);
+
+    cx = x + width - 1 - r;
+    cy = y + height - 1 - r;
+    drawPixel(cx + py, cy + px, state);
+    drawPixel(cx + px, cy + py, state);
+
+    if (d < 0) {
+      d += 2 * px + 3;
+    } else {
+      d += 2 * (px - py) + 5;
+      py--;
+    }
+    px++;
+  }
+
+  drawLine(x + r, y, x + width - 1 - r, y, state);
+  drawLine(x + r, y + height - 1, x + width - 1 - r, y + height - 1, state);
+  drawLine(x, y + r, x, y + height - 1 - r, state);
+  drawLine(x + width - 1, y + r, x + width - 1, y + height - 1 - r, state);
+}
+
+void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, const int height, const int radius,
+                                  const bool state) const {
+  if (radius <= 0) {
+    fillRect(x, y, width, height, state);
+    return;
+  }
+
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  fillRect(x + r, y, width - 2 * r, height, state);
+  fillRect(x, y + r, r, height - 2 * r, state);
+  fillRect(x + width - r, y + r, r, height - 2 * r, state);
+
+  int px = 0, py = r;
+  int d = 1 - r;
+
+  while (px <= py) {
+    drawLine(x + r - py, y + r - px, x + r, y + r - px, state);
+    drawLine(x + width - 1 - r, y + r - px, x + width - 1 - r + py, y + r - px, state);
+    drawLine(x + r - px, y + r - py, x + r, y + r - py, state);
+    drawLine(x + width - 1 - r, y + r - py, x + width - 1 - r + px, y + r - py, state);
+
+    drawLine(x + r - py, y + height - 1 - r + px, x + r, y + height - 1 - r + px, state);
+    drawLine(x + width - 1 - r, y + height - 1 - r + px, x + width - 1 - r + py, y + height - 1 - r + px, state);
+    drawLine(x + r - px, y + height - 1 - r + py, x + r, y + height - 1 - r + py, state);
+    drawLine(x + width - 1 - r, y + height - 1 - r + py, x + width - 1 - r + px, y + height - 1 - r + py, state);
+
+    if (d < 0) {
+      d += 2 * px + 3;
+    } else {
+      d += 2 * (px - py) + 5;
+      py--;
+    }
+    px++;
+  }
+}
+
+void GfxRenderer::fillRoundedRectDithered(const int x, const int y, const int width, const int height, const int radius,
+                                          const uint8_t grayLevel) const {
+  if (grayLevel == 0x00) {
+    fillRoundedRect(x, y, width, height, radius, true);
+    return;
+  }
+  if (grayLevel >= 0xF0) {
+    fillRoundedRect(x, y, width, height, radius, false);
+    return;
+  }
+
+  int r = std::min(radius, std::min(width / 2, height / 2));
+  if (r <= 0) {
+    fillRectDithered(x, y, width, height, grayLevel);
+    return;
+  }
+
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+  int threshold = (grayLevel * 4) / 255;
+
+  auto isInside = [&](int px, int py) -> bool {
+    if (px < x + r && py < y + r) {
+      int dx = px - (x + r);
+      int dy = py - (y + r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px >= x + width - r && py < y + r) {
+      int dx = px - (x + width - 1 - r);
+      int dy = py - (y + r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px < x + r && py >= y + height - r) {
+      int dx = px - (x + r);
+      int dy = py - (y + height - 1 - r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    if (px >= x + width - r && py >= y + height - r) {
+      int dx = px - (x + width - 1 - r);
+      int dy = py - (y + height - 1 - r);
+      return (dx * dx + dy * dy) <= r * r;
+    }
+    return px >= x && px < x + width && py >= y && py < y + height;
+  };
+
+  const int x1 = std::max(0, x);
+  const int y1 = std::max(0, y);
+  const int x2 = std::min(screenWidth - 1, x + width - 1);
+  const int y2 = std::min(screenHeight - 1, y + height - 1);
+
+  for (int sy = y1; sy <= y2; sy++) {
+    for (int sx = x1; sx <= x2; sx++) {
+      if (!isInside(sx, sy)) continue;
+
+      int bayerValue;
+      int bx = sx % 2;
+      int by = sy % 2;
+      if (bx == 0 && by == 0)
+        bayerValue = 0;
+      else if (bx == 1 && by == 0)
+        bayerValue = 2;
+      else if (bx == 0 && by == 1)
+        bayerValue = 3;
+      else
+        bayerValue = 1;
+
+      bool isBlack = bayerValue >= threshold;
+      drawPixel(sx, sy, isBlack);
+    }
   }
 }
 
@@ -168,7 +497,8 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
-  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
+  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for
+  // 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
     return;
@@ -178,8 +508,6 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   bool isScaled = false;
   int cropPixX = std::floor(bitmap.getWidth() * cropX / 2.0f);
   int cropPixY = std::floor(bitmap.getHeight() * cropY / 2.0f);
-  Serial.printf("[%lu] [GFX] Cropping %dx%d by %dx%d pix, is %s\n", millis(), bitmap.getWidth(), bitmap.getHeight(),
-                cropPixX, cropPixY, bitmap.isTopDown() ? "top-down" : "bottom-up");
 
   if (maxWidth > 0 && (1.0f - cropX) * bitmap.getWidth() > maxWidth) {
     scale = static_cast<float>(maxWidth) / static_cast<float>((1.0f - cropX) * bitmap.getWidth());
@@ -189,10 +517,10 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>((1.0f - cropY) * bitmap.getHeight()));
     isScaled = true;
   }
-  Serial.printf("[%lu] [GFX] Scaling by %f - %s\n", millis(), scale, isScaled ? "scaled" : "not scaled");
 
   // Calculate output row size (2 bits per pixel, packed into bytes)
-  // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
+  // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels
+  // wide
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
   auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
@@ -205,8 +533,8 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   }
 
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
-    // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
-    // Screen's (0, 0) is the top-left corner.
+    // The BMP's (0, 0) is the bottom-left corner (if the height is positive,
+    // top-left if negative). Screen's (0, 0) is the top-left corner.
     int screenY = -cropPixY + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
     if (isScaled) {
       screenY = std::floor(screenY * scale);
@@ -247,8 +575,14 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
-      if (renderMode == BW && val < 3) {
-        drawPixel(screenX, screenY);
+      // In BW mode:
+      // 0 = Black (< 45)
+      // 1 = Dark Gray (< 70)
+      // 2 = Light Gray (< 140)
+      // 3 = White
+      // Draw black for val < 2, and white for val >= 2 (Opaque)
+      if (renderMode == BW) {
+        drawPixel(screenX, screenY, val < 2);
       } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
         drawPixel(screenX, screenY, false);
       } else if (renderMode == GRAYSCALE_LSB && val == 1) {
@@ -259,6 +593,132 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
   free(outputRow);
   free(rowBytes);
+}
+
+void GfxRenderer::draw2BitImage(const uint8_t data[], int x, int y, int w, int h) const {
+  uint8_t* frameBuffer = display.getFrameBuffer();
+  if (!frameBuffer) {
+    return;
+  }
+
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+
+  // Pre-compute row byte width for 2-bit packed data (4 pixels per byte)
+  const int srcRowBytes = (w + 3) / 4;
+
+  // Optimized path for Portrait mode with BW rendering (most common case)
+  // In Portrait: logical (x, y) -> physical (y, DISPLAY_HEIGHT - 1 - x)
+  if (orientation == Portrait && renderMode == BW) {
+    for (int row = 0; row < h; row++) {
+      const int screenY = y + row;
+      if (screenY < 0 || screenY >= screenHeight) continue;
+
+      // In Portrait, screenY maps to physical X coordinate
+      const int physX = screenY;
+      const uint8_t* srcRow = data + row * srcRowBytes;
+
+      for (int col = 0; col < w; col++) {
+        const int screenX = x + col;
+        if (screenX < 0 || screenX >= screenWidth) continue;
+
+        // Extract 2-bit value (4 pixels per byte)
+        const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
+
+        // val < 2 means black pixel in 2-bit representation (0=Black, 1=DarkGray)
+        // 2=LightGray, 3=White -> Treat as White
+        if (val < 2) {
+          // In Portrait: physical Y = DISPLAY_HEIGHT - 1 - screenX
+          const int physY = HalDisplay::DISPLAY_HEIGHT - 1 - screenX;
+          const uint16_t byteIndex = physY * HalDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+          const uint8_t bitPosition = 7 - (physX % 8);
+          frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit = black
+        }
+      }
+    }
+    return;
+  }
+
+  // Optimized path for PortraitInverted mode with BW rendering
+  if (orientation == PortraitInverted && renderMode == BW) {
+    for (int row = 0; row < h; row++) {
+      const int screenY = y + row;
+      if (screenY < 0 || screenY >= screenHeight) continue;
+
+      const uint8_t* srcRow = data + row * srcRowBytes;
+
+      for (int col = 0; col < w; col++) {
+        const int screenX = x + col;
+        if (screenX < 0 || screenX >= screenWidth) continue;
+
+        const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
+
+        if (val < 3) {
+          // PortraitInverted: physical X = DISPLAY_WIDTH - 1 - screenY
+          // physical Y = screenX
+          const int physX = HalDisplay::DISPLAY_WIDTH - 1 - screenY;
+          const int physY = screenX;
+          const uint16_t byteIndex = physY * HalDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+          const uint8_t bitPosition = 7 - (physX % 8);
+          frameBuffer[byteIndex] &= ~(1 << bitPosition);
+        }
+      }
+    }
+    return;
+  }
+
+  // Optimized path for Landscape modes with BW rendering
+  if ((orientation == LandscapeClockwise || orientation == LandscapeCounterClockwise) && renderMode == BW) {
+    for (int row = 0; row < h; row++) {
+      const int screenY = y + row;
+      if (screenY < 0 || screenY >= screenHeight) continue;
+
+      const uint8_t* srcRow = data + row * srcRowBytes;
+
+      for (int col = 0; col < w; col++) {
+        const int screenX = x + col;
+        if (screenX < 0 || screenX >= screenWidth) continue;
+
+        const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
+
+        if (val < 3) {
+          int physX, physY;
+          if (orientation == LandscapeClockwise) {
+            physX = HalDisplay::DISPLAY_WIDTH - 1 - screenX;
+            physY = HalDisplay::DISPLAY_HEIGHT - 1 - screenY;
+          } else {
+            physX = screenX;
+            physY = screenY;
+          }
+          const uint16_t byteIndex = physY * HalDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+          const uint8_t bitPosition = 7 - (physX % 8);
+          frameBuffer[byteIndex] &= ~(1 << bitPosition);
+        }
+      }
+    }
+    return;
+  }
+
+  // Fallback: generic path for grayscale modes
+  for (int row = 0; row < h; row++) {
+    const int screenY = y + row;
+    if (screenY < 0 || screenY >= screenHeight) continue;
+
+    const uint8_t* srcRow = data + row * srcRowBytes;
+
+    for (int col = 0; col < w; col++) {
+      const int screenX = x + col;
+      if (screenX < 0 || screenX >= screenWidth) continue;
+
+      const uint8_t val = (srcRow[col / 4] >> (6 - ((col % 4) * 2))) & 0x3;
+
+      if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+        drawPixel(screenX, screenY, false);
+      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+        drawPixel(screenX, screenY, false);
+      }
+    }
+  }
 }
 
 void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
@@ -274,7 +734,8 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
     isScaled = true;
   }
 
-  // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
+  // For 1-bit BMP, output is still 2-bit packed (for consistency with
+  // readNextRow)
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
   auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
@@ -318,11 +779,196 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
       // For 1-bit source: 0 or 1 -> map to black (0,1,2) or white (3)
-      // val < 3 means black pixel (draw it)
-      if (val < 3) {
-        drawPixel(screenX, screenY, true);
-      }
+      // Draw black if val < 3, Draw white if val == 3 (Opaque)
+      drawPixel(screenX, screenY, val < 3);
       // White pixels (val == 3) are not drawn (leave background)
+    }
+  }
+
+  free(outputRow);
+  free(rowBytes);
+}
+
+void GfxRenderer::drawTransparentBitmap(const Bitmap& bitmap, const int x, const int y, const int w,
+                                        const int h) const {
+  // Similar to drawBitmap1Bit but strictly skips 1s (white) in the source 1-bit data
+  // The Bitmap reader returns 2-bit packed data where 0-2=Black and 3=White for 1-bit sources
+
+  float scale = 1.0f;
+  bool isScaled = false;
+  if (w > 0) {
+    scale = static_cast<float>(w) / static_cast<float>(bitmap.getWidth());
+    isScaled = true;
+  }
+  if (h > 0) {
+    scale = std::min(scale, static_cast<float>(h) / static_cast<float>(bitmap.getHeight()));
+    isScaled = true;
+  }
+
+  const int outputRowSize = (bitmap.getWidth() + 3) / 4;
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
+  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+
+  if (!outputRow || !rowBytes) {
+    Serial.printf("[%lu] [GFX] !! Failed to allocate BMP row buffers\n", millis());
+    free(outputRow);
+    free(rowBytes);
+    return;
+  }
+
+  for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
+    if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+      free(outputRow);
+      free(rowBytes);
+      return;
+    }
+
+    const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
+
+    // Calculate target Y span
+    int startY = y + static_cast<int>(std::floor(bmpYOffset * scale));
+    int endY = y + static_cast<int>(std::floor((bmpYOffset + 1) * scale));
+
+    // Clamp to screen
+    if (startY < 0) startY = 0;
+    if (endY > getScreenHeight()) endY = getScreenHeight();
+    if (startY >= endY) continue;
+
+    for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
+      // Calculate target X span
+      int startX = x + static_cast<int>(std::floor(bmpX * scale));
+      int endX = x + static_cast<int>(std::floor((bmpX + 1) * scale));
+
+      if (startX < 0) startX = 0;
+      if (endX > getScreenWidth()) endX = getScreenWidth();
+      if (startX >= endX) continue;
+
+      // Extract 2-bit value (0=Black, 3=White for 1-bit BMP)
+      const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+
+      if (val < 3) {
+        for (int sy = startY; sy < endY; sy++) {
+          for (int sx = startX; sx < endX; sx++) {
+            drawPixel(sx, sy, true);  // Black
+          }
+        }
+      }
+    }
+  }
+
+  free(outputRow);
+  free(rowBytes);
+}
+
+void GfxRenderer::drawRoundedBitmap(const Bitmap& bitmap, const int x, const int y, const int w, const int h,
+                                    const int radius) const {
+  if (radius <= 0) {
+    drawBitmap(bitmap, x, y, w, h);
+    return;
+  }
+
+  float scale = 1.0f;
+  bool isScaled = false;
+  if (w > 0) {
+    scale = static_cast<float>(w) / static_cast<float>(bitmap.getWidth());
+    isScaled = true;
+  }
+  if (h > 0) {
+    scale = std::min(scale, static_cast<float>(h) / static_cast<float>(bitmap.getHeight()));
+    isScaled = true;
+  }
+
+  // Pre-calculate squared radius for containment checks
+  const int r2 = radius * radius;
+
+  // Lambda to check if a pixel is inside the rounded rect
+  // We use relative coordinates (px, py) from the top-left of the destination rect
+  auto isVisible = [&](int px, int py) -> bool {
+    // Top-left
+    if (px < radius && py < radius) {
+      int dx = radius - px;
+      int dy = radius - py;
+      return (dx * dx + dy * dy) <= r2;
+    }
+    // Top-right
+    if (px >= w - radius && py < radius) {
+      int dx = px - (w - 1 - radius);
+      int dy = radius - py;
+      return (dx * dx + dy * dy) <= r2;
+    }
+    // Bottom-left
+    if (px < radius && py >= h - radius) {
+      int dx = radius - px;
+      int dy = py - (h - 1 - radius);
+      return (dx * dx + dy * dy) <= r2;
+    }
+    // Bottom-right
+    if (px >= w - radius && py >= h - radius) {
+      int dx = px - (w - 1 - radius);
+      int dy = py - (h - 1 - radius);
+      return (dx * dx + dy * dy) <= r2;
+    }
+    return true;  // Safe center area
+  };
+
+  const int outputRowSize = (bitmap.getWidth() + 3) / 4;
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
+  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+
+  if (!outputRow || !rowBytes) {
+    Serial.printf("[%lu] [GFX] !! Failed to allocate BMP row buffers\n", millis());
+    free(outputRow);
+    free(rowBytes);
+    return;
+  }
+
+  for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
+    if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+      free(outputRow);
+      free(rowBytes);
+      return;
+    }
+
+    const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
+
+    // Calculate target Y span
+    int startY = y + static_cast<int>(std::floor(bmpYOffset * scale));
+    int endY = y + static_cast<int>(std::floor((bmpYOffset + 1) * scale));
+
+    if (startY < 0) startY = 0;
+    if (endY > getScreenHeight()) endY = getScreenHeight();
+    if (startY >= endY) continue;
+
+    for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
+      int startX = x + static_cast<int>(std::floor(bmpX * scale));
+      int endX = x + static_cast<int>(std::floor((bmpX + 1) * scale));
+
+      if (startX < 0) startX = 0;
+      if (endX > getScreenWidth()) endX = getScreenWidth();
+      if (startX >= endX) continue;
+
+      const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+      bool pixelBlack = false;
+
+      if (renderMode == BW) {
+        pixelBlack = (val < 2);
+      } else if (renderMode == GRAYSCALE_MSB) {
+        pixelBlack = (val < 3);  // Draw all non-white as black for icons/covers
+      } else if (renderMode == GRAYSCALE_LSB) {
+        pixelBlack = (val == 0);
+      }
+
+      if (pixelBlack) {
+        for (int sy = startY; sy < endY; sy++) {
+          int relY = sy - y;
+          for (int sx = startX; sx < endX; sx++) {
+            int relX = sx - x;
+            if (isVisible(relX, relY)) {
+              drawPixel(sx, sy, true);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -398,6 +1044,130 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   free(nodeX);
 }
 
+uint8_t* GfxRenderer::captureRegion(int x, int y, int width, int height, size_t* outSize) const {
+  uint8_t* frameBuffer = display.getFrameBuffer();
+  if (!frameBuffer || width <= 0 || height <= 0) {
+    if (outSize) *outSize = 0;
+    return nullptr;
+  }
+
+  // Clip to screen bounds
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+  if (x < 0) {
+    width += x;
+    x = 0;
+  }
+  if (y < 0) {
+    height += y;
+    y = 0;
+  }
+  if (x + width > screenWidth) width = screenWidth - x;
+  if (y + height > screenHeight) height = screenHeight - y;
+
+  if (width <= 0 || height <= 0) {
+    if (outSize) *outSize = 0;
+    return nullptr;
+  }
+
+  // Pack as 1-bit: ceil(width/8) bytes per row
+  const size_t rowBytes = (width + 7) / 8;
+  const size_t bufferSize = rowBytes * height + 4 * sizeof(int);  // +header
+  uint8_t* buffer = static_cast<uint8_t*>(malloc(bufferSize));
+  if (!buffer) {
+    if (outSize) *outSize = 0;
+    return nullptr;
+  }
+
+  // Store dimensions in header
+  int* header = reinterpret_cast<int*>(buffer);
+  header[0] = x;
+  header[1] = y;
+  header[2] = width;
+  header[3] = height;
+  uint8_t* data = buffer + 4 * sizeof(int);
+
+  // Extract pixels - this is orientation-dependent
+  for (int row = 0; row < height; row++) {
+    const int screenY = y + row;
+    uint8_t* destRow = data + row * rowBytes;
+    memset(destRow, 0xFF, rowBytes);  // Start with white
+
+    for (int col = 0; col < width; col++) {
+      const int screenX = x + col;
+
+      // Get physical coordinates
+      int physX, physY;
+      rotateCoordinates(screenX, screenY, &physX, &physY);
+
+      // Read pixel from framebuffer
+      const uint16_t byteIndex = physY * HalDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+      const uint8_t bitPosition = 7 - (physX % 8);
+      const bool isBlack = !(frameBuffer[byteIndex] & (1 << bitPosition));
+
+      // Store in destination
+      if (isBlack) {
+        destRow[col / 8] &= ~(1 << (7 - (col % 8)));
+      }
+    }
+  }
+
+  if (outSize) *outSize = bufferSize;
+  return buffer;
+}
+
+void GfxRenderer::restoreRegion(const uint8_t* buffer, int x, int y, int width, int height) const {
+  uint8_t* frameBuffer = display.getFrameBuffer();
+  if (!frameBuffer || !buffer || width <= 0 || height <= 0) {
+    return;
+  }
+
+  const size_t rowBytes = (width + 7) / 8;
+  const uint8_t* data = buffer + 4 * sizeof(int);  // Skip header
+
+  // Optimized path for Portrait mode
+  if (orientation == Portrait) {
+    for (int row = 0; row < height; row++) {
+      const int screenY = y + row;
+      if (screenY < 0 || screenY >= getScreenHeight()) continue;
+
+      const uint8_t* srcRow = data + row * rowBytes;
+      const int physX = screenY;
+      const uint8_t physXByte = physX / 8;
+      const uint8_t physXBit = 7 - (physX % 8);
+      const uint8_t mask = 1 << physXBit;
+
+      for (int col = 0; col < width; col++) {
+        const int screenX = x + col;
+        if (screenX < 0 || screenX >= getScreenWidth()) continue;
+
+        const bool isBlack = !(srcRow[col / 8] & (1 << (7 - (col % 8))));
+        const int physY = HalDisplay::DISPLAY_HEIGHT - 1 - screenX;
+        const uint16_t byteIndex = physY * HalDisplay::DISPLAY_WIDTH_BYTES + physXByte;
+
+        if (isBlack) {
+          frameBuffer[byteIndex] &= ~mask;
+        } else {
+          frameBuffer[byteIndex] |= mask;
+        }
+      }
+    }
+    return;
+  }
+
+  // Generic fallback using drawPixel
+  for (int row = 0; row < height; row++) {
+    const int screenY = y + row;
+    const uint8_t* srcRow = data + row * rowBytes;
+
+    for (int col = 0; col < width; col++) {
+      const int screenX = x + col;
+      const bool isBlack = !(srcRow[col / 8] & (1 << (7 - (col % 8))));
+      drawPixel(screenX, screenY, isBlack);
+    }
+  }
+}
+
 void GfxRenderer::clearScreen(const uint8_t color) const { display.clearScreen(color); }
 
 void GfxRenderer::invertScreen() const {
@@ -424,7 +1194,8 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   return item;
 }
 
-// Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
+// Note: Internal driver treats screen in command orientation; this library
+// exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
   switch (orientation) {
     case Portrait:
@@ -523,22 +1294,26 @@ void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, cons
 
   // Draw top button outline (3 sides, bottom open)
   if (topBtn != nullptr && topBtn[0] != '\0') {
-    drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);                                       // Top
-    drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);                                      // Left
-    drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);  // Right
+    drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);   // Top
+    drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);  // Left
+    drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1,
+             topButtonY + buttonHeight - 1);  // Right
   }
 
   // Draw shared middle border
   if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
-    drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);  // Shared border
+    drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1,
+             topButtonY + buttonHeight);  // Shared border
   }
 
   // Draw bottom button outline (3 sides, top is shared)
   if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-    drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);  // Left
+    drawLine(x, topButtonY + buttonHeight, x,
+             topButtonY + 2 * buttonHeight - 1);  // Left
     drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1,
-             topButtonY + 2 * buttonHeight - 1);                                                             // Right
-    drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);  // Bottom
+             topButtonY + 2 * buttonHeight - 1);  // Right
+    drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1,
+             topButtonY + 2 * buttonHeight - 1);  // Bottom
   }
 
   // Draw text for each button
@@ -674,9 +1449,10 @@ void GfxRenderer::freeBwBufferChunks() {
 
 /**
  * This should be called before grayscale buffers are populated.
- * A `restoreBwBuffer` call should always follow the grayscale render if this method was called.
- * Uses chunked allocation to avoid needing 48KB of contiguous memory.
- * Returns true if buffer was stored successfully, false if allocation failed.
+ * A `restoreBwBuffer` call should always follow the grayscale render if this
+ * method was called. Uses chunked allocation to avoid needing 48KB of
+ * contiguous memory. Returns true if buffer was stored successfully, false if
+ * allocation failed.
  */
 bool GfxRenderer::storeBwBuffer() {
   const uint8_t* frameBuffer = display.getFrameBuffer();
@@ -689,8 +1465,10 @@ bool GfxRenderer::storeBwBuffer() {
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if any chunks are already allocated
     if (bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk\n",
-                    millis(), i);
+      Serial.printf(
+          "[%lu] [GFX] !! BW buffer chunk %zu already stored - this "
+          "is likely a bug, freeing chunk\n",
+          millis(), i);
       free(bwBufferChunks[i]);
       bwBufferChunks[i] = nullptr;
     }
@@ -715,9 +1493,9 @@ bool GfxRenderer::storeBwBuffer() {
 }
 
 /**
- * This can only be called if `storeBwBuffer` was called prior to the grayscale render.
- * It should be called to restore the BW buffer state after grayscale rendering is complete.
- * Uses chunked restoration to match chunked storage.
+ * This can only be called if `storeBwBuffer` was called prior to the grayscale
+ * render. It should be called to restore the BW buffer state after grayscale
+ * rendering is complete. Uses chunked restoration to match chunked storage.
  */
 void GfxRenderer::restoreBwBuffer() {
   // Check if any all chunks are allocated
@@ -802,17 +1580,19 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
         if (is2Bit) {
           const uint8_t byte = bitmap[pixelPosition / 4];
           const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
-          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
-          // we swap this to better match the way images and screen think about colors:
-          // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
+          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 ->
+          // dark gray, 3 -> black we swap this to better match the way images
+          // and screen think about colors: 0 -> black, 1 -> dark grey, 2 ->
+          // light grey, 3 -> white
           const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
 
           if (renderMode == BW && bmpVal < 3) {
             // Black (also paints over the grays in BW mode)
             drawPixel(screenX, screenY, pixelState);
           } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
+            // Light gray (also mark the MSB if it's going to be a dark gray
+            // too) We have to flag pixels in reverse for the gray buffers, as 0
+            // leave alone, 1 update
             drawPixel(screenX, screenY, false);
           } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
             // Dark gray

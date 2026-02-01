@@ -11,7 +11,12 @@
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "ThemeSelectionActivity.h"
 #include "fontIds.h"
+
+// ... (existing includes)
+
+// ...
 
 void CategorySettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<CategorySettingsActivity*>(param);
@@ -32,7 +37,8 @@ void CategorySettingsActivity::onEnter() {
 void CategorySettingsActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
+  // Wait until not rendering to delete task to avoid killing mid-instruction to
+  // EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
     vTaskDelete(displayTaskHandle);
@@ -123,6 +129,14 @@ void CategorySettingsActivity::toggleCurrentSetting() {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Theme") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new ThemeSelectionActivity(renderer, mappedInput, [this] {
         exitActivity();
         updateRequired = true;
       }));
