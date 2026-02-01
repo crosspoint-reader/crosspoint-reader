@@ -15,7 +15,19 @@ class CrossPointSettings {
   CrossPointSettings(const CrossPointSettings&) = delete;
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
-  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3, BLANK = 4, SLEEP_SCREEN_MODE_COUNT };
+  #define SLEEP_SCREEN_DATA \
+      X(DARK, 0, "Dark") \
+      X(LIGHT, 1, "Light") \
+      X(CUSTOM, 2, "Custom") \
+      X(COVER, 3, "Cover") \
+      X(BLANK, 4, "None")
+
+  enum SLEEP_SCREEN_MODE {
+      #define X(name, val, str) name = val,
+      SLEEP_SCREEN_DATA
+      #undef X
+      SLEEP_SCREEN_MODE_COUNT
+  };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
@@ -71,24 +83,34 @@ class CrossPointSettings {
     PARAGRAPH_ALIGNMENT_COUNT
   };
 
-  // Auto-sleep timeout options (in minutes)
-  enum SLEEP_TIMEOUT {
-    SLEEP_1_MIN = 0,
-    SLEEP_5_MIN = 1,
-    SLEEP_10_MIN = 2,
-    SLEEP_15_MIN = 3,
-    SLEEP_30_MIN = 4,
-    SLEEP_TIMEOUT_COUNT
+  // E-ink refresh frequency (pages between full refreshes)
+  #define REFRESH_DATA \
+      X(REFRESH_1, 0, "1 page") \
+      X(REFRESH_5, 1, "5 pages") \
+      X(REFRESH_10, 2, "10 pages") \
+      X(REFRESH_15, 3, "15 pages") \
+      X(REFRESH_30, 4, "30 pages")
+
+  enum REFRESH_FREQUENCY {
+      #define X(name, val, str) name = val,
+      REFRESH_DATA
+      #undef X
+      REFRESH_FREQUENCY_COUNT
   };
 
-  // E-ink refresh frequency (pages between full refreshes)
-  enum REFRESH_FREQUENCY {
-    REFRESH_1 = 0,
-    REFRESH_5 = 1,
-    REFRESH_10 = 2,
-    REFRESH_15 = 3,
-    REFRESH_30 = 4,
-    REFRESH_FREQUENCY_COUNT
+  // Auto-sleep timeout options (in minutes)
+  #define TIMEOUT_DATA \
+      X(SLEEP_1_MIN, 0, "1 min") \
+      X(SLEEP_5_MIN, 1, "5 min") \
+      X(SLEEP_10_MIN, 2, "10 min") \
+      X(SLEEP_15_MIN, 3, "15 min") \
+      X(SLEEP_30_MIN, 4, "30 min")
+
+  enum SLEEP_TIMEOUT {
+      #define X(name, val, str) name = val,
+      TIMEOUT_DATA
+      #undef X
+      SLEEP_TIMEOUT_COUNT
   };
 
   // Short power button press actions

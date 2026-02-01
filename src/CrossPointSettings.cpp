@@ -272,44 +272,55 @@ int CrossPointSettings::getReaderFontId() const {
   }
 }
 
+namespace {
+const char* const REFRESH_FREQUENCY_OPTIONS[] = {
+    #define X(name, val, str) str,
+    REFRESH_DATA
+    #undef X
+};
+
+const char* const SLEEP_SCREEN_OPTIONS[] = {
+    #define X(name, val, str) str,
+    SLEEP_SCREEN_DATA
+    #undef X
+};
+
+const char* const SLEEP_TIMEOUT_OPTIONS[] = {
+    #define X(name, val, str) str,
+    TIMEOUT_DATA
+    #undef X
+};
+}  // namespace
+
 const char* CrossPointSettings::getRefreshFrequencyString(uint8_t value) {
-  static const char* options[] = {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"};
-  static constexpr size_t count = sizeof(options) / sizeof(options[0]);
-  if (value < count) {
-    return options[value];
+  if (value < REFRESH_FREQUENCY_COUNT) {
+    return REFRESH_FREQUENCY_OPTIONS[value];
   }
-  return options[REFRESH_15];  // Default
+  return REFRESH_FREQUENCY_OPTIONS[REFRESH_15];
 }
 
 size_t CrossPointSettings::getRefreshFrequencyCount() {
-  static const char* options[] = {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"};
-  return sizeof(options) / sizeof(options[0]);
+  return REFRESH_FREQUENCY_COUNT;
 }
 
 const char* CrossPointSettings::getSleepScreenString(uint8_t value) {
-  static const char* options[] = {"Dark", "Light", "Custom", "Cover", "None"};
-  static constexpr size_t count = sizeof(options) / sizeof(options[0]);
-  if (value < count) {
-    return options[value];
+  if (value < SLEEP_SCREEN_MODE_COUNT) {
+    return SLEEP_SCREEN_OPTIONS[value];
   }
-  return options[DARK];  // Default
+  return SLEEP_SCREEN_OPTIONS[DARK];
 }
 
 size_t CrossPointSettings::getSleepScreenCount() {
-  static const char* options[] = {"Dark", "Light", "Custom", "Cover", "None"};
-  return sizeof(options) / sizeof(options[0]);
+  return SLEEP_SCREEN_MODE_COUNT;
 }
 
 const char* CrossPointSettings::getSleepTimeoutString(uint8_t value) {
-  static const char* options[] = {"1 min", "5 min", "10 min", "15 min", "30 min"};
-  static constexpr size_t count = sizeof(options) / sizeof(options[0]);
-  if (value < count) {
-    return options[value];
+  if (value < SLEEP_TIMEOUT_COUNT) {
+    return SLEEP_TIMEOUT_OPTIONS[value];
   }
-  return options[SLEEP_10_MIN];  // Default
+  return SLEEP_TIMEOUT_OPTIONS[SLEEP_10_MIN];
 }
 
 size_t CrossPointSettings::getSleepTimeoutCount() {
-  static const char* options[] = {"1 min", "5 min", "10 min", "15 min", "30 min"};
-  return sizeof(options) / sizeof(options[0]);
+  return SLEEP_TIMEOUT_COUNT;
 }
