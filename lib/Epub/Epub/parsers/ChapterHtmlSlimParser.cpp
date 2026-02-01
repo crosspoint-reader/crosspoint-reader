@@ -1,7 +1,5 @@
 #include "ChapterHtmlSlimParser.h"
 
-#include "../../Epub.h"
-
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
@@ -10,6 +8,7 @@
 #include <ZipFile.h>
 #include <expat.h>
 
+#include "../../Epub.h"
 #include "../Page.h"
 
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
@@ -175,8 +174,7 @@ bool ChapterHtmlSlimParser::generateImageBmp(const std::string& imageHref, std::
     return false;
   }
 
-  const bool success =
-      JpegToBmpConverter::jpegFileToBmpStreamWithSize(jpgFile, bmpFile, viewportWidth, viewportHeight);
+  const bool success = JpegToBmpConverter::jpegFileToBmpStreamWithSize(jpgFile, bmpFile, viewportWidth, viewportHeight);
   jpgFile.close();
   bmpFile.close();
   SdMan.remove(tmpJpgPath.c_str());

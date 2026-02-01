@@ -1,10 +1,9 @@
 #include "Page.h"
 
+#include <GfxRenderer.h>
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
-
-#include <GfxRenderer.h>
 
 namespace {
 constexpr uint16_t MAX_PATH_LEN = 512;
@@ -43,8 +42,7 @@ void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffse
   Bitmap bitmap(file, true);
   const auto err = bitmap.parseHeaders();
   if (err != BmpReaderError::Ok) {
-    Serial.printf("[%lu] [PGE] Failed to parse bitmap %s: %s\n", millis(), bmpPath.c_str(),
-                  Bitmap::errorToString(err));
+    Serial.printf("[%lu] [PGE] Failed to parse bitmap %s: %s\n", millis(), bmpPath.c_str(), Bitmap::errorToString(err));
     file.close();
     return;
   }
