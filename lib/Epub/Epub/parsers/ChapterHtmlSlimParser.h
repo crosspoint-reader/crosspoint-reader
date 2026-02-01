@@ -9,13 +9,16 @@
 #include "../ParsedText.h"
 #include "../blocks/TextBlock.h"
 
+class Epub;
 class Page;
 class GfxRenderer;
 
 #define MAX_WORD_SIZE 200
 
 class ChapterHtmlSlimParser {
+  const std::shared_ptr<Epub> epub;
   const std::string& filepath;
+  const std::string chapterHref;
   GfxRenderer& renderer;
   std::function<void(std::unique_ptr<Page>)> completePageFn;
   std::function<void()> popupFn;  // Popup callback
@@ -41,19 +44,25 @@ class ChapterHtmlSlimParser {
   void startNewTextBlock(TextBlock::Style style);
   void flushPartWordBuffer();
   void makePages();
+  void addImageToPage(const std::string& bmpPath, int bmpWidth, int bmpHeight);
+  std::string resolveImageHref(const std::string& src) const;
+  bool generateImageBmp(const std::string& imageHref, std::string* outBmpPath) const;
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
   static void XMLCALL endElement(void* userData, const XML_Char* name);
 
  public:
-  explicit ChapterHtmlSlimParser(const std::string& filepath, GfxRenderer& renderer, const int fontId,
+  explicit ChapterHtmlSlimParser(const std::shared_ptr<Epub>& epub, const std::string& filepath,
+                                 const std::string& chapterHref, GfxRenderer& renderer, const int fontId,
                                  const float lineCompression, const bool extraParagraphSpacing,
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const std::function<void()>& popupFn = nullptr)
-      : filepath(filepath),
+      : epub(epub),
+        filepath(filepath),
+        chapterHref(chapterHref),
         renderer(renderer),
         fontId(fontId),
         lineCompression(lineCompression),

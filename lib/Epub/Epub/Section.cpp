@@ -8,7 +8,7 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 10;
+constexpr uint8_t SECTION_FILE_VERSION = 11;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) +
                                  sizeof(uint32_t);
@@ -177,8 +177,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   std::vector<uint32_t> lut = {};
 
   ChapterHtmlSlimParser visitor(
-      tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
-      viewportHeight, hyphenationEnabled,
+      epub, tmpHtmlPath, localPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment,
+      viewportWidth, viewportHeight, hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); }, popupFn);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   success = visitor.parseAndBuildPages();
