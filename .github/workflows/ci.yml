@@ -79,8 +79,10 @@ jobs:
           echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
           {
             echo "## Firmware build stats"
-            if [ -n "$ram_line" ]; then echo "- ${ram_line}"; else echo "- RAM: not found"; fi
-            if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
+            echo "```text"
+            if [ -n "$ram_line" ]; then echo "${ram_line}"; else echo "RAM: not found"; fi
+            if [ -n "$flash_line" ]; then echo "${flash_line}"; else echo "Flash: not found"; fi
+            echo "```"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload firmware.bin artifact
