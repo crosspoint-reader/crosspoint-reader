@@ -419,9 +419,13 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
 
   std::string item = text;
   const char* ellipsis = "...";
-  int ellipsisWidth = getTextWidth(fontId, ellipsis, style);
+  int textWidth = getTextWidth(fontId, item.c_str(), style);
+  if (textWidth <= maxWidth) {
+    // Text fits, return as is
+    return item;
+  }
 
-  while (!item.empty() && getTextWidth(fontId, (item + ellipsis).c_str(), style) > maxWidth) {
+  while (!item.empty() && getTextWidth(fontId, (item + ellipsis).c_str(), style) >= maxWidth) {
     utf8RemoveLastChar(item);
   }
 
