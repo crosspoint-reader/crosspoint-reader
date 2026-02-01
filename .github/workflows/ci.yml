@@ -1,32 +1,22 @@
-name: CI
-'on':
+name: CI (build)
+
+on:
   push:
     branches: [master]
   pull_request:
 
-# permissions:
-#   contents: read
-#   issues: write
-#   pull-requests: write
-
-# permissions: 
-#   write-all
-
+permissions:
+  contents: read
 
 jobs:
-  label:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/labeler@v5
-
   clang-format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
 
@@ -39,16 +29,18 @@ jobs:
           sudo apt-get install -y clang-format-21
 
       - name: Run clang-format
-        run: PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix && git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
+        run: |
+          PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+          git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
 
   cppcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
 
@@ -61,11 +53,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
 
@@ -95,62 +87,18 @@ jobs:
             if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Upload both the binary and the stats/log so Stage 2 can read them without checkout.
       - name: Upload firmware.bin artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event_name == 'pull_request' && format('firmware-bin-pr-{0}-{1}', github.event.pull_request.number, steps.short_sha.outputs.short) || format('firmware-bin-{0}', steps.short_sha.outputs.short) }}
+          name: firmware-bin
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
 
-      - name: Comment PR with firmware stats and firmware.bin
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+      - name: Upload build metadata artifact
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const marker = '<!-- firmware-stats -->';
-            const ram = `${{ steps.fw_stats.outputs.ram_line }}`.trim();
-            const flash = `${{ steps.fw_stats.outputs.flash_line }}`.trim();
-            const prNumber = context.payload.pull_request?.number;
-            const shortSha = `${{ steps.short_sha.outputs.short }}`.trim() || context.sha.substring(0, 7);
-            const artifactName = prNumber
-              ? `firmware-bin-pr-${prNumber}-${shortSha}`
-              : `firmware-bin-${shortSha}`;
-            let firmwareLine = 'Firmware: artifact not found';
-            try {
-              const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: context.runId,
-              });
-              const firmwareArtifact = artifacts.artifacts.find((artifact) => artifact.name === artifactName);
-              if (firmwareArtifact) {
-                const artifactUiUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/artifacts/${firmwareArtifact.id}`;
-                firmwareLine = `Firmware: [${artifactName}](${artifactUiUrl})`;
-              } else {
-                firmwareLine = `Firmware: artifact not found (${artifactName})`;
-              }
-            } catch (error) {
-              firmwareLine = `Firmware: artifact lookup failed (${error.message})`;
-            }
-            const body = `${marker}\n**Firmware build stats**\n\n\`\`\`\n${ram || 'RAM: not found'}\n${flash || 'Flash: not found'}\n\`\`\`\n\n**Firmware binary**\n${firmwareLine}`;
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
+          name: build-meta
+          path: |
+            pio.log
+          if-no-files-found: error
