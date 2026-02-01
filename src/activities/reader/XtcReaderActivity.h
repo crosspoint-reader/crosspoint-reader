@@ -13,6 +13,10 @@
 #include <freertos/task.h>
 
 #include "activities/ActivityWithSubactivity.h"
+namespace {
+constexpr size_t MAX_PAGE_BUFFER_SIZE = (480 * 800 + 7) / 8 * 2;
+static uint8_t s_pageBuffer[MAX_PAGE_BUFFER_SIZE] = {0}; 
+}  // namespace
 
 class XtcReaderActivity final : public ActivityWithSubactivity {
   std::shared_ptr<Xtc> xtc;
@@ -23,6 +27,8 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
+    //pages once load
+  uint32_t m_loadedMax = 499;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
@@ -30,6 +36,8 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   void renderPage();
   void saveProgress() const;
   void loadProgress();
+//new 
+void gotoPage(uint32_t targetPage);
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,

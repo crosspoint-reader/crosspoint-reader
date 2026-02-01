@@ -101,6 +101,12 @@ struct ChapterInfo {
   uint16_t startPage;
   uint16_t endPage;
 };
+//new struct 
+struct ChapterData {
+    int chapterIndex;        
+    uint16_t startPage;     
+    char shortTitle[64]; 
+};
 
 // Error codes
 enum class XtcError {

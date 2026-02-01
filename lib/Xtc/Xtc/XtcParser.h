@@ -29,6 +29,11 @@ class XtcParser {
   XtcParser();
   ~XtcParser();
 
+#define MAX_SAVE_CHAPTER  30   
+  #define TITLE_KEEP_LENGTH 20    
+  #define TITLE_BUF_SIZE    64    
+
+
   // File open/close
   XtcError open(const char* filepath);
   void close();
@@ -54,6 +59,46 @@ class XtcParser {
    */
   size_t loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize);
 
+
+/**
+ * @brief 
+ * @return XtcError Loading status: OK = success, PAGE_OUT_OF_RANGE = no more pages to load, others = loading failed.
+ */
+XtcError loadNextPageBatch();
+
+/**
+ * @brief Get the maximum page number that has been loaded currently.
+ * @return uint16_t The maximum valid page number loaded currently.
+ */
+uint16_t getLoadedMaxPage() const;
+
+/**
+ * @brief Get the number of pages loaded dynamically each time (batch size).
+ * @return uint16_t Page batch size, default is 10.
+ */
+uint16_t getPageBatchSize() const;
+
+uint32_t getChapterstartpage(int chapterIndex) {
+    for(int i = 0; i < 25; i++) {
+        if(ChapterList[i].chapterIndex == chapterIndex) {
+            return ChapterList[i].startPage;
+        }
+    }
+    return 0; // Return 0 if the chapter does not exist.
+}
+
+std::string getChapterTitleByIndex(int chapterIndex) {
+    Serial.printf("[%lu] [XTC] Entered getChapterTitleByIndex，chapterActualCount=%d\n", millis(),chapterActualCount);
+    for(int i = 0; i < 25; i++) {
+        if(ChapterList[i].chapterIndex == chapterIndex) {
+            return std::string(ChapterList[i].shortTitle);
+            Serial.printf("[%lu] [XTC] In getChapterTitleByIndex, the title of chapter %d is: %s %u\n", millis(), i, ChapterList[i].shortTitle);
+        }
+    }
+    return ""; // Return empty string if the chapter does not exist.
+}
+
+
   /**
    * Streaming page load
    * Memory-efficient method that reads page data in chunks.
@@ -74,6 +119,11 @@ class XtcParser {
   bool hasChapters() const { return m_hasChapters; }
   const std::vector<ChapterInfo>& getChapters() const { return m_chapters; }
 
+  XtcError readChapters_gd(uint16_t chapterStart);
+ ChapterData ChapterList[MAX_SAVE_CHAPTER];
+  int chapterActualCount = 0;
+  XtcError loadPageBatchByStart(uint16_t startPage);
+
   // Validation
   static bool isValidXtcFile(const char* filepath);
 
@@ -93,6 +143,7 @@ class XtcParser {
   uint8_t m_bitDepth;  // 1 = XTC/XTG (1-bit), 2 = XTCH/XTH (2-bit)
   bool m_hasChapters;
   XtcError m_lastError;
+  uint16_t m_loadedStartPage = 0;
 
   // Internal helper functions
   XtcError readHeader();
@@ -100,6 +151,8 @@ class XtcParser {
   XtcError readTitle();
   XtcError readAuthor();
   XtcError readChapters();
+  uint16_t m_loadBatchSize = 10;    // pages for once load
+  uint16_t m_loadedMaxPage = 0;     // Record the maximum page currently loaded
 };
 
 }  // namespace xtc
