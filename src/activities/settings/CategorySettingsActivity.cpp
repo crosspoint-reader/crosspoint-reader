@@ -5,6 +5,7 @@
 
 #include <cstring>
 
+#include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
@@ -127,6 +128,15 @@ void CategorySettingsActivity::toggleCurrentSetting() {
         updateRequired = true;
       }));
       xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "Remap Front Buttons") == 0) {
+      // Start the button remap flow.
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new ButtonRemapActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
     }
   } else {
     return;
@@ -186,7 +196,7 @@ void CategorySettingsActivity::render() const {
   renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
                     pageHeight - 60, CROSSPOINT_VERSION);
 
-  const auto labels = mappedInput.mapLabels("« Back", "Toggle", "", "");
+  const auto labels = mappedInput.mapLabels("« Back", "Toggle", "Up", "Down");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
