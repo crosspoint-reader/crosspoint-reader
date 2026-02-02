@@ -45,8 +45,6 @@ void validateFrontButtonMapping(CrossPointSettings& settings) {
 }
 }  // namespace
 
-
-
 bool CrossPointSettings::saveToFile() const {
   // Make sure the directory exists
   SdMan.mkdir("/.crosspoint");
@@ -63,7 +61,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, shortPwrBtn);
   serialization::writePod(outputFile, statusBar);
   serialization::writePod(outputFile, orientation);
-  serialization::writePod(outputFile, frontButtonLayout); // legacy
+  serialization::writePod(outputFile, frontButtonLayout);  // legacy
   serialization::writePod(outputFile, sideButtonLayout);
   serialization::writePod(outputFile, fontFamily);
   serialization::writePod(outputFile, fontSize);
@@ -124,7 +122,7 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, orientation, ORIENTATION_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, frontButtonLayout, FRONT_BUTTON_LAYOUT_COUNT); // legacy
+    readAndValidate(inputFile, frontButtonLayout, FRONT_BUTTON_LAYOUT_COUNT);  // legacy
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, sideButtonLayout, SIDE_BUTTON_LAYOUT_COUNT);
     if (++settingsRead >= fileSettingsCount) break;

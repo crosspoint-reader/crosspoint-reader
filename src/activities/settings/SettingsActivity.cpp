@@ -40,12 +40,12 @@ const SettingInfo readerSettings[readerSettingsCount] = {
 
 constexpr int controlsSettingsCount = 4;
 const SettingInfo controlsSettings[controlsSettingsCount] = {
-  // Launches the remap wizard for front buttons.
-  SettingInfo::Action("Remap Front Buttons"),
-  SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
-            {"Prev, Next", "Next, Prev"}),
-  SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
-  SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
+    // Launches the remap wizard for front buttons.
+    SettingInfo::Action("Remap Front Buttons"),
+    SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
+                      {"Prev, Next", "Next, Prev"}),
+    SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
+    SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
 
 constexpr int systemSettingsCount = 5;
 const SettingInfo systemSettings[systemSettingsCount] = {
