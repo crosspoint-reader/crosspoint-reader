@@ -23,8 +23,6 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingPercentJump = false;
   // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
   float pendingSpineProgress = 0.0f;
-  // Prevents the reader menu from reopening due to the confirm button used to exit the slider.
-  bool suppressMenuOpenOnce = false;
   bool updateRequired = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;

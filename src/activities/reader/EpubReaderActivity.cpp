@@ -136,19 +136,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Enter reader menu activity (suppressed after slider confirm/cancel).
-  if (suppressMenuOpenOnce) {
-    // If we're seeing the confirm release that closed the slider, consume it and return.
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      suppressMenuOpenOnce = false;
-      return;
-    }
-    // If confirm is no longer pressed and no release is pending, clear suppression.
-    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      suppressMenuOpenOnce = false;
-    }
-  }
-
+  // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -382,13 +370,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           [this](const int percent) {
             // Apply the new position and exit back to the reader.
             jumpToPercent(percent);
-            suppressMenuOpenOnce = true;
             exitActivity();
             updateRequired = true;
           },
           [this]() {
             // Cancel selection and return to the reader.
-            suppressMenuOpenOnce = true;
             exitActivity();
             updateRequired = true;
           }));
