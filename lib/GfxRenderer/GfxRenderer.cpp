@@ -104,7 +104,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 
   uint32_t cp;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+  while ((cp = utf8NextCodepointWithLigatures(reinterpret_cast<const uint8_t**>(&text)))) {
     renderChar(font, cp, &xpos, &yPos, black, style);
   }
 }
@@ -600,7 +600,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   int yPos = y;  // Current Y position (decreases as we draw characters)
 
   uint32_t cp;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+  while ((cp = utf8NextCodepointWithLigatures(reinterpret_cast<const uint8_t**>(&text)))) {
     const EpdGlyph* glyph = font.getGlyph(cp, style);
     if (!glyph) {
       glyph = font.getGlyph(REPLACEMENT_GLYPH, style);

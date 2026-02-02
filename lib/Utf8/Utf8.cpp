@@ -30,6 +30,42 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
   return cp;
 }
 
+uint32_t utf8NextCodepointWithLigatures(const unsigned char** string) {
+  const uint32_t cp = utf8NextCodepoint(string);
+  if (cp != 'f') {
+    return cp;
+  }
+
+  // Save position after 'f' for potential rollback
+  const unsigned char* afterF = *string;
+
+  const uint32_t next = utf8NextCodepoint(string);
+  if (next == 'f') {
+    // ff — check for ffi or ffl
+    const unsigned char* afterFF = *string;
+    const uint32_t third = utf8NextCodepoint(string);
+    if (third == 'i') {
+      return 0xFB03;  // ffi
+    }
+    if (third == 'l') {
+      return 0xFB04;  // ffl
+    }
+    // Just ff, roll back the third character
+    *string = afterFF;
+    return 0xFB00;  // ff
+  }
+  if (next == 'i') {
+    return 0xFB01;  // fi
+  }
+  if (next == 'l') {
+    return 0xFB02;  // fl
+  }
+
+  // No ligature match, roll back to after 'f'
+  *string = afterF;
+  return 'f';
+}
+
 size_t utf8RemoveLastChar(std::string& str) {
   if (str.empty()) return 0;
   size_t pos = str.size() - 1;
