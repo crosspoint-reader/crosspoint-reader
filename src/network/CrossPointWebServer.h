@@ -42,11 +42,10 @@ class CrossPointWebServer {
     // 4KB is a good balance: large enough to reduce syscall overhead, small enough
     // to keep individual write times short and avoid watchdog issues
     static constexpr size_t UPLOAD_BUFFER_SIZE = 4096;  // 4KB buffer
-    uint8_t* buffer = nullptr;
+    std::vector<uint8_t> buffer;
     size_t bufferPos = 0;
 
-    UploadState() : buffer(new uint8_t[UPLOAD_BUFFER_SIZE]) {}
-    ~UploadState() { delete[] buffer; }
+    UploadState() { buffer.resize(UPLOAD_BUFFER_SIZE); }
   } upload;
 
   CrossPointWebServer();

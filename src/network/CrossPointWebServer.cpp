@@ -467,7 +467,7 @@ static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
   if (state.bufferPos > 0 && state.file) {
     esp_task_wdt_reset();  // Reset watchdog before potentially slow SD write
     const unsigned long writeStart = millis();
-    const size_t written = state.file.write(state.buffer, state.bufferPos);
+    const size_t written = state.file.write(state.buffer.data(), state.bufferPos);
     totalWriteTime += millis() - writeStart;
     writeCount++;
     esp_task_wdt_reset();  // Reset watchdog after SD write
@@ -565,7 +565,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         const size_t space = UploadState::UPLOAD_BUFFER_SIZE - state.bufferPos;
         const size_t toCopy = (remaining < space) ? remaining : space;
 
-        memcpy(state.buffer + state.bufferPos, data, toCopy);
+        memcpy(state.buffer.data() + state.bufferPos, data, toCopy);
         state.bufferPos += toCopy;
         data += toCopy;
         remaining -= toCopy;
