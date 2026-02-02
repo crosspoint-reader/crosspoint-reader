@@ -6,8 +6,8 @@
 #include <esp_task_wdt.h>
 
 #include "MappedInputManager.h"
-#include "ScreenComponents.h"
 #include "WifiSelectionActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -258,8 +258,7 @@ void CalibreConnectActivity::renderServerRunning() const {
     constexpr int barWidth = 300;
     constexpr int barHeight = 16;
     constexpr int barX = (480 - barWidth) / 2;
-    ScreenComponents::drawProgressBar(renderer, barX, y + 22, barWidth, barHeight, lastProgressReceived,
-                                      lastProgressTotal);
+    GUI.drawProgressBar(renderer, Rect{barX, y + 22, barWidth, barHeight}, lastProgressReceived, lastProgressTotal);
     y += 40;
   }
 
@@ -272,5 +271,5 @@ void CalibreConnectActivity::renderServerRunning() const {
   }
 
   const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

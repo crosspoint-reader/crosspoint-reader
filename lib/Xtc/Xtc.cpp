@@ -301,11 +301,12 @@ bool Xtc::generateCoverBmp() const {
   return true;
 }
 
-std::string Xtc::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Xtc::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
+std::string Xtc::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
 
-bool Xtc::generateThumbBmp() const {
+bool Xtc::generateThumbBmp(int height) const {
   // Already generated
-  if (SdMan.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getThumbBmpPath(height).c_str())) {
     return true;
   }
 
@@ -333,8 +334,8 @@ bool Xtc::generateThumbBmp() const {
   const uint8_t bitDepth = parser->getBitDepth();
 
   // Calculate target dimensions for thumbnail (fit within 240x400 Continue Reading card)
-  constexpr int THUMB_TARGET_WIDTH = 240;
-  constexpr int THUMB_TARGET_HEIGHT = 400;
+  int THUMB_TARGET_WIDTH = height * 0.6;
+  int THUMB_TARGET_HEIGHT = height;
 
   // Calculate scale factor
   float scaleX = static_cast<float>(THUMB_TARGET_WIDTH) / pageInfo.width;
@@ -348,7 +349,7 @@ bool Xtc::generateThumbBmp() const {
     if (generateCoverBmp()) {
       FsFile src, dst;
       if (SdMan.openFileForRead("XTC", getCoverBmpPath(), src)) {
-        if (SdMan.openFileForWrite("XTC", getThumbBmpPath(), dst)) {
+        if (SdMan.openFileForWrite("XTC", getThumbBmpPath(height), dst)) {
           uint8_t buffer[512];
           while (src.available()) {
             size_t bytesRead = src.read(buffer, sizeof(buffer));
@@ -359,7 +360,7 @@ bool Xtc::generateThumbBmp() const {
         src.close();
       }
       Serial.printf("[%lu] [XTC] Copied cover to thumb (no scaling needed)\n", millis());
-      return SdMan.exists(getThumbBmpPath().c_str());
+      return SdMan.exists(getThumbBmpPath(height).c_str());
     }
     return false;
   }
@@ -393,7 +394,7 @@ bool Xtc::generateThumbBmp() const {
 
   // Create thumbnail BMP file - use 1-bit format for fast home screen rendering (no gray passes)
   FsFile thumbBmp;
-  if (!SdMan.openFileForWrite("XTC", getThumbBmpPath(), thumbBmp)) {
+  if (!SdMan.openFileForWrite("XTC", getThumbBmpPath(height), thumbBmp)) {
     Serial.printf("[%lu] [XTC] Failed to create thumb BMP file\n", millis());
     free(pageBuffer);
     return false;
@@ -558,7 +559,7 @@ bool Xtc::generateThumbBmp() const {
   free(pageBuffer);
 
   Serial.printf("[%lu] [XTC] Generated thumb BMP (%dx%d): %s\n", millis(), thumbWidth, thumbHeight,
-                getThumbBmpPath().c_str());
+                getThumbBmpPath(height).c_str());
   return true;
 }
 

@@ -14,7 +14,8 @@ constexpr int MAX_RECENT_BOOKS = 10;
 
 RecentBooksStore RecentBooksStore::instance;
 
-void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author) {
+void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
+                               const std::string& coverBmpPath) {
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
@@ -23,7 +24,7 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author});
+  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -50,6 +51,7 @@ bool RecentBooksStore::saveToFile() const {
     serialization::writeString(outputFile, book.path);
     serialization::writeString(outputFile, book.title);
     serialization::writeString(outputFile, book.author);
+    serialization::writeString(outputFile, book.coverBmpPath);
   }
 
   outputFile.close();
@@ -77,7 +79,7 @@ bool RecentBooksStore::loadFromFile() {
         serialization::readString(inputFile, path);
         // Title and author will be empty, they will be filled when the book is
         // opened again
-        recentBooks.push_back({path, "", ""});
+        recentBooks.push_back({path, "", "", ""});
       }
     } else {
       Serial.printf("[%lu] [RBS] Deserialization failed: Unknown version %u\n", millis(), version);
@@ -92,11 +94,12 @@ bool RecentBooksStore::loadFromFile() {
     recentBooks.reserve(count);
 
     for (uint8_t i = 0; i < count; i++) {
-      std::string path, title, author;
+      std::string path, title, author, coverBmpPath;
       serialization::readString(inputFile, path);
       serialization::readString(inputFile, title);
       serialization::readString(inputFile, author);
-      recentBooks.push_back({path, title, author});
+      serialization::readString(inputFile, coverBmpPath);
+      recentBooks.push_back({path, title, author, coverBmpPath});
     }
   }
 
