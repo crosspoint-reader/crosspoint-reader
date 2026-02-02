@@ -59,10 +59,13 @@ int ScreenComponents::bookProgressBarHeight() {
   const bool isVertical = (orientation == CrossPointSettings::ORIENTATION::PORTRAIT ||
                            orientation == CrossPointSettings::ORIENTATION::INVERTED);
 
+  constexpr int bookProgressBarVerticalHeight = 4;
+  constexpr int bookProgressBarHorizontalHeight = 2;
+
   if (isVertical) {
-    return ScreenComponents::BOOK_PROGRESS_BAR_VERTICAL_HEIGHT;
+    return bookProgressBarVerticalHeight;
   } else {
-    return ScreenComponents::BOOK_PROGRESS_BAR_HORIZONTAL_HEIGHT;
+    return bookProgressBarHorizontalHeight;
   }
 }
 
