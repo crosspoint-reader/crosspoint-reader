@@ -58,9 +58,11 @@ void TxtReaderActivity::onEnter() {
   txt->setupCacheDir();
 
   // Save current txt as last opened file and add to recent books
-  APP_STATE.openEpubPath = txt->getPath();
+  auto filePath = txt->getPath();
+  auto fileName = filePath.substr(filePath.rfind('/') + 1);
+  APP_STATE.openEpubPath = filePath;
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(txt->getPath(), "", "", "");
+  RECENT_BOOKS.addBook(filePath, fileName, "", "");
 
   // Trigger first update
   updateRequired = true;

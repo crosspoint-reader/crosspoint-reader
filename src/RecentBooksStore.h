@@ -36,6 +36,7 @@ class RecentBooksStore {
   bool saveToFile() const;
 
   bool loadFromFile();
+  RecentBook getDataFromBook(std::string path) const;
 };
 
 // Helper macro to access recent books store
