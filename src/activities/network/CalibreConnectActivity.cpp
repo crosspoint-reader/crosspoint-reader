@@ -11,7 +11,19 @@
 #include "fontIds.h"
 
 namespace {
-constexpr const char* HOSTNAME = "crosspoint";
+  // Generate hostname dynamically based on device MAC address
+  String getDeviceHostname() {
+    static String deviceHostname;
+    if (deviceHostname.length() == 0) {
+      uint64_t chipId = ESP.getEfuseMac();
+      // Extract last 6 hex digits (24 bits) for serial number
+      uint32_t serialNum = (uint32_t)(chipId & 0xFFFFFF);
+      char hostname[32];
+      snprintf(hostname, sizeof(hostname), "XTeinkX4-%06X", serialNum);
+      deviceHostname = String(hostname);
+    }
+    return deviceHostname;
+  }
 }  // namespace
 
 void CalibreConnectActivity::taskTrampoline(void* param) {
@@ -94,9 +106,9 @@ void CalibreConnectActivity::startWebServer() {
   state = CalibreConnectState::SERVER_STARTING;
   updateRequired = true;
 
-  if (MDNS.begin(HOSTNAME)) {
+  if (MDNS.begin(getDeviceHostname().c_str())) {
     // mDNS is optional for the Calibre plugin but still helpful for users.
-    Serial.printf("[%lu] [CAL] mDNS started: http://%s.local/\n", millis(), HOSTNAME);
+    Serial.printf("[%lu] [CAL] mDNS started: http://%s.local/\n", millis(), getDeviceHostname().c_str());
   }
 
   webServer.reset(new CrossPointWebServer());
