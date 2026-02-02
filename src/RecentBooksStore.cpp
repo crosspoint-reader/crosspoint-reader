@@ -7,7 +7,7 @@
 #include <algorithm>
 
 namespace {
-constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 2;
+constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 3;
 constexpr char RECENT_BOOKS_FILE[] = "/.crosspoint/recent.bin";
 constexpr int MAX_RECENT_BOOKS = 10;
 }  // namespace
@@ -80,6 +80,21 @@ bool RecentBooksStore::loadFromFile() {
         // Title and author will be empty, they will be filled when the book is
         // opened again
         recentBooks.push_back({path, "", "", ""});
+      }
+    } else if (version == 2) {
+      // Old version, just read paths, titles and authors
+      uint8_t count;
+      serialization::readPod(inputFile, count);
+      recentBooks.clear();
+      recentBooks.reserve(count);
+      for (uint8_t i = 0; i < count; i++) {
+        std::string path, title, author;
+        serialization::readString(inputFile, path);
+        serialization::readString(inputFile, title);
+        serialization::readString(inputFile, author);
+        // Title and author will be empty, they will be filled when the book is
+        // opened again
+        recentBooks.push_back({path, title, author, ""});
       }
     } else {
       Serial.printf("[%lu] [RBS] Deserialization failed: Unknown version %u\n", millis(), version);
