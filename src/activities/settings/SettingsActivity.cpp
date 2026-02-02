@@ -48,7 +48,8 @@ const SettingInfo readerSettings[readerSettingsCount] = {
     SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
                       {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
     SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
-    SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing)};
+    SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing),
+    SettingInfo::Toggle("Inverse Display", &CrossPointSettings::inverseDisplay)};
 
 constexpr int controlsSettingsCount = 4;
 const SettingInfo controlsSettings[controlsSettingsCount] = {

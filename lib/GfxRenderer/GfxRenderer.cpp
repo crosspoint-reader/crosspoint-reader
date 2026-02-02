@@ -788,7 +788,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
               drawPixel(screenX, screenY, black);
             } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
               drawPixel(screenX, screenY, false);
-            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+            } else if (renderMode == GRAYSCALE_LSB && bmpVal == (black ? 1 : 2)) {
               drawPixel(screenX, screenY, false);
             }
           } else {
@@ -972,8 +972,8 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
             // Light gray (also mark the MSB if it's going to be a dark gray too)
             // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
             drawPixel(screenX, screenY, false);
-          } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
+          } else if (renderMode == GRAYSCALE_LSB && bmpVal == (pixelState ? 1 : 2)) {
+            // Dark gray (swap gray level for inverse display)
             drawPixel(screenX, screenY, false);
           }
         } else {

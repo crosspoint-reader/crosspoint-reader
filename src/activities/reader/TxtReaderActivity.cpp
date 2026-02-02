@@ -400,7 +400,7 @@ void TxtReaderActivity::renderScreen() {
   currentPageLines.clear();
   loadPageAtOffset(offset, currentPageLines, nextOffset);
 
-  renderer.clearScreen();
+  renderer.clearScreen(SETTINGS.inverseDisplay ? 0x00 : 0xFF);
   renderPage();
 
   // Save progress
@@ -418,6 +418,8 @@ void TxtReaderActivity::renderPage() {
 
   const int lineHeight = renderer.getLineHeight(cachedFontId);
   const int contentWidth = viewportWidth;
+
+  const bool inverse = SETTINGS.inverseDisplay;
 
   // Render text lines with alignment
   auto renderLines = [&]() {
@@ -448,7 +450,7 @@ void TxtReaderActivity::renderPage() {
             break;
         }
 
-        renderer.drawText(cachedFontId, x, y, line.c_str());
+        renderer.drawText(cachedFontId, x, y, line.c_str(), !inverse);
       }
       y += lineHeight;
     }

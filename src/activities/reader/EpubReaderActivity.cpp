@@ -619,11 +619,12 @@ void EpubReaderActivity::renderScreen() {
     }
   }
 
-  renderer.clearScreen();
+  const bool inverse = SETTINGS.inverseDisplay;
+  renderer.clearScreen(inverse ? 0x00 : 0xFF);
 
   if (section->pageCount == 0) {
     Serial.printf("[%lu] [ERS] No pages to render\n", millis());
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty chapter", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty chapter", !inverse, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
     return;
@@ -631,7 +632,7 @@ void EpubReaderActivity::renderScreen() {
 
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
     Serial.printf("[%lu] [ERS] Page out of bounds: %d (max %d)\n", millis(), section->currentPage, section->pageCount);
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Out of bounds", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Out of bounds", !inverse, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
     return;
@@ -672,7 +673,8 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+  const bool inverse = SETTINGS.inverseDisplay;
+  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop, !inverse);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -690,13 +692,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   if (SETTINGS.textAntiAliasing) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop, !inverse);
     renderer.copyGrayscaleLsbBuffers();
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop, !inverse);
     renderer.copyGrayscaleMsbBuffers();
 
     // display grayscale part
