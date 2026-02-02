@@ -8,10 +8,10 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
+#include "EpubReaderPercentSelectionActivity.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "ScreenComponents.h"
-#include "activities/reader/EpubReaderPercentSelectionActivity.h"
 #include "fontIds.h"
 
 namespace {
