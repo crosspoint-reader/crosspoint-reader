@@ -60,9 +60,9 @@ int ScreenComponents::bookProgressBarHeight() {
                            orientation == CrossPointSettings::ORIENTATION::INVERTED);
 
   if (isVertical) {
-    return 4;
+    return ScreenComponents::BOOK_PROGRESS_BAR_VERTICAL_HEIGHT;
   } else {
-    return 2;
+    return ScreenComponents::BOOK_PROGRESS_BAR_HORIZONTAL_HEIGHT;
   }
 }
 

@@ -13,6 +13,8 @@ struct TabInfo {
 
 class ScreenComponents {
  public:
+  static const int BOOK_PROGRESS_BAR_VERTICAL_HEIGHT = 4;
+  static const int BOOK_PROGRESS_BAR_HORIZONTAL_HEIGHT = 2;
   static int bookProgressBarHeight();
 
   static void drawBattery(const GfxRenderer& renderer, int left, int top, bool showPercentage = true);
