@@ -5,12 +5,14 @@
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "ScreenComponents.h"
+#include "activities/reader/EpubReaderPercentSelectionActivity.h"
 #include "fontIds.h"
 
 namespace {
@@ -21,6 +23,17 @@ constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
 
 }  // namespace
+
+// Clamp any percent-like value into the valid 0-100 range.
+static int clampPercent(const int value) {
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 100) {
+    return 100;
+  }
+  return value;
+}
 
 void EpubReaderActivity::taskTrampoline(void* param) {
   auto* self = static_cast<EpubReaderActivity*>(param);
@@ -123,7 +136,19 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Enter chapter selection activity
+  // Enter reader menu activity (suppressed after slider confirm/cancel).
+  if (suppressMenuOpenOnce) {
+    // If we're seeing the confirm release that closed the slider, consume it and return.
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      suppressMenuOpenOnce = false;
+      return;
+    }
+    // If confirm is no longer pressed and no release is pending, clear suppression.
+    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      suppressMenuOpenOnce = false;
+    }
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -225,6 +250,85 @@ void EpubReaderActivity::onReaderMenuBack() {
   updateRequired = true;
 }
 
+// Translate an absolute percent into a spine index plus a normalized position
+// within that spine so we can jump after the section is loaded.
+void EpubReaderActivity::jumpToPercent(int percent) {
+  if (!epub) {
+    return;
+  }
+
+  const size_t bookSize = epub->getBookSize();
+  if (bookSize == 0) {
+    return;
+  }
+
+  // Normalize input to 0-100 to avoid invalid jumps.
+  percent = clampPercent(percent);
+
+  // Convert percent into a byte-like absolute position across the spine sizes.
+  size_t targetSize = (bookSize * static_cast<size_t>(percent)) / 100;
+  if (percent >= 100 && bookSize > 0) {
+    // Ensure the final percent lands inside the last spine item.
+    targetSize = bookSize - 1;
+  }
+
+  const int spineCount = epub->getSpineItemsCount();
+  if (spineCount == 0) {
+    return;
+  }
+
+  int targetSpineIndex = spineCount - 1;
+  size_t prevCumulative = 0;
+
+  for (int i = 0; i < spineCount; i++) {
+    const size_t cumulative = epub->getCumulativeSpineItemSize(i);
+    if (targetSize <= cumulative) {
+      // Found the spine item containing the absolute position.
+      targetSpineIndex = i;
+      prevCumulative = (i > 0) ? epub->getCumulativeSpineItemSize(i - 1) : 0;
+      break;
+    }
+  }
+
+  const size_t cumulative = epub->getCumulativeSpineItemSize(targetSpineIndex);
+  const size_t spineSize = (cumulative > prevCumulative) ? (cumulative - prevCumulative) : 0;
+  // Store a normalized position within the spine so it can be applied once loaded.
+  pendingSpineProgress = (spineSize == 0) ? 0.0f
+                                          : static_cast<float>(targetSize - prevCumulative) /
+                                                static_cast<float>(spineSize);
+  if (pendingSpineProgress < 0.0f) {
+    pendingSpineProgress = 0.0f;
+  } else if (pendingSpineProgress > 1.0f) {
+    pendingSpineProgress = 1.0f;
+  }
+
+  // Reset state so renderScreen() reloads and repositions on the target spine.
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  currentSpineIndex = targetSpineIndex;
+  nextPageNumber = 0;
+  pendingPercentJump = true;
+  section.reset();
+  xSemaphoreGive(renderingMutex);
+}
+
+// Compute the overall reading position as a percent of the book.
+int EpubReaderActivity::getCurrentPercent() const {
+  if (!epub || epub->getBookSize() == 0) {
+    return 0;
+  }
+
+  // Estimate within-spine progress based on the current page.
+  float chapterProgress = 0.0f;
+  if (section && section->pageCount > 0) {
+    chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+  }
+
+  // Convert to overall progress using cumulative spine sizes.
+  const float progress = epub->calculateProgress(currentSpineIndex, chapterProgress);
+  const int percent = static_cast<int>(progress * 100.0f + 0.5f);
+  return clampPercent(percent);
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
@@ -265,6 +369,29 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             updateRequired = true;
           }));
 
+      xSemaphoreGive(renderingMutex);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
+      // Launch the slider-based percent selector and return here on confirm/cancel.
+      const int initialPercent = getCurrentPercent();
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new EpubReaderPercentSelectionActivity(
+          renderer, mappedInput, initialPercent,
+          [this](const int percent) {
+            // Apply the new position and exit back to the reader.
+            jumpToPercent(percent);
+            suppressMenuOpenOnce = true;
+            exitActivity();
+            updateRequired = true;
+          },
+          [this]() {
+            // Cancel selection and return to the reader.
+            suppressMenuOpenOnce = true;
+            exitActivity();
+            updateRequired = true;
+          }));
       xSemaphoreGive(renderingMutex);
       break;
     }
@@ -397,6 +524,18 @@ void EpubReaderActivity::renderScreen() {
         section->currentPage = newPage;
       }
       cachedChapterTotalPageCount = 0;  // resets to 0 to prevent reading cached progress again
+    }
+
+    if (pendingPercentJump && section->pageCount > 0) {
+      // Apply the pending percent jump now that we know the new section's page count.
+      int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
+      if (newPage < 0) {
+        newPage = 0;
+      } else if (newPage >= section->pageCount) {
+        newPage = section->pageCount - 1;
+      }
+      section->currentPage = newPage;
+      pendingPercentJump = false;
     }
   }
 

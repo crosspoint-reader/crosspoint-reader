@@ -18,6 +18,13 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   int pagesUntilFullRefresh = 0;
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
+  // Signals that the next render should reposition within the newly loaded section
+  // based on a cross-book percentage jump.
+  bool pendingPercentJump = false;
+  // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
+  float pendingSpineProgress = 0.0f;
+  // Prevents the reader menu from reopening due to the confirm button used to exit the slider.
+  bool suppressMenuOpenOnce = false;
   bool updateRequired = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
@@ -29,6 +36,10 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
   void saveProgress(int spineIndex, int currentPage, int pageCount);
+  // Jump to a percentage of the book (0-100), mapping it to spine and page.
+  void jumpToPercent(int percent);
+  // Compute the current reading position as an integer percent (0-100).
+  int getCurrentPercent() const;
   void onReaderMenuBack();
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
 
