@@ -5,7 +5,6 @@
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
-
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -281,9 +280,8 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   const size_t cumulative = epub->getCumulativeSpineItemSize(targetSpineIndex);
   const size_t spineSize = (cumulative > prevCumulative) ? (cumulative - prevCumulative) : 0;
   // Store a normalized position within the spine so it can be applied once loaded.
-  pendingSpineProgress = (spineSize == 0) ? 0.0f
-                                          : static_cast<float>(targetSize - prevCumulative) /
-                                                static_cast<float>(spineSize);
+  pendingSpineProgress =
+      (spineSize == 0) ? 0.0f : static_cast<float>(targetSize - prevCumulative) / static_cast<float>(spineSize);
   if (pendingSpineProgress < 0.0f) {
     pendingSpineProgress = 0.0f;
   } else if (pendingSpineProgress > 1.0f) {

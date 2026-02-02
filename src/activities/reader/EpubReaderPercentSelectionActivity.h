@@ -5,8 +5,8 @@
 
 #include <functional>
 
-#include "activities/ActivityWithSubactivity.h"
 #include "MappedInputManager.h"
+#include "activities/ActivityWithSubactivity.h"
 
 class EpubReaderPercentSelectionActivity final : public ActivityWithSubactivity {
  public:
@@ -24,17 +24,17 @@ class EpubReaderPercentSelectionActivity final : public ActivityWithSubactivity 
   void loop() override;
 
  private:
-    // Current percent value (0-100) shown on the slider.
+  // Current percent value (0-100) shown on the slider.
   int percent = 0;
-    // Render dirty flag for the task loop.
+  // Render dirty flag for the task loop.
   bool updateRequired = false;
-    // FreeRTOS task and mutex for rendering.
+  // FreeRTOS task and mutex for rendering.
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
 
-    // Callback invoked when the user confirms a percent.
+  // Callback invoked when the user confirms a percent.
   const std::function<void(int)> onSelect;
-    // Callback invoked when the user cancels the slider.
+  // Callback invoked when the user cancels the slider.
   const std::function<void()> onCancel;
 
   static void taskTrampoline(void* param);

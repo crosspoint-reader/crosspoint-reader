@@ -9,7 +9,7 @@ namespace {
 // Fine/coarse slider step sizes for percent adjustments.
 constexpr int kSmallStep = 1;
 constexpr int kLargeStep = 10;
-}
+}  // namespace
 
 void EpubReaderPercentSelectionActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
