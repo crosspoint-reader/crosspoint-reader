@@ -313,7 +313,7 @@ void setup() {
 
   // Boot to home screen directly when back button is held or when reader activity crashes 3 times
   if (APP_STATE.openEpubPath.empty() || mappedInputManager.isPressed(MappedInputManager::Button::Back) ||
-      APP_STATE.readerActivityLoadCount > 2) {
+      APP_STATE.readerActivityLoadCount > 0) {
     onGoHome();
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
