@@ -257,7 +257,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   size_t targetSize =
       (bookSize / 100) * static_cast<size_t>(percent) +
       (bookSize % 100) * static_cast<size_t>(percent) / 100;
-  if (percent >= 100 && bookSize > 0) {
+  if (percent >= 100) {
     // Ensure the final percent lands inside the last spine item.
     targetSize = bookSize - 1;
   }
