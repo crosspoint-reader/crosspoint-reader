@@ -468,10 +468,47 @@ bool Epub::generateThumbBmp() const {
       coverJpg.close();
       return false;
     }
-    // Use smaller target size for Continue Reading card (half of screen: 240x400)
-    // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-    constexpr int THUMB_TARGET_WIDTH = 240;
-    constexpr int THUMB_TARGET_HEIGHT = 400;
+
+    // Generate 1-bit BMP maintaining aspect ratio with fixed height of 400px
+    // This ensures the card width adapts to the actual cover image aspect ratio
+    const int THUMB_TARGET_HEIGHT = 400;
+
+    // Read a small portion of the JPG file to determine its dimensions
+    uint8_t headerBuffer[200];
+    size_t bytesRead = coverJpg.read(headerBuffer, sizeof(headerBuffer));
+    coverJpg.seek(0);  // Reset file position
+
+    int imgWidth = 240, imgHeight = 400;  // Default fallback
+
+    // Simple header parsing to get image dimensions (works for most JPGs)
+    if (bytesRead > 0) {
+      // Look for SOF (Start of Frame) markers
+      for (size_t i = 0; i < bytesRead - 10; i++) {
+        if (headerBuffer[i] == 0xFF && headerBuffer[i + 1] == 0xC0) {
+          // Found SOF0 marker
+          if (i + 7 < bytesRead) {
+            imgHeight = (headerBuffer[i + 5] << 8) | headerBuffer[i + 6];
+            imgWidth = (headerBuffer[i + 7] << 8) | headerBuffer[i + 8];
+            break;
+          }
+        } else if (headerBuffer[i] == 0xFF && headerBuffer[i + 1] == 0xC2) {
+          // Found SOF2 marker
+          if (i + 7 < bytesRead) {
+            imgHeight = (headerBuffer[i + 5] << 8) | headerBuffer[i + 6];
+            imgWidth = (headerBuffer[i + 7] << 8) | headerBuffer[i + 8];
+            break;
+          }
+        }
+      }
+    }
+
+    // Calculate target width maintaining aspect ratio
+    const float aspectRatio = static_cast<float>(imgWidth) / static_cast<float>(imgHeight);
+    const int THUMB_TARGET_WIDTH = static_cast<int>(THUMB_TARGET_HEIGHT * aspectRatio);
+
+    Serial.printf("[%lu] [EBP] Original JPG: %dx%d, Target: %dx%d\n", millis(), imgWidth, imgHeight, THUMB_TARGET_WIDTH,
+                  THUMB_TARGET_HEIGHT);
+
     const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
                                                                              THUMB_TARGET_HEIGHT);
     coverJpg.close();

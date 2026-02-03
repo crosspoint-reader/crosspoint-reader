@@ -223,9 +223,50 @@ void HomeActivity::render() {
   constexpr int bottomMargin = 60;
 
   // --- Top "book" card for the current title (selectorIndex == 0) ---
-  const int bookWidth = pageWidth / 2;
-  const int bookHeight = pageHeight / 2;
-  const int bookX = (pageWidth - bookWidth) / 2;
+  // When there's no cover image, use fixed size (half screen)
+  // When there's cover image, adapt width to image aspect ratio, keep height fixed at 400px
+  const int baseHeight = 400;  // Fixed height for both scenarios
+
+  int bookWidth, bookX;
+  if (hasCoverImage) {
+    // When there's cover, calculate width based on image aspect ratio
+    // Use default width ratio as fallback if we can't get image dimensions
+    const float defaultWidthRatio = 0.5f;  // Same as half screen
+    bookWidth = static_cast<int>(pageWidth * defaultWidthRatio);
+
+    // If we have cover bitmap path, try to get actual image dimensions
+    if (!coverBmpPath.empty()) {
+      FsFile file;
+      if (SdMan.openFileForRead("HOME", coverBmpPath, file)) {
+        Bitmap bitmap(file);
+        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          const int imgWidth = bitmap.getWidth();
+          const int imgHeight = bitmap.getHeight();
+
+          // Calculate width based on aspect ratio, maintaining 400px height
+          if (imgHeight > 0) {
+            const float aspectRatio = static_cast<float>(imgWidth) / static_cast<float>(imgHeight);
+            bookWidth = static_cast<int>(baseHeight * aspectRatio);
+
+            // Ensure width doesn't exceed reasonable limits (max 90% of screen width)
+            const int maxWidth = static_cast<int>(pageWidth * 0.9f);
+            if (bookWidth > maxWidth) {
+              bookWidth = maxWidth;
+            }
+          }
+        }
+        file.close();
+      }
+    }
+
+    bookX = (pageWidth - bookWidth) / 2;
+  } else {
+    // No cover: use half screen size
+    bookWidth = pageWidth / 2;
+    bookX = (pageWidth - bookWidth) / 2;
+  }
+
+  const int bookHeight = baseHeight;
   constexpr int bookY = 30;
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
 
