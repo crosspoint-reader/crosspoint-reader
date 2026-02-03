@@ -56,9 +56,15 @@ void EpubReaderMenuActivity::loop() {
     selectedIndex = (selectedIndex + 1) % menuItems.size();
     updateRequired = true;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    const auto selectedAction = menuItems[selectedIndex].action;
+    if (selectedAction == MenuAction::ROTATE_SCREEN) {
+      pendingOrientation = (pendingOrientation + 1) % orientationLabels.size();
+      updateRequired = true;
+      return;
+    }
+
     // 1. Capture the callback and action locally
     auto actionCallback = onAction;
-    auto selectedAction = menuItems[selectedIndex].action;
 
     // 2. Execute the callback
     actionCallback(selectedAction);
@@ -66,7 +72,7 @@ void EpubReaderMenuActivity::loop() {
     // 3. CRITICAL: Return immediately. 'this' is likely deleted now.
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onBack();
+    onBack(pendingOrientation);
     return;  // Also return here just in case
   }
 }
@@ -93,6 +99,12 @@ void EpubReaderMenuActivity::renderScreen() {
     }
 
     renderer.drawText(UI_10_FONT_ID, 20, displayY, menuItems[i].label.c_str(), !isSelected);
+
+    if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
+      const auto value = orientationLabels[pendingOrientation];
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
+      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, displayY, value, !isSelected);
+    }
   }
 
   // Footer / Hints

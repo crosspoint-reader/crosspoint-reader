@@ -16,9 +16,12 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   enum class MenuAction { SELECT_CHAPTER, ROTATE_SCREEN, GO_HOME, DELETE_CACHE };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
-                                  const std::function<void()>& onBack, const std::function<void(MenuAction)>& onAction)
+                                  const uint8_t currentOrientation,
+                                  const std::function<void(uint8_t)>& onBack,
+                                  const std::function<void(MenuAction)>& onAction)
       : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
         title(title),
+        pendingOrientation(currentOrientation),
         onBack(onBack),
         onAction(onAction) {}
 
@@ -33,7 +36,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   };
 
   const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, "Go to Chapter"},
-                                           {MenuAction::ROTATE_SCREEN, "Rotate Screen"},
+                                           {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
                                            {MenuAction::GO_HOME, "Go Home"},
                                            {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
 
@@ -42,8 +45,10 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   std::string title = "Reader Menu";
+  uint8_t pendingOrientation = 0;
+  const std::vector<const char*> orientationLabels = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"};
 
-  const std::function<void()> onBack;
+  const std::function<void(uint8_t)> onBack;
   const std::function<void(MenuAction)> onAction;
 
   static void taskTrampoline(void* param);

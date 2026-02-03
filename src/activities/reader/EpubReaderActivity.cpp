@@ -20,22 +20,8 @@ constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
 
-}  // namespace
-
-void EpubReaderActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderActivity*>(param);
-  self->displayTaskLoop();
-}
-
-void EpubReaderActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
-
-  if (!epub) {
-    return;
-  }
-
-  // Configure screen orientation based on settings
-  switch (SETTINGS.orientation) {
+void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
+  switch (orientation) {
     case CrossPointSettings::ORIENTATION::PORTRAIT:
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
       break;
@@ -51,6 +37,24 @@ void EpubReaderActivity::onEnter() {
     default:
       break;
   }
+}
+
+}  // namespace
+
+void EpubReaderActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<EpubReaderActivity*>(param);
+  self->displayTaskLoop();
+}
+
+void EpubReaderActivity::onEnter() {
+  ActivityWithSubactivity::onEnter();
+
+  if (!epub) {
+    return;
+  }
+
+  // Configure screen orientation based on settings
+  applyReaderOrientation(renderer, SETTINGS.orientation);
 
   renderingMutex = xSemaphoreCreateMutex();
 
@@ -127,11 +131,10 @@ void EpubReaderActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    const int currentPage = section ? section->currentPage : 0;
-    const int totalPages = section ? section->pageCount : 0;
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
-        this->renderer, this->mappedInput, epub->getTitle(), [this]() { onReaderMenuBack(); },
+      this->renderer, this->mappedInput, epub->getTitle(), SETTINGS.orientation,
+      [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
@@ -220,8 +223,9 @@ void EpubReaderActivity::loop() {
   }
 }
 
-void EpubReaderActivity::onReaderMenuBack() {
+void EpubReaderActivity::onReaderMenuBack(const uint8_t orientation) {
   exitActivity();
+  applyOrientation(orientation);
   updateRequired = true;
 }
 
@@ -268,40 +272,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       xSemaphoreGive(renderingMutex);
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::ROTATE_SCREEN: {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      if (section) {
-        cachedSpineIndex = currentSpineIndex;
-        cachedChapterTotalPageCount = section->pageCount;
-        nextPageNumber = section->currentPage;
-      }
-
-      SETTINGS.orientation = (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT;
-      SETTINGS.saveToFile();
-
-      switch (SETTINGS.orientation) {
-        case CrossPointSettings::ORIENTATION::PORTRAIT:
-          renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-          break;
-        case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
-          renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
-          break;
-        case CrossPointSettings::ORIENTATION::INVERTED:
-          renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
-          break;
-        case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
-          renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
-          break;
-        default:
-          break;
-      }
-
-      section.reset();
-      exitActivity();
-      updateRequired = true;
-      xSemaphoreGive(renderingMutex);
-      break;
-    }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       // 2. Trigger the reader's "Go Home" callback
       if (onGoHome) {
@@ -335,6 +305,27 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
   }
+}
+
+void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
+  if (SETTINGS.orientation == orientation) {
+    return;
+  }
+
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  if (section) {
+    cachedSpineIndex = currentSpineIndex;
+    cachedChapterTotalPageCount = section->pageCount;
+    nextPageNumber = section->currentPage;
+  }
+
+  SETTINGS.orientation = orientation;
+  SETTINGS.saveToFile();
+
+  applyReaderOrientation(renderer, SETTINGS.orientation);
+
+  section.reset();
+  xSemaphoreGive(renderingMutex);
 }
 
 void EpubReaderActivity::displayTaskLoop() {
