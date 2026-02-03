@@ -148,6 +148,9 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep.
 - **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting.
+- **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight
+  - "OFF" (default) - Disable the fix
+  - "ON" - Enable the fix
 - **OPDS Browser**: Configure OPDS server settings for browsing and downloading books. Set the server URL (for Calibre Content Server, add `/opds` to the end), and optionally configure username and password for servers requiring authentication. Note: Only HTTP Basic authentication is supported. If using Calibre Content Server with authentication enabled, you must set it to use Basic authentication instead of the default Digest authentication.
 - **Check for updates**: Check for firmware updates over WiFi.
 
