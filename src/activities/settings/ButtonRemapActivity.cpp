@@ -164,8 +164,8 @@ void ButtonRemapActivity::render() {
   }
 
   // Provide side button actions at the bottom of the screen (split across two lines).
-  renderer.drawCenteredText(SMALL_FONT_ID, 250, "Side button Up: Reset", true);
-  renderer.drawCenteredText(SMALL_FONT_ID, 270, "Side button Down: Cancel", true);
+  renderer.drawCenteredText(SMALL_FONT_ID, 250, "Side button Up: Reset to default layout", true);
+  renderer.drawCenteredText(SMALL_FONT_ID, 280, "Side button Down: Cancel remapping", true);
 
   // Live preview of logical labels under front buttons.
   // This mirrors the on-device front button order: Back, Confirm, Left, Right.

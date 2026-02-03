@@ -24,6 +24,7 @@ constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
 constexpr uint8_t SETTINGS_COUNT = 27;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
+
 // Validate front button mapping to ensure each hardware button is unique.
 // If duplicates are detected, reset to the default physical order to prevent invalid mappings.
 void validateFrontButtonMapping(CrossPointSettings& settings) {
@@ -41,6 +42,37 @@ void validateFrontButtonMapping(CrossPointSettings& settings) {
         return;
       }
     }
+  }
+}
+
+// Convert legacy front button layout into explicit logical->hardware mapping.
+void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
+  switch (static_cast<CrossPointSettings::FRONT_BUTTON_LAYOUT>(settings.frontButtonLayout)) {
+    case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
+      settings.frontButtonBack = CrossPointSettings::FRONT_HW_LEFT;
+      settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_RIGHT;
+      settings.frontButtonLeft = CrossPointSettings::FRONT_HW_BACK;
+      settings.frontButtonRight = CrossPointSettings::FRONT_HW_CONFIRM;
+      break;
+    case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
+      settings.frontButtonBack = CrossPointSettings::FRONT_HW_CONFIRM;
+      settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_LEFT;
+      settings.frontButtonLeft = CrossPointSettings::FRONT_HW_BACK;
+      settings.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
+      break;
+    case CrossPointSettings::BACK_CONFIRM_RIGHT_LEFT:
+      settings.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
+      settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
+      settings.frontButtonLeft = CrossPointSettings::FRONT_HW_RIGHT;
+      settings.frontButtonRight = CrossPointSettings::FRONT_HW_LEFT;
+      break;
+    case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
+    default:
+      settings.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
+      settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
+      settings.frontButtonLeft = CrossPointSettings::FRONT_HW_LEFT;
+      settings.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
+      break;
   }
 }
 }  // namespace
@@ -186,6 +218,8 @@ bool CrossPointSettings::loadFromFile() {
 
   if (frontButtonMappingRead) {
     validateFrontButtonMapping(*this);
+  } else {
+    applyLegacyFrontButtonLayout(*this);
   }
 
   inputFile.close();
