@@ -102,8 +102,15 @@ AppManifest AppLoader::parseManifest(const String& path) {
     return manifest;
   }
 
+  // Handle UTF-8 BOM if the manifest was created by an editor that writes it.
+  const char* json = buffer.get();
+  if (bytesRead >= 3 && static_cast<uint8_t>(json[0]) == 0xEF && static_cast<uint8_t>(json[1]) == 0xBB &&
+      static_cast<uint8_t>(json[2]) == 0xBF) {
+    json += 3;
+  }
+
   JsonDocument doc;
-  const DeserializationError error = deserializeJson(doc, buffer.get());
+  const DeserializationError error = deserializeJson(doc, json);
 
   if (error) {
     Serial.printf("[%lu] [AppLoader] JSON parse error in %s: %s\n",
@@ -230,12 +237,16 @@ bool AppLoader::flashApp(const String& binPath, ProgressCallback callback) {
   }
 
   if (callback) {
-    callback(0, 100);
+    callback(0, fileSize);
   }
 
   size_t totalWritten = 0;
-  static constexpr size_t flashChunkSize = 1024;
-  uint8_t buffer[flashChunkSize];
+  // Larger chunks reduce SD/OTA overhead significantly.
+  // 32KB is a good balance on ESP32-C3: faster writes without blowing RAM.
+  static constexpr size_t flashChunkSize = 32 * 1024;
+  static uint8_t buffer[flashChunkSize];
+
+  size_t lastNotifiedPercent = 0;
 
   while (totalWritten < fileSize) {
     const size_t remaining = fileSize - totalWritten;
@@ -260,7 +271,11 @@ bool AppLoader::flashApp(const String& binPath, ProgressCallback callback) {
 
     if (callback) {
       const size_t percent = (totalWritten * 100) / fileSize;
-      callback(percent, 100);
+      // Throttle UI updates; each screen refresh is ~400ms.
+      if (percent >= lastNotifiedPercent + 10 || percent == 100) {
+        lastNotifiedPercent = percent;
+        callback(totalWritten, fileSize);
+      }
     }
   }
 

@@ -1,19 +1,19 @@
 #pragma once
 
-#include <EInkDisplay.h>
-#include <InputManager.h>
+#include <HalDisplay.h>
+#include <HalGPIO.h>
 
 class HelloWorldActivity {
  public:
-  HelloWorldActivity(EInkDisplay& display, InputManager& input);
+  HelloWorldActivity(HalDisplay& display, HalGPIO& input);
   
   void onEnter();
   void loop();
   void onExit();
   
  private:
-  EInkDisplay& display_;
-  InputManager& input_;
+  HalDisplay& display_;
+  HalGPIO& input_;
   bool needsUpdate_;
   
   void render();

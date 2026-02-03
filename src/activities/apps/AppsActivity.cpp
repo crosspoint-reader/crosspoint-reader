@@ -86,9 +86,12 @@ void AppsActivity::launchApp() {
   
   CrossPoint::AppLoader loader;
   bool success = loader.flashApp(binPath, [this](size_t written, size_t total) {
-    flashProgress_ = static_cast<int>((written * 100) / total);
-    needsUpdate_ = true;
-    renderProgress();
+    const int nextProgress = (total > 0) ? static_cast<int>((written * 100) / total) : 0;
+    if (nextProgress != flashProgress_) {
+      flashProgress_ = nextProgress;
+      needsUpdate_ = true;
+      renderProgress();
+    }
   });
   
   if (!success) {
@@ -134,7 +137,8 @@ void AppsActivity::render() {
         int textWidth = renderer_.getTextWidth(UI_12_FONT_ID, buf);
         int x = (pageWidth - textWidth) / 2 - 10;
         renderer_.fillRect(x, y - 5, textWidth + 20, lineHeight - 5);
-        renderer_.drawText(UI_12_FONT_ID, x + 10, y, buf, true);  // inverted
+        // Draw white text on black highlight.
+        renderer_.drawText(UI_12_FONT_ID, x + 10, y, buf, false);
       } else {
         renderer_.drawCenteredText(UI_10_FONT_ID, y, buf);
       }

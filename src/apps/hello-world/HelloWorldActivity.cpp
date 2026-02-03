@@ -19,7 +19,7 @@ EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 }
 
-HelloWorldActivity::HelloWorldActivity(EInkDisplay& display, InputManager& input)
+HelloWorldActivity::HelloWorldActivity(HalDisplay& display, HalGPIO& input)
     : display_(display), input_(input), needsUpdate_(true) {}
 
 void HelloWorldActivity::onEnter() {
@@ -35,7 +35,7 @@ void HelloWorldActivity::onEnter() {
 }
 
 void HelloWorldActivity::loop() {
-  if (input_.wasPressed(InputManager::BTN_BACK)) {
+  if (input_.wasPressed(HalGPIO::BTN_BACK)) {
     returnToLauncher();
     return;
   }

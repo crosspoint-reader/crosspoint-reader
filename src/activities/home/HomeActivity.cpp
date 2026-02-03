@@ -266,6 +266,7 @@ void HomeActivity::render() {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
+  // Keep this list in sync with getMenuItemCount() and loop() index mapping.
   std::vector<const char*> menuItems = {"Browse Files", "Recents", "File Transfer", "Apps", "Settings"};
   if (hasOpdsUrl) {
     // Insert OPDS Browser after My Library
