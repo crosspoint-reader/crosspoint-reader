@@ -141,7 +141,7 @@ class CrossPointSettings {
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
   // UI Theme
-  uint8_t uiTheme = CLASSIC;
+  uint8_t uiTheme = LYRA;
 
   ~CrossPointSettings() = default;
 
