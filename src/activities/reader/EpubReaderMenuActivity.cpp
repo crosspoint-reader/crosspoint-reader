@@ -80,14 +80,25 @@ void EpubReaderMenuActivity::loop() {
 void EpubReaderMenuActivity::renderScreen() {
   renderer.clearScreen();
   const auto pageWidth = renderer.getScreenWidth();
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int contentWidth = pageWidth - hintGutterWidth;
+  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
+  const int contentY = hintGutterHeight;
 
   // Title
   const std::string truncTitle =
-      renderer.truncatedText(UI_12_FONT_ID, title.c_str(), pageWidth - 40, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, truncTitle.c_str(), true, EpdFontFamily::BOLD);
+      renderer.truncatedText(UI_12_FONT_ID, title.c_str(), contentWidth - 40, EpdFontFamily::BOLD);
+  const int titleX = contentX +
+                     (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD)) / 2;
+  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
   // Menu Items
-  constexpr int startY = 60;
+  const int startY = 60 + contentY;
   constexpr int lineHeight = 30;
 
   for (size_t i = 0; i < menuItems.size(); ++i) {
@@ -95,15 +106,15 @@ void EpubReaderMenuActivity::renderScreen() {
     const bool isSelected = (static_cast<int>(i) == selectedIndex);
 
     if (isSelected) {
-      renderer.fillRect(0, displayY, pageWidth - 1, lineHeight, true);
+      renderer.fillRect(contentX, displayY, contentWidth - 1, lineHeight, true);
     }
 
-    renderer.drawText(UI_10_FONT_ID, 20, displayY, menuItems[i].label.c_str(), !isSelected);
+    renderer.drawText(UI_10_FONT_ID, contentX + 20, displayY, menuItems[i].label.c_str(), !isSelected);
 
     if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
       const auto value = orientationLabels[pendingOrientation];
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, displayY, value, !isSelected);
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
     }
   }
 
