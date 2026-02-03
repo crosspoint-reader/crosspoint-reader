@@ -41,15 +41,15 @@ class LyraTheme : public BaseTheme {
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                   bool selected) const override;
   void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                const std::function<std::string(int index)>& rowTitle, bool hasSubtitle,
-                const std::function<std::string(int index)>& rowSubtitle, bool hasIcon,
-                const std::function<std::string(int index)>& rowIcon, bool hasValue,
+                const std::function<std::string(int index)>& rowTitle,
+                const std::function<std::string(int index)>& rowSubtitle,
+                const std::function<std::string(int index)>& rowIcon,
                 const std::function<std::string(int index)>& rowValue) const override;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
   void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const override;
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                      const std::function<std::string(int index)>& buttonLabel, bool hasIcon,
+                      const std::function<std::string(int index)>& buttonLabel,
                       const std::function<std::string(int index)>& rowIcon) const override;
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,

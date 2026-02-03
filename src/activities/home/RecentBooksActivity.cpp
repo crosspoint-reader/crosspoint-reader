@@ -137,8 +137,8 @@ void RecentBooksActivity::render() const {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
-        [this](int index) { return recentBooks[index].title; }, true,
-        [this](int index) { return recentBooks[index].author; }, false, nullptr, false, nullptr);
+        [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
+        nullptr, nullptr);
   }
 
   // Help text

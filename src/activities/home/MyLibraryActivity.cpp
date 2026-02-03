@@ -201,7 +201,7 @@ void MyLibraryActivity::render() const {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return files[index]; }, false, nullptr, false, nullptr, false, nullptr);
+        [this](int index) { return files[index]; }, nullptr, nullptr, nullptr);
   }
 
   // Help text

@@ -277,7 +277,7 @@ void SettingsActivity::render() const {
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
                          metrics.verticalSpacing * 2)},
       settingsCount, selectedSettingIndex - 1, [this](int index) { return std::string(settingsList[index].name); },
-      false, nullptr, false, nullptr, true,
+      nullptr, nullptr,
       [this](int i) {
         const auto& setting = settingsList[i];
         std::string valueText = "";

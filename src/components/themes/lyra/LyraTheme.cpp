@@ -115,11 +115,12 @@ void LyraTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::ve
 }
 
 void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                         const std::function<std::string(int index)>& rowTitle, bool hasSubtitle,
-                         const std::function<std::string(int index)>& rowSubtitle, bool hasIcon,
-                         const std::function<std::string(int index)>& rowIcon, bool hasValue,
+                         const std::function<std::string(int index)>& rowTitle,
+                         const std::function<std::string(int index)>& rowSubtitle,
+                         const std::function<std::string(int index)>& rowIcon,
                          const std::function<std::string(int index)>& rowValue) const {
-  int rowHeight = hasSubtitle ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
+  int rowHeight =
+      (rowSubtitle != nullptr) ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
 
   const int totalPages = (itemCount + pageItems - 1) / pageItems;
@@ -153,13 +154,13 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     // Draw name
     int textWidth = contentWidth - LyraMetrics::values.contentSidePadding * 2 - hPaddingInSelection * 2 -
-                    (hasValue ? 60 : 0);  // TODO truncate according to value width?
+                    (rowValue != nullptr ? 60 : 0);  // TODO truncate according to value width?
     auto itemName = rowTitle(i);
     auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), textWidth);
     renderer.drawText(UI_10_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection * 2,
                       itemY + 6, item.c_str(), true);
 
-    if (hasSubtitle) {
+    if (rowSubtitle != nullptr) {
       // Draw subtitle
       std::string subtitleText = rowSubtitle(i);
       auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), textWidth);
@@ -167,7 +168,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                         itemY + 30, subtitle.c_str(), true);
     }
 
-    if (hasValue) {
+    if (rowValue != nullptr) {
       // Draw value
       std::string valueText = rowValue(i);
       if (!valueText.empty()) {
@@ -329,7 +330,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 }
 
 void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                               const std::function<std::string(int index)>& buttonLabel, bool hasIcon,
+                               const std::function<std::string(int index)>& buttonLabel,
                                const std::function<std::string(int index)>& rowIcon) const {
   for (int i = 0; i < buttonCount; ++i) {
     int tileWidth = (rect.width - LyraMetrics::values.contentSidePadding * 2 - LyraMetrics::values.menuSpacing) / 2;

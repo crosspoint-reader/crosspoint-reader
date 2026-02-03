@@ -158,11 +158,12 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 }
 
 void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                         const std::function<std::string(int index)>& rowTitle, bool hasSubtitle,
-                         const std::function<std::string(int index)>& rowSubtitle, bool hasIcon,
-                         const std::function<std::string(int index)>& rowIcon, bool hasValue,
+                         const std::function<std::string(int index)>& rowTitle,
+                         const std::function<std::string(int index)>& rowSubtitle,
+                         const std::function<std::string(int index)>& rowIcon,
                          const std::function<std::string(int index)>& rowValue) const {
-  int rowHeight = hasSubtitle ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
+  int rowHeight =
+      (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
 
   const int totalPages = (itemCount + pageItems - 1) / pageItems;
@@ -200,15 +201,15 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
-    int textWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2 - (hasValue ? 60 : 0);
+    int textWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2 - (rowValue != nullptr ? 60 : 0);
 
     // Draw name
     auto itemName = rowTitle(i);
-    auto font = hasSubtitle ? UI_12_FONT_ID : UI_10_FONT_ID;
+    auto font = (rowSubtitle != nullptr) ? UI_12_FONT_ID : UI_10_FONT_ID;
     auto item = renderer.truncatedText(font, itemName.c_str(), textWidth);
     renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), i != selectedIndex);
 
-    if (hasSubtitle) {
+    if (rowSubtitle != nullptr) {
       // Draw subtitle
       std::string subtitleText = rowSubtitle(i);
       auto subtitle = renderer.truncatedText(UI_10_FONT_ID, subtitleText.c_str(), textWidth);
@@ -216,7 +217,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                         i != selectedIndex);
     }
 
-    if (hasValue) {
+    if (rowValue != nullptr) {
       // Draw value
       std::string valueText = rowValue(i);
       const auto valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
@@ -570,7 +571,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 }
 
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                               const std::function<std::string(int index)>& buttonLabel, bool hasIcon,
+                               const std::function<std::string(int index)>& buttonLabel,
                                const std::function<std::string(int index)>& rowIcon) const {
   for (int i = 0; i < buttonCount; ++i) {
     const int tileY = BaseMetrics::values.verticalSpacing + rect.y +

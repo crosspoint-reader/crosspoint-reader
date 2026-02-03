@@ -98,9 +98,9 @@ class BaseTheme {
                                const char* btn4) const;
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                        const std::function<std::string(int index)>& rowTitle, bool hasSubtitle,
-                        const std::function<std::string(int index)>& rowSubtitle, bool hasIcon,
-                        const std::function<std::string(int index)>& rowIcon, bool hasValue,
+                        const std::function<std::string(int index)>& rowTitle,
+                        const std::function<std::string(int index)>& rowSubtitle,
+                        const std::function<std::string(int index)>& rowIcon,
                         const std::function<std::string(int index)>& rowValue) const;
 
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const;
@@ -110,7 +110,7 @@ class BaseTheme {
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                              const std::function<std::string(int index)>& buttonLabel, bool hasIcon,
+                              const std::function<std::string(int index)>& buttonLabel,
                               const std::function<std::string(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
