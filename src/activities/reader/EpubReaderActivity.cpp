@@ -20,6 +20,8 @@ constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
 
+// Apply the logical reader orientation to the renderer.
+// This centralizes orientation mapping so we don't duplicate switch logic elsewhere.
 void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   switch (orientation) {
     case CrossPointSettings::ORIENTATION::PORTRAIT:
@@ -54,6 +56,7 @@ void EpubReaderActivity::onEnter() {
   }
 
   // Configure screen orientation based on settings
+  // NOTE: This affects layout math and must be applied before any render calls.
   applyReaderOrientation(renderer, SETTINGS.orientation);
 
   renderingMutex = xSemaphoreCreateMutex();
@@ -225,6 +228,8 @@ void EpubReaderActivity::loop() {
 
 void EpubReaderActivity::onReaderMenuBack(const uint8_t orientation) {
   exitActivity();
+  // Apply the user-selected orientation when the menu is dismissed.
+  // This ensures the menu can be navigated without immediately rotating the screen.
   applyOrientation(orientation);
   updateRequired = true;
 }
@@ -308,10 +313,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 }
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
+  // No-op if the selected orientation matches current settings.
   if (SETTINGS.orientation == orientation) {
     return;
   }
 
+  // Preserve current reading position so we can restore after reflow.
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (section) {
     cachedSpineIndex = currentSpineIndex;
@@ -319,11 +326,14 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     nextPageNumber = section->currentPage;
   }
 
+  // Persist the selection so the reader keeps the new orientation on next launch.
   SETTINGS.orientation = orientation;
   SETTINGS.saveToFile();
 
+  // Update renderer orientation to match the new logical coordinate system.
   applyReaderOrientation(renderer, SETTINGS.orientation);
 
+  // Reset section to force re-layout in the new orientation.
   section.reset();
   xSemaphoreGive(renderingMutex);
 }
