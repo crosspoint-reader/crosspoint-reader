@@ -16,8 +16,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   enum class MenuAction { SELECT_CHAPTER, ROTATE_SCREEN, GO_HOME, DELETE_CACHE };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
-                                  const uint8_t currentOrientation,
-                                  const std::function<void(uint8_t)>& onBack,
+                                  const uint8_t currentOrientation, const std::function<void(uint8_t)>& onBack,
                                   const std::function<void(MenuAction)>& onAction)
       : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
         title(title),

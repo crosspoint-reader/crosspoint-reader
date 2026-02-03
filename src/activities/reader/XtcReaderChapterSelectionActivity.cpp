@@ -1,7 +1,8 @@
 #include "XtcReaderChapterSelectionActivity.h"
 
-#include <algorithm>
 #include <GfxRenderer.h>
+
+#include <algorithm>
 
 #include "MappedInputManager.h"
 #include "fontIds.h"
@@ -146,15 +147,14 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
   const int contentY = hintGutterHeight;
   const int pageItems = getPageItems();
   // Manual centering to honor content gutters.
-  const int titleX = contentX +
-                     (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, "Select Chapter", EpdFontFamily::BOLD)) / 2;
+  const int titleX =
+      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, "Select Chapter", EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, "Select Chapter", true, EpdFontFamily::BOLD);
 
   const auto& chapters = xtc->getChapters();
   if (chapters.empty()) {
     // Center the empty state within the gutter-safe content region.
-    const int emptyX =
-        contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, "No chapters")) / 2;
+    const int emptyX = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, "No chapters")) / 2;
     renderer.drawText(UI_10_FONT_ID, emptyX, 120 + contentY, "No chapters");
     renderer.displayBuffer();
     return;
@@ -166,8 +166,7 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
     const char* title = chapter.name.empty() ? "Unnamed" : chapter.name.c_str();
-    renderer.drawText(UI_10_FONT_ID, contentX + 20, 60 + contentY + (i % pageItems) * 30, title,
-                      i != selectorIndex);
+    renderer.drawText(UI_10_FONT_ID, contentX + 20, 60 + contentY + (i % pageItems) * 30, title, i != selectorIndex);
   }
 
   const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");

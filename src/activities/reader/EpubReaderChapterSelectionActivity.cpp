@@ -1,7 +1,8 @@
 #include "EpubReaderChapterSelectionActivity.h"
 
-#include <algorithm>
 #include <GfxRenderer.h>
+
+#include <algorithm>
 
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
@@ -193,8 +194,8 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
   const int totalItems = getTotalItems();
 
   // Manual centering to honor content gutters.
-  const int titleX = contentX +
-                     (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, "Go to Chapter", EpdFontFamily::BOLD)) / 2;
+  const int titleX =
+      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, "Go to Chapter", EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, "Go to Chapter", true, EpdFontFamily::BOLD);
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
@@ -214,8 +215,8 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
       const int tocIndex = tocIndexFromItemIndex(itemIndex);
       auto item = epub->getTocItem(tocIndex);
 
-        // Indent per TOC level while keeping content within the gutter-safe region.
-        const int indentSize = contentX + 20 + (item.level - 1) * 15;
+      // Indent per TOC level while keeping content within the gutter-safe region.
+      const int indentSize = contentX + 20 + (item.level - 1) * 15;
       const std::string chapterName =
           renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), contentWidth - 40 - indentSize);
 

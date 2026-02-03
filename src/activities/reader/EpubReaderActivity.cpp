@@ -136,8 +136,8 @@ void EpubReaderActivity::loop() {
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
-      this->renderer, this->mappedInput, epub->getTitle(), SETTINGS.orientation,
-      [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
+        this->renderer, this->mappedInput, epub->getTitle(), SETTINGS.orientation,
+        [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
