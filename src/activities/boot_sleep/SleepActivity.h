@@ -10,7 +10,6 @@ class SleepActivity final : public Activity {
   void onEnter() override;
 
  private:
-  void renderPopup(const char* message) const;
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;

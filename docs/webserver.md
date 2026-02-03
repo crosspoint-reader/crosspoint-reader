@@ -153,7 +153,7 @@ Click **File Manager** to access file management features.
 
 1. Click the **+ Add** button in the top-right corner
 2. Select **New Folder** from the dropdown menu
-3. Enter a folder name (letters, numbers, underscores, and hyphens only)
+3. Enter a folder name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
 4. Click **Create Folder**
 
 This is useful for organizing your ebooks by genre, author, or series.
