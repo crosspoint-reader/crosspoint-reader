@@ -106,14 +106,14 @@ void EpubReaderPercentSelectionActivity::renderScreen() {
   renderer.drawCenteredText(UI_12_FONT_ID, 15, "Go to Position", true, EpdFontFamily::BOLD);
 
   const std::string percentText = std::to_string(percent) + "%";
-  renderer.drawCenteredText(UI_12_FONT_ID, 70, percentText.c_str(), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 90, percentText.c_str(), true, EpdFontFamily::BOLD);
 
   // Draw slider track.
   const int screenWidth = renderer.getScreenWidth();
   constexpr int barWidth = 360;
   constexpr int barHeight = 16;
   const int barX = (screenWidth - barWidth) / 2;
-  const int barY = 120;
+  const int barY = 140;
 
   renderer.drawRect(barX, barY, barWidth, barHeight);
 

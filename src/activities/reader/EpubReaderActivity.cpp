@@ -255,8 +255,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   // Convert percent into a byte-like absolute position across the spine sizes.
   // Use an overflow-safe computation: (bookSize / 100) * percent + (bookSize % 100) * percent / 100
   size_t targetSize =
-      (bookSize / 100) * static_cast<size_t>(percent) +
-      (bookSize % 100) * static_cast<size_t>(percent) / 100;
+      (bookSize / 100) * static_cast<size_t>(percent) + (bookSize % 100) * static_cast<size_t>(percent) / 100;
   if (percent >= 100) {
     // Ensure the final percent lands inside the last spine item.
     targetSize = bookSize - 1;
