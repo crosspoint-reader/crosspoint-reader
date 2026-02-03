@@ -11,6 +11,7 @@
 
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/AppsPageHtml.generated.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -128,6 +129,7 @@ void CrossPointWebServer::begin() {
   Serial.printf("[%lu] [WEB] Setting up routes...\n", millis());
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
+  server->on("/apps", HTTP_GET, [this] { handleAppsPage(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
@@ -135,6 +137,9 @@ void CrossPointWebServer::begin() {
 
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
+
+  // App upload endpoint (developer feature)
+  server->on("/upload-app", HTTP_POST, [this] { handleUploadAppPost(); }, [this] { handleUploadApp(); });
 
   // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
@@ -290,6 +295,11 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
 void CrossPointWebServer::handleRoot() const {
   server->send(200, "text/html", HomePageHtml);
   Serial.printf("[%lu] [WEB] Served root page\n", millis());
+}
+
+void CrossPointWebServer::handleAppsPage() const {
+  server->send(200, "text/html", AppsPageHtml);
+  Serial.printf("[%lu] [WEB] Served apps page\n", millis());
 }
 
 void CrossPointWebServer::handleNotFound() const {
@@ -494,6 +504,117 @@ void CrossPointWebServer::handleDownload() const {
   file.close();
 }
 
+// Static variables for app upload handling (developer feature)
+static FsFile appUploadFile;
+static String appUploadAppId;
+static String appUploadName;
+static String appUploadVersion;
+static String appUploadAuthor;
+static String appUploadDescription;
+static String appUploadMinFirmware;
+static String appUploadTempPath;
+static String appUploadFinalPath;
+static String appUploadManifestPath;
+static size_t appUploadSize = 0;
+static bool appUploadSuccess = false;
+static String appUploadError = "";
+
+constexpr size_t APP_UPLOAD_BUFFER_SIZE = 4096;
+static uint8_t appUploadBuffer[APP_UPLOAD_BUFFER_SIZE];
+static size_t appUploadBufferPos = 0;
+
+static bool flushAppUploadBuffer() {
+  if (appUploadBufferPos > 0 && appUploadFile) {
+    esp_task_wdt_reset();
+    const size_t written = appUploadFile.write(appUploadBuffer, appUploadBufferPos);
+    esp_task_wdt_reset();
+
+    if (written != appUploadBufferPos) {
+      appUploadBufferPos = 0;
+      return false;
+    }
+    appUploadBufferPos = 0;
+  }
+  return true;
+}
+
+static bool isValidAppId(const String& appId) {
+  if (appId.isEmpty() || appId.length() > 64) {
+    return false;
+  }
+  if (appId.startsWith(".")) {
+    return false;
+  }
+  if (appId.indexOf("..") >= 0) {
+    return false;
+  }
+  if (appId.indexOf('/') >= 0 || appId.indexOf('\\') >= 0) {
+    return false;
+  }
+  for (size_t i = 0; i < appId.length(); i++) {
+    const char c = appId.charAt(i);
+    const bool ok =
+        (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+    if (!ok) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool renameFileAtomic(const String& from, const String& to) {
+  if (!SdMan.exists(from.c_str())) {
+    return false;
+  }
+  if (SdMan.exists(to.c_str())) {
+    SdMan.remove(to.c_str());
+  }
+
+  FsFile src = SdMan.open(from.c_str(), O_RDONLY);
+  if (!src) {
+    return false;
+  }
+
+  // Try SdFat rename first.
+  if (src.rename(to.c_str())) {
+    src.close();
+    return true;
+  }
+  src.close();
+
+  // Fallback: copy + delete.
+  FsFile in = SdMan.open(from.c_str(), O_RDONLY);
+  if (!in) {
+    return false;
+  }
+
+  FsFile out;
+  if (!SdMan.openFileForWrite("WEB", to, out)) {
+    in.close();
+    return false;
+  }
+
+  static uint8_t copyBuf[2048];
+  while (true) {
+    const int n = in.read(copyBuf, sizeof(copyBuf));
+    if (n <= 0) {
+      break;
+    }
+    if (out.write(copyBuf, n) != static_cast<size_t>(n)) {
+      out.close();
+      in.close();
+      SdMan.remove(to.c_str());
+      return false;
+    }
+    yield();
+    esp_task_wdt_reset();
+  }
+
+  out.close();
+  in.close();
+  SdMan.remove(from.c_str());
+  return true;
+}
 // Diagnostic counters for upload performance analysis
 static unsigned long uploadStartTime = 0;
 static unsigned long totalWriteTime = 0;
@@ -673,6 +794,186 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
   } else {
     const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
     server->send(400, "text/plain", error);
+  }
+}
+
+void CrossPointWebServer::handleUploadApp() const {
+  // Reset watchdog at start of every upload callback
+  esp_task_wdt_reset();
+
+  if (!running || !server) {
+    Serial.printf("[%lu] [WEB] [APPUPLOAD] ERROR: handleUploadApp called but server not running!\n", millis());
+    return;
+  }
+
+  const HTTPUpload& upload = server->upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    appUploadSuccess = false;
+    appUploadError = "";
+    appUploadSize = 0;
+    appUploadBufferPos = 0;
+
+    // NOTE: we use query args (not multipart fields) because multipart fields
+    // aren't reliably available until after upload completes.
+    if (!server->hasArg("appId") || !server->hasArg("name") || !server->hasArg("version")) {
+      appUploadError = "Missing required fields: appId, name, version";
+      return;
+    }
+
+    appUploadAppId = server->arg("appId");
+    appUploadName = server->arg("name");
+    appUploadVersion = server->arg("version");
+    appUploadAuthor = server->hasArg("author") ? server->arg("author") : "";
+    appUploadDescription = server->hasArg("description") ? server->arg("description") : "";
+    appUploadMinFirmware = server->hasArg("minFirmware") ? server->arg("minFirmware") : "";
+
+    if (!isValidAppId(appUploadAppId)) {
+      appUploadError = "Invalid appId";
+      return;
+    }
+
+    if (!SdMan.ready()) {
+      appUploadError = "SD card not ready";
+      return;
+    }
+
+    const String appDir = String("/.crosspoint/apps/") + appUploadAppId;
+    if (!SdMan.ensureDirectoryExists("/.crosspoint") || !SdMan.ensureDirectoryExists("/.crosspoint/apps") ||
+        !SdMan.ensureDirectoryExists(appDir.c_str())) {
+      appUploadError = "Failed to create app directory";
+      return;
+    }
+
+    appUploadTempPath = appDir + "/app.bin.tmp";
+    appUploadFinalPath = appDir + "/app.bin";
+    appUploadManifestPath = appDir + "/app.json";
+
+    if (SdMan.exists(appUploadTempPath.c_str())) {
+      SdMan.remove(appUploadTempPath.c_str());
+    }
+
+    if (!SdMan.openFileForWrite("APPUPLOAD", appUploadTempPath, appUploadFile)) {
+      appUploadError = "Failed to create app.bin.tmp";
+      return;
+    }
+
+    Serial.printf("[%lu] [WEB] [APPUPLOAD] START: %s (%s v%s)\n", millis(), appUploadAppId.c_str(),
+                  appUploadName.c_str(), appUploadVersion.c_str());
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (appUploadFile && appUploadError.isEmpty()) {
+      const uint8_t* data = upload.buf;
+      size_t remaining = upload.currentSize;
+
+      while (remaining > 0) {
+        const size_t space = APP_UPLOAD_BUFFER_SIZE - appUploadBufferPos;
+        const size_t toCopy = (remaining < space) ? remaining : space;
+        memcpy(appUploadBuffer + appUploadBufferPos, data, toCopy);
+        appUploadBufferPos += toCopy;
+        data += toCopy;
+        remaining -= toCopy;
+
+        if (appUploadBufferPos >= APP_UPLOAD_BUFFER_SIZE) {
+          if (!flushAppUploadBuffer()) {
+            appUploadError = "Failed writing app.bin.tmp (disk full?)";
+            appUploadFile.close();
+            SdMan.remove(appUploadTempPath.c_str());
+            return;
+          }
+        }
+      }
+
+      appUploadSize += upload.currentSize;
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (appUploadFile) {
+      if (!flushAppUploadBuffer()) {
+        appUploadError = "Failed writing final app.bin.tmp data";
+      }
+      appUploadFile.close();
+
+      if (!appUploadError.isEmpty()) {
+        SdMan.remove(appUploadTempPath.c_str());
+        return;
+      }
+
+      if (appUploadSize == 0) {
+        appUploadError = "Uploaded file is empty";
+        SdMan.remove(appUploadTempPath.c_str());
+        return;
+      }
+
+      // Quick firmware sanity check: first byte should be 0xE9.
+      FsFile checkFile = SdMan.open(appUploadTempPath.c_str(), O_RDONLY);
+      if (!checkFile) {
+        appUploadError = "Failed to reopen uploaded file";
+        SdMan.remove(appUploadTempPath.c_str());
+        return;
+      }
+      uint8_t magic = 0;
+      if (checkFile.read(&magic, 1) != 1 || magic != 0xE9) {
+        checkFile.close();
+        appUploadError = "Invalid firmware image (bad magic byte)";
+        SdMan.remove(appUploadTempPath.c_str());
+        return;
+      }
+      checkFile.close();
+
+      if (!renameFileAtomic(appUploadTempPath, appUploadFinalPath)) {
+        appUploadError = "Failed to finalize app.bin";
+        SdMan.remove(appUploadTempPath.c_str());
+        return;
+      }
+
+      // Write manifest JSON (atomic).
+      JsonDocument doc;
+      doc["name"] = appUploadName;
+      doc["version"] = appUploadVersion;
+      doc["description"] = appUploadDescription;
+      doc["author"] = appUploadAuthor;
+      doc["minFirmware"] = appUploadMinFirmware;
+      doc["id"] = appUploadAppId;
+      doc["uploadMs"] = millis();
+
+      String manifestJson;
+      serializeJson(doc, manifestJson);
+
+      const String manifestTmp = appUploadManifestPath + ".tmp";
+      if (!SdMan.writeFile(manifestTmp.c_str(), manifestJson)) {
+        appUploadError = "Failed to write app.json";
+        return;
+      }
+      if (!renameFileAtomic(manifestTmp, appUploadManifestPath)) {
+        SdMan.remove(manifestTmp.c_str());
+        appUploadError = "Failed to finalize app.json";
+        return;
+      }
+
+      appUploadSuccess = true;
+      Serial.printf("[%lu] [WEB] [APPUPLOAD] Complete: %s (%u bytes)\n", millis(), appUploadAppId.c_str(),
+                    static_cast<unsigned>(appUploadSize));
+    }
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    appUploadBufferPos = 0;
+    if (appUploadFile) {
+      appUploadFile.close();
+    }
+    if (!appUploadTempPath.isEmpty()) {
+      SdMan.remove(appUploadTempPath.c_str());
+    }
+    appUploadError = "Upload aborted";
+    Serial.printf("[%lu] [WEB] [APPUPLOAD] Upload aborted\n", millis());
+  }
+}
+
+void CrossPointWebServer::handleUploadAppPost() const {
+  if (appUploadSuccess) {
+    server->send(200, "text/plain",
+                 "App uploaded. Install on device: Home -> Apps -> " + appUploadName + " v" + appUploadVersion);
+  } else {
+    const String error = appUploadError.isEmpty() ? "Unknown error during app upload" : appUploadError;
+    const int code = (error.startsWith("Missing") || error.startsWith("Invalid")) ? 400 : 500;
+    server->send(code, "text/plain", error);
   }
 }
 

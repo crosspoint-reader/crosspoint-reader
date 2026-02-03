@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrossPoint Reader - Apps (Developer)</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+          Ubuntu, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+      }
+      h1 {
+        color: #2c3e50;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 10px;
+        margin-bottom: 8px;
+      }
+      .subtitle {
+        color: #7f8c8d;
+        margin-top: 0;
+        margin-bottom: 16px;
+      }
+      .card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .nav-links {
+        margin: 20px 0;
+      }
+      .nav-links a {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: #3498db;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        margin-right: 10px;
+        margin-bottom: 8px;
+      }
+      .nav-links a:hover {
+        background-color: #2980b9;
+      }
+      .warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 6px;
+        padding: 12px;
+        color: #856404;
+        font-size: 0.95em;
+        line-height: 1.35;
+      }
+      .field {
+        margin: 12px 0;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        color: #34495e;
+        margin-bottom: 6px;
+      }
+      input[type="text"],
+      input[type="file"] {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+        font-size: 1em;
+      }
+      .hint {
+        color: #7f8c8d;
+        font-size: 0.9em;
+        margin-top: 6px;
+      }
+      .actions {
+        margin-top: 14px;
+      }
+      .btn {
+        width: 100%;
+        padding: 12px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+        font-weight: 600;
+      }
+      .btn.primary {
+        background-color: #27ae60;
+        color: white;
+      }
+      .btn.primary:hover {
+        background-color: #219a52;
+      }
+      .btn:disabled {
+        background-color: #95a5a6;
+        cursor: not-allowed;
+      }
+      #progress-container {
+        display: none;
+        margin-top: 12px;
+      }
+      #progress-bar {
+        width: 100%;
+        height: 20px;
+        background-color: #e0e0e0;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      #progress-fill {
+        height: 100%;
+        background-color: #27ae60;
+        width: 0%;
+        transition: width 0.2s;
+      }
+      #progress-text {
+        text-align: center;
+        margin-top: 6px;
+        font-size: 0.9em;
+        color: #7f8c8d;
+      }
+      .message {
+        display: none;
+        padding: 12px;
+        border-radius: 6px;
+        margin-top: 12px;
+        font-size: 0.95em;
+        line-height: 1.35;
+        word-break: break-word;
+      }
+      .message.success {
+        display: block;
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .message.error {
+        display: block;
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      @media (max-width: 600px) {
+        body {
+          padding: 10px;
+          font-size: 14px;
+        }
+        .card {
+          padding: 12px;
+        }
+        .nav-links a {
+          padding: 8px 12px;
+          margin-right: 6px;
+          font-size: 0.9em;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/files">File Manager</a>
+      <a href="/apps">Apps (Developer)</a>
+    </div>
+
+    <h1>Apps (Developer)</h1>
+    <p class="subtitle">Upload an app binary to the device SD card for installation via the on-device Apps menu.</p>
+
+    <div class="card">
+      <div class="warning">
+        This is a developer feature. It only uploads files to the SD card.
+        To install/run an app, use the device UI: Home → Apps → select app → Install.
+      </div>
+
+      <div class="field">
+        <label for="appId">App ID</label>
+        <input id="appId" type="text" placeholder="e.g. chess-puzzles or org.example.myapp" />
+        <div class="hint">Allowed: letters, numbers, dot, underscore, dash. No slashes. Max 64 chars.</div>
+      </div>
+
+      <div class="field">
+        <label for="name">Name</label>
+        <input id="name" type="text" placeholder="Display name" />
+      </div>
+
+      <div class="field">
+        <label for="version">Version</label>
+        <input id="version" type="text" placeholder="e.g. 0.1.0" />
+      </div>
+
+      <div class="field">
+        <label for="author">Author (optional)</label>
+        <input id="author" type="text" placeholder="Your name" />
+      </div>
+
+      <div class="field">
+        <label for="description">Description (optional)</label>
+        <input id="description" type="text" placeholder="Short description" />
+      </div>
+
+      <div class="field">
+        <label for="minFirmware">Min Firmware (optional)</label>
+        <input id="minFirmware" type="text" placeholder="e.g. 0.14.0" />
+      </div>
+
+      <div class="field">
+        <label for="file">App Binary (app.bin)</label>
+        <input id="file" type="file" />
+      </div>
+
+      <div class="actions">
+        <button id="uploadBtn" class="btn primary" onclick="uploadApp()" disabled>Upload App</button>
+      </div>
+
+      <div id="progress-container">
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="progress-text"></div>
+      </div>
+
+      <div id="message" class="message"></div>
+    </div>
+
+    <div class="card">
+      <p style="text-align: center; color: #95a5a6; margin: 0">
+        CrossPoint E-Reader • Open Source
+      </p>
+    </div>
+
+    <script>
+      const appIdInput = document.getElementById('appId');
+      const nameInput = document.getElementById('name');
+      const versionInput = document.getElementById('version');
+      const authorInput = document.getElementById('author');
+      const descriptionInput = document.getElementById('description');
+      const minFirmwareInput = document.getElementById('minFirmware');
+      const fileInput = document.getElementById('file');
+      const uploadBtn = document.getElementById('uploadBtn');
+
+      function setMessage(kind, text) {
+        const el = document.getElementById('message');
+        el.className = 'message ' + kind;
+        el.textContent = text;
+      }
+
+      function clearMessage() {
+        const el = document.getElementById('message');
+        el.className = 'message';
+        el.textContent = '';
+      }
+
+      function isValidAppId(appId) {
+        if (!appId) return false;
+        if (appId.length > 64) return false;
+        if (appId.startsWith('.')) return false;
+        if (appId.indexOf('..') >= 0) return false;
+        if (appId.indexOf('/') >= 0) return false;
+        if (appId.indexOf('\\') >= 0) return false;
+        return /^[A-Za-z0-9._-]+$/.test(appId);
+      }
+
+      function updateButtonState() {
+        const appId = appIdInput.value.trim();
+        const name = nameInput.value.trim();
+        const version = versionInput.value.trim();
+        const file = fileInput.files && fileInput.files[0];
+        uploadBtn.disabled = !(isValidAppId(appId) && name && version && file);
+      }
+
+      [appIdInput, nameInput, versionInput, authorInput, descriptionInput, minFirmwareInput, fileInput].forEach((el) => {
+        el.addEventListener('input', updateButtonState);
+        el.addEventListener('change', updateButtonState);
+      });
+
+      function uploadApp() {
+        clearMessage();
+
+        const appId = appIdInput.value.trim();
+        const name = nameInput.value.trim();
+        const version = versionInput.value.trim();
+        const author = authorInput.value.trim();
+        const description = descriptionInput.value.trim();
+        const minFirmware = minFirmwareInput.value.trim();
+        const file = fileInput.files && fileInput.files[0];
+
+        if (!isValidAppId(appId)) {
+          setMessage('error', 'Invalid App ID. Use letters/numbers/dot/underscore/dash only.');
+          return;
+        }
+        if (!name || !version || !file) {
+          setMessage('error', 'App ID, Name, Version, and app.bin are required.');
+          return;
+        }
+
+        const qs = new URLSearchParams();
+        qs.set('appId', appId);
+        qs.set('name', name);
+        qs.set('version', version);
+        if (author) qs.set('author', author);
+        if (description) qs.set('description', description);
+        if (minFirmware) qs.set('minFirmware', minFirmware);
+
+        const url = '/upload-app?' + qs.toString();
+        const form = new FormData();
+        form.append('file', file, 'app.bin');
+
+        const progressContainer = document.getElementById('progress-container');
+        const progressFill = document.getElementById('progress-fill');
+        const progressText = document.getElementById('progress-text');
+        progressContainer.style.display = 'block';
+        progressFill.style.width = '0%';
+        progressText.textContent = 'Starting upload...';
+
+        uploadBtn.disabled = true;
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+
+        xhr.upload.onprogress = function (evt) {
+          if (evt.lengthComputable) {
+            const pct = Math.round((evt.loaded / evt.total) * 100);
+            progressFill.style.width = pct + '%';
+            progressText.textContent = 'Uploading: ' + pct + '% (' + Math.round(evt.loaded / 1024) + ' KB)';
+          } else {
+            progressText.textContent = 'Uploading...';
+          }
+        };
+
+        xhr.onload = function () {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Upload complete.';
+            setMessage('success', xhr.responseText || 'Upload succeeded.');
+          } else {
+            setMessage('error', xhr.responseText || 'Upload failed (HTTP ' + xhr.status + ').');
+          }
+          updateButtonState();
+        };
+
+        xhr.onerror = function () {
+          setMessage('error', 'Upload failed due to a network error.');
+          updateButtonState();
+        };
+
+        xhr.send(form);
+      }
+    </script>
+  </body>
+</html>

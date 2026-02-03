@@ -89,6 +89,7 @@ class CrossPointWebServer {
 
   // Request handlers
   void handleRoot() const;
+  void handleAppsPage() const;
   void handleNotFound() const;
   void handleStatus() const;
   void handleFileList() const;
@@ -96,6 +97,8 @@ class CrossPointWebServer {
   void handleDownload() const;
   void handleUpload(UploadState& state) const;
   void handleUploadPost(UploadState& state) const;
+  void handleUploadApp() const;
+  void handleUploadAppPost() const;
   void handleCreateFolder() const;
   void handleRename() const;
   void handleMove() const;
