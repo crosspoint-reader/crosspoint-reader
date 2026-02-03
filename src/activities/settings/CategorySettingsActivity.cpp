@@ -87,6 +87,9 @@ void CategorySettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+    if (strcmp(setting.name, "Orientation") == 0) {
+      updateRendererOrientation();
+    }
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
@@ -151,20 +154,22 @@ void CategorySettingsActivity::render() const {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  const int pageItems = getPageItems();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, categoryName, true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, marginTop, categoryName, true, EpdFontFamily::BOLD);
 
   // Draw selection highlight
-  renderer.fillRect(0, 60 + selectedSettingIndex * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, contentStartY + (selectedSettingIndex % pageItems) * LINE_HEIGHT - 2, pageWidth - 1,
+                    LINE_HEIGHT);
 
   // Draw all settings
-  for (int i = 0; i < settingsCount; i++) {
-    const int settingY = 60 + i * 30;  // 30 pixels between settings
+  const auto pageStartIndex = selectedSettingIndex / pageItems * pageItems;
+  for (int i = pageStartIndex; i < settingsCount && i < pageStartIndex + pageItems; i++) {
+    const int settingY = contentStartY + (i % pageItems) * LINE_HEIGHT;
     const bool isSelected = (i == selectedSettingIndex);
 
     // Draw setting name
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, settingsList[i].name, !isSelected);
+    renderer.drawText(UI_10_FONT_ID, marginLeft, settingY, settingsList[i].name, !isSelected);
 
     // Draw value based on setting type
     std::string valueText;
@@ -179,12 +184,12 @@ void CategorySettingsActivity::render() const {
     }
     if (!valueText.empty()) {
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, valueText.c_str(), !isSelected);
+      renderer.drawText(UI_10_FONT_ID, pageWidth - marginRight - width, settingY, valueText.c_str(), !isSelected);
     }
   }
 
-  renderer.drawText(SMALL_FONT_ID, pageWidth - 20 - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
-                    pageHeight - 60, CROSSPOINT_VERSION);
+  renderer.drawText(SMALL_FONT_ID, pageWidth - marginRight - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
+                    marginTop + 5, CROSSPOINT_VERSION);
 
   const auto labels = mappedInput.mapLabels("« Back", "Toggle", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

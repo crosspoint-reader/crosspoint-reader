@@ -85,7 +85,7 @@ class GfxRenderer {
 
   // UI Components
   void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4);
-  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn) const;
+  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn);
 
  private:
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)

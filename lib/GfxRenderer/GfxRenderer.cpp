@@ -494,11 +494,11 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
   setOrientation(Orientation::Portrait);
 
   const int pageHeight = getScreenHeight();
-  constexpr int buttonWidth = 106;
+  constexpr int buttonWidth = 94;
   constexpr int buttonHeight = 40;
   constexpr int buttonY = 40;     // Distance from bottom
   constexpr int textYOffset = 7;  // Distance from top of button to text baseline
-  constexpr int buttonPositions[] = {25, 130, 245, 350};
+  constexpr int buttonPositions[] = {50, 143, 247, 340};
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < 4; i++) {
@@ -516,7 +516,10 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
   setOrientation(orig_orientation);
 }
 
-void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, const char* bottomBtn) const {
+void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, const char* bottomBtn) {
+  const Orientation orig_orientation = getOrientation();
+  setOrientation(Orientation::Portrait);
+
   const int screenWidth = getScreenWidth();
   constexpr int buttonWidth = 40;   // Width on screen (height when rotated)
   constexpr int buttonHeight = 80;  // Height on screen (width when rotated)
@@ -565,6 +568,8 @@ void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, cons
       drawTextRotated90CW(fontId, textX, textY, labels[i]);
     }
   }
+
+  setOrientation(orig_orientation);
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {

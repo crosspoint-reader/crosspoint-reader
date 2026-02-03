@@ -13,12 +13,8 @@
 
 namespace {
 // Layout constants
-constexpr int TAB_BAR_Y = 15;
-constexpr int CONTENT_START_Y = 60;
-constexpr int LINE_HEIGHT = 30;
 constexpr int RECENTS_LINE_HEIGHT = 65;  // Increased for two-line items
-constexpr int LEFT_MARGIN = 20;
-constexpr int RIGHT_MARGIN = 40;  // Extra space for scroll indicator
+constexpr int scrollIndicatorWidth = 20;
 
 // Timing thresholds
 constexpr int SKIP_PAGE_MS = 700;
@@ -34,17 +30,6 @@ void sortFileList(std::vector<std::string>& strs) {
   });
 }
 }  // namespace
-
-int MyLibraryActivity::getPageItems() const {
-  const int screenHeight = renderer.getScreenHeight();
-  const int bottomBarHeight = 60;  // Space for button hints
-  const int availableHeight = screenHeight - CONTENT_START_Y - bottomBarHeight;
-  int items = availableHeight / LINE_HEIGHT;
-  if (items < 1) {
-    items = 1;
-  }
-  return items;
-}
 
 int MyLibraryActivity::getCurrentItemCount() const {
   if (currentTab == Tab::Recent) {
@@ -286,7 +271,7 @@ void MyLibraryActivity::render() const {
 
   // Draw tab bar
   std::vector<TabInfo> tabs = {{"Recent", currentTab == Tab::Recent}, {"Files", currentTab == Tab::Files}};
-  ScreenComponents::drawTabBar(renderer, TAB_BAR_Y, tabs);
+  ScreenComponents::drawTabBar(renderer, marginTop, tabs);
 
   // Draw content based on current tab
   if (currentTab == Tab::Recent) {
@@ -297,8 +282,8 @@ void MyLibraryActivity::render() const {
 
   // Draw scroll indicator
   const int screenHeight = renderer.getScreenHeight();
-  const int contentHeight = screenHeight - CONTENT_START_Y - 60;  // 60 for bottom bar
-  ScreenComponents::drawScrollIndicator(renderer, getCurrentPage(), getTotalPages(), CONTENT_START_Y, contentHeight);
+  const int contentHeight = screenHeight - contentStartY - marginBottom;
+  ScreenComponents::drawScrollIndicator(renderer, getCurrentPage(), getTotalPages(), contentStartY, contentHeight);
 
   // Draw side button hints (up/down navigation on right side)
   // Note: text is rotated 90° CW, so ">" appears as "^" and "<" appears as "v"
@@ -317,20 +302,20 @@ void MyLibraryActivity::renderRecentTab() const {
   const int bookCount = static_cast<int>(recentBooks.size());
 
   if (bookCount == 0) {
-    renderer.drawText(UI_10_FONT_ID, LEFT_MARGIN, CONTENT_START_Y, "No recent books");
+    renderer.drawText(UI_10_FONT_ID, marginLeft, contentStartY, "No recent books");
     return;
   }
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
 
   // Draw selection highlight
-  renderer.fillRect(0, CONTENT_START_Y + (selectorIndex % pageItems) * RECENTS_LINE_HEIGHT - 2,
-                    pageWidth - RIGHT_MARGIN, RECENTS_LINE_HEIGHT);
+  renderer.fillRect(0, contentStartY + (selectorIndex % pageItems) * RECENTS_LINE_HEIGHT - 2,
+                    pageWidth - marginRight - scrollIndicatorWidth, RECENTS_LINE_HEIGHT);
 
   // Draw items
   for (int i = pageStartIndex; i < bookCount && i < pageStartIndex + pageItems; i++) {
     const auto& book = recentBooks[i];
-    const int y = CONTENT_START_Y + (i % pageItems) * RECENTS_LINE_HEIGHT;
+    const int y = contentStartY + (i % pageItems) * RECENTS_LINE_HEIGHT;
 
     // Line 1: Title
     std::string title = book.title;
@@ -346,14 +331,15 @@ void MyLibraryActivity::renderRecentTab() const {
         title.resize(dot);
       }
     }
-    auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title.c_str(), pageWidth - LEFT_MARGIN - RIGHT_MARGIN);
-    renderer.drawText(UI_12_FONT_ID, LEFT_MARGIN, y + 2, truncatedTitle.c_str(), i != selectorIndex);
+    auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title.c_str(),
+                                                 pageWidth - marginLeft - marginRight - scrollIndicatorWidth);
+    renderer.drawText(UI_12_FONT_ID, marginLeft, y + 2, truncatedTitle.c_str(), i != selectorIndex);
 
     // Line 2: Author
     if (!book.author.empty()) {
-      auto truncatedAuthor =
-          renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), pageWidth - LEFT_MARGIN - RIGHT_MARGIN);
-      renderer.drawText(UI_10_FONT_ID, LEFT_MARGIN, y + 32, truncatedAuthor.c_str(), i != selectorIndex);
+      auto truncatedAuthor = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(),
+                                                    pageWidth - marginLeft - marginRight - scrollIndicatorWidth);
+      renderer.drawText(UI_10_FONT_ID, marginLeft, y + 32, truncatedAuthor.c_str(), i != selectorIndex);
     }
   }
 }
@@ -364,20 +350,21 @@ void MyLibraryActivity::renderFilesTab() const {
   const int fileCount = static_cast<int>(files.size());
 
   if (fileCount == 0) {
-    renderer.drawText(UI_10_FONT_ID, LEFT_MARGIN, CONTENT_START_Y, "No books found");
+    renderer.drawText(UI_10_FONT_ID, marginLeft, contentStartY, "No books found");
     return;
   }
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
 
   // Draw selection highlight
-  renderer.fillRect(0, CONTENT_START_Y + (selectorIndex % pageItems) * LINE_HEIGHT - 2, pageWidth - RIGHT_MARGIN,
-                    LINE_HEIGHT);
+  renderer.fillRect(0, contentStartY + (selectorIndex % pageItems) * LINE_HEIGHT - 2,
+                    pageWidth - marginRight - scrollIndicatorWidth, LINE_HEIGHT);
 
   // Draw items
   for (int i = pageStartIndex; i < fileCount && i < pageStartIndex + pageItems; i++) {
-    auto item = renderer.truncatedText(UI_10_FONT_ID, files[i].c_str(), pageWidth - LEFT_MARGIN - RIGHT_MARGIN);
-    renderer.drawText(UI_10_FONT_ID, LEFT_MARGIN, CONTENT_START_Y + (i % pageItems) * LINE_HEIGHT, item.c_str(),
+    auto item = renderer.truncatedText(UI_10_FONT_ID, files[i].c_str(),
+                                       pageWidth - marginLeft - marginRight - scrollIndicatorWidth);
+    renderer.drawText(UI_10_FONT_ID, marginLeft, contentStartY + (i % pageItems) * LINE_HEIGHT, item.c_str(),
                       i != selectorIndex);
   }
 }

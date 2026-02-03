@@ -220,14 +220,29 @@ void HomeActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  constexpr int margin = 20;
-  constexpr int bottomMargin = 60;
+  // --- Bottom menu tiles ---
+  // Build menu items dynamically
+  std::vector<const char*> menuItems = {"My Library", "File Transfer", "Settings"};
+  if (hasOpdsUrl) {
+    // Insert OPDS Browser after My Library
+    menuItems.insert(menuItems.begin() + 1, "OPDS Browser");
+  }
+
+  const int menuTileWidth = pageWidth - marginLeft - marginRight;
+  constexpr int menuTileHeight = 45;
+  constexpr int menuSpacing = 8;
+  const int totalMenuHeight =
+      static_cast<int>(menuItems.size()) * menuTileHeight + (static_cast<int>(menuItems.size()) - 1) * menuSpacing;
 
   // --- Top "book" card for the current title (selectorIndex == 0) ---
+  // if we're in inverted portrait, battery and hints can overlap
+  GfxRenderer::Orientation orientation = renderer.getOrientation();
+  const int batteryHeight = (orientation == GfxRenderer::Orientation::PortraitInverted ? 0 : 20);
   const int bookWidth = pageWidth / 2;
-  const int bookHeight = pageHeight / 2;
-  const int bookX = (pageWidth - bookWidth) / 2;
-  constexpr int bookY = 30;
+  const int maxBookHeight = pageHeight - marginTop - marginBottom - totalMenuHeight - batteryHeight;
+  const int bookHeight = std::min(pageHeight / 2, maxBookHeight);
+  const int bookX = marginLeft + (pageWidth - marginLeft - marginRight - bookWidth) / 2;
+  const int bookY = marginTop + batteryHeight;
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
 
   // Bookmark dimensions (used in multiple places)
@@ -443,7 +458,7 @@ void HomeActivity::render() {
 
       const int boxWidth = maxTextWidth + boxPadding * 2;
       const int boxHeight = totalTextHeight + boxPadding * 2;
-      const int boxX = (pageWidth - boxWidth) / 2;
+      const int boxX = bookX + (bookWidth - boxWidth) / 2;
       const int boxY = titleYStart - boxPadding;
 
       // Draw box (inverted when selected: black box instead of white)
@@ -453,7 +468,8 @@ void HomeActivity::render() {
     }
 
     for (const auto& line : lines) {
-      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), !bookSelected);
+      renderer.drawText(UI_12_FONT_ID, bookX + (bookWidth - renderer.getTextWidth(UI_12_FONT_ID, line.c_str())) / 2,
+                        titleYStart, line.c_str(), !bookSelected);
       titleYStart += renderer.getLineHeight(UI_12_FONT_ID);
     }
 
@@ -474,26 +490,27 @@ void HomeActivity::render() {
         }
         trimmedAuthor.append("...");
       }
-      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, trimmedAuthor.c_str(), !bookSelected);
+      renderer.drawText(UI_10_FONT_ID,
+                        bookX + (bookWidth - renderer.getTextWidth(UI_10_FONT_ID, trimmedAuthor.c_str())) / 2,
+                        titleYStart, trimmedAuthor.c_str(), !bookSelected);
     }
 
     // "Continue Reading" label at the bottom
     const int continueY = bookY + bookHeight - renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
+    const char* continueText = "Continue Reading";
+    const int continueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, continueText);
     if (coverRendered) {
       // Draw box behind "Continue Reading" text (inverted when selected: black box instead of white)
-      const char* continueText = "Continue Reading";
-      const int continueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, continueText);
       constexpr int continuePadding = 6;
       const int continueBoxWidth = continueTextWidth + continuePadding * 2;
       const int continueBoxHeight = renderer.getLineHeight(UI_10_FONT_ID) + continuePadding;
-      const int continueBoxX = (pageWidth - continueBoxWidth) / 2;
+      const int continueBoxX = bookX + (bookWidth - continueBoxWidth) / 2;
       const int continueBoxY = continueY - continuePadding / 2;
       renderer.fillRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, bookSelected);
       renderer.drawRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, !bookSelected);
-      renderer.drawCenteredText(UI_10_FONT_ID, continueY, continueText, !bookSelected);
-    } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, continueY, "Continue Reading", !bookSelected);
     }
+    renderer.drawText(UI_10_FONT_ID, bookX + (bookWidth - continueTextWidth) / 2, continueY, continueText,
+                      !bookSelected);
   } else {
     // No book to continue reading
     const int y =
@@ -502,30 +519,11 @@ void HomeActivity::render() {
     renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), "Start reading below");
   }
 
-  // --- Bottom menu tiles ---
-  // Build menu items dynamically
-  std::vector<const char*> menuItems = {"My Library", "File Transfer", "Settings"};
-  if (hasOpdsUrl) {
-    // Insert OPDS Browser after My Library
-    menuItems.insert(menuItems.begin() + 1, "OPDS Browser");
-  }
-
-  const int menuTileWidth = pageWidth - 2 * margin;
-  constexpr int menuTileHeight = 45;
-  constexpr int menuSpacing = 8;
-  const int totalMenuHeight =
-      static_cast<int>(menuItems.size()) * menuTileHeight + (static_cast<int>(menuItems.size()) - 1) * menuSpacing;
-
-  int menuStartY = bookY + bookHeight + 15;
-  // Ensure we don't collide with the bottom button legend
-  const int maxMenuStartY = pageHeight - bottomMargin - totalMenuHeight - margin;
-  if (menuStartY > maxMenuStartY) {
-    menuStartY = maxMenuStartY;
-  }
+  int menuStartY = bookY + bookHeight + menuSpacing;
 
   for (size_t i = 0; i < menuItems.size(); ++i) {
     const int overallIndex = static_cast<int>(i) + (hasContinueReading ? 1 : 0);
-    constexpr int tileX = margin;
+    const int tileX = marginLeft;
     const int tileY = menuStartY + static_cast<int>(i) * (menuTileHeight + menuSpacing);
     const bool selected = selectorIndex == overallIndex;
 
@@ -553,7 +551,7 @@ void HomeActivity::render() {
   // get percentage so we can align text properly
   const uint16_t percentage = battery.readPercentage();
   const auto percentageText = showBatteryPercentage ? std::to_string(percentage) + "%" : "";
-  const auto batteryX = pageWidth - 25 - renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+  const auto batteryX = pageWidth - 30 - renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
   ScreenComponents::drawBattery(renderer, batteryX, 10, showBatteryPercentage);
 
   renderer.displayBuffer();

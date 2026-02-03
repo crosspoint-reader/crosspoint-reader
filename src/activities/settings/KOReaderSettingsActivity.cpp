@@ -81,7 +81,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "KOReader Username", KOREADER_STORE.getUsername(), 10,
+        renderer, mappedInput, "KOReader Username", KOREADER_STORE.getUsername(), 50,
         64,     // maxLength
         false,  // not password
         [this](const std::string& username) {
@@ -98,7 +98,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "KOReader Password", KOREADER_STORE.getPassword(), 10,
+        renderer, mappedInput, "KOReader Password", KOREADER_STORE.getPassword(), 50,
         64,     // maxLength
         false,  // show characters
         [this](const std::string& password) {
@@ -117,7 +117,7 @@ void KOReaderSettingsActivity::handleSelection() {
     const std::string prefillUrl = currentUrl.empty() ? "https://" : currentUrl;
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Sync Server URL", prefillUrl, 10,
+        renderer, mappedInput, "Sync Server URL", prefillUrl, 50,
         128,    // maxLength - URLs can be long
         false,  // not password
         [this](const std::string& url) {
@@ -175,17 +175,17 @@ void KOReaderSettingsActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Sync", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, marginTop, "KOReader Sync", true, EpdFontFamily::BOLD);
 
   // Draw selection highlight
-  renderer.fillRect(0, 60 + selectedIndex * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, contentStartY + selectedIndex * LINE_HEIGHT - 2, pageWidth - 1, LINE_HEIGHT);
 
   // Draw menu items
   for (int i = 0; i < MENU_ITEMS; i++) {
-    const int settingY = 60 + i * 30;
+    const int settingY = contentStartY + i * LINE_HEIGHT;
     const bool isSelected = (i == selectedIndex);
 
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, menuNames[i], !isSelected);
+    renderer.drawText(UI_10_FONT_ID, marginLeft, settingY, menuNames[i], !isSelected);
 
     // Draw status for each item
     const char* status = "";
@@ -202,7 +202,7 @@ void KOReaderSettingsActivity::render() {
     }
 
     const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
+    renderer.drawText(UI_10_FONT_ID, pageWidth - marginRight - width, settingY, status, !isSelected);
   }
 
   // Draw button hints

@@ -228,7 +228,7 @@ void OpdsBookBrowserActivity::render() const {
   }
 
   const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-  renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, contentStartY + (selectorIndex % PAGE_ITEMS) * LINE_HEIGHT - 2, pageWidth - 1, LINE_HEIGHT);
 
   for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
     const auto& entry = entries[i];
@@ -246,7 +246,7 @@ void OpdsBookBrowserActivity::render() const {
     }
 
     auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), renderer.getScreenWidth() - 40);
-    renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
+    renderer.drawText(UI_10_FONT_ID, 20, contentStartY + (i % PAGE_ITEMS) * LINE_HEIGHT, item.c_str(),
                       i != static_cast<size_t>(selectorIndex));
   }
 

@@ -9,21 +9,6 @@ namespace {
 constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
 
-int XtcReaderChapterSelectionActivity::getPageItems() const {
-  constexpr int startY = 60;
-  constexpr int lineHeight = 30;
-
-  const int screenHeight = renderer.getScreenHeight();
-  const int endY = screenHeight - lineHeight;
-
-  const int availableHeight = endY - startY;
-  int items = availableHeight / lineHeight;
-  if (items < 1) {
-    items = 1;
-  }
-  return items;
-}
-
 int XtcReaderChapterSelectionActivity::findChapterIndexForPage(uint32_t page) const {
   if (!xtc) {
     return 0;
@@ -132,28 +117,26 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const int pageItems = getPageItems();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Select Chapter", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, marginTop, "Select Chapter", true, EpdFontFamily::BOLD);
 
   const auto& chapters = xtc->getChapters();
   if (chapters.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 120, "No chapters");
+    renderer.drawCenteredText(UI_10_FONT_ID, marginTop + 105, "No chapters");
     renderer.displayBuffer();
     return;
   }
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, contentStartY + (selectorIndex % pageItems) * LINE_HEIGHT - 2, pageWidth - 1, LINE_HEIGHT);
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
     const char* title = chapter.name.empty() ? "Unnamed" : chapter.name.c_str();
-    renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % pageItems) * 30, title, i != selectorIndex);
+    renderer.drawText(UI_10_FONT_ID, marginLeft, contentStartY + (i % pageItems) * LINE_HEIGHT, title,
+                      i != selectorIndex);
   }
 
-  // Skip button hints in landscape CW mode (they overlap content)
-  if (renderer.getOrientation() != GfxRenderer::LandscapeClockwise) {
-    const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
-    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  }
+  const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

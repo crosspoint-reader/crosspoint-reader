@@ -32,24 +32,6 @@ int EpubReaderChapterSelectionActivity::tocIndexFromItemIndex(int itemIndex) con
   return itemIndex - offset;
 }
 
-int EpubReaderChapterSelectionActivity::getPageItems() const {
-  // Layout constants used in renderScreen
-  constexpr int startY = 60;
-  constexpr int lineHeight = 30;
-
-  const int screenHeight = renderer.getScreenHeight();
-  const int endY = screenHeight - lineHeight;
-
-  const int availableHeight = endY - startY;
-  int items = availableHeight / lineHeight;
-
-  // Ensure we always have at least one item per page to avoid division by zero
-  if (items < 1) {
-    items = 1;
-  }
-  return items;
-}
-
 void EpubReaderChapterSelectionActivity::taskTrampoline(void* param) {
   auto* self = static_cast<EpubReaderChapterSelectionActivity*>(param);
   self->displayTaskLoop();
@@ -184,21 +166,21 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
   renderer.drawCenteredText(UI_12_FONT_ID, 15, "Go to Chapter", true, EpdFontFamily::BOLD);
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, contentStartY + (selectorIndex % pageItems) * LINE_HEIGHT - 2, pageWidth - 1, LINE_HEIGHT);
 
   for (int i = 0; i < pageItems; i++) {
     int itemIndex = pageStartIndex + i;
     if (itemIndex >= totalItems) break;
-    const int displayY = 60 + i * 30;
+    const int displayY = contentStartY + (itemIndex % pageItems) * LINE_HEIGHT;
     const bool isSelected = (itemIndex == selectorIndex);
 
     if (isSyncItem(itemIndex)) {
-      renderer.drawText(UI_10_FONT_ID, 20, displayY, ">> Sync Progress", !isSelected);
+      renderer.drawText(UI_10_FONT_ID, marginLeft, displayY, ">> Sync Progress", !isSelected);
     } else {
       const int tocIndex = tocIndexFromItemIndex(itemIndex);
       auto item = epub->getTocItem(tocIndex);
 
-      const int indentSize = 20 + (item.level - 1) * 15;
+      const int indentSize = marginLeft + (item.level - 1) * 15;
       const std::string chapterName =
           renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), pageWidth - 40 - indentSize);
 
@@ -206,11 +188,8 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
     }
   }
 
-  // Skip button hints in landscape CW mode (they overlap content)
-  if (renderer.getOrientation() != GfxRenderer::LandscapeClockwise) {
-    const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
-    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  }
+  const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

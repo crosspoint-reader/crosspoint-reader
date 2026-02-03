@@ -7,6 +7,7 @@
 
 void BootActivity::onEnter() {
   Activity::onEnter();
+  updateRendererOrientation();
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();

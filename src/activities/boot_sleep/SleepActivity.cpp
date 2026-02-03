@@ -126,6 +126,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   int x, y;
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   float cropX = 0, cropY = 0;
