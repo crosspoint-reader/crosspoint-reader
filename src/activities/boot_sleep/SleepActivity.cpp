@@ -8,13 +8,15 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "ScreenComponents.h"
 #include "fontIds.h"
 #include "images/CrossLarge.h"
 #include "util/StringUtils.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  renderPopup("Entering Sleep...");
+
+  ScreenComponents::drawPopup(renderer, "Entering Sleep...");
 
   if (SETTINGS.sleepScreenMode == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();
@@ -30,20 +32,6 @@ void SleepActivity::onEnter() {
   }
 
   renderDefaultSleepScreen();
-}
-
-void SleepActivity::renderPopup(const char* message) const {
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
-  constexpr int margin = 20;
-  const int x = (renderer.getScreenWidth() - textWidth - margin * 2) / 2;
-  constexpr int y = 117;
-  const int w = textWidth + margin * 2;
-  const int h = renderer.getLineHeight(UI_12_FONT_ID) + margin * 2;
-  // renderer.clearScreen();
-  renderer.fillRect(x - 5, y - 5, w + 10, h + 10, true);
-  renderer.fillRect(x + 5, y + 5, w - 10, h - 10, false);
-  renderer.drawText(UI_12_FONT_ID, x + margin, y + margin, message, true, EpdFontFamily::BOLD);
-  renderer.displayBuffer();
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
@@ -134,7 +122,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
     renderer.invertScreen();
   }
 
-  renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
@@ -190,7 +178,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.invertScreen();
   }
 
-  renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
   if (hasGreyscale) {
     bitmap.rewindToData();
@@ -285,5 +273,5 @@ void SleepActivity::renderBlankSleepScreen() const {
   if (SETTINGS.sleepScreenFilter == CrossPointSettings::SLEEP_SCREEN_FILTER::NEGATIVE) {
     renderer.invertScreen();
   }
-  renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
