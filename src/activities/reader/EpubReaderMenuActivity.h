@@ -13,7 +13,7 @@
 
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  public:
-  enum class MenuAction { SELECT_CHAPTER, GO_HOME, DELETE_CACHE };
+  enum class MenuAction { SELECT_CHAPTER, ROTATE_SCREEN, GO_HOME, DELETE_CACHE };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const std::function<void()>& onBack, const std::function<void(MenuAction)>& onAction)
@@ -33,6 +33,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   };
 
   const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, "Go to Chapter"},
+                                           {MenuAction::ROTATE_SCREEN, "Rotate Screen"},
                                            {MenuAction::GO_HOME, "Go Home"},
                                            {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
 

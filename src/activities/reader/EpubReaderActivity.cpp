@@ -268,6 +268,40 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       xSemaphoreGive(renderingMutex);
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::ROTATE_SCREEN: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      if (section) {
+        cachedSpineIndex = currentSpineIndex;
+        cachedChapterTotalPageCount = section->pageCount;
+        nextPageNumber = section->currentPage;
+      }
+
+      SETTINGS.orientation = (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT;
+      SETTINGS.saveToFile();
+
+      switch (SETTINGS.orientation) {
+        case CrossPointSettings::ORIENTATION::PORTRAIT:
+          renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+          break;
+        case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
+          renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
+          break;
+        case CrossPointSettings::ORIENTATION::INVERTED:
+          renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+          break;
+        case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
+          renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+          break;
+        default:
+          break;
+      }
+
+      section.reset();
+      exitActivity();
+      updateRequired = true;
+      xSemaphoreGive(renderingMutex);
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       // 2. Trigger the reader's "Go Home" callback
       if (onGoHome) {
