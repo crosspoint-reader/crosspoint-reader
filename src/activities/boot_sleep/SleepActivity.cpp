@@ -281,5 +281,9 @@ void SleepActivity::renderCoverSleepScreen() const {
 
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
+  // Make blank screen negative
+  if (SETTINGS.sleepScreenFilter == CrossPointSettings::SLEEP_SCREEN_FILTER::NEGATIVE) {
+    renderer.invertScreen();
+  }
   renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
 }
