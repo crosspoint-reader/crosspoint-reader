@@ -7,9 +7,11 @@ This document describes all HTTP and WebSocket endpoints available on the CrossP
   - [HTTP Endpoints](#http-endpoints)
     - [GET `/` - Home Page](#get----home-page)
     - [GET `/files` - File Browser Page](#get-files---file-browser-page)
+    - [GET `/apps` - Apps (Developer) Page](#get-apps---apps-developer-page)
     - [GET `/api/status` - Device Status](#get-apistatus---device-status)
     - [GET `/api/files` - List Files](#get-apifiles---list-files)
     - [POST `/upload` - Upload File](#post-upload---upload-file)
+    - [POST `/upload-app` - Upload App (Developer)](#post-upload-app---upload-app-developer)
     - [POST `/mkdir` - Create Folder](#post-mkdir---create-folder)
     - [POST `/delete` - Delete File or Folder](#post-delete---delete-file-or-folder)
   - [WebSocket Endpoint](#websocket-endpoint)
@@ -51,6 +53,22 @@ Serves the file browser HTML interface.
 **Request:**
 ```bash
 curl http://crosspoint.local/files
+```
+
+**Response:** HTML page (200 OK)
+
+---
+
+### GET `/apps` - Apps (Developer) Page
+
+Serves the Apps (Developer) HTML interface.
+
+This is a developer-oriented page for uploading app binaries to the SD card under `/.crosspoint/apps/`.
+Installing/running apps still happens on the device: Home → Apps.
+
+**Request:**
+```bash
+curl http://crosspoint.local/apps
 ```
 
 **Response:** HTML page (200 OK)
@@ -167,6 +185,51 @@ File uploaded successfully: mybook.epub
 **Notes:**
 - Existing files with the same name will be overwritten
 - Uses a 4KB buffer for efficient SD card writes
+
+---
+
+### POST `/upload-app` - Upload App (Developer)
+
+Uploads an app binary to the SD card under `/.crosspoint/apps/<appId>/` and creates/updates `app.json`.
+
+**Important:** this endpoint does not install the app. Install on device via Home → Apps.
+
+**Request:**
+```bash
+curl -X POST \
+  -F "file=@app.bin" \
+  "http://crosspoint.local/upload-app?appId=chess-puzzles&name=Chess%20Puzzles&version=0.1.0"
+```
+
+**Query Parameters:**
+
+| Parameter     | Required | Description |
+|---------------|----------|-------------|
+| `appId`       | Yes      | App identifier; allowed chars: `[A-Za-z0-9._-]`, max 64, no slashes |
+| `name`        | Yes      | Display name |
+| `version`     | Yes      | Version string |
+| `author`      | No       | Author string |
+| `description` | No       | Short description |
+| `minFirmware` | No       | Minimum CrossPoint firmware version required |
+
+**Response (200 OK):**
+```
+App uploaded. Install on device: Home -> Apps -> <Name> v<Version>
+```
+
+**Error Responses:**
+
+| Status | Body                                       | Cause |
+|--------|--------------------------------------------|-------|
+| 400    | `Missing required fields: appId, name, version` | Missing query parameters |
+| 400    | `Invalid appId`                            | appId failed validation |
+| 500    | `SD card not ready`                        | SD not mounted/ready |
+| 500    | `Failed to create app.bin.tmp`             | File create failed (disk full / FS error) |
+| 500    | `Invalid firmware image (bad magic byte)`  | Uploaded file is not an ESP32 image |
+
+**Notes:**
+- Upload uses a temp file (`app.bin.tmp`) and finalizes to `app.bin` on success.
+- Partial uploads are cleaned up on abort/failure.
 
 ---
 
