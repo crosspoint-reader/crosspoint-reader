@@ -139,11 +139,18 @@ void EpubReaderActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    const int currentPage = section ? section->currentPage : 0;
+    const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
+    float bookProgress = 0.0f;
+    if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
+      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+      bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+    }
+    const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
-        this->renderer, this->mappedInput, epub->getTitle(), [this]() { onReaderMenuBack(); },
+        this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
+        [this]() { onReaderMenuBack(); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }

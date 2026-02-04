@@ -17,9 +17,13 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   enum class MenuAction { SELECT_CHAPTER, GO_TO_PERCENT, GO_HOME, DELETE_CACHE };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
+                                  const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const std::function<void()>& onBack, const std::function<void(MenuAction)>& onAction)
       : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
         title(title),
+        currentPage(currentPage),
+        totalPages(totalPages),
+        bookProgressPercent(bookProgressPercent),
         onBack(onBack),
         onAction(onAction) {}
 
@@ -44,6 +48,9 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   std::string title = "Reader Menu";
+  int currentPage = 0;
+  int totalPages = 0;
+  int bookProgressPercent = 0;
 
   const std::function<void()> onBack;
   const std::function<void(MenuAction)> onAction;
