@@ -19,23 +19,6 @@ namespace {
 constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
 constexpr size_t SOFT_HYPHEN_BYTES = 2;
 
-// Check if a character is punctuation that should attach to the previous word
-// (no space before it). Includes sentence punctuation and closing quotes.
-// Excludes brackets/parens to avoid false positives with decorative patterns like "[ 1 ]".
-bool isAttachingPunctuation(const char c) {
-  return c == '.' || c == ',' || c == '!' || c == '?' || c == ';' || c == ':' || c == '"' || c == '\'';
-}
-
-// Check if a word consists entirely of punctuation that should attach to the previous word
-bool isAttachingPunctuationWord(const std::string& word) {
-  if (word.empty()) return false;
-  // Check if word starts with attaching punctuation and is short (to avoid false positives)
-  if (isAttachingPunctuation(word[0]) && word.size() <= 3) {
-    return true;
-  }
-  return false;
-}
-
 bool containsSoftHyphen(const std::string& word) { return word.find(SOFT_HYPHEN_UTF8) != std::string::npos; }
 
 // Removes every soft hyphen in-place so rendered glyphs match measured widths.
@@ -66,12 +49,15 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 
 }  // namespace
 
-void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline) {
+void ParsedText::addWord(std::string word, const EpdFontFamily::Style style, const bool underline) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
-  wordStyles.push_back(fontStyle);
-  wordUnderlines.push_back(underline);
+  EpdFontFamily::Style combinedStyle = style;
+  if (underline) {
+    combinedStyle = static_cast<EpdFontFamily::Style>(combinedStyle | EpdFontFamily::UNDERLINE);
+  }
+  wordStyles.push_back(combinedStyle);
 }
 
 // Consumes data to minimize memory usage
@@ -112,8 +98,7 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   auto wordStylesIt = wordStyles.begin();
 
   while (wordsIt != words.end()) {
-    uint16_t width = measureWordWidth(renderer, fontId, *wordsIt, *wordStylesIt);
-    wordWidths.push_back(width);
+    wordWidths.push_back(measureWordWidth(renderer, fontId, *wordsIt, *wordStylesIt));
 
     std::advance(wordsIt, 1);
     std::advance(wordStylesIt, 1);
@@ -129,10 +114,11 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   }
 
   // Calculate first line indent (only for left/justified text without extra paragraph spacing)
-  const int firstLineIndent = blockStyle.textIndent > 0 && !extraParagraphSpacing &&
-                                      (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN)
-                                  ? blockStyle.textIndent
-                                  : 0;
+  const int firstLineIndent =
+      blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+          ? blockStyle.textIndent
+          : 0;
 
   // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
   for (size_t i = 0; i < wordWidths.size(); ++i) {
@@ -233,7 +219,7 @@ void ParsedText::applyParagraphIndent() {
   if (blockStyle.textIndentDefined) {
     // CSS text-indent is explicitly set (even if 0) - don't use fallback EmSpace
     // The actual indent positioning is handled in extractLine()
-  } else if (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) {
+  } else if (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left) {
     // No CSS text-indent defined - use EmSpace fallback for visual indent
     words.front().insert(0, "\xe2\x80\x83");
   }
@@ -244,10 +230,11 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
                                                             const int pageWidth, const int spaceWidth,
                                                             std::vector<uint16_t>& wordWidths) {
   // Calculate first line indent (only for left/justified text without extra paragraph spacing)
-  const int firstLineIndent = blockStyle.textIndent > 0 && !extraParagraphSpacing &&
-                                      (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN)
-                                  ? blockStyle.textIndent
-                                  : 0;
+  const int firstLineIndent =
+      blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+          ? blockStyle.textIndent
+          : 0;
 
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
@@ -381,25 +368,16 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   // Calculate first line indent (only for left/justified text without extra paragraph spacing)
   const bool isFirstLine = breakIndex == 0;
-  const int firstLineIndent = isFirstLine && blockStyle.textIndent > 0 && !extraParagraphSpacing &&
-                                      (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN)
-                                  ? blockStyle.textIndent
-                                  : 0;
+  const int firstLineIndent =
+      isFirstLine && blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+          ? blockStyle.textIndent
+          : 0;
 
-  // Calculate total word width for this line and count actual word gaps
-  // (punctuation that attaches to previous word doesn't count as a gap)
-  // Note: words list starts at the beginning because previous lines were spliced out
+  // Calculate total word width for this line
   int lineWordWidthSum = 0;
-  size_t actualGapCount = 0;
-  auto countWordIt = words.begin();
-
-  for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-    lineWordWidthSum += wordWidths[lastBreakAt + wordIdx];
-    // Count gaps: each word after the first creates a gap, unless it's attaching punctuation
-    if (wordIdx > 0 && !isAttachingPunctuationWord(*countWordIt)) {
-      actualGapCount++;
-    }
-    ++countWordIt;
+  for (size_t i = lastBreakAt; i < lineBreak; i++) {
+    lineWordWidthSum += wordWidths[i];
   }
 
   // Calculate spacing (account for indent reducing effective page width on first line)
@@ -409,54 +387,37 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   int spacing = spaceWidth;
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
 
-  // For justified text, calculate spacing based on actual gap count
-  if (style == TextBlock::JUSTIFIED && !isLastLine && actualGapCount >= 1) {
-    spacing = spareSpace / static_cast<int>(actualGapCount);
+  if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && lineWordCount >= 2) {
+    spacing = spareSpace / (lineWordCount - 1);
   }
 
   // Calculate initial x position (first line starts at indent for left/justified text)
   auto xpos = static_cast<uint16_t>(firstLineIndent);
-  if (style == TextBlock::RIGHT_ALIGN) {
-    xpos = spareSpace - static_cast<int>(actualGapCount) * spaceWidth;
-  } else if (style == TextBlock::CENTER_ALIGN) {
-    xpos = (spareSpace - static_cast<int>(actualGapCount) * spaceWidth) / 2;
+  if (blockStyle.alignment == CssTextAlign::Right) {
+    xpos = spareSpace - (lineWordCount - 1) * spaceWidth;
+  } else if (blockStyle.alignment == CssTextAlign::Center) {
+    xpos = (spareSpace - (lineWordCount - 1) * spaceWidth) / 2;
   }
 
   // Pre-calculate X positions for words
-  // Punctuation that attaches to the previous word doesn't get space before it
-  // Note: words list starts at the beginning because previous lines were spliced out
   std::list<uint16_t> lineXPos;
-  auto wordIt = words.begin();
-
-  for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-    const uint16_t currentWordWidth = wordWidths[lastBreakAt + wordIdx];
-
+  for (size_t i = lastBreakAt; i < lineBreak; i++) {
+    const uint16_t currentWordWidth = wordWidths[i];
     lineXPos.push_back(xpos);
-
-    // Add spacing after this word, unless the next word is attaching punctuation
-    auto nextWordIt = wordIt;
-    ++nextWordIt;
-    const bool nextIsAttachingPunctuation = wordIdx + 1 < lineWordCount && isAttachingPunctuationWord(*nextWordIt);
-
-    xpos += currentWordWidth + (nextIsAttachingPunctuation ? 0 : spacing);
-    ++wordIt;
+    xpos += currentWordWidth + spacing;
   }
 
   // Iterators always start at the beginning as we are moving content with splice below
   auto wordEndIt = words.begin();
   auto wordStyleEndIt = wordStyles.begin();
-  auto wordUnderlineEndIt = wordUnderlines.begin();
   std::advance(wordEndIt, lineWordCount);
   std::advance(wordStyleEndIt, lineWordCount);
-  std::advance(wordUnderlineEndIt, lineWordCount);
 
   // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
   std::list<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
-  std::list<bool> lineWordUnderlines;
-  lineWordUnderlines.splice(lineWordUnderlines.begin(), wordUnderlines, wordUnderlines.begin(), wordUnderlineEndIt);
 
   for (auto& word : lineWords) {
     if (containsSoftHyphen(word)) {
@@ -464,6 +425,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style,
-                                          blockStyle, std::move(lineWordUnderlines)));
+  processLine(
+      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle));
 }

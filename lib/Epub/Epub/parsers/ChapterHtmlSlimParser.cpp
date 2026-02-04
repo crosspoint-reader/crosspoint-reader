@@ -43,39 +43,17 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
   return false;
 }
 
-// Create a BlockStyle from CSS style properties, resolving CssLength values to pixels
-// emSize is the current font line height, used for em/rem unit conversion
-BlockStyle createBlockStyleFromCss(const CssStyle& cssStyle, const float emSize) {
-  BlockStyle blockStyle;
-  // Resolve all CssLength values to pixels using the current font's em size
-  const int16_t marginTopPx = cssStyle.marginTop.toPixelsInt16(emSize);
-  const int16_t marginBottomPx = cssStyle.marginBottom.toPixelsInt16(emSize);
-  const int16_t paddingTopPx = cssStyle.paddingTop.toPixelsInt16(emSize);
-  const int16_t paddingBottomPx = cssStyle.paddingBottom.toPixelsInt16(emSize);
-
-  // Vertical: combine margin and padding for top/bottom spacing
-  blockStyle.marginTop = static_cast<int16_t>(marginTopPx + paddingTopPx);
-  blockStyle.marginBottom = static_cast<int16_t>(marginBottomPx + paddingBottomPx);
-  blockStyle.paddingTop = paddingTopPx;
-  blockStyle.paddingBottom = paddingBottomPx;
-  // Horizontal: store margin and padding separately for layout calculations
-  blockStyle.marginLeft = cssStyle.marginLeft.toPixelsInt16(emSize);
-  blockStyle.marginRight = cssStyle.marginRight.toPixelsInt16(emSize);
-  blockStyle.paddingLeft = cssStyle.paddingLeft.toPixelsInt16(emSize);
-  blockStyle.paddingRight = cssStyle.paddingRight.toPixelsInt16(emSize);
-  // Text indent
-  blockStyle.textIndent = cssStyle.textIndent.toPixelsInt16(emSize);
-  blockStyle.textIndentDefined = cssStyle.defined.textIndent;
-  return blockStyle;
+bool isHeaderOrBlock(const char* name) {
+  return matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
 }
 
 // Update effective bold/italic/underline based on block style and inline style stack
 void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   // Start with block-level styles
-  effectiveBold = currentBlockStyle.hasFontWeight() && currentBlockStyle.fontWeight == CssFontWeight::Bold;
-  effectiveItalic = currentBlockStyle.hasFontStyle() && currentBlockStyle.fontStyle == CssFontStyle::Italic;
+  effectiveBold = currentCssStyle.hasFontWeight() && currentCssStyle.fontWeight == CssFontWeight::Bold;
+  effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
   effectiveUnderline =
-      currentBlockStyle.hasTextDecoration() && currentBlockStyle.textDecoration == CssTextDecoration::Underline;
+      currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::Underline;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
@@ -98,68 +76,40 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   const bool isItalic = italicUntilDepth < depth || effectiveItalic;
   const bool isUnderline = underlineUntilDepth < depth || effectiveUnderline;
 
+  // Combine style flags using bitwise OR
   EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
-  if (isBold && isItalic) {
-    fontStyle = EpdFontFamily::BOLD_ITALIC;
-  } else if (isBold) {
-    fontStyle = EpdFontFamily::BOLD;
-  } else if (isItalic) {
-    fontStyle = EpdFontFamily::ITALIC;
+  if (isBold) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::BOLD);
+  }
+  if (isItalic) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::ITALIC);
+  }
+  if (isUnderline) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::UNDERLINE);
   }
 
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
-  currentTextBlock->addWord(partWordBuffer, fontStyle, isUnderline);
+  currentTextBlock->addWord(partWordBuffer, fontStyle);
   partWordBufferIndex = 0;
 }
 
-// Merge block styles for nested block elements
-// When a child block element is inside a parent with no direct text content,
-// we accumulate their margins so nested containers properly contribute spacing
-BlockStyle mergeBlockStyles(const BlockStyle& parent, const BlockStyle& child) {
-  BlockStyle merged;
-  // Vertical margins: sum them (nested blocks create additive spacing)
-  merged.marginTop = static_cast<int16_t>(parent.marginTop + child.marginTop);
-  merged.marginBottom = static_cast<int16_t>(parent.marginBottom + child.marginBottom);
-  // Horizontal margins: sum them (nested blocks create cumulative indentation)
-  merged.marginLeft = static_cast<int16_t>(parent.marginLeft + child.marginLeft);
-  merged.marginRight = static_cast<int16_t>(parent.marginRight + child.marginRight);
-  // Padding: sum them
-  merged.paddingTop = static_cast<int16_t>(parent.paddingTop + child.paddingTop);
-  merged.paddingBottom = static_cast<int16_t>(parent.paddingBottom + child.paddingBottom);
-  merged.paddingLeft = static_cast<int16_t>(parent.paddingLeft + child.paddingLeft);
-  merged.paddingRight = static_cast<int16_t>(parent.paddingRight + child.paddingRight);
-  // Text indent: use child's if defined, otherwise inherit parent's
-  if (child.textIndentDefined) {
-    merged.textIndent = child.textIndent;
-    merged.textIndentDefined = true;
-  } else if (parent.textIndentDefined) {
-    merged.textIndent = parent.textIndent;
-    merged.textIndentDefined = true;
-  }
-  return merged;
-}
-
 // start a new text block if needed
-void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style, const BlockStyle& blockStyle) {
+void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
-      currentTextBlock->setStyle(style);
-      // Merge with existing block style to accumulate margins from parent block elements
-      // This handles cases like <div margin-bottom:2em><h1>text</h1></div> where the
-      // div's margin should be preserved even though it has no direct text content
-      const BlockStyle merged = mergeBlockStyles(currentTextBlock->getBlockStyle(), blockStyle);
-      currentTextBlock->setBlockStyle(merged);
+      // Merge with existing block style to accumulate CSS styling from parent block elements.
+      // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
+      // div's margin should be preserved, even though it has no direct text content.
+      currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
       return;
     }
 
     makePages();
   }
-  currentTextBlock.reset(new ParsedText(style, extraParagraphSpacing, hyphenationEnabled, blockStyle));
+  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
 }
-
-void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style) { startNewTextBlock(style, BlockStyle{}); }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
@@ -183,13 +133,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  auto centeredBlockStyle = BlockStyle();
+  centeredBlockStyle.textAlignDefined = true;
+  centeredBlockStyle.alignment = CssTextAlign::Center;
+
   // Special handling for tables - show placeholder text instead of dropping silently
   if (strcmp(name, "table") == 0) {
     // Add placeholder text
-    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+    self->startNewTextBlock(centeredBlockStyle);
 
     self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
-    // Advance depth before processing character data (like you would for a element with text)
+    // Advance depth before processing character data (like you would for an element with text)
     self->depth += 1;
     self->characterData(userData, "[Table omitted]", strlen("[Table omitted]"));
 
@@ -214,9 +168,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
     Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
 
-    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+    self->startNewTextBlock(centeredBlockStyle);
     self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
-    // Advance depth before processing character data (like you would for a element with text)
+    // Advance depth before processing character data (like you would for an element with text)
     self->depth += 1;
     self->characterData(userData, alt.c_str(), alt.length());
 
@@ -244,9 +198,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
-  // Determine if this is a block element
-  bool isBlockElement = matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
-
   // Compute CSS style for this element
   CssStyle cssStyle;
   if (self->cssParser) {
@@ -259,30 +210,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
-  if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
-    // Headers: center aligned, bold, apply CSS overrides
-    TextBlock::Style alignment = TextBlock::CENTER_ALIGN;
-    if (cssStyle.hasTextAlign()) {
-      switch (cssStyle.textAlign) {
-        case CssTextAlign::Left:
-          alignment = TextBlock::LEFT_ALIGN;
-          break;
-        case CssTextAlign::Right:
-          alignment = TextBlock::RIGHT_ALIGN;
-          break;
-        case CssTextAlign::Center:
-          alignment = TextBlock::CENTER_ALIGN;
-          break;
-        case CssTextAlign::Justify:
-          alignment = TextBlock::JUSTIFIED;
-          break;
-        default:
-          break;
-      }
-    }
+  const float emSize = static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+  const auto userAlignment = static_cast<CssTextAlign>(self->paragraphAlignment);
 
-    self->currentBlockStyle = cssStyle;
-    self->startNewTextBlock(alignment, createBlockStyleFromCss(cssStyle, self->renderer.getLineHeight(self->fontId)));
+  if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
+    self->currentCssStyle = cssStyle;
+    self->startNewTextBlock(BlockStyle::fromCssStyle(cssStyle, emSize, userAlignment));
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
@@ -291,31 +224,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
-      self->startNewTextBlock(self->currentTextBlock->getStyle());
+      self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
     } else {
-      // Determine alignment from CSS or default
-      auto alignment = static_cast<TextBlock::Style>(self->paragraphAlignment);
-      if (cssStyle.hasTextAlign()) {
-        switch (cssStyle.textAlign) {
-          case CssTextAlign::Left:
-            alignment = TextBlock::LEFT_ALIGN;
-            break;
-          case CssTextAlign::Right:
-            alignment = TextBlock::RIGHT_ALIGN;
-            break;
-          case CssTextAlign::Center:
-            alignment = TextBlock::CENTER_ALIGN;
-            break;
-          case CssTextAlign::Justify:
-            alignment = TextBlock::JUSTIFIED;
-            break;
-          default:
-            break;
-        }
-      }
-
-      self->currentBlockStyle = cssStyle;
-      self->startNewTextBlock(alignment, createBlockStyleFromCss(cssStyle, self->renderer.getLineHeight(self->fontId)));
+      self->currentCssStyle = cssStyle;
+      self->startNewTextBlock(BlockStyle::fromCssStyle(cssStyle, emSize, userAlignment));
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
@@ -373,7 +285,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
-  } else if (strcmp(name, "span") == 0 || !isBlockElement) {
+  } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
     // Handle span and other inline elements for CSS styling
     if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration()) {
       StyleStackEntry entry;
@@ -464,12 +376,12 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   const bool willClearUnderline = self->underlineUntilDepth == self->depth - 1;
 
   const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic || willClearUnderline;
+  const bool headerOrBlockTag = isHeaderOrBlock(name);
 
   // Flush buffer with current style BEFORE any style changes
   if (self->partWordBufferIndex > 0) {
     // Flush if style will change OR if we're closing a block/structural element
-    const bool shouldFlush = styleWillChange || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) ||
-                             matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BOLD_TAGS, NUM_BOLD_TAGS) ||
+    const bool shouldFlush = styleWillChange || headerOrBlockTag || matches(name, BOLD_TAGS, NUM_BOLD_TAGS) ||
                              matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) ||
                              matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS) || strcmp(name, "table") == 0 ||
                              matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) || self->depth == 1;
@@ -508,15 +420,18 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->updateEffectiveInlineStyle();
   }
 
-  // Clear block style when leaving block elements
-  if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
-    self->currentBlockStyle.reset();
+  // Clear block style when leaving header or block elements
+  if (headerOrBlockTag) {
+    self->currentCssStyle.reset();
     self->updateEffectiveInlineStyle();
   }
 }
 
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
-  startNewTextBlock((TextBlock::Style)this->paragraphAlignment);
+  auto paragraphAlignmentBlockStyle = BlockStyle();
+  paragraphAlignmentBlockStyle.textAlignDefined = true;
+  paragraphAlignmentBlockStyle.alignment = static_cast<CssTextAlign>(this->paragraphAlignment);
+  startNewTextBlock(paragraphAlignmentBlockStyle);
 
   const XML_Parser parser = XML_ParserCreate(nullptr);
   int done;
@@ -624,10 +539,13 @@ void ChapterHtmlSlimParser::makePages() {
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
-  // Apply marginTop before the paragraph (stored in pixels)
+  // Apply top spacing before the paragraph (stored in pixels)
   const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
   if (blockStyle.marginTop > 0) {
     currentPageNextY += blockStyle.marginTop;
+  }
+  if (blockStyle.paddingTop > 0) {
+    currentPageNextY += blockStyle.paddingTop;
   }
 
   // Calculate effective width accounting for horizontal margins/padding
@@ -639,9 +557,12 @@ void ChapterHtmlSlimParser::makePages() {
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
 
-  // Apply marginBottom after the paragraph (stored in pixels)
+  // Apply bottom spacing after the paragraph (stored in pixels)
   if (blockStyle.marginBottom > 0) {
     currentPageNextY += blockStyle.marginBottom;
+  }
+  if (blockStyle.paddingBottom > 0) {
+    currentPageNextY += blockStyle.paddingBottom;
   }
 
   // Extra paragraph spacing if enabled (default behavior)
