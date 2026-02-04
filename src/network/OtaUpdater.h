@@ -8,6 +8,9 @@ class OtaUpdater {
   std::string latestVersion;
   std::string otaUrl;
   size_t otaSize = 0;
+  size_t processedSize = 0;
+  size_t totalSize = 0;
+  bool render = false;
 
  public:
   enum OtaUpdaterError {
@@ -19,12 +22,18 @@ class OtaUpdater {
     INTERNAL_UPDATE_ERROR,
     OOM_ERROR,
   };
-  size_t processedSize = 0;
-  size_t totalSize = 0;
+
+  size_t getOtaSize() const { return otaSize; }
+
+  size_t getProcessedSize() const { return processedSize; }
+
+  size_t getTotalSize() const { return totalSize; }
+
+  bool getRender() const { return render; }
 
   OtaUpdater() = default;
   bool isUpdateNewer() const;
   const std::string& getLatestVersion() const;
   OtaUpdaterError checkForUpdate();
-  OtaUpdaterError installUpdate(const std::function<void(size_t, size_t)>& onProgress);
+  OtaUpdaterError installUpdate();
 };

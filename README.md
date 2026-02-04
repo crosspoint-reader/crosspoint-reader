@@ -41,7 +41,9 @@ This project is **not affiliated with Xteink**; it's built as a community projec
   - [ ] Full UTF support
 - [x] Screen rotation
 
-See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint.
+Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
+
+See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint. 
 
 ## Installing
 
@@ -93,6 +95,20 @@ Connect your Xteink X4 to your computer via USB-C and run the following command.
 ```sh
 pio run --target upload
 ```
+### Debugging
+
+After flashing the new features, it’s recommended to capture detailed logs from the serial port.
+
+First, make sure all required Python packages are installed:
+
+```python
+python3 -m pip install serial colorama matplotlib
+```
+after that run the script:
+```sh
+python3 scripts/debugging_monitor.py
+```
+This was tested on Debian and should work on most Linux systems. Minor adjustments may be required for Windows or macOS.
 
 ## Internals
 

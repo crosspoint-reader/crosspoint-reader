@@ -33,7 +33,7 @@ class Section {
   bool clearCache() const;
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
-                         const std::function<void()>& progressSetupFn = nullptr,
-                         const std::function<void(int)>& progressFn = nullptr);
+                         const std::function<void()>& progressSetupFn,
+                         const std::function<void(int)>& progressFn);
   std::unique_ptr<Page> loadPageFromSectionFile();
 };

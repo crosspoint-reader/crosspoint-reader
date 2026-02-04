@@ -3,6 +3,7 @@
  * name: notosans_12_italic
  * size: 12
  * mode: 2-bit
+ * Command used: fontconvert.py notosans_12_italic 12 ../builtinFonts/source/NotoSans/NotoSans-Italic.ttf --2bit
  */
 #pragma once
 #include "EpdFontData.h"
