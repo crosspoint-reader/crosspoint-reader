@@ -50,6 +50,10 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
 
+  // Check for timer wakeup first (scheduled wake feature)
+  if (wakeupCause == ESP_SLEEP_WAKEUP_TIMER && resetReason == ESP_RST_DEEPSLEEP) {
+    return WakeupReason::Timer;
+  }
   if ((wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) ||
       (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP && usbConnected)) {
     return WakeupReason::PowerButton;
