@@ -493,6 +493,8 @@ void TxtReaderActivity::renderPage() {
 
 void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) const {
+  const bool inverse = SETTINGS.inverseDisplay;
+
   const bool showProgressPercentage = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
   const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
                                SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR;
@@ -531,22 +533,22 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
 
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
     renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - orientedMarginRight - progressTextWidth, textY,
-                      progressStr);
+                      progressStr, !inverse);
   }
 
   if (showProgressBar) {
     // Draw progress bar at the very bottom of the screen, from edge to edge of viewable area
-    GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress));
+    GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress), !inverse);
   }
 
   if (showChapterProgressBar) {
     // For text mode, treat the entire book as one chapter, so chapter progress == book progress
-    GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress));
+    GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress), !inverse);
   }
 
   if (showBattery) {
     GUI.drawBattery(renderer, Rect{orientedMarginLeft, textY, metrics.batteryWidth, metrics.batteryHeight},
-                    showBatteryPercentage);
+                    showBatteryPercentage, !inverse);
   }
 
   if (showTitle) {
@@ -561,7 +563,8 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
       titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     }
 
-    renderer.drawText(SMALL_FONT_ID, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, title.c_str());
+    renderer.drawText(SMALL_FONT_ID, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, title.c_str(),
+                      !inverse);
   }
 }
 

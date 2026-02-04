@@ -19,14 +19,14 @@ constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 }  // namespace
 
-void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage, const bool black) const {
   // Left aligned battery icon and percentage
   // TODO refactor this so the percentage doesnt change after we position it
   const uint16_t percentage = battery.readPercentage();
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + BaseMetrics::values.batteryWidth, rect.y,
-                      percentageText.c_str());
+                      percentageText.c_str(), black);
   }
   // 1 column on left, 2 columns on right, 5 columns of battery body
   const int x = rect.x;
@@ -34,16 +34,16 @@ void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool s
   const int battWidth = BaseMetrics::values.batteryWidth;
 
   // Top line
-  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
+  renderer.drawLine(x + 1, y, x + battWidth - 3, y, black);
   // Bottom line
-  renderer.drawLine(x + 1, y + rect.height - 1, x + battWidth - 3, y + rect.height - 1);
+  renderer.drawLine(x + 1, y + rect.height - 1, x + battWidth - 3, y + rect.height - 1, black);
   // Left line
-  renderer.drawLine(x, y + 1, x, y + rect.height - 2);
+  renderer.drawLine(x, y + 1, x, y + rect.height - 2, black);
   // Battery end
-  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rect.height - 2);
-  renderer.drawPixel(x + battWidth - 1, y + 3);
-  renderer.drawPixel(x + battWidth - 1, y + rect.height - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rect.height - 5);
+  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rect.height - 2, black);
+  renderer.drawPixel(x + battWidth - 1, y + 3, black);
+  renderer.drawPixel(x + battWidth - 1, y + rect.height - 4, black);
+  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rect.height - 5, black);
 
   // The +1 is to round up, so that we always fill at least one pixel
   int filledWidth = percentage * (rect.width - 5) / 100 + 1;
@@ -51,7 +51,7 @@ void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool s
     filledWidth = rect.width - 5;  // Ensure we don't overflow
   }
 
-  renderer.fillRect(x + 2, y + 2, filledWidth, rect.height - 4);
+  renderer.fillRect(x + 2, y + 2, filledWidth, rect.height - 4, black);
 }
 
 void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,
@@ -635,7 +635,7 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
-void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const {
+void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress, const bool black) const {
   int vieweableMarginTop, vieweableMarginRight, vieweableMarginBottom, vieweableMarginLeft;
   renderer.getOrientedViewableTRBL(&vieweableMarginTop, &vieweableMarginRight, &vieweableMarginBottom,
                                    &vieweableMarginLeft);
@@ -644,5 +644,5 @@ void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t
   const int progressBarY =
       renderer.getScreenHeight() - vieweableMarginBottom - BaseMetrics::values.bookProgressBarHeight;
   const int barWidth = progressBarMaxWidth * bookProgress / 100;
-  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BaseMetrics::values.bookProgressBarHeight, true);
+  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BaseMetrics::values.bookProgressBarHeight, black);
 }

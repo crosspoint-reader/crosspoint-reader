@@ -20,13 +20,13 @@ constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 }  // namespace
 
-void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage, const bool black) const {
   // Left aligned battery icon and percentage
   const uint16_t percentage = battery.readPercentage();
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + LyraMetrics::values.batteryWidth, rect.y,
-                      percentageText.c_str());
+                      percentageText.c_str(), black);
   }
   // 1 column on left, 2 columns on right, 5 columns of battery body
   const int x = rect.x;
@@ -34,26 +34,26 @@ void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool s
   const int battWidth = LyraMetrics::values.batteryWidth;
 
   // Top line
-  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
+  renderer.drawLine(x + 1, y, x + battWidth - 3, y, black);
   // Bottom line
-  renderer.drawLine(x + 1, y + rect.height - 1, x + battWidth - 3, y + rect.height - 1);
+  renderer.drawLine(x + 1, y + rect.height - 1, x + battWidth - 3, y + rect.height - 1, black);
   // Left line
-  renderer.drawLine(x, y + 1, x, y + rect.height - 2);
+  renderer.drawLine(x, y + 1, x, y + rect.height - 2, black);
   // Battery end
-  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rect.height - 2);
-  renderer.drawPixel(x + battWidth - 1, y + 3);
-  renderer.drawPixel(x + battWidth - 1, y + rect.height - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rect.height - 5);
+  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rect.height - 2, black);
+  renderer.drawPixel(x + battWidth - 1, y + 3, black);
+  renderer.drawPixel(x + battWidth - 1, y + rect.height - 4, black);
+  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rect.height - 5, black);
 
   // Draw bars
   if (percentage > 10) {
-    renderer.fillRect(x + 2, y + 2, 3, rect.height - 4);
+    renderer.fillRect(x + 2, y + 2, 3, rect.height - 4, black);
   }
   if (percentage > 40) {
-    renderer.fillRect(x + 6, y + 2, 3, rect.height - 4);
+    renderer.fillRect(x + 6, y + 2, 3, rect.height - 4, black);
   }
   if (percentage > 70) {
-    renderer.fillRect(x + 10, y + 2, 3, rect.height - 4);
+    renderer.fillRect(x + 10, y + 2, 3, rect.height - 4, black);
   }
 }
 
