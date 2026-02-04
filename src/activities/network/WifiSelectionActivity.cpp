@@ -520,7 +520,7 @@ void WifiSelectionActivity::renderNetworkList() const {
     const auto height = renderer.getLineHeight(UI_10_FONT_ID);
     const auto top = (pageHeight - height) / 2;
     renderer.drawCenteredText(UI_10_FONT_ID, top, "No networks found");
-    renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, "Press OK to scan again");
+    renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, "Press Connect to scan again");
   } else {
     // Calculate how many networks we can display
     constexpr int startY = 60;
@@ -546,8 +546,8 @@ void WifiSelectionActivity::renderNetworkList() const {
 
       // Draw network name (truncate if too long)
       std::string displayName = network.ssid;
-      if (displayName.length() > 16) {
-        displayName.replace(13, displayName.length() - 13, "...");
+      if (displayName.length() > 33) {
+        displayName.replace(30, displayName.length() - 30, "...");
       }
       renderer.drawText(UI_10_FONT_ID, 20, networkY, displayName.c_str());
 
