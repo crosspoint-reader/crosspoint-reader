@@ -1,24 +1,25 @@
 #pragma once
 
 #include <ArduinoJson.h>
-#include <WString.h>
-#include <vector>
-#include <functional>
 #include <SDCardManager.h>
+#include <WString.h>
+
+#include <functional>
+#include <vector>
 
 namespace CrossPoint {
 
 /**
  * @brief App manifest data structure
- * 
+ *
  * Contains the metadata parsed from app.json files
  */
 struct AppManifest {
-  String name;           ///< Display name of the app
-  String version;        ///< Version string (e.g., "1.0.0")
-  String description;    ///< Brief description of the app
-  String author;         ///< Author/creator name
-  String minFirmware;    ///< Minimum firmware version required
+  String name;         ///< Display name of the app
+  String version;      ///< Version string (e.g., "1.0.0")
+  String description;  ///< Brief description of the app
+  String author;       ///< Author/creator name
+  String minFirmware;  ///< Minimum firmware version required
 
   AppManifest() = default;
   AppManifest(const String& n, const String& v, const String& d, const String& a, const String& f)
@@ -27,7 +28,7 @@ struct AppManifest {
 
 /**
  * @brief Complete app information including manifest and path
- * 
+ *
  * Combines the parsed manifest with file system path information
  */
 struct AppInfo {
@@ -40,10 +41,10 @@ struct AppInfo {
 
 /**
  * @brief Utility class for loading and managing apps from SD card
- * 
+ *
  * Handles scanning for app manifests in the /.crosspoint/apps directory,
  * parsing JSON manifests, and providing access to app information.
- * 
+ *
  * Usage:
  *   AppLoader loader;
  *   std::vector<AppInfo> apps = loader.scanApps();
@@ -60,21 +61,21 @@ class AppLoader {
 
   /**
    * @brief Scan for apps in the /.crosspoint/apps directory
-   * 
+   *
    * Searches for subdirectories under /.crosspoint/apps and attempts to
    * parse app.json files in each directory. Invalid or missing manifests
    * are skipped gracefully.
-   * 
+   *
    * @return Vector of AppInfo objects for all valid apps found
    */
   std::vector<AppInfo> scanApps();
 
   /**
    * @brief Parse an app.json manifest file
-   * 
+   *
    * Reads and parses a JSON manifest file, extracting the required fields.
    * Logs errors for malformed JSON but does not throw exceptions.
-   * 
+   *
    * @param path Full path to the app.json file
    * @return AppManifest object with parsed data (empty on failure)
    */
@@ -107,7 +108,7 @@ class AppLoader {
 
   /**
    * @brief Helper to build manifest file path from app directory path
-   * 
+   *
    * @param appDir Path to the app directory
    * @return Full path to the app.json file
    */
@@ -115,7 +116,7 @@ class AppLoader {
 
   /**
    * @brief Check if SD card is ready
-   * 
+   *
    * @return true if SD card is initialized and ready
    */
   bool isSDReady() const;

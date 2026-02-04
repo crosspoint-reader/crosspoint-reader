@@ -1,9 +1,10 @@
 #include "AppLoader.h"
 
-#include <memory>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <esp_system.h>
+
+#include <memory>
 
 #include "Battery.h"
 
@@ -85,8 +86,8 @@ AppManifest AppLoader::parseManifest(const String& path) {
   }
 
   if (fileSize > MAX_MANIFEST_SIZE) {
-    Serial.printf("[%lu] [AppLoader] Manifest file too large (%u bytes, max %u): %s\n",
-                  millis(), fileSize, MAX_MANIFEST_SIZE, path.c_str());
+    Serial.printf("[%lu] [AppLoader] Manifest file too large (%u bytes, max %u): %s\n", millis(), fileSize,
+                  MAX_MANIFEST_SIZE, path.c_str());
     file.close();
     return manifest;
   }
@@ -97,8 +98,8 @@ AppManifest AppLoader::parseManifest(const String& path) {
   file.close();
 
   if (bytesRead != fileSize) {
-    Serial.printf("[%lu] [AppLoader] Failed to read complete manifest file (read %u of %u bytes): %s\n",
-                  millis(), bytesRead, fileSize, path.c_str());
+    Serial.printf("[%lu] [AppLoader] Failed to read complete manifest file (read %u of %u bytes): %s\n", millis(),
+                  bytesRead, fileSize, path.c_str());
     return manifest;
   }
 
@@ -113,8 +114,7 @@ AppManifest AppLoader::parseManifest(const String& path) {
   const DeserializationError error = deserializeJson(doc, json);
 
   if (error) {
-    Serial.printf("[%lu] [AppLoader] JSON parse error in %s: %s\n",
-                  millis(), path.c_str(), error.c_str());
+    Serial.printf("[%lu] [AppLoader] JSON parse error in %s: %s\n", millis(), path.c_str(), error.c_str());
     return manifest;
   }
 
@@ -307,8 +307,6 @@ String AppLoader::buildManifestPath(const String& appDir) const {
   return path;
 }
 
-bool AppLoader::isSDReady() const {
-  return SdMan.ready();
-}
+bool AppLoader::isSDReady() const { return SdMan.ready(); }
 
-}
+}  // namespace CrossPoint

@@ -4,7 +4,6 @@
 #include <EpdFontFamily.h>
 #include <GfxRenderer.h>
 #include <builtinFonts/all.h>
-
 #include <esp_attr.h>
 #include <esp_ota_ops.h>
 #include <esp_system.h>
@@ -17,7 +16,7 @@ namespace {
 EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
-}
+}  // namespace
 
 HelloWorldActivity::HelloWorldActivity(HalDisplay& display, HalGPIO& input)
     : display_(display), input_(input), needsUpdate_(true) {}

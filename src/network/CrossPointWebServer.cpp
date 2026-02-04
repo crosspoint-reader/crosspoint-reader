@@ -9,9 +9,9 @@
 
 #include <algorithm>
 
+#include "html/AppsPageHtml.generated.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
-#include "html/AppsPageHtml.generated.h"
 #include "util/StringUtils.h"
 
 namespace {
