@@ -85,7 +85,7 @@ class CssParser {
   static CssStyle parseDeclarations(const std::string& declBlock);
 
   // Individual property value parsers
-  static TextAlign interpretAlignment(const std::string& val);
+  static CssTextAlign interpretAlignment(const std::string& val);
   static CssFontStyle interpretFontStyle(const std::string& val);
   static CssFontWeight interpretFontWeight(const std::string& val);
   static CssTextDecoration interpretDecoration(const std::string& val);

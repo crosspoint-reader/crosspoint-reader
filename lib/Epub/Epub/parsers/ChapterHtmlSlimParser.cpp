@@ -64,8 +64,8 @@ BlockStyle createBlockStyleFromCss(const CssStyle& cssStyle, const float emSize)
   blockStyle.paddingLeft = cssStyle.paddingLeft.toPixelsInt16(emSize);
   blockStyle.paddingRight = cssStyle.paddingRight.toPixelsInt16(emSize);
   // Text indent
-  blockStyle.textIndent = cssStyle.indent.toPixelsInt16(emSize);
-  blockStyle.textIndentDefined = cssStyle.defined.indent;
+  blockStyle.textIndent = cssStyle.textIndent.toPixelsInt16(emSize);
+  blockStyle.textIndentDefined = cssStyle.defined.textIndent;
   return blockStyle;
 }
 
@@ -75,7 +75,7 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveBold = currentBlockStyle.hasFontWeight() && currentBlockStyle.fontWeight == CssFontWeight::Bold;
   effectiveItalic = currentBlockStyle.hasFontStyle() && currentBlockStyle.fontStyle == CssFontStyle::Italic;
   effectiveUnderline =
-      currentBlockStyle.hasTextDecoration() && currentBlockStyle.decoration == CssTextDecoration::Underline;
+      currentBlockStyle.hasTextDecoration() && currentBlockStyle.textDecoration == CssTextDecoration::Underline;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
@@ -255,7 +255,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // Merge inline style (highest priority)
     if (!styleAttr.empty()) {
       CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
-      cssStyle.merge(inlineStyle);
+      cssStyle.applyOver(inlineStyle);
     }
   }
 
@@ -263,17 +263,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // Headers: center aligned, bold, apply CSS overrides
     TextBlock::Style alignment = TextBlock::CENTER_ALIGN;
     if (cssStyle.hasTextAlign()) {
-      switch (cssStyle.alignment) {
-        case TextAlign::Left:
+      switch (cssStyle.textAlign) {
+        case CssTextAlign::Left:
           alignment = TextBlock::LEFT_ALIGN;
           break;
-        case TextAlign::Right:
+        case CssTextAlign::Right:
           alignment = TextBlock::RIGHT_ALIGN;
           break;
-        case TextAlign::Center:
+        case CssTextAlign::Center:
           alignment = TextBlock::CENTER_ALIGN;
           break;
-        case TextAlign::Justify:
+        case CssTextAlign::Justify:
           alignment = TextBlock::JUSTIFIED;
           break;
         default:
@@ -296,17 +296,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Determine alignment from CSS or default
       auto alignment = static_cast<TextBlock::Style>(self->paragraphAlignment);
       if (cssStyle.hasTextAlign()) {
-        switch (cssStyle.alignment) {
-          case TextAlign::Left:
+        switch (cssStyle.textAlign) {
+          case CssTextAlign::Left:
             alignment = TextBlock::LEFT_ALIGN;
             break;
-          case TextAlign::Right:
+          case CssTextAlign::Right:
             alignment = TextBlock::RIGHT_ALIGN;
             break;
-          case TextAlign::Center:
+          case CssTextAlign::Center:
             alignment = TextBlock::CENTER_ALIGN;
             break;
-          case TextAlign::Justify:
+          case CssTextAlign::Justify:
             alignment = TextBlock::JUSTIFIED;
             break;
           default:
@@ -352,7 +352,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     if (cssStyle.hasTextDecoration()) {
       entry.hasUnderline = true;
-      entry.underline = cssStyle.decoration == CssTextDecoration::Underline;
+      entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
@@ -369,7 +369,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     if (cssStyle.hasTextDecoration()) {
       entry.hasUnderline = true;
-      entry.underline = cssStyle.decoration == CssTextDecoration::Underline;
+      entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
@@ -388,7 +388,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       if (cssStyle.hasTextDecoration()) {
         entry.hasUnderline = true;
-        entry.underline = cssStyle.decoration == CssTextDecoration::Underline;
+        entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
       }
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();

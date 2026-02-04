@@ -2,10 +2,8 @@
 
 #include <cstdint>
 
-// Text alignment options matching CSS text-align property
-enum class TextAlign : uint8_t { None = 0, Left = 1, Right = 2, Center = 3, Justify = 4 };
-
-// CSS length unit types
+// Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings
+enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3 };
 enum class CssUnit : uint8_t { Pixels = 0, Em = 1, Rem = 2, Points = 3 };
 
 // Represents a CSS length value with its unit, allowing deferred resolution to pixels
@@ -47,11 +45,11 @@ enum class CssTextDecoration : uint8_t { None = 0, Underline = 1 };
 
 // Bitmask for tracking which properties have been explicitly set
 struct CssPropertyFlags {
-  uint16_t alignment : 1;
+  uint16_t textAlign : 1;
   uint16_t fontStyle : 1;
   uint16_t fontWeight : 1;
-  uint16_t decoration : 1;
-  uint16_t indent : 1;
+  uint16_t textDecoration : 1;
+  uint16_t textIndent : 1;
   uint16_t marginTop : 1;
   uint16_t marginBottom : 1;
   uint16_t marginLeft : 1;
@@ -60,14 +58,13 @@ struct CssPropertyFlags {
   uint16_t paddingBottom : 1;
   uint16_t paddingLeft : 1;
   uint16_t paddingRight : 1;
-  uint16_t reserved : 3;
 
   CssPropertyFlags()
-      : alignment(0),
+      : textAlign(0),
         fontStyle(0),
         fontWeight(0),
-        decoration(0),
-        indent(0),
+        textDecoration(0),
+        textIndent(0),
         marginTop(0),
         marginBottom(0),
         marginLeft(0),
@@ -75,16 +72,15 @@ struct CssPropertyFlags {
         paddingTop(0),
         paddingBottom(0),
         paddingLeft(0),
-        paddingRight(0),
-        reserved(0) {}
+        paddingRight(0) {}
 
   [[nodiscard]] bool anySet() const {
-    return alignment || fontStyle || fontWeight || decoration || indent || marginTop || marginBottom || marginLeft ||
-           marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight;
+    return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
+           marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight;
   }
 
   void clearAll() {
-    alignment = fontStyle = fontWeight = decoration = indent = 0;
+    textAlign = fontStyle = fontWeight = textDecoration = textIndent = 0;
     marginTop = marginBottom = marginLeft = marginRight = 0;
     paddingTop = paddingBottom = paddingLeft = paddingRight = 0;
   }
@@ -94,12 +90,12 @@ struct CssPropertyFlags {
 // Only stores properties relevant to e-ink text rendering
 // Length values are stored as CssLength (value + unit) for deferred resolution
 struct CssStyle {
-  TextAlign alignment = TextAlign::None;
+  CssTextAlign textAlign = CssTextAlign::Left;
   CssFontStyle fontStyle = CssFontStyle::Normal;
   CssFontWeight fontWeight = CssFontWeight::Normal;
-  CssTextDecoration decoration = CssTextDecoration::None;
+  CssTextDecoration textDecoration = CssTextDecoration::None;
 
-  CssLength indent;         // First-line indent (deferred resolution)
+  CssLength textIndent;     // First-line indent (deferred resolution)
   CssLength marginTop;      // Vertical spacing before block
   CssLength marginBottom;   // Vertical spacing after block
   CssLength marginLeft;     // Horizontal spacing left of block
@@ -114,66 +110,65 @@ struct CssStyle {
   // Apply properties from another style, only overwriting if the other style
   // has that property explicitly defined
   void applyOver(const CssStyle& base) {
-    if (base.defined.alignment) {
-      alignment = base.alignment;
-      defined.alignment = 1;
+    if (base.hasTextAlign()) {
+      textAlign = base.textAlign;
+      defined.textAlign = 1;
     }
-    if (base.defined.fontStyle) {
+    if (base.hasFontStyle()) {
       fontStyle = base.fontStyle;
       defined.fontStyle = 1;
     }
-    if (base.defined.fontWeight) {
+    if (base.hasFontWeight()) {
       fontWeight = base.fontWeight;
       defined.fontWeight = 1;
     }
-    if (base.defined.decoration) {
-      decoration = base.decoration;
-      defined.decoration = 1;
+    if (base.hasTextDecoration()) {
+      textDecoration = base.textDecoration;
+      defined.textDecoration = 1;
     }
-    if (base.defined.indent) {
-      indent = base.indent;
-      defined.indent = 1;
+    if (base.hasTextIndent()) {
+      textIndent = base.textIndent;
+      defined.textIndent = 1;
     }
-    if (base.defined.marginTop) {
+    if (base.hasMarginTop()) {
       marginTop = base.marginTop;
       defined.marginTop = 1;
     }
-    if (base.defined.marginBottom) {
+    if (base.hasMarginBottom()) {
       marginBottom = base.marginBottom;
       defined.marginBottom = 1;
     }
-    if (base.defined.marginLeft) {
+    if (base.hasMarginLeft()) {
       marginLeft = base.marginLeft;
       defined.marginLeft = 1;
     }
-    if (base.defined.marginRight) {
+    if (base.hasMarginRight()) {
       marginRight = base.marginRight;
       defined.marginRight = 1;
     }
-    if (base.defined.paddingTop) {
+    if (base.hasPaddingTop()) {
       paddingTop = base.paddingTop;
       defined.paddingTop = 1;
     }
-    if (base.defined.paddingBottom) {
+    if (base.hasPaddingBottom()) {
       paddingBottom = base.paddingBottom;
       defined.paddingBottom = 1;
     }
-    if (base.defined.paddingLeft) {
+    if (base.hasPaddingLeft()) {
       paddingLeft = base.paddingLeft;
       defined.paddingLeft = 1;
     }
-    if (base.defined.paddingRight) {
+    if (base.hasPaddingRight()) {
       paddingRight = base.paddingRight;
       defined.paddingRight = 1;
     }
   }
 
-  // Compatibility accessors for existing code that uses hasX pattern
-  [[nodiscard]] bool hasTextAlign() const { return defined.alignment; }
+  [[nodiscard]] bool hasTextAlign() const { return defined.textAlign; }
   [[nodiscard]] bool hasFontStyle() const { return defined.fontStyle; }
   [[nodiscard]] bool hasFontWeight() const { return defined.fontWeight; }
-  [[nodiscard]] bool hasTextDecoration() const { return defined.decoration; }
-  [[nodiscard]] bool hasTextIndent() const { return defined.indent; }
+  [[nodiscard]] bool hasTextDecoration() const { return defined.textDecoration; }
+  [[nodiscard]] bool hasTextIndent() const { return defined.textIndent; }
   [[nodiscard]] bool hasMarginTop() const { return defined.marginTop; }
   [[nodiscard]] bool hasMarginBottom() const { return defined.marginBottom; }
   [[nodiscard]] bool hasMarginLeft() const { return defined.marginLeft; }
@@ -183,15 +178,12 @@ struct CssStyle {
   [[nodiscard]] bool hasPaddingLeft() const { return defined.paddingLeft; }
   [[nodiscard]] bool hasPaddingRight() const { return defined.paddingRight; }
 
-  // Merge another style (alias for applyOver for compatibility)
-  void merge(const CssStyle& other) { applyOver(other); }
-
   void reset() {
-    alignment = TextAlign::None;
+    textAlign = CssTextAlign::Left;
     fontStyle = CssFontStyle::Normal;
     fontWeight = CssFontWeight::Normal;
-    decoration = CssTextDecoration::None;
-    indent = CssLength{};
+    textDecoration = CssTextDecoration::None;
+    textIndent = CssLength{};
     marginTop = marginBottom = marginLeft = marginRight = CssLength{};
     paddingTop = paddingBottom = paddingLeft = paddingRight = CssLength{};
     defined.clearAll();

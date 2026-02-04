@@ -204,15 +204,15 @@ std::vector<std::string> CssParser::splitWhitespace(const std::string& s) {
 
 // Property value interpreters
 
-TextAlign CssParser::interpretAlignment(const std::string& val) {
+CssTextAlign CssParser::interpretAlignment(const std::string& val) {
   const std::string v = normalized(val);
 
-  if (v == "left" || v == "start") return TextAlign::Left;
-  if (v == "right" || v == "end") return TextAlign::Right;
-  if (v == "center") return TextAlign::Center;
-  if (v == "justify") return TextAlign::Justify;
+  if (v == "left" || v == "start") return CssTextAlign::Left;
+  if (v == "right" || v == "end") return CssTextAlign::Right;
+  if (v == "center") return CssTextAlign::Center;
+  if (v == "justify") return CssTextAlign::Justify;
 
-  return TextAlign::None;
+  return CssTextAlign::Left;
 }
 
 CssFontStyle CssParser::interpretFontStyle(const std::string& val) {
@@ -352,11 +352,8 @@ CssStyle CssParser::parseDeclarations(const std::string& declBlock) {
 
     // Match property and set value
     if (propName == "text-align") {
-      const TextAlign align = interpretAlignment(propValue);
-      if (align != TextAlign::None) {
-        style.alignment = align;
-        style.defined.alignment = 1;
-      }
+      style.textAlign = interpretAlignment(propValue);
+      style.defined.textAlign = 1;
     } else if (propName == "font-style") {
       style.fontStyle = interpretFontStyle(propValue);
       style.defined.fontStyle = 1;
@@ -364,11 +361,11 @@ CssStyle CssParser::parseDeclarations(const std::string& declBlock) {
       style.fontWeight = interpretFontWeight(propValue);
       style.defined.fontWeight = 1;
     } else if (propName == "text-decoration" || propName == "text-decoration-line") {
-      style.decoration = interpretDecoration(propValue);
-      style.defined.decoration = 1;
+      style.textDecoration = interpretDecoration(propValue);
+      style.defined.textDecoration = 1;
     } else if (propName == "text-indent") {
-      style.indent = interpretLength(propValue);
-      style.defined.indent = 1;
+      style.textIndent = interpretLength(propValue);
+      style.defined.textIndent = 1;
     } else if (propName == "margin-top") {
       style.marginTop = interpretLength(propValue);
       style.defined.marginTop = 1;
