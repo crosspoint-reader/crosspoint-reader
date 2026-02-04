@@ -15,6 +15,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "ScheduledWakeManager.h"
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
@@ -197,6 +198,13 @@ void enterDeepSleep() {
 
   display.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
+
+  // Set up timer wakeup if scheduled wake is enabled and time is synced
+  if (SCHEDULED_WAKE.isScheduledWakeReady()) {
+    SCHEDULED_WAKE.setTimerWakeup();
+    Serial.printf("[%lu] [   ] Scheduled wake timer configured\n", millis());
+  }
+
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
 
   gpio.startDeepSleep();
@@ -294,11 +302,24 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
 
+  // Load scheduled wake config from file (creates template if not exists)
+  SCHEDULED_WAKE.createTemplateConfigFile();
+  SCHEDULED_WAKE.loadConfigFromFile();
+
+  // Track if this is a scheduled wake for auto-shutdown
+  bool isScheduledWakeBoot = false;
+
   switch (gpio.getWakeupReason()) {
     case HalGPIO::WakeupReason::PowerButton:
       // For normal wakeups, verify power button press duration
       Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
       verifyPowerButtonDuration();
+      break;
+    case HalGPIO::WakeupReason::Timer:
+      // Scheduled wake - mark for auto file transfer
+      Serial.printf("[%lu] [   ] Wakeup reason: Scheduled Timer\n", millis());
+      SCHEDULED_WAKE.setScheduledWakeBoot();
+      isScheduledWakeBoot = true;
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
@@ -323,7 +344,11 @@ void setup() {
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
-  if (APP_STATE.openEpubPath.empty()) {
+  if (isScheduledWakeBoot) {
+    // Scheduled wake - go directly to file transfer
+    Serial.printf("[%lu] [   ] Scheduled wake: Starting file transfer automatically\n", millis());
+    onGoToFileTransfer();
+  } else if (APP_STATE.openEpubPath.empty()) {
     onGoHome();
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
@@ -359,6 +384,14 @@ void loop() {
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (millis() - lastActivityTime >= sleepTimeoutMs) {
     Serial.printf("[%lu] [SLP] Auto-sleep triggered after %lu ms of inactivity\n", millis(), sleepTimeoutMs);
+    enterDeepSleep();
+    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    return;
+  }
+
+  // Check for scheduled wake auto-shutdown timeout
+  if (SCHEDULED_WAKE.shouldAutoShutdown()) {
+    Serial.printf("[%lu] [SLP] Scheduled wake auto-shutdown triggered\n", millis());
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
