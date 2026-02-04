@@ -76,6 +76,21 @@ class CssParser {
    */
   void clear() { rulesBySelector_.clear(); }
 
+  /**
+   * Save parsed CSS rules to a cache file.
+   * @param file Open file handle to write to
+   * @return true if cache was written successfully
+   */
+  bool saveToCache(FsFile& file) const;
+
+  /**
+   * Load CSS rules from a cache file.
+   * Clears any existing rules before loading.
+   * @param file Open file handle to read from
+   * @return true if cache was loaded successfully
+   */
+  bool loadFromCache(FsFile& file);
+
  private:
   // Storage: maps normalized selector -> style properties
   std::unordered_map<std::string, CssStyle> rulesBySelector_;

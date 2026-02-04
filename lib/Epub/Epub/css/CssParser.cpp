@@ -514,3 +514,184 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
 // Inline style parsing (static - doesn't need rule database)
 
 CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return parseDeclarations(styleValue); }
+
+// Cache serialization
+
+// Cache format version - increment when format changes
+constexpr uint8_t CSS_CACHE_VERSION = 1;
+
+bool CssParser::saveToCache(FsFile& file) const {
+  if (!file) {
+    return false;
+  }
+
+  // Write version
+  file.write(CSS_CACHE_VERSION);
+
+  // Write rule count
+  const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
+  file.write(reinterpret_cast<const uint8_t*>(&ruleCount), sizeof(ruleCount));
+
+  // Write each rule: selector string + CssStyle fields
+  for (const auto& pair : rulesBySelector_) {
+    // Write selector string (length-prefixed)
+    const auto selectorLen = static_cast<uint16_t>(pair.first.size());
+    file.write(reinterpret_cast<const uint8_t*>(&selectorLen), sizeof(selectorLen));
+    file.write(reinterpret_cast<const uint8_t*>(pair.first.data()), selectorLen);
+
+    // Write CssStyle fields (all are POD types)
+    const CssStyle& style = pair.second;
+    file.write(static_cast<uint8_t>(style.textAlign));
+    file.write(static_cast<uint8_t>(style.fontStyle));
+    file.write(static_cast<uint8_t>(style.fontWeight));
+    file.write(static_cast<uint8_t>(style.textDecoration));
+
+    // Write CssLength fields (value + unit)
+    auto writeLength = [&file](const CssLength& len) {
+      file.write(reinterpret_cast<const uint8_t*>(&len.value), sizeof(len.value));
+      file.write(static_cast<uint8_t>(len.unit));
+    };
+
+    writeLength(style.textIndent);
+    writeLength(style.marginTop);
+    writeLength(style.marginBottom);
+    writeLength(style.marginLeft);
+    writeLength(style.marginRight);
+    writeLength(style.paddingTop);
+    writeLength(style.paddingBottom);
+    writeLength(style.paddingLeft);
+    writeLength(style.paddingRight);
+
+    // Write defined flags as uint16_t
+    uint16_t definedBits = 0;
+    if (style.defined.textAlign) definedBits |= 1 << 0;
+    if (style.defined.fontStyle) definedBits |= 1 << 1;
+    if (style.defined.fontWeight) definedBits |= 1 << 2;
+    if (style.defined.textDecoration) definedBits |= 1 << 3;
+    if (style.defined.textIndent) definedBits |= 1 << 4;
+    if (style.defined.marginTop) definedBits |= 1 << 5;
+    if (style.defined.marginBottom) definedBits |= 1 << 6;
+    if (style.defined.marginLeft) definedBits |= 1 << 7;
+    if (style.defined.marginRight) definedBits |= 1 << 8;
+    if (style.defined.paddingTop) definedBits |= 1 << 9;
+    if (style.defined.paddingBottom) definedBits |= 1 << 10;
+    if (style.defined.paddingLeft) definedBits |= 1 << 11;
+    if (style.defined.paddingRight) definedBits |= 1 << 12;
+    file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
+  }
+
+  Serial.printf("[%lu] [CSS] Saved %u rules to cache\n", millis(), ruleCount);
+  return true;
+}
+
+bool CssParser::loadFromCache(FsFile& file) {
+  if (!file) {
+    return false;
+  }
+
+  // Clear existing rules
+  clear();
+
+  // Read and verify version
+  uint8_t version = 0;
+  if (file.read(&version, 1) != 1 || version != CSS_CACHE_VERSION) {
+    Serial.printf("[%lu] [CSS] Cache version mismatch (got %u, expected %u)\n", millis(), version, CSS_CACHE_VERSION);
+    return false;
+  }
+
+  // Read rule count
+  uint16_t ruleCount = 0;
+  if (file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount)) {
+    return false;
+  }
+
+  // Read each rule
+  for (uint16_t i = 0; i < ruleCount; ++i) {
+    // Read selector string
+    uint16_t selectorLen = 0;
+    if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen)) {
+      rulesBySelector_.clear();
+      return false;
+    }
+
+    std::string selector;
+    selector.resize(selectorLen);
+    if (file.read(&selector[0], selectorLen) != selectorLen) {
+      rulesBySelector_.clear();
+      return false;
+    }
+
+    // Read CssStyle fields
+    CssStyle style;
+    uint8_t enumVal;
+
+    if (file.read(&enumVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.textAlign = static_cast<CssTextAlign>(enumVal);
+
+    if (file.read(&enumVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.fontStyle = static_cast<CssFontStyle>(enumVal);
+
+    if (file.read(&enumVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.fontWeight = static_cast<CssFontWeight>(enumVal);
+
+    if (file.read(&enumVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.textDecoration = static_cast<CssTextDecoration>(enumVal);
+
+    // Read CssLength fields
+    auto readLength = [&file](CssLength& len) -> bool {
+      if (file.read(&len.value, sizeof(len.value)) != sizeof(len.value)) {
+        return false;
+      }
+      uint8_t unitVal;
+      if (file.read(&unitVal, 1) != 1) {
+        return false;
+      }
+      len.unit = static_cast<CssUnit>(unitVal);
+      return true;
+    };
+
+    if (!readLength(style.textIndent) || !readLength(style.marginTop) || !readLength(style.marginBottom) ||
+        !readLength(style.marginLeft) || !readLength(style.marginRight) || !readLength(style.paddingTop) ||
+        !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight)) {
+      rulesBySelector_.clear();
+      return false;
+    }
+
+    // Read defined flags
+    uint16_t definedBits = 0;
+    if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.defined.textAlign = (definedBits & 1 << 0) != 0;
+    style.defined.fontStyle = (definedBits & 1 << 1) != 0;
+    style.defined.fontWeight = (definedBits & 1 << 2) != 0;
+    style.defined.textDecoration = (definedBits & 1 << 3) != 0;
+    style.defined.textIndent = (definedBits & 1 << 4) != 0;
+    style.defined.marginTop = (definedBits & 1 << 5) != 0;
+    style.defined.marginBottom = (definedBits & 1 << 6) != 0;
+    style.defined.marginLeft = (definedBits & 1 << 7) != 0;
+    style.defined.marginRight = (definedBits & 1 << 8) != 0;
+    style.defined.paddingTop = (definedBits & 1 << 9) != 0;
+    style.defined.paddingBottom = (definedBits & 1 << 10) != 0;
+    style.defined.paddingLeft = (definedBits & 1 << 11) != 0;
+    style.defined.paddingRight = (definedBits & 1 << 12) != 0;
+
+    rulesBySelector_[selector] = style;
+  }
+
+  Serial.printf("[%lu] [CSS] Loaded %u rules from cache\n", millis(), ruleCount);
+  return true;
+}
