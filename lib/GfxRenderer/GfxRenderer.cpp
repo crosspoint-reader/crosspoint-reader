@@ -470,7 +470,7 @@ int GfxRenderer::getSpaceWidth(const int fontId) const {
   return fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
 }
 
-int GfxRenderer::getIndentWidth(const int fontId, const char* text) const {
+int GfxRenderer::getTextAdvanceX(const int fontId, const char* text) const {
   if (fontMap.count(fontId) == 0) {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return 0;
