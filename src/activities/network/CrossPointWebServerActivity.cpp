@@ -11,6 +11,7 @@
 
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
+#include "ScheduledWakeManager.h"
 #include "WifiSelectionActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
 #include "fontIds.h"
@@ -184,6 +185,9 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     if (MDNS.begin(AP_HOSTNAME)) {
       Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), AP_HOSTNAME);
     }
+
+    // Sync time with NTP for scheduled wake feature
+    SCHEDULED_WAKE.syncTimeWithNTP();
 
     // Start the web server
     startWebServer();
