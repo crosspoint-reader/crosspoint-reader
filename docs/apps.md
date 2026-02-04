@@ -1,22 +1,28 @@
-# Apps (Extensions) and Developer Workflow
+# Extensions (Apps)
 
-CrossPoint supports **apps/extensions** that live on the SD card and are installed by flashing their firmware image into the device's unused OTA partition.
+CrossPoint supports **extensions** implemented as standalone firmware images installed from the SD card.
 
-This is intentionally designed so out-of-scope apps (games, puzzles, etc.) do **not** need to be included in the core reader firmware.
+This is intended to keep non-core features (games/tools/experiments) out of the main reader firmware.
 
-## What is an "app"?
+## SD layout
 
-An app is a **standalone firmware binary** (ESP32-C3) with a small manifest.
-
-SD card layout:
+An extension is a firmware binary plus a small manifest:
 
 ```
 /.crosspoint/apps/<appId>/
-  app.bin   # app firmware image (ESP32-C3; starts with magic byte 0xE9)
+  app.bin   # ESP32-C3 firmware image (starts with magic byte 0xE9)
   app.json  # manifest (name, version, ...)
 ```
 
-The CrossPoint launcher discovers apps by scanning `/.crosspoint/apps/*/app.json`.
+CrossPoint discovers extensions by scanning `/.crosspoint/apps/*/app.json`.
+
+## How it boots (high level)
+
+```text
+SD app.bin -> CrossPoint flashes to the other OTA slot -> reboot into extension
+```
+
+Note: CrossPoint OTA updates may overwrite the currently-installed extension slot (two-slot OTA). The extension remains on SD and can be reinstalled.
 
 ## Installing an app (on device)
 
