@@ -230,6 +230,11 @@ void EpubReaderActivity::loop() {
                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
                                     mappedInput.wasReleased(MappedInputManager::Button::Right));
 
+  // Clear any status bar override on page turn
+  if (prevTriggered || nextTriggered) {
+    statusBarOverride.clear();
+  }
+
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -711,6 +716,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                          const int orientedMarginLeft) const {
   auto metrics = UITheme::getInstance().getMetrics();
+
+  if (!statusBarOverride.empty()) {
+    const auto screenHeight = renderer.getScreenHeight();
+    const auto textY = screenHeight - orientedMarginBottom - 4;
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, statusBarOverride.c_str());
+    const int x = (renderer.getScreenWidth() - textWidth) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, textY, statusBarOverride.c_str());
+    return;
+  }
 
   // determine visible status bar elements
   const bool showProgressPercentage = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
