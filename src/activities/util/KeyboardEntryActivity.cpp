@@ -14,6 +14,10 @@ const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
 const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"",
                                                                     "ZXCVBNM<>?", "SPECIAL ROW"};
 
+namespace {
+constexpr unsigned long capsMs = 1000;
+}
+
 void KeyboardEntryActivity::taskTrampoline(void* param) {
   auto* self = static_cast<KeyboardEntryActivity*>(param);
   self->displayTaskLoop();
@@ -95,6 +99,7 @@ void KeyboardEntryActivity::handleKeyPress() {
     if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
       // Shift toggle
       shiftActive = !shiftActive;
+      updateRequired = true;
       return;
     }
 
@@ -235,7 +240,11 @@ void KeyboardEntryActivity::loop() {
 
   // Selection
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    handleKeyPress();
+    if (mappedInput.getHeldTime() >= capsMs) {
+      shiftActive = !shiftActive;
+    } else {
+      handleKeyPress();
+    }
     updateRequired = true;
   }
 
