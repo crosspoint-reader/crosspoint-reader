@@ -49,3 +49,8 @@ class HalStorage {
 };
 
 #define Storage HalStorage::getInstance()
+
+// Downstream code must use Storage instead of SdMan
+#ifdef SdMan
+#undef SdMan
+#endif

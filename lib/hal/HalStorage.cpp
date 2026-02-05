@@ -2,42 +2,44 @@
 
 #include <SDCardManager.h>
 
+#define SDCard SDCardManager::getInstance()
+
 HalStorage HalStorage::instance;
 
 HalStorage::HalStorage() {}
 
-bool HalStorage::begin() { return SdMan.begin(); }
+bool HalStorage::begin() { return SDCard.begin(); }
 
-bool HalStorage::ready() const { return SdMan.ready(); }
+bool HalStorage::ready() const { return SDCard.ready(); }
 
-std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) { return SdMan.listFiles(path, maxFiles); }
+std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) { return SDCard.listFiles(path, maxFiles); }
 
-String HalStorage::readFile(const char* path) { return SdMan.readFile(path); }
+String HalStorage::readFile(const char* path) { return SDCard.readFile(path); }
 
 bool HalStorage::readFileToStream(const char* path, Print& out, size_t chunkSize) {
-  return SdMan.readFileToStream(path, out, chunkSize);
+  return SDCard.readFileToStream(path, out, chunkSize);
 }
 
 size_t HalStorage::readFileToBuffer(const char* path, char* buffer, size_t bufferSize, size_t maxBytes) {
-  return SdMan.readFileToBuffer(path, buffer, bufferSize, maxBytes);
+  return SDCard.readFileToBuffer(path, buffer, bufferSize, maxBytes);
 }
 
-bool HalStorage::writeFile(const char* path, const String& content) { return SdMan.writeFile(path, content); }
+bool HalStorage::writeFile(const char* path, const String& content) { return SDCard.writeFile(path, content); }
 
-bool HalStorage::ensureDirectoryExists(const char* path) { return SdMan.ensureDirectoryExists(path); }
+bool HalStorage::ensureDirectoryExists(const char* path) { return SDCard.ensureDirectoryExists(path); }
 
-File HalStorage::open(const char* path, const oflag_t oflag) { return SdMan.open(path, oflag); }
+File HalStorage::open(const char* path, const oflag_t oflag) { return SDCard.open(path, oflag); }
 
-bool HalStorage::mkdir(const char* path, const bool pFlag) { return SdMan.mkdir(path, pFlag); }
+bool HalStorage::mkdir(const char* path, const bool pFlag) { return SDCard.mkdir(path, pFlag); }
 
-bool HalStorage::exists(const char* path) { return SdMan.exists(path); }
+bool HalStorage::exists(const char* path) { return SDCard.exists(path); }
 
-bool HalStorage::remove(const char* path) { return SdMan.remove(path); }
+bool HalStorage::remove(const char* path) { return SDCard.remove(path); }
 
-bool HalStorage::rmdir(const char* path) { return SdMan.rmdir(path); }
+bool HalStorage::rmdir(const char* path) { return SDCard.rmdir(path); }
 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, File& file) {
-  return SdMan.openFileForRead(moduleName, path, file);
+  return SDCard.openFileForRead(moduleName, path, file);
 }
 
 bool HalStorage::openFileForRead(const char* moduleName, const std::string& path, File& file) {
@@ -49,7 +51,7 @@ bool HalStorage::openFileForRead(const char* moduleName, const String& path, Fil
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const char* path, File& file) {
-  return SdMan.openFileForWrite(moduleName, path, file);
+  return SDCard.openFileForWrite(moduleName, path, file);
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, File& file) {
@@ -60,4 +62,4 @@ bool HalStorage::openFileForWrite(const char* moduleName, const String& path, Fi
   return openFileForWrite(moduleName, path.c_str(), file);
 }
 
-bool HalStorage::removeDir(const char* path) { return SdMan.removeDir(path); }
+bool HalStorage::removeDir(const char* path) { return SDCard.removeDir(path); }
