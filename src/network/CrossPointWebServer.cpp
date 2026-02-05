@@ -104,7 +104,7 @@ void CrossPointWebServer::begin() {
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
   // Upload endpoint with special handling for multipart form data
-  server->on("/upload", HTTP_POST, [this] { handleUploadPost(); }, [this] { handleUpload(); });
+  server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
 
   // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
@@ -458,47 +458,32 @@ void CrossPointWebServer::handleDownload() const {
   file.close();
 }
 
-// Static variables for upload handling
-static FsFile uploadFile;
-static String uploadFileName;
-static String uploadPath = "/";
-static size_t uploadSize = 0;
-static bool uploadSuccess = false;
-static String uploadError = "";
-
-// Upload write buffer - batches small writes into larger SD card operations
-// 4KB is a good balance: large enough to reduce syscall overhead, small enough
-// to keep individual write times short and avoid watchdog issues
-constexpr size_t UPLOAD_BUFFER_SIZE = 4096;  // 4KB buffer
-static uint8_t uploadBuffer[UPLOAD_BUFFER_SIZE];
-static size_t uploadBufferPos = 0;
-
 // Diagnostic counters for upload performance analysis
 static unsigned long uploadStartTime = 0;
 static unsigned long totalWriteTime = 0;
 static size_t writeCount = 0;
 
-static bool flushUploadBuffer() {
-  if (uploadBufferPos > 0 && uploadFile) {
+static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
+  if (state.bufferPos > 0 && state.file) {
     esp_task_wdt_reset();  // Reset watchdog before potentially slow SD write
     const unsigned long writeStart = millis();
-    const size_t written = uploadFile.write(uploadBuffer, uploadBufferPos);
+    const size_t written = state.file.write(state.buffer.data(), state.bufferPos);
     totalWriteTime += millis() - writeStart;
     writeCount++;
     esp_task_wdt_reset();  // Reset watchdog after SD write
 
-    if (written != uploadBufferPos) {
-      Serial.printf("[%lu] [WEB] [UPLOAD] Buffer flush failed: expected %d, wrote %d\n", millis(), uploadBufferPos,
+    if (written != state.bufferPos) {
+      Serial.printf("[%lu] [WEB] [UPLOAD] Buffer flush failed: expected %d, wrote %d\n", millis(), state.bufferPos,
                     written);
-      uploadBufferPos = 0;
+      state.bufferPos = 0;
       return false;
     }
-    uploadBufferPos = 0;
+    state.bufferPos = 0;
   }
   return true;
 }
 
-void CrossPointWebServer::handleUpload() const {
+void CrossPointWebServer::handleUpload(UploadState& state) const {
   static size_t lastLoggedSize = 0;
 
   // Reset watchdog at start of every upload callback - HTTP parsing can be slow
@@ -516,13 +501,13 @@ void CrossPointWebServer::handleUpload() const {
     // Reset watchdog - this is the critical 1% crash point
     esp_task_wdt_reset();
 
-    uploadFileName = upload.filename;
-    uploadSize = 0;
-    uploadSuccess = false;
-    uploadError = "";
+    state.fileName = upload.filename;
+    state.size = 0;
+    state.success = false;
+    state.error = "";
     uploadStartTime = millis();
     lastLoggedSize = 0;
-    uploadBufferPos = 0;
+    state.bufferPos = 0;
     totalWriteTime = 0;
     writeCount = 0;
 
@@ -530,26 +515,26 @@ void CrossPointWebServer::handleUpload() const {
     // Note: We use query parameter instead of form data because multipart form
     // fields aren't available until after file upload completes
     if (server->hasArg("path")) {
-      uploadPath = server->arg("path");
+      state.path = server->arg("path");
       // Ensure path starts with /
-      if (!uploadPath.startsWith("/")) {
-        uploadPath = "/" + uploadPath;
+      if (!state.path.startsWith("/")) {
+        state.path = "/" + state.path;
       }
       // Remove trailing slash unless it's root
-      if (uploadPath.length() > 1 && uploadPath.endsWith("/")) {
-        uploadPath = uploadPath.substring(0, uploadPath.length() - 1);
+      if (state.path.length() > 1 && state.path.endsWith("/")) {
+        state.path = state.path.substring(0, state.path.length() - 1);
       }
     } else {
-      uploadPath = "/";
+      state.path = "/";
     }
 
-    Serial.printf("[%lu] [WEB] [UPLOAD] START: %s to path: %s\n", millis(), uploadFileName.c_str(), uploadPath.c_str());
+    Serial.printf("[%lu] [WEB] [UPLOAD] START: %s to path: %s\n", millis(), state.fileName.c_str(), state.path.c_str());
     Serial.printf("[%lu] [WEB] [UPLOAD] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
 
     // Create file path
-    String filePath = uploadPath;
+    String filePath = state.path;
     if (!filePath.endsWith("/")) filePath += "/";
-    filePath += uploadFileName;
+    filePath += state.fileName;
 
     // Check if file already exists - SD operations can be slow
     esp_task_wdt_reset();
@@ -561,8 +546,8 @@ void CrossPointWebServer::handleUpload() const {
 
     // Open file for writing - this can be slow due to FAT cluster allocation
     esp_task_wdt_reset();
-    if (!SdMan.openFileForWrite("WEB", filePath, uploadFile)) {
-      uploadError = "Failed to create file on SD card";
+    if (!SdMan.openFileForWrite("WEB", filePath, state.file)) {
+      state.error = "Failed to create file on SD card";
       Serial.printf("[%lu] [WEB] [UPLOAD] FAILED to create file: %s\n", millis(), filePath.c_str());
       return;
     }
@@ -570,87 +555,87 @@ void CrossPointWebServer::handleUpload() const {
 
     Serial.printf("[%lu] [WEB] [UPLOAD] File created successfully: %s\n", millis(), filePath.c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadFile && uploadError.isEmpty()) {
+    if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
       // This reduces SD card write operations and improves throughput
       const uint8_t* data = upload.buf;
       size_t remaining = upload.currentSize;
 
       while (remaining > 0) {
-        const size_t space = UPLOAD_BUFFER_SIZE - uploadBufferPos;
+        const size_t space = UploadState::UPLOAD_BUFFER_SIZE - state.bufferPos;
         const size_t toCopy = (remaining < space) ? remaining : space;
 
-        memcpy(uploadBuffer + uploadBufferPos, data, toCopy);
-        uploadBufferPos += toCopy;
+        memcpy(state.buffer.data() + state.bufferPos, data, toCopy);
+        state.bufferPos += toCopy;
         data += toCopy;
         remaining -= toCopy;
 
         // Flush buffer when full
-        if (uploadBufferPos >= UPLOAD_BUFFER_SIZE) {
-          if (!flushUploadBuffer()) {
-            uploadError = "Failed to write to SD card - disk may be full";
-            uploadFile.close();
+        if (state.bufferPos >= UploadState::UPLOAD_BUFFER_SIZE) {
+          if (!flushUploadBuffer(state)) {
+            state.error = "Failed to write to SD card - disk may be full";
+            state.file.close();
             return;
           }
         }
       }
 
-      uploadSize += upload.currentSize;
+      state.size += upload.currentSize;
 
       // Log progress every 100KB
-      if (uploadSize - lastLoggedSize >= 102400) {
+      if (state.size - lastLoggedSize >= 102400) {
         const unsigned long elapsed = millis() - uploadStartTime;
-        const float kbps = (elapsed > 0) ? (uploadSize / 1024.0) / (elapsed / 1000.0) : 0;
-        Serial.printf("[%lu] [WEB] [UPLOAD] %d bytes (%.1f KB), %.1f KB/s, %d writes\n", millis(), uploadSize,
-                      uploadSize / 1024.0, kbps, writeCount);
-        lastLoggedSize = uploadSize;
+        const float kbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
+        Serial.printf("[%lu] [WEB] [UPLOAD] %d bytes (%.1f KB), %.1f KB/s, %d writes\n", millis(), state.size,
+                      state.size / 1024.0, kbps, writeCount);
+        lastLoggedSize = state.size;
       }
     }
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadFile) {
+    if (state.file) {
       // Flush any remaining buffered data
-      if (!flushUploadBuffer()) {
-        uploadError = "Failed to write final data to SD card";
+      if (!flushUploadBuffer(state)) {
+        state.error = "Failed to write final data to SD card";
       }
-      uploadFile.close();
+      state.file.close();
 
-      if (uploadError.isEmpty()) {
-        uploadSuccess = true;
+      if (state.error.isEmpty()) {
+        state.success = true;
         const unsigned long elapsed = millis() - uploadStartTime;
-        const float avgKbps = (elapsed > 0) ? (uploadSize / 1024.0) / (elapsed / 1000.0) : 0;
+        const float avgKbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
         const float writePercent = (elapsed > 0) ? (totalWriteTime * 100.0 / elapsed) : 0;
         Serial.printf("[%lu] [WEB] [UPLOAD] Complete: %s (%d bytes in %lu ms, avg %.1f KB/s)\n", millis(),
-                      uploadFileName.c_str(), uploadSize, elapsed, avgKbps);
+                      state.fileName.c_str(), state.size, elapsed, avgKbps);
         Serial.printf("[%lu] [WEB] [UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)\n", millis(),
                       writeCount, totalWriteTime, writePercent);
 
         // Clear epub cache to prevent stale metadata issues when overwriting files
-        String filePath = uploadPath;
+        String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
-        filePath += uploadFileName;
+        filePath += state.fileName;
         clearEpubCacheIfNeeded(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    uploadBufferPos = 0;  // Discard buffered data
-    if (uploadFile) {
-      uploadFile.close();
+    state.bufferPos = 0;  // Discard buffered data
+    if (state.file) {
+      state.file.close();
       // Try to delete the incomplete file
-      String filePath = uploadPath;
+      String filePath = state.path;
       if (!filePath.endsWith("/")) filePath += "/";
-      filePath += uploadFileName;
+      filePath += state.fileName;
       SdMan.remove(filePath.c_str());
     }
-    uploadError = "Upload aborted";
+    state.error = "Upload aborted";
     Serial.printf("[%lu] [WEB] Upload aborted\n", millis());
   }
 }
 
-void CrossPointWebServer::handleUploadPost() const {
-  if (uploadSuccess) {
-    server->send(200, "text/plain", "File uploaded successfully: " + uploadFileName);
+void CrossPointWebServer::handleUploadPost(UploadState& state) const {
+  if (state.success) {
+    server->send(200, "text/plain", "File uploaded successfully: " + state.fileName);
   } else {
-    const String error = uploadError.isEmpty() ? "Unknown error during upload" : uploadError;
+    const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
     server->send(400, "text/plain", error);
   }
 }

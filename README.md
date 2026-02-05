@@ -102,13 +102,18 @@ After flashing the new features, it’s recommended to capture detailed logs fro
 First, make sure all required Python packages are installed:
 
 ```python
-python3 -m pip install serial colorama matplotlib
+python3 -m pip install pyserial colorama matplotlib
 ```
 after that run the script:
 ```sh
+# For Linux
+# This was tested on Debian and should work on most Linux systems.
 python3 scripts/debugging_monitor.py
+
+# For macOS
+python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
 ```
-This was tested on Debian and should work on most Linux systems. Minor adjustments may be required for Windows or macOS.
+Minor adjustments may be required for Windows.
 
 ## Internals
 

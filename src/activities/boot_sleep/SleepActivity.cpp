@@ -8,15 +8,14 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "ScreenComponents.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/CrossLarge.h"
 #include "util/StringUtils.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-
-  ScreenComponents::drawPopup(renderer, "Entering Sleep...");
+  GUI.drawPopup(renderer, "Entering Sleep...");
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
     return renderBlankSleepScreen();
@@ -238,7 +237,8 @@ void SleepActivity::renderCoverSleepScreen() const {
   } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
     // Handle EPUB file
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
-    if (!lastEpub.load()) {
+    // Skip loading css since we only need metadata here
+    if (!lastEpub.load(true, true)) {
       Serial.println("[SLP] Failed to load last epub");
       return renderDefaultSleepScreen();
     }
