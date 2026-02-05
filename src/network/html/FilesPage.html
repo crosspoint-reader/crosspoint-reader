@@ -1499,10 +1499,10 @@
         return;
       }
 
-      // Validate name (letters, numbers, underscores, hyphens, dots, and spaces)
-      const validName = /^[a-zA-Z0-9_\-\. ]+$/.test(newName);
+      // Validate name
+      const validName = /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(newName);
       if (!validName) {
-        alert('Name can only contain letters, numbers, underscores, hyphens, dots, and spaces.');
+        alert('Name cannot contain \" * : < > ? / \\ | and must not be . or ..');
         return;
       }
 
@@ -1512,7 +1512,7 @@
 
       const formData = new FormData();
       formData.append('oldPath', oldPath);
-      formData.append('newName', newName);
+      formData.append('newPath', newPath);
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/rename', true);
