@@ -2,6 +2,7 @@
 .idea
 .DS_Store
 .vscode
+.sdcard
 lib/EpdFont/fontsrc
 *.generated.h
 .vs
