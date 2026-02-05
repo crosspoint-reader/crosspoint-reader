@@ -31,7 +31,7 @@ const SettingInfo displaySettings[displaySettingsCount] = {
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),
     SettingInfo::Enum("UI Theme", &CrossPointSettings::uiTheme, {"Classic", "Lyra"}),
-    SettingInfo::Enum("Sunlight Fading Fix", &CrossPointSettings::fadingFix, {"OFF", "ON"}),
+    SettingInfo::Toggle("Sunlight Fading Fix", &CrossPointSettings::fadingFix),
 };
 
 constexpr int readerSettingsCount = 9;
