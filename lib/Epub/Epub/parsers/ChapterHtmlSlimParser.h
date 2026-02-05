@@ -37,6 +37,7 @@ class ChapterHtmlSlimParser {
   uint16_t viewportWidth;
   uint16_t viewportHeight;
   bool hyphenationEnabled;
+  uint8_t wordSpacing;
 
   void startNewTextBlock(TextBlock::Style style);
   void flushPartWordBuffer();
@@ -51,12 +52,14 @@ class ChapterHtmlSlimParser {
                                  const float lineCompression, const bool extraParagraphSpacing,
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
+                                 const uint8_t wordSpacing,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const std::function<void()>& popupFn = nullptr)
       : filepath(filepath),
         renderer(renderer),
         fontId(fontId),
         lineCompression(lineCompression),
+        wordSpacing(wordSpacing),
         extraParagraphSpacing(extraParagraphSpacing),
         paragraphAlignment(paragraphAlignment),
         viewportWidth(viewportWidth),
