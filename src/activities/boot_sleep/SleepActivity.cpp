@@ -10,7 +10,7 @@
 #include "CrossPointState.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "images/CrossLarge.h"
+#include "images/Logo120.h"
 #include "util/StringUtils.h"
 
 void SleepActivity::onEnter() {
@@ -109,7 +109,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  renderer.drawImage(CrossLarge, (pageWidth - 128) / 2, (pageHeight - 128) / 2, 128, 128);
+  renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "CrossPoint", true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "SLEEPING");
 
