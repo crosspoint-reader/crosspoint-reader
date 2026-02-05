@@ -22,7 +22,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 23;
+constexpr uint8_t SETTINGS_COUNT = 30;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 }  // namespace
 
@@ -60,6 +60,14 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writeString(outputFile, std::string(opdsUsername));
   serialization::writeString(outputFile, std::string(opdsPassword));
   serialization::writePod(outputFile, sleepScreenCoverFilter);
+  // Scheduled wake settings
+  serialization::writePod(outputFile, scheduledWakeEnabled);
+  serialization::writePod(outputFile, scheduledWakeHour);
+  serialization::writePod(outputFile, scheduledWakeMinute);
+  serialization::writePod(outputFile, scheduledWakeDays);
+  serialization::writePod(outputFile, scheduledWakeAutoOffMinutes);
+  serialization::writeString(outputFile, std::string(scheduledWakeWifiSSID));
+  serialization::writePod(outputFile, scheduledWakeTimezoneOffset);
   // New fields added at end for backward compatibility
   outputFile.close();
 
@@ -147,6 +155,34 @@ bool CrossPointSettings::loadFromFile() {
     }
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, sleepScreenCoverFilter, SLEEP_SCREEN_COVER_FILTER_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    // Scheduled wake settings
+    serialization::readPod(inputFile, scheduledWakeEnabled);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      uint8_t tempHour;
+      serialization::readPod(inputFile, tempHour);
+      if (tempHour < 24) scheduledWakeHour = tempHour;
+    }
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      uint8_t tempMinute;
+      serialization::readPod(inputFile, tempMinute);
+      if (tempMinute < 60) scheduledWakeMinute = tempMinute;
+    }
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, scheduledWakeDays);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, scheduledWakeAutoOffMinutes);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string ssidStr;
+      serialization::readString(inputFile, ssidStr);
+      strncpy(scheduledWakeWifiSSID, ssidStr.c_str(), sizeof(scheduledWakeWifiSSID) - 1);
+      scheduledWakeWifiSSID[sizeof(scheduledWakeWifiSSID) - 1] = '\0';
+    }
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, scheduledWakeTimezoneOffset);
     if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
   } while (false);
