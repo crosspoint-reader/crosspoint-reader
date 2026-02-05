@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
 
+#include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
@@ -19,7 +20,8 @@ constexpr int changeTabsMs = 700;
 constexpr int displaySettingsCount = 8;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
-    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen, {"Dark", "Light", "Custom", "Cover", "None"}),
+    SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen,
+                      {"Dark", "Light", "Custom", "Cover", "None", "Cover + Custom"}),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
     SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
                       {"None", "Contrast", "Inverted"}),
@@ -48,9 +50,8 @@ const SettingInfo readerSettings[readerSettingsCount] = {
 
 constexpr int controlsSettingsCount = 4;
 const SettingInfo controlsSettings[controlsSettingsCount] = {
-    SettingInfo::Enum(
-        "Front Button Layout", &CrossPointSettings::frontButtonLayout,
-        {"Bck, Cnfrm, Lft, Rght", "Lft, Rght, Bck, Cnfrm", "Lft, Bck, Cnfrm, Rght", "Bck, Cnfrm, Rght, Lft"}),
+    // Launches the remap wizard for front buttons.
+    SettingInfo::Action("Remap Front Buttons"),
     SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
                       {"Prev, Next", "Next, Prev"}),
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
@@ -202,7 +203,15 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    if (strcmp(setting.name, "KOReader Sync") == 0) {
+    if (strcmp(setting.name, "Remap Front Buttons") == 0) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new ButtonRemapActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+    } else if (strcmp(setting.name, "KOReader Sync") == 0) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
