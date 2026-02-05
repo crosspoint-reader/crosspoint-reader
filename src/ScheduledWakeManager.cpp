@@ -69,7 +69,7 @@ time_t ScheduledWakeManager::getNextWakeTime() const {
     return 0;
   }
 
-  struct tm* timeinfo = localtime(&now);
+  const struct tm* timeinfo = localtime(&now);
   if (!timeinfo) {
     return 0;
   }
@@ -90,7 +90,7 @@ time_t ScheduledWakeManager::getNextWakeTime() const {
     time_t candidate = mktime(&nextWake);
 
     // Get the day of week for this candidate (0=Sunday)
-    struct tm* candidateInfo = localtime(&candidate);
+    const struct tm* candidateInfo = localtime(&candidate);
     uint8_t dayMask = 1 << candidateInfo->tm_wday;
 
     // Check if this day is enabled and the time is in the future
@@ -183,7 +183,7 @@ bool ScheduledWakeManager::shouldAutoShutdown() const {
 }
 
 void ScheduledWakeManager::formatTime(time_t t, char* buffer, size_t bufferSize) {
-  struct tm* timeinfo = localtime(&t);
+  const struct tm* timeinfo = localtime(&t);
   if (timeinfo) {
     strftime(buffer, bufferSize, "%Y-%m-%d %H:%M:%S", timeinfo);
   } else {
@@ -214,9 +214,8 @@ bool ScheduledWakeManager::loadConfigFromFile() {
   while (configFile.available()) {
     // Read line
     int len = 0;
-    char c;
     while (configFile.available() && len < (int)sizeof(line) - 1) {
-      c = configFile.read();
+      char c = configFile.read();
       if (c == '\n' || c == '\r') {
         break;
       }
