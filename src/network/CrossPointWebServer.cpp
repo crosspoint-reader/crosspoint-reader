@@ -763,12 +763,12 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  if (!SdMan.exists(itemPath.c_str())) {
+  if (!Storage.exists(itemPath.c_str())) {
     server->send(404, "text/plain", "Item not found");
     return;
   }
 
-  FsFile file = SdMan.open(itemPath.c_str());
+  FsFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -789,7 +789,7 @@ void CrossPointWebServer::handleRename() const {
   }
   newPath += newName;
 
-  if (SdMan.exists(newPath.c_str())) {
+  if (Storage.exists(newPath.c_str())) {
     file.close();
     server->send(409, "text/plain", "Target already exists");
     return;
@@ -839,12 +839,12 @@ void CrossPointWebServer::handleMove() const {
     }
   }
 
-  if (!SdMan.exists(itemPath.c_str())) {
+  if (!Storage.exists(itemPath.c_str())) {
     server->send(404, "text/plain", "Item not found");
     return;
   }
 
-  FsFile file = SdMan.open(itemPath.c_str());
+  FsFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -855,12 +855,12 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  if (!SdMan.exists(destPath.c_str())) {
+  if (!Storage.exists(destPath.c_str())) {
     file.close();
     server->send(404, "text/plain", "Destination not found");
     return;
   }
-  FsFile destDir = SdMan.open(destPath.c_str());
+  FsFile destDir = Storage.open(destPath.c_str());
   if (!destDir || !destDir.isDirectory()) {
     if (destDir) {
       destDir.close();
@@ -882,7 +882,7 @@ void CrossPointWebServer::handleMove() const {
     server->send(200, "text/plain", "Already in destination");
     return;
   }
-  if (SdMan.exists(newPath.c_str())) {
+  if (Storage.exists(newPath.c_str())) {
     file.close();
     server->send(409, "text/plain", "Target already exists");
     return;

@@ -52,13 +52,13 @@ void HomeActivity::loadRecentBooks(int maxBooks, int coverHeight) {
     }
 
     // Skip if file no longer exists
-    if (!SdMan.exists(book.path.c_str())) {
+    if (!Storage.exists(book.path.c_str())) {
       continue;
     }
 
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!SdMan.exists(coverPath.c_str())) {
+      if (!Storage.exists(coverPath.c_str())) {
         std::string lastBookFileName = "";
         const size_t lastSlash = book.path.find_last_of('/');
         if (lastSlash != std::string::npos) {
