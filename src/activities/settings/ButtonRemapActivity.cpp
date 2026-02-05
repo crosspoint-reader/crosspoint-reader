@@ -4,6 +4,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -169,10 +170,10 @@ void ButtonRemapActivity::render() {
 
   // Live preview of logical labels under front buttons.
   // This mirrors the on-device front button order: Back, Confirm, Left, Right.
-  renderer.drawButtonHints(UI_10_FONT_ID, labelForHardware(CrossPointSettings::FRONT_HW_BACK),
-                           labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM),
-                           labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
-                           labelForHardware(CrossPointSettings::FRONT_HW_RIGHT));
+  GUI.drawButtonHints(renderer, labelForHardware(CrossPointSettings::FRONT_HW_BACK),
+                      labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM),
+                      labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
+                      labelForHardware(CrossPointSettings::FRONT_HW_RIGHT));
   renderer.displayBuffer();
 }
 
