@@ -139,13 +139,13 @@ class CrossPointSettings {
   uint8_t longPressChapterSkip = 1;
 
   // Scheduled wake settings
-  uint8_t scheduledWakeEnabled = 0;      // 0 = disabled, 1 = enabled
-  uint8_t scheduledWakeHour = 8;         // 0-23
-  uint8_t scheduledWakeMinute = 0;       // 0-59
-  uint8_t scheduledWakeDays = 0x7F;      // Bitmask: Sun=0x01, Mon=0x02, ... Sat=0x40
+  uint8_t scheduledWakeEnabled = 0;          // 0 = disabled, 1 = enabled
+  uint8_t scheduledWakeHour = 8;             // 0-23
+  uint8_t scheduledWakeMinute = 0;           // 0-59
+  uint8_t scheduledWakeDays = 0x7F;          // Bitmask: Sun=0x01, Mon=0x02, ... Sat=0x40
   uint8_t scheduledWakeAutoOffMinutes = 30;  // Auto-shutdown after this many minutes
-  char scheduledWakeWifiSSID[33] = "";   // WiFi network to connect to
-  int8_t scheduledWakeTimezoneOffset = 0; // Timezone offset in hours from UTC
+  char scheduledWakeWifiSSID[33] = "";       // WiFi network to connect to
+  int8_t scheduledWakeTimezoneOffset = 0;    // Timezone offset in hours from UTC
 
   ~CrossPointSettings() = default;
 

@@ -260,7 +260,8 @@ bool ScheduledWakeManager::loadConfigFromFile() {
       }
     } else if (strcmp(key, "days") == 0) {
       SETTINGS.scheduledWakeDays = (uint8_t)atoi(value);
-      Serial.printf("[%lu] [SWM]   days=%d (0x%02X)\n", millis(), SETTINGS.scheduledWakeDays, SETTINGS.scheduledWakeDays);
+      Serial.printf("[%lu] [SWM]   days=%d (0x%02X)\n", millis(), SETTINGS.scheduledWakeDays,
+                    SETTINGS.scheduledWakeDays);
     } else if (strcmp(key, "auto_off_minutes") == 0) {
       SETTINGS.scheduledWakeAutoOffMinutes = (uint8_t)atoi(value);
       Serial.printf("[%lu] [SWM]   auto_off_minutes=%d\n", millis(), SETTINGS.scheduledWakeAutoOffMinutes);
