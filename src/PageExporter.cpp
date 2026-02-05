@@ -58,9 +58,9 @@ bool PageExporter::writeEntry(FsFile& file, const std::string& chapterTitle, int
   return file.write(reinterpret_cast<const uint8_t*>(entry.c_str()), entry.size()) == entry.size();
 }
 
-bool PageExporter::exportPage(const std::string& bookTitle, const std::string& bookAuthor,
-                              const std::string& bookHash, const std::string& chapterTitle,
-                              int pageNumber, int bookPercent, const std::string& pageText) {
+bool PageExporter::exportPage(const std::string& bookTitle, const std::string& bookAuthor, const std::string& bookHash,
+                              const std::string& chapterTitle, int pageNumber, int bookPercent,
+                              const std::string& pageText) {
   SdMan.mkdir(EXPORTS_DIR);
 
   const std::string path = getExportPath(bookTitle, bookHash);

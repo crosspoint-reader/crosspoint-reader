@@ -3,7 +3,6 @@
 #include <Epub/Page.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include "PageExporter.h"
 #include <SDCardManager.h>
 
 #include "CrossPointSettings.h"
@@ -13,6 +12,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "PageExporter.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -196,11 +196,11 @@ void EpubReaderActivity::loop() {
         const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
         const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
         const int pageNum = section->currentPage + 1;
-        const float chapterProgress = (section->pageCount > 0)
-            ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
-            : 0.0f;
-        const int bookPercent = clampPercent(
-            static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+        const float chapterProgress =
+            (section->pageCount > 0) ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                                     : 0.0f;
+        const int bookPercent =
+            clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
         const std::string bookHash = epub->getCachePath().substr(epub->getCachePath().rfind('/') + 1);
 
         const bool ok = PageExporter::exportPage(epub->getTitle(), epub->getAuthor(), bookHash, chapterTitle, pageNum,

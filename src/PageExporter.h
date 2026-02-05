@@ -16,14 +16,13 @@ class PageExporter {
   // - pageNumber: 1-based page within chapter
   // - bookPercent: 0-100 overall book progress
   // - pageText: the plain text content of the page
-  static bool exportPage(const std::string& bookTitle, const std::string& bookAuthor,
-                         const std::string& bookHash, const std::string& chapterTitle,
-                         int pageNumber, int bookPercent, const std::string& pageText);
+  static bool exportPage(const std::string& bookTitle, const std::string& bookAuthor, const std::string& bookHash,
+                         const std::string& chapterTitle, int pageNumber, int bookPercent, const std::string& pageText);
 
  private:
   static std::string sanitizeFilename(const std::string& title);
   static std::string getExportPath(const std::string& bookTitle, const std::string& bookHash);
   static bool writeHeader(FsFile& file, const std::string& bookTitle, const std::string& bookAuthor);
-  static bool writeEntry(FsFile& file, const std::string& chapterTitle, int pageNumber,
-                         int bookPercent, const std::string& pageText);
+  static bool writeEntry(FsFile& file, const std::string& chapterTitle, int pageNumber, int bookPercent,
+                         const std::string& pageText);
 };

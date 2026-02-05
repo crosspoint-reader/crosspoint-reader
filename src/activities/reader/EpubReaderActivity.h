@@ -4,6 +4,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+
 #include <string>
 
 #include "EpubReaderMenuActivity.h"
@@ -28,8 +29,8 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingSubactivityExit = false;  // Defer subactivity exit to avoid use-after-free
   bool pendingGoHome = false;           // Defer go home to avoid race condition with display task
   bool skipNextButtonCheck = false;     // Skip button processing for one frame after subactivity exit
-  std::string statusBarOverride;  // Temporary override text (e.g. "Page saved"), cleared on page turn
-  bool exportTriggered = false;   // Guard to prevent repeated export while Confirm is held
+  std::string statusBarOverride;        // Temporary override text (e.g. "Page saved"), cleared on page turn
+  bool exportTriggered = false;         // Guard to prevent repeated export while Confirm is held
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 

@@ -2,6 +2,7 @@
 
 #include <HardwareSerial.h>
 #include <Serialization.h>
+
 #include <string>
 
 void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
