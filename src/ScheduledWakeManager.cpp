@@ -288,7 +288,7 @@ bool ScheduledWakeManager::createTemplateConfigFile() {
   const char* configPath = getConfigFilePath();
 
   // Check if file already exists
-  if (SdMan.fileExists(configPath)) {
+  if (SdMan.exists(configPath)) {
     Serial.printf("[%lu] [SWM] Config file already exists: %s\n", millis(), configPath);
     return true;
   }
