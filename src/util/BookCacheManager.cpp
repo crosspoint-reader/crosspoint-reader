@@ -13,9 +13,9 @@ bool BookCacheManager::migrateCache(const String& oldPath, const String& newPath
   RECENT_BOOKS.updatePath(oldPath.c_str(), newPath.c_str());
 
   // Update last opened book state if matches
-  if (CrossPointState::getInstance().openEpubPath == oldPath.c_str()) {
-    CrossPointState::getInstance().openEpubPath = newPath.c_str();
-    CrossPointState::getInstance().saveToFile();
+  if (APP_STATE.openEpubPath == oldPath.c_str()) {
+    APP_STATE.openEpubPath = newPath.c_str();
+    APP_STATE.saveToFile();
   }
 
   if (!SdMan.exists(oldPath.c_str())) {
