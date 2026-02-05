@@ -2,8 +2,7 @@
 
 #include <SDCardManager.h>
 
-#include <algorithm>
-#include <cstring>
+#include <string>
 
 namespace {
 constexpr const char* EXPORTS_DIR = "/.crosspoint/exports";
@@ -52,9 +51,8 @@ bool PageExporter::writeHeader(FsFile& file, const std::string& bookTitle, const
 
 bool PageExporter::writeEntry(FsFile& file, const std::string& chapterTitle, int pageNumber, int bookPercent,
                               const std::string& pageText) {
-  char meta[128];
-  snprintf(meta, sizeof(meta), "\n--- %s | Page %d | %d%% ---\n", chapterTitle.c_str(), pageNumber, bookPercent);
-  std::string entry(meta);
+  std::string entry = "\n--- " + chapterTitle + " | Page " + std::to_string(pageNumber) + " | " +
+                      std::to_string(bookPercent) + "% ---\n";
   entry += pageText;
   entry += '\n';
   return file.write(reinterpret_cast<const uint8_t*>(entry.c_str()), entry.size()) == entry.size();

@@ -188,14 +188,17 @@ void EpubReaderActivity::loop() {
 
   // Long press CONFIRM (1s+) exports current page text
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= exportPageMs) {
-    if (section && epub) {
+    if (!exportTriggered && section && epub) {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       auto page = section->loadPageFromSectionFile();
       if (page) {
         const std::string pageText = page->getPlainText();
         const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
         const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
         const int pageNum = section->currentPage + 1;
-        const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+        const float chapterProgress = (section->pageCount > 0)
+            ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+            : 0.0f;
         const int bookPercent = clampPercent(
             static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
         const std::string bookHash = epub->getCachePath().substr(epub->getCachePath().rfind('/') + 1);
@@ -207,8 +210,15 @@ void EpubReaderActivity::loop() {
         statusBarOverride = "Save failed";
       }
       updateRequired = true;
+      xSemaphoreGive(renderingMutex);
+      exportTriggered = true;
     }
     return;
+  }
+
+  // Reset export guard when Confirm is released
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    exportTriggered = false;
   }
 
   // Short press CONFIRM opens reader menu

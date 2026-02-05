@@ -1,4 +1,6 @@
 #pragma once
+#include <SdFat.h>
+
 #include <string>
 
 // Exports the current page's text to a per-book .txt file on the SD card.
