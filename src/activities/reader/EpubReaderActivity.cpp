@@ -3,6 +3,7 @@
 #include <Epub/Page.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include "PageExporter.h"
 #include <SDCardManager.h>
 
 #include "CrossPointSettings.h"
@@ -20,6 +21,7 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
+constexpr unsigned long exportPageMs = 1000;
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
 
@@ -184,8 +186,33 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Enter reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Long press CONFIRM (1s+) exports current page text
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= exportPageMs) {
+    if (section && epub) {
+      auto page = section->loadPageFromSectionFile();
+      if (page) {
+        const std::string pageText = page->getPlainText();
+        const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+        const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
+        const int pageNum = section->currentPage + 1;
+        const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+        const int bookPercent = clampPercent(
+            static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+        const std::string bookHash = epub->getCachePath().substr(epub->getCachePath().rfind('/') + 1);
+
+        const bool ok = PageExporter::exportPage(epub->getTitle(), epub->getAuthor(), bookHash, chapterTitle, pageNum,
+                                                 bookPercent, pageText);
+        statusBarOverride = ok ? "Page saved" : "Save failed";
+      } else {
+        statusBarOverride = "Save failed";
+      }
+      updateRequired = true;
+    }
+    return;
+  }
+
+  // Short press CONFIRM opens reader menu
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < exportPageMs) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     const int currentPage = section ? section->currentPage + 1 : 0;
