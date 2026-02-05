@@ -343,7 +343,7 @@ void KeyboardEntryActivity::render() const {
 
       // OK button (logical col 9, spans 2 key widths)
       const bool okSelected = (selectedRow == 4 && selectedCol >= DONE_COL);
-      renderItemWithSelector(currentX + 2, rowY, TR(OK_BUTTON), okSelected);
+      renderItemWithSelector(currentX + 2, rowY, i18n(OK_BUTTON), okSelected);
     } else {
       // Regular rows: render each key individually
       for (int col = 0; col < getRowLength(row); col++) {
@@ -360,11 +360,11 @@ void KeyboardEntryActivity::render() const {
   }
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), TR(DIR_LEFT), TR(DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), i18n(DIR_LEFT), i18n(DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Draw side button hints for Up/Down navigation
-  GUI.drawSideButtonHints(renderer, TR(DIR_UP), TR(DIR_DOWN));
+  GUI.drawSideButtonHints(renderer, i18n(DIR_UP), i18n(DIR_DOWN));
 
   renderer.displayBuffer();
 }

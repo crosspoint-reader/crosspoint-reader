@@ -218,7 +218,7 @@ void TxtReaderActivity::buildPageIndex() {
 
   Serial.printf("[%lu] [TRS] Building page index for %zu bytes...\n", millis(), fileSize);
 
-  GUI.drawPopup(renderer, TR(INDEXING));
+  GUI.drawPopup(renderer, i18n(INDEXING));
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
@@ -386,7 +386,7 @@ void TxtReaderActivity::renderScreen() {
 
   if (pageOffsets.empty()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(EMPTY_FILE), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, i18n(EMPTY_FILE), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }

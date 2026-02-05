@@ -101,10 +101,10 @@ void NetworkModeSelectionActivity::render() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(FILE_TRANSFER), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, i18n(FILE_TRANSFER), true, EpdFontFamily::BOLD);
 
   // Draw subtitle
-  renderer.drawCenteredText(UI_10_FONT_ID, 50, TR(HOW_CONNECT));
+  renderer.drawCenteredText(UI_10_FONT_ID, 50, i18n(HOW_CONNECT));
 
   // Menu items and descriptions
   static constexpr StrId menuItems[MENU_ITEM_COUNT] = {StrId::JOIN_NETWORK, StrId::CALIBRE_WIRELESS, StrId::CREATE_HOTSPOT};
@@ -130,7 +130,7 @@ void NetworkModeSelectionActivity::render() const {
   }
 
   // Draw help text at bottom
-  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), "", "");
+  const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

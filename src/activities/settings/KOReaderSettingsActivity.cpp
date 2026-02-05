@@ -84,7 +84,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, TR(KOREADER_USERNAME), KOREADER_STORE.getUsername(), 10,
+        renderer, mappedInput, i18n(KOREADER_USERNAME), KOREADER_STORE.getUsername(), 10,
         64,     // maxLength
         false,  // not password
         [this](const std::string& username) {
@@ -101,7 +101,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, TR(KOREADER_PASSWORD), KOREADER_STORE.getPassword(), 10,
+        renderer, mappedInput, i18n(KOREADER_PASSWORD), KOREADER_STORE.getPassword(), 10,
         64,     // maxLength
         false,  // show characters
         [this](const std::string& password) {
@@ -120,7 +120,7 @@ void KOReaderSettingsActivity::handleSelection() {
     const std::string prefillUrl = currentUrl.empty() ? "https://" : currentUrl;
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, TR(SYNC_SERVER_URL), prefillUrl, 10,
+        renderer, mappedInput, i18n(SYNC_SERVER_URL), prefillUrl, 10,
         128,    // maxLength - URLs can be long
         false,  // not password
         [this](const std::string& url) {
@@ -178,7 +178,7 @@ void KOReaderSettingsActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(KOREADER_SYNC), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, i18n(KOREADER_SYNC), true, EpdFontFamily::BOLD);
 
   // Draw selection highlight
   renderer.fillRect(0, 60 + selectedIndex * 30 - 2, pageWidth - 1, 30);
@@ -193,15 +193,15 @@ void KOReaderSettingsActivity::render() {
     // Draw status for each item
     std::string status = "";
     if (i == 0) {
-      status = std::string("[") + (KOREADER_STORE.getUsername().empty() ? TR(NOT_SET) : TR(SET)) + "]";
+      status = std::string("[") + (KOREADER_STORE.getUsername().empty() ? i18n(NOT_SET) : i18n(SET)) + "]";
     } else if (i == 1) {
-      status = std::string("[") + (KOREADER_STORE.getPassword().empty() ? TR(NOT_SET) : TR(SET)) + "]";
+      status = std::string("[") + (KOREADER_STORE.getPassword().empty() ? i18n(NOT_SET) : i18n(SET)) + "]";
     } else if (i == 2) {
-      status = std::string("[") + (KOREADER_STORE.getServerUrl().empty() ? TR(DEFAULT_VALUE) : TR(CUSTOM)) + "]";
+      status = std::string("[") + (KOREADER_STORE.getServerUrl().empty() ? i18n(DEFAULT_VALUE) : i18n(CUSTOM)) + "]";
     } else if (i == 3) {
-      status = std::string("[") + (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? TR(FILENAME) : TR(BINARY)) + "]";
+      status = std::string("[") + (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? i18n(FILENAME) : i18n(BINARY)) + "]";
     } else if (i == 4) {
-      status = KOREADER_STORE.hasCredentials() ? "" : std::string("[") + TR(SET_CREDENTIALS_FIRST) + "]";
+      status = KOREADER_STORE.hasCredentials() ? "" : std::string("[") + i18n(SET_CREDENTIALS_FIRST) + "]";
     }
 
     const auto width = renderer.getTextWidth(UI_10_FONT_ID, status.c_str());
@@ -209,7 +209,7 @@ void KOReaderSettingsActivity::render() {
   }
 
   // Draw button hints
-  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), "", "");
+  const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

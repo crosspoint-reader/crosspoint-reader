@@ -295,7 +295,7 @@ void setup() {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
     setupDisplayAndFonts();
     exitActivity();
-    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, TR(SD_CARD_ERROR), EpdFontFamily::BOLD));
+    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, i18n(SD_CARD_ERROR), EpdFontFamily::BOLD));
     return;
   }
 

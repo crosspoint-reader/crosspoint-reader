@@ -389,7 +389,7 @@ void CrossPointWebServerActivity::render() const {
   } else if (state == WebServerActivityState::AP_STARTING) {
     renderer.clearScreen();
     const auto pageHeight = renderer.getScreenHeight();
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, TR(STARTING_HOTSPOT), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, i18n(STARTING_HOTSPOT), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
   }
 }
@@ -420,21 +420,21 @@ void CrossPointWebServerActivity::renderServerRunning() const {
   // Use consistent line spacing
   constexpr int LINE_SPACING = 28;  // Space between lines
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(FILE_TRANSFER), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, i18n(FILE_TRANSFER), true, EpdFontFamily::BOLD);
 
   if (isApMode) {
     // AP mode display - center the content block
     int startY = 55;
 
-    renderer.drawCenteredText(UI_10_FONT_ID, startY, TR(HOTSPOT_MODE), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, i18n(HOTSPOT_MODE), true, EpdFontFamily::BOLD);
 
-    std::string ssidInfo = std::string(TR(NETWORK_PREFIX)) + connectedSSID;
+    std::string ssidInfo = std::string(i18n(NETWORK_PREFIX)) + connectedSSID;
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ssidInfo.c_str());
 
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, TR(CONNECT_WIFI_HINT));
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, i18n(CONNECT_WIFI_HINT));
 
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3,
-                              TR(SCAN_QR_WIFI_HINT));
+                              i18n(SCAN_QR_WIFI_HINT));
     // Show QR code for URL
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
@@ -445,24 +445,24 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str(), true, EpdFontFamily::BOLD);
 
     // Show IP address as fallback
-    std::string ipUrl = std::string(TR(OR_HTTP_PREFIX)) + connectedIP + "/";
+    std::string ipUrl = std::string(i18n(OR_HTTP_PREFIX)) + connectedIP + "/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, ipUrl.c_str());
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, TR(OPEN_URL_HINT));
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, i18n(OPEN_URL_HINT));
 
     // Show QR code for URL
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, TR(SCAN_QR_HINT));
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, i18n(SCAN_QR_HINT));
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 7, hostnameUrl);
   } else {
     // STA mode display (original behavior)
     const int startY = 65;
 
-    std::string ssidInfo = std::string(TR(NETWORK_PREFIX)) + connectedSSID;
+    std::string ssidInfo = std::string(i18n(NETWORK_PREFIX)) + connectedSSID;
     if (ssidInfo.length() > 28) {
       ssidInfo.replace(25, ssidInfo.length() - 25, "...");
     }
     renderer.drawCenteredText(UI_10_FONT_ID, startY, ssidInfo.c_str());
 
-    std::string ipInfo = std::string(TR(IP_ADDRESS_PREFIX)) + connectedIP;
+    std::string ipInfo = std::string(i18n(IP_ADDRESS_PREFIX)) + connectedIP;
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ipInfo.c_str());
 
     // Show web server URL prominently
@@ -470,16 +470,16 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 2, webInfo.c_str(), true, EpdFontFamily::BOLD);
 
     // Also show hostname URL
-    std::string hostnameUrl = std::string(TR(OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
+    std::string hostnameUrl = std::string(i18n(OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str());
 
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, TR(OPEN_URL_HINT));
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, i18n(OPEN_URL_HINT));
 
     // Show QR code for URL
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, TR(SCAN_QR_HINT));
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, i18n(SCAN_QR_HINT));
   }
 
-  const auto labels = mappedInput.mapLabels(TR(EXIT), "", "", "");
+  const auto labels = mappedInput.mapLabels(i18n(EXIT), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

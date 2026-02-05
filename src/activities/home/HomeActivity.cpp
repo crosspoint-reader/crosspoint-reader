@@ -77,7 +77,7 @@ void HomeActivity::loadRecentBooks(int maxBooks, int coverHeight) {
           // Try to generate thumbnail image for Continue Reading card
           if (!showingLoading) {
             showingLoading = true;
-            popupRect = GUI.drawPopup(renderer, TR(LOADING));
+            popupRect = GUI.drawPopup(renderer, i18n(LOADING));
           }
           GUI.fillPopupProgress(renderer, popupRect, progress * 30);
           epub.generateThumbBmp(coverHeight);
@@ -89,7 +89,7 @@ void HomeActivity::loadRecentBooks(int maxBooks, int coverHeight) {
             // Try to generate thumbnail image for Continue Reading card
             if (!showingLoading) {
               showingLoading = true;
-              popupRect = GUI.drawPopup(renderer, TR(LOADING));
+              popupRect = GUI.drawPopup(renderer, i18n(LOADING));
             }
             GUI.fillPopupProgress(renderer, popupRect, progress * 30);
             xtc.generateThumbBmp(coverHeight);
@@ -267,10 +267,10 @@ void HomeActivity::render() {
   }
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {TR(BROWSE_FILES), TR(MENU_RECENT_BOOKS), TR(FILE_TRANSFER), TR(SETTINGS_TITLE)};
+  std::vector<const char*> menuItems = {i18n(BROWSE_FILES), i18n(MENU_RECENT_BOOKS), i18n(FILE_TRANSFER), i18n(SETTINGS_TITLE)};
   if (hasOpdsUrl) {
     // Insert OPDS Browser after My Library
-    menuItems.insert(menuItems.begin() + 2, TR(OPDS_BROWSER));
+    menuItems.insert(menuItems.begin() + 2, i18n(OPDS_BROWSER));
   }
 
   GUI.drawButtonMenu(
@@ -281,7 +281,7 @@ void HomeActivity::render() {
       static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); }, nullptr);
 
-  const auto labels = mappedInput.mapLabels("", TR(SELECT), TR(DIR_UP), TR(DIR_DOWN));
+  const auto labels = mappedInput.mapLabels("", i18n(SELECT), i18n(DIR_UP), i18n(DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

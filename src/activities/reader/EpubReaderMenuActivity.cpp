@@ -111,9 +111,9 @@ void EpubReaderMenuActivity::renderScreen() {
   // Progress summary
   std::string progressLine;
   if (totalPages > 0) {
-    progressLine = std::string(TR(CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages) + std::string(TR(PAGES_SEPARATOR));
+    progressLine = std::string(i18n(CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages) + std::string(i18n(PAGES_SEPARATOR));
   }
-  progressLine += std::string(TR(BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
+  progressLine += std::string(i18n(BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
   renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
 
   // Menu Items
@@ -140,7 +140,7 @@ void EpubReaderMenuActivity::renderScreen() {
   }
 
   // Footer / Hints
-  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), TR(DIR_UP), TR(DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), i18n(DIR_UP), i18n(DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

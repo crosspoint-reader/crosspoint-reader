@@ -283,7 +283,7 @@ void SettingsActivity::render() const {
 
   auto metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, TR(SETTINGS_TITLE));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, i18n(SETTINGS_TITLE));
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
@@ -305,7 +305,7 @@ void SettingsActivity::render() const {
         std::string valueText = "";
         if (settingsList[i].type == SettingType::TOGGLE && settingsList[i].valuePtr != nullptr) {
           const bool value = SETTINGS.*(settingsList[i].valuePtr);
-          valueText = value ? TR(STATE_ON) : TR(STATE_OFF);
+          valueText = value ? i18n(STATE_ON) : i18n(STATE_OFF);
         } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
           const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
           valueText = I18N.get(settingsList[i].enumValues[value]);
@@ -321,7 +321,7 @@ void SettingsActivity::render() const {
                     metrics.versionTextY, CROSSPOINT_VERSION);
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels(TR(BACK), TR(TOGGLE), TR(DIR_UP), TR(DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(TOGGLE), i18n(DIR_UP), i18n(DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

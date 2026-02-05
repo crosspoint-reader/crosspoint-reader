@@ -32,7 +32,7 @@ private:
 
   std::function<void()> onBack;
   int selectedIndex = 0;
-  static constexpr int totalItems = 3; // English, 简体中文, 日本語
+  static constexpr int totalItems = 5; // English, Spanish, Italian, Swedish, French
 
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;

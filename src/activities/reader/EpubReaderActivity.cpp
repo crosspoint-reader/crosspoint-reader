@@ -540,7 +540,7 @@ void EpubReaderActivity::renderScreen() {
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(END_OF_BOOK), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, i18n(END_OF_BOOK), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
@@ -579,7 +579,7 @@ void EpubReaderActivity::renderScreen() {
                                   viewportHeight, SETTINGS.hyphenationEnabled)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
-      const auto popupFn = [this]() { GUI.drawPopup(renderer, TR(INDEXING)); };
+      const auto popupFn = [this]() { GUI.drawPopup(renderer, i18n(INDEXING)); };
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
@@ -624,7 +624,7 @@ void EpubReaderActivity::renderScreen() {
 
   if (section->pageCount == 0) {
     Serial.printf("[%lu] [ERS] No pages to render\n", millis());
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, i18n(EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
     return;
@@ -632,7 +632,7 @@ void EpubReaderActivity::renderScreen() {
 
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
     Serial.printf("[%lu] [ERS] Page out of bounds: %d (max %d)\n", millis(), section->currentPage, section->pageCount);
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, TR(OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, i18n(OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
     return;
@@ -795,7 +795,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     std::string title;
     int titleWidth;
     if (tocIndex == -1) {
-      title = TR(UNNAMED);
+      title = i18n(UNNAMED);
       titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     } else {
       const auto tocItem = epub->getTocItem(tocIndex);

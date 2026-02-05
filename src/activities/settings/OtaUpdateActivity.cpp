@@ -130,27 +130,27 @@ void OtaUpdateActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(UPDATE), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, i18n(UPDATE), true, EpdFontFamily::BOLD);
 
   if (state == CHECKING_FOR_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, TR(CHECKING_UPDATE), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, i18n(CHECKING_UPDATE), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == WAITING_CONFIRMATION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 200, TR(NEW_UPDATE), true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, 20, 250, (std::string(TR(CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
-    renderer.drawText(UI_10_FONT_ID, 20, 270, (std::string(TR(NEW_VERSION)) + updater.getLatestVersion()).c_str());
+    renderer.drawCenteredText(UI_10_FONT_ID, 200, i18n(NEW_UPDATE), true, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, 20, 250, (std::string(i18n(CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
+    renderer.drawText(UI_10_FONT_ID, 20, 270, (std::string(i18n(NEW_VERSION)) + updater.getLatestVersion()).c_str());
 
-    const auto labels = mappedInput.mapLabels(TR(CANCEL), TR(UPDATE), "", "");
+    const auto labels = mappedInput.mapLabels(i18n(CANCEL), i18n(UPDATE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == UPDATE_IN_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 310, TR(UPDATING), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 310, i18n(UPDATING), true, EpdFontFamily::BOLD);
     renderer.drawRect(20, 350, pageWidth - 40, 50);
     renderer.fillRect(24, 354, static_cast<int>(updaterProgress * static_cast<float>(pageWidth - 44)), 42);
     renderer.drawCenteredText(UI_10_FONT_ID, 420,
@@ -163,20 +163,20 @@ void OtaUpdateActivity::render() {
   }
 
   if (state == NO_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, TR(NO_UPDATE), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, i18n(NO_UPDATE), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, TR(UPDATE_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, i18n(UPDATE_FAILED), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == FINISHED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, TR(UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 350, TR(POWER_ON_HINT));
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, i18n(UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 350, i18n(POWER_ON_HINT));
     renderer.displayBuffer();
     state = SHUTTING_DOWN;
     return;

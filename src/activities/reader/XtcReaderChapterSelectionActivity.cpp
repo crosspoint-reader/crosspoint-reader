@@ -150,14 +150,14 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
   const int pageItems = getPageItems();
   // Manual centering to honor content gutters.
   const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, TR(SELECT_CHAPTER), EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, TR(SELECT_CHAPTER), true, EpdFontFamily::BOLD);
+      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, i18n(SELECT_CHAPTER), EpdFontFamily::BOLD)) / 2;
+  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, i18n(SELECT_CHAPTER), true, EpdFontFamily::BOLD);
 
   const auto& chapters = xtc->getChapters();
   if (chapters.empty()) {
     // Center the empty state within the gutter-safe content region.
-    const int emptyX = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, TR(NO_CHAPTERS))) / 2;
-    renderer.drawText(UI_10_FONT_ID, emptyX, 120 + contentY, TR(NO_CHAPTERS));
+    const int emptyX = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, i18n(NO_CHAPTERS))) / 2;
+    renderer.drawText(UI_10_FONT_ID, emptyX, 120 + contentY, i18n(NO_CHAPTERS));
     renderer.displayBuffer();
     return;
   }
@@ -167,13 +167,13 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
   renderer.fillRect(contentX, 60 + contentY + (selectorIndex % pageItems) * 30 - 2, contentWidth - 1, 30);
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
-    const char* title = chapter.name.empty() ? TR(UNNAMED) : chapter.name.c_str();
+    const char* title = chapter.name.empty() ? i18n(UNNAMED) : chapter.name.c_str();
     renderer.drawText(UI_10_FONT_ID, contentX + 20, 60 + contentY + (i % pageItems) * 30, title, i != selectorIndex);
   }
 
   // Skip button hints in landscape CW mode (they overlap content)
   if (renderer.getOrientation() != GfxRenderer::LandscapeClockwise) {
-    const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), TR(DIR_UP), TR(DIR_DOWN));
+    const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), i18n(DIR_UP), i18n(DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 

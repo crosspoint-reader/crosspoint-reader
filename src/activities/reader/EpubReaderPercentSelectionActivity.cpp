@@ -105,7 +105,7 @@ void EpubReaderPercentSelectionActivity::renderScreen() {
   renderer.clearScreen();
 
   // Title and numeric percent value.
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(GO_TO_PERCENT), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, i18n(GO_TO_PERCENT), true, EpdFontFamily::BOLD);
 
   const std::string percentText = std::to_string(percent) + "%";
   renderer.drawCenteredText(UI_12_FONT_ID, 90, percentText.c_str(), true, EpdFontFamily::BOLD);
@@ -130,10 +130,10 @@ void EpubReaderPercentSelectionActivity::renderScreen() {
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
   // Hint text for step sizes.
-  renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, TR(PERCENT_STEP_HINT), true);
+  renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, i18n(PERCENT_STEP_HINT), true);
 
   // Button hints follow the current front button layout.
-  const auto labels = mappedInput.mapLabels(TR(BACK), TR(SELECT), "-", "+");
+  const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), "-", "+");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

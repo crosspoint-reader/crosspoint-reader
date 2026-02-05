@@ -212,9 +212,9 @@ void CalibreConnectActivity::render() const {
   renderer.clearScreen();
   const auto pageHeight = renderer.getScreenHeight();
   if (state == CalibreConnectState::SERVER_STARTING) {
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, TR(CALIBRE_STARTING), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, i18n(CALIBRE_STARTING), true, EpdFontFamily::BOLD);
   } else if (state == CalibreConnectState::ERROR) {
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, TR(CONNECTION_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, i18n(CONNECTION_FAILED), true, EpdFontFamily::BOLD);
   }
   renderer.displayBuffer();
 }
@@ -224,31 +224,31 @@ void CalibreConnectActivity::renderServerRunning() const {
   constexpr int SMALL_SPACING = 20;
   constexpr int SECTION_SPACING = 40;
   constexpr int TOP_PADDING = 14;
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(CALIBRE_WIRELESS), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, i18n(CALIBRE_WIRELESS), true, EpdFontFamily::BOLD);
 
   int y = 55 + TOP_PADDING;
-  renderer.drawCenteredText(UI_10_FONT_ID, y, TR(WIFI_NETWORKS), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, y, i18n(WIFI_NETWORKS), true, EpdFontFamily::BOLD);
   y += LINE_SPACING;
-  std::string ssidInfo = std::string(TR(NETWORK_PREFIX)) + connectedSSID;
+  std::string ssidInfo = std::string(i18n(NETWORK_PREFIX)) + connectedSSID;
   if (ssidInfo.length() > 28) {
     ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
   renderer.drawCenteredText(UI_10_FONT_ID, y, ssidInfo.c_str());
-  renderer.drawCenteredText(UI_10_FONT_ID, y + LINE_SPACING, (std::string(TR(IP_ADDRESS_PREFIX)) + connectedIP).c_str());
+  renderer.drawCenteredText(UI_10_FONT_ID, y + LINE_SPACING, (std::string(i18n(IP_ADDRESS_PREFIX)) + connectedIP).c_str());
 
   y += LINE_SPACING * 2 + SECTION_SPACING;
-  renderer.drawCenteredText(UI_10_FONT_ID, y, TR(CALIBRE_SETUP), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, y, i18n(CALIBRE_SETUP), true, EpdFontFamily::BOLD);
   y += LINE_SPACING;
-  renderer.drawCenteredText(SMALL_FONT_ID, y, "1) Install CrossPoint Reader plugin");
-  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING, "2) Be on the same WiFi network");
-  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING * 2, "3) In Calibre: \"Send to device\"");
-  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING * 3, "Keep this screen open while sending");
+  renderer.drawCenteredText(SMALL_FONT_ID, y, i18n(CALIBRE_INSTRUCTION_1));
+  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING, i18n(CALIBRE_INSTRUCTION_2));
+  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING * 2, i18n(CALIBRE_INSTRUCTION_3));
+  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING * 3, i18n(CALIBRE_INSTRUCTION_4));
 
   y += SMALL_SPACING * 3 + SECTION_SPACING;
-  renderer.drawCenteredText(UI_10_FONT_ID, y, TR(CALIBRE_STATUS), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, y, i18n(CALIBRE_STATUS), true, EpdFontFamily::BOLD);
   y += LINE_SPACING;
   if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {
-    std::string label = TR(CALIBRE_RECEIVING);
+    std::string label = i18n(CALIBRE_RECEIVING);
     if (!currentUploadName.empty()) {
       label += ": " + currentUploadName;
       if (label.length() > 34) {
@@ -264,13 +264,13 @@ void CalibreConnectActivity::renderServerRunning() const {
   }
 
   if (lastCompleteAt > 0 && (millis() - lastCompleteAt) < 6000) {
-    std::string msg = std::string(TR(CALIBRE_RECEIVED)) + lastCompleteName;
+    std::string msg = std::string(i18n(CALIBRE_RECEIVED)) + lastCompleteName;
     if (msg.length() > 36) {
       msg.replace(33, msg.length() - 33, "...");
     }
     renderer.drawCenteredText(SMALL_FONT_ID, y, msg.c_str());
   }
 
-  const auto labels = mappedInput.mapLabels(TR(EXIT), "", "", "");
+  const auto labels = mappedInput.mapLabels(i18n(EXIT), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
