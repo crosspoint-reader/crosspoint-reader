@@ -20,10 +20,12 @@
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
 #include "activities/home/MyLibraryActivity.h"
+#include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 HalDisplay display;
@@ -203,13 +205,13 @@ void enterDeepSleep() {
 }
 
 void onGoHome();
-void onGoToMyLibraryWithTab(const std::string& path, MyLibraryActivity::Tab tab);
-void onGoToReader(const std::string& initialEpubPath, MyLibraryActivity::Tab fromTab) {
+void onGoToMyLibraryWithPath(const std::string& path);
+void onGoToRecentBooks();
+void onGoToReader(const std::string& initialEpubPath) {
   exitActivity();
   enterNewActivity(
-      new ReaderActivity(renderer, mappedInputManager, initialEpubPath, fromTab, onGoHome, onGoToMyLibraryWithTab));
+      new ReaderActivity(renderer, mappedInputManager, initialEpubPath, onGoHome, onGoToMyLibraryWithPath));
 }
-void onContinueReading() { onGoToReader(APP_STATE.openEpubPath, MyLibraryActivity::Tab::Recent); }
 
 void onGoToFileTransfer() {
   exitActivity();
@@ -226,9 +228,14 @@ void onGoToMyLibrary() {
   enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
 }
 
-void onGoToMyLibraryWithTab(const std::string& path, MyLibraryActivity::Tab tab) {
+void onGoToRecentBooks() {
   exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, tab, path));
+  enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+}
+
+void onGoToMyLibraryWithPath(const std::string& path) {
+  exitActivity();
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, path));
 }
 
 void onGoToBrowser() {
@@ -238,8 +245,8 @@ void onGoToBrowser() {
 
 void onGoHome() {
   exitActivity();
-  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToMyLibrary, onGoToSettings,
-                                    onGoToFileTransfer, onGoToBrowser));
+  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
+                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {
@@ -293,6 +300,7 @@ void setup() {
 
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
+  UITheme::getInstance().reload();
 
   switch (gpio.getWakeupReason()) {
     case HalGPIO::WakeupReason::PowerButton:
@@ -323,14 +331,17 @@ void setup() {
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
-  if (APP_STATE.openEpubPath.empty()) {
+  // Boot to home screen directly when back button is held or when reader activity crashes 3 times
+  if (APP_STATE.openEpubPath.empty() || mappedInputManager.isPressed(MappedInputManager::Button::Back) ||
+      APP_STATE.readerActivityLoadCount > 0) {
     onGoHome();
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
     APP_STATE.openEpubPath = "";
+    APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
-    onGoToReader(path, MyLibraryActivity::Tab::Recent);
+    onGoToReader(path);
   }
 
   // Ensure we're not still holding the power button before leaving setup
@@ -343,6 +354,8 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
+
+  renderer.setFadingFix(SETTINGS.fadingFix);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
     Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
