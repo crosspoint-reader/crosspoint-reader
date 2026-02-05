@@ -20,9 +20,10 @@ constexpr int RECENTS_LINE_HEIGHT = 65;  // Increased for two-line items
 constexpr int LEFT_MARGIN = 20;
 constexpr int RIGHT_MARGIN = 40;  // Extra space for scroll indicator
 
-// Timing thresholds
-constexpr int SKIP_PAGE_MS = 700;
-constexpr unsigned long GO_HOME_MS = 1000;
+// Timing thresholds for button behavior
+constexpr int LONG_PRESS_MS = 450;          // Long press: change tab
+constexpr int DOUBLE_PRESS_MS = 120;        // Double press: skip page
+constexpr unsigned long GO_HOME_MS = 1000;  // Long press back: go to root
 
 void sortFileList(std::vector<std::string>& strs) {
   std::sort(begin(strs), end(strs), [](const std::string& str1, const std::string& str2) {
@@ -126,6 +127,51 @@ void MyLibraryActivity::taskTrampoline(void* param) {
   self->displayTaskLoop();
 }
 
+// Action execution: Move one item (short press timeout)
+void MyLibraryActivity::executeMoveItem(bool isPrevButton) {
+  const int itemCount = getCurrentItemCount();
+  if (itemCount > 0) {
+    if (isPrevButton) {
+      selectorIndex = (selectorIndex + itemCount - 1) % itemCount;
+    } else {
+      selectorIndex = (selectorIndex + 1) % itemCount;
+    }
+  }
+}
+
+// Action execution: Skip page (double press)
+void MyLibraryActivity::executeSkipPage(bool isPrevButton) {
+  const int itemCount = getCurrentItemCount();
+  const int pageItems = getPageItems();
+  if (itemCount > 0) {
+    if (isPrevButton) {
+      int targetPage = (selectorIndex / pageItems) - 1;
+      if (targetPage < 0) {
+        targetPage = ((itemCount - 1) / pageItems);
+      }
+      selectorIndex = targetPage * pageItems;
+    } else {
+      int targetPage = (selectorIndex / pageItems) + 1;
+      int maxPage = (itemCount - 1) / pageItems;
+      if (targetPage > maxPage) {
+        targetPage = 0;
+      }
+      selectorIndex = targetPage * pageItems;
+    }
+  }
+}
+
+// Action execution: Switch tab (long press)
+void MyLibraryActivity::executeSwitchTab(bool isPrevButton) {
+  if (isPrevButton && currentTab == Tab::Files) {
+    currentTab = Tab::Recent;
+    selectorIndex = 0;
+  } else if (!isPrevButton && currentTab == Tab::Recent) {
+    currentTab = Tab::Files;
+    selectorIndex = 0;
+  }
+}
+
 void MyLibraryActivity::onEnter() {
   Activity::onEnter();
 
@@ -163,8 +209,8 @@ void MyLibraryActivity::onExit() {
 }
 
 void MyLibraryActivity::loop() {
-  const int itemCount = getCurrentItemCount();
-  const int pageItems = getPageItems();
+  // Get current time for all timing operations
+  unsigned long currentTime = millis();
 
   // Long press BACK (1s+) in Files tab goes to root folder
   if (currentTab == Tab::Files && mappedInput.isPressed(MappedInputManager::Button::Back) &&
@@ -177,13 +223,6 @@ void MyLibraryActivity::loop() {
     }
     return;
   }
-
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Up);
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Down);
-  const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
 
   // Confirm button - open selected item
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -234,38 +273,84 @@ void MyLibraryActivity::loop() {
     return;
   }
 
-  // Tab switching: Left/Right always control tabs
-  if (leftReleased && currentTab == Tab::Files) {
-    currentTab = Tab::Recent;
-    selectorIndex = 0;
-    updateRequired = true;
-    return;
-  }
-  if (rightReleased && currentTab == Tab::Recent) {
-    currentTab = Tab::Files;
-    selectorIndex = 0;
-    updateRequired = true;
-    return;
-  }
+  // Navigation buttons (UP/LEFT and DOWN/RIGHT have same behavior)
+  const bool upPressed = mappedInput.isPressed(MappedInputManager::Button::Up);
+  const bool leftPressed = mappedInput.isPressed(MappedInputManager::Button::Left);
+  const bool downPressed = mappedInput.isPressed(MappedInputManager::Button::Down);
+  const bool rightPressed = mappedInput.isPressed(MappedInputManager::Button::Right);
+  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Up);
+  const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
+  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Down);
+  const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
 
-  // Navigation: Up/Down moves through items only
-  const bool prevReleased = upReleased;
-  const bool nextReleased = downReleased;
+  // Navigation: UP/LEFT move backward, DOWN/RIGHT move forward
+  const bool prevPressed = upPressed || leftPressed;
+  const bool nextPressed = downPressed || rightPressed;
+  const bool prevReleased = upReleased || leftReleased;
+  const bool nextReleased = downReleased || rightReleased;
 
-  if (prevReleased && itemCount > 0) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + itemCount) % itemCount;
-    } else {
-      selectorIndex = (selectorIndex + itemCount - 1) % itemCount;
+  // State machine for button press detection
+  // ==========================================
+
+  // IDLE: Wait for first press
+  if (buttonState == ButtonState::Idle) {
+    if (prevPressed || nextPressed) {
+      buttonState = ButtonState::FirstPress;
+      firstPressTime = currentTime;
+      isPrevButtonPressed = prevPressed;
     }
-    updateRequired = true;
-  } else if (nextReleased && itemCount > 0) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % itemCount;
-    } else {
-      selectorIndex = (selectorIndex + 1) % itemCount;
+  }
+  // FIRST_PRESS: Button is held, check for long press or release
+  else if (buttonState == ButtonState::FirstPress) {
+    const unsigned long holdDuration = currentTime - firstPressTime;
+
+    // Check for long press (>=450ms) - switch tab
+    if (holdDuration >= LONG_PRESS_MS) {
+      executeSwitchTab(isPrevButtonPressed);
+      buttonState = ButtonState::WaitingForReleaseAfterLongPress;
+      updateRequired = true;
+      return;
     }
-    updateRequired = true;
+
+    // Check for release (<450ms) - transition to waiting for second press
+    if ((isPrevButtonPressed && prevReleased) || (!isPrevButtonPressed && nextReleased)) {
+      buttonState = ButtonState::WaitingForSecondPress;
+      firstReleaseTime = currentTime;
+    }
+  }
+  // WAITING_FOR_SECOND_PRESS: First button released, waiting for second press
+  else if (buttonState == ButtonState::WaitingForSecondPress) {
+    const unsigned long waitDuration = currentTime - firstReleaseTime;
+
+    // Timeout (>=120ms without second press) - execute move_item
+    if (waitDuration >= DOUBLE_PRESS_MS) {
+      executeMoveItem(isPrevButtonPressed);
+      buttonState = ButtonState::Idle;
+      updateRequired = true;
+      return;
+    }
+
+    // Second press detected (<120ms) - double press
+    if (prevPressed || nextPressed) {
+      buttonState = ButtonState::DoublePressDetected;
+    }
+  }
+  // DOUBLE_PRESS_DETECTED: Second press detected, wait for release
+  else if (buttonState == ButtonState::DoublePressDetected) {
+    // Wait for second button release
+    if (prevReleased || nextReleased) {
+      executeSkipPage(isPrevButtonPressed);
+      buttonState = ButtonState::Idle;
+      updateRequired = true;
+      return;
+    }
+  }
+  // WAITING_FOR_RELEASE_AFTER_LONG_PRESS: Ignore release after long press
+  else if (buttonState == ButtonState::WaitingForReleaseAfterLongPress) {
+    // Wait for button to be released, then go back to idle
+    if ((isPrevButtonPressed && prevReleased) || (!isPrevButtonPressed && nextReleased)) {
+      buttonState = ButtonState::Idle;
+    }
   }
 }
 

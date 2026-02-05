@@ -22,6 +22,25 @@ class MyLibraryActivity final : public Activity {
   int selectorIndex = 0;
   bool updateRequired = false;
 
+  // State machine for button press detection
+  enum class ButtonState {
+    Idle,
+    FirstPress,
+    WaitingForSecondPress,
+    DoublePressDetected,
+    WaitingForReleaseAfterLongPress
+  };
+
+  ButtonState buttonState = ButtonState::Idle;
+  unsigned long firstPressTime = 0;    // Time of first PRESS
+  unsigned long firstReleaseTime = 0;  // Time of first RELEASE
+  bool isPrevButtonPressed = false;    // Which button was pressed first
+
+  // Action execution functions
+  void executeMoveItem(bool isPrevButton);
+  void executeSkipPage(bool isPrevButton);
+  void executeSwitchTab(bool isPrevButton);
+
   // Recent tab state
   std::vector<RecentBook> recentBooks;
 
