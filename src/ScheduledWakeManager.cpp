@@ -192,8 +192,8 @@ void ScheduledWakeManager::formatTime(time_t t, char* buffer, size_t bufferSize)
 }
 
 const char* ScheduledWakeManager::getDayName(uint8_t dayIndex) {
-  static const char* days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   if (dayIndex < 7) {
+    static const char* const days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
     return days[dayIndex];
   }
   return "???";
