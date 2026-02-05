@@ -49,4 +49,12 @@ static void readString(FsFile& file, std::string& s) {
   s.resize(len);
   file.read(&s[0], len);
 }
+
+static void readString(FsFile& file, char* buffer, size_t maxLen) {
+  uint32_t len;
+  readPod(file, len);
+  const uint32_t bytesToRead = (len < maxLen - 1) ? len : (maxLen - 1);
+  file.read(reinterpret_cast<uint8_t*>(buffer), bytesToRead);
+  buffer[bytesToRead] = '\0';
+}
 }  // namespace serialization
