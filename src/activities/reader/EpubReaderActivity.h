@@ -5,6 +5,7 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include "EpubReaderMenuActivity.h"
 #include "activities/ActivityWithSubactivity.h"
 
 class EpubReaderActivity final : public ActivityWithSubactivity {
@@ -17,6 +18,11 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   int pagesUntilFullRefresh = 0;
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
+  // Signals that the next render should reposition within the newly loaded section
+  // based on a cross-book percentage jump.
+  bool pendingPercentJump = false;
+  // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
+  float pendingSpineProgress = 0.0f;
   bool updateRequired = false;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
@@ -27,6 +33,12 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
+  void saveProgress(int spineIndex, int currentPage, int pageCount);
+  // Jump to a percentage of the book (0-100), mapping it to spine and page.
+  void jumpToPercent(int percent);
+  void onReaderMenuBack(uint8_t orientation);
+  void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  void applyOrientation(uint8_t orientation);
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
