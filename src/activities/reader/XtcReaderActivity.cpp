@@ -22,6 +22,25 @@
 namespace {
 constexpr unsigned long skipPageMs = 700;
 constexpr unsigned long goHomeMs = 1000;
+
+void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
+  switch (orientation) {
+    case CrossPointSettings::ORIENTATION::PORTRAIT:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
+      break;
+    case CrossPointSettings::ORIENTATION::INVERTED:
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+      break;
+    default:
+      break;
+  }
+}
 }  // namespace
 
 void XtcReaderActivity::taskTrampoline(void* param) {
@@ -35,6 +54,9 @@ void XtcReaderActivity::onEnter() {
   if (!xtc) {
     return;
   }
+
+  // Configure screen orientation based on settings
+  applyReaderOrientation(renderer, SETTINGS.orientation);
 
   renderingMutex = xSemaphoreCreateMutex();
 
@@ -61,6 +83,9 @@ void XtcReaderActivity::onEnter() {
 
 void XtcReaderActivity::onExit() {
   ActivityWithSubactivity::onExit();
+
+  // Reset orientation back to portrait for the rest of the UI
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   // Wait until not rendering to delete task
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -111,6 +136,18 @@ void XtcReaderActivity::loop() {
   // Short press BACK goes to file selection
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
     onGoBack();
+    return;
+  }
+
+  const bool powerRotate = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::ROTATE_ORIENTATION &&
+                           mappedInput.wasReleased(MappedInputManager::Button::Power);
+  if (powerRotate) {
+    const uint8_t nextOrientation =
+        static_cast<uint8_t>((SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION::ORIENTATION_COUNT);
+    SETTINGS.orientation = nextOrientation;
+    SETTINGS.saveToFile();
+    applyReaderOrientation(renderer, SETTINGS.orientation);
+    updateRequired = true;
     return;
   }
 
