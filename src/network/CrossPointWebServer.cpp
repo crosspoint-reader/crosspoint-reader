@@ -11,6 +11,7 @@
 
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "util/BookCacheManager.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -111,6 +112,10 @@ void CrossPointWebServer::begin() {
 
   // Delete file/folder endpoint
   server->on("/delete", HTTP_POST, [this] { handleDelete(); });
+
+  // Move and Rename endpoints (stubs)
+  server->on("/move", HTTP_POST, [this] { handleMove(); });
+  server->on("/rename", HTTP_POST, [this] { handleRename(); });
 
   server->onNotFound([this] { handleNotFound(); });
   Serial.printf("[%lu] [WEB] [MEM] Free heap after route setup: %d bytes\n", millis(), ESP.getFreeHeap());
@@ -769,6 +774,89 @@ void CrossPointWebServer::handleDelete() const {
   } else {
     Serial.printf("[%lu] [WEB] Failed to delete: %s\n", millis(), itemPath.c_str());
     server->send(500, "text/plain", "Failed to delete item");
+  }
+}
+
+void CrossPointWebServer::handleMove() const {
+  if (!server->hasArg("oldPath") || !server->hasArg("newPath")) {
+    server->send(400, "text/plain", "Missing oldPath or newPath");
+    return;
+  }
+
+  String oldPath = server->arg("oldPath");
+  String newPath = server->arg("newPath");
+
+  if (oldPath.isEmpty() || newPath.isEmpty() || oldPath == "/" || newPath == "/") {
+    server->send(400, "text/plain", "Invalid paths");
+    return;
+  }
+
+  if (!oldPath.startsWith("/")) oldPath = "/" + oldPath;
+  if (!newPath.startsWith("/")) newPath = "/" + newPath;
+
+  if (!SdMan.exists(oldPath.c_str())) {
+    server->send(404, "text/plain", "Source not found");
+    return;
+  }
+
+  if (SdMan.exists(newPath.c_str())) {
+    server->send(400, "text/plain", "Destination already exists");
+    return;
+  }
+
+  // Migrate cache first (or parts of it if it's a directory)
+  BookCacheManager::migrateCache(oldPath, newPath);
+
+  if (SdMan.rename(oldPath.c_str(), newPath.c_str())) {
+    Serial.printf("[%lu] [WEB] Moved %s to %s\n", millis(), oldPath.c_str(), newPath.c_str());
+    server->send(200, "text/plain", "Moved successfully");
+  } else {
+    server->send(500, "text/plain", "Move failed");
+  }
+}
+
+void CrossPointWebServer::handleRename() const {
+  if (!server->hasArg("oldPath") || !server->hasArg("newPath")) {
+    server->send(400, "text/plain", "Missing oldPath or newPath");
+    return;
+  }
+
+  String oldPath = server->arg("oldPath");
+  String newPath = server->arg("newPath");
+
+  if (oldPath.isEmpty() || newPath.isEmpty() || oldPath == "/" || newPath == "/") {
+    server->send(400, "text/plain", "Invalid paths");
+    return;
+  }
+
+  if (!oldPath.startsWith("/")) oldPath = "/" + oldPath;
+  if (!newPath.startsWith("/")) newPath = "/" + newPath;
+
+  // Security check: prevent renaming system files
+  if (oldPath.substring(oldPath.lastIndexOf('/') + 1).startsWith(".") ||
+      newPath.substring(newPath.lastIndexOf('/') + 1).startsWith(".")) {
+    server->send(403, "text/plain", "Cannot rename system files");
+    return;
+  }
+
+  if (!SdMan.exists(oldPath.c_str())) {
+    server->send(404, "text/plain", "Source not found");
+    return;
+  }
+
+  if (SdMan.exists(newPath.c_str())) {
+    server->send(400, "text/plain", "Destination already exists");
+    return;
+  }
+
+  // Migrate cache
+  BookCacheManager::migrateCache(oldPath, newPath);
+
+  if (SdMan.rename(oldPath.c_str(), newPath.c_str())) {
+    Serial.printf("[%lu] [WEB] Renamed %s to %s\n", millis(), oldPath.c_str(), newPath.c_str());
+    server->send(200, "text/plain", "Renamed successfully");
+  } else {
+    server->send(500, "text/plain", "Rename failed");
   }
 }
 
