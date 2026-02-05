@@ -13,7 +13,7 @@ struct TabInfo {
 
 class ScreenComponents {
  public:
-  static const int BOOK_PROGRESS_BAR_HEIGHT = 4;
+  static int bookProgressBarHeight();
 
   struct PopupLayout {
     int x;
