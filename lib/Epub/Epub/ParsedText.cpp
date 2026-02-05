@@ -21,9 +21,16 @@ constexpr size_t SOFT_HYPHEN_BYTES = 2;
 
 // Known attaching punctuation (including UTF-8 sequences)
 const std::vector<std::string> punctuation = {
-  ".", ",", "!", "?", ";", ":", "\"", "'",
-  "\xE2\x80\x99",  // ’ (U+2019 right single quote)
-  "\xE2\x80\x9D"   // ” (U+201D right double quote)
+    ".",
+    ",",
+    "!",
+    "?",
+    ";",
+    ":",
+    "\"",
+    "'",
+    "\xE2\x80\x99",  // ’ (U+2019 right single quote)
+    "\xE2\x80\x9D"   // ” (U+201D right double quote)
 };
 
 bool isAttachingPunctuationWord(const std::string& word) {
