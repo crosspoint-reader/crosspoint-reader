@@ -31,6 +31,7 @@ HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 Activity* currentActivity;
+unsigned long allowSleepAt = 0;
 
 // Fonts
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
@@ -192,8 +193,9 @@ void waitForPowerRelease() {
 
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout) {
+  bool isOnReaderActivity = currentActivity && currentActivity->name == "Reader";
   exitActivity();
-  enterNewActivity(new SleepActivity(renderer, mappedInputManager, fromTimeout));
+  enterNewActivity(new SleepActivity(renderer, mappedInputManager, fromTimeout, isOnReaderActivity));
 
   display.deepSleep();
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
@@ -318,10 +320,13 @@ void setup() {
   setupDisplayAndFonts();
 
   exitActivity();
-  enterNewActivity(new BootActivity(renderer, mappedInputManager));
 
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
+
+  if (APP_STATE.showBootScreen) {
+    enterNewActivity(new BootActivity(renderer, mappedInputManager));
+  }
 
   if (APP_STATE.openEpubPath.empty()) {
     onGoHome();
@@ -335,6 +340,7 @@ void setup() {
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
+  allowSleepAt = millis() + 2000;
 }
 
 void loop() {
@@ -364,7 +370,8 @@ void loop() {
     return;
   }
 
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+      gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
     enterDeepSleep(false);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;

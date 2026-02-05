@@ -22,7 +22,11 @@ void SleepActivity::onEnter() {
   Activity::onEnter();
   if (SHOW_SLEEP_SCREEN) {
     ScreenComponents::drawPopup(renderer, "Entering Sleep...");
+    APP_STATE.showBootScreen = true;
+    APP_STATE.saveToFile();
   } else {
+    APP_STATE.showBootScreen = !isOnReaderActivity;
+    APP_STATE.saveToFile();
     return renderLastScreenSleepScreen();
   }
 

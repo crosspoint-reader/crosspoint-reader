@@ -20,6 +20,7 @@ bool CrossPointState::saveToFile() const {
   serialization::writePod(outputFile, STATE_FILE_VERSION);
   serialization::writeString(outputFile, openEpubPath);
   serialization::writePod(outputFile, lastSleepImage);
+  serialization::writePod(outputFile, showBootScreen);
   outputFile.close();
   return true;
 }
@@ -41,8 +42,10 @@ bool CrossPointState::loadFromFile() {
   serialization::readString(inputFile, openEpubPath);
   if (version >= 2) {
     serialization::readPod(inputFile, lastSleepImage);
+    serialization::readPod(inputFile, showBootScreen);
   } else {
     lastSleepImage = 0;
+    showBootScreen = true;
   }
 
   inputFile.close();

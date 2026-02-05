@@ -10,11 +10,11 @@ class GfxRenderer;
 
 class Activity {
  protected:
-  std::string name;
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
 
  public:
+  std::string name;
   explicit Activity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)
       : name(std::move(name)), renderer(renderer), mappedInput(mappedInput) {}
   virtual ~Activity() = default;
