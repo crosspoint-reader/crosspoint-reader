@@ -539,7 +539,7 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
 
   if (showChapterProgressBar) {
     // For text mode, treat the entire book as one chapter, so chapter progress == book progress
-    ScreenComponents::drawStatusProgressBar(renderer, static_cast<size_t>(progress));
+    GUI.drawBookProgressBar(renderer, static_cast<size_t>(progress));
   }
 
   if (showBattery) {

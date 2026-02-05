@@ -706,7 +706,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     // Draw chapter progress bar at the very bottom of the screen, from edge to edge of viewable area
     const float chapterProgress =
         (section->pageCount > 0) ? (static_cast<float>(section->currentPage + 1) / section->pageCount) * 100 : 0;
-    ScreenComponents::drawStatusProgressBar(renderer, static_cast<size_t>(chapterProgress));
+    GUI.drawBookProgressBar(renderer, static_cast<size_t>(chapterProgress));
   }
 
   if (showBattery) {
