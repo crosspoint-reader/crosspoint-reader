@@ -1,8 +1,8 @@
 #include "ChapterHtmlSlimParser.h"
 
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
 #include <HalStorage.h>
+#include <HardwareSerial.h>
 #include <expat.h>
 
 #include "../Page.h"

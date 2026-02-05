@@ -1,7 +1,7 @@
 #include "ZipFile.h"
 
-#include <HardwareSerial.h>
 #include <HalStorage.h>
+#include <HardwareSerial.h>
 #include <miniz.h>
 
 #include <algorithm>

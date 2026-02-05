@@ -1,8 +1,8 @@
 #include "KOReaderDocumentId.h"
 
+#include <HalStorage.h>
 #include <HardwareSerial.h>
 #include <MD5Builder.h>
-#include <HalStorage.h>
 
 namespace {
 // Extract filename from path (everything after last '/')

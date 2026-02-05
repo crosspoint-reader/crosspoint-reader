@@ -1,8 +1,8 @@
 #include "KOReaderCredentialStore.h"
 
+#include <HalStorage.h>
 #include <HardwareSerial.h>
 #include <MD5Builder.h>
-#include <HalStorage.h>
 #include <Serialization.h>
 
 // Initialize the static instance

@@ -1,7 +1,7 @@
 #include "RecentBooksStore.h"
 
-#include <HalStorage.h>
 #include <Epub.h>
+#include <HalStorage.h>
 #include <HardwareSerial.h>
 #include <Serialization.h>
 #include <Xtc.h>

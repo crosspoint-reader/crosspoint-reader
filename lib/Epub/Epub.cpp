@@ -1,9 +1,9 @@
 #include "Epub.h"
 
 #include <FsHelpers.h>
+#include <HalStorage.h>
 #include <HardwareSerial.h>
 #include <JpegToBmpConverter.h>
-#include <HalStorage.h>
 #include <ZipFile.h>
 
 #include "Epub/parsers/ContainerParser.h"

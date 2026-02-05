@@ -7,8 +7,8 @@
 
 #include "Xtc.h"
 
-#include <HardwareSerial.h>
 #include <HalStorage.h>
+#include <HardwareSerial.h>
 
 bool Xtc::load() {
   Serial.printf("[%lu] [XTC] Loading XTC: %s\n", millis(), filepath.c_str());

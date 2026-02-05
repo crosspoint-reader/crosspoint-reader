@@ -8,8 +8,8 @@
 #include "XtcParser.h"
 
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
 #include <HalStorage.h>
+#include <HardwareSerial.h>
 
 #include <cstring>
 
