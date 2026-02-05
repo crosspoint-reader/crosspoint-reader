@@ -95,6 +95,25 @@ Connect your Xteink X4 to your computer via USB-C and run the following command.
 ```sh
 pio run --target upload
 ```
+### Debugging
+
+After flashing the new features, it’s recommended to capture detailed logs from the serial port.
+
+First, make sure all required Python packages are installed:
+
+```python
+python3 -m pip install pyserial colorama matplotlib
+```
+after that run the script:
+```sh
+# For Linux
+# This was tested on Debian and should work on most Linux systems.
+python3 scripts/debugging_monitor.py
+
+# For macOS
+python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
+```
+Minor adjustments may be required for Windows.
 
 ## Internals
 

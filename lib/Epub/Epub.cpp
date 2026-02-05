@@ -86,6 +86,10 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
     tocNavItem = opfParser.tocNavPath;
   }
 
+  if (!opfParser.cssFiles.empty()) {
+    cssFiles = opfParser.cssFiles;
+  }
+
   Serial.printf("[%lu] [EBP] Successfully parsed content.opf\n", millis());
   return true;
 }
@@ -204,15 +208,91 @@ bool Epub::parseTocNavFile() const {
   return true;
 }
 
+std::string Epub::getCssRulesCache() const { return cachePath + "/css_rules.cache"; }
+
+bool Epub::loadCssRulesFromCache() const {
+  FsFile cssCacheFile;
+  if (SdMan.openFileForRead("EBP", getCssRulesCache(), cssCacheFile)) {
+    if (cssParser->loadFromCache(cssCacheFile)) {
+      cssCacheFile.close();
+      Serial.printf("[%lu] [EBP] Loaded CSS rules from cache\n", millis());
+      return true;
+    }
+    cssCacheFile.close();
+    Serial.printf("[%lu] [EBP] CSS cache invalid, reparsing\n", millis());
+  }
+  return false;
+}
+
+void Epub::parseCssFiles() const {
+  if (cssFiles.empty()) {
+    Serial.printf("[%lu] [EBP] No CSS files to parse, but CssParser created for inline styles\n", millis());
+  }
+
+  // Try to load from CSS cache first
+  if (!loadCssRulesFromCache()) {
+    // Cache miss - parse CSS files
+    for (const auto& cssPath : cssFiles) {
+      Serial.printf("[%lu] [EBP] Parsing CSS file: %s\n", millis(), cssPath.c_str());
+
+      // Extract CSS file to temp location
+      const auto tmpCssPath = getCachePath() + "/.tmp.css";
+      FsFile tempCssFile;
+      if (!SdMan.openFileForWrite("EBP", tmpCssPath, tempCssFile)) {
+        Serial.printf("[%lu] [EBP] Could not create temp CSS file\n", millis());
+        continue;
+      }
+      if (!readItemContentsToStream(cssPath, tempCssFile, 1024)) {
+        Serial.printf("[%lu] [EBP] Could not read CSS file: %s\n", millis(), cssPath.c_str());
+        tempCssFile.close();
+        SdMan.remove(tmpCssPath.c_str());
+        continue;
+      }
+      tempCssFile.close();
+
+      // Parse the CSS file
+      if (!SdMan.openFileForRead("EBP", tmpCssPath, tempCssFile)) {
+        Serial.printf("[%lu] [EBP] Could not open temp CSS file for reading\n", millis());
+        SdMan.remove(tmpCssPath.c_str());
+        continue;
+      }
+      cssParser->loadFromStream(tempCssFile);
+      tempCssFile.close();
+      SdMan.remove(tmpCssPath.c_str());
+    }
+
+    // Save to cache for next time
+    FsFile cssCacheFile;
+    if (SdMan.openFileForWrite("EBP", getCssRulesCache(), cssCacheFile)) {
+      cssParser->saveToCache(cssCacheFile);
+      cssCacheFile.close();
+    }
+
+    Serial.printf("[%lu] [EBP] Loaded %zu CSS style rules from %zu files\n", millis(), cssParser->ruleCount(),
+                  cssFiles.size());
+  }
+}
+
 // load in the meta data for the epub file
-bool Epub::load(const bool buildIfMissing) {
+bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   Serial.printf("[%lu] [EBP] Loading ePub: %s\n", millis(), filepath.c_str());
 
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  // Always create CssParser - needed for inline style parsing even without CSS files
+  cssParser.reset(new CssParser());
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
+    if (!skipLoadingCss && !loadCssRulesFromCache()) {
+      Serial.printf("[%lu] [EBP] Warning: CSS rules cache not found, attempting to parse CSS files\n", millis());
+      // to get CSS file list
+      if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
+        Serial.printf("[%lu] [EBP] Could not parse content.opf from cached bookMetadata for CSS files\n", millis());
+        // continue anyway - book will work without CSS and we'll still load any inline style CSS
+      }
+      parseCssFiles();
+    }
     Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
     return true;
   }
@@ -307,6 +387,11 @@ bool Epub::load(const bool buildIfMissing) {
   if (!bookMetadataCache->load()) {
     Serial.printf("[%lu] [EBP] Failed to reload cache after writing\n", millis());
     return false;
+  }
+
+  if (!skipLoadingCss) {
+    // Parse CSS files after cache reload
+    parseCssFiles();
   }
 
   Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
@@ -428,11 +513,12 @@ bool Epub::generateCoverBmp(bool cropped) const {
   return false;
 }
 
-std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
+std::string Epub::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
 
-bool Epub::generateThumbBmp() const {
+bool Epub::generateThumbBmp(int height) const {
   // Already generated, return true
-  if (SdMan.exists(getThumbBmpPath().c_str())) {
+  if (SdMan.exists(getThumbBmpPath(height).c_str())) {
     return true;
   }
 
@@ -444,11 +530,8 @@ bool Epub::generateThumbBmp() const {
   const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
   if (coverImageHref.empty()) {
     Serial.printf("[%lu] [EBP] No known cover image for thumbnail\n", millis());
-    return false;
-  }
-
-  if (coverImageHref.substr(coverImageHref.length() - 4) == ".jpg" ||
-      coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
+  } else if (coverImageHref.substr(coverImageHref.length() - 4) == ".jpg" ||
+             coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
     Serial.printf("[%lu] [EBP] Generating thumb BMP from JPG cover image\n", millis());
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
@@ -464,14 +547,14 @@ bool Epub::generateThumbBmp() const {
     }
 
     FsFile thumbBmp;
-    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(), thumbBmp)) {
+    if (!SdMan.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
       coverJpg.close();
       return false;
     }
     // Use smaller target size for Continue Reading card (half of screen: 240x400)
     // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-    constexpr int THUMB_TARGET_WIDTH = 240;
-    constexpr int THUMB_TARGET_HEIGHT = 400;
+    int THUMB_TARGET_WIDTH = height * 0.6;
+    int THUMB_TARGET_HEIGHT = height;
     const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
                                                                              THUMB_TARGET_HEIGHT);
     coverJpg.close();
@@ -480,7 +563,7 @@ bool Epub::generateThumbBmp() const {
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
-      SdMan.remove(getThumbBmpPath().c_str());
+      SdMan.remove(getThumbBmpPath(height).c_str());
     }
     Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
                   success ? "yes" : "no");
@@ -489,6 +572,10 @@ bool Epub::generateThumbBmp() const {
     Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping thumbnail\n", millis());
   }
 
+  // Write an empty bmp file to avoid generation attempts in the future
+  FsFile thumbBmp;
+  SdMan.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp);
+  thumbBmp.close();
   return false;
 }
 

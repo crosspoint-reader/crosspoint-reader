@@ -20,10 +20,12 @@
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
 #include "activities/home/MyLibraryActivity.h"
+#include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 HalDisplay display;
@@ -203,13 +205,13 @@ void enterDeepSleep() {
 }
 
 void onGoHome();
-void onGoToMyLibraryWithTab(const std::string& path, MyLibraryActivity::Tab tab);
-void onGoToReader(const std::string& initialEpubPath, MyLibraryActivity::Tab fromTab) {
+void onGoToMyLibraryWithPath(const std::string& path);
+void onGoToRecentBooks();
+void onGoToReader(const std::string& initialEpubPath) {
   exitActivity();
   enterNewActivity(
-      new ReaderActivity(renderer, mappedInputManager, initialEpubPath, fromTab, onGoHome, onGoToMyLibraryWithTab));
+      new ReaderActivity(renderer, mappedInputManager, initialEpubPath, onGoHome, onGoToMyLibraryWithPath));
 }
-void onContinueReading() { onGoToReader(APP_STATE.openEpubPath, MyLibraryActivity::Tab::Recent); }
 
 void onGoToFileTransfer() {
   exitActivity();
@@ -226,9 +228,14 @@ void onGoToMyLibrary() {
   enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
 }
 
-void onGoToMyLibraryWithTab(const std::string& path, MyLibraryActivity::Tab tab) {
+void onGoToRecentBooks() {
   exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, tab, path));
+  enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+}
+
+void onGoToMyLibraryWithPath(const std::string& path) {
+  exitActivity();
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, path));
 }
 
 void onGoToBrowser() {
@@ -238,8 +245,8 @@ void onGoToBrowser() {
 
 void onGoHome() {
   exitActivity();
-  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToMyLibrary, onGoToSettings,
-                                    onGoToFileTransfer, onGoToBrowser));
+  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
+                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {
@@ -293,11 +300,24 @@ void setup() {
 
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
+  UITheme::getInstance().reload();
 
-  if (gpio.isWakeupByPowerButton()) {
-    // For normal wakeups, verify power button press duration
-    Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
-    verifyPowerButtonDuration();
+  switch (gpio.getWakeupReason()) {
+    case HalGPIO::WakeupReason::PowerButton:
+      // For normal wakeups, verify power button press duration
+      Serial.printf("[%lu] [   ] Verifying power button press duration\n", millis());
+      verifyPowerButtonDuration();
+      break;
+    case HalGPIO::WakeupReason::AfterUSBPower:
+      // If USB power caused a cold boot, go back to sleep
+      Serial.printf("[%lu] [   ] Wakeup reason: After USB Power\n", millis());
+      gpio.startDeepSleep();
+      break;
+    case HalGPIO::WakeupReason::AfterFlash:
+      // After flashing, just proceed to boot
+    case HalGPIO::WakeupReason::Other:
+    default:
+      break;
   }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
@@ -317,9 +337,8 @@ void setup() {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
     APP_STATE.openEpubPath = "";
-    APP_STATE.lastSleepImage = 0;
     APP_STATE.saveToFile();
-    onGoToReader(path, MyLibraryActivity::Tab::Recent);
+    onGoToReader(path);
   }
 
   // Ensure we're not still holding the power button before leaving setup
