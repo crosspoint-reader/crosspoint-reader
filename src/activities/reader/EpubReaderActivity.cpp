@@ -21,33 +21,20 @@ constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
 
-}  // namespace
-
-// Clamp any percent-like value into the valid 0-100 range.
-static int clampPercent(const int value) {
-  if (value < 0) {
+int clampPercent(int percent) {
+  if (percent < 0) {
     return 0;
   }
-  if (value > 100) {
+  if (percent > 100) {
     return 100;
   }
-  return value;
+  return percent;
 }
 
-void EpubReaderActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderActivity*>(param);
-  self->displayTaskLoop();
-}
-
-void EpubReaderActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
-
-  if (!epub) {
-    return;
-  }
-
-  // Configure screen orientation based on settings
-  switch (SETTINGS.orientation) {
+// Apply the logical reader orientation to the renderer.
+// This centralizes orientation mapping so we don't duplicate switch logic elsewhere.
+void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
+  switch (orientation) {
     case CrossPointSettings::ORIENTATION::PORTRAIT:
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
       break;
@@ -63,6 +50,25 @@ void EpubReaderActivity::onEnter() {
     default:
       break;
   }
+}
+
+}  // namespace
+
+void EpubReaderActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<EpubReaderActivity*>(param);
+  self->displayTaskLoop();
+}
+
+void EpubReaderActivity::onEnter() {
+  ActivityWithSubactivity::onEnter();
+
+  if (!epub) {
+    return;
+  }
+
+  // Configure screen orientation based on settings
+  // NOTE: This affects layout math and must be applied before any render calls.
+  applyReaderOrientation(renderer, SETTINGS.orientation);
 
   renderingMutex = xSemaphoreCreateMutex();
 
@@ -124,6 +130,8 @@ void EpubReaderActivity::onExit() {
   }
   vSemaphoreDelete(renderingMutex);
   renderingMutex = nullptr;
+  APP_STATE.readerActivityLoadCount = 0;
+  APP_STATE.saveToFile();
   section.reset();
   epub.reset();
 }
@@ -149,9 +157,10 @@ void EpubReaderActivity::loop() {
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
-        this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-        [this]() { onReaderMenuBack(); },
-        [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
+      this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
+      SETTINGS.orientation,
+      [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
+      [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
 
@@ -239,8 +248,11 @@ void EpubReaderActivity::loop() {
   }
 }
 
-void EpubReaderActivity::onReaderMenuBack() {
+void EpubReaderActivity::onReaderMenuBack(const uint8_t orientation) {
   exitActivity();
+  // Apply the user-selected orientation when the menu is dismissed.
+  // This ensures the menu can be navigated without immediately rotating the screen.
+  applyOrientation(orientation);
   updateRequired = true;
 }
 
@@ -408,6 +420,32 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
   }
+}
+
+void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
+  // No-op if the selected orientation matches current settings.
+  if (SETTINGS.orientation == orientation) {
+    return;
+  }
+
+  // Preserve current reading position so we can restore after reflow.
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  if (section) {
+    cachedSpineIndex = currentSpineIndex;
+    cachedChapterTotalPageCount = section->pageCount;
+    nextPageNumber = section->currentPage;
+  }
+
+  // Persist the selection so the reader keeps the new orientation on next launch.
+  SETTINGS.orientation = orientation;
+  SETTINGS.saveToFile();
+
+  // Update renderer orientation to match the new logical coordinate system.
+  applyReaderOrientation(renderer, SETTINGS.orientation);
+
+  // Reset section to force re-layout in the new orientation.
+  section.reset();
+  xSemaphoreGive(renderingMutex);
 }
 
 void EpubReaderActivity::displayTaskLoop() {

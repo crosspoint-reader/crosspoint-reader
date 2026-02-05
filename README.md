@@ -45,6 +45,8 @@ Multi-language support: Read EPUBs in various languages, including English, Span
 
 See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint. 
 
+For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
+
 ## Installing
 
 ### Web (latest firmware)
@@ -58,7 +60,7 @@ back to the other partition using the "Swap boot partition" button here https://
 ### Web (specific firmware version)
 
 1. Connect your Xteink X4 to your computer via USB-C
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/daveallie/crosspoint-reader/releases)
+2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
 3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
 
 To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
@@ -82,7 +84,7 @@ See [Development](#development) below.
 CrossPoint uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
 
 ```
-git clone --recursive https://github.com/daveallie/crosspoint-reader
+git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
 
 # Or, if you've already cloned without --recursive:
 git submodule update --init --recursive
@@ -152,8 +154,11 @@ For more details on the internal file structures, see the [file formats document
 
 Contributions are very welcome!
 
-If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/daveallie/crosspoint-reader/discussions/categories/ideas).
+If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
 If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
+
+Everyone here is a volunteer, so please be respectful and patient. For more details on our goverance and community 
+principles, please see [GOVERNANCE.md](GOVERNANCE.md).
 
 ### To submit a contribution:
 
