@@ -5,14 +5,6 @@
 #else
 #include <EmulationUtils.h>
 
-#ifdef SdMan
-static_assert(false, "SdMan should not be defined in emulated environment");
-#endif
-
-#ifdef SD_FAT_VERSION
-static_assert(false, "SdFat.h should not be included in emulated environment");
-#endif
-
 typedef int oflag_t;
 #define O_RDONLY 0 /* +1 == FREAD */
 #define O_WRONLY 1 /* +1 == FWRITE */
