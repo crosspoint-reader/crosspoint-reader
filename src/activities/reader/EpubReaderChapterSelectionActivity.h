@@ -26,22 +26,12 @@ class EpubReaderChapterSelectionActivity final : public ActivityWithSubactivity 
   // This adapts automatically when switching between portrait and landscape.
   int getPageItems() const;
 
-  // Total items including sync options (top and bottom)
+  // Total TOC items count
   int getTotalItems() const;
-
-  // Check if sync option is available (credentials configured)
-  bool hasSyncOption() const;
-
-  // Check if given item index is a sync option (first or last)
-  bool isSyncItem(int index) const;
-
-  // Convert item index to TOC index (accounting for top sync option offset)
-  int tocIndexFromItemIndex(int itemIndex) const;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void renderScreen();
-  void launchSyncActivity();
 
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

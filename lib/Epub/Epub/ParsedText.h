@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "blocks/BlockStyle.h"
 #include "blocks/TextBlock.h"
 
 class GfxRenderer;
@@ -15,7 +16,7 @@ class GfxRenderer;
 class ParsedText {
   std::list<std::string> words;
   std::list<EpdFontFamily::Style> wordStyles;
-  TextBlock::Style style;
+  BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
 
@@ -32,14 +33,14 @@ class ParsedText {
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
-  explicit ParsedText(const TextBlock::Style style, const bool extraParagraphSpacing,
-                      const bool hyphenationEnabled = false)
-      : style(style), extraParagraphSpacing(extraParagraphSpacing), hyphenationEnabled(hyphenationEnabled) {}
+  explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
+                      const BlockStyle& blockStyle = BlockStyle())
+      : blockStyle(blockStyle), extraParagraphSpacing(extraParagraphSpacing), hyphenationEnabled(hyphenationEnabled) {}
   ~ParsedText() = default;
 
-  void addWord(std::string word, EpdFontFamily::Style fontStyle);
-  void setStyle(const TextBlock::Style style) { this->style = style; }
-  TextBlock::Style getStyle() const { return style; }
+  void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false);
+  void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
+  BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
