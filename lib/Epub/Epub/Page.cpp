@@ -72,13 +72,12 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
 std::string Page::getPlainText() const {
   std::string result;
   for (const auto& element : elements) {
-    auto* pageLine = dynamic_cast<PageLine*>(element.get());
-    if (pageLine) {
-      if (!result.empty()) {
-        result += '\n';
-      }
-      result += pageLine->getBlock().getPlainText();
+    // Only PageLine exists currently (see Page::serialize)
+    auto* pageLine = static_cast<PageLine*>(element.get());
+    if (!result.empty()) {
+      result += '\n';
     }
+    result += pageLine->getBlock().getPlainText();
   }
   return result;
 }
