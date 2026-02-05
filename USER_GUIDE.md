@@ -13,12 +13,14 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [3.2 Book Selection](#32-book-selection)
     - [3.3 Reading Mode](#33-reading-mode)
     - [3.4 File Upload Screen](#34-file-upload-screen)
+    - [3.4.1 Calibre Wireless Transfers](#341-calibre-wireless-transfers)
     - [3.5 Settings](#35-settings)
     - [3.6 Sleep Screen](#36-sleep-screen)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
     - [System Navigation](#system-navigation)
+    - [Supported Languages](#supported-languages)
   - [5. Chapter Selection Screen](#5-chapter-selection-screen)
   - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
   - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
@@ -114,7 +116,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
-  - "Full" - Show status bar with reading progress
+  - "Full w/ Percentage" - Show status bar with book progress (as percentage)
+  - "Full w/ Book Bar" - Show status bar with book progress (as bar)
+  - "Book Bar Only" - Show book progress (as bar)
+  - "Full w/ Chapter Bar" - Show status bar with chapter progress (as bar)
 - **Hide Battery %**: Configure where to suppress the battery pecentage display in the status bar; the battery icon will still be shown:
   - "Never" - Always show battery percentage (default)
   - "In Reader" - Show battery percentage everywhere except in reading mode
