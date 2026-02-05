@@ -86,6 +86,10 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
     tocNavItem = opfParser.tocNavPath;
   }
 
+  if (!opfParser.cssFiles.empty()) {
+    cssFiles = opfParser.cssFiles;
+  }
+
   Serial.printf("[%lu] [EBP] Successfully parsed content.opf\n", millis());
   return true;
 }
@@ -204,15 +208,91 @@ bool Epub::parseTocNavFile() const {
   return true;
 }
 
+std::string Epub::getCssRulesCache() const { return cachePath + "/css_rules.cache"; }
+
+bool Epub::loadCssRulesFromCache() const {
+  FsFile cssCacheFile;
+  if (SdMan.openFileForRead("EBP", getCssRulesCache(), cssCacheFile)) {
+    if (cssParser->loadFromCache(cssCacheFile)) {
+      cssCacheFile.close();
+      Serial.printf("[%lu] [EBP] Loaded CSS rules from cache\n", millis());
+      return true;
+    }
+    cssCacheFile.close();
+    Serial.printf("[%lu] [EBP] CSS cache invalid, reparsing\n", millis());
+  }
+  return false;
+}
+
+void Epub::parseCssFiles() const {
+  if (cssFiles.empty()) {
+    Serial.printf("[%lu] [EBP] No CSS files to parse, but CssParser created for inline styles\n", millis());
+  }
+
+  // Try to load from CSS cache first
+  if (!loadCssRulesFromCache()) {
+    // Cache miss - parse CSS files
+    for (const auto& cssPath : cssFiles) {
+      Serial.printf("[%lu] [EBP] Parsing CSS file: %s\n", millis(), cssPath.c_str());
+
+      // Extract CSS file to temp location
+      const auto tmpCssPath = getCachePath() + "/.tmp.css";
+      FsFile tempCssFile;
+      if (!SdMan.openFileForWrite("EBP", tmpCssPath, tempCssFile)) {
+        Serial.printf("[%lu] [EBP] Could not create temp CSS file\n", millis());
+        continue;
+      }
+      if (!readItemContentsToStream(cssPath, tempCssFile, 1024)) {
+        Serial.printf("[%lu] [EBP] Could not read CSS file: %s\n", millis(), cssPath.c_str());
+        tempCssFile.close();
+        SdMan.remove(tmpCssPath.c_str());
+        continue;
+      }
+      tempCssFile.close();
+
+      // Parse the CSS file
+      if (!SdMan.openFileForRead("EBP", tmpCssPath, tempCssFile)) {
+        Serial.printf("[%lu] [EBP] Could not open temp CSS file for reading\n", millis());
+        SdMan.remove(tmpCssPath.c_str());
+        continue;
+      }
+      cssParser->loadFromStream(tempCssFile);
+      tempCssFile.close();
+      SdMan.remove(tmpCssPath.c_str());
+    }
+
+    // Save to cache for next time
+    FsFile cssCacheFile;
+    if (SdMan.openFileForWrite("EBP", getCssRulesCache(), cssCacheFile)) {
+      cssParser->saveToCache(cssCacheFile);
+      cssCacheFile.close();
+    }
+
+    Serial.printf("[%lu] [EBP] Loaded %zu CSS style rules from %zu files\n", millis(), cssParser->ruleCount(),
+                  cssFiles.size());
+  }
+}
+
 // load in the meta data for the epub file
-bool Epub::load(const bool buildIfMissing) {
+bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   Serial.printf("[%lu] [EBP] Loading ePub: %s\n", millis(), filepath.c_str());
 
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  // Always create CssParser - needed for inline style parsing even without CSS files
+  cssParser.reset(new CssParser());
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
+    if (!skipLoadingCss && !loadCssRulesFromCache()) {
+      Serial.printf("[%lu] [EBP] Warning: CSS rules cache not found, attempting to parse CSS files\n", millis());
+      // to get CSS file list
+      if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
+        Serial.printf("[%lu] [EBP] Could not parse content.opf from cached bookMetadata for CSS files\n", millis());
+        // continue anyway - book will work without CSS and we'll still load any inline style CSS
+      }
+      parseCssFiles();
+    }
     Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
     return true;
   }
@@ -307,6 +387,11 @@ bool Epub::load(const bool buildIfMissing) {
   if (!bookMetadataCache->load()) {
     Serial.printf("[%lu] [EBP] Failed to reload cache after writing\n", millis());
     return false;
+  }
+
+  if (!skipLoadingCss) {
+    // Parse CSS files after cache reload
+    parseCssFiles();
   }
 
   Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());

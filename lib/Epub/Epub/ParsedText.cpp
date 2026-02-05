@@ -49,11 +49,15 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 
 }  // namespace
 
-void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle) {
+void ParsedText::addWord(std::string word, const EpdFontFamily::Style style, const bool underline) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
-  wordStyles.push_back(fontStyle);
+  EpdFontFamily::Style combinedStyle = style;
+  if (underline) {
+    combinedStyle = static_cast<EpdFontFamily::Style>(combinedStyle | EpdFontFamily::UNDERLINE);
+  }
+  wordStyles.push_back(combinedStyle);
 }
 
 // Consumes data to minimize memory usage
@@ -109,10 +113,19 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     return {};
   }
 
+  // Calculate first line indent (only for left/justified text without extra paragraph spacing)
+  const int firstLineIndent =
+      blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+          ? blockStyle.textIndent
+          : 0;
+
   // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
   for (size_t i = 0; i < wordWidths.size(); ++i) {
-    while (wordWidths[i] > pageWidth) {
-      if (!hyphenateWordAtIndex(i, pageWidth, renderer, fontId, wordWidths, /*allowFallbackBreaks=*/true)) {
+    // First word needs to fit in reduced width if there's an indent
+    const int effectiveWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
+    while (wordWidths[i] > effectiveWidth) {
+      if (!hyphenateWordAtIndex(i, effectiveWidth, renderer, fontId, wordWidths, /*allowFallbackBreaks=*/true)) {
         break;
       }
     }
@@ -133,11 +146,14 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     int currlen = -spaceWidth;
     dp[i] = MAX_COST;
 
+    // First line has reduced width due to text-indent
+    const int effectivePageWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
+
     for (size_t j = i; j < totalWordCount; ++j) {
       // Current line length: previous width + space + current word width
       currlen += wordWidths[j] + spaceWidth;
 
-      if (currlen > pageWidth) {
+      if (currlen > effectivePageWidth) {
         break;
       }
 
@@ -145,7 +161,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
       if (j == totalWordCount - 1) {
         cost = 0;  // Last line
       } else {
-        const int remainingSpace = pageWidth - currlen;
+        const int remainingSpace = effectivePageWidth - currlen;
         // Use long long for the square to prevent overflow
         const long long cost_ll = static_cast<long long>(remainingSpace) * remainingSpace + dp[j + 1];
 
@@ -200,7 +216,11 @@ void ParsedText::applyParagraphIndent() {
     return;
   }
 
-  if (style == TextBlock::JUSTIFIED || style == TextBlock::LEFT_ALIGN) {
+  if (blockStyle.textIndentDefined) {
+    // CSS text-indent is explicitly set (even if 0) - don't use fallback EmSpace
+    // The actual indent positioning is handled in extractLine()
+  } else if (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left) {
+    // No CSS text-indent defined - use EmSpace fallback for visual indent
     words.front().insert(0, "\xe2\x80\x83");
   }
 }
@@ -209,12 +229,23 @@ void ParsedText::applyParagraphIndent() {
 std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const int fontId,
                                                             const int pageWidth, const int spaceWidth,
                                                             std::vector<uint16_t>& wordWidths) {
+  // Calculate first line indent (only for left/justified text without extra paragraph spacing)
+  const int firstLineIndent =
+      blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+          ? blockStyle.textIndent
+          : 0;
+
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
+  bool isFirstLine = true;
 
   while (currentIndex < wordWidths.size()) {
     const size_t lineStart = currentIndex;
     int lineWidth = 0;
+
+    // First line has reduced width due to text-indent
+    const int effectivePageWidth = isFirstLine ? pageWidth - firstLineIndent : pageWidth;
 
     // Consume as many words as possible for current line, splitting when prefixes fit
     while (currentIndex < wordWidths.size()) {
@@ -223,14 +254,14 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
       // Word fits on current line
-      if (lineWidth + candidateWidth <= pageWidth) {
+      if (lineWidth + candidateWidth <= effectivePageWidth) {
         lineWidth += candidateWidth;
         ++currentIndex;
         continue;
       }
 
       // Word would overflow — try to split based on hyphenation points
-      const int availableWidth = pageWidth - lineWidth - spacing;
+      const int availableWidth = effectivePageWidth - lineWidth - spacing;
       const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
 
       if (availableWidth > 0 &&
@@ -250,6 +281,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
     }
 
     lineBreakIndices.push_back(currentIndex);
+    isFirstLine = false;
   }
 
   return lineBreakIndices;
@@ -334,27 +366,36 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
+  // Calculate first line indent (only for left/justified text without extra paragraph spacing)
+  const bool isFirstLine = breakIndex == 0;
+  const int firstLineIndent =
+      isFirstLine && blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+          ? blockStyle.textIndent
+          : 0;
+
   // Calculate total word width for this line
   int lineWordWidthSum = 0;
   for (size_t i = lastBreakAt; i < lineBreak; i++) {
     lineWordWidthSum += wordWidths[i];
   }
 
-  // Calculate spacing
-  const int spareSpace = pageWidth - lineWordWidthSum;
+  // Calculate spacing (account for indent reducing effective page width on first line)
+  const int effectivePageWidth = pageWidth - firstLineIndent;
+  const int spareSpace = effectivePageWidth - lineWordWidthSum;
 
   int spacing = spaceWidth;
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
 
-  if (style == TextBlock::JUSTIFIED && !isLastLine && lineWordCount >= 2) {
+  if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && lineWordCount >= 2) {
     spacing = spareSpace / (lineWordCount - 1);
   }
 
-  // Calculate initial x position
-  uint16_t xpos = 0;
-  if (style == TextBlock::RIGHT_ALIGN) {
+  // Calculate initial x position (first line starts at indent for left/justified text)
+  auto xpos = static_cast<uint16_t>(firstLineIndent);
+  if (blockStyle.alignment == CssTextAlign::Right) {
     xpos = spareSpace - (lineWordCount - 1) * spaceWidth;
-  } else if (style == TextBlock::CENTER_ALIGN) {
+  } else if (blockStyle.alignment == CssTextAlign::Center) {
     xpos = (spareSpace - (lineWordCount - 1) * spaceWidth) / 2;
   }
 
@@ -384,5 +425,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), style));
+  processLine(
+      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle));
 }

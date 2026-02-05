@@ -70,7 +70,8 @@ void HomeActivity::loadRecentBooks(int maxBooks, int coverHeight) {
         // If epub, try to load the metadata for title/author and cover
         if (StringUtils::checkFileExtension(lastBookFileName, ".epub")) {
           Epub epub(book.path, "/.crosspoint");
-          epub.load(false);
+          // Skip loading css since we only need metadata here
+          epub.load(false, true);
 
           // Try to generate thumbnail image for Continue Reading card
           if (!showingLoading) {
