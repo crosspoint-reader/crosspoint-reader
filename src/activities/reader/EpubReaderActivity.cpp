@@ -76,7 +76,7 @@ void EpubReaderActivity::onEnter() {
 
   epub->setupCacheDir();
 
-  File f;
+  FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
     int dataSize = f.read(data, 6);

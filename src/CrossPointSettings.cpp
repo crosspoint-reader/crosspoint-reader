@@ -11,7 +11,7 @@
 // Initialize the static instance
 CrossPointSettings CrossPointSettings::instance;
 
-void readAndValidate(File& file, uint8_t& member, const uint8_t maxValue) {
+void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
   uint8_t tempValue;
   serialization::readPod(file, tempValue);
   if (tempValue < maxValue) {
@@ -81,7 +81,7 @@ bool CrossPointSettings::saveToFile() const {
   // Make sure the directory exists
   Storage.mkdir("/.crosspoint");
 
-  File outputFile;
+  FsFile outputFile;
   if (!Storage.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
     return false;
   }
@@ -125,7 +125,7 @@ bool CrossPointSettings::saveToFile() const {
 }
 
 bool CrossPointSettings::loadFromFile() {
-  File inputFile;
+  FsFile inputFile;
   if (!Storage.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
     return false;
   }

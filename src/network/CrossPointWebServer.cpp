@@ -25,7 +25,7 @@ constexpr uint16_t LOCAL_UDP_PORT = 8134;
 CrossPointWebServer* wsInstance = nullptr;
 
 // WebSocket upload state
-File wsUploadFile;
+FsFile wsUploadFile;
 String wsUploadFileName;
 String wsUploadPath;
 size_t wsUploadSize = 0;
@@ -316,7 +316,7 @@ void CrossPointWebServer::handleStatus() const {
 }
 
 void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
-  File root = Storage.open(path);
+  FsFile root = Storage.open(path);
   if (!root) {
     Serial.printf("[%lu] [WEB] Failed to open directory: %s\n", millis(), path);
     return;
@@ -330,7 +330,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
   Serial.printf("[%lu] [WEB] Scanning files in: %s\n", millis(), path);
 
-  File file = root.openNextFile();
+  FsFile file = root.openNextFile();
   char name[500];
   while (file) {
     file.getName(name, sizeof(name));
@@ -463,7 +463,7 @@ void CrossPointWebServer::handleDownload() const {
     return;
   }
 
-  File file = Storage.open(itemPath.c_str());
+  FsFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -954,10 +954,10 @@ void CrossPointWebServer::handleDelete() const {
 
   if (itemType == "folder") {
     // For folders, try to remove (will fail if not empty)
-    File dir = Storage.open(itemPath.c_str());
+    FsFile dir = Storage.open(itemPath.c_str());
     if (dir && dir.isDirectory()) {
       // Check if folder is empty
-      File entry = dir.openNextFile();
+      FsFile entry = dir.openNextFile();
       if (entry) {
         // Folder is not empty
         entry.close();

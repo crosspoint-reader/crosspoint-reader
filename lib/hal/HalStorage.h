@@ -4,8 +4,6 @@
 
 #include <vector>
 
-using File = FsFile;
-
 class HalStorage {
  public:
   HalStorage();
@@ -26,18 +24,18 @@ class HalStorage {
   // Ensure a directory exists, creating it if necessary. Returns true on success.
   bool ensureDirectoryExists(const char* path);
 
-  File open(const char* path, const oflag_t oflag = O_RDONLY);
+  FsFile open(const char* path, const oflag_t oflag = O_RDONLY);
   bool mkdir(const char* path, const bool pFlag = true);
   bool exists(const char* path);
   bool remove(const char* path);
   bool rmdir(const char* path);
 
-  bool openFileForRead(const char* moduleName, const char* path, File& file);
-  bool openFileForRead(const char* moduleName, const std::string& path, File& file);
-  bool openFileForRead(const char* moduleName, const String& path, File& file);
-  bool openFileForWrite(const char* moduleName, const char* path, File& file);
-  bool openFileForWrite(const char* moduleName, const std::string& path, File& file);
-  bool openFileForWrite(const char* moduleName, const String& path, File& file);
+  bool openFileForRead(const char* moduleName, const char* path, FsFile& file);
+  bool openFileForRead(const char* moduleName, const std::string& path, FsFile& file);
+  bool openFileForRead(const char* moduleName, const String& path, FsFile& file);
+  bool openFileForWrite(const char* moduleName, const char* path, FsFile& file);
+  bool openFileForWrite(const char* moduleName, const std::string& path, FsFile& file);
+  bool openFileForWrite(const char* moduleName, const String& path, FsFile& file);
   bool removeDir(const char* path);
 
   static HalStorage& getInstance() { return instance; }

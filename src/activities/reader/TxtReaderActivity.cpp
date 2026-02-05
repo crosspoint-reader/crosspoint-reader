@@ -564,7 +564,7 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
 }
 
 void TxtReaderActivity::saveProgress() const {
-  File f;
+  FsFile f;
   if (Storage.openFileForWrite("TRS", txt->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     data[0] = currentPage & 0xFF;
@@ -577,7 +577,7 @@ void TxtReaderActivity::saveProgress() const {
 }
 
 void TxtReaderActivity::loadProgress() {
-  File f;
+  FsFile f;
   if (Storage.openFileForRead("TRS", txt->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
@@ -608,7 +608,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   // - N * uint32_t: page offsets
 
   std::string cachePath = txt->getCachePath() + "/index.bin";
-  File f;
+  FsFile f;
   if (!Storage.openFileForRead("TRS", cachePath, f)) {
     Serial.printf("[%lu] [TRS] No page index cache found\n", millis());
     return false;
@@ -700,7 +700,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
 
 void TxtReaderActivity::savePageIndexCache() const {
   std::string cachePath = txt->getCachePath() + "/index.bin";
-  File f;
+  FsFile f;
   if (!Storage.openFileForWrite("TRS", cachePath, f)) {
     Serial.printf("[%lu] [TRS] Failed to save page index cache\n", millis());
     return;

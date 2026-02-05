@@ -42,7 +42,7 @@ bool RecentBooksStore::saveToFile() const {
   // Make sure the directory exists
   Storage.mkdir("/.crosspoint");
 
-  File outputFile;
+  FsFile outputFile;
   if (!Storage.openFileForWrite("RBS", RECENT_BOOKS_FILE, outputFile)) {
     return false;
   }
@@ -92,7 +92,7 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
 }
 
 bool RecentBooksStore::loadFromFile() {
-  File inputFile;
+  FsFile inputFile;
   if (!Storage.openFileForRead("RBS", RECENT_BOOKS_FILE, inputFile)) {
     return false;
   }

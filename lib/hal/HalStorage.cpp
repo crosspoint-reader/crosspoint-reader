@@ -28,7 +28,7 @@ bool HalStorage::writeFile(const char* path, const String& content) { return SDC
 
 bool HalStorage::ensureDirectoryExists(const char* path) { return SDCard.ensureDirectoryExists(path); }
 
-File HalStorage::open(const char* path, const oflag_t oflag) { return SDCard.open(path, oflag); }
+FsFile HalStorage::open(const char* path, const oflag_t oflag) { return SDCard.open(path, oflag); }
 
 bool HalStorage::mkdir(const char* path, const bool pFlag) { return SDCard.mkdir(path, pFlag); }
 
@@ -38,27 +38,27 @@ bool HalStorage::remove(const char* path) { return SDCard.remove(path); }
 
 bool HalStorage::rmdir(const char* path) { return SDCard.rmdir(path); }
 
-bool HalStorage::openFileForRead(const char* moduleName, const char* path, File& file) {
+bool HalStorage::openFileForRead(const char* moduleName, const char* path, FsFile& file) {
   return SDCard.openFileForRead(moduleName, path, file);
 }
 
-bool HalStorage::openFileForRead(const char* moduleName, const std::string& path, File& file) {
+bool HalStorage::openFileForRead(const char* moduleName, const std::string& path, FsFile& file) {
   return openFileForRead(moduleName, path.c_str(), file);
 }
 
-bool HalStorage::openFileForRead(const char* moduleName, const String& path, File& file) {
+bool HalStorage::openFileForRead(const char* moduleName, const String& path, FsFile& file) {
   return openFileForRead(moduleName, path.c_str(), file);
 }
 
-bool HalStorage::openFileForWrite(const char* moduleName, const char* path, File& file) {
+bool HalStorage::openFileForWrite(const char* moduleName, const char* path, FsFile& file) {
   return SDCard.openFileForWrite(moduleName, path, file);
 }
 
-bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, File& file) {
+bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, FsFile& file) {
   return openFileForWrite(moduleName, path.c_str(), file);
 }
 
-bool HalStorage::openFileForWrite(const char* moduleName, const String& path, File& file) {
+bool HalStorage::openFileForWrite(const char* moduleName, const String& path, FsFile& file) {
   return openFileForWrite(moduleName, path.c_str(), file);
 }
 

@@ -31,7 +31,7 @@ bool WifiCredentialStore::saveToFile() const {
   // Make sure the directory exists
   Storage.mkdir("/.crosspoint");
 
-  File file;
+  FsFile file;
   if (!Storage.openFileForWrite("WCS", WIFI_FILE, file)) {
     return false;
   }
@@ -59,7 +59,7 @@ bool WifiCredentialStore::saveToFile() const {
 }
 
 bool WifiCredentialStore::loadFromFile() {
-  File file;
+  FsFile file;
   if (!Storage.openFileForRead("WCS", WIFI_FILE, file)) {
     return false;
   }

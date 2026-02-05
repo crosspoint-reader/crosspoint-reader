@@ -105,7 +105,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   }
 
   // Open file for writing
-  File file;
+  FsFile file;
   if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
     Serial.printf("[%lu] [HTTP] Failed to open file for writing\n", millis());
     http.end();
