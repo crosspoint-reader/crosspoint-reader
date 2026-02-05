@@ -32,22 +32,7 @@ void TxtReaderActivity::onEnter() {
   }
 
   // Configure screen orientation based on settings
-  switch (SETTINGS.orientation) {
-    case CrossPointSettings::ORIENTATION::PORTRAIT:
-      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-      break;
-    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
-      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
-      break;
-    case CrossPointSettings::ORIENTATION::INVERTED:
-      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
-      break;
-    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
-      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
-      break;
-    default:
-      break;
-  }
+  renderer.setOrientation(static_cast<GfxRenderer::Orientation>(SETTINGS.orientation));
 
   txt->setupCacheDir();
 
@@ -90,6 +75,19 @@ void TxtReaderActivity::loop() {
   // Short press BACK goes directly to home
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
     onGoHome();
+    return;
+  }
+
+  // Short press power rotates the screen, if configured
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::ROTATE_ORIENTATION &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    SETTINGS.orientation = (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION::ORIENTATION_COUNT;
+    SETTINGS.saveToFile();
+    renderer.setOrientation(static_cast<GfxRenderer::Orientation>(SETTINGS.orientation));
+    initialized = false;
+    pageOffsets.clear();
+    currentPageLines.clear();
+    updateRequired = true;
     return;
   }
 
