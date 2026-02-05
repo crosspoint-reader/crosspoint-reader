@@ -10,13 +10,46 @@
 #include "activities/ActivityWithSubactivity.h"
 
 class CrossPointSettings;
-struct SettingInfo;
+
+enum class SettingType { TOGGLE, ENUM, ACTION, VALUE };
+
+struct SettingInfo {
+  const char* name;
+  SettingType type;
+  uint8_t CrossPointSettings::* valuePtr;
+  std::vector<std::string> enumValues;
+
+  struct ValueRange {
+    uint8_t min;
+    uint8_t max;
+    uint8_t step;
+  };
+  ValueRange valueRange;
+
+  static SettingInfo Toggle(const char* name, uint8_t CrossPointSettings::* ptr) {
+    return {name, SettingType::TOGGLE, ptr};
+  }
+
+  static SettingInfo Enum(const char* name, uint8_t CrossPointSettings::* ptr, std::vector<std::string> values) {
+    return {name, SettingType::ENUM, ptr, std::move(values)};
+  }
+
+  static SettingInfo Action(const char* name) { return {name, SettingType::ACTION, nullptr}; }
+
+  static SettingInfo Value(const char* name, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange) {
+    return {name, SettingType::VALUE, ptr, {}, valueRange};
+  }
+};
 
 class SettingsActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
   int selectedCategoryIndex = 0;  // Currently selected category
+  int selectedSettingIndex = 0;
+  int settingsCount = 0;
+  const SettingInfo* settingsList = nullptr;
+
   const std::function<void()> onGoHome;
 
   static constexpr int categoryCount = 4;
@@ -26,6 +59,7 @@ class SettingsActivity final : public ActivityWithSubactivity {
   [[noreturn]] void displayTaskLoop();
   void render() const;
   void enterCategory(int categoryIndex);
+  void toggleCurrentSetting();
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

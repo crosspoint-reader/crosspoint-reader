@@ -9,7 +9,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
-#include "ScreenComponents.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -58,9 +58,11 @@ void TxtReaderActivity::onEnter() {
   txt->setupCacheDir();
 
   // Save current txt as last opened file and add to recent books
-  APP_STATE.openEpubPath = txt->getPath();
+  auto filePath = txt->getPath();
+  auto fileName = filePath.substr(filePath.rfind('/') + 1);
+  APP_STATE.openEpubPath = filePath;
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(txt->getPath(), "", "");
+  RECENT_BOOKS.addBook(filePath, fileName, "", "");
 
   // Trigger first update
   updateRequired = true;
@@ -168,13 +170,15 @@ void TxtReaderActivity::initializeReader() {
   orientedMarginRight += cachedScreenMargin;
   orientedMarginBottom += cachedScreenMargin;
 
+  auto metrics = UITheme::getInstance().getMetrics();
+
   // Add status bar margin
   if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
     // Add additional margin for status bar if progress bar is shown
     const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR ||
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_PROGRESS_BAR;
     orientedMarginBottom += statusBarMargin - cachedScreenMargin +
-                            (showProgressBar ? (ScreenComponents::BOOK_PROGRESS_BAR_HEIGHT + progressBarMarginTop) : 0);
+                            (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
   }
 
   viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
@@ -210,7 +214,7 @@ void TxtReaderActivity::buildPageIndex() {
 
   Serial.printf("[%lu] [TRS] Building page index for %zu bytes...\n", millis(), fileSize);
 
-  ScreenComponents::drawPopup(renderer, "Indexing...");
+  GUI.drawPopup(renderer, "Indexing...");
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
@@ -498,6 +502,7 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
 
+  auto metrics = UITheme::getInstance().getMetrics();
   const auto screenHeight = renderer.getScreenHeight();
   const auto textY = screenHeight - orientedMarginBottom - 4;
   int progressTextWidth = 0;
@@ -519,11 +524,12 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
 
   if (showProgressBar) {
     // Draw progress bar at the very bottom of the screen, from edge to edge of viewable area
-    ScreenComponents::drawBookProgressBar(renderer, static_cast<size_t>(progress));
+    GUI.drawBookProgressBar(renderer, static_cast<size_t>(progress));
   }
 
   if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft, textY, showBatteryPercentage);
+    GUI.drawBattery(renderer, Rect{orientedMarginLeft, textY, metrics.batteryWidth, metrics.batteryHeight},
+                    showBatteryPercentage);
   }
 
   if (showTitle) {

@@ -11,7 +11,7 @@
 #include "EpubReaderPercentSelectionActivity.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
-#include "ScreenComponents.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -97,7 +97,7 @@ void EpubReaderActivity::onEnter() {
   // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor());
+  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
   // Trigger first update
   updateRequired = true;
@@ -454,13 +454,15 @@ void EpubReaderActivity::renderScreen() {
   orientedMarginRight += SETTINGS.screenMargin;
   orientedMarginBottom += SETTINGS.screenMargin;
 
+  auto metrics = UITheme::getInstance().getMetrics();
+
   // Add status bar margin
   if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
     // Add additional margin for status bar if progress bar is shown
     const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR ||
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_PROGRESS_BAR;
     orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
-                            (showProgressBar ? (ScreenComponents::BOOK_PROGRESS_BAR_HEIGHT + progressBarMarginTop) : 0);
+                            (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
   }
 
   if (!section) {
@@ -476,7 +478,7 @@ void EpubReaderActivity::renderScreen() {
                                   viewportHeight, SETTINGS.hyphenationEnabled)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
-      const auto popupFn = [this]() { ScreenComponents::drawPopup(renderer, "Indexing..."); };
+      const auto popupFn = [this]() { GUI.drawPopup(renderer, "Indexing..."); };
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
@@ -608,6 +610,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                          const int orientedMarginLeft) const {
+  auto metrics = UITheme::getInstance().getMetrics();
+
   // determine visible status bar elements
   const bool showProgressPercentage = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
   const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR ||
@@ -651,11 +655,12 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
 
   if (showProgressBar) {
     // Draw progress bar at the very bottom of the screen, from edge to edge of viewable area
-    ScreenComponents::drawBookProgressBar(renderer, static_cast<size_t>(bookProgress));
+    GUI.drawBookProgressBar(renderer, static_cast<size_t>(bookProgress));
   }
 
   if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft + 1, textY, showBatteryPercentage);
+    GUI.drawBattery(renderer, Rect{orientedMarginLeft + 1, textY, metrics.batteryWidth, metrics.batteryHeight},
+                    showBatteryPercentage);
   }
 
   if (showChapterTitle) {
