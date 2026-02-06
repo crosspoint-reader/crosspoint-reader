@@ -294,8 +294,8 @@ void EpubReaderActivity::loop() {
   }
 
   // Handle deferred popup from menu
-  if (pendingStartCapture) {
-    pendingStartCapture = false;
+  if (pendingPopupMenu) {
+    pendingPopupMenu = false;
     if (section && epub) {
       captureState = CaptureState::POPUP_MENU;
       popupSelectedIndex = 0;
@@ -618,7 +618,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (captureState == CaptureState::CAPTURING) {
         stopCapture();
       } else {
-        pendingStartCapture = true;
+        pendingPopupMenu = true;
       }
       break;
     }
