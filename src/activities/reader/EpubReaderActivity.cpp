@@ -293,10 +293,14 @@ void EpubReaderActivity::loop() {
     return;  // Don't access 'this' after callback
   }
 
-  // Handle deferred capture start from menu
+  // Handle deferred popup from menu
   if (pendingStartCapture) {
     pendingStartCapture = false;
-    startCapture();
+    if (section && epub) {
+      captureState = CaptureState::POPUP_MENU;
+      popupSelectedIndex = 0;
+      updateRequired = true;
+    }
     return;
   }
 
@@ -314,13 +318,47 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Long press CONFIRM (1s+) toggles capture
+  // Popup menu input handling — intercepts all input while popup is visible
+  if (captureState == CaptureState::POPUP_MENU) {
+    // Navigate up
+    if (mappedInput.wasPressed(MappedInputManager::Button::Left) ||
+        mappedInput.wasPressed(MappedInputManager::Button::PageBack)) {
+      popupSelectedIndex = 0;
+      updateRequired = true;
+    }
+    // Navigate down
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right) ||
+        mappedInput.wasPressed(MappedInputManager::Button::PageForward)) {
+      popupSelectedIndex = 1;
+      updateRequired = true;
+    }
+    // Confirm selection
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      captureState = CaptureState::IDLE;
+      if (popupSelectedIndex == 0) {
+        writeBookmark();
+      } else {
+        startCapture();
+      }
+      return;
+    }
+    // Dismiss popup
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      captureState = CaptureState::IDLE;
+      updateRequired = true;
+    }
+    return;
+  }
+
+  // Long press CONFIRM (1s+): show popup (IDLE) or stop capture (CAPTURING)
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= captureHoldMs) {
     if (captureState == CaptureState::IDLE) {
       if (section && epub) {
-        startCapture();
+        captureState = CaptureState::POPUP_MENU;
+        popupSelectedIndex = 0;
+        updateRequired = true;
       }
-    } else {
+    } else if (captureState == CaptureState::CAPTURING) {
       stopCapture();
     }
     // Wait for button release before processing further input
