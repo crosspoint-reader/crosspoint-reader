@@ -1,0 +1,135 @@
+#include "StatusBarSettingsActivity.h"
+
+#include <GfxRenderer.h>
+#include <I18n.h>
+
+#include <cstring>
+
+#include "CrossPointSettings.h"
+#include "MappedInputManager.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
+
+namespace {
+constexpr int MENU_ITEMS = 5;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_CHAPTER_PAGE_COUNT, StrId::STR_BOOK_PROGRESS_PERCENTAGE,
+                                     StrId::STR_PROGRESS_BAR, StrId::STR_CHAPTER_TITLE, StrId::STR_BATTERY};
+}  // namespace
+
+constexpr int PROGRESS_BAR_ITEMS = 3;
+const StrId progressBarNames[PROGRESS_BAR_ITEMS] = {StrId::STR_SHOW_BOOK_PROGRESS, StrId::STR_SHOW_CHAPTER_PROGRESS,
+                                                    StrId::STR_HIDE};
+
+void StatusBarSettingsActivity::onEnter() {
+  Activity::onEnter();
+
+  selectedIndex = 0;
+
+  // Clamp statusBarProgressBar in case of corrupt/migrated data
+  if (SETTINGS.statusBarProgressBar >= PROGRESS_BAR_ITEMS) {
+    SETTINGS.statusBarProgressBar = CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
+  }
+
+  requestUpdate();
+}
+
+void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
+
+void StatusBarSettingsActivity::loop() {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    onBack();
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    handleSelection();
+    requestUpdate();
+    return;
+  }
+
+  // Handle navigation
+  buttonNavigator.onNextRelease([this] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
+    requestUpdate();
+  });
+
+  buttonNavigator.onNextContinuous([this] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousContinuous([this] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
+    requestUpdate();
+  });
+}
+
+void StatusBarSettingsActivity::handleSelection() {
+  if (selectedIndex == 0) {
+    // Chapter Page Count
+    SETTINGS.statusBarChapterPageCount = (SETTINGS.statusBarChapterPageCount + 1) % 2;
+  } else if (selectedIndex == 1) {
+    // Book Progress %
+    SETTINGS.statusBarBookProgressPercentage = (SETTINGS.statusBarBookProgressPercentage + 1) % 2;
+  } else if (selectedIndex == 2) {
+    // Progress Bar
+    SETTINGS.statusBarProgressBar = (SETTINGS.statusBarProgressBar + 1) % PROGRESS_BAR_ITEMS;
+  } else if (selectedIndex == 3) {
+    // Chapter Title
+    SETTINGS.statusBarChapterTitle = (SETTINGS.statusBarChapterTitle + 1) % 2;
+  } else if (selectedIndex == 4) {
+    // Show Battery
+    SETTINGS.statusBarBattery = (SETTINGS.statusBarBattery + 1) % 2;
+  }
+  SETTINGS.saveToFile();
+}
+
+void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
+  renderer.clearScreen();
+
+  const auto pageWidth = renderer.getScreenWidth();
+
+  // Draw header
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_CUSTOMISE_STATUS_BAR), true, EpdFontFamily::BOLD);
+
+  // Draw selection highlight
+  renderer.fillRect(0, 70 + selectedIndex * 30 - 2, pageWidth - 1, 30);
+
+  // Draw menu items
+  for (int i = 0; i < MENU_ITEMS; i++) {
+    const int settingY = 70 + i * 30;
+    const bool isSelected = (i == selectedIndex);
+
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, I18N.get(menuNames[i]), !isSelected);
+
+    const char* translatedShow = tr(STR_SHOW);
+    const char* translatedHide = tr(STR_HIDE);
+
+    // Draw status for each setting
+    const char* status = translatedHide;
+    if (i == 0) {
+      status = SETTINGS.statusBarChapterPageCount ? translatedShow : translatedHide;
+    } else if (i == 1) {
+      status = SETTINGS.statusBarBookProgressPercentage ? translatedShow : translatedHide;
+    } else if (i == 2) {
+      status = I18N.get(progressBarNames[SETTINGS.statusBarProgressBar]);
+    } else if (i == 3) {
+      status = SETTINGS.statusBarChapterTitle ? translatedShow : translatedHide;
+    } else if (i == 4) {
+      status = SETTINGS.statusBarBattery ? translatedShow : translatedHide;
+    }
+    const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
+    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
+  }
+
+  // Draw button hints
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  renderer.displayBuffer();
+}
