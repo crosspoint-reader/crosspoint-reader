@@ -20,8 +20,6 @@ constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 }  // namespace
 
-BatteryPercentageRingBuffer BaseTheme::batteryBuffer;
-
 void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   const bool charging = (digitalRead(20) == HIGH);
 

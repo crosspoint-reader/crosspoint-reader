@@ -34,8 +34,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
 
 class LyraTheme : public BaseTheme {
  public:
-  static BatteryPercentageRingBuffer batteryBuffer;
-
   // Component drawing methods
   //   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) override;
   void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const override;
