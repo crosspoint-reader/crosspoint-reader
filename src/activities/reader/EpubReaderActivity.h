@@ -6,8 +6,10 @@
 #include <freertos/task.h>
 
 #include <string>
+#include <vector>
 
 #include "EpubReaderMenuActivity.h"
+#include "PageExporter.h"
 #include "activities/ActivityWithSubactivity.h"
 
 class EpubReaderActivity final : public ActivityWithSubactivity {
@@ -29,8 +31,16 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingSubactivityExit = false;  // Defer subactivity exit to avoid use-after-free
   bool pendingGoHome = false;           // Defer go home to avoid race condition with display task
   bool skipNextButtonCheck = false;     // Skip button processing for one frame after subactivity exit
-  std::string statusBarOverride;        // Temporary override text (e.g. "Page saved"), cleared on page turn
-  bool exportTriggered = false;         // Guard to prevent repeated export while Confirm is held
+  std::string statusBarOverride;        // Temporary override text (e.g. "Passage saved"), cleared on page turn
+  bool pendingStartCapture = false;     // Deferred capture start from menu
+
+  // Capture state machine
+  enum class CaptureState { IDLE, CAPTURING };
+  CaptureState captureState = CaptureState::IDLE;
+  std::vector<CapturedPage> captureBuffer;
+  bool statusBarMarker = false;       // Persistent capture indicator in status bar
+  bool pendingCaptureAfterRender = false;  // Capture deferred until section loads after boundary crossing
+
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
@@ -46,6 +56,12 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void onReaderMenuBack(uint8_t orientation);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+
+  // Capture helpers
+  void captureCurrentPage();
+  void startCapture();
+  void stopCapture();
+  void cancelCapture();
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,

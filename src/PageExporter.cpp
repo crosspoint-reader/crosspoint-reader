@@ -5,7 +5,7 @@
 #include <string>
 
 namespace {
-constexpr const char* EXPORTS_DIR = "/.crosspoint/exports";
+constexpr const char* EXPORTS_DIR = "/Saved Passages";
 constexpr const char* TAG = "PEX";
 }  // namespace
 
@@ -37,30 +37,60 @@ std::string PageExporter::getExportPath(const std::string& bookTitle, const std:
   } else {
     filename = sanitizeFilename(bookTitle);
   }
-  return std::string(EXPORTS_DIR) + "/" + filename + ".txt";
+  return std::string(EXPORTS_DIR) + "/" + filename + ".md";
 }
 
 bool PageExporter::writeHeader(FsFile& file, const std::string& bookTitle, const std::string& bookAuthor) {
-  std::string header = "== " + bookTitle;
+  // YAML frontmatter
+  std::string header = "---\n";
+  header += "title: \"" + bookTitle + "\"\n";
+  if (!bookAuthor.empty()) {
+    header += "author: \"" + bookAuthor + "\"\n";
+  }
+  header += "---\n\n";
+
+  // Markdown title heading
+  header += "# " + bookTitle;
   if (!bookAuthor.empty()) {
     header += " \xe2\x80\x94 " + bookAuthor;  // em-dash UTF-8
   }
-  header += " ==\n";
+  header += "\n";
+
   return file.write(reinterpret_cast<const uint8_t*>(header.c_str()), header.size()) == header.size();
 }
 
-bool PageExporter::writeEntry(FsFile& file, const std::string& chapterTitle, int pageNumber, int bookPercent,
-                              const std::string& pageText) {
-  std::string entry = "\n--- " + chapterTitle + " | Page " + std::to_string(pageNumber) + " | " +
-                      std::to_string(bookPercent) + "% ---\n";
-  entry += pageText;
-  entry += '\n';
+bool PageExporter::writePassage(FsFile& file, const std::vector<CapturedPage>& pages) {
+  if (pages.empty()) {
+    return true;
+  }
+
+  std::string entry;
+  std::string lastChapter;
+
+  for (const auto& page : pages) {
+    // Insert a new chapter heading when the chapter changes
+    if (page.chapterTitle != lastChapter) {
+      entry += "\n## " + page.chapterTitle + " | " + std::to_string(page.bookPercent) + "% of book | " +
+               std::to_string(page.chapterPercent) + "% of chapter\n";
+      lastChapter = page.chapterTitle;
+    }
+
+    entry += page.pageText;
+    entry += "\n\n";
+  }
+
+  // Visual separator between captures for readability
+  entry += "---\n";
+
   return file.write(reinterpret_cast<const uint8_t*>(entry.c_str()), entry.size()) == entry.size();
 }
 
-bool PageExporter::exportPage(const std::string& bookTitle, const std::string& bookAuthor, const std::string& bookHash,
-                              const std::string& chapterTitle, int pageNumber, int bookPercent,
-                              const std::string& pageText) {
+bool PageExporter::exportPassage(const std::string& bookTitle, const std::string& bookAuthor,
+                                 const std::string& bookHash, const std::vector<CapturedPage>& pages) {
+  if (pages.empty()) {
+    return false;
+  }
+
   SdMan.mkdir(EXPORTS_DIR);
 
   const std::string path = getExportPath(bookTitle, bookHash);
@@ -80,15 +110,16 @@ bool PageExporter::exportPage(const std::string& bookTitle, const std::string& b
     ok = writeHeader(file, bookTitle, bookAuthor);
   }
   if (ok) {
-    ok = writeEntry(file, chapterTitle, pageNumber, bookPercent, pageText);
+    ok = writePassage(file, pages);
   }
 
   file.close();
 
   if (ok) {
-    Serial.printf("[%lu] [%s] Page exported to %s\n", millis(), TAG, path.c_str());
+    Serial.printf("[%lu] [%s] Passage exported to %s (%d pages)\n", millis(), TAG, path.c_str(),
+                  static_cast<int>(pages.size()));
   } else {
-    Serial.printf("[%lu] [%s] Failed to write export entry\n", millis(), TAG);
+    Serial.printf("[%lu] [%s] Failed to write passage\n", millis(), TAG);
   }
   return ok;
 }

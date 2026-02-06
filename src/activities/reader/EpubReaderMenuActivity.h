@@ -13,11 +13,12 @@
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  public:
   // Menu actions available from the reader menu.
-  enum class MenuAction { SELECT_CHAPTER, GO_TO_PERCENT, ROTATE_SCREEN, GO_HOME, SYNC, DELETE_CACHE };
+  enum class MenuAction { SELECT_CHAPTER, START_CAPTURE, GO_TO_PERCENT, ROTATE_SCREEN, GO_HOME, SYNC, DELETE_CACHE };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const std::function<void(uint8_t)>& onBack,
+                                  const uint8_t currentOrientation, const bool isCapturing,
+                                  const std::function<void(uint8_t)>& onBack,
                                   const std::function<void(MenuAction)>& onAction)
       : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
         title(title),
@@ -26,7 +27,16 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
         totalPages(totalPages),
         bookProgressPercent(bookProgressPercent),
         onBack(onBack),
-        onAction(onAction) {}
+        onAction(onAction) {
+    if (isCapturing) {
+      for (auto& item : menuItems) {
+        if (item.action == MenuAction::START_CAPTURE) {
+          item.label = "Stop Capture";
+          break;
+        }
+      }
+    }
+  }
 
   void onEnter() override;
   void onExit() override;
@@ -39,8 +49,9 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   };
 
   // Fixed menu layout (order matters for up/down navigation).
-  const std::vector<MenuItem> menuItems = {
-      {MenuAction::SELECT_CHAPTER, "Go to Chapter"}, {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
+  std::vector<MenuItem> menuItems = {
+      {MenuAction::SELECT_CHAPTER, "Go to Chapter"}, {MenuAction::START_CAPTURE, "Save Passage"},
+      {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
       {MenuAction::GO_TO_PERCENT, "Go to %"},        {MenuAction::GO_HOME, "Go Home"},
       {MenuAction::SYNC, "Sync Progress"},           {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
 
