@@ -16,30 +16,15 @@
 #include "fontIds.h"
 
 namespace {
-// AP Mode configuration
-constexpr const char* AP_SSID = "CrossPoint-Reader";
-constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
-constexpr uint8_t AP_CHANNEL = 1;
-constexpr uint8_t AP_MAX_CONNECTIONS = 4;
+  // AP Mode configuration
+  constexpr const char* AP_SSID = "CrossPoint-Reader";
+  constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
+  constexpr uint8_t AP_CHANNEL = 1;
+  constexpr uint8_t AP_MAX_CONNECTIONS = 4;
 
-// Static cached hostname for the device
-static String deviceHostname;
-
-// Generate hostname dynamically based on device MAC address
-String getDeviceHostname() {
-  if (deviceHostname.length() == 0) {
-    // Extract last 6 hex digits (24 bits) for serial number
-    uint32_t serialNum = (uint32_t)(ESP.getEfuseMac() & 0xFFFFFF);
-    char hostname[32];
-    snprintf(hostname, sizeof(hostname), "XTeinkX4-%06X", serialNum);
-    deviceHostname = String(hostname);
-  }
-  return deviceHostname;
-}
-
-// DNS server for captive portal (redirects all DNS queries to our IP)
-DNSServer* dnsServer = nullptr;
-constexpr uint16_t DNS_PORT = 53;
+  // DNS server for captive portal (redirects all DNS queries to our IP)
+  DNSServer* dnsServer = nullptr;
+  constexpr uint16_t DNS_PORT = 53;
 }  // namespace
 
 void CrossPointWebServerActivity::taskTrampoline(void* param) {
@@ -62,6 +47,13 @@ void CrossPointWebServerActivity::onEnter() {
   connectedSSID.clear();
   lastHandleClientTime = 0;
   updateRequired = true;
+
+  // Cache hostname for display
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macStr[16];
+  snprintf(macStr, sizeof(macStr), "XTeinkX4-%02x%02x%02x", mac[3], mac[4], mac[5]);
+  hostname = std::string(macStr);
 
   xTaskCreate(&CrossPointWebServerActivity::taskTrampoline, "WebServerActivityTask",
               2048,               // Stack size
@@ -195,8 +187,8 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     exitActivity();
 
     // Start mDNS for hostname resolution
-    if (MDNS.begin(getDeviceHostname().c_str())) {
-      Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), getDeviceHostname().c_str());
+    if (MDNS.begin(hostname.c_str())) {
+      Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), hostname);
     }
 
     // Start the web server
@@ -248,8 +240,8 @@ void CrossPointWebServerActivity::startAccessPoint() {
   Serial.printf("[%lu] [WEBACT] IP: %s\n", millis(), connectedIP.c_str());
 
   // Start mDNS for hostname resolution
-  if (MDNS.begin(getDeviceHostname().c_str())) {
-    Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), getDeviceHostname().c_str());
+  if (MDNS.begin(hostname.c_str())) {
+    Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), hostname);
   } else {
     Serial.printf("[%lu] [WEBACT] WARNING: mDNS failed to start\n", millis());
   }
@@ -453,7 +445,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     startY += 6 * 29 + 3 * LINE_SPACING;
     // Show primary URL (hostname)
-    std::string hostnameUrl = std::string("http://") + getDeviceHostname().c_str() + ".local/";
+    std::string hostnameUrl = std::string("http://") + hostname + ".local/";
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str(), true, EpdFontFamily::BOLD);
 
     // Show IP address as fallback
@@ -482,7 +474,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 2, webInfo.c_str(), true, EpdFontFamily::BOLD);
 
     // Also show hostname URL
-    std::string hostnameUrl = std::string("or http://") + getDeviceHostname().c_str() + ".local/";
+    std::string hostnameUrl = std::string("or http://") + hostname + ".local/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str());
 
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Open this URL in your browser");

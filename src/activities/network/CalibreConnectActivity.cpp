@@ -10,22 +10,6 @@
 #include "WifiSelectionActivity.h"
 #include "fontIds.h"
 
-namespace {
-  // Generate hostname dynamically based on device MAC address
-  String getDeviceHostname() {
-    static String deviceHostname;
-    if (deviceHostname.length() == 0) {
-      uint64_t chipId = ESP.getEfuseMac();
-      // Extract last 6 hex digits (24 bits) for serial number
-      uint32_t serialNum = (uint32_t)(chipId & 0xFFFFFF);
-      char hostname[32];
-      snprintf(hostname, sizeof(hostname), "XTeinkX4-%06X", serialNum);
-      deviceHostname = String(hostname);
-    }
-    return deviceHostname;
-  }
-}  // namespace
-
 void CalibreConnectActivity::taskTrampoline(void* param) {
   auto* self = static_cast<CalibreConnectActivity*>(param);
   self->displayTaskLoop();
@@ -46,6 +30,13 @@ void CalibreConnectActivity::onEnter() {
   lastCompleteName.clear();
   lastCompleteAt = 0;
   exitRequested = false;
+
+  // Cache hostname for display
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macStr[16];
+  snprintf(macStr, sizeof(macStr), "XTeinkX4-%02x%02x%02x", mac[3], mac[4], mac[5]);
+  hostname = std::string(macStr);
 
   xTaskCreate(&CalibreConnectActivity::taskTrampoline, "CalibreConnectTask",
               2048,               // Stack size
@@ -106,9 +97,9 @@ void CalibreConnectActivity::startWebServer() {
   state = CalibreConnectState::SERVER_STARTING;
   updateRequired = true;
 
-  if (MDNS.begin(getDeviceHostname().c_str())) {
+  if (MDNS.begin(hostname.c_str())) {
     // mDNS is optional for the Calibre plugin but still helpful for users.
-    Serial.printf("[%lu] [CAL] mDNS started: http://%s.local/\n", millis(), getDeviceHostname().c_str());
+    Serial.printf("[%lu] [CAL] mDNS started: http://%s.local/\n", millis(), hostname);
   }
 
   webServer.reset(new CrossPointWebServer());

@@ -62,6 +62,9 @@ class CrossPointWebServerActivity final : public ActivityWithSubactivity {
   void startWebServer();
   void stopWebServer();
 
+  // Cached MAC address string for display
+  std::string hostname;
+
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                        const std::function<void()>& onGoBack)
