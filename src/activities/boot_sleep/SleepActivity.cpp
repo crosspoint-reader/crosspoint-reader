@@ -16,9 +16,9 @@
 
 void SleepActivity::onEnter() {
   const bool SHOW_SLEEP_SCREEN =
-        SETTINGS.showSleepScreen == CrossPointSettings::SHOW_SLEEP_SCREEN::ALWAYS ||
-        (!fromTimeout && SETTINGS.showSleepScreen == CrossPointSettings::SHOW_SLEEP_SCREEN::EXCEPT_TIMEOUT);
-      
+      SETTINGS.showSleepScreen == CrossPointSettings::SHOW_SLEEP_SCREEN::ALWAYS ||
+      (!fromTimeout && SETTINGS.showSleepScreen == CrossPointSettings::SHOW_SLEEP_SCREEN::EXCEPT_TIMEOUT);
+
   Activity::onEnter();
   if (SHOW_SLEEP_SCREEN) {
     GUI.drawPopup(renderer, "Entering Sleep...");
