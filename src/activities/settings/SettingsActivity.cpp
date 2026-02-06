@@ -311,7 +311,7 @@ void SettingsActivity::render() const {
                     metrics.versionTextY, CROSSPOINT_VERSION);
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels("« Back", "Toggle", "Up", "Down");
+  const auto labels = mappedInput.mapLabels("« Back", "Toggle", "Prev", "Next");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

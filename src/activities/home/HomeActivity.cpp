@@ -276,7 +276,7 @@ void HomeActivity::render() {
       static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); }, nullptr);
 
-  const auto labels = mappedInput.mapLabels("", "Select", "Up", "Down");
+  const auto labels = mappedInput.mapLabels("", "Select", "Prev", "Next");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
