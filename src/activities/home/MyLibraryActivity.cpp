@@ -19,12 +19,12 @@ void sortFileList(std::vector<std::string>& strs) {
     bool isDir1 = str1.back() == '/';
     bool isDir2 = str2.back() == '/';
     if (isDir1 != isDir2) return isDir1;
-    
-	// Start naive natural sort
+
+    // Start naive natural sort
     const char* s1 = str1.c_str();
     const char* s2 = str2.c_str();
-   
-	// Iterate while both strings have characters
+
+    // Iterate while both strings have characters
     while (*s1 && *s2) {
       // Check if both are at the start of a number
       if (isdigit(*s1) && isdigit(*s2)) {
@@ -33,20 +33,20 @@ void sortFileList(std::vector<std::string>& strs) {
         const char* start2 = s2;
         while (*s1 == '0') s1++;
         while (*s2 == '0') s2++;
-        
+
         // Count digits to compare lengths first
         int len1 = 0, len2 = 0;
         while (isdigit(s1[len1])) len1++;
         while (isdigit(s2[len2])) len2++;
-        
+
         // Different length so return smaller integer value
         if (len1 != len2) return len1 < len2;
-        
+
         // Same length so compare digit by digit
         for (int i = 0; i < len1; i++) {
           if (s1[i] != s2[i]) return s1[i] < s2[i];
         }
-        
+
         // Numbers equal so advance pointers
         s1 += len1;
         s2 += len2;
@@ -59,7 +59,7 @@ void sortFileList(std::vector<std::string>& strs) {
         s2++;
       }
     }
-    
+
     // One string is prefix of other
     return *s1 == '\0' && *s2 != '\0';
   });
