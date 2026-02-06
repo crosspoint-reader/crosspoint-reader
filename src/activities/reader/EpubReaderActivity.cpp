@@ -933,6 +933,12 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   // restore the bw data
   renderer.restoreBwBuffer();
+
+  // Draw popup overlay if active
+  if (captureState == CaptureState::POPUP_MENU) {
+    renderPopupMenu();
+    renderer.displayBuffer();
+  }
 }
 
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
