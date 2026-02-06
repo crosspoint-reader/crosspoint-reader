@@ -35,10 +35,11 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingStartCapture = false;     // Deferred capture start from menu
 
   // Capture state machine
-  enum class CaptureState { IDLE, CAPTURING };
+  enum class CaptureState { IDLE, POPUP_MENU, CAPTURING };
   CaptureState captureState = CaptureState::IDLE;
   std::vector<CapturedPage> captureBuffer;
   bool statusBarMarker = false;            // Persistent capture indicator in status bar
+  int popupSelectedIndex = 0;  // 0 = Bookmark, 1 = Save Passage
   bool pendingCaptureAfterRender = false;  // Capture deferred until section loads after boundary crossing
 
   const std::function<void()> onGoBack;
@@ -62,6 +63,8 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void startCapture();
   void stopCapture();
   void cancelCapture();
+  void writeBookmark();
+  void renderPopupMenu() const;
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
