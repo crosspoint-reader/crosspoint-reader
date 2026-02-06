@@ -9,7 +9,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
-#include "ScreenComponents.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -58,9 +58,11 @@ void TxtReaderActivity::onEnter() {
   txt->setupCacheDir();
 
   // Save current txt as last opened file and add to recent books
-  APP_STATE.openEpubPath = txt->getPath();
+  auto filePath = txt->getPath();
+  auto fileName = filePath.substr(filePath.rfind('/') + 1);
+  APP_STATE.openEpubPath = filePath;
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(txt->getPath(), "", "");
+  RECENT_BOOKS.addBook(filePath, fileName, "", "");
 
   // Trigger first update
   updateRequired = true;
@@ -89,6 +91,8 @@ void TxtReaderActivity::onExit() {
   renderingMutex = nullptr;
   pageOffsets.clear();
   currentPageLines.clear();
+  APP_STATE.readerActivityLoadCount = 0;
+  APP_STATE.saveToFile();
   txt.reset();
 }
 
@@ -168,13 +172,15 @@ void TxtReaderActivity::initializeReader() {
   orientedMarginRight += cachedScreenMargin;
   orientedMarginBottom += cachedScreenMargin;
 
+  auto metrics = UITheme::getInstance().getMetrics();
+
   // Add status bar margin
   if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
     // Add additional margin for status bar if progress bar is shown
     const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR ||
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_PROGRESS_BAR;
     orientedMarginBottom += statusBarMargin - cachedScreenMargin +
-                            (showProgressBar ? (ScreenComponents::BOOK_PROGRESS_BAR_HEIGHT + progressBarMarginTop) : 0);
+                            (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
   }
 
   viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
@@ -207,28 +213,10 @@ void TxtReaderActivity::buildPageIndex() {
 
   size_t offset = 0;
   const size_t fileSize = txt->getFileSize();
-  int lastProgressPercent = -1;
 
   Serial.printf("[%lu] [TRS] Building page index for %zu bytes...\n", millis(), fileSize);
 
-  // Progress bar dimensions (matching EpubReaderActivity style)
-  constexpr int barWidth = 200;
-  constexpr int barHeight = 10;
-  constexpr int boxMargin = 20;
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, "Indexing...");
-  const int boxWidth = (barWidth > textWidth ? barWidth : textWidth) + boxMargin * 2;
-  const int boxHeight = renderer.getLineHeight(UI_12_FONT_ID) + barHeight + boxMargin * 3;
-  const int boxX = (renderer.getScreenWidth() - boxWidth) / 2;
-  constexpr int boxY = 50;
-  const int barX = boxX + (boxWidth - barWidth) / 2;
-  const int barY = boxY + renderer.getLineHeight(UI_12_FONT_ID) + boxMargin * 2;
-
-  // Draw initial progress box
-  renderer.fillRect(boxX, boxY, boxWidth, boxHeight, false);
-  renderer.drawText(UI_12_FONT_ID, boxX + boxMargin, boxY + boxMargin, "Indexing...");
-  renderer.drawRect(boxX + 5, boxY + 5, boxWidth - 10, boxHeight - 10);
-  renderer.drawRect(barX, barY, barWidth, barHeight);
-  renderer.displayBuffer();
+  GUI.drawPopup(renderer, "Indexing...");
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
@@ -246,17 +234,6 @@ void TxtReaderActivity::buildPageIndex() {
     offset = nextOffset;
     if (offset < fileSize) {
       pageOffsets.push_back(offset);
-    }
-
-    // Update progress bar every 10% (matching EpubReaderActivity logic)
-    int progressPercent = (offset * 100) / fileSize;
-    if (lastProgressPercent / 10 != progressPercent / 10) {
-      lastProgressPercent = progressPercent;
-
-      // Fill progress bar
-      const int fillWidth = (barWidth - 2) * progressPercent / 100;
-      renderer.fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2, true);
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     }
 
     // Yield to other tasks periodically
@@ -402,9 +379,6 @@ void TxtReaderActivity::renderScreen() {
 
   // Initialize reader if not done
   if (!initialized) {
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Indexing...", true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
     initializeReader();
   }
 
@@ -530,6 +504,7 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
 
+  auto metrics = UITheme::getInstance().getMetrics();
   const auto screenHeight = renderer.getScreenHeight();
   const auto textY = screenHeight - orientedMarginBottom - 4;
   int progressTextWidth = 0;
@@ -551,11 +526,12 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
 
   if (showProgressBar) {
     // Draw progress bar at the very bottom of the screen, from edge to edge of viewable area
-    ScreenComponents::drawBookProgressBar(renderer, static_cast<size_t>(progress));
+    GUI.drawBookProgressBar(renderer, static_cast<size_t>(progress));
   }
 
   if (showBattery) {
-    ScreenComponents::drawBattery(renderer, orientedMarginLeft, textY, showBatteryPercentage);
+    GUI.drawBattery(renderer, Rect{orientedMarginLeft, textY, metrics.batteryWidth, metrics.batteryHeight},
+                    showBatteryPercentage);
   }
 
   if (showTitle) {
@@ -565,8 +541,8 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
 
     std::string title = txt->getTitle();
     int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-    while (titleWidth > availableTextWidth && title.length() > 11) {
-      title.replace(title.length() - 8, 8, "...");
+    if (titleWidth > availableTextWidth) {
+      title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), availableTextWidth);
       titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     }
 
