@@ -16,7 +16,6 @@
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
 namespace {
-constexpr int changeTabsMs = 700;
 constexpr int displaySettingsCount = 7;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
@@ -133,26 +132,20 @@ void SettingsActivity::loop() {
     return;
   }
 
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Up);
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Down);
-  const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
-  const bool changeTab = mappedInput.getHeldTime() > changeTabsMs;
-
   // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount);
+  buttonNavigator.onNextRelease([this] {
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
     updateRequired = true;
   });
 
   buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
     selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
-    updateRequired = true;
-  });
-
-  buttonNavigator.onPrevious([this] {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount);
     updateRequired = true;
   });
 
