@@ -38,6 +38,19 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   saveToFile();
 }
 
+void RecentBooksStore::updateBook(const std::string& path, const std::string& title, const std::string& author,
+                                  const std::string& coverBmpPath) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it != recentBooks.end()) {
+    RecentBook& book = *it;
+    book.title = title;
+    book.author = author;
+    book.coverBmpPath = coverBmpPath;
+    saveToFile();
+  }
+}
+
 bool RecentBooksStore::saveToFile() const {
   // Make sure the directory exists
   Storage.mkdir("/.crosspoint");

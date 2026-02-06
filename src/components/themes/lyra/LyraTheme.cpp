@@ -274,30 +274,37 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       for (int i = 0; i < std::min(static_cast<int>(recentBooks.size()), LyraMetrics::values.homeRecentBooksCount);
            i++) {
         std::string coverPath = recentBooks[i].coverBmpPath;
+        bool hasCover = true;
+        int tileX = LyraMetrics::values.contentSidePadding + tileWidth * i;
         if (coverPath.empty()) {
-          continue;
+          hasCover = false;
+        } else {
+          const std::string coverBmpPath = UITheme::getCoverThumbPath(coverPath, LyraMetrics::values.homeCoverHeight);
+
+          // First time: load cover from SD and render
+          FsFile file;
+          if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
+            Bitmap bitmap(file);
+            if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+              float coverHeight = static_cast<float>(bitmap.getHeight());
+              float coverWidth = static_cast<float>(bitmap.getWidth());
+              float ratio = coverWidth / coverHeight;
+              const float tileRatio = static_cast<float>(tileWidth - 2 * hPaddingInSelection) /
+                                      static_cast<float>(LyraMetrics::values.homeCoverHeight);
+              float cropX = 1.0f - (tileRatio / ratio);
+
+              renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
+                                  tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight, cropX);
+            } else {
+              hasCover = false;
+            }
+            file.close();
+          }
         }
 
-        const std::string coverBmpPath = UITheme::getCoverThumbPath(coverPath, LyraMetrics::values.homeCoverHeight);
-
-        int tileX = LyraMetrics::values.contentSidePadding + tileWidth * i;
-
-        // First time: load cover from SD and render
-        FsFile file;
-        if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
-          Bitmap bitmap(file);
-          if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-            float coverHeight = static_cast<float>(bitmap.getHeight());
-            float coverWidth = static_cast<float>(bitmap.getWidth());
-            float ratio = coverWidth / coverHeight;
-            const float tileRatio = static_cast<float>(tileWidth - 2 * hPaddingInSelection) /
-                                    static_cast<float>(LyraMetrics::values.homeCoverHeight);
-            float cropX = 1.0f - (tileRatio / ratio);
-
-            renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                                tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight, cropX);
-          }
-          file.close();
+        if (!hasCover) {
+          renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection,
+                            tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight);
         }
       }
 

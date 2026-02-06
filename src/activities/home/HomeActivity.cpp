@@ -35,16 +35,11 @@ int HomeActivity::getMenuItemCount() const {
   return count;
 }
 
-void HomeActivity::loadRecentBooks(int maxBooks, int coverHeight) {
-  recentsLoading = true;
-  bool showingLoading = false;
-  Rect popupRect;
-
+void HomeActivity::loadRecentBooks(int maxBooks) {
   recentBooks.clear();
   const auto& books = RECENT_BOOKS.getBooks();
   recentBooks.reserve(std::min(static_cast<int>(books.size()), maxBooks));
 
-  int progress = 0;
   for (const RecentBook& book : books) {
     // Limit to maximum number of recent books
     if (recentBooks.size() >= maxBooks) {
@@ -56,19 +51,22 @@ void HomeActivity::loadRecentBooks(int maxBooks, int coverHeight) {
       continue;
     }
 
+    recentBooks.push_back(book);
+  }
+}
+
+void HomeActivity::loadRecentCovers(int coverHeight) {
+  recentsLoading = true;
+  bool showingLoading = false;
+  Rect popupRect;
+
+  int progress = 0;
+  for (RecentBook& book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       if (!Storage.exists(coverPath.c_str())) {
-        std::string lastBookFileName = "";
-        const size_t lastSlash = book.path.find_last_of('/');
-        if (lastSlash != std::string::npos) {
-          lastBookFileName = book.path.substr(lastSlash + 1);
-        }
-
-        Serial.printf("Loading recent book: %s\n", book.path.c_str());
-
         // If epub, try to load the metadata for title/author and cover
-        if (StringUtils::checkFileExtension(lastBookFileName, ".epub")) {
+        if (StringUtils::checkFileExtension(book.path, ".epub")) {
           Epub epub(book.path, "/.crosspoint");
           // Skip loading css since we only need metadata here
           epub.load(false, true);
@@ -78,10 +76,16 @@ void HomeActivity::loadRecentBooks(int maxBooks, int coverHeight) {
             showingLoading = true;
             popupRect = GUI.drawPopup(renderer, "Loading...");
           }
-          GUI.fillPopupProgress(renderer, popupRect, progress * 30);
-          epub.generateThumbBmp(coverHeight);
-        } else if (StringUtils::checkFileExtension(lastBookFileName, ".xtch") ||
-                   StringUtils::checkFileExtension(lastBookFileName, ".xtc")) {
+          GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
+          bool success = epub.generateThumbBmp(coverHeight);
+          if (!success) {
+            RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+            book.coverBmpPath = "";
+          }
+          coverRendered = false;
+          updateRequired = true;
+        } else if (StringUtils::checkFileExtension(book.path, ".xtch") ||
+                   StringUtils::checkFileExtension(book.path, ".xtc")) {
           // Handle XTC file
           Xtc xtc(book.path, "/.crosspoint");
           if (xtc.load()) {
@@ -90,21 +94,23 @@ void HomeActivity::loadRecentBooks(int maxBooks, int coverHeight) {
               showingLoading = true;
               popupRect = GUI.drawPopup(renderer, "Loading...");
             }
-            GUI.fillPopupProgress(renderer, popupRect, progress * 30);
-            xtc.generateThumbBmp(coverHeight);
+            GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
+            bool success = xtc.generateThumbBmp(coverHeight);
+            if (!success) {
+              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+              book.coverBmpPath = "";
+            }
+            coverRendered = false;
+            updateRequired = true;
           }
         }
       }
     }
-
-    recentBooks.push_back(book);
     progress++;
   }
 
-  Serial.printf("Recent books loaded: %d\n", recentBooks.size());
   recentsLoaded = true;
   recentsLoading = false;
-  updateRequired = true;
 }
 
 void HomeActivity::onEnter() {
@@ -112,13 +118,13 @@ void HomeActivity::onEnter() {
 
   renderingMutex = xSemaphoreCreateMutex();
 
-  // Check if we have a book to continue reading
-  hasContinueReading = !APP_STATE.openEpubPath.empty() && Storage.exists(APP_STATE.openEpubPath.c_str());
-
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
 
   selectorIndex = 0;
+
+  auto metrics = UITheme::getInstance().getMetrics();
+  loadRecentBooks(metrics.homeRecentBooksCount);
 
   // Trigger first update
   updateRequired = true;
@@ -246,24 +252,14 @@ void HomeActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
+  renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
-  if (!firstRenderDone || (recentsLoaded && !recentsDisplayed)) {
-    renderer.clearScreen();
-  }
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
 
-  if (hasContinueReading) {
-    if (recentsLoaded) {
-      recentsDisplayed = true;
-      GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                              recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                              std::bind(&HomeActivity::storeCoverBuffer, this));
-    } else if (!recentsLoading && firstRenderDone) {
-      recentsLoading = true;
-      loadRecentBooks(metrics.homeRecentBooksCount, metrics.homeCoverHeight);
-    }
-  }
+  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
+                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
+                          std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
   std::vector<const char*> menuItems = {"Browse Files", "Recents", "File Transfer", "Settings"};
@@ -288,5 +284,8 @@ void HomeActivity::render() {
   if (!firstRenderDone) {
     firstRenderDone = true;
     updateRequired = true;
+  } else if (!recentsLoaded && !recentsLoading) {
+    recentsLoading = true;
+    loadRecentCovers(metrics.homeCoverHeight);
   }
 }

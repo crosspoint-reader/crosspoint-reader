@@ -3,7 +3,7 @@
 #include <cstdint>
 
 // Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings
-enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3 };
+enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3, None = 4 };
 enum class CssUnit : uint8_t { Pixels = 0, Em = 1, Rem = 2, Points = 3 };
 
 // Represents a CSS length value with its unit, allowing deferred resolution to pixels

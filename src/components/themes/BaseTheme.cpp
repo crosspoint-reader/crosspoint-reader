@@ -301,6 +301,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   {
     // Draw cover image as background if available (inside the box)
     // Only load from SD on first render, then use stored buffer
+
     if (hasContinueReading && !recentBooks[0].coverBmpPath.empty() && !coverRendered) {
       const std::string coverBmpPath =
           UITheme::getCoverThumbPath(recentBooks[0].coverBmpPath, BaseMetrics::values.homeCoverHeight);
@@ -310,6 +311,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          Serial.printf("Rendering bmp\n");
           // Calculate position to center image within the book card
           int coverX, coverY;
 
@@ -343,13 +345,16 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
           // First render: if selected, draw selection indicators now
           if (bookSelected) {
+            Serial.printf("Drawing selection\n");
             renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
             renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
           }
         }
         file.close();
       }
-    } else if (!bufferRestored && !coverRendered) {
+    }
+
+    if (!bufferRestored && !coverRendered) {
       // No cover image: draw border or fill, plus bookmark as visual flair
       if (bookSelected) {
         renderer.fillRect(bookX, bookY, bookWidth, bookHeight);

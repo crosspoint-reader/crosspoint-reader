@@ -22,7 +22,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 29;
+constexpr uint8_t SETTINGS_COUNT = 30;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 
 // Validate front button mapping to ensure each hardware button is unique.
@@ -117,6 +117,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, frontButtonLeft);
   serialization::writePod(outputFile, frontButtonRight);
   serialization::writePod(outputFile, fadingFix);
+  serialization::writePod(outputFile, embeddedStyle);
   // New fields added at end for backward compatibility
   outputFile.close();
 
@@ -219,6 +220,8 @@ bool CrossPointSettings::loadFromFile() {
     frontButtonMappingRead = true;
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, fadingFix);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, embeddedStyle);
     if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
   } while (false);
