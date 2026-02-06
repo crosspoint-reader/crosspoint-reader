@@ -234,6 +234,33 @@ void EpubReaderActivity::renderPopupMenu() const {
   }
 }
 
+void EpubReaderActivity::writeBookmark() {
+  if (!section || !epub) {
+    return;
+  }
+  // Prevent bookmarking from books stored inside the exports directory
+  if (epub->getPath().find("/Saved Passages/") != std::string::npos) {
+    statusBarOverride = "Cannot bookmark here";
+    updateRequired = true;
+    return;
+  }
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
+  const float chapterProgress = (section->pageCount > 0)
+                                    ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                                    : 0.0f;
+  const int bookPercent =
+      clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
+  xSemaphoreGive(renderingMutex);
+
+  std::vector<CapturedPage> bookmark = {{"\xf0\x9f\x93\x8c Bookmarked", chapterTitle, bookPercent, chapterPercent}};
+  const bool ok = PageExporter::exportPassage(epub->getPath(), epub->getTitle(), epub->getAuthor(), bookmark);
+  statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
+  updateRequired = true;
+}
+
 void EpubReaderActivity::loop() {
   // Pass input responsibility to sub activity if exists
   if (subActivity) {
