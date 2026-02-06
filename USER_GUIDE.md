@@ -201,21 +201,34 @@ This feature can be disabled in **[Settings](#35-settings)** to help avoid chang
 
 ### Bookmarks & Saved Passages
 
-You can bookmark pages and save passages to a file on the SD card.
+**Bookmarks** and **Saved Passages** are separate features for marking your place and saving text.
 
-**Bookmarking or saving a passage:**
-1. Hold **Confirm** for about 1 second — a popup appears with two options
-2. Use **Left**/**Right** to select **Bookmark** or **Save Passage**
-3. Press **Confirm** to execute your choice
+#### Bookmarks
 
-**Bookmark:** Records the current page location in the book's annotation file.
+Hold **Confirm** for about 1 second to bookmark the current page. The status bar will briefly show "Bookmarked".
 
-**Save Passage (single page):** Starts a capture, then hold **Confirm** again to save just the current page.
+**Viewing bookmarks:** Press **Confirm** to open the reader menu → select **Bookmarks**. This opens a list of all bookmarks for the current book, showing the book percentage for each.
 
-**Save Passage (multi-page):**
-1. Select **Save Passage** from the popup
+**In the bookmark list:**
+- Use **Up**/**Down** (or **Left**/**Right**) to navigate
+- Press **Confirm** to jump to a bookmark
+- Long-press **Back** to delete the selected bookmark (with confirmation)
+- Press **Back** to return to reading
+
+Bookmarks are stored in the **Bookmarks** folder on the SD card (one file per book).
+
+#### Saved Passages
+
+You can save text from pages to a file on the SD card.
+
+**Quick save (single page):**
+1. Press **Confirm** → select **Save Passage** from the reader menu
+2. "Capture started" appears. Hold **Confirm** again — "Passage saved" appears
+
+**Multi-page save:**
+1. Press **Confirm** → select **Save Passage** from the reader menu
 2. Turn pages forward — each page is captured (indicated by **\*** in the status bar)
-3. Hold **Confirm** again on the last page to save all captured pages
+3. Hold **Confirm** on the last page to save all captured pages
 
 **Stopping a capture:**
 - **Hold Confirm** to save the captured pages
@@ -223,15 +236,12 @@ You can bookmark pages and save passages to a file on the SD card.
 - **Press Back** to discard the capture without saving
 - **Open the reader menu** and select **Stop Capture** to save
 
-> [!TIP]
-> You can also access this from the reader menu: press **Confirm** → select **Bookmark & Save**.
-
-Bookmarks and saved passages are stored in the **Saved Passages** folder on the SD card as `.md` files (one file per book). You can browse them directly on the device or on a computer.
+Saved passages are stored in the **Saved Passages** folder on the SD card as `.md` files (one file per book). You can browse them directly on the device or on a computer.
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
 * **Return to Home:** Press and **hold** the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
-* **Reader Menu:** Press **Confirm** to open the reader menu (chapter selection, bookmark & save, and more).
+* **Reader Menu:** Press **Confirm** to open the reader menu (chapter selection, bookmarks, save passage, and more).
 
 ### Supported Languages
 
