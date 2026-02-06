@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "BookmarkStore.h"
 #include "EpubReaderMenuActivity.h"
 #include "PageExporter.h"
 #include "activities/ActivityWithSubactivity.h"
@@ -32,14 +33,11 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingGoHome = false;           // Defer go home to avoid race condition with display task
   bool skipNextButtonCheck = false;     // Skip button processing for one frame after subactivity exit
   std::string statusBarOverride;        // Temporary override text (e.g. "Passage saved"), cleared on page turn
-  bool pendingPopupMenu = false;        // Deferred popup from menu
-
   // Capture state machine
-  enum class CaptureState { IDLE, POPUP_MENU, CAPTURING };
+  enum class CaptureState { IDLE, CAPTURING };
   CaptureState captureState = CaptureState::IDLE;
   std::vector<CapturedPage> captureBuffer;
   bool statusBarMarker = false;            // Persistent capture indicator in status bar
-  int popupSelectedIndex = 0;              // 0 = Bookmark, 1 = Save Passage
   bool pendingCaptureAfterRender = false;  // Capture deferred until section loads after boundary crossing
 
   const std::function<void()> onGoBack;
@@ -63,8 +61,7 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void startCapture();
   void stopCapture();
   void cancelCapture();
-  void writeBookmark();
-  void renderPopupMenu() const;
+  void addBookmark();
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,

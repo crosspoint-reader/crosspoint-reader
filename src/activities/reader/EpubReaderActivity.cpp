@@ -197,44 +197,7 @@ void EpubReaderActivity::cancelCapture() {
   pendingCaptureAfterRender = false;
 }
 
-void EpubReaderActivity::renderPopupMenu() const {
-  constexpr int margin = 12;
-  constexpr int y = 60;
-  constexpr int itemCount = 2;
-  const char* labels[itemCount] = {"Bookmark", "Save Passage"};
-
-  // Calculate popup dimensions based on widest label
-  int maxTextWidth = 0;
-  for (int i = 0; i < itemCount; i++) {
-    const int w = renderer.getTextWidth(UI_12_FONT_ID, labels[i], EpdFontFamily::BOLD);
-    if (w > maxTextWidth) {
-      maxTextWidth = w;
-    }
-  }
-  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int rowHeight = lineHeight + 8;
-  const int popupWidth = maxTextWidth + margin * 2;
-  const int popupHeight = rowHeight * itemCount + margin * 2;
-  const int popupX = (renderer.getScreenWidth() - popupWidth) / 2;
-
-  // Draw popup border and background
-  renderer.fillRect(popupX - 2, y - 2, popupWidth + 4, popupHeight + 4, true);
-  renderer.fillRect(popupX, y, popupWidth, popupHeight, false);
-
-  // Draw each item
-  for (int i = 0; i < itemCount; i++) {
-    const int itemY = y + margin + i * rowHeight;
-    const bool selected = (i == popupSelectedIndex);
-    if (selected) {
-      renderer.fillRect(popupX + 2, itemY - 2, popupWidth - 4, rowHeight, true);
-    }
-    const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, labels[i], EpdFontFamily::BOLD);
-    const int textX = popupX + (popupWidth - textWidth) / 2;
-    renderer.drawText(UI_12_FONT_ID, textX, itemY, labels[i], !selected, EpdFontFamily::BOLD);
-  }
-}
-
-void EpubReaderActivity::writeBookmark() {
+void EpubReaderActivity::addBookmark() {
   if (!section || !epub) {
     return;
   }
@@ -245,18 +208,19 @@ void EpubReaderActivity::writeBookmark() {
     return;
   }
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-  const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
   const float chapterProgress = (section->pageCount > 0)
                                     ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
                                     : 0.0f;
   const int bookPercent =
       clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
-  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
   xSemaphoreGive(renderingMutex);
 
-  std::vector<CapturedPage> bookmark = {{"Bookmarked", chapterTitle, bookPercent, chapterPercent}};
-  const bool ok = PageExporter::exportPassage(epub->getPath(), epub->getTitle(), epub->getAuthor(), bookmark);
+  BookmarkEntry entry;
+  entry.bookPercent = static_cast<uint8_t>(bookPercent);
+  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+  entry.pageIndex = section ? static_cast<uint16_t>(section->currentPage) : 0;
+
+  const bool ok = BookmarkStore::addBookmark(epub->getPath(), entry);
   statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
   updateRequired = true;
 }
@@ -293,17 +257,6 @@ void EpubReaderActivity::loop() {
     return;  // Don't access 'this' after callback
   }
 
-  // Handle deferred popup from menu
-  if (pendingPopupMenu) {
-    pendingPopupMenu = false;
-    if (section && epub) {
-      captureState = CaptureState::POPUP_MENU;
-      popupSelectedIndex = 0;
-      updateRequired = true;
-    }
-    return;
-  }
-
   // Skip button processing after returning from subactivity
   // This prevents stale button release events from triggering actions
   // We wait until: (1) all relevant buttons are released, AND (2) wasReleased events have been cleared
@@ -318,46 +271,10 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Popup menu input handling — intercepts all input while popup is visible
-  if (captureState == CaptureState::POPUP_MENU) {
-    // Navigate up
-    if (mappedInput.wasPressed(MappedInputManager::Button::Left) ||
-        mappedInput.wasPressed(MappedInputManager::Button::PageBack)) {
-      popupSelectedIndex = 0;
-      updateRequired = true;
-    }
-    // Navigate down
-    if (mappedInput.wasPressed(MappedInputManager::Button::Right) ||
-        mappedInput.wasPressed(MappedInputManager::Button::PageForward)) {
-      popupSelectedIndex = 1;
-      updateRequired = true;
-    }
-    // Confirm selection
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      captureState = CaptureState::IDLE;
-      if (popupSelectedIndex == 0) {
-        writeBookmark();
-      } else {
-        startCapture();
-      }
-      return;
-    }
-    // Dismiss popup
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      captureState = CaptureState::IDLE;
-      updateRequired = true;
-    }
-    return;
-  }
-
-  // Long press CONFIRM (1s+): show popup (IDLE) or stop capture (CAPTURING)
+  // Long press CONFIRM (1s+): bookmark (IDLE) or stop capture (CAPTURING)
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= captureHoldMs) {
     if (captureState == CaptureState::IDLE) {
-      if (section && epub) {
-        captureState = CaptureState::POPUP_MENU;
-        popupSelectedIndex = 0;
-        updateRequired = true;
-      }
+      addBookmark();
     } else if (captureState == CaptureState::CAPTURING) {
       stopCapture();
     }
@@ -618,7 +535,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (captureState == CaptureState::CAPTURING) {
         stopCapture();
       } else {
-        pendingPopupMenu = true;
+        startCapture();
       }
       break;
     }
@@ -901,9 +818,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginLeft) {
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
-  if (captureState == CaptureState::POPUP_MENU) {
-    renderPopupMenu();
-  }
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
