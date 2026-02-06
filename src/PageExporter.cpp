@@ -21,7 +21,7 @@ std::string PageExporter::getExportPath(const std::string& bookPath) {
   // Strip the original extension
   const auto lastDot = filename.rfind('.');
   if (lastDot != std::string::npos) {
-    filename = filename.substr(0, lastDot);
+    filename.resize(lastDot);
   }
   if (filename.empty()) {
     filename = "untitled";

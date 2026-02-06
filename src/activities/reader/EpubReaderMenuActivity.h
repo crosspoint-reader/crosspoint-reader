@@ -4,6 +4,7 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -29,11 +30,10 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
         onBack(onBack),
         onAction(onAction) {
     if (isCapturing) {
-      for (auto& item : menuItems) {
-        if (item.action == MenuAction::START_CAPTURE) {
-          item.label = "Stop Capture";
-          break;
-        }
+      auto it = std::find_if(menuItems.begin(), menuItems.end(),
+                             [](const MenuItem& item) { return item.action == MenuAction::START_CAPTURE; });
+      if (it != menuItems.end()) {
+        it->label = "Stop Capture";
       }
     }
   }
