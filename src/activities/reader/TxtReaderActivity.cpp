@@ -102,15 +102,15 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  // Long press BACK (1s+) goes directly to home
+  // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    onGoHome();
+    onGoBack();
     return;
   }
 
-  // Short press BACK goes to file selection
+  // Short press BACK goes directly to home
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
-    onGoBack();
+    onGoHome();
     return;
   }
 
