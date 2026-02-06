@@ -151,9 +151,9 @@ void EpubReaderActivity::captureCurrentPage() {
   const std::string pageText = page->getPlainText();
   const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
   const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
-  const float chapterProgress =
-      (section->pageCount > 0) ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
-                               : 0.0f;
+  const float chapterProgress = (section->pageCount > 0)
+                                    ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                                    : 0.0f;
   const int bookPercent =
       clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
   const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
@@ -183,8 +183,7 @@ void EpubReaderActivity::stopCapture() {
     return;
   }
   const std::string bookHash = epub->getCachePath().substr(epub->getCachePath().rfind('/') + 1);
-  const bool ok =
-      PageExporter::exportPassage(epub->getTitle(), epub->getAuthor(), bookHash, captureBuffer);
+  const bool ok = PageExporter::exportPassage(epub->getTitle(), epub->getAuthor(), bookHash, captureBuffer);
   statusBarOverride = ok ? "Passage saved" : "Save failed";
   captureBuffer.clear();
   captureState = CaptureState::IDLE;

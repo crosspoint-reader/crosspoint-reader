@@ -38,7 +38,7 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   enum class CaptureState { IDLE, CAPTURING };
   CaptureState captureState = CaptureState::IDLE;
   std::vector<CapturedPage> captureBuffer;
-  bool statusBarMarker = false;       // Persistent capture indicator in status bar
+  bool statusBarMarker = false;            // Persistent capture indicator in status bar
   bool pendingCaptureAfterRender = false;  // Capture deferred until section loads after boundary crossing
 
   const std::function<void()> onGoBack;
