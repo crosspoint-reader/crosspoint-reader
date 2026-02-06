@@ -6,6 +6,9 @@
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
 
+inline int min(const int a, const int b) { return a < b ? a : b; }
+inline int max(const int a, const int b) { return a > b ? a : b; }
+
 class UITheme {
   // Static instance
   static UITheme instance;
