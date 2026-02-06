@@ -132,6 +132,7 @@ class CrossPointSettings {
   uint8_t statusBarBookProgressPercentage = 1;
   uint8_t statusBarProgressBar = HIDE;
   uint8_t statusBarChapterTitle = 1;
+  uint8_t statusBarBattery = 1;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;

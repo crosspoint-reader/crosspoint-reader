@@ -557,10 +557,8 @@ void EpubReaderActivity::renderScreen() {
 
   // Add status bar margin
   const bool showProgressBar = SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
-  if (SETTINGS.statusBarChapterPageCount ||
-      SETTINGS.statusBarBookProgressPercentage ||
-      showProgressBar ||
-      SETTINGS.statusBarChapterTitle) {
+  if (SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage || showProgressBar ||
+      SETTINGS.statusBarChapterTitle || SETTINGS.statusBarBattery) {
     // Add additional margin for status bar if progress bar is shown
     orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
                             (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
@@ -712,14 +710,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                          const int orientedMarginLeft) const {
   auto metrics = UITheme::getInstance().getMetrics();
-
-  // determine battery status bar elements
-  const bool showBattery = SETTINGS.statusBarBookProgressPercentage ||
-                           SETTINGS.statusBarChapterPageCount ||
-                           SETTINGS.statusBarChapterTitle;
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
-
   // Position status bar near the bottom of the logical screen, regardless of orientation
   const auto screenHeight = renderer.getScreenHeight();
   const auto textY = screenHeight - orientedMarginBottom - 4;
@@ -760,7 +750,9 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     GUI.drawReadingProgressBar(renderer, static_cast<size_t>(chapterProgress));
   }
 
-  if (showBattery) {
+  const bool showBatteryPercentage =
+      SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
+  if (SETTINGS.statusBarBattery) {
     GUI.drawBattery(renderer, Rect{orientedMarginLeft + 1, textY, metrics.batteryWidth, metrics.batteryHeight},
                     showBatteryPercentage);
   }
@@ -770,7 +762,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     // Page width minus existing content with 30px padding on each side
     const int rendererableScreenWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
 
-    const int batterySize = showBattery ? (showBatteryPercentage ? 50 : 20) : 0;
+    const int batterySize = SETTINGS.statusBarBattery ? (showBatteryPercentage ? 50 : 20) : 0;
     const int titleMarginLeft = batterySize + 30;
     const int titleMarginRight = progressTextWidth + 30;
 

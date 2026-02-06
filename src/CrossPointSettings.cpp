@@ -84,30 +84,35 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::HIDE;
       settings.statusBarChapterTitle = 0;
+      settings.statusBarBattery = 0;
       break;
     case CrossPointSettings::NO_PROGRESS:
       settings.statusBarChapterPageCount = 0;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::HIDE;
       settings.statusBarChapterTitle = 1;
+      settings.statusBarBattery = 1;
       break;
     case CrossPointSettings::BOOK_PROGRESS_BAR:
       settings.statusBarChapterPageCount = 1;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
       settings.statusBarChapterTitle = 1;
+      settings.statusBarBattery = 1;
       break;
     case CrossPointSettings::ONLY_BOOK_PROGRESS_BAR:
       settings.statusBarChapterPageCount = 1;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
       settings.statusBarChapterTitle = 0;
+      settings.statusBarBattery = 0;
       break;
     case CrossPointSettings::CHAPTER_PROGRESS_BAR:
       settings.statusBarChapterPageCount = 0;
       settings.statusBarBookProgressPercentage = 1;
       settings.statusBarProgressBar = CrossPointSettings::CHAPTER_PROGRESS;
       settings.statusBarChapterTitle = 1;
+      settings.statusBarBattery = 1;
       break;
     case CrossPointSettings::FULL:
     default:
@@ -115,6 +120,7 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
       settings.statusBarBookProgressPercentage = 1;
       settings.statusBarProgressBar = CrossPointSettings::HIDE;
       settings.statusBarChapterTitle = 1;
+      settings.statusBarBattery = 1;
       break;
   }
 }
@@ -165,6 +171,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, statusBarBookProgressPercentage);
   serialization::writePod(outputFile, statusBarProgressBar);
   serialization::writePod(outputFile, statusBarChapterTitle);
+  serialization::writePod(outputFile, statusBarBattery);
   // New fields added at end for backward compatibility
   outputFile.close();
 
@@ -278,6 +285,8 @@ bool CrossPointSettings::loadFromFile() {
     readAndValidate(inputFile, statusBarProgressBar, STATUS_BAR_PROGRESS_BAR_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, statusBarChapterTitle);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBarBattery);
     statusBarSettingsRead = true;
     // New fields added at end for backward compatibility
   } while (false);

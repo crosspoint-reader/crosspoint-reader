@@ -17,7 +17,7 @@ const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader
 
 namespace {
 constexpr int changeTabsMs = 700;
-constexpr int displaySettingsCount = 11;
+constexpr int displaySettingsCount = 12;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen,
@@ -30,6 +30,7 @@ const SettingInfo displaySettings[displaySettingsCount] = {
     SettingInfo::Enum("Status Bar Progress Bar", &CrossPointSettings::statusBarProgressBar,
                       {"Book", "Chapter", "Hide"}),
     SettingInfo::Toggle("Status Bar Chapter Title", &CrossPointSettings::statusBarChapterTitle),
+    SettingInfo::Toggle("Status Bar Show Battery", &CrossPointSettings::statusBarBattery),
     SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"}),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}),

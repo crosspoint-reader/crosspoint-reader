@@ -176,10 +176,8 @@ void TxtReaderActivity::initializeReader() {
 
   // Add status bar margin
   const bool showProgressBar = SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
-  if (SETTINGS.statusBarChapterPageCount ||
-      SETTINGS.statusBarBookProgressPercentage ||
-      showProgressBar ||
-      SETTINGS.statusBarChapterTitle) {
+  if (SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage || showProgressBar ||
+      SETTINGS.statusBarChapterTitle || SETTINGS.statusBarBattery) {
     // Add additional margin for status bar if progress bar is shown
     orientedMarginBottom += statusBarMargin - cachedScreenMargin +
                             (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
@@ -492,12 +490,6 @@ void TxtReaderActivity::renderPage() {
 
 void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) const {
-  const bool showBattery = SETTINGS.statusBarBookProgressPercentage ||
-                           SETTINGS.statusBarChapterPageCount ||
-                           SETTINGS.statusBarChapterTitle;
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
-
   auto metrics = UITheme::getInstance().getMetrics();
   const auto screenHeight = renderer.getScreenHeight();
   // Adjust text position upward when progress bar is shown to avoid overlap
@@ -529,9 +521,9 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
     GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress));
   }
 
-  if (showBattery) {
+  if (SETTINGS.statusBarBattery) {
     GUI.drawBattery(renderer, Rect{orientedMarginLeft, textY, metrics.batteryWidth, metrics.batteryHeight},
-                    showBatteryPercentage);
+                    SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER);
   }
 
   // For text mode, treat the entire book as one chapter, so chapter title == book title
