@@ -333,7 +333,8 @@ void setup() {
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
-  // Boot to home screen directly when back button is held or when reader activity crashes 3 times
+  // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
+  // crashed (indicated by readerActivityLoadCount > 0)
   if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
       mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     onGoHome();
