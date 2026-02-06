@@ -32,7 +32,14 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
   }
 
   uint8_t header[2];
-  if (file.read(header, 2) != 2 || header[0] != FORMAT_VERSION) {
+  const int bytesRead = file.read(header, 2);
+  if (bytesRead != 2) {
+    file.close();
+    return entries;
+  }
+  if (header[0] != FORMAT_VERSION) {
+    Serial.printf("[%lu] [%s] Skipping bookmark file with version %d (expected %d): %s\n", millis(), TAG, header[0],
+                  FORMAT_VERSION, path.c_str());
     file.close();
     return entries;
   }
@@ -55,11 +62,11 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
 }
 
 bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<BookmarkEntry>& entries) {
-  FsFile file = SdMan.open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
-  if (!file) {
-    Serial.printf("[%lu] [%s] Failed to open bookmark file: %s\n", millis(), TAG, path.c_str());
+  FsFile file;
+  if (!SdMan.openFileForWrite(TAG, path, file)) {
     return false;
   }
+  file.truncate(0);
 
   uint8_t header[2] = {FORMAT_VERSION, static_cast<uint8_t>(entries.size())};
   if (file.write(header, 2) != 2) {
@@ -125,6 +132,12 @@ bool BookmarkStore::deleteBookmark(const std::string& bookPath, int index) {
     return false;
   }
 
+  const int bookPercent = entries[index].bookPercent;
   entries.erase(entries.begin() + index);
-  return writeBookmarks(path, entries);
+  const bool ok = writeBookmarks(path, entries);
+  if (ok) {
+    Serial.printf("[%lu] [%s] Bookmark deleted at %d%% (remaining: %d)\n", millis(), TAG, bookPercent,
+                  static_cast<int>(entries.size()));
+  }
+  return ok;
 }
