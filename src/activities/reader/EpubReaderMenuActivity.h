@@ -50,7 +50,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
 
   // Fixed menu layout (order matters for up/down navigation).
   std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, "Go to Chapter"},
-                                     {MenuAction::START_CAPTURE, "Save Passage"},
+                                     {MenuAction::START_CAPTURE, "Bookmark & Save"},
                                      {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
                                      {MenuAction::GO_TO_PERCENT, "Go to %"},
                                      {MenuAction::GO_HOME, "Go Home"},
