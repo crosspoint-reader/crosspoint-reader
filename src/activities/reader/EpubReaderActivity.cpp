@@ -255,7 +255,7 @@ void EpubReaderActivity::writeBookmark() {
   const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
   xSemaphoreGive(renderingMutex);
 
-  std::vector<CapturedPage> bookmark = {{"\xf0\x9f\x93\x8c Bookmarked", chapterTitle, bookPercent, chapterPercent}};
+  std::vector<CapturedPage> bookmark = {{"Bookmarked", chapterTitle, bookPercent, chapterPercent}};
   const bool ok = PageExporter::exportPassage(epub->getPath(), epub->getTitle(), epub->getAuthor(), bookmark);
   statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
   updateRequired = true;
