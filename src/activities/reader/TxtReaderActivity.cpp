@@ -177,8 +177,9 @@ void TxtReaderActivity::initializeReader() {
   // Add status bar margin
   if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
     // Add additional margin for status bar if progress bar is shown
-    const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR ||
-                                 SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_PROGRESS_BAR;
+    const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
+                                 SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR ||
+                                 SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
     orientedMarginBottom += statusBarMargin - cachedScreenMargin +
                             (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
   }
@@ -491,30 +492,37 @@ void TxtReaderActivity::renderPage() {
 void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) const {
   const bool showProgressPercentage = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
-  const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR ||
-                               SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_PROGRESS_BAR;
+  const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
+                               SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR;
+  const bool showChapterProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
   const bool showProgressText = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL ||
-                                SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR;
+                                SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR;
+  const bool showBookPercentage = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
   const bool showBattery = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS ||
                            SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL ||
-                           SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR;
+                           SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
+                           SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
   const bool showTitle = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS ||
                          SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL ||
-                         SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL_WITH_PROGRESS_BAR;
+                         SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
+                         SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
 
   auto metrics = UITheme::getInstance().getMetrics();
   const auto screenHeight = renderer.getScreenHeight();
+  // Adjust text position upward when progress bar is shown to avoid overlap
   const auto textY = screenHeight - orientedMarginBottom - 4;
   int progressTextWidth = 0;
 
   const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
 
-  if (showProgressText || showProgressPercentage) {
+  if (showProgressText || showProgressPercentage || showBookPercentage) {
     char progressStr[32];
     if (showProgressPercentage) {
       snprintf(progressStr, sizeof(progressStr), "%d/%d %.0f%%", currentPage + 1, totalPages, progress);
+    } else if (showBookPercentage) {
+      snprintf(progressStr, sizeof(progressStr), "%.0f%%", progress);
     } else {
       snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage + 1, totalPages);
     }
@@ -526,7 +534,12 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
 
   if (showProgressBar) {
     // Draw progress bar at the very bottom of the screen, from edge to edge of viewable area
-    GUI.drawBookProgressBar(renderer, static_cast<size_t>(progress));
+    GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress));
+  }
+
+  if (showChapterProgressBar) {
+    // For text mode, treat the entire book as one chapter, so chapter progress == book progress
+    GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress));
   }
 
   if (showBattery) {

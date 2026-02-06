@@ -44,6 +44,36 @@ void clearEpubCacheIfNeeded(const String& filePath) {
     Serial.printf("[%lu] [WEB] Cleared epub cache for: %s\n", millis(), filePath.c_str());
   }
 }
+
+String normalizeWebPath(const String& inputPath) {
+  if (inputPath.isEmpty() || inputPath == "/") {
+    return "/";
+  }
+  std::string normalized = FsHelpers::normalisePath(inputPath.c_str());
+  String result = normalized.c_str();
+  if (result.isEmpty()) {
+    return "/";
+  }
+  if (!result.startsWith("/")) {
+    result = "/" + result;
+  }
+  if (result.length() > 1 && result.endsWith("/")) {
+    result = result.substring(0, result.length() - 1);
+  }
+  return result;
+}
+
+bool isProtectedItemName(const String& name) {
+  if (name.startsWith(".")) {
+    return true;
+  }
+  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+    if (name.equals(HIDDEN_ITEMS[i])) {
+      return true;
+    }
+  }
+  return false;
+}
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -108,6 +138,12 @@ void CrossPointWebServer::begin() {
 
   // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
+
+  // Rename file endpoint
+  server->on("/rename", HTTP_POST, [this] { handleRename(); });
+
+  // Move file endpoint
+  server->on("/move", HTTP_POST, [this] { handleMove(); });
 
   // Delete file/folder endpoint
   server->on("/delete", HTTP_POST, [this] { handleDelete(); });
@@ -687,6 +723,181 @@ void CrossPointWebServer::handleCreateFolder() const {
   } else {
     Serial.printf("[%lu] [WEB] Failed to create folder: %s\n", millis(), folderPath.c_str());
     server->send(500, "text/plain", "Failed to create folder");
+  }
+}
+
+void CrossPointWebServer::handleRename() const {
+  if (!server->hasArg("path") || !server->hasArg("name")) {
+    server->send(400, "text/plain", "Missing path or new name");
+    return;
+  }
+
+  String itemPath = normalizeWebPath(server->arg("path"));
+  String newName = server->arg("name");
+  newName.trim();
+
+  if (itemPath.isEmpty() || itemPath == "/") {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+  if (newName.isEmpty()) {
+    server->send(400, "text/plain", "New name cannot be empty");
+    return;
+  }
+  if (newName.indexOf('/') >= 0 || newName.indexOf('\\') >= 0) {
+    server->send(400, "text/plain", "Invalid file name");
+    return;
+  }
+  if (isProtectedItemName(newName)) {
+    server->send(403, "text/plain", "Cannot rename to protected name");
+    return;
+  }
+
+  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+  if (isProtectedItemName(itemName)) {
+    server->send(403, "text/plain", "Cannot rename protected item");
+    return;
+  }
+  if (newName == itemName) {
+    server->send(200, "text/plain", "Name unchanged");
+    return;
+  }
+
+  if (!SdMan.exists(itemPath.c_str())) {
+    server->send(404, "text/plain", "Item not found");
+    return;
+  }
+
+  FsFile file = SdMan.open(itemPath.c_str());
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open file");
+    return;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    server->send(400, "text/plain", "Only files can be renamed");
+    return;
+  }
+
+  String parentPath = itemPath.substring(0, itemPath.lastIndexOf('/'));
+  if (parentPath.isEmpty()) {
+    parentPath = "/";
+  }
+  String newPath = parentPath;
+  if (!newPath.endsWith("/")) {
+    newPath += "/";
+  }
+  newPath += newName;
+
+  if (SdMan.exists(newPath.c_str())) {
+    file.close();
+    server->send(409, "text/plain", "Target already exists");
+    return;
+  }
+
+  clearEpubCacheIfNeeded(itemPath);
+  const bool success = file.rename(newPath.c_str());
+  file.close();
+
+  if (success) {
+    Serial.printf("[%lu] [WEB] Renamed file: %s -> %s\n", millis(), itemPath.c_str(), newPath.c_str());
+    server->send(200, "text/plain", "Renamed successfully");
+  } else {
+    Serial.printf("[%lu] [WEB] Failed to rename file: %s -> %s\n", millis(), itemPath.c_str(), newPath.c_str());
+    server->send(500, "text/plain", "Failed to rename file");
+  }
+}
+
+void CrossPointWebServer::handleMove() const {
+  if (!server->hasArg("path") || !server->hasArg("dest")) {
+    server->send(400, "text/plain", "Missing path or destination");
+    return;
+  }
+
+  String itemPath = normalizeWebPath(server->arg("path"));
+  String destPath = normalizeWebPath(server->arg("dest"));
+
+  if (itemPath.isEmpty() || itemPath == "/") {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+  if (destPath.isEmpty()) {
+    server->send(400, "text/plain", "Invalid destination");
+    return;
+  }
+
+  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+  if (isProtectedItemName(itemName)) {
+    server->send(403, "text/plain", "Cannot move protected item");
+    return;
+  }
+  if (destPath != "/") {
+    const String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
+    if (isProtectedItemName(destName)) {
+      server->send(403, "text/plain", "Cannot move into protected folder");
+      return;
+    }
+  }
+
+  if (!SdMan.exists(itemPath.c_str())) {
+    server->send(404, "text/plain", "Item not found");
+    return;
+  }
+
+  FsFile file = SdMan.open(itemPath.c_str());
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open file");
+    return;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    server->send(400, "text/plain", "Only files can be moved");
+    return;
+  }
+
+  if (!SdMan.exists(destPath.c_str())) {
+    file.close();
+    server->send(404, "text/plain", "Destination not found");
+    return;
+  }
+  FsFile destDir = SdMan.open(destPath.c_str());
+  if (!destDir || !destDir.isDirectory()) {
+    if (destDir) {
+      destDir.close();
+    }
+    file.close();
+    server->send(400, "text/plain", "Destination is not a folder");
+    return;
+  }
+  destDir.close();
+
+  String newPath = destPath;
+  if (!newPath.endsWith("/")) {
+    newPath += "/";
+  }
+  newPath += itemName;
+
+  if (newPath == itemPath) {
+    file.close();
+    server->send(200, "text/plain", "Already in destination");
+    return;
+  }
+  if (SdMan.exists(newPath.c_str())) {
+    file.close();
+    server->send(409, "text/plain", "Target already exists");
+    return;
+  }
+
+  clearEpubCacheIfNeeded(itemPath);
+  const bool success = file.rename(newPath.c_str());
+  file.close();
+
+  if (success) {
+    Serial.printf("[%lu] [WEB] Moved file: %s -> %s\n", millis(), itemPath.c_str(), newPath.c_str());
+    server->send(200, "text/plain", "Moved successfully");
+  } else {
+    Serial.printf("[%lu] [WEB] Failed to move file: %s -> %s\n", millis(), itemPath.c_str(), newPath.c_str());
+    server->send(500, "text/plain", "Failed to move file");
   }
 }
 

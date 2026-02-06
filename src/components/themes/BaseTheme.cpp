@@ -630,7 +630,7 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
-void BaseTheme::drawBookProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const {
+void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const {
   int vieweableMarginTop, vieweableMarginRight, vieweableMarginBottom, vieweableMarginLeft;
   renderer.getOrientedViewableTRBL(&vieweableMarginTop, &vieweableMarginRight, &vieweableMarginBottom,
                                    &vieweableMarginLeft);

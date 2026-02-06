@@ -357,6 +357,8 @@ void loop() {
 
   gpio.update();
 
+  renderer.setFadingFix(SETTINGS.fadingFix);
+
   if (Serial && millis() - lastMemPrint >= 10000) {
     Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
                   ESP.getHeapSize(), ESP.getMinFreeHeap());

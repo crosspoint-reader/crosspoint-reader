@@ -32,6 +32,7 @@ class GfxRenderer {
   HalDisplay& display;
   RenderMode renderMode;
   Orientation orientation;
+  bool fadingFix;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
@@ -42,7 +43,8 @@ class GfxRenderer {
   void fillArc(int maxRadius, int cx, int cy, int xDir, int yDir, Color color) const;
 
  public:
-  explicit GfxRenderer(HalDisplay& halDisplay) : display(halDisplay), renderMode(BW), orientation(Portrait) {}
+  explicit GfxRenderer(HalDisplay& halDisplay)
+      : display(halDisplay), renderMode(BW), orientation(Portrait), fadingFix(false) {}
   ~GfxRenderer() { freeBwBufferChunks(); }
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
@@ -56,6 +58,9 @@ class GfxRenderer {
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
   Orientation getOrientation() const { return orientation; }
+
+  // Fading fix control
+  void setFadingFix(const bool enabled) { fadingFix = enabled; }
 
   // Screen ops
   int getScreenWidth() const;

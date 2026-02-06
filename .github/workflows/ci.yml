@@ -89,3 +89,21 @@ jobs:
           name: firmware.bin
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
+
+  # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
+  # PR requirements.
+  test-status:
+    name: Test Status
+    needs:
+      - build
+      - clang-format
+      - cppcheck
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail because needed jobs failed
+        # Fail if any job failed or was cancelled (skipped jobs are ok)
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+      - name: Success
+        run: exit 0

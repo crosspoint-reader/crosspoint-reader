@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 
+#include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -106,8 +107,16 @@ void EpubReaderMenuActivity::renderScreen() {
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
+  // Progress summary
+  std::string progressLine;
+  if (totalPages > 0) {
+    progressLine = "Chapter: " + std::to_string(currentPage) + "/" + std::to_string(totalPages) + " pages  |  ";
+  }
+  progressLine += "Book: " + std::to_string(bookProgressPercent) + "%";
+  renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
+
   // Menu Items
-  const int startY = 60 + contentY;
+  const int startY = 75 + contentY;
   constexpr int lineHeight = 30;
 
   for (size_t i = 0; i < menuItems.size(); ++i) {
