@@ -182,8 +182,7 @@ void EpubReaderActivity::stopCapture() {
     cancelCapture();
     return;
   }
-  const std::string bookHash = epub->getCachePath().substr(epub->getCachePath().rfind('/') + 1);
-  const bool ok = PageExporter::exportPassage(epub->getTitle(), epub->getAuthor(), bookHash, captureBuffer);
+  const bool ok = PageExporter::exportPassage(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
   statusBarOverride = ok ? "Passage saved" : "Save failed";
   captureBuffer.clear();
   captureState = CaptureState::IDLE;

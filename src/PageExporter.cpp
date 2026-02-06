@@ -9,33 +9,22 @@ constexpr const char* EXPORTS_DIR = "/Saved Passages";
 constexpr const char* TAG = "PEX";
 }  // namespace
 
-std::string PageExporter::sanitizeFilename(const std::string& title) {
-  std::string result;
-  result.reserve(title.size());
-  for (char c : title) {
-    if (c == ' ') {
-      result += '_';
-    } else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
-      result += c;
-    }
-    // Skip all other characters (punctuation, special chars, etc.)
-  }
-  // Truncate to 80 chars to stay well within FAT32 limits
-  if (result.size() > 80) {
-    result.resize(80);
-  }
-  if (result.empty()) {
-    result = "untitled";
-  }
-  return result;
-}
-
-std::string PageExporter::getExportPath(const std::string& bookTitle, const std::string& bookHash) {
+std::string PageExporter::getExportPath(const std::string& bookPath) {
+  // Extract filename from path (e.g. "/Books/My Book.epub" -> "My Book")
   std::string filename;
-  if (bookTitle.empty()) {
-    filename = bookHash;
+  const auto lastSlash = bookPath.rfind('/');
+  if (lastSlash != std::string::npos) {
+    filename = bookPath.substr(lastSlash + 1);
   } else {
-    filename = sanitizeFilename(bookTitle);
+    filename = bookPath;
+  }
+  // Strip the original extension
+  const auto lastDot = filename.rfind('.');
+  if (lastDot != std::string::npos) {
+    filename = filename.substr(0, lastDot);
+  }
+  if (filename.empty()) {
+    filename = "untitled";
   }
   return std::string(EXPORTS_DIR) + "/" + filename + ".md";
 }
@@ -85,15 +74,15 @@ bool PageExporter::writePassage(FsFile& file, const std::vector<CapturedPage>& p
   return file.write(reinterpret_cast<const uint8_t*>(entry.c_str()), entry.size()) == entry.size();
 }
 
-bool PageExporter::exportPassage(const std::string& bookTitle, const std::string& bookAuthor,
-                                 const std::string& bookHash, const std::vector<CapturedPage>& pages) {
+bool PageExporter::exportPassage(const std::string& bookPath, const std::string& bookTitle,
+                                 const std::string& bookAuthor, const std::vector<CapturedPage>& pages) {
   if (pages.empty()) {
     return false;
   }
 
   SdMan.mkdir(EXPORTS_DIR);
 
-  const std::string path = getExportPath(bookTitle, bookHash);
+  const std::string path = getExportPath(bookPath);
 
   // Check if file already exists (to decide whether to write header)
   const bool isNew = !SdMan.exists(path.c_str());
