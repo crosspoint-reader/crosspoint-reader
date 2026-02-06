@@ -901,6 +901,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginLeft) {
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+  if (captureState == CaptureState::POPUP_MENU) {
+    renderPopupMenu();
+  }
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
@@ -934,11 +937,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // restore the bw data
   renderer.restoreBwBuffer();
 
-  // Draw popup overlay if active
-  if (captureState == CaptureState::POPUP_MENU) {
-    renderPopupMenu();
-    renderer.displayBuffer();
-  }
 }
 
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
