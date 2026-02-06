@@ -596,9 +596,7 @@ void EpubReaderActivity::renderScreen() {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, "End of book", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     // turns off automatic page turn when end of book is reached
-    if (automaticPageTurnActive) {
-      automaticPageTurnActive = false;
-    }
+    automaticPageTurnActive = false;
     return;
   }
 
