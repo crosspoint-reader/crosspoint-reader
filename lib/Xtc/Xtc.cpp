@@ -340,7 +340,7 @@ bool Xtc::generateThumbBmp(int height) const {
   // Calculate scale factor
   float scaleX = static_cast<float>(THUMB_TARGET_WIDTH) / pageInfo.width;
   float scaleY = static_cast<float>(THUMB_TARGET_HEIGHT) / pageInfo.height;
-  float scale = (scaleX < scaleY) ? scaleX : scaleY;
+  float scale = (scaleX > scaleY) ? scaleX : scaleY;  // for cropping
 
   // Only scale down, never up
   if (scale >= 1.0f) {
