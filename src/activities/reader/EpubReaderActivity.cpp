@@ -936,7 +936,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   // restore the bw data
   renderer.restoreBwBuffer();
-
 }
 
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
