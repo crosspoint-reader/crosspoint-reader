@@ -19,7 +19,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
-    - [Saving Passages](#saving-passages)
+    - [Bookmarks & Saved Passages](#bookmarks--saved-passages)
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
   - [5. Chapter Selection Screen](#5-chapter-selection-screen)
@@ -199,16 +199,21 @@ If the **Short Power Button Click** setting is set to "Page Turn", you can also 
 
 This feature can be disabled in **[Settings](#35-settings)** to help avoid changing chapters by mistake.
 
-### Saving Passages
+### Bookmarks & Saved Passages
 
-You can save text from pages you're reading to a file on the SD card.
+You can bookmark pages and save passages to a file on the SD card.
 
-**Quick save (single page):**
-1. Hold **Confirm** for about 1 second — "Capture started" appears
-2. Hold **Confirm** again — "Passage saved" appears
+**Bookmarking or saving a passage:**
+1. Hold **Confirm** for about 1 second — a popup appears with two options
+2. Use **Left**/**Right** to select **Bookmark** or **Save Passage**
+3. Press **Confirm** to execute your choice
 
-**Multi-page save:**
-1. Hold **Confirm** for about 1 second on the first page you want to save
+**Bookmark:** Records the current page location in the book's annotation file.
+
+**Save Passage (single page):** Starts a capture, then hold **Confirm** again to save just the current page.
+
+**Save Passage (multi-page):**
+1. Select **Save Passage** from the popup
 2. Turn pages forward — each page is captured (indicated by **\*** in the status bar)
 3. Hold **Confirm** again on the last page to save all captured pages
 
@@ -219,14 +224,14 @@ You can save text from pages you're reading to a file on the SD card.
 - **Open the reader menu** and select **Stop Capture** to save
 
 > [!TIP]
-> You can also start a capture from the reader menu: press **Confirm** → select **Save Passage**.
+> You can also access this from the reader menu: press **Confirm** → select **Bookmark & Save**.
 
-Saved passages are stored in the **Saved Passages** folder on the SD card as `.md` files (one file per book). You can browse them directly on the device or on a computer.
+Bookmarks and saved passages are stored in the **Saved Passages** folder on the SD card as `.md` files (one file per book). You can browse them directly on the device or on a computer.
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
 * **Return to Home:** Press and **hold** the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
-* **Reader Menu:** Press **Confirm** to open the reader menu (chapter selection, save passage, and more).
+* **Reader Menu:** Press **Confirm** to open the reader menu (chapter selection, bookmark & save, and more).
 
 ### Supported Languages
 
