@@ -331,7 +331,7 @@ void setup() {
 
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
-
+  
   if (APP_STATE.showBootScreen) {
     enterNewActivity(new BootActivity(renderer, mappedInputManager));
   }
