@@ -7,6 +7,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "EpubReaderBookmarkListActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -537,6 +538,27 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       } else {
         startCapture();
       }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new EpubReaderBookmarkListActivity(
+          this->renderer, this->mappedInput, epub->getPath(),
+          [this]() {
+            exitActivity();
+            updateRequired = true;
+          },
+          [this](const int spineIndex, const int pageIndex) {
+            if (currentSpineIndex != spineIndex || (section && section->currentPage != pageIndex)) {
+              currentSpineIndex = spineIndex;
+              nextPageNumber = pageIndex;
+              section.reset();
+            }
+            exitActivity();
+            updateRequired = true;
+          }));
+      xSemaphoreGive(renderingMutex);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
