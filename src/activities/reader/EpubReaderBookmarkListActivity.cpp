@@ -97,17 +97,15 @@ void EpubReaderBookmarkListActivity::loop() {
   const int pageItems = getPageItems();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (selectorIndex >= 0 && selectorIndex < totalItems) {
+    if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
+      confirmingDelete = true;
+      updateRequired = true;
+    } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
       const auto& bk = bookmarks[selectorIndex];
       onSelectBookmark(bk.spineIndex, bk.pageIndex);
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
-      confirmingDelete = true;
-      updateRequired = true;
-    } else {
-      onGoBack();
-    }
+    onGoBack();
   } else if (prevReleased) {
     if (skipPage) {
       selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + totalItems) % totalItems;
@@ -176,8 +174,17 @@ void EpubReaderBookmarkListActivity::renderScreen() {
     const bool isSelected = (itemIndex == selectorIndex);
 
     const auto& bk = bookmarks[itemIndex];
-    char label[48];
-    snprintf(label, sizeof(label), "%d%% of book", bk.bookPercent);
+    char label[64];
+    if (resolveChapterTitle && bk.chapterPercent > 0) {
+      std::string title = resolveChapterTitle(bk.spineIndex);
+      if (title.length() > 20) {
+        title.resize(17);
+        title += "...";
+      }
+      snprintf(label, sizeof(label), "%d%% of %s - %d%% of book", bk.chapterPercent, title.c_str(), bk.bookPercent);
+    } else {
+      snprintf(label, sizeof(label), "%d%% of book", bk.bookPercent);
+    }
 
     const int textX = contentX + 20;
     renderer.drawText(UI_10_FONT_ID, textX, displayY, label, !isSelected);

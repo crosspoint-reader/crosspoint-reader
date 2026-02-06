@@ -12,8 +12,8 @@ struct CapturedPage {
   int chapterPercent;
 };
 
-// Exports captured passages to per-book .md files on the SD card.
-// Files are stored at /Saved Passages/<book-filename>.md
+// Exports captured clippings to per-book .md files on the SD card.
+// Files are stored at /clippings/<book-filename>.md
 // Each capture is appended with chapter/percentage metadata.
 class PageExporter {
  public:
@@ -22,8 +22,10 @@ class PageExporter {
   static bool exportPassage(const std::string& bookPath, const std::string& bookTitle, const std::string& bookAuthor,
                             const std::vector<CapturedPage>& pages);
 
- private:
+  // Get the export path for a book (e.g. "/clippings/My Book.md")
   static std::string getExportPath(const std::string& bookPath);
+
+ private:
   static bool writeHeader(FsFile& file, const std::string& bookTitle, const std::string& bookAuthor);
   static bool writePassage(FsFile& file, const std::vector<CapturedPage>& pages);
 };

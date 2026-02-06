@@ -163,7 +163,7 @@ void EpubReaderActivity::captureCurrentPage() {
 
 void EpubReaderActivity::startCapture() {
   // Prevent capturing from books stored inside the exports directory
-  if (epub && epub->getPath().find("/Saved Passages/") != std::string::npos) {
+  if (epub && epub->getPath().find("/clippings/") != std::string::npos) {
     statusBarOverride = "Cannot capture here";
     updateRequired = true;
     return;
@@ -184,7 +184,7 @@ void EpubReaderActivity::stopCapture() {
     return;
   }
   const bool ok = PageExporter::exportPassage(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
-  statusBarOverride = ok ? "Passage saved" : "Save failed";
+  statusBarOverride = ok ? "Clipping saved" : "Save failed";
   captureBuffer.clear();
   captureState = CaptureState::IDLE;
   statusBarMarker = false;
@@ -203,7 +203,7 @@ void EpubReaderActivity::addBookmark() {
     return;
   }
   // Prevent bookmarking from books stored inside the exports directory
-  if (epub->getPath().find("/Saved Passages/") != std::string::npos) {
+  if (epub->getPath().find("/clippings/") != std::string::npos) {
     statusBarOverride = "Cannot bookmark here";
     updateRequired = true;
     return;
@@ -216,10 +216,13 @@ void EpubReaderActivity::addBookmark() {
       clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
   xSemaphoreGive(renderingMutex);
 
+  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
+
   BookmarkEntry entry;
   entry.bookPercent = static_cast<uint8_t>(bookPercent);
+  entry.chapterPercent = static_cast<uint8_t>(chapterPercent);
   entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
-  entry.pageIndex = section ? static_cast<uint16_t>(section->currentPage) : 0;
+  entry.pageIndex = static_cast<uint16_t>(section->currentPage);
 
   const bool ok = BookmarkStore::addBookmark(epub->getPath(), entry);
   statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
@@ -258,6 +261,22 @@ void EpubReaderActivity::loop() {
     return;  // Don't access 'this' after callback
   }
 
+  // Handle pending file open (e.g. clippings viewer)
+  if (!pendingOpenFilePath.empty()) {
+    auto path = std::move(pendingOpenFilePath);
+    pendingOpenFilePath.clear();
+    if (SdMan.exists(path.c_str())) {
+      exitActivity();
+      if (onOpenFile) {
+        onOpenFile(path);
+      }
+      return;
+    } else {
+      statusBarOverride = "No clippings yet";
+      updateRequired = true;
+    }
+  }
+
   // Skip button processing after returning from subactivity
   // This prevents stale button release events from triggering actions
   // We wait until: (1) all relevant buttons are released, AND (2) wasReleased events have been cleared
@@ -272,13 +291,9 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Long press CONFIRM (1s+): bookmark (IDLE) or stop capture (CAPTURING)
+  // Long press CONFIRM (1s+): always bookmark
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= captureHoldMs) {
-    if (captureState == CaptureState::IDLE) {
-      addBookmark();
-    } else if (captureState == CaptureState::CAPTURING) {
-      stopCapture();
-    }
+    addBookmark();
     // Wait for button release before processing further input
     skipNextButtonCheck = true;
     return;
@@ -540,11 +555,21 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::VIEW_CLIPPINGS: {
+      exitActivity();
+      applyOrientation(SETTINGS.orientation);
+      pendingOpenFilePath = PageExporter::getExportPath(epub->getPath());
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new EpubReaderBookmarkListActivity(
           this->renderer, this->mappedInput, epub->getPath(),
+          [this](uint16_t spineIndex) -> std::string {
+            const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+            return (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
+          },
           [this]() {
             exitActivity();
             updateRequired = true;

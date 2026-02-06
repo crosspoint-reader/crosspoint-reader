@@ -18,6 +18,7 @@ class EpubReaderBookmarkListActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   bool confirmingDelete = false;
 
+  const std::function<std::string(uint16_t)> resolveChapterTitle;
   const std::function<void()> onGoBack;
   const std::function<void(int spineIndex, int pageIndex)> onSelectBookmark;
 
@@ -30,10 +31,13 @@ class EpubReaderBookmarkListActivity final : public ActivityWithSubactivity {
 
  public:
   explicit EpubReaderBookmarkListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                          const std::string& bookPath, const std::function<void()>& onGoBack,
+                                          const std::string& bookPath,
+                                          const std::function<std::string(uint16_t)>& resolveChapterTitle,
+                                          const std::function<void()>& onGoBack,
                                           const std::function<void(int spineIndex, int pageIndex)>& onSelectBookmark)
       : ActivityWithSubactivity("EpubReaderBookmarkList", renderer, mappedInput),
         bookPath(bookPath),
+        resolveChapterTitle(resolveChapterTitle),
         onGoBack(onGoBack),
         onSelectBookmark(onSelectBookmark) {}
   void onEnter() override;

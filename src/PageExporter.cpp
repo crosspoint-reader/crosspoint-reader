@@ -5,7 +5,7 @@
 #include <string>
 
 namespace {
-constexpr const char* EXPORTS_DIR = "/Saved Passages";
+constexpr const char* EXPORTS_DIR = "/clippings";
 constexpr const char* TAG = "PEX";
 }  // namespace
 

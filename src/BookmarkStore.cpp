@@ -46,14 +46,15 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
 
   const uint8_t count = header[1];
   for (uint8_t i = 0; i < count; i++) {
-    uint8_t data[5];
-    if (file.read(data, 5) != 5) {
+    uint8_t data[6];
+    if (file.read(data, 6) != 6) {
       break;
     }
     BookmarkEntry entry;
     entry.bookPercent = data[0];
-    entry.spineIndex = data[1] | (data[2] << 8);
-    entry.pageIndex = data[3] | (data[4] << 8);
+    entry.chapterPercent = data[1];
+    entry.spineIndex = data[2] | (data[3] << 8);
+    entry.pageIndex = data[4] | (data[5] << 8);
     entries.push_back(entry);
   }
 
@@ -66,8 +67,6 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
   if (!SdMan.openFileForWrite(TAG, path, file)) {
     return false;
   }
-  file.truncate(0);
-
   uint8_t header[2] = {FORMAT_VERSION, static_cast<uint8_t>(entries.size())};
   if (file.write(header, 2) != 2) {
     file.close();
@@ -75,13 +74,14 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
   }
 
   for (const auto& entry : entries) {
-    uint8_t data[5];
+    uint8_t data[6];
     data[0] = entry.bookPercent;
-    data[1] = entry.spineIndex & 0xFF;
-    data[2] = (entry.spineIndex >> 8) & 0xFF;
-    data[3] = entry.pageIndex & 0xFF;
-    data[4] = (entry.pageIndex >> 8) & 0xFF;
-    if (file.write(data, 5) != 5) {
+    data[1] = entry.chapterPercent;
+    data[2] = entry.spineIndex & 0xFF;
+    data[3] = (entry.spineIndex >> 8) & 0xFF;
+    data[4] = entry.pageIndex & 0xFF;
+    data[5] = (entry.pageIndex >> 8) & 0xFF;
+    if (file.write(data, 6) != 6) {
       file.close();
       return false;
     }
@@ -97,12 +97,13 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
 
   auto entries = loadBookmarks(bookPath);
 
-  // Skip duplicate (same bookPercent)
-  for (const auto& existing : entries) {
-    if (existing.bookPercent == entry.bookPercent) {
-      Serial.printf("[%lu] [%s] Bookmark at %d%% already exists\n", millis(), TAG, entry.bookPercent);
-      return true;
-    }
+  // Skip duplicate (same exact position)
+  if (std::any_of(entries.begin(), entries.end(), [&entry](const BookmarkEntry& existing) {
+        return existing.spineIndex == entry.spineIndex && existing.pageIndex == entry.pageIndex;
+      })) {
+    Serial.printf("[%lu] [%s] Bookmark already exists at spine %d page %d\n", millis(), TAG, entry.spineIndex,
+                  entry.pageIndex);
+    return true;
   }
 
   entries.push_back(entry);
