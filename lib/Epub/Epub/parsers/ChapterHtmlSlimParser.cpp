@@ -211,11 +211,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   const float emSize = static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
-  const auto userAlignment = static_cast<CssTextAlign>(self->paragraphAlignment);
+  const auto userAlignmentBlockStyle =
+      BlockStyle::fromCssStyle(cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment));
 
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
     self->currentCssStyle = cssStyle;
-    self->startNewTextBlock(BlockStyle::fromCssStyle(cssStyle, emSize, userAlignment));
+    auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center);
+    headerBlockStyle.textAlignDefined = true;
+    if (self->embeddedStyle && cssStyle.hasTextAlign()) {
+      headerBlockStyle.alignment = cssStyle.textAlign;
+    }
+    self->startNewTextBlock(headerBlockStyle);
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
@@ -227,7 +233,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
     } else {
       self->currentCssStyle = cssStyle;
-      self->startNewTextBlock(BlockStyle::fromCssStyle(cssStyle, emSize, userAlignment));
+      self->startNewTextBlock(userAlignmentBlockStyle);
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
@@ -430,7 +436,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;
-  paragraphAlignmentBlockStyle.alignment = static_cast<CssTextAlign>(this->paragraphAlignment);
+  // Resolve None sentinel to Justify for initial block (no CSS context yet)
+  const auto align = (this->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                         ? CssTextAlign::Justify
+                         : static_cast<CssTextAlign>(this->paragraphAlignment);
+  paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
 
   const XML_Parser parser = XML_ParserCreate(nullptr);
