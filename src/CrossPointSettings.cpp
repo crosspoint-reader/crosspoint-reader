@@ -91,7 +91,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, sleepScreen);
   serialization::writePod(outputFile, extraParagraphSpacing);
   serialization::writePod(outputFile, shortPwrBtn);
-  serialization::writePod(outputFile, statusBar);
+  serialization::writePod(outputFile, statusBar);  // legacy
   serialization::writePod(outputFile, orientation);
   serialization::writePod(outputFile, frontButtonLayout);  // legacy
   serialization::writePod(outputFile, sideButtonLayout);
@@ -118,6 +118,10 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, frontButtonRight);
   serialization::writePod(outputFile, fadingFix);
   serialization::writePod(outputFile, embeddedStyle);
+  serialization::writePod(outputFile, statusBarChapterPageCount);
+  serialization::writePod(outputFile, statusBarBookProgressPercentage);
+  serialization::writePod(outputFile, statusBarProgressBar);
+  serialization::writePod(outputFile, statusBarChapterTitle);
   // New fields added at end for backward compatibility
   outputFile.close();
 
@@ -153,7 +157,7 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, shortPwrBtn, SHORT_PWRBTN_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, statusBar, STATUS_BAR_MODE_COUNT);
+    readAndValidate(inputFile, statusBar, STATUS_BAR_MODE_COUNT);  // legacy
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, orientation, ORIENTATION_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
@@ -223,6 +227,13 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, embeddedStyle);
     if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBarChapterPageCount);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBarBookProgressPercentage);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, statusBarProgressBar, STATUS_BAR_PROGRESS_BAR_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBarChapterTitle);
     // New fields added at end for backward compatibility
   } while (false);
 
