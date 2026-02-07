@@ -237,54 +237,54 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
   }
 }
 
-static constexpr uint8_t bayer4x4[4][4] = {
-    {0, 8, 2, 10},
-    {12, 4, 14, 6},
-    {3, 11, 1, 9},
-    {15, 7, 13, 5},
-};
-static constexpr int matrixSize = 4;
-static constexpr int matrixLevels = matrixSize * matrixSize;
-
-void GfxRenderer::drawPixelDither(const int x, const int y, Color color) const {
-  if (color == Color::Clear) {
-  } else if (color == Color::Black) {
-    drawPixel(x, y, true);
-  } else if (color == Color::White) {
-    drawPixel(x, y, false);
-  } else {
-    // Use dithering
-    const int greyLevel = static_cast<int>(color) - 1;  // 0-15
-    const int normalizedGrey = (greyLevel * 255) / (matrixLevels - 1);
-    const int clampedGrey = std::max(0, std::min(normalizedGrey, 255));
-    const int threshold = (clampedGrey * (matrixLevels + 1)) / 256;
-
-    const int matrixX = x & (matrixSize - 1);
-    const int matrixY = y & (matrixSize - 1);
-    const uint8_t patternValue = bayer4x4[matrixY][matrixX];
-    const bool black = patternValue < threshold;
-    drawPixel(x, y, black);
-  }
+template <>
+void GfxRenderer::drawPixelDither<Color::Clear>(const int x, const int y) const {
+  // Do nothing for clear
 }
 
-// Use Bayer matrix 4x4 dithering to fill the rectangle with a grey level
+template <>
+void GfxRenderer::drawPixelDither<Color::Black>(const int x, const int y) const {
+  drawPixel(x, y, true);
+}
+
+template <>
+void GfxRenderer::drawPixelDither<Color::White>(const int x, const int y) const {
+  drawPixel(x, y, false);
+}
+
+template <>
+void GfxRenderer::drawPixelDither<Color::LightGray>(const int x, const int y) const {
+  drawPixel(x, y, x % 2 == 0 && y % 2 == 0);
+}
+
+template <>
+void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) const {
+  drawPixel(x, y, (x + y) % 2 == 0);  // TODO: maybe find a better pattern?
+}
+
 void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color) const {
   if (color == Color::Clear) {
   } else if (color == Color::Black) {
     fillRect(x, y, width, height, true);
   } else if (color == Color::White) {
     fillRect(x, y, width, height, false);
-  } else {
+  } else if (color == Color::LightGray) {
     for (int fillY = y; fillY < y + height; fillY++) {
       for (int fillX = x; fillX < x + width; fillX++) {
-        drawPixelDither(fillX, fillY, color);
+        drawPixelDither<Color::LightGray>(fillX, fillY);
+      }
+    }
+  } else if (color == Color::DarkGray) {
+    for (int fillY = y; fillY < y + height; fillY++) {
+      for (int fillX = x; fillX < x + width; fillX++) {
+        drawPixelDither<Color::DarkGray>(fillX, fillY);
       }
     }
   }
 }
 
-void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir,
-                          Color color) const {
+template <Color color>
+void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir) const {
   const int radiusSq = maxRadius * maxRadius;
   for (int dy = 0; dy <= maxRadius; ++dy) {
     for (int dx = 0; dx <= maxRadius; ++dx) {
@@ -292,7 +292,7 @@ void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const
       const int px = cx + xDir * dx;
       const int py = cy + yDir * dy;
       if (distSq <= radiusSq) {
-        drawPixelDither(px, py, color);
+        drawPixelDither<color>(px, py);
       }
     }
   }
@@ -327,26 +327,45 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
     fillRectDither(x + width - maxRadius - 1, y + maxRadius + 1, maxRadius + 1, verticalHeight, color);
   }
 
+  auto fillArcTemplated = [this](int maxRadius, int cx, int cy, int xDir, int yDir, Color color) {
+    switch (color) {
+      case Color::Clear:
+        break;
+      case Color::Black:
+        fillArc<Color::Black>(maxRadius, cx, cy, xDir, yDir);
+        break;
+      case Color::White:
+        fillArc<Color::White>(maxRadius, cx, cy, xDir, yDir);
+        break;
+      case Color::LightGray:
+        fillArc<Color::LightGray>(maxRadius, cx, cy, xDir, yDir);
+        break;
+      case Color::DarkGray:
+        fillArc<Color::DarkGray>(maxRadius, cx, cy, xDir, yDir);
+        break;
+    }
+  };
+
   if (roundTopLeft) {
-    fillArc(maxRadius, x + maxRadius, y + maxRadius, -1, -1, color);
+    fillArcTemplated(maxRadius, x + maxRadius, y + maxRadius, -1, -1, color);
   } else {
     fillRectDither(x, y, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundTopRight) {
-    fillArc(maxRadius, x + width - maxRadius - 1, y + maxRadius, 1, -1, color);
+    fillArcTemplated(maxRadius, x + width - maxRadius - 1, y + maxRadius, 1, -1, color);
   } else {
     fillRectDither(x + width - maxRadius - 1, y, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundBottomRight) {
-    fillArc(maxRadius, x + width - maxRadius - 1, y + height - maxRadius - 1, 1, 1, color);
+    fillArcTemplated(maxRadius, x + width - maxRadius - 1, y + height - maxRadius - 1, 1, 1, color);
   } else {
     fillRectDither(x + width - maxRadius - 1, y + height - maxRadius - 1, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundBottomLeft) {
-    fillArc(maxRadius, x + maxRadius, y + height - maxRadius - 1, -1, 1, color);
+    fillArcTemplated(maxRadius, x + maxRadius, y + height - maxRadius - 1, -1, 1, color);
   } else {
     fillRectDither(x, y + height - maxRadius - 1, maxRadius + 1, maxRadius + 1, color);
   }
