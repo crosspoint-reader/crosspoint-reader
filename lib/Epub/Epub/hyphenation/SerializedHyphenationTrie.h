@@ -5,6 +5,7 @@
 
 // Lightweight descriptor that points at a serialized Liang hyphenation trie stored in flash.
 struct SerializedHyphenationPatterns {
+  size_t rootOffset;
   const std::uint8_t* data;
   size_t size;
 };

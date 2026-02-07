@@ -13,10 +13,10 @@
 namespace {
 
 // English hyphenation patterns (3/3 minimum prefix/suffix length)
-LanguageHyphenator englishHyphenator(en_us_patterns, isLatinLetter, toLowerLatin, 3, 3);
+LanguageHyphenator englishHyphenator(en_patterns, isLatinLetter, toLowerLatin, 3, 3);
 LanguageHyphenator frenchHyphenator(fr_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator germanHyphenator(de_patterns, isLatinLetter, toLowerLatin);
-LanguageHyphenator russianHyphenator(ru_ru_patterns, isCyrillicLetter, toLowerCyrillic);
+LanguageHyphenator russianHyphenator(ru_patterns, isCyrillicLetter, toLowerCyrillic);
 LanguageHyphenator spanishHyphenator(es_patterns, isLatinLetter, toLowerLatin);
 
 using EntryArray = std::array<LanguageEntry, 5>;
