@@ -37,6 +37,7 @@ void WifiSelectionActivity::onEnter() {
   usedSavedPassword = false;
   savePromptSelection = 0;
   forgetPromptSelection = 0;
+  autoConnecting = false;
 
   // Cache MAC address for display
   uint8_t mac[6];
@@ -46,9 +47,7 @@ void WifiSelectionActivity::onEnter() {
            mac[5]);
   cachedMacAddress = std::string(macStr);
 
-  // Trigger first update to show scanning message
-  updateRequired = true;
-
+  // Task creation
   xTaskCreate(&WifiSelectionActivity::taskTrampoline, "WifiSelectionTask",
               4096,               // Stack size (larger for WiFi operations)
               this,               // Parameters
@@ -56,7 +55,24 @@ void WifiSelectionActivity::onEnter() {
               &displayTaskHandle  // Task handle
   );
 
-  // Start WiFi scan
+  // Attempt to auto-connect to the last network
+  const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
+  if (!lastSsid.empty()) {
+    const auto* cred = WIFI_STORE.findCredential(lastSsid);
+    if (cred) {
+      Serial.printf("[%lu] [WIFI] Attempting to auto-connect to %s\n", millis(), lastSsid.c_str());
+      selectedSSID = cred->ssid;
+      enteredPassword = cred->password;
+      selectedRequiresPassword = !cred->password.empty();
+      usedSavedPassword = true;
+      autoConnecting = true;
+      attemptConnection();
+      updateRequired = true;
+      return;
+    }
+  }
+
+  // Fallback to scanning
   startWifiScan();
 }
 
@@ -96,6 +112,7 @@ void WifiSelectionActivity::onExit() {
 }
 
 void WifiSelectionActivity::startWifiScan() {
+  autoConnecting = false;
   state = WifiSelectionState::SCANNING;
   networks.clear();
   updateRequired = true;
@@ -181,6 +198,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
   selectedRequiresPassword = network.isEncrypted;
   usedSavedPassword = false;
   enteredPassword.clear();
+  autoConnecting = false;
 
   // Check if we have saved credentials for this network
   const auto* savedCred = WIFI_STORE.findCredential(selectedSSID);
@@ -223,7 +241,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
 }
 
 void WifiSelectionActivity::attemptConnection() {
-  state = WifiSelectionState::CONNECTING;
+  state = autoConnecting ? WifiSelectionState::AUTO_CONNECTING : WifiSelectionState::CONNECTING;
   connectionStartTime = millis();
   connectedIP.clear();
   connectionError.clear();
@@ -239,7 +257,7 @@ void WifiSelectionActivity::attemptConnection() {
 }
 
 void WifiSelectionActivity::checkConnectionStatus() {
-  if (state != WifiSelectionState::CONNECTING) {
+  if (state != WifiSelectionState::CONNECTING && state != WifiSelectionState::AUTO_CONNECTING) {
     return;
   }
 
@@ -251,6 +269,10 @@ void WifiSelectionActivity::checkConnectionStatus() {
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     connectedIP = ipStr;
+    autoConnecting = false;
+
+    // Save this as the last connected network
+    WIFI_STORE.setLastConnectedSsid(selectedSSID);
 
     // If we entered a new password, ask if user wants to save it
     // Otherwise, immediately complete so parent can start web server
@@ -299,7 +321,7 @@ void WifiSelectionActivity::loop() {
   }
 
   // Check connection progress
-  if (state == WifiSelectionState::CONNECTING) {
+  if (state == WifiSelectionState::CONNECTING || state == WifiSelectionState::AUTO_CONNECTING) {
     checkConnectionStatus();
     return;
   }
@@ -368,12 +390,10 @@ void WifiSelectionActivity::loop() {
         }
       }
       // Go back to network list (whether Cancel or Forget network was selected)
-      state = WifiSelectionState::NETWORK_LIST;
-      updateRequired = true;
+      startWifiScan();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       // Skip forgetting, go back to network list
-      state = WifiSelectionState::NETWORK_LIST;
-      updateRequired = true;
+      startWifiScan();
     }
     return;
   }
@@ -389,12 +409,13 @@ void WifiSelectionActivity::loop() {
   if (state == WifiSelectionState::CONNECTION_FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      // If we used saved credentials, offer to forget the network
-      if (usedSavedPassword) {
+      // If we were auto-connecting or using a saved credential, offer to forget the network
+      if (autoConnecting || usedSavedPassword) {
+        autoConnecting = false;
         state = WifiSelectionState::FORGET_PROMPT;
         forgetPromptSelection = 0;  // Default to "Cancel"
       } else {
-        // Go back to network list on failure
+        // Go back to network list on failure for non-saved credentials
         state = WifiSelectionState::NETWORK_LIST;
       }
       updateRequired = true;
@@ -496,6 +517,9 @@ void WifiSelectionActivity::render() const {
   renderer.clearScreen();
 
   switch (state) {
+    case WifiSelectionState::AUTO_CONNECTING:
+      renderConnecting();
+      break;
     case WifiSelectionState::SCANNING:
       renderConnecting();  // Reuse connecting screen with different message
       break;
@@ -614,6 +638,13 @@ void WifiSelectionActivity::renderConnecting() const {
 
   if (state == WifiSelectionState::SCANNING) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, "Scanning...");
+  } else if (state == WifiSelectionState::AUTO_CONNECTING) {
+    renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Auto-connecting...", true, EpdFontFamily::BOLD);
+    std::string ssidInfo = "to " + selectedSSID;
+    if (ssidInfo.length() > 25) {
+      ssidInfo.replace(22, ssidInfo.length() - 22, "...");
+    }
+    renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
   } else {
     renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connecting...", true, EpdFontFamily::BOLD);
 
@@ -707,7 +738,12 @@ void WifiSelectionActivity::renderForgetPrompt() const {
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connection Failed", true, EpdFontFamily::BOLD);
+  // Show a different title if we are trying to forget a network that failed to connect
+  if (autoConnecting) {
+    renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Auto-Connect Failed", true, EpdFontFamily::BOLD);
+  } else {
+    renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connection Failed", true, EpdFontFamily::BOLD);
+  }
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {

@@ -21,6 +21,7 @@ struct WifiNetworkInfo {
 
 // WiFi selection states
 enum class WifiSelectionState {
+  AUTO_CONNECTING,    // Trying to connect to the last known network
   SCANNING,           // Scanning for networks
   NETWORK_LIST,       // Displaying available networks
   PASSWORD_ENTRY,     // Entering password for selected network
@@ -67,6 +68,9 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
 
   // Whether network was connected using a saved password (skip save prompt)
   bool usedSavedPassword = false;
+
+  // Whether we are attempting to auto-connect
+  bool autoConnecting = false;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;
