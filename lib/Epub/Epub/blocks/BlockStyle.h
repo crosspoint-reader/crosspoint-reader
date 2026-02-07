@@ -64,8 +64,8 @@ struct BlockStyle {
   // Create a BlockStyle from CSS style properties, resolving CssLength values to pixels
   // emSize is the current font line height, used for em/rem unit conversion
   // paragraphAlignment is the user's paragraphAlignment setting preference
-  static BlockStyle fromCssStyle(const CssStyle& cssStyle, const float emSize,
-                                 const CssTextAlign paragraphAlignment, const uint16_t viewportWidth = 0) {
+  static BlockStyle fromCssStyle(const CssStyle& cssStyle, const float emSize, const CssTextAlign paragraphAlignment,
+                                 const uint16_t viewportWidth = 0) {
     BlockStyle blockStyle;
     const float vw = viewportWidth;
     // Resolve all CssLength values to pixels using the current font's em size and viewport width
