@@ -87,6 +87,7 @@ class CrossPointSettings {
     LEFT_ALIGN = 1,
     CENTER_ALIGN = 2,
     RIGHT_ALIGN = 3,
+    BOOK_STYLE = 4,
     PARAGRAPH_ALIGNMENT_COUNT
   };
 
@@ -171,6 +172,8 @@ class CrossPointSettings {
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
+  uint8_t embeddedStyle = 1;
 
   ~CrossPointSettings() = default;
 
