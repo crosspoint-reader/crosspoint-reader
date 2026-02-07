@@ -18,7 +18,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   int cursorX = startX;
   const int cursorY = startY;
   uint32_t cp;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
+  while ((cp = utf8NextCodepointWithLigatures(reinterpret_cast<const uint8_t**>(&string)))) {
     const EpdGlyph* glyph = getGlyph(cp);
 
     if (!glyph) {

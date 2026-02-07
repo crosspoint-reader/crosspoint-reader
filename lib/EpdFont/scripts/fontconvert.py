@@ -101,6 +101,9 @@ intervals = [
     # (0xFE30, 0xFE4F),
     # # CJK Compatibility Ideographs
     # (0xF900, 0xFAFF),
+    ### Alphabetic Presentation Forms ###
+    # Latin ligatures (ff, fi, fl, ffi, ffl, long st, st)
+    (0xFB00, 0xFB06),
     ### Specials
     # Replacement Character
     (0xFFFD, 0xFFFD),
