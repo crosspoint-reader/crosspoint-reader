@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <Epub.h>
+#include <Fb2.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <WiFi.h>
@@ -40,11 +41,13 @@ size_t wsLastCompleteSize = 0;
 unsigned long wsLastCompleteAt = 0;
 
 // Helper function to clear epub cache after upload
-void clearEpubCacheIfNeeded(const String& filePath) {
-  // Only clear cache for .epub files
+void clearBookCacheIfNeeded(const String& filePath) {
   if (StringUtils::checkFileExtension(filePath, ".epub")) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     Serial.printf("[%lu] [WEB] Cleared epub cache for: %s\n", millis(), filePath.c_str());
+  } else if (StringUtils::checkFileExtension(filePath, ".fb2")) {
+    Fb2(filePath.c_str(), "/.crosspoint").clearCache();
+    Serial.printf("[%lu] [WEB] Cleared fb2 cache for: %s\n", millis(), filePath.c_str());
   }
 }
 
@@ -657,7 +660,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
-        clearEpubCacheIfNeeded(filePath);
+        clearBookCacheIfNeeded(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -803,7 +806,7 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  clearEpubCacheIfNeeded(itemPath);
+  clearBookCacheIfNeeded(itemPath);
   const bool success = file.rename(newPath.c_str());
   file.close();
 
@@ -896,7 +899,7 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  clearEpubCacheIfNeeded(itemPath);
+  clearBookCacheIfNeeded(itemPath);
   const bool success = file.rename(newPath.c_str());
   file.close();
 
@@ -1290,7 +1293,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        clearEpubCacheIfNeeded(filePath);
+        clearBookCacheIfNeeded(filePath);
 
         wsServer->sendTXT(num, "DONE");
         lastProgressSent = 0;

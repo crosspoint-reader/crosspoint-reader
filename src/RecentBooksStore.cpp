@@ -1,6 +1,7 @@
 #include "RecentBooksStore.h"
 
 #include <Epub.h>
+#include <Fb2.h>
 #include <HalStorage.h>
 #include <HardwareSerial.h>
 #include <Serialization.h>
@@ -90,6 +91,11 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
     Epub epub(path, "/.crosspoint");
     epub.load(false);
     return RecentBook{path, epub.getTitle(), epub.getAuthor(), epub.getThumbBmpPath()};
+  } else if (StringUtils::checkFileExtension(lastBookFileName, ".fb2")) {
+    Fb2 fb2(path, "/.crosspoint");
+    if (fb2.load(false)) {
+      return RecentBook{path, fb2.getTitle(), fb2.getAuthor(), fb2.getThumbBmpPath()};
+    }
   } else if (StringUtils::checkFileExtension(lastBookFileName, ".xtch") ||
              StringUtils::checkFileExtension(lastBookFileName, ".xtc")) {
     // Handle XTC file

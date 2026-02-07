@@ -5,6 +5,7 @@
 #include "activities/home/MyLibraryActivity.h"
 
 class Epub;
+class Fb2;
 class Xtc;
 class Txt;
 
@@ -14,14 +15,17 @@ class ReaderActivity final : public ActivityWithSubactivity {
   const std::function<void()> onGoBack;
   const std::function<void(const std::string&)> onGoToLibrary;
   static std::unique_ptr<Epub> loadEpub(const std::string& path);
+  static std::unique_ptr<Fb2> loadFb2(const std::string& path);
   static std::unique_ptr<Xtc> loadXtc(const std::string& path);
   static std::unique_ptr<Txt> loadTxt(const std::string& path);
+  static bool isFb2File(const std::string& path);
   static bool isXtcFile(const std::string& path);
   static bool isTxtFile(const std::string& path);
 
   static std::string extractFolderPath(const std::string& filePath);
   void goToLibrary(const std::string& fromBookPath = "");
   void onGoToEpubReader(std::unique_ptr<Epub> epub);
+  void onGoToFb2Reader(std::unique_ptr<Fb2> fb2);
   void onGoToXtcReader(std::unique_ptr<Xtc> xtc);
   void onGoToTxtReader(std::unique_ptr<Txt> txt);
 
