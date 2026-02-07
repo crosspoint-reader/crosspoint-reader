@@ -99,6 +99,8 @@ class CrossPointWebServer {
   void handleUploadPost(UploadState& state) const;
   void handleUploadApp() const;
   void handleUploadAppPost() const;
+  void handleUploadAppZip();
+  void handleUploadAppZipPost();
   void handleCreateFolder() const;
   void handleRename() const;
   void handleMove() const;

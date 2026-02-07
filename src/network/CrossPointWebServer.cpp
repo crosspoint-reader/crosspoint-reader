@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <SDCardManager.h>
 #include <WiFi.h>
+#include <ZipFile.h>
 #include <esp_task_wdt.h>
 
 #include <algorithm>
@@ -140,6 +141,9 @@ void CrossPointWebServer::begin() {
 
   // App upload endpoint (developer feature)
   server->on("/upload-app", HTTP_POST, [this] { handleUploadAppPost(); }, [this] { handleUploadApp(); });
+
+  // App ZIP upload endpoint (developer feature)
+  server->on("/upload-app-zip", HTTP_POST, [this] { handleUploadAppZipPost(); }, [this] { handleUploadAppZip(); });
 
   // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
@@ -522,6 +526,24 @@ static String appUploadError = "";
 constexpr size_t APP_UPLOAD_BUFFER_SIZE = 4096;
 static uint8_t appUploadBuffer[APP_UPLOAD_BUFFER_SIZE];
 static size_t appUploadBufferPos = 0;
+
+// Static variables for app ZIP upload handling (developer feature)
+static FsFile appZipUploadFile;
+static String appZipUploadTempPath;
+static String appZipUploadExtractDir;
+static String appZipUploadAppId;
+static String appZipUploadName;
+static String appZipUploadVersion;
+static String appZipUploadAuthor;
+static String appZipUploadDescription;
+static String appZipUploadMinFirmware;
+static String appZipUploadAppDir;
+static String appZipUploadManifestPath;
+static size_t appZipUploadSize = 0;
+static bool appZipUploadSuccess = false;
+static String appZipUploadError = "";
+static uint8_t appZipUploadBuffer[APP_UPLOAD_BUFFER_SIZE];
+static size_t appZipUploadBufferPos = 0;
 
 static bool flushAppUploadBuffer() {
   if (appUploadBufferPos > 0 && appUploadFile) {
@@ -972,6 +994,258 @@ void CrossPointWebServer::handleUploadAppPost() const {
                  "App uploaded. Install on device: Home -> Apps -> " + appUploadName + " v" + appUploadVersion);
   } else {
     const String error = appUploadError.isEmpty() ? "Unknown error during app upload" : appUploadError;
+    const int code = (error.startsWith("Missing") || error.startsWith("Invalid")) ? 400 : 500;
+    server->send(code, "text/plain", error);
+  }
+}
+
+void CrossPointWebServer::handleUploadAppZip() {
+  esp_task_wdt_reset();
+
+  if (!running || !server) {
+    Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] ERROR: handleUploadAppZip called but server not running!\n", millis());
+    return;
+  }
+
+  const HTTPUpload& upload = server->upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    appZipUploadSuccess = false;
+    appZipUploadError = "";
+    appZipUploadSize = 0;
+    appZipUploadBufferPos = 0;
+
+    if (!server->hasArg("appId") || !server->hasArg("name") || !server->hasArg("version")) {
+      appZipUploadError = "Missing required fields: appId, name, version";
+      return;
+    }
+
+    appZipUploadAppId = server->arg("appId");
+    appZipUploadName = server->arg("name");
+    appZipUploadVersion = server->arg("version");
+    appZipUploadAuthor = server->hasArg("author") ? server->arg("author") : "";
+    appZipUploadDescription = server->hasArg("description") ? server->arg("description") : "";
+    appZipUploadMinFirmware = server->hasArg("minFirmware") ? server->arg("minFirmware") : "";
+
+    if (!isValidAppId(appZipUploadAppId)) {
+      appZipUploadError = "Invalid appId";
+      return;
+    }
+
+    if (!SdMan.ready()) {
+      appZipUploadError = "SD card not ready";
+      return;
+    }
+
+    appZipUploadAppDir = String("/.crosspoint/apps/") + appZipUploadAppId;
+    if (!SdMan.ensureDirectoryExists("/.crosspoint") || !SdMan.ensureDirectoryExists("/.crosspoint/apps") ||
+        !SdMan.ensureDirectoryExists(appZipUploadAppDir.c_str())) {
+      appZipUploadError = "Failed to create app directory";
+      return;
+    }
+
+    appZipUploadTempPath = appZipUploadAppDir + "/upload.zip.tmp";
+    appZipUploadExtractDir = appZipUploadAppDir + "/extract.tmp";
+
+    if (SdMan.exists(appZipUploadTempPath.c_str())) {
+      SdMan.remove(appZipUploadTempPath.c_str());
+    }
+
+    if (!SdMan.openFileForWrite("APPZIPUPLOAD", appZipUploadTempPath, appZipUploadFile)) {
+      appZipUploadError = "Failed to create upload.zip.tmp";
+      return;
+    }
+
+    Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] START: %s (%s v%s)\n", millis(), appZipUploadAppId.c_str(),
+                  appZipUploadName.c_str(), appZipUploadVersion.c_str());
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (appZipUploadFile && appZipUploadError.isEmpty()) {
+      const uint8_t* data = upload.buf;
+      size_t remaining = upload.currentSize;
+
+      while (remaining > 0) {
+        const size_t space = APP_UPLOAD_BUFFER_SIZE - appZipUploadBufferPos;
+        const size_t toCopy = (remaining < space) ? remaining : space;
+        memcpy(appZipUploadBuffer + appZipUploadBufferPos, data, toCopy);
+        appZipUploadBufferPos += toCopy;
+        data += toCopy;
+        remaining -= toCopy;
+
+        if (appZipUploadBufferPos >= APP_UPLOAD_BUFFER_SIZE) {
+          const size_t written = appZipUploadFile.write(appZipUploadBuffer, appZipUploadBufferPos);
+          esp_task_wdt_reset();
+
+          if (written != appZipUploadBufferPos) {
+            appZipUploadError = "Failed writing upload.zip.tmp (disk full?)";
+            appZipUploadFile.close();
+            SdMan.remove(appZipUploadTempPath.c_str());
+            return;
+          }
+          appZipUploadBufferPos = 0;
+        }
+      }
+
+      appZipUploadSize += upload.currentSize;
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (appZipUploadFile) {
+      if (appZipUploadBufferPos > 0) {
+        const size_t written = appZipUploadFile.write(appZipUploadBuffer, appZipUploadBufferPos);
+        esp_task_wdt_reset();
+
+        if (written != appZipUploadBufferPos) {
+          appZipUploadError = "Failed writing final upload.zip.tmp data";
+        }
+        appZipUploadBufferPos = 0;
+      }
+      appZipUploadFile.close();
+
+      if (!appZipUploadError.isEmpty()) {
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      if (appZipUploadSize == 0) {
+        appZipUploadError = "Uploaded file is empty";
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] Extracting app.bin...\n", millis());
+
+      ZipFile zip(appZipUploadTempPath.c_str());
+      if (!zip.open()) {
+        appZipUploadError = "Failed to open ZIP file";
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      size_t extractedSize = 0;
+      if (!zip.getInflatedFileSize("app.bin", &extractedSize)) {
+        appZipUploadError = "ZIP must contain app.bin";
+        zip.close();
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      SdMan.ensureDirectoryExists(appZipUploadExtractDir.c_str());
+
+      const String extractedTempPath = appZipUploadExtractDir + "/app.bin";
+      if (SdMan.exists(extractedTempPath.c_str())) {
+        SdMan.remove(extractedTempPath.c_str());
+      }
+
+      FsFile outFile;
+      if (!SdMan.openFileForWrite("APPZIPUPLOAD", extractedTempPath, outFile)) {
+        appZipUploadError = "Failed to extract app.bin";
+        zip.close();
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      if (!zip.readFileToStream("app.bin", outFile, 4096)) {
+        appZipUploadError = "Failed to extract app.bin";
+        outFile.close();
+        SdMan.remove(extractedTempPath.c_str());
+        zip.close();
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      outFile.close();
+      zip.close();
+
+      Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] app.bin extracted (%u bytes), validating magic byte...\n", millis(),
+                    static_cast<unsigned>(extractedSize));
+
+      FsFile checkFile = SdMan.open(extractedTempPath.c_str(), O_RDONLY);
+      if (!checkFile) {
+        appZipUploadError = "Failed to reopen extracted file";
+        SdMan.remove(extractedTempPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+      uint8_t magic = 0;
+      if (checkFile.read(&magic, 1) != 1 || magic != 0xE9) {
+        checkFile.close();
+        appZipUploadError = "Invalid firmware image (bad magic byte)";
+        SdMan.remove(extractedTempPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+      checkFile.close();
+
+      const String finalAppBinPath = appZipUploadAppDir + "/app.bin";
+      const String finalAppBinTmp = appZipUploadAppDir + "/app.bin.tmp";
+      if (SdMan.exists(finalAppBinTmp.c_str())) {
+        SdMan.remove(finalAppBinTmp.c_str());
+      }
+
+      if (!renameFileAtomic(extractedTempPath, finalAppBinTmp)) {
+        appZipUploadError = "Failed to move app.bin to final location";
+        SdMan.remove(extractedTempPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      if (!renameFileAtomic(finalAppBinTmp, finalAppBinPath)) {
+        appZipUploadError = "Failed to finalize app.bin";
+        SdMan.remove(finalAppBinTmp.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] app.bin extracted and moved successfully\n", millis());
+
+      SdMan.remove(appZipUploadTempPath.c_str());
+
+      appZipUploadManifestPath = appZipUploadAppDir + "/app.json";
+
+      JsonDocument doc;
+      doc["name"] = appZipUploadName;
+      doc["version"] = appZipUploadVersion;
+      doc["description"] = appZipUploadDescription;
+      doc["author"] = appZipUploadAuthor;
+      doc["minFirmware"] = appZipUploadMinFirmware;
+      doc["id"] = appZipUploadAppId;
+      doc["uploadMs"] = millis();
+
+      String manifestJson;
+      serializeJson(doc, manifestJson);
+
+      const String manifestTmp = appZipUploadManifestPath + ".tmp";
+      if (!SdMan.writeFile(manifestTmp.c_str(), manifestJson)) {
+        appZipUploadError = "Failed to write app.json";
+        return;
+      }
+      if (!renameFileAtomic(manifestTmp, appZipUploadManifestPath)) {
+        SdMan.remove(manifestTmp.c_str());
+        appZipUploadError = "Failed to finalize app.json";
+        return;
+      }
+
+      appZipUploadSuccess = true;
+      Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] Complete: %s\n", millis(), appZipUploadAppId.c_str());
+    }
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    appZipUploadBufferPos = 0;
+    if (appZipUploadFile) {
+      appZipUploadFile.close();
+    }
+    if (!appZipUploadTempPath.isEmpty()) {
+      SdMan.remove(appZipUploadTempPath.c_str());
+    }
+    appZipUploadError = "Upload aborted";
+    Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] Upload aborted\n", millis());
+  }
+}
+
+void CrossPointWebServer::handleUploadAppZipPost() {
+  if (appZipUploadSuccess) {
+    server->send(200, "text/plain",
+                 "App ZIP uploaded. Install on device: Home -> Apps -> " + appZipUploadName + " v" + appZipUploadVersion);
+  } else {
+    const String error = appZipUploadError.isEmpty() ? "Unknown error during app ZIP upload" : appZipUploadError;
     const int code = (error.startsWith("Missing") || error.startsWith("Invalid")) ? 400 : 500;
     server->send(code, "text/plain", error);
   }
