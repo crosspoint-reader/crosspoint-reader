@@ -13,6 +13,7 @@ void GfxRenderer::begin() {
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
+// This should always be inlined for better performance
 static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
                                      int* phyY) {
   switch (orientation) {
@@ -45,9 +46,13 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
   }
 }
 
+// IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
+// efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   int phyX = 0;
   int phyY = 0;
+
+  // Note: this call should be inlined for better performance
   rotateCoordinates(orientation, x, y, &phyX, &phyY);
 
   // Bounds checking against physical panel dimensions
