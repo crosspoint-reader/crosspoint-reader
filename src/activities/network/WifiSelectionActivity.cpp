@@ -640,13 +640,6 @@ void WifiSelectionActivity::renderConnecting() const {
 
   if (state == WifiSelectionState::SCANNING) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, "Scanning...");
-  } else if (state == WifiSelectionState::AUTO_CONNECTING) {
-    renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Auto-connecting...", true, EpdFontFamily::BOLD);
-    std::string ssidInfo = "to " + selectedSSID;
-    if (ssidInfo.length() > 25) {
-      ssidInfo.replace(22, ssidInfo.length() - 22, "...");
-    }
-    renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
   } else {
     renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connecting...", true, EpdFontFamily::BOLD);
 
@@ -740,13 +733,7 @@ void WifiSelectionActivity::renderForgetPrompt() const {
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
-  // Show a different title if we are trying to forget a network that failed to connect
-  if (autoConnecting) {
-    renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Auto-Connect Failed", true, EpdFontFamily::BOLD);
-  } else {
-    renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connection Failed", true, EpdFontFamily::BOLD);
-  }
-
+  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connection Failed", true, EpdFontFamily::BOLD);
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
     ssidInfo.replace(25, ssidInfo.length() - 25, "...");
