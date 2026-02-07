@@ -88,16 +88,26 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::UNDERLINE);
   }
 
+  // Determine attachment type: Continues (inline boundary) > NonBreaking (nbsp) > Normal
+  auto attachment = WordAttach::Normal;
+  if (nextWordContinues) {
+    attachment = WordAttach::Continues;
+  } else if (nextWordNonBreaking) {
+    attachment = WordAttach::NonBreaking;
+  }
+
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  currentTextBlock->addWord(partWordBuffer, fontStyle, false, attachment);
   partWordBufferIndex = 0;
   nextWordContinues = false;
+  nextWordNonBreaking = false;
 }
 
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
+  nextWordNonBreaking = false;
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -355,6 +365,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
       // Whitespace is a real word boundary — reset continuation state
       self->nextWordContinues = false;
+      self->nextWordNonBreaking = false;
       // Skip the whitespace char
       continue;
     }
@@ -371,6 +382,17 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         i += 2;    // Skip the next two bytes
         continue;  // Move to the next iteration
       }
+    }
+
+    // Detect U+00A0 (non-breaking space): UTF-8 encoding is 0xC2 0xA0
+    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+      self->nextWordContinues = false;
+      self->nextWordNonBreaking = true;
+      i++;  // Skip the second byte (0xA0)
+      continue;
     }
 
     // If we're about to run out of space, then cut the word off and start a new one

@@ -13,25 +13,31 @@
 
 class GfxRenderer;
 
+// Controls how a word attaches to the previous word for spacing and line-breaking.
+//   Normal       — regular word boundary: space before, line break allowed
+//   Continues    — inline element boundary: no space, no line break (e.g. style change mid-word)
+//   NonBreaking  — non-breaking space: space before, but no line break (e.g. &nbsp;)
+enum class WordAttach : uint8_t { Normal, Continues, NonBreaking };
+
 class ParsedText {
   std::list<std::string> words;
   std::list<EpdFontFamily::Style> wordStyles;
-  std::list<bool> wordContinues;  // true = word attaches to previous (no space before it)
+  std::list<WordAttach> wordContinues;
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
 
   void applyParagraphIndent();
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth, int spaceWidth,
-                                        std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec);
+                                        std::vector<uint16_t>& wordWidths, std::vector<WordAttach>& continuesVec);
   std::vector<size_t> computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                                   int spaceWidth, std::vector<uint16_t>& wordWidths,
-                                                  std::vector<bool>& continuesVec);
+                                                  std::vector<WordAttach>& continuesVec);
   bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks,
-                            std::vector<bool>* continuesVec = nullptr);
+                            std::vector<WordAttach>* continuesVec = nullptr);
   void extractLine(size_t breakIndex, int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths,
-                   const std::vector<bool>& continuesVec, const std::vector<size_t>& lineBreakIndices,
+                   const std::vector<WordAttach>& continuesVec, const std::vector<size_t>& lineBreakIndices,
                    const std::function<void(std::shared_ptr<TextBlock>)>& processLine);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
@@ -41,7 +47,8 @@ class ParsedText {
       : blockStyle(blockStyle), extraParagraphSpacing(extraParagraphSpacing), hyphenationEnabled(hyphenationEnabled) {}
   ~ParsedText() = default;
 
-  void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false);
+  void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false,
+               WordAttach attachment = WordAttach::Normal);
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
