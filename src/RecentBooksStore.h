@@ -6,6 +6,7 @@ struct RecentBook {
   std::string path;
   std::string title;
   std::string author;
+  std::string coverBmpPath;
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
@@ -23,7 +24,11 @@ class RecentBooksStore {
   static RecentBooksStore& getInstance() { return instance; }
 
   // Add a book to the recent list (moves to front if already exists)
-  void addBook(const std::string& path, const std::string& title, const std::string& author);
+  void addBook(const std::string& path, const std::string& title, const std::string& author,
+               const std::string& coverBmpPath);
+
+  void updateBook(const std::string& path, const std::string& title, const std::string& author,
+                  const std::string& coverBmpPath);
 
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }
@@ -34,6 +39,7 @@ class RecentBooksStore {
   bool saveToFile() const;
 
   bool loadFromFile();
+  RecentBook getDataFromBook(std::string path) const;
 };
 
 // Helper macro to access recent books store

@@ -10,6 +10,8 @@
 #include "../FootnoteEntry.h"
 #include "../ParsedText.h"
 #include "../blocks/TextBlock.h"
+#include "../css/CssParser.h"
+#include "../css/CssStyle.h"
 
 class Page;
 class GfxRenderer;
@@ -56,10 +58,12 @@ class ChapterHtmlSlimParser {
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
+  int underlineUntilDepth = INT_MAX;
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
+  bool nextWordContinues = false;  // true when next flushed word attaches to previous (inline element boundary)
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   std::unique_ptr<Page> currentPage = nullptr;
   int16_t currentPageNextY = 0;
@@ -70,6 +74,21 @@ class ChapterHtmlSlimParser {
   uint16_t viewportWidth;
   uint16_t viewportHeight;
   bool hyphenationEnabled;
+  const CssParser* cssParser;
+  bool embeddedStyle;
+
+  // Style tracking (replaces depth-based approach)
+  struct StyleStackEntry {
+    int depth = 0;
+    bool hasBold = false, bold = false;
+    bool hasItalic = false, italic = false;
+    bool hasUnderline = false, underline = false;
+  };
+  std::vector<StyleStackEntry> inlineStyleStack;
+  CssStyle currentCssStyle;
+  bool effectiveBold = false;
+  bool effectiveItalic = false;
+  bool effectiveUnderline = false;
 
   // Noteref tracking
   char currentNoterefText[16] = {0};
@@ -107,8 +126,8 @@ class ChapterHtmlSlimParser {
   bool isPass1CollectingAsides = false;
 
   std::unique_ptr<FootnoteEntry> createFootnoteEntry(const char* number, const char* href);
-  void startNewTextBlock(TextBlock::Style style);
-  EpdFontFamily::Style getCurrentFontStyle() const;
+  void updateEffectiveInlineStyle();
+  void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPartWordBuffer();
   void makePages();
 
@@ -130,10 +149,13 @@ class ChapterHtmlSlimParser {
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
-                                 const std::function<void()>& popupFn = nullptr)
+                                 const bool embeddedStyle, const std::function<void()>& popupFn = nullptr,
+                                 const CssParser* cssParser = nullptr)
+
       : filepath(filepath),
         renderer(renderer),
         completePageFn(completePageFn),
+        popupFn(popupFn),
         fontId(fontId),
         lineCompression(lineCompression),
         extraParagraphSpacing(extraParagraphSpacing),
@@ -141,7 +163,11 @@ class ChapterHtmlSlimParser {
         viewportWidth(viewportWidth),
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
-        popupFn(popupFn),
+        cssParser(cssParser),
+        embeddedStyle(embeddedStyle),
+        boldUntilDepth(INT_MAX),
+        italicUntilDepth(INT_MAX),
+        underlineUntilDepth(INT_MAX),
         inlineFootnoteCount(0) {
     // Initialize all footnote pointers to null
     for (int i = 0; i < 16; i++) {
