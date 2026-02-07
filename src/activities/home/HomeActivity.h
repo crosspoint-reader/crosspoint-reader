@@ -19,10 +19,8 @@ class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   bool updateRequired = false;
-  bool hasContinueReading = false;
   bool recentsLoading = false;
   bool recentsLoaded = false;
-  bool recentsDisplayed = false;
   bool firstRenderDone = false;
   bool hasOpdsUrl = false;
   bool coverRendered = false;      // Track if cover has been rendered once
@@ -43,7 +41,8 @@ class HomeActivity final : public Activity {
   bool storeCoverBuffer();    // Store frame buffer for cover image
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
-  void loadRecentBooks(int maxBooks, int coverHeight);
+  void loadRecentBooks(int maxBooks);
+  void loadRecentCovers(int coverHeight);
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

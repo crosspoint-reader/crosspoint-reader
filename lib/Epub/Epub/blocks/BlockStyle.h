@@ -80,8 +80,9 @@ struct BlockStyle {
     blockStyle.textIndent = cssStyle.textIndent.toPixelsInt16(emSize);
     blockStyle.textIndentDefined = cssStyle.hasTextIndent();
     blockStyle.textAlignDefined = cssStyle.hasTextAlign();
-    if (blockStyle.textAlignDefined) {
-      blockStyle.alignment = cssStyle.textAlign;
+    // User setting overrides CSS, unless "Book's Style" alignment setting is selected
+    if (paragraphAlignment == CssTextAlign::None) {
+      blockStyle.alignment = blockStyle.textAlignDefined ? cssStyle.textAlign : CssTextAlign::Justify;
     } else {
       blockStyle.alignment = paragraphAlignment;
     }
