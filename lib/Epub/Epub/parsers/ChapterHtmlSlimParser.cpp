@@ -360,8 +360,6 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     }
 
     // Treat Non-Breaking Space (U+00A0) = 0xC2 0xA0 as a word separator
-    // EPUBs use &nbsp; between short prepositions and following words (e.g. Polish "w domu")
-    // The nbsp should render as a visible space, not merge words together (issue #743)
     const XML_Char NBSP_BYTE_1 = static_cast<XML_Char>(0xC2);
     const XML_Char NBSP_BYTE_2 = static_cast<XML_Char>(0xA0);
     if (s[i] == NBSP_BYTE_1 && (i + 1 < len) && s[i + 1] == NBSP_BYTE_2) {
