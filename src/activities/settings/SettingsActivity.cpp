@@ -238,7 +238,7 @@ void SettingsActivity::toggleCurrentSetting() {
         enterSubActivity(new CalibreSettingsActivity(renderer, mappedInput, onComplete));
         break;
       case SettingAction::Network:
-        enterSubActivity(new WifiSelectionActivity(renderer, mappedInput, onCompleteBool));
+        enterSubActivity(new WifiSelectionActivity(renderer, mappedInput, onCompleteBool, false));
         break;
       case SettingAction::ClearCache:
         enterSubActivity(new ClearCacheActivity(renderer, mappedInput, onComplete));

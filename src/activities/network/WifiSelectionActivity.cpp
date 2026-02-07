@@ -56,19 +56,21 @@ void WifiSelectionActivity::onEnter() {
   );
 
   // Attempt to auto-connect to the last network
-  const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
-  if (!lastSsid.empty()) {
-    const auto* cred = WIFI_STORE.findCredential(lastSsid);
-    if (cred) {
-      Serial.printf("[%lu] [WIFI] Attempting to auto-connect to %s\n", millis(), lastSsid.c_str());
-      selectedSSID = cred->ssid;
-      enteredPassword = cred->password;
-      selectedRequiresPassword = !cred->password.empty();
-      usedSavedPassword = true;
-      autoConnecting = true;
-      attemptConnection();
-      updateRequired = true;
-      return;
+  if (allowAutoConnect) {
+    const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
+    if (!lastSsid.empty()) {
+      const auto* cred = WIFI_STORE.findCredential(lastSsid);
+      if (cred) {
+        Serial.printf("[%lu] [WIFI] Attempting to auto-connect to %s\n", millis(), lastSsid.c_str());
+        selectedSSID = cred->ssid;
+        enteredPassword = cred->password;
+        selectedRequiresPassword = !cred->password.empty();
+        usedSavedPassword = true;
+        autoConnecting = true;
+        attemptConnection();
+        updateRequired = true;
+        return;
+      }
     }
   }
 
