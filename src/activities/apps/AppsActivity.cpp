@@ -16,7 +16,8 @@ AppsActivity::AppsActivity(GfxRenderer& renderer, MappedInputManager& mappedInpu
       selectedIndex_(0),
       needsUpdate_(true),
       isFlashing_(false),
-      flashProgress_(0) {}
+      flashProgress_(0),
+      flashingStarted_(false) {}
 
 void AppsActivity::onEnter() {
   Activity::onEnter();
@@ -45,7 +46,9 @@ void AppsActivity::loop() {
     }
   } else if (mappedInput_.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!appList_.empty()) {
-      launchApp();
+      static constexpr unsigned long kForceInstallHoldMs = 800;
+      const bool forceInstall = mappedInput_.getHeldTime() >= kForceInstallHoldMs;
+      launchApp(forceInstall);
     }
   } else if (mappedInput_.wasReleased(MappedInputManager::Button::Back)) {
     if (exitCallback_) {
@@ -69,24 +72,39 @@ void AppsActivity::scanApps() {
   Serial.printf("[%lu] [AppsActivity] Found %d apps\n", millis(), appList_.size());
 }
 
-void AppsActivity::launchApp() {
+void AppsActivity::launchApp(const bool forceInstall) {
   if (selectedIndex_ >= static_cast<int>(appList_.size())) {
     return;
   }
 
   const auto& app = appList_[selectedIndex_];
-  String binPath = app.path + "/app.bin";
 
   Serial.printf("[%lu] [AppsActivity] Launching app: %s\n", millis(), app.manifest.name.c_str());
 
   isFlashing_ = true;
   flashProgress_ = 0;
+  flashingStarted_ = false;
   needsUpdate_ = true;
-  renderProgress();
+
+  // Show a lightweight screen immediately; if we end up installing, we will switch to the progress UI
+  // as soon as we receive the first progress callback.
+  renderBooting();
 
   CrossPoint::AppLoader loader;
-  bool success = loader.flashApp(binPath, [this](size_t written, size_t total) {
-    const int nextProgress = (total > 0) ? static_cast<int>((written * 100) / total) : 0;
+  const bool success = loader.launchApp(app, forceInstall, [this](size_t written, size_t total) {
+    if (total == 0) {
+      return;
+    }
+
+    const int nextProgress = static_cast<int>((written * 100) / total);
+    if (!flashingStarted_) {
+      flashingStarted_ = true;
+      flashProgress_ = nextProgress;
+      needsUpdate_ = true;
+      renderProgress();
+      return;
+    }
+
     if (nextProgress != flashProgress_) {
       flashProgress_ = nextProgress;
       needsUpdate_ = true;
@@ -95,7 +113,7 @@ void AppsActivity::launchApp() {
   });
 
   if (!success) {
-    Serial.printf("[%lu] [AppsActivity] Flash failed\n", millis());
+    Serial.printf("[%lu] [AppsActivity] Launch failed\n", millis());
     isFlashing_ = false;
     needsUpdate_ = true;
   }
@@ -154,12 +172,25 @@ void AppsActivity::render() {
 
   // Button hints
   const char* btn1 = "Back";
-  const char* btn2 = appList_.empty() ? "" : "Launch";
-  const char* btn3 = "<";
-  const char* btn4 = ">";
+  const char* btn2 = "";
+  // Note: text is rotated 90° CW, so ">" appears as "^" and "<" appears as "v"
+  const char* btn3 = ">";  // Up arrow (for scrolling up in app list)
+  const char* btn4 = "<";  // Down arrow (for scrolling down in app list)
+
+  bool selectedInstalled = false;
+  if (!appList_.empty() && selectedIndex_ < static_cast<int>(appList_.size())) {
+    CrossPoint::AppLoader loader;
+    CrossPoint::AppLoader::InstalledAppInfo installed;
+    selectedInstalled = loader.isAppInstalledAndCurrent(appList_[selectedIndex_], installed);
+    btn2 = selectedInstalled ? "Boot" : "Install";
+  }
 
   auto labels = mappedInput_.mapLabels(btn1, btn2, btn3, btn4);
   renderer_.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (selectedInstalled) {
+    renderer_.drawCenteredText(UI_10_FONT_ID, pageHeight - 110, "Hold Confirm: reinstall");
+  }
 
   renderer_.displayBuffer();
 }
@@ -192,6 +223,15 @@ void AppsActivity::renderProgress() {
   snprintf(percentStr, sizeof(percentStr), "%d%%", flashProgress_);
   renderer_.drawCenteredText(UI_12_FONT_ID, barY + barHeight + 20, percentStr);
 
+  renderer_.displayBuffer();
+}
+
+void AppsActivity::renderBooting() {
+  renderer_.clearScreen();
+
+  const int pageHeight = renderer_.getScreenHeight();
+  renderer_.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, "Booting...");
+  renderer_.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 20, "Switching boot partition");
   renderer_.displayBuffer();
 }
 
