@@ -10,7 +10,6 @@ void EpubReaderMenuActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
   renderingMutex = xSemaphoreCreateMutex();
   updateRequired = true;
-
   xTaskCreate(&EpubReaderMenuActivity::taskTrampoline, "EpubMenuTask", 4096, this, 1, &displayTaskHandle);
 }
 
@@ -71,7 +70,6 @@ void EpubReaderMenuActivity::loop() {
 
     // 2. Execute the callback
     actionCallback(selectedAction);
-
     // 3. CRITICAL: Return immediately. 'this' is likely deleted now.
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -118,11 +116,9 @@ void EpubReaderMenuActivity::renderScreen() {
   // Menu Items
   const int startY = 75 + contentY;
   constexpr int lineHeight = 30;
-
   for (size_t i = 0; i < menuItems.size(); ++i) {
     const int displayY = startY + (i * lineHeight);
     const bool isSelected = (static_cast<int>(i) == selectedIndex);
-
     if (isSelected) {
       // Highlight only the content area so we don't paint over hint gutters.
       renderer.fillRect(contentX, displayY, contentWidth - 1, lineHeight, true);

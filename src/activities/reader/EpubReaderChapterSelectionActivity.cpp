@@ -11,7 +11,7 @@ namespace {
 constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
 
-int EpubReaderChapterSelectionActivity::getTotalItems() const { return epub->getTocItemsCount(); }
+int EpubReaderChapterSelectionActivity::getTotalItems() const { return filteredSpineIndices.size(); }
 
 int EpubReaderChapterSelectionActivity::getPageItems() const {
   // Layout constants used in renderScreen
@@ -34,6 +34,30 @@ void EpubReaderChapterSelectionActivity::taskTrampoline(void* param) {
   self->displayTaskLoop();
 }
 
+void EpubReaderChapterSelectionActivity::buildFilteredChapterList() {
+  filteredSpineIndices.clear();
+
+  for (int i = 0; i < epub->getSpineItemsCount(); i++) {
+    // Skip footnote pages
+    if (epub->shouldHideFromToc(i)) {
+      Serial.printf("[%lu] [CHAP] Hiding footnote page at spine index: %d\n", millis(), i);
+      continue;
+    }
+
+    // Skip pages without TOC entry (unnamed pages)
+    int tocIndex = epub->getTocIndexForSpineIndex(i);
+    if (tocIndex == -1) {
+      Serial.printf("[%lu] [CHAP] Hiding unnamed page at spine index: %d\n", millis(), i);
+      continue;
+    }
+
+    filteredSpineIndices.push_back(i);
+  }
+
+  Serial.printf("[%lu] [CHAP] Filtered chapters: %d out of %d\n", millis(), filteredSpineIndices.size(),
+                epub->getSpineItemsCount());
+}
+
 void EpubReaderChapterSelectionActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
@@ -43,9 +67,16 @@ void EpubReaderChapterSelectionActivity::onEnter() {
 
   renderingMutex = xSemaphoreCreateMutex();
 
-  selectorIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-  if (selectorIndex == -1) {
-    selectorIndex = 0;
+  // Build filtered chapter list (excluding footnote pages)
+  buildFilteredChapterList();
+
+  // Find the index in filtered list that corresponds to currentSpineIndex
+  selectorIndex = 0;
+  for (size_t i = 0; i < filteredSpineIndices.size(); i++) {
+    if (filteredSpineIndices[i] == currentSpineIndex) {
+      selectorIndex = i;
+      break;
+    }
   }
 
   // Trigger first update
@@ -87,11 +118,8 @@ void EpubReaderChapterSelectionActivity::loop() {
   const int totalItems = getTotalItems();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const auto newSpineIndex = epub->getSpineIndexForTocIndex(selectorIndex);
-    if (newSpineIndex == -1) {
-      onGoBack();
-    } else {
-      onSelectSpineIndex(newSpineIndex);
+    if (selectorIndex >= 0 && selectorIndex < getTotalItems()) {
+      onSelectSpineIndex(filteredSpineIndices[selectorIndex]);
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();
@@ -143,6 +171,12 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
+  if (totalItems == 0) {
+    renderer.drawCenteredText(SMALL_FONT_ID, 300, "No chapters available", true);
+    renderer.displayBuffer();
+    return;
+  }
+
   // Manual centering to honor content gutters.
   const int titleX =
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, "Go to Chapter", EpdFontFamily::BOLD)) / 2;
@@ -158,14 +192,21 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
     const int displayY = 60 + contentY + i * 30;
     const bool isSelected = (itemIndex == selectorIndex);
 
-    auto item = epub->getTocItem(itemIndex);
+    const int actualSpineIndex = filteredSpineIndices[itemIndex];
+    const int tocIndex = epub->getTocIndexForSpineIndex(actualSpineIndex);
 
-    // Indent per TOC level while keeping content within the gutter-safe region.
-    const int indentSize = contentX + 20 + (item.level - 1) * 15;
-    const std::string chapterName =
-        renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), contentWidth - 40 - indentSize);
-
-    renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
+    if (tocIndex == -1) {
+      // Indent per TOC level while keeping content within the gutter-safe region.
+      const int indentSize = contentX + 20;
+      renderer.drawText(UI_10_FONT_ID, indentSize, displayY, "Unnamed", !isSelected);
+    } else {
+      auto item = epub->getTocItem(tocIndex);
+      // Indent per TOC level while keeping content within the gutter-safe region.
+      const int indentSize = contentX + 20 + (item.level - 1) * 15;
+      const std::string chapterName =
+          renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), contentWidth - 40 - indentSize);
+      renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
+    }
   }
 
   const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
