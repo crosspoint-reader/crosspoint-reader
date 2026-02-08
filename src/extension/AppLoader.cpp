@@ -1,10 +1,9 @@
 #include "AppLoader.h"
 
-#include <mbedtls/sha256.h>
-
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <esp_system.h>
+#include <mbedtls/sha256.h>
 
 #include <memory>
 
@@ -477,8 +476,7 @@ bool AppLoader::isAppInstalled(const String& appId, const String& sha256) {
   (void)loadInstalledState(doc);
 
   const String storedId = doc["installed"]["appId"].is<const char*>() ? doc["installed"]["appId"].as<String>() : "";
-  const String storedHash =
-      doc["installed"]["sha256"].is<const char*>() ? doc["installed"]["sha256"].as<String>() : "";
+  const String storedHash = doc["installed"]["sha256"].is<const char*>() ? doc["installed"]["sha256"].as<String>() : "";
 
   return storedId == appId && storedHash == sha256;
 }

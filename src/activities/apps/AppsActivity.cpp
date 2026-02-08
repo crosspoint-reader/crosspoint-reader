@@ -90,7 +90,7 @@ void AppsActivity::launchApp() {
   renderProgress();
 
   CrossPoint::AppLoader loader;
-  
+
   // Build path to app binary (assumes app.bin in app directory)
   String binPath = app.path + "/app.bin";
 

@@ -10,10 +10,10 @@
 
 #include <algorithm>
 
+#include "CrossPointSettings.h"
 #include "html/AppsPageHtml.generated.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
-#include "CrossPointSettings.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -1344,8 +1344,9 @@ void CrossPointWebServer::handleUploadAppZipPost() {
   }
 
   if (appZipUploadSuccess) {
-    server->send(200, "text/plain",
-                 "App ZIP uploaded. Install on device: Home -> Apps -> " + appZipUploadName + " v" + appZipUploadVersion);
+    server->send(
+        200, "text/plain",
+        "App ZIP uploaded. Install on device: Home -> Apps -> " + appZipUploadName + " v" + appZipUploadVersion);
   } else {
     const String error = appZipUploadError.isEmpty() ? "Unknown error during app ZIP upload" : appZipUploadError;
     const int code = (error.startsWith("Missing") || error.startsWith("Invalid")) ? 400 : 500;
