@@ -272,7 +272,6 @@ void KOReaderSyncActivity::render() {
     return;
   }
 
-  const auto pageHeight = renderer.getScreenHeight();
   const auto area = UIHelpers::contentAreaForRenderer(renderer);
   const int contentX = area.contentX;
   const int contentWidth = area.contentWidth;
