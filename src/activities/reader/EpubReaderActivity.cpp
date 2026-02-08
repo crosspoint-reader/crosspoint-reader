@@ -578,7 +578,7 @@ void EpubReaderActivity::renderScreen() {
                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
-      const auto popupFn = [this]() { GUI.drawPopup(renderer, "Indexing..."); };
+      const auto popupFn = [this]() { GUI.drawPopup(renderer, "Indexing"); };
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,

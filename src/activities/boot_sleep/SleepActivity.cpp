@@ -15,7 +15,7 @@
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  GUI.drawPopup(renderer, "Entering Sleep...");
+  GUI.drawPopup(renderer, "Going to sleep");
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
