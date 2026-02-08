@@ -21,8 +21,20 @@ constexpr int topHintButtonY = 345;
 }  // namespace
 
 void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+  const bool charging = (digitalRead(20) == HIGH);
+
   // Left aligned battery icon and percentage
-  const uint16_t percentage = battery.readPercentage();
+  uint8_t percentage = battery.readPercentage();
+
+  if (charging) {
+    // If charging reinitialize buffer with current percentage and display this value
+    batteryBuffer.init(percentage);
+  } else {
+    // Else update buffer with new percentage and return smoothed validated percentage to display
+    batteryBuffer.update(percentage);
+    percentage = batteryBuffer.evaluate();
+  }
+
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + LyraMetrics::values.batteryWidth, rect.y,

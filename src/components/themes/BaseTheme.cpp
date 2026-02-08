@@ -19,10 +19,25 @@ constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 }  // namespace
 
+BatteryPercentageRingBuffer BaseTheme::batteryBuffer;
+
 void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+  const bool charging = (digitalRead(20) == HIGH);
+
+  // Left aligned battery icon and percentage
+  uint8_t percentage = battery.readPercentage();
+
+  if (charging) {
+    // If charging reinitialize buffer with current percentage and display this value
+    batteryBuffer.init(percentage);
+  } else {
+    // Else update buffer with new percentage and return smoothed validated percentage to display
+    batteryBuffer.update(percentage);
+    percentage = batteryBuffer.evaluate();
+  }
+
   // Left aligned battery icon and percentage
   // TODO refactor this so the percentage doesnt change after we position it
-  const uint16_t percentage = battery.readPercentage();
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + BaseMetrics::values.batteryWidth, rect.y,
@@ -52,6 +67,25 @@ void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool s
   }
 
   renderer.fillRect(x + 2, y + 2, filledWidth, rect.height - 4);
+
+  // Draw lightning bolt when charging (white/inverted on black fill for visibility)
+  if (charging) {
+    // Lightning bolt: 6px wide, 8px tall, centered in battery
+    const int boltX = x + 4;
+    const int boltY = y + 2;
+
+    // Draw bolt in white (state=false) for visibility on black fill
+    // Upper diagonal pointing right
+    renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, false);
+    renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, false);
+    renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, false);  // Wide middle
+    renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, false);
+    // Lower diagonal pointing left
+    renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, false);
+    renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, false);  // Wide middle
+    renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, false);
+    renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
+  }
 }
 
 void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,

@@ -5,6 +5,8 @@
 #include <functional>
 #include <vector>
 
+#include "Battery.h"
+
 class GfxRenderer;
 struct RecentBook;
 
@@ -90,6 +92,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
 class BaseTheme {
  public:
   virtual ~BaseTheme() = default;
+
+  static BatteryPercentageRingBuffer batteryBuffer;
 
   // Component drawing methods
   virtual void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
