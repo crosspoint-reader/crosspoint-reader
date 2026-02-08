@@ -606,15 +606,13 @@ void WifiSelectionActivity::renderNetworkList() const {
 void WifiSelectionActivity::renderConnecting() const {
   const auto pageHeight = renderer.getScreenHeight();
   const auto area = UIHelpers::contentAreaForRenderer(renderer);
-  const int contentX = area.contentX;
-  const int contentWidth = area.contentWidth;
 
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
   if (state == WifiSelectionState::SCANNING) {
     const auto text = "Scanning...";
-    const int x = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, text)) / 2;
+    const int x = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, text, area);
     renderer.drawText(UI_10_FONT_ID, x, top, text);
   } else {
     const auto title = "Connecting...";
@@ -633,8 +631,6 @@ void WifiSelectionActivity::renderConnecting() const {
 void WifiSelectionActivity::renderConnected() const {
   const auto pageHeight = renderer.getScreenHeight();
   const auto area = UIHelpers::contentAreaForRenderer(renderer);
-  const int contentX = area.contentX;
-  const int contentWidth = area.contentWidth;
 
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 4) / 2;
@@ -711,8 +707,6 @@ void WifiSelectionActivity::renderSavePrompt() const {
 void WifiSelectionActivity::renderConnectionFailed() const {
   const auto pageHeight = renderer.getScreenHeight();
   const auto area = UIHelpers::contentAreaForRenderer(renderer);
-  const int contentX = area.contentX;
-  const int contentWidth = area.contentWidth;
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 2) / 2;
 
@@ -731,8 +725,6 @@ void WifiSelectionActivity::renderConnectionFailed() const {
 void WifiSelectionActivity::renderForgetPrompt() const {
   const auto pageHeight = renderer.getScreenHeight();
   const auto area = UIHelpers::contentAreaForRenderer(renderer);
-  const int contentX = area.contentX;
-  const int contentWidth = area.contentWidth;
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
