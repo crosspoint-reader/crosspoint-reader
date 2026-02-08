@@ -353,6 +353,7 @@ void KOReaderSyncActivity::render() {
     renderer.drawText(UI_10_FONT_ID, leftX, sectionBaseY + 200, localPageStr);
 
     // Options (anchor above button hints)
+    const int optionY = 350;
     const int optionHeight = 30;
     const int optionY = startY + std::max(10, area.contentHeight - (optionHeight * 3) - 10);
 
@@ -444,11 +445,11 @@ void KOReaderSyncActivity::loop() {
     // Navigate options
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      selectedOption = (selectedOption + 2) % 3;  // Wrap around
+      selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       updateRequired = true;
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
                mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      selectedOption = (selectedOption + 1) % 3;
+      selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       updateRequired = true;
     }
 
@@ -459,9 +460,6 @@ void KOReaderSyncActivity::loop() {
       } else if (selectedOption == 1) {
         // Upload local progress
         performUpload();
-      } else {
-        // Cancel
-        onCancel();
       }
     }
 
