@@ -137,8 +137,13 @@ void RecentBooksActivity::render() const {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
-        [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
-        nullptr, nullptr);
+        [this](int index) { return recentBooks[index].title; }, 
+        [this](int index) { return recentBooks[index].author; },
+        [this](int index) { 
+          auto filename = recentBooks[index].path;
+          auto pos = filename.rfind('.');
+          return filename.substr(pos + 1);
+        }, nullptr);
   }
 
   // Help text

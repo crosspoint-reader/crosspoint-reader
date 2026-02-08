@@ -397,7 +397,7 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
-  display.drawImage(bitmap, y, getScreenWidth() - width - x, height, width);
+  display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,

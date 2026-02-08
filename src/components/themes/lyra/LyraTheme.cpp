@@ -11,6 +11,17 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
+#include "components/icons/library.h"
+#include "components/icons/book.h"
+#include "components/icons/recent.h"
+#include "components/icons/cog.h"
+#include "components/icons/transfer.h"
+#include "components/icons/folder.h"
+#include "components/icons/folder24.h"
+#include "components/icons/book24.h"
+#include "components/icons/image24.h"
+#include "components/icons/text24.h"
+#include "components/icons/cover.h"
 
 // Internal constants
 namespace {
@@ -18,6 +29,37 @@ constexpr int batteryPercentSpacing = 4;
 constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
+constexpr int mainMenuIconSize = 32;
+constexpr int listIconSize = 24;
+
+struct IconEntry {
+  const char* name;
+  const uint8_t* icon;
+};
+
+constexpr IconEntry iconTable[] = {
+    {"Browse Files", FolderIcon},
+    {"Recents", RecentIcon},
+    {"Settings", CogIcon},
+    {"File Transfer", TransferIcon},
+    {"OPDS Browser", LibraryIcon},
+    {"Folder", Folder24Icon},
+    {"epub", Book24Icon},
+    {"xtc", Book24Icon},
+    {"xtch", Book24Icon},
+    {"txt", Text24Icon},
+    {"bmp", Image24Icon},
+};
+
+const uint8_t* iconForName(const std::string& iconName) {
+  for (const auto& entry : iconTable) {
+    if (iconName == entry.name) {
+      return entry.icon;
+    }
+  }
+
+  return nullptr;
+}
 }  // namespace
 
 void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
@@ -147,25 +189,38 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                              Color::LightGray);
   }
 
+  int textX = rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection;
+  if (rowIcon != nullptr) {
+    textX += listIconSize + hPaddingInSelection;
+  }
+
   // Draw all items
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
+  int iconY = (rowSubtitle != nullptr) ? 20 : 10;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
 
     // Draw name
     int textWidth = contentWidth - LyraMetrics::values.contentSidePadding * 2 - hPaddingInSelection * 2 -
-                    (rowValue != nullptr ? 60 : 0);  // TODO truncate according to value width?
+                    (rowValue != nullptr ? 60 : 0) - (rowIcon != nullptr ? listIconSize + hPaddingInSelection : 0);  // TODO truncate according to value width?
     auto itemName = rowTitle(i);
     auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), textWidth);
-    renderer.drawText(UI_10_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection * 2,
-                      itemY + 6, item.c_str(), true);
+    renderer.drawText(UI_10_FONT_ID, textX, itemY + 7, item.c_str(), true);
+
+    if (rowIcon != nullptr) {
+      std::string iconName = rowIcon(i);
+      const uint8_t* iconBitmap = iconForName(iconName);
+      if (iconBitmap != nullptr) {
+        renderer.drawIcon(iconBitmap, rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection, 
+          itemY + iconY, listIconSize, listIconSize);
+      }
+    }
 
     if (rowSubtitle != nullptr) {
       // Draw subtitle
       std::string subtitleText = rowSubtitle(i);
       auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), textWidth);
-      renderer.drawText(SMALL_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection * 2,
-                        itemY + 30, subtitle.c_str(), true);
+      renderer.drawText(SMALL_FONT_ID, textX, itemY + 30, subtitle.c_str(), true);
     }
 
     if (rowValue != nullptr) {
@@ -182,7 +237,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
         renderer.drawText(UI_10_FONT_ID,
                           contentWidth - LyraMetrics::values.contentSidePadding - hPaddingInSelection - valueTextWidth,
-                          itemY + 6, valueText.c_str(), i != selectedIndex);
+                          itemY + 7, valueText.c_str(), i != selectedIndex);
       }
     }
   }
@@ -301,10 +356,14 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
             file.close();
           }
         }
-
         if (!hasCover) {
+          // Render empty cover
           renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                            tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight);
+                                tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight, true);
+          renderer.fillRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection + (LyraMetrics::values.homeCoverHeight / 3),
+                                tileWidth - 2 * hPaddingInSelection, 2 * LyraMetrics::values.homeCoverHeight / 3, true);
+          renderer.drawIcon(CoverIcon, tileX + hPaddingInSelection + 24,
+                              tileY + hPaddingInSelection + 24, 32, 32);
         }
       }
 
@@ -352,12 +411,19 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
       renderer.fillRoundedRect(tileRect.x, tileRect.y, tileRect.width, tileRect.height, cornerRadius, Color::LightGray);
     }
 
-    const char* label = buttonLabel(i).c_str();
-    const int textX = tileRect.x + 16;
+    int textX = tileRect.x + 16;
     const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
     const int textY = tileRect.y + (LyraMetrics::values.menuRowHeight - lineHeight) / 2;
+    const char* label = buttonLabel(i).c_str();
 
-    // Invert text when the tile is selected, to contrast with the filled background
+    if (rowIcon != nullptr) {
+      const uint8_t* icon = iconForName(label);
+      if (icon != nullptr) {
+        renderer.drawIcon(icon, textX, textY, mainMenuIconSize, mainMenuIconSize);
+        textX += mainMenuIconSize + hPaddingInSelection;
+      }
+    }
+
     renderer.drawText(UI_12_FONT_ID, textX, textY, label, true);
   }
 }

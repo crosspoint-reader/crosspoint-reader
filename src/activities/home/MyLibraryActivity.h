@@ -32,6 +32,8 @@ class MyLibraryActivity final : public Activity {
   // Data loading
   void loadFiles();
   size_t findEntry(const std::string& name) const;
+  std::string getFileType(std::string filename) const;
+  std::string getFileName(std::string filename) const;
 
  public:
   explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
