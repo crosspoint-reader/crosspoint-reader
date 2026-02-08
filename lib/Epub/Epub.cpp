@@ -287,11 +287,17 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     if (!skipLoadingCss && !loadCssRulesFromCache()) {
       Serial.printf("[%lu] [EBP] Warning: CSS rules cache not found, attempting to parse CSS files\n", millis());
       // to get CSS file list
-      if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
-        Serial.printf("[%lu] [EBP] Could not parse content.opf from cached bookMetadata for CSS files\n", millis());
-        // continue anyway - book will work without CSS and we'll still load any inline style CSS
+      try {
+        if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
+          Serial.printf("[%lu] [EBP] Could not parse content.opf from cached bookMetadata for CSS files\n", millis());
+          // continue anyway - book will work without CSS and we'll still load any inline style CSS
+        }
+        parseCssFiles();
+      } catch (...) {
+        // On ESP32, some STL allocations may throw and abort if uncaught.
+        // CSS parsing is optional, so prefer failing open.
+        Serial.printf("[%lu] [EBP] Exception while parsing CSS files; continuing without CSS\n", millis());
       }
-      parseCssFiles();
     }
     Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
     return true;
@@ -391,7 +397,11 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   if (!skipLoadingCss) {
     // Parse CSS files after cache reload
-    parseCssFiles();
+    try {
+      parseCssFiles();
+    } catch (...) {
+      Serial.printf("[%lu] [EBP] Exception while parsing CSS files; continuing without CSS\n", millis());
+    }
   }
 
   Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
