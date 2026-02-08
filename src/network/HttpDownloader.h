@@ -1,5 +1,5 @@
 #pragma once
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include <functional>
 #include <string>
