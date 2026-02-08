@@ -27,24 +27,24 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .homeRecentBooksCount = 3,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
-                                 .versionTextRightX = 20,
-                                 .versionTextY = 55,
+                                 .progressBarHeight = 16,
                                  .bookProgressBarHeight = 4};
 }
 
 class LyraTheme : public BaseTheme {
  public:
   // Component drawing methods
-  //   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) override;
   void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const override;
-  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const override;
+  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const override;
+  void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
+                     const char* rightLabel = nullptr) const override;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                   bool selected) const override;
   void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                 const std::function<std::string(int index)>& rowTitle,
                 const std::function<std::string(int index)>& rowSubtitle,
                 const std::function<std::string(int index)>& rowIcon,
-                const std::function<std::string(int index)>& rowValue) const override;
+                const std::function<std::string(int index)>& rowValue, bool highlightValue) const override;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
   void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const override;

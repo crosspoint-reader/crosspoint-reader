@@ -4,9 +4,14 @@
 
 #include <memory>
 
+#include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
+
+namespace {
+constexpr int SKIP_PAGE_MS = 700;
+}  // namespace
 
 UITheme UITheme::instance;
 
@@ -59,4 +64,30 @@ std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight
     coverBmpPath.replace(pos, 8, std::to_string(coverHeight));
   }
   return coverBmpPath;
+}
+
+void UITheme::handleListScrolling(const GfxRenderer& renderer, int listSize, int pageItems, size_t& selectorIndex,
+                                  const MappedInputManager& mappedInput, bool& updateRequired) {
+  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+                          mappedInput.wasReleased(MappedInputManager::Button::Up);
+  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+                            mappedInput.wasReleased(MappedInputManager::Button::Down);
+
+  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
+
+  if (upReleased) {
+    if (skipPage) {
+      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + listSize) % listSize;
+    } else {
+      selectorIndex = (selectorIndex + listSize - 1) % listSize;
+    }
+    updateRequired = true;
+  } else if (downReleased) {
+    if (skipPage) {
+      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % listSize;
+    } else {
+      selectorIndex = (selectorIndex + 1) % listSize;
+    }
+    updateRequired = true;
+  }
 }

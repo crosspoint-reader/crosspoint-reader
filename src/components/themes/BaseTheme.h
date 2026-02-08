@@ -51,9 +51,7 @@ struct ThemeMetrics {
   int buttonHintsHeight;
   int sideButtonHintsWidth;
 
-  int versionTextRightX;
-  int versionTextY;
-
+  int progressBarHeight;
   int bookProgressBarHeight;
 };
 
@@ -82,8 +80,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeRecentBooksCount = 1,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
-                                 .versionTextRightX = 20,
-                                 .versionTextY = 738,
+                                 .progressBarHeight = 16,
                                  .bookProgressBarHeight = 4};
 }
 
@@ -99,11 +96,14 @@ class BaseTheme {
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                         const std::function<std::string(int index)>& rowTitle,
-                        const std::function<std::string(int index)>& rowSubtitle,
-                        const std::function<std::string(int index)>& rowIcon,
-                        const std::function<std::string(int index)>& rowValue) const;
-
-  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const;
+                        const std::function<std::string(int index)>& rowSubtitle = nullptr,
+                        const std::function<std::string(int index)>& rowIcon = nullptr,
+                        const std::function<std::string(int index)>& rowValue = nullptr,
+                        bool highlightValue = false) const;
+  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
+                          const char* subtitle = nullptr) const;
+  virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
+                             const char* rightLabel = nullptr) const;
   virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                           bool selected) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
@@ -115,4 +115,5 @@ class BaseTheme {
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   virtual void drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const;
+  virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
 };

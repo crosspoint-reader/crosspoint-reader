@@ -26,7 +26,7 @@ class CalibreSettingsActivity final : public ActivityWithSubactivity {
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
 
-  int selectedIndex = 0;
+  size_t selectedIndex = 0;
   const std::function<void()> onBack;
 
   static void taskTrampoline(void* param);

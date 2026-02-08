@@ -54,10 +54,13 @@ void ClearCacheActivity::displayTaskLoop() {
 }
 
 void ClearCacheActivity::render() {
+  auto metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Clear Cache", true, EpdFontFamily::BOLD);
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Clear Cache");
 
   if (state == WARNING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 60, "This will clear all cached book data.", true);
@@ -73,7 +76,7 @@ void ClearCacheActivity::render() {
   }
 
   if (state == CLEARING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Clearing cache...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Clearing cache...");
     renderer.displayBuffer();
     return;
   }
