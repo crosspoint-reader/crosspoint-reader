@@ -224,7 +224,6 @@ void HomeActivity::loop() {
       onOpdsBrowserOpen();
     } else if (menuSelectedIndex == fileTransferIdx) {
       onFileTransferOpen();
-    } else if (menuSelectedIndex == settingsIdx) {
     } else if (menuSelectedIndex == appsIdx) {
       onAppsOpen();
     } else if (menuSelectedIndex == settingsIdx) {
