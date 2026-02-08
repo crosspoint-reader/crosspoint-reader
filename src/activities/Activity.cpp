@@ -2,15 +2,16 @@
 
 void Activity::renderTaskTrampoline(void* param) {
   auto* self = static_cast<Activity*>(param);
-  self->renderTaskLoop();
+  return self->renderTaskLoop();
 }
 
 void Activity::renderTaskLoop() {
   while (true) {
     ulTaskNotifyTake(pdFALSE, portMAX_DELAY);
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    render();
-    xSemaphoreGive(renderingMutex);
+    {
+      RenderLock lock(*this);
+      render();
+    }
   }
 }
 
@@ -26,10 +27,9 @@ void Activity::onEnter() {
 }
 
 void Activity::onExit() {
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  RenderLock lock(*this);  // Ensure we don't delete the task while it's rendering
   vTaskDelete(renderTaskHandle);
   renderTaskHandle = nullptr;
-  xSemaphoreGive(renderingMutex);
 
   Serial.printf("[%lu] [ACT] Exiting activity: %s\n", millis(), name.c_str());
 }
@@ -41,3 +41,11 @@ void Activity::requestUpdate() {
     xTaskNotify(renderTaskHandle, 1, eIncrement);
   }
 }
+
+// RenderLock
+
+Activity::RenderLock::RenderLock(Activity& activity) : activity(activity) {
+  xSemaphoreTake(activity.renderingMutex, portMAX_DELAY);
+}
+
+Activity::RenderLock::~RenderLock() { xSemaphoreGive(activity.renderingMutex); }

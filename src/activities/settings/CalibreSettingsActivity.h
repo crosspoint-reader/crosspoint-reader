@@ -1,7 +1,4 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <functional>
 
@@ -20,17 +17,10 @@ class CalibreSettingsActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render() override;
 
  private:
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-  bool updateRequired = false;
-
   int selectedIndex = 0;
   const std::function<void()> onBack;
-
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render();
   void handleSelection();
 };

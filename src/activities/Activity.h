@@ -7,8 +7,8 @@
 #include <string>
 #include <utility>
 
-class MappedInputManager;
-class GfxRenderer;
+#include "GfxRenderer.h"
+#include "MappedInputManager.h"
 
 class Activity {
  protected:
@@ -18,7 +18,7 @@ class Activity {
   // Task to render and display the activity
   TaskHandle_t renderTaskHandle = nullptr;
   [[noreturn]] static void renderTaskTrampoline(void* param);
-  void renderTaskLoop();
+  [[noreturn]] void renderTaskLoop();
   // Mutex to protect rendering operations from being deleted mid-render
   SemaphoreHandle_t renderingMutex = nullptr;
 
@@ -39,4 +39,13 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
+
+  // RAII helper to lock rendering mutex for the duration of a scope.
+  class RenderLock {
+    Activity& activity;
+
+   public:
+    explicit RenderLock(Activity& activity);
+    ~RenderLock();
+  };
 };

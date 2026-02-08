@@ -67,8 +67,6 @@ void EpubReaderActivity::onEnter() {
   // NOTE: This affects layout math and must be applied before any render calls.
   applyReaderOrientation(renderer, SETTINGS.orientation);
 
-  renderingMutex = xSemaphoreCreateMutex();
-
   epub->setupCacheDir();
 
   FsFile f;
@@ -166,8 +164,6 @@ void EpubReaderActivity::loop() {
 
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    // Don't start activity transition while rendering
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
@@ -181,7 +177,6 @@ void EpubReaderActivity::loop() {
         this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
         SETTINGS.orientation, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
-    xSemaphoreGive(renderingMutex);
   }
 
   // Long press BACK (1s+) goes to file selection
@@ -329,7 +324,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
     pendingSpineProgress = 1.0f;
   }
 
-  // Reset state so renderScreen() reloads and repositions on the target spine.
+  // Reset state so render() reloads and repositions on the target spine.
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   currentSpineIndex = targetSpineIndex;
   nextPageNumber = 0;
@@ -346,8 +341,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const int totalP = section ? section->pageCount : 0;
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();
-
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
 
       // 1. Close the menu
       exitActivity();
@@ -378,7 +371,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             requestUpdate();
           }));
 
-      xSemaphoreGive(renderingMutex);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
@@ -389,7 +381,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
       }
       const int initialPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new EpubReaderPercentSelectionActivity(
           renderer, mappedInput, initialPercent,
@@ -404,7 +395,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             exitActivity();
             requestUpdate();
           }));
-      xSemaphoreGive(renderingMutex);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
@@ -437,7 +427,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
-        xSemaphoreTake(renderingMutex, portMAX_DELAY);
         const int currentPage = section ? section->currentPage : 0;
         const int totalPages = section ? section->pageCount : 0;
         exitActivity();
@@ -456,7 +445,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               }
               pendingSubactivityExit = true;
             }));
-        xSemaphoreGive(renderingMutex);
       }
       break;
     }
@@ -490,7 +478,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 }
 
 // TODO: Failure handling
-void EpubReaderActivity::renderScreen() {
+void EpubReaderActivity::render() {
   if (!epub) {
     return;
   }
@@ -611,7 +599,7 @@ void EpubReaderActivity::renderScreen() {
       Serial.printf("[%lu] [ERS] Failed to load page from SD - clearing section cache\n", millis());
       section->clearCache();
       section.reset();
-      return renderScreen();
+      return render();
     }
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);

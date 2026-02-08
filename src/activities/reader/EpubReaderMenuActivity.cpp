@@ -8,39 +8,10 @@
 
 void EpubReaderMenuActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
-  renderingMutex = xSemaphoreCreateMutex();
-  updateRequired = true;
-
-  xTaskCreate(&EpubReaderMenuActivity::taskTrampoline, "EpubMenuTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
-void EpubReaderMenuActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
-
-void EpubReaderMenuActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderMenuActivity*>(param);
-  self->displayTaskLoop();
-}
-
-void EpubReaderMenuActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
+void EpubReaderMenuActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void EpubReaderMenuActivity::loop() {
   if (subActivity) {
@@ -52,17 +23,17 @@ void EpubReaderMenuActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
       mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     selectedIndex = (selectedIndex + menuItems.size() - 1) % menuItems.size();
-    updateRequired = true;
+    requestUpdate();
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
              mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     selectedIndex = (selectedIndex + 1) % menuItems.size();
-    updateRequired = true;
+    requestUpdate();
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto selectedAction = menuItems[selectedIndex].action;
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       // Cycle orientation preview locally; actual rotation happens on menu exit.
       pendingOrientation = (pendingOrientation + 1) % orientationLabels.size();
-      updateRequired = true;
+      requestUpdate();
       return;
     }
 
@@ -81,7 +52,7 @@ void EpubReaderMenuActivity::loop() {
   }
 }
 
-void EpubReaderMenuActivity::renderScreen() {
+void EpubReaderMenuActivity::render() {
   renderer.clearScreen();
   const auto pageWidth = renderer.getScreenWidth();
   const auto orientation = renderer.getOrientation();

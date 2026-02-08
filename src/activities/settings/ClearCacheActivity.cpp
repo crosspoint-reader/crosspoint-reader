@@ -8,50 +8,14 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-void ClearCacheActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<ClearCacheActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void ClearCacheActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
   state = WARNING;
-  updateRequired = true;
-
-  xTaskCreate(&ClearCacheActivity::taskTrampoline, "ClearCacheActivityTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void ClearCacheActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
-
-void ClearCacheActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
+void ClearCacheActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void ClearCacheActivity::render() {
   const auto pageHeight = renderer.getScreenHeight();
@@ -112,7 +76,7 @@ void ClearCacheActivity::clearCache() {
     Serial.printf("[%lu] [CLEAR_CACHE] Failed to open cache directory\n", millis());
     if (root) root.close();
     state = FAILED;
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -147,7 +111,7 @@ void ClearCacheActivity::clearCache() {
   Serial.printf("[%lu] [CLEAR_CACHE] Cache cleared: %d removed, %d failed\n", millis(), clearedCount, failedCount);
 
   state = SUCCESS;
-  updateRequired = true;
+  requestUpdate();
 }
 
 void ClearCacheActivity::loop() {
@@ -157,7 +121,7 @@ void ClearCacheActivity::loop() {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = CLEARING;
       xSemaphoreGive(renderingMutex);
-      updateRequired = true;
+      requestUpdate();
       vTaskDelay(10 / portTICK_PERIOD_MS);
 
       clearCache();

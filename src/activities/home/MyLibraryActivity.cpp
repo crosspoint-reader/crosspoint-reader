@@ -25,11 +25,6 @@ void sortFileList(std::vector<std::string>& strs) {
   });
 }
 
-void MyLibraryActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<MyLibraryActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void MyLibraryActivity::loadFiles() {
   files.clear();
 
@@ -68,33 +63,13 @@ void MyLibraryActivity::loadFiles() {
 void MyLibraryActivity::onEnter() {
   Activity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
-
   loadFiles();
 
   selectorIndex = 0;
-  updateRequired = true;
-
-  xTaskCreate(&MyLibraryActivity::taskTrampoline, "MyLibraryActivityTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
 }
 
 void MyLibraryActivity::onExit() {
   Activity::onExit();
-
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-
   files.clear();
 }
 
@@ -105,7 +80,6 @@ void MyLibraryActivity::loop() {
     basepath = "/";
     loadFiles();
     selectorIndex = 0;
-    updateRequired = true;
     return;
   }
 
@@ -128,7 +102,7 @@ void MyLibraryActivity::loop() {
       basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
       loadFiles();
       selectorIndex = 0;
-      updateRequired = true;
+      requestUpdate();
     } else {
       onSelectBook(basepath + files[selectorIndex]);
       return;
@@ -149,7 +123,7 @@ void MyLibraryActivity::loop() {
         const std::string dirName = oldPath.substr(pos + 1) + "/";
         selectorIndex = findEntry(dirName);
 
-        updateRequired = true;
+        requestUpdate();
       } else {
         onGoHome();
       }
@@ -163,30 +137,18 @@ void MyLibraryActivity::loop() {
     } else {
       selectorIndex = (selectorIndex + listSize - 1) % listSize;
     }
-    updateRequired = true;
+    requestUpdate();
   } else if (downReleased) {
     if (skipPage) {
       selectorIndex = std::min(static_cast<int>((selectorIndex / pageItems + 1) * pageItems), listSize - 1);
     } else {
       selectorIndex = (selectorIndex + 1) % listSize;
     }
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void MyLibraryActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void MyLibraryActivity::render() const {
+void MyLibraryActivity::render() {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

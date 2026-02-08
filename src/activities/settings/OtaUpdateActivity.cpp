@@ -9,11 +9,6 @@
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
 
-void OtaUpdateActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<OtaUpdateActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();
 
@@ -28,7 +23,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = CHECKING_FOR_UPDATE;
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
   vTaskDelay(10 / portTICK_PERIOD_MS);
   const auto res = updater.checkForUpdate();
   if (res != OtaUpdater::OK) {
@@ -36,7 +31,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     state = FAILED;
     xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -45,27 +40,18 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     state = NO_UPDATE;
     xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = WAITING_CONFIRMATION;
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
 }
 
 void OtaUpdateActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
-
-  renderingMutex = xSemaphoreCreateMutex();
-
-  xTaskCreate(&OtaUpdateActivity::taskTrampoline, "OtaUpdateActivityTask",
-              2048,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
 
   // Turn on WiFi immediately
   Serial.printf("[%lu] [OTA] Turning on WiFi...\n", millis());
@@ -85,27 +71,6 @@ void OtaUpdateActivity::onExit() {
   delay(100);              // Allow disconnect frame to be sent
   WiFi.mode(WIFI_OFF);
   delay(100);  // Allow WiFi hardware to fully power down
-
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
-
-void OtaUpdateActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired || updater.getRender()) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
 }
 
 void OtaUpdateActivity::render() {
@@ -194,7 +159,7 @@ void OtaUpdateActivity::loop() {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;
       xSemaphoreGive(renderingMutex);
-      updateRequired = true;
+      requestUpdate();
       vTaskDelay(10 / portTICK_PERIOD_MS);
       const auto res = updater.installUpdate();
 
@@ -203,14 +168,14 @@ void OtaUpdateActivity::loop() {
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
         state = FAILED;
         xSemaphoreGive(renderingMutex);
-        updateRequired = true;
+        requestUpdate();
         return;
       }
 
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = FINISHED;
       xSemaphoreGive(renderingMutex);
-      updateRequired = true;
+      requestUpdate();
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {

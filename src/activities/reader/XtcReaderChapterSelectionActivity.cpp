@@ -41,11 +41,6 @@ int XtcReaderChapterSelectionActivity::findChapterIndexForPage(uint32_t page) co
   return 0;
 }
 
-void XtcReaderChapterSelectionActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<XtcReaderChapterSelectionActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void XtcReaderChapterSelectionActivity::onEnter() {
   Activity::onEnter();
 
@@ -53,29 +48,12 @@ void XtcReaderChapterSelectionActivity::onEnter() {
     return;
   }
 
-  renderingMutex = xSemaphoreCreateMutex();
   selectorIndex = findChapterIndexForPage(currentPage);
 
-  updateRequired = true;
-  xTaskCreate(&XtcReaderChapterSelectionActivity::taskTrampoline, "XtcReaderChapterSelectionActivityTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void XtcReaderChapterSelectionActivity::onExit() {
-  Activity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void XtcReaderChapterSelectionActivity::onExit() { Activity::onExit(); }
 
 void XtcReaderChapterSelectionActivity::loop() {
   const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
@@ -103,7 +81,7 @@ void XtcReaderChapterSelectionActivity::loop() {
     } else {
       selectorIndex = (selectorIndex + total - 1) % total;
     }
-    updateRequired = true;
+    requestUpdate();
   } else if (nextReleased) {
     const int total = static_cast<int>(xtc->getChapters().size());
     if (total == 0) {
@@ -114,23 +92,11 @@ void XtcReaderChapterSelectionActivity::loop() {
     } else {
       selectorIndex = (selectorIndex + 1) % total;
     }
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void XtcReaderChapterSelectionActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void XtcReaderChapterSelectionActivity::renderScreen() {
+void XtcReaderChapterSelectionActivity::render() {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

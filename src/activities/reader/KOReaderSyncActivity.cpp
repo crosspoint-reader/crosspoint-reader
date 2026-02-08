@@ -39,11 +39,6 @@ void syncTimeWithNTP() {
 }
 }  // namespace
 
-void KOReaderSyncActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<KOReaderSyncActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();
 
@@ -59,7 +54,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   state = SYNCING;
   statusMessage = "Syncing time...";
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
 
   // Sync time with NTP before making API requests
   syncTimeWithNTP();
@@ -67,7 +62,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   statusMessage = "Calculating document hash...";
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
 
   performSync();
 }
@@ -84,7 +79,7 @@ void KOReaderSyncActivity::performSync() {
     state = SYNC_FAILED;
     statusMessage = "Failed to calculate document hash";
     xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -93,7 +88,7 @@ void KOReaderSyncActivity::performSync() {
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   statusMessage = "Fetching remote progress...";
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
   vTaskDelay(10 / portTICK_PERIOD_MS);
 
   // Fetch remote progress
@@ -105,7 +100,7 @@ void KOReaderSyncActivity::performSync() {
     state = NO_REMOTE_PROGRESS;
     hasRemoteProgress = false;
     xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -114,7 +109,7 @@ void KOReaderSyncActivity::performSync() {
     state = SYNC_FAILED;
     statusMessage = KOReaderSyncClient::errorString(result);
     xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -131,7 +126,7 @@ void KOReaderSyncActivity::performSync() {
   state = SHOWING_RESULT;
   selectedOption = 0;  // Default to "Apply"
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
 }
 
 void KOReaderSyncActivity::performUpload() {
@@ -139,7 +134,7 @@ void KOReaderSyncActivity::performUpload() {
   state = UPLOADING;
   statusMessage = "Uploading progress...";
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
   vTaskDelay(10 / portTICK_PERIOD_MS);
 
   // Convert current position to KOReader format
@@ -158,32 +153,23 @@ void KOReaderSyncActivity::performUpload() {
     state = SYNC_FAILED;
     statusMessage = KOReaderSyncClient::errorString(result);
     xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = UPLOAD_COMPLETE;
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
 }
 
 void KOReaderSyncActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
-
-  xTaskCreate(&KOReaderSyncActivity::taskTrampoline, "KOSyncTask",
-              4096,               // Stack size (larger for network operations)
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
-
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
     state = NO_CREDENTIALS;
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -196,7 +182,7 @@ void KOReaderSyncActivity::onEnter() {
     Serial.printf("[%lu] [KOSync] Already connected to WiFi\n", millis());
     state = SYNCING;
     statusMessage = "Syncing time...";
-    updateRequired = true;
+    requestUpdate();
 
     // Perform sync directly (will be handled in loop)
     xTaskCreate(
@@ -207,7 +193,7 @@ void KOReaderSyncActivity::onEnter() {
           xSemaphoreTake(self->renderingMutex, portMAX_DELAY);
           self->statusMessage = "Calculating document hash...";
           xSemaphoreGive(self->renderingMutex);
-          self->updateRequired = true;
+          self->requestUpdate();
           self->performSync();
           vTaskDelete(nullptr);
         },
@@ -229,27 +215,6 @@ void KOReaderSyncActivity::onExit() {
   delay(100);
   WiFi.mode(WIFI_OFF);
   delay(100);
-
-  // Wait until not rendering to delete task
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
-
-void KOReaderSyncActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
 }
 
 void KOReaderSyncActivity::render() {
@@ -387,11 +352,11 @@ void KOReaderSyncActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
-      updateRequired = true;
+      requestUpdate();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
                mappedInput.wasPressed(MappedInputManager::Button::Right)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
-      updateRequired = true;
+      requestUpdate();
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {

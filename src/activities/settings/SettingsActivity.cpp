@@ -22,7 +22,6 @@ constexpr int changeTabsMs = 700;
 
 void SettingsActivity::onEnter() {
   Activity::onEnter();
-  renderingMutex = xSemaphoreCreateMutex();
 
   // Build per-category vectors from the shared settings list
   displaySettings.clear();
@@ -162,45 +161,35 @@ void SettingsActivity::toggleCurrentSetting() {
     }
   } else if (setting.type == SettingType::ACTION) {
     if (strcmp(setting.name, "Remap Front Buttons") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new ButtonRemapActivity(renderer, mappedInput, [this] {
         exitActivity();
         requestUpdate();
       }));
-      xSemaphoreGive(renderingMutex);
     } else if (strcmp(setting.name, "KOReader Sync") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
         exitActivity();
         requestUpdate();
       }));
-      xSemaphoreGive(renderingMutex);
     } else if (strcmp(setting.name, "OPDS Browser") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
         exitActivity();
         requestUpdate();
       }));
-      xSemaphoreGive(renderingMutex);
     } else if (strcmp(setting.name, "Clear Cache") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
         exitActivity();
         requestUpdate();
       }));
-      xSemaphoreGive(renderingMutex);
     } else if (strcmp(setting.name, "Check for updates") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
         exitActivity();
         requestUpdate();
       }));
-      xSemaphoreGive(renderingMutex);
     }
   } else {
     return;

@@ -16,42 +16,17 @@ const char* MENU_DESCRIPTIONS[MENU_ITEM_COUNT] = {
 };
 }  // namespace
 
-void NetworkModeSelectionActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<NetworkModeSelectionActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void NetworkModeSelectionActivity::onEnter() {
   Activity::onEnter();
-
-  renderingMutex = xSemaphoreCreateMutex();
 
   // Reset selection
   selectedIndex = 0;
 
   // Trigger first update
-  updateRequired = true;
-
-  xTaskCreate(&NetworkModeSelectionActivity::taskTrampoline, "NetworkModeTask",
-              2048,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void NetworkModeSelectionActivity::onExit() {
-  Activity::onExit();
-
-  // Wait until not rendering to delete task
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void NetworkModeSelectionActivity::onExit() { Activity::onExit(); }
 
 void NetworkModeSelectionActivity::loop() {
   // Handle back button - cancel
@@ -80,26 +55,14 @@ void NetworkModeSelectionActivity::loop() {
 
   if (prevPressed) {
     selectedIndex = (selectedIndex + MENU_ITEM_COUNT - 1) % MENU_ITEM_COUNT;
-    updateRequired = true;
+    requestUpdate();
   } else if (nextPressed) {
     selectedIndex = (selectedIndex + 1) % MENU_ITEM_COUNT;
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void NetworkModeSelectionActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void NetworkModeSelectionActivity::render() const {
+void NetworkModeSelectionActivity::render() {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

@@ -24,7 +24,6 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
-  void renderScreen();
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
@@ -45,5 +44,5 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render() override { renderScreen(); }
+  void render() override;
 };

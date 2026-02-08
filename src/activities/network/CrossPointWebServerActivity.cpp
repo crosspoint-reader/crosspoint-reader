@@ -29,17 +29,10 @@ DNSServer* dnsServer = nullptr;
 constexpr uint16_t DNS_PORT = 53;
 }  // namespace
 
-void CrossPointWebServerActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<CrossPointWebServerActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void CrossPointWebServerActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap at onEnter: %d bytes\n", millis(), ESP.getFreeHeap());
-
-  renderingMutex = xSemaphoreCreateMutex();
 
   // Reset state
   state = WebServerActivityState::MODE_SELECTION;
@@ -48,14 +41,7 @@ void CrossPointWebServerActivity::onEnter() {
   connectedIP.clear();
   connectedSSID.clear();
   lastHandleClientTime = 0;
-  updateRequired = true;
-
-  xTaskCreate(&CrossPointWebServerActivity::taskTrampoline, "WebServerActivityTask",
-              2048,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 
   // Launch network mode selection subactivity
   Serial.printf("[%lu] [WEBACT] Launching NetworkModeSelectionActivity...\n", millis());
@@ -105,24 +91,6 @@ void CrossPointWebServerActivity::onExit() {
 
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap after WiFi disconnect: %d bytes\n", millis(), ESP.getFreeHeap());
 
-  // Acquire mutex before deleting task
-  Serial.printf("[%lu] [WEBACT] Acquiring rendering mutex before task deletion...\n", millis());
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-
-  // Delete the display task
-  Serial.printf("[%lu] [WEBACT] Deleting display task...\n", millis());
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-    Serial.printf("[%lu] [WEBACT] Display task deleted\n", millis());
-  }
-
-  // Delete the mutex
-  Serial.printf("[%lu] [WEBACT] Deleting mutex...\n", millis());
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-  Serial.printf("[%lu] [WEBACT] Mutex deleted\n", millis());
-
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap at onExit end: %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
@@ -165,7 +133,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   } else {
     // AP mode - start access point
     state = WebServerActivityState::AP_STARTING;
-    updateRequired = true;
+    requestUpdate();
     startAccessPoint();
   }
 }
@@ -267,9 +235,10 @@ void CrossPointWebServerActivity::startWebServer() {
 
     // Force an immediate render since we're transitioning from a subactivity
     // that had its own rendering task. We need to make sure our display is shown.
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    render();
-    xSemaphoreGive(renderingMutex);
+    {
+      RenderLock lock(*this);
+      render();
+    }
     Serial.printf("[%lu] [WEBACT] Rendered File Transfer screen\n", millis());
   } else {
     Serial.printf("[%lu] [WEBACT] ERROR: Failed to start web server!\n", millis());
@@ -312,7 +281,7 @@ void CrossPointWebServerActivity::loop() {
           Serial.printf("[%lu] [WEBACT] WiFi disconnected! Status: %d\n", millis(), wifiStatus);
           // Show error and exit gracefully
           state = WebServerActivityState::SHUTTING_DOWN;
-          updateRequired = true;
+          requestUpdate();
           return;
         }
         // Log weak signal warnings
@@ -366,19 +335,7 @@ void CrossPointWebServerActivity::loop() {
   }
 }
 
-void CrossPointWebServerActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void CrossPointWebServerActivity::render() const {
+void CrossPointWebServerActivity::render() {
   // Only render our own UI when server is running
   // Subactivities handle their own rendering
   if (state == WebServerActivityState::SERVER_RUNNING) {

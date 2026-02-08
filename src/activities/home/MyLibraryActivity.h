@@ -1,8 +1,4 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
-
 #include <functional>
 #include <string>
 #include <vector>
@@ -11,11 +7,7 @@
 
 class MyLibraryActivity final : public Activity {
  private:
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-
   size_t selectorIndex = 0;
-  bool updateRequired = false;
 
   // Files state
   std::string basepath = "/";
@@ -24,10 +16,6 @@ class MyLibraryActivity final : public Activity {
   // Callbacks
   const std::function<void(const std::string& path)> onSelectBook;
   const std::function<void()> onGoHome;
-
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render() const;
 
   // Data loading
   void loadFiles();
@@ -45,4 +33,5 @@ class MyLibraryActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render() override;
 };

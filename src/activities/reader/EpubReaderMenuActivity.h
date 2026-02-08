@@ -1,8 +1,5 @@
 #pragma once
 #include <Epub.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <functional>
 #include <string>
@@ -31,6 +28,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render() override;
 
  private:
   struct MenuItem {
@@ -45,9 +43,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
       {MenuAction::SYNC, "Sync Progress"},           {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
 
   int selectedIndex = 0;
-  bool updateRequired = false;
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
+
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
   const std::vector<const char*> orientationLabels = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"};
@@ -57,8 +53,4 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
 
   const std::function<void(uint8_t)> onBack;
   const std::function<void(MenuAction)> onAction;
-
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void renderScreen();
 };
