@@ -171,6 +171,8 @@ class CrossPointSettings {
   uint8_t fadingFix = 0;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // Enable app extensions (Home Apps menu + web developer app upload)
+  uint8_t appsEnabled = 1;
 
   ~CrossPointSettings() = default;
 
