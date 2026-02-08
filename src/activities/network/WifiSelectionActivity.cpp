@@ -725,6 +725,8 @@ void WifiSelectionActivity::renderConnectionFailed() const {
 void WifiSelectionActivity::renderForgetPrompt() const {
   const auto pageHeight = renderer.getScreenHeight();
   const auto area = UIHelpers::contentAreaForRenderer(renderer);
+  const int contentX = area.contentX;
+  const int contentWidth = area.contentWidth;
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
