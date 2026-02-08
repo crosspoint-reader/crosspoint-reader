@@ -52,7 +52,9 @@ void AppsActivity::loop() {
     }
   } else if (mappedInput_.wasReleased(MappedInputManager::Button::Back)) {
     if (exitCallback_) {
-      exitCallback_();
+      auto callback = exitCallback_;
+      callback();
+      return;
     }
   }
 
