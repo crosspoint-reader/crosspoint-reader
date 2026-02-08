@@ -30,6 +30,46 @@ Where `app.json` must include at least:
 - `name`
 - `version`
 
+### App ID rules
+
+The App ID is used as the folder name under `/.crosspoint/apps/`.
+
+Rules:
+- Max 64 chars
+- Allowed: letters, numbers, `.`, `_`, `-`
+- Must not start with `.`
+- Must not contain `..`
+- No slashes
+
+### `app.json` schema
+
+Required (for ZIP uploads):
+- `id` (string)
+- `name` (string)
+- `version` (string)
+
+Optional:
+- `description` (string)
+- `author` (string)
+- `minFirmware` (string)
+
+Example:
+
+```json
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "0.1.0",
+  "description": "A minimal demo app",
+  "author": "Your Name",
+  "minFirmware": "0.16.0"
+}
+```
+
+Notes:
+- For SD/manual installs, CrossPoint requires at least `name`. Other fields will fall back to defaults.
+- Keep `app.json` small (CrossPoint reads up to 8KB).
+
 ## How it boots (high level)
 
 ```text
@@ -125,9 +165,15 @@ Apps should live in their own repositories and publish binaries via GitHub Relea
 
 For safety/auditability, registry listings should reference a public source repository (e.g. GitHub URL) so maintainers and users can review the code that produced the release.
 
-Release assets:
-- Required: `app.bin`
-- Optional: `app.json`
+Release assets (recommended):
+- `app.zip` (contains `app.bin` + `app.json`)
+
+Suggested naming:
+- `<appId>-<version>.zip`
+
+If you also publish raw binaries:
+- `app.bin` (manual install)
+- `app.json` (manual install)
 
 Registry location (maintainer choice):
 1. Separate repo (recommended): `crosspoint-reader/app-registry` containing `apps.json`
