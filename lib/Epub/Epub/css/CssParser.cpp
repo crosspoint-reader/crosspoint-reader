@@ -139,6 +139,28 @@ bool extractNextRule(const std::string& css, size_t& pos, std::string& selector,
   return true;
 }
 
+// Normalize a substring [start, end) into an existing buffer, avoiding allocation
+// when the buffer already has sufficient capacity from a prior use.
+void normalizeInto(const std::string& src, const size_t start, const size_t end, std::string& out) {
+  out.clear();
+  bool inSpace = true;
+  for (size_t i = start; i < end; ++i) {
+    const char c = src[i];
+    if (isCssWhitespace(c)) {
+      if (!inSpace) {
+        out.push_back(' ');
+        inSpace = true;
+      }
+    } else {
+      out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+      inSpace = false;
+    }
+  }
+  if (!out.empty() && out.back() == ' ') {
+    out.pop_back();
+  }
+}
+
 }  // anonymous namespace
 
 // String utilities implementation
@@ -203,40 +225,35 @@ std::vector<std::string> CssParser::splitWhitespace(const std::string& s) {
 }
 
 // Property value interpreters
+// All interpreters receive pre-normalized input (lowercase, whitespace-collapsed)
+// from parseDeclarations, so they do not re-normalize.
 
 CssTextAlign CssParser::interpretAlignment(const std::string& val) {
-  const std::string v = normalized(val);
-
-  if (v == "left" || v == "start") return CssTextAlign::Left;
-  if (v == "right" || v == "end") return CssTextAlign::Right;
-  if (v == "center") return CssTextAlign::Center;
-  if (v == "justify") return CssTextAlign::Justify;
-
+  if (val == "left" || val == "start") return CssTextAlign::Left;
+  if (val == "right" || val == "end") return CssTextAlign::Right;
+  if (val == "center") return CssTextAlign::Center;
+  if (val == "justify") return CssTextAlign::Justify;
   return CssTextAlign::Left;
 }
 
 CssFontStyle CssParser::interpretFontStyle(const std::string& val) {
-  const std::string v = normalized(val);
-
-  if (v == "italic" || v == "oblique") return CssFontStyle::Italic;
+  if (val == "italic" || val == "oblique") return CssFontStyle::Italic;
   return CssFontStyle::Normal;
 }
 
 CssFontWeight CssParser::interpretFontWeight(const std::string& val) {
-  const std::string v = normalized(val);
-
   // Named values
-  if (v == "bold" || v == "bolder") return CssFontWeight::Bold;
-  if (v == "normal" || v == "lighter") return CssFontWeight::Normal;
+  if (val == "bold" || val == "bolder") return CssFontWeight::Bold;
+  if (val == "normal" || val == "lighter") return CssFontWeight::Normal;
 
   // Numeric values: 100-900
   // CSS spec: 400 = normal, 700 = bold
   // We use: 0-400 = normal, 700+ = bold, 500-600 = normal (conservative)
   char* endPtr = nullptr;
-  const long numericWeight = std::strtol(v.c_str(), &endPtr, 10);
+  const long numericWeight = std::strtol(val.c_str(), &endPtr, 10);
 
   // If we parsed a number and consumed the whole string
-  if (endPtr != v.c_str() && *endPtr == '\0') {
+  if (endPtr != val.c_str() && *endPtr == '\0') {
     return numericWeight >= 700 ? CssFontWeight::Bold : CssFontWeight::Normal;
   }
 
@@ -244,45 +261,34 @@ CssFontWeight CssParser::interpretFontWeight(const std::string& val) {
 }
 
 CssTextDecoration CssParser::interpretDecoration(const std::string& val) {
-  const std::string v = normalized(val);
-
   // text-decoration can have multiple space-separated values
-  if (v.find("underline") != std::string::npos) {
+  if (val.find("underline") != std::string::npos) {
     return CssTextDecoration::Underline;
   }
   return CssTextDecoration::None;
 }
 
 CssLength CssParser::interpretLength(const std::string& val) {
-  const std::string v = normalized(val);
-  if (v.empty()) return CssLength{};
+  if (val.empty()) return CssLength{};
 
-  // Find where the number ends
-  size_t unitStart = v.size();
-  for (size_t i = 0; i < v.size(); ++i) {
-    const char c = v[i];
-    if (!std::isdigit(c) && c != '.' && c != '-' && c != '+') {
-      unitStart = i;
-      break;
-    }
-  }
-
-  const std::string numPart = v.substr(0, unitStart);
-  const std::string unitPart = v.substr(unitStart);
-
-  // Parse numeric value
+  // Parse number directly — strtof stops at the first non-numeric character
   char* endPtr = nullptr;
-  const float numericValue = std::strtof(numPart.c_str(), &endPtr);
-  if (endPtr == numPart.c_str()) return CssLength{};  // No number parsed
+  const float numericValue = std::strtof(val.c_str(), &endPtr);
+  if (endPtr == val.c_str()) return CssLength{};  // No number parsed
 
-  // Determine unit type (preserve for deferred resolution)
+  // Determine unit from the remaining characters (no substring allocation)
   auto unit = CssUnit::Pixels;
-  if (unitPart == "em") {
-    unit = CssUnit::Em;
-  } else if (unitPart == "rem") {
+  const size_t unitStart = static_cast<size_t>(endPtr - val.c_str());
+  const size_t unitLen = val.size() - unitStart;
+
+  if (unitLen == 2) {
+    if (val[unitStart] == 'e' && val[unitStart + 1] == 'm') {
+      unit = CssUnit::Em;
+    } else if (val[unitStart] == 'p' && val[unitStart + 1] == 't') {
+      unit = CssUnit::Points;
+    }
+  } else if (unitLen == 3 && val[unitStart] == 'r' && val[unitStart + 1] == 'e' && val[unitStart + 2] == 'm') {
     unit = CssUnit::Rem;
-  } else if (unitPart == "pt") {
-    unit = CssUnit::Points;
   }
   // px and unitless default to Pixels
 
@@ -290,38 +296,29 @@ CssLength CssParser::interpretLength(const std::string& val) {
 }
 
 int8_t CssParser::interpretSpacing(const std::string& val) {
-  const std::string v = normalized(val);
-  if (v.empty()) return 0;
+  if (val.empty()) return 0;
 
+  // Parse number directly
+  char* endPtr = nullptr;
+  const float numericValue = std::strtof(val.c_str(), &endPtr);
+  if (endPtr == val.c_str()) return 0;
+
+  // Determine unit and multiplier from remaining characters
   // For spacing, we convert to "lines" (discrete units for e-ink)
   // 1em ≈ 1 line, percentages based on ~30 lines per page
-
   float multiplier = 0.0f;
-  size_t unitStart = v.size();
+  const size_t unitStart = static_cast<size_t>(endPtr - val.c_str());
+  const size_t unitLen = val.size() - unitStart;
 
-  for (size_t i = 0; i < v.size(); ++i) {
-    const char c = v[i];
-    if (!std::isdigit(c) && c != '.' && c != '-' && c != '+') {
-      unitStart = i;
-      break;
-    }
-  }
-
-  const std::string numPart = v.substr(0, unitStart);
-  const std::string unitPart = v.substr(unitStart);
-
-  if (unitPart == "em" || unitPart == "rem") {
-    multiplier = 1.0f;  // 1em = 1 line
-  } else if (unitPart == "%") {
+  if (unitLen == 2 && val[unitStart] == 'e' && val[unitStart + 1] == 'm') {
+    multiplier = 1.0f;
+  } else if (unitLen == 3 && val[unitStart] == 'r' && val[unitStart + 1] == 'e' && val[unitStart + 2] == 'm') {
+    multiplier = 1.0f;
+  } else if (unitLen == 1 && val[unitStart] == '%') {
     multiplier = 0.3f;  // ~30 lines per page, so 10% = 3 lines
   } else {
     return 0;  // Unsupported unit for spacing
   }
-
-  char* endPtr = nullptr;
-  const float numericValue = std::strtof(numPart.c_str(), &endPtr);
-
-  if (endPtr == numPart.c_str()) return 0;
 
   int lines = static_cast<int>(numericValue * multiplier);
 
@@ -333,85 +330,104 @@ int8_t CssParser::interpretSpacing(const std::string& val) {
 }
 
 // Declaration parsing
+// Scans the declaration block inline (no intermediate vector allocation)
+// and normalizes property names/values into reusable buffers.
 
 CssStyle CssParser::parseDeclarations(const std::string& declBlock) {
   CssStyle style;
+  std::string propName;
+  std::string propValue;
 
-  // Split declarations by semicolon
-  const auto declarations = splitOnChar(declBlock, ';');
+  size_t pos = 0;
+  const size_t len = declBlock.size();
 
-  for (const auto& decl : declarations) {
-    // Find colon separator
-    const size_t colonPos = decl.find(':');
-    if (colonPos == std::string::npos || colonPos == 0) continue;
+  while (pos < len) {
+    // Find end of this declaration (semicolon or end of string)
+    size_t declEnd = pos;
+    while (declEnd < len && declBlock[declEnd] != ';') ++declEnd;
 
-    std::string propName = normalized(decl.substr(0, colonPos));
-    std::string propValue = normalized(decl.substr(colonPos + 1));
-
-    if (propName.empty() || propValue.empty()) continue;
-
-    // Match property and set value
-    if (propName == "text-align") {
-      style.textAlign = interpretAlignment(propValue);
-      style.defined.textAlign = 1;
-    } else if (propName == "font-style") {
-      style.fontStyle = interpretFontStyle(propValue);
-      style.defined.fontStyle = 1;
-    } else if (propName == "font-weight") {
-      style.fontWeight = interpretFontWeight(propValue);
-      style.defined.fontWeight = 1;
-    } else if (propName == "text-decoration" || propName == "text-decoration-line") {
-      style.textDecoration = interpretDecoration(propValue);
-      style.defined.textDecoration = 1;
-    } else if (propName == "text-indent") {
-      style.textIndent = interpretLength(propValue);
-      style.defined.textIndent = 1;
-    } else if (propName == "margin-top") {
-      style.marginTop = interpretLength(propValue);
-      style.defined.marginTop = 1;
-    } else if (propName == "margin-bottom") {
-      style.marginBottom = interpretLength(propValue);
-      style.defined.marginBottom = 1;
-    } else if (propName == "margin-left") {
-      style.marginLeft = interpretLength(propValue);
-      style.defined.marginLeft = 1;
-    } else if (propName == "margin-right") {
-      style.marginRight = interpretLength(propValue);
-      style.defined.marginRight = 1;
-    } else if (propName == "margin") {
-      // Shorthand: 1-4 values for top, right, bottom, left
-      const auto values = splitWhitespace(propValue);
-      if (!values.empty()) {
-        style.marginTop = interpretLength(values[0]);
-        style.marginRight = values.size() >= 2 ? interpretLength(values[1]) : style.marginTop;
-        style.marginBottom = values.size() >= 3 ? interpretLength(values[2]) : style.marginTop;
-        style.marginLeft = values.size() >= 4 ? interpretLength(values[3]) : style.marginRight;
-        style.defined.marginTop = style.defined.marginRight = style.defined.marginBottom = style.defined.marginLeft = 1;
-      }
-    } else if (propName == "padding-top") {
-      style.paddingTop = interpretLength(propValue);
-      style.defined.paddingTop = 1;
-    } else if (propName == "padding-bottom") {
-      style.paddingBottom = interpretLength(propValue);
-      style.defined.paddingBottom = 1;
-    } else if (propName == "padding-left") {
-      style.paddingLeft = interpretLength(propValue);
-      style.defined.paddingLeft = 1;
-    } else if (propName == "padding-right") {
-      style.paddingRight = interpretLength(propValue);
-      style.defined.paddingRight = 1;
-    } else if (propName == "padding") {
-      // Shorthand: 1-4 values for top, right, bottom, left
-      const auto values = splitWhitespace(propValue);
-      if (!values.empty()) {
-        style.paddingTop = interpretLength(values[0]);
-        style.paddingRight = values.size() >= 2 ? interpretLength(values[1]) : style.paddingTop;
-        style.paddingBottom = values.size() >= 3 ? interpretLength(values[2]) : style.paddingTop;
-        style.paddingLeft = values.size() >= 4 ? interpretLength(values[3]) : style.paddingRight;
-        style.defined.paddingTop = style.defined.paddingRight = style.defined.paddingBottom =
-            style.defined.paddingLeft = 1;
+    // Find colon separator within this declaration
+    size_t colonPos = declEnd;  // sentinel: no colon found
+    for (size_t i = pos; i < declEnd; ++i) {
+      if (declBlock[i] == ':') {
+        colonPos = i;
+        break;
       }
     }
+
+    if (colonPos < declEnd && colonPos > pos) {
+      // Normalize property name and value into reusable buffers
+      normalizeInto(declBlock, pos, colonPos, propName);
+      normalizeInto(declBlock, colonPos + 1, declEnd, propValue);
+
+      if (!propName.empty() && !propValue.empty()) {
+        // Match property and set value
+        if (propName == "text-align") {
+          style.textAlign = interpretAlignment(propValue);
+          style.defined.textAlign = 1;
+        } else if (propName == "font-style") {
+          style.fontStyle = interpretFontStyle(propValue);
+          style.defined.fontStyle = 1;
+        } else if (propName == "font-weight") {
+          style.fontWeight = interpretFontWeight(propValue);
+          style.defined.fontWeight = 1;
+        } else if (propName == "text-decoration" || propName == "text-decoration-line") {
+          style.textDecoration = interpretDecoration(propValue);
+          style.defined.textDecoration = 1;
+        } else if (propName == "text-indent") {
+          style.textIndent = interpretLength(propValue);
+          style.defined.textIndent = 1;
+        } else if (propName == "margin-top") {
+          style.marginTop = interpretLength(propValue);
+          style.defined.marginTop = 1;
+        } else if (propName == "margin-bottom") {
+          style.marginBottom = interpretLength(propValue);
+          style.defined.marginBottom = 1;
+        } else if (propName == "margin-left") {
+          style.marginLeft = interpretLength(propValue);
+          style.defined.marginLeft = 1;
+        } else if (propName == "margin-right") {
+          style.marginRight = interpretLength(propValue);
+          style.defined.marginRight = 1;
+        } else if (propName == "margin") {
+          // Shorthand: 1-4 values for top, right, bottom, left
+          const auto values = splitWhitespace(propValue);
+          if (!values.empty()) {
+            style.marginTop = interpretLength(values[0]);
+            style.marginRight = values.size() >= 2 ? interpretLength(values[1]) : style.marginTop;
+            style.marginBottom = values.size() >= 3 ? interpretLength(values[2]) : style.marginTop;
+            style.marginLeft = values.size() >= 4 ? interpretLength(values[3]) : style.marginRight;
+            style.defined.marginTop = style.defined.marginRight = style.defined.marginBottom =
+                style.defined.marginLeft = 1;
+          }
+        } else if (propName == "padding-top") {
+          style.paddingTop = interpretLength(propValue);
+          style.defined.paddingTop = 1;
+        } else if (propName == "padding-bottom") {
+          style.paddingBottom = interpretLength(propValue);
+          style.defined.paddingBottom = 1;
+        } else if (propName == "padding-left") {
+          style.paddingLeft = interpretLength(propValue);
+          style.defined.paddingLeft = 1;
+        } else if (propName == "padding-right") {
+          style.paddingRight = interpretLength(propValue);
+          style.defined.paddingRight = 1;
+        } else if (propName == "padding") {
+          // Shorthand: 1-4 values for top, right, bottom, left
+          const auto values = splitWhitespace(propValue);
+          if (!values.empty()) {
+            style.paddingTop = interpretLength(values[0]);
+            style.paddingRight = values.size() >= 2 ? interpretLength(values[1]) : style.paddingTop;
+            style.paddingBottom = values.size() >= 3 ? interpretLength(values[2]) : style.paddingTop;
+            style.paddingLeft = values.size() >= 4 ? interpretLength(values[3]) : style.paddingRight;
+            style.defined.paddingTop = style.defined.paddingRight = style.defined.paddingBottom =
+                style.defined.paddingLeft = 1;
+          }
+        }
+      }
+    }
+
+    pos = declEnd + 1;
   }
 
   return style;
@@ -425,20 +441,21 @@ void CssParser::processRuleBlock(const std::string& selectorGroup, const std::st
   // Only store if any properties were set
   if (!style.defined.anySet()) return;
 
-  // Handle comma-separated selectors
-  const auto selectors = splitOnChar(selectorGroup, ',');
-
-  for (const auto& sel : selectors) {
-    // Normalize the selector
-    std::string key = normalized(sel);
-    if (key.empty()) continue;
-
-    // Store or merge with existing
-    auto it = rulesBySelector_.find(key);
-    if (it != rulesBySelector_.end()) {
-      it->second.applyOver(style);
-    } else {
-      rulesBySelector_[key] = style;
+  // Handle comma-separated selectors (inline scan, reuse key buffer)
+  std::string key;
+  size_t start = 0;
+  for (size_t i = 0; i <= selectorGroup.size(); ++i) {
+    if (i == selectorGroup.size() || selectorGroup[i] == ',') {
+      normalizeInto(selectorGroup, start, i, key);
+      if (!key.empty()) {
+        auto it = rulesBySelector_.find(key);
+        if (it != rulesBySelector_.end()) {
+          it->second.applyOver(style);
+        } else {
+          rulesBySelector_[key] = style;
+        }
+      }
+      start = i + 1;
     }
   }
 }

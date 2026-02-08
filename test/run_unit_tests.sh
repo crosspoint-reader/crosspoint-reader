@@ -83,6 +83,20 @@ compile_and_run CssParserTest \
   "$ROOT_DIR/test/unit/CssParserTest.cpp" \
   "$ROOT_DIR/lib/Epub/Epub/css/CssParser.cpp"
 
+# --- CssParserRegressionTest ---
+compile_and_run CssParserRegressionTest \
+  "$ROOT_DIR/test/unit/CssParserRegressionTest.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/css/CssParser.cpp"
+
+# --- HyphenationRegressionTest ---
+compile_and_run HyphenationRegressionTest \
+  "$ROOT_DIR/test/unit/HyphenationRegressionTest.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/Hyphenator.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/LanguageRegistry.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/LiangHyphenation.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/HyphenationCommon.cpp" \
+  "$ROOT_DIR/lib/Utf8/Utf8.cpp"
+
 # --- OpdsParserTest ---
 # Expat is C code — compile as object files first, then link with C++ test
 echo "--- OpdsParserTest ---"

@@ -157,17 +157,25 @@ void trimSurroundingPunctuationAndFootnote(std::vector<CodepointInfo>& cps) {
     }
   }
 
-  while (!cps.empty() && isPunctuation(cps.front().value)) {
-    cps.erase(cps.begin());
+  // Find first non-punctuation element and bulk-erase leading punctuation in one operation
+  size_t firstNonPunct = 0;
+  while (firstNonPunct < cps.size() && isPunctuation(cps[firstNonPunct].value)) {
+    ++firstNonPunct;
+  }
+  if (firstNonPunct > 0) {
+    if (firstNonPunct >= cps.size()) {
+      cps.clear();
+      return;
+    }
+    cps.erase(cps.begin(), cps.begin() + static_cast<ptrdiff_t>(firstNonPunct));
   }
   while (!cps.empty() && isPunctuation(cps.back().value)) {
     cps.pop_back();
   }
 }
 
-std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
-  std::vector<CodepointInfo> cps;
-  cps.reserve(word.size());
+void collectCodepoints(const std::string& word, std::vector<CodepointInfo>& cps) {
+  cps.clear();
 
   const unsigned char* base = reinterpret_cast<const unsigned char*>(word.c_str());
   const unsigned char* ptr = base;
@@ -176,6 +184,11 @@ std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
     const uint32_t cp = utf8NextCodepoint(&ptr);
     cps.push_back({cp, static_cast<size_t>(current - base)});
   }
+}
 
+std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
+  std::vector<CodepointInfo> cps;
+  cps.reserve(word.size());
+  collectCodepoints(word, cps);
   return cps;
 }

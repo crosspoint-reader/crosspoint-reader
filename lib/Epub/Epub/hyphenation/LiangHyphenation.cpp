@@ -87,14 +87,15 @@ size_t encodeUtf8(uint32_t cp, std::vector<uint8_t>& out) {
 }
 
 // Build the dotted, lowercase UTF-8 representation plus lookup tables.
-AugmentedWord buildAugmentedWord(const std::vector<CodepointInfo>& cps, const LiangWordConfig& config) {
-  AugmentedWord word;
-  if (cps.empty()) {
-    return word;
-  }
+// Fills the provided AugmentedWord, reusing its vector capacity across calls.
+void buildAugmentedWord(const std::vector<CodepointInfo>& cps, const LiangWordConfig& config, AugmentedWord& word) {
+  word.bytes.clear();
+  word.charByteOffsets.clear();
+  word.byteToCharIndex.clear();
 
-  word.bytes.reserve(cps.size() * 2 + 2);
-  word.charByteOffsets.reserve(cps.size() + 2);
+  if (cps.empty()) {
+    return;
+  }
 
   word.charByteOffsets.push_back(0);
   word.bytes.push_back('.');
@@ -103,8 +104,7 @@ AugmentedWord buildAugmentedWord(const std::vector<CodepointInfo>& cps, const Li
     if (!config.isLetter(info.value)) {
       word.bytes.clear();
       word.charByteOffsets.clear();
-      word.byteToCharIndex.clear();
-      return word;
+      return;
     }
     word.charByteOffsets.push_back(word.bytes.size());
     encodeUtf8(config.toLower(info.value), word.bytes);
@@ -120,7 +120,6 @@ AugmentedWord buildAugmentedWord(const std::vector<CodepointInfo>& cps, const Li
       word.byteToCharIndex[offset] = static_cast<int32_t>(i);
     }
   }
-  return word;
 }
 
 // Decoded view of a single trie node pulled straight out of the serialized blob.
@@ -339,7 +338,9 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
 // Entry point that runs the full Liang pipeline for a single word.
 std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
                                       const SerializedHyphenationPatterns& patterns, const LiangWordConfig& config) {
-  const auto augmented = buildAugmentedWord(cps, config);
+  // Reuse static buffers across calls (safe: ESP32-C3 is single-threaded).
+  static AugmentedWord augmented;
+  buildAugmentedWord(cps, config, augmented);
   if (augmented.empty()) {
     return {};
   }
@@ -355,7 +356,9 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
   }
 
   // Liang scores: one entry per augmented char (leading/trailing dots included).
-  std::vector<uint8_t> scores(augmented.charCount(), 0);
+  // Reuse static buffer — assign zeros while preserving allocated capacity.
+  static std::vector<uint8_t> scores;
+  scores.assign(augmented.charCount(), 0);
 
   // Walk every starting character position and stream bytes through the trie.
   for (size_t charStart = 0; charStart < augmented.charByteOffsets.size(); ++charStart) {
