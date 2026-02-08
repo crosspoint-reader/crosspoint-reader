@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CrossPoint Emulator</title>
+  <style>
+    body {
+      font-family: monospace;
+      margin: 0;
+      height: 100vh;
+      background-color: #bbb;
+      display: flex;
+      justify-content: center;
+    }
+
+    button {
+      font-size: 1.2em;
+      padding: 0.5em 1em;
+      margin: 0.2em;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      max-width: 1200px;
+    }
+
+    .display, .control {
+      width: 50%;
+      height: 95vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding-left: 2em;
+      padding-right: 2em;
+    }
+
+    .display {
+      flex-direction: row;
+      gap: 1em;
+    }
+
+    canvas {
+      height: calc(100% - 4em);
+    }
+
+    .screen-ctrl {
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+      height: calc(100% - 4em);
+    }
+
+    .ctrl-bottom {
+      display: flex;
+      justify-content: center;
+      gap: 1em;
+    }
+
+    .ctrl-bottom > button {
+      width: 100%;
+    }
+
+    .log {
+      height: calc(100% - 5em);
+      width: 100%;
+    }
+
+    .log > #output {
+      height: 100%;
+      width: 100%;
+      padding: 10px;
+      overflow-y: scroll;
+      border: 1px solid #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="display">
+      <!-- Display and buttons -->
+      <div class="screen-ctrl">
+        <canvas id="screen" width="480" height="800" style="border:1px solid #555;"></canvas>
+        <!--div class="ctrl-bottom">
+          <button id="btn0">0</button>
+          <button id="btn1">1</button>
+          <button id="btn2">2</button>
+          <button id="btn3">3</button>
+        </div-->
+      </div>
+      <!--div class="ctrl-right">
+        <button id="btnP">P</button><br/>
+        <br/><br/><br/><br/>
+        <button id="btnU">U</button><br/>
+        <button id="btnD">D</button><br/>
+        <br/><br/><br/><br/>
+        <br/><br/><br/><br/>
+      </div-->
+    </div>
+
+    <div class="log">
+      <div id="output"></div>
+    </div>
+  </div>
+
+  <script>
+    const output = document.getElementById('output');
+    const screen = document.getElementById('screen');
+    const ctx = screen.getContext('2d');
+
+    let ws = null;
+
+    const MAX_LOG_LINES = 1000;
+    function appendLog(type, message) {
+      const line = document.createElement('div');
+      line.className = type;
+      line.textContent = message;
+      output.appendChild(line);
+      const isNearBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 50;
+      if (isNearBottom) {
+        output.scrollTop = output.scrollHeight;
+      }
+      while (output.childElementCount > MAX_LOG_LINES) {
+        output.removeChild(output.firstChild);
+      }
+    }
+
+    function drawScreen(b64Data) {
+      // b64Data is a base64-encoded 1-bit per pixel framebuffer
+      // Source buffer is 800x480, with 100 bytes per row (800/8 = 100)
+      // We rotate 90 degrees clockwise to display as 480x800
+      const binaryString = atob(b64Data);
+      const srcWidth = 800;
+      const srcHeight = 480;
+      const srcWidthBytes = srcWidth / 8; // 100 bytes per row
+
+      // After 90° clockwise rotation: new width = srcHeight, new height = srcWidth
+      const dstWidth = srcHeight;  // 480
+      const dstHeight = srcWidth;  // 800
+
+      const imageData = ctx.createImageData(dstWidth, dstHeight);
+      const pixels = imageData.data;
+
+      for (let srcY = 0; srcY < srcHeight; srcY++) {
+        for (let xByte = 0; xByte < srcWidthBytes; xByte++) {
+          const byteIndex = srcY * srcWidthBytes + xByte;
+          const byte = binaryString.charCodeAt(byteIndex);
+
+          // Each byte contains 8 pixels (MSB first)
+          for (let bit = 0; bit < 8; bit++) {
+            const srcX = xByte * 8 + bit;
+
+            // 90° clockwise rotation: (srcX, srcY) -> (srcHeight - 1 - srcY, srcX)
+            const dstX = srcHeight - 1 - srcY;
+            const dstY = srcX;
+
+            const pixelIndex = (dstY * dstWidth + dstX) * 4;
+
+            // Bit 1 = white (0xFF), Bit 0 = black (0x00)
+            const isWhite = (byte >> (7 - bit)) & 1;
+            const color = isWhite ? 255 : 0;
+
+            pixels[pixelIndex] = color;     // R
+            pixels[pixelIndex + 1] = color; // G
+            pixels[pixelIndex + 2] = color; // B
+            pixels[pixelIndex + 3] = 255;   // A
+          }
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    // TODO: Handle button presses and forward back to device
+    /*
+    let btn0Pressed = false;
+    let btn1Pressed = false;
+    let btn2Pressed = false;
+    let btn3Pressed = false;
+    let btnUpPressed = false;
+    let btnDownPressed = false;
+    let btnPowerPressed = false;
+
+    let buttonState = 0;
+    function sendButtonState() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'button_state',
+          state: buttonState
+        }));
+        appendLog('info', `Sent button state: ${buttonState}`);
+      } else {
+        appendLog('error', 'WebSocket not connected');
+      }
+    }
+
+    function setupButtonHandler(buttonId, bitIndex) {
+      const button = document.getElementById(buttonId);
+      button.onmousedown = () => {
+        buttonState ^= (1 << bitIndex);
+        sendButtonState();
+      };
+      button.onmouseup = () => {
+        buttonState &= ~(1 << bitIndex);
+        sendButtonState();
+      };
+    }
+    setupButtonHandler('btn0', 0);
+    setupButtonHandler('btn1', 1);
+    setupButtonHandler('btn2', 2);
+    setupButtonHandler('btn3', 3);
+    setupButtonHandler('btnU', 4);
+    setupButtonHandler('btnD', 5);
+    setupButtonHandler('btnP', 6);
+    */
+
+    function connect() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+      appendLog('info', `Connecting to ${wsUrl}...`);
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        appendLog('info', 'Connected');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.data.startsWith('$$CMD_')) {
+            // $$CMD_(COMMAND)[:(ARG0)][:(ARG1)][:(ARG2)]$$
+            const parts = msg.data.slice(2, -2).split(':');
+            const command = parts[0];
+            appendLog('cmd', `Received command: ${command}`);
+            if (command === 'CMD_DISPLAY') {
+              drawScreen(parts[1]);
+            }
+          } else {
+            appendLog(msg.type, msg.data);
+          }
+        } catch (e) {
+          appendLog('stdout', event.data);
+        }
+      };
+
+      ws.onclose = () => {
+        appendLog('info', 'Disconnected');
+        setTimeout(connect, 3000);
+      };
+    }
+
+    window.onload = () => {
+      connect();
+
+      // fill canvas with black initially
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, screen.width, screen.height);
+    };
+  </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 #include "WifiCredentialStore.h"
 
+#include <HalStorage.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
 #include <Serialization.h>
 
 // Initialize the static instance
@@ -29,10 +29,10 @@ void WifiCredentialStore::obfuscate(std::string& data) const {
 
 bool WifiCredentialStore::saveToFile() const {
   // Make sure the directory exists
-  SdMan.mkdir("/.crosspoint");
+  Storage.mkdir("/.crosspoint");
 
   FsFile file;
-  if (!SdMan.openFileForWrite("WCS", WIFI_FILE, file)) {
+  if (!Storage.openFileForWrite("WCS", WIFI_FILE, file)) {
     return false;
   }
 
@@ -60,7 +60,7 @@ bool WifiCredentialStore::saveToFile() const {
 
 bool WifiCredentialStore::loadFromFile() {
   FsFile file;
-  if (!SdMan.openFileForRead("WCS", WIFI_FILE, file)) {
+  if (!Storage.openFileForRead("WCS", WIFI_FILE, file)) {
     return false;
   }
 
