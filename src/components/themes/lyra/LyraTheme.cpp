@@ -373,7 +373,8 @@ Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   const int h = textHeight + marginY * 2;
   const int x = (renderer.getScreenWidth() - w) / 2;
 
-  renderer.fillRoundedRect(x - outline, y - outline, w + outline * 2, h + outline * 2, cornerRadius + outline, Color::White);
+  renderer.fillRoundedRect(x - outline, y - outline, w + outline * 2, h + outline * 2, cornerRadius + outline,
+                           Color::White);
   renderer.fillRoundedRect(x, y, w, h, cornerRadius, Color::Black);
 
   const int textX = x + (w - textWidth) / 2;
