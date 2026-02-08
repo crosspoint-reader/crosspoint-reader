@@ -363,20 +363,23 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 }
 
 Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
-  constexpr int margin = 15;
-  constexpr int y = 60;
+  constexpr int marginX = 16;
+  constexpr int marginY = 12;
+  constexpr int y = 132;
+  constexpr int outline = 2;
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::REGULAR);
   const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int w = textWidth + margin * 2;
-  const int h = textHeight + margin * 2;
+  const int w = textWidth + marginX * 2;
+  const int h = textHeight + marginY * 2;
   const int x = (renderer.getScreenWidth() - w) / 2;
 
-  renderer.fillRect(x - 5, y - 5, w + 10, h + 10, false);
-  renderer.drawRect(x, y, w, h, true);
+  renderer.fillRoundedRect(x - outline, y - outline, w + outline * 2, h + outline * 2, cornerRadius + outline, Color::White);
+  renderer.fillRoundedRect(x, y, w, h, cornerRadius, Color::Black);
 
   const int textX = x + (w - textWidth) / 2;
-  const int textY = y + margin - 2;
-  renderer.drawText(UI_12_FONT_ID, textX, textY, message, true, EpdFontFamily::REGULAR);
+  const int textY = y + marginY - 2;
+  renderer.drawText(UI_12_FONT_ID, textX, textY, message, false, EpdFontFamily::REGULAR);
   renderer.displayBuffer();
+
   return Rect{x, y, w, h};
 }
