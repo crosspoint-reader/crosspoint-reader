@@ -40,10 +40,10 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   int reservedHeight = metrics.topPadding;
   if (hasHeader) {
-    reservedHeight += metrics.headerHeight;
+    reservedHeight += metrics.headerHeight + metrics.verticalSpacing;
   }
   if (hasTabBar) {
-    reservedHeight += metrics.tabBarHeight + metrics.verticalSpacing;
+    reservedHeight += metrics.tabBarHeight;
   }
   if (hasButtonHints) {
     reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
