@@ -19,6 +19,7 @@ constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 constexpr int maxSubtitleWidth = 100;
+constexpr int maxListValueWidth = 200;
 }  // namespace
 
 void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
@@ -174,8 +175,14 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     const int itemY = rect.y + (i % pageItems) * rowHeight;
 
     // Draw name
-    int textWidth = contentWidth - LyraMetrics::values.contentSidePadding * 2 - hPaddingInSelection * 2 -
-                    (rowValue != nullptr ? 60 : 0);  // TODO truncate according to value width?
+    int valueWidth = 0;
+    std::string valueText = "";
+    if (rowValue != nullptr) {
+      valueText = rowValue(i);
+      valueText = renderer.truncatedText(UI_10_FONT_ID, valueText.c_str(), maxListValueWidth);
+      valueWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str()) + hPaddingInSelection;
+    }
+    int textWidth = contentWidth - LyraMetrics::values.contentSidePadding * 2 - hPaddingInSelection * 2 - valueWidth;
     auto itemName = rowTitle(i);
     auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), textWidth);
     renderer.drawText(UI_10_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection * 2,
@@ -189,22 +196,16 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                         itemY + 30, subtitle.c_str(), true);
     }
 
-    if (rowValue != nullptr) {
-      // Draw value
-      std::string valueText = rowValue(i);
-      if (!valueText.empty()) {
-        const auto valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
-
-        if (i == selectedIndex) {
-          renderer.fillRoundedRect(
-              contentWidth - LyraMetrics::values.contentSidePadding - hPaddingInSelection * 2 - valueTextWidth, itemY,
-              valueTextWidth + hPaddingInSelection * 2, rowHeight, cornerRadius, Color::Black);
-        }
-
-        renderer.drawText(UI_10_FONT_ID,
-                          contentWidth - LyraMetrics::values.contentSidePadding - hPaddingInSelection - valueTextWidth,
-                          itemY + 6, valueText.c_str(), i != selectedIndex);
+    // Draw value
+    if (!valueText.empty()) {
+      if (i == selectedIndex) {
+        renderer.fillRoundedRect(
+            contentWidth - LyraMetrics::values.contentSidePadding - hPaddingInSelection - valueWidth, itemY,
+            valueWidth + hPaddingInSelection, rowHeight, cornerRadius, Color::Black);
       }
+
+      renderer.drawText(UI_10_FONT_ID, contentWidth - LyraMetrics::values.contentSidePadding - valueWidth, itemY + 6,
+                        valueText.c_str(), i != selectedIndex);
     }
   }
 }

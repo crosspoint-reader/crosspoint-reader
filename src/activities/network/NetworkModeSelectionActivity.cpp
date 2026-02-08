@@ -73,18 +73,8 @@ void NetworkModeSelectionActivity::loop() {
   }
 
   // Handle navigation
-  const bool prevPressed = mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-                           mappedInput.wasPressed(MappedInputManager::Button::Left);
-  const bool nextPressed = mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-                           mappedInput.wasPressed(MappedInputManager::Button::Right);
-
-  if (prevPressed) {
-    selectedIndex = (selectedIndex + MENU_ITEM_COUNT - 1) % MENU_ITEM_COUNT;
-    updateRequired = true;
-  } else if (nextPressed) {
-    selectedIndex = (selectedIndex + 1) % MENU_ITEM_COUNT;
-    updateRequired = true;
-  }
+  UITheme::getInstance().handleListScrolling(renderer, static_cast<int>(MENU_ITEM_COUNT), MENU_ITEM_COUNT,
+                                             selectedIndex, mappedInput, updateRequired);
 }
 
 void NetworkModeSelectionActivity::displayTaskLoop() {
