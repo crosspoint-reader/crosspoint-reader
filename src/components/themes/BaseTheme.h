@@ -83,7 +83,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .versionTextRightX = 20,
-                                 .versionTextY = 738,
                                  .bookProgressBarHeight = 4};
 }
 
@@ -102,8 +101,8 @@ class BaseTheme {
                         const std::function<std::string(int index)>& rowSubtitle,
                         const std::function<std::string(int index)>& rowIcon,
                         const std::function<std::string(int index)>& rowValue) const;
-
-  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const;
+  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr) const;
+  virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                           bool selected) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
@@ -115,4 +114,5 @@ class BaseTheme {
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   virtual void drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const;
+  virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
 };

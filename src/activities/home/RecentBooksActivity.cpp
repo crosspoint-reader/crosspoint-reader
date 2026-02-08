@@ -10,7 +10,6 @@
 #include "util/StringUtils.h"
 
 namespace {
-constexpr int SKIP_PAGE_MS = 700;
 constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
 
@@ -68,15 +67,6 @@ void RecentBooksActivity::onExit() {
 }
 
 void RecentBooksActivity::loop() {
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-                          mappedInput.wasReleased(MappedInputManager::Button::Up);
-  ;
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Down);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
       Serial.printf("Selected recent book: %s\n", recentBooks[selectorIndex].path.c_str());
@@ -89,22 +79,10 @@ void RecentBooksActivity::loop() {
     onGoHome();
   }
 
-  int listSize = static_cast<int>(recentBooks.size());
-  if (upReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + listSize) % listSize;
-    } else {
-      selectorIndex = (selectorIndex + listSize - 1) % listSize;
-    }
-    updateRequired = true;
-  } else if (downReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % listSize;
-    } else {
-      selectorIndex = (selectorIndex + 1) % listSize;
-    }
-    updateRequired = true;
-  }
+    auto theme = UITheme::getInstance();
+  const int pageItems = theme.getNumberOfItemsPerPage(renderer, true, false, true, true);
+  theme.handleListScrolling(renderer, static_cast<int>(recentBooks.size()), pageItems,
+    selectorIndex, mappedInput, updateRequired);
 }
 
 void RecentBooksActivity::displayTaskLoop() {

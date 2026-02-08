@@ -17,6 +17,7 @@ namespace {
 constexpr int batteryPercentSpacing = 4;
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
+constexpr int subtitleY = 738;
 }  // namespace
 
 void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
@@ -227,7 +228,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   }
 }
 
-void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const {
+void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   int batteryX = rect.x + rect.width - BaseMetrics::values.contentSidePadding - BaseMetrics::values.batteryWidth;
@@ -246,6 +247,28 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                                                  EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
   }
+
+  if (subtitle) {
+    auto truncatedSubtitle = renderer.truncatedText(
+        SMALL_FONT_ID, subtitle, rect.width - BaseMetrics::values.contentSidePadding * 2, EpdFontFamily::REGULAR);
+    int truncatedSubtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedSubtitle.c_str());
+    renderer.drawText(SMALL_FONT_ID, 
+                    rect.x + rect.width - BaseMetrics::values.contentSidePadding - truncatedSubtitleWidth,
+                    subtitleY, truncatedSubtitle.c_str(), true);
+  }
+}
+
+void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label) const {
+  constexpr int underlineHeight = 2;  // Height of selection underline
+  constexpr int underlineGap = 4;     // Gap between text and underline
+
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+
+  int currentX = rect.x + BaseMetrics::values.contentSidePadding;
+
+  auto truncatedLabel = renderer.truncatedText(
+        UI_12_FONT_ID, label, rect.width - BaseMetrics::values.contentSidePadding * 2, EpdFontFamily::REGULAR);
+  renderer.drawText(UI_12_FONT_ID, currentX, rect.y, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
 }
 
 void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
@@ -645,4 +668,11 @@ void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t
       renderer.getScreenHeight() - vieweableMarginBottom - BaseMetrics::values.bookProgressBarHeight;
   const int barWidth = progressBarMaxWidth * bookProgress / 100;
   renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BaseMetrics::values.bookProgressBarHeight, true);
+}
+
+void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {
+  auto metrics = UITheme::getInstance().getMetrics();
+  auto truncatedLabel = renderer.truncatedText(
+      SMALL_FONT_ID, label, rect.width - metrics.contentSidePadding * 2, EpdFontFamily::REGULAR);
+  renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
 }
