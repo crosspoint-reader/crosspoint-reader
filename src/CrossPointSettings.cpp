@@ -75,6 +75,55 @@ void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
       break;
   }
 }
+
+// Convert legacy status bar settings.
+void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
+  switch (static_cast<CrossPointSettings::STATUS_BAR_MODE>(settings.statusBar)) {
+    case CrossPointSettings::NONE:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE;
+      settings.statusBarChapterTitle = 0;
+      settings.statusBarBattery = 0;
+      break;
+    case CrossPointSettings::NO_PROGRESS:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE;
+      settings.statusBarChapterTitle = 1;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::BOOK_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
+      settings.statusBarChapterTitle = 1;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::ONLY_BOOK_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
+      settings.statusBarChapterTitle = 0;
+      settings.statusBarBattery = 0;
+      break;
+    case CrossPointSettings::CHAPTER_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 1;
+      settings.statusBarProgressBar = CrossPointSettings::CHAPTER_PROGRESS;
+      settings.statusBarChapterTitle = 1;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::FULL:
+    default:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 1;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE;
+      settings.statusBarChapterTitle = 1;
+      settings.statusBarBattery = 1;
+      break;
+  }
+}
 }  // namespace
 
 bool CrossPointSettings::saveToFile() const {
@@ -91,7 +140,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, sleepScreen);
   serialization::writePod(outputFile, extraParagraphSpacing);
   serialization::writePod(outputFile, shortPwrBtn);
-  serialization::writePod(outputFile, statusBar);
+  serialization::writePod(outputFile, statusBar);  // legacy
   serialization::writePod(outputFile, orientation);
   serialization::writePod(outputFile, frontButtonLayout);  // legacy
   serialization::writePod(outputFile, sideButtonLayout);
@@ -118,6 +167,11 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, frontButtonRight);
   serialization::writePod(outputFile, fadingFix);
   serialization::writePod(outputFile, embeddedStyle);
+  serialization::writePod(outputFile, statusBarChapterPageCount);
+  serialization::writePod(outputFile, statusBarBookProgressPercentage);
+  serialization::writePod(outputFile, statusBarProgressBar);
+  serialization::writePod(outputFile, statusBarChapterTitle);
+  serialization::writePod(outputFile, statusBarBattery);
   // New fields added at end for backward compatibility
   outputFile.close();
 
@@ -146,6 +200,7 @@ bool CrossPointSettings::loadFromFile() {
   uint8_t settingsRead = 0;
   // Track whether remap fields were present in the settings file.
   bool frontButtonMappingRead = false;
+  bool statusBarSettingsRead = false;
   do {
     readAndValidate(inputFile, sleepScreen, SLEEP_SCREEN_MODE_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
@@ -153,7 +208,7 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, shortPwrBtn, SHORT_PWRBTN_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, statusBar, STATUS_BAR_MODE_COUNT);
+    readAndValidate(inputFile, statusBar, STATUS_BAR_MODE_COUNT);  // legacy
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, orientation, ORIENTATION_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
@@ -223,6 +278,16 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, embeddedStyle);
     if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBarChapterPageCount);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBarBookProgressPercentage);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, statusBarProgressBar, STATUS_BAR_PROGRESS_BAR_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBarChapterTitle);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, statusBarBattery);
+    statusBarSettingsRead = true;
     // New fields added at end for backward compatibility
   } while (false);
 
@@ -230,6 +295,10 @@ bool CrossPointSettings::loadFromFile() {
     validateFrontButtonMapping(*this);
   } else {
     applyLegacyFrontButtonLayout(*this);
+  }
+
+  if (!statusBarSettingsRead) {
+    applyLegacyStatusBarSettings(*this);
   }
 
   inputFile.close();
