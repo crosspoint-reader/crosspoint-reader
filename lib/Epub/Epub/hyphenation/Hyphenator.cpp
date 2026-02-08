@@ -56,7 +56,9 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   }
 
   // Convert to codepoints and normalize word boundaries.
-  auto cps = collectCodepoints(word);
+  // Reuse static buffer across calls (safe: ESP32-C3 is single-threaded).
+  static std::vector<CodepointInfo> cps;
+  collectCodepoints(word, cps);
   trimSurroundingPunctuationAndFootnote(cps);
   const auto* hyphenator = cachedHyphenator_;
 
