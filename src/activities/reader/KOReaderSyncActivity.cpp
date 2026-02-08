@@ -132,15 +132,10 @@ void KOReaderSyncActivity::performSync() {
   // Pre-select the option corresponding to the more advanced progress (defensive):
   // 0 = Apply remote progress, 1 = Upload local progress
   int preselect = 0;  // default to Apply remote
-  if (hasRemoteProgress) {
-    // localProgress should be available; choose based on percentage
-    if (localProgress.percentage > remoteProgress.percentage) {
-      preselect = 1;
-    } else {
-      preselect = 0;
-    }
+  // localProgress should be available; choose based on percentage
+  if (localProgress.percentage > remoteProgress.percentage) {
+    preselect = 1;
   } else {
-    // No remote progress — keep default (Apply remote not applicable but safe)
     preselect = 0;
   }
   selectedOption = preselect;
