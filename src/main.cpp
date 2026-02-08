@@ -33,6 +33,10 @@
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 
+#include <SD.h>
+#include "Bitmap.h"
+#include "BitmapHelpers.h"
+
 HalDisplay display;
 HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
@@ -288,32 +292,9 @@ void setupDisplayAndFonts() {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
-#include "hal/HalGPIO.h"
-#include <SD.h>
-#include "xtc/Xtc.h"
-#include "Bitmap.h"
-#include "BitmapHelpers.h"
-
-CrossPointState crossPointState;
-HalDisplay halDisplay;
-HalGPIO halGPIO;
-
-HomeActivity *homeActivity;
-
 void takeScreenshot() {
-  RtcDateTime dt;
-  Xtc::get_time(dt);
-
-  char filename[100];
-  SD.mkdir("/screenshots");
-  snprintf(filename, sizeof(filename),
-           "/screenshots/Screenshot-%04d-%02d-%02d-%02d-%02d-%02d.bmp", dt.year,
-           dt.month, dt.day, dt.hour, dt.minute, dt.second);
-
-  Bitmap bitmap(halDisplay.get_width(), halDisplay.get_height(),
-                halDisplay.get_display_buffer(), true);
-  BitmapHelpers::write_to_fs(SD, filename, &bitmap);
-  Serial.printf("Screenshot saved to %s\n", filename);
+  // take a screenshot and save it on the folder screenshot
+  // with the name Screenshot-<date>-<time>.bmp
 }
 
 void setup() {
