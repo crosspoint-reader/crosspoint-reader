@@ -591,7 +591,15 @@ bool Epub::generateThumbBmp(int height) const {
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
-      SdMan.remove(getThumbBmpPath(height).c_str());
+
+      // Avoid retrying on every Home entry (some EPUB covers are unsupported by our JPEG decoder).
+      // Remove any partial output and create an empty sentinel file so `exists()` short-circuits future attempts.
+      const std::string thumbPath = getThumbBmpPath(height);
+      SdMan.remove(thumbPath.c_str());
+      FsFile sentinel;
+      if (SdMan.openFileForWrite("EBP", thumbPath, sentinel)) {
+        sentinel.close();
+      }
     }
     Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
                   success ? "yes" : "no");
