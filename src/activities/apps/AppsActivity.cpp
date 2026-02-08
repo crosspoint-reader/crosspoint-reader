@@ -46,9 +46,7 @@ void AppsActivity::loop() {
     }
   } else if (mappedInput_.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!appList_.empty()) {
-      static constexpr unsigned long kForceInstallHoldMs = 800;
-      const bool forceInstall = mappedInput_.getHeldTime() >= kForceInstallHoldMs;
-      launchApp(forceInstall);
+      launchApp();
     }
   } else if (mappedInput_.wasReleased(MappedInputManager::Button::Back)) {
     if (exitCallback_) {
@@ -72,7 +70,7 @@ void AppsActivity::scanApps() {
   Serial.printf("[%lu] [AppsActivity] Found %d apps\n", millis(), appList_.size());
 }
 
-void AppsActivity::launchApp(const bool forceInstall) {
+void AppsActivity::launchApp() {
   if (selectedIndex_ >= static_cast<int>(appList_.size())) {
     return;
   }
@@ -86,12 +84,17 @@ void AppsActivity::launchApp(const bool forceInstall) {
   flashingStarted_ = false;
   needsUpdate_ = true;
 
-  // Show a lightweight screen immediately; if we end up installing, we will switch to the progress UI
-  // as soon as we receive the first progress callback.
-  renderBooting();
+  // Show progress UI immediately
+  renderProgress();
 
   CrossPoint::AppLoader loader;
-  const bool success = loader.launchApp(app, forceInstall, [this](size_t written, size_t total) {
+  
+  // Build path to app binary (assumes app.bin in app directory)
+  String binPath = app.path + "/app.bin";
+
+  const String appId = app.path.substring(app.path.lastIndexOf('/') + 1);
+
+  const bool success = loader.bootApp(binPath, appId, [this](size_t written, size_t total) {
     if (total == 0) {
       return;
     }
@@ -99,10 +102,6 @@ void AppsActivity::launchApp(const bool forceInstall) {
     const int nextProgress = static_cast<int>((written * 100) / total);
     if (!flashingStarted_) {
       flashingStarted_ = true;
-      flashProgress_ = nextProgress;
-      needsUpdate_ = true;
-      renderProgress();
-      return;
     }
 
     if (nextProgress != flashProgress_) {
@@ -113,7 +112,7 @@ void AppsActivity::launchApp(const bool forceInstall) {
   });
 
   if (!success) {
-    Serial.printf("[%lu] [AppsActivity] Launch failed\n", millis());
+    Serial.printf("[%lu] [AppsActivity] Flash failed\n", millis());
     isFlashing_ = false;
     needsUpdate_ = true;
   }
@@ -172,25 +171,13 @@ void AppsActivity::render() {
 
   // Button hints
   const char* btn1 = "Back";
-  const char* btn2 = "";
+  const char* btn2 = !appList_.empty() ? "Install" : "";
   // Note: text is rotated 90° CW, so ">" appears as "^" and "<" appears as "v"
-  const char* btn3 = ">";  // Up arrow (for scrolling up in app list)
-  const char* btn4 = "<";  // Down arrow (for scrolling down in app list)
-
-  bool selectedInstalled = false;
-  if (!appList_.empty() && selectedIndex_ < static_cast<int>(appList_.size())) {
-    CrossPoint::AppLoader loader;
-    CrossPoint::AppLoader::InstalledAppInfo installed;
-    selectedInstalled = loader.isAppInstalledAndCurrent(appList_[selectedIndex_], installed);
-    btn2 = selectedInstalled ? "Boot" : "Install";
-  }
+  const char* btn3 = ">";
+  const char* btn4 = "<";
 
   auto labels = mappedInput_.mapLabels(btn1, btn2, btn3, btn4);
   renderer_.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  if (selectedInstalled) {
-    renderer_.drawCenteredText(UI_10_FONT_ID, pageHeight - 110, "Hold Confirm: reinstall");
-  }
 
   renderer_.displayBuffer();
 }

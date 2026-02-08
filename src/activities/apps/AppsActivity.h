@@ -29,10 +29,12 @@ class AppsActivity : public Activity {
   bool needsUpdate_;
   bool isFlashing_;
   int flashProgress_;
+  bool flashingStarted_;
 
   void scanApps();
   void launchApp();
   void render();
   void renderProgress();
+  void renderBooting();
   void showProgress(size_t written, size_t total);
 };
