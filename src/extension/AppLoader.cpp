@@ -1,5 +1,7 @@
 #include "AppLoader.h"
 
+#include <mbedtls/sha256.h>
+
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <esp_system.h>
@@ -9,6 +11,60 @@
 #include "Battery.h"
 
 namespace CrossPoint {
+
+namespace {
+bool renameFileAtomic(const String& from, const String& to) {
+  if (!SdMan.exists(from.c_str())) {
+    return false;
+  }
+  if (SdMan.exists(to.c_str())) {
+    SdMan.remove(to.c_str());
+  }
+
+  FsFile src = SdMan.open(from.c_str(), O_RDONLY);
+  if (!src) {
+    return false;
+  }
+
+  // Try SdFat rename first.
+  if (src.rename(to.c_str())) {
+    src.close();
+    return true;
+  }
+  src.close();
+
+  // Fallback: copy + delete.
+  FsFile in = SdMan.open(from.c_str(), O_RDONLY);
+  if (!in) {
+    return false;
+  }
+
+  FsFile out;
+  if (!SdMan.openFileForWrite("AppLoader", to, out)) {
+    in.close();
+    return false;
+  }
+
+  static uint8_t copyBuf[2048];
+  while (true) {
+    const int n = in.read(copyBuf, sizeof(copyBuf));
+    if (n <= 0) {
+      break;
+    }
+    if (out.write(copyBuf, n) != static_cast<size_t>(n)) {
+      out.close();
+      in.close();
+      SdMan.remove(to.c_str());
+      return false;
+    }
+  }
+
+  out.close();
+  in.close();
+  SdMan.remove(from.c_str());
+  return true;
+}
+}  // namespace
 
 std::vector<AppInfo> AppLoader::scanApps() {
   std::vector<AppInfo> apps;
@@ -293,7 +349,199 @@ bool AppLoader::flashApp(const String& binPath, ProgressCallback callback) {
     return false;
   }
 
-  Serial.printf("[%lu] [AppLoader] Flash complete. Rebooting...\n", millis());
+  Serial.printf("[%lu] [AppLoader] Flash complete. Boot partition set: %s\n", millis(), target->label);
+  return true;
+}
+
+String AppLoader::calculateFileSHA256(const String& path) {
+  if (!isSDReady()) {
+    Serial.printf("[%lu] [AppLoader] SD card not ready, cannot hash file\n", millis());
+    return "";
+  }
+
+  if (!SdMan.exists(path.c_str())) {
+    Serial.printf("[%lu] [AppLoader] File not found for hashing: %s\n", millis(), path.c_str());
+    return "";
+  }
+
+  FsFile file = SdMan.open(path.c_str(), O_RDONLY);
+  if (!file) {
+    Serial.printf("[%lu] [AppLoader] Failed to open file for hashing: %s\n", millis(), path.c_str());
+    return "";
+  }
+
+  mbedtls_sha256_context ctx;
+  mbedtls_sha256_init(&ctx);
+
+  if (mbedtls_sha256_starts_ret(&ctx, 0) != 0) {
+    mbedtls_sha256_free(&ctx);
+    file.close();
+    Serial.printf("[%lu] [AppLoader] Failed to init SHA256\n", millis());
+    return "";
+  }
+
+  static uint8_t buf[4096];
+  while (true) {
+    const int n = file.read(buf, sizeof(buf));
+    if (n <= 0) {
+      break;
+    }
+    if (mbedtls_sha256_update_ret(&ctx, buf, static_cast<size_t>(n)) != 0) {
+      mbedtls_sha256_free(&ctx);
+      file.close();
+      Serial.printf("[%lu] [AppLoader] Failed updating SHA256\n", millis());
+      return "";
+    }
+  }
+
+  file.close();
+
+  uint8_t hash[32];
+  if (mbedtls_sha256_finish_ret(&ctx, hash) != 0) {
+    mbedtls_sha256_free(&ctx);
+    Serial.printf("[%lu] [AppLoader] Failed finishing SHA256\n", millis());
+    return "";
+  }
+  mbedtls_sha256_free(&ctx);
+
+  String out;
+  out.reserve(64);
+  for (size_t i = 0; i < sizeof(hash); i++) {
+    char hex[3];
+    snprintf(hex, sizeof(hex), "%02x", hash[i]);
+    out += hex;
+  }
+  return out;
+}
+
+bool AppLoader::loadInstalledState(JsonDocument& doc) {
+  doc.clear();
+  doc.to<JsonObject>();
+
+  if (!isSDReady()) {
+    return false;
+  }
+
+  if (!SdMan.exists(INSTALLED_STATE_PATH)) {
+    return true;
+  }
+
+  FsFile file = SdMan.open(INSTALLED_STATE_PATH, O_RDONLY);
+  if (!file) {
+    return false;
+  }
+
+  const DeserializationError err = deserializeJson(doc, file);
+  file.close();
+
+  if (err) {
+    Serial.printf("[%lu] [AppLoader] Installed state JSON parse error: %s\n", millis(), err.c_str());
+    doc.clear();
+    doc.to<JsonObject>();
+  }
+
+  return true;
+}
+
+bool AppLoader::saveInstalledState(const JsonDocument& doc) {
+  if (!isSDReady()) {
+    return false;
+  }
+
+  if (!SdMan.ensureDirectoryExists("/.crosspoint") || !SdMan.ensureDirectoryExists(APPS_BASE_PATH)) {
+    return false;
+  }
+
+  String json;
+  serializeJson(doc, json);
+
+  const String tmpPath = String(INSTALLED_STATE_PATH) + ".tmp";
+  if (!SdMan.writeFile(tmpPath.c_str(), json)) {
+    return false;
+  }
+
+  if (!renameFileAtomic(tmpPath, INSTALLED_STATE_PATH)) {
+    SdMan.remove(tmpPath.c_str());
+    return false;
+  }
+
+  return true;
+}
+
+bool AppLoader::isAppInstalled(const String& appId, const String& sha256) {
+  if (appId.isEmpty() || sha256.isEmpty()) {
+    return false;
+  }
+
+  JsonDocument doc;
+  (void)loadInstalledState(doc);
+
+  const String storedId = doc["installed"]["appId"].is<const char*>() ? doc["installed"]["appId"].as<String>() : "";
+  const String storedHash =
+      doc["installed"]["sha256"].is<const char*>() ? doc["installed"]["sha256"].as<String>() : "";
+
+  return storedId == appId && storedHash == sha256;
+}
+
+bool AppLoader::switchPartition() {
+  const esp_partition_t* target = esp_ota_get_next_update_partition(NULL);
+  if (!target) {
+    Serial.printf("[%lu] [AppLoader] No OTA partition available\n", millis());
+    return false;
+  }
+
+  const esp_err_t err = esp_ota_set_boot_partition(target);
+  if (err != ESP_OK) {
+    Serial.printf("[%lu] [AppLoader] Failed to set boot partition: %d\n", millis(), err);
+    return false;
+  }
+
+  Serial.printf("[%lu] [AppLoader] Boot partition set: %s\n", millis(), target->label);
+  return true;
+}
+
+bool AppLoader::bootApp(const String& binPath, const String& appId, ProgressCallback callback) {
+  if (!isSDReady()) {
+    Serial.printf("[%lu] [AppLoader] SD card not ready, cannot boot app\n", millis());
+    return false;
+  }
+
+  const String sha256 = calculateFileSHA256(binPath);
+  if (sha256.isEmpty()) {
+    Serial.printf("[%lu] [AppLoader] Failed to calculate SHA256 for: %s\n", millis(), binPath.c_str());
+    return false;
+  }
+
+  Serial.printf("[%lu] [AppLoader] App id=%s sha256=%s\n", millis(), appId.c_str(), sha256.c_str());
+
+  if (isAppInstalled(appId, sha256)) {
+    Serial.printf("[%lu] [AppLoader] App already installed, switching partition\n", millis());
+    if (!switchPartition()) {
+      return false;
+    }
+    Serial.printf("[%lu] [AppLoader] Rebooting...\n", millis());
+    esp_restart();
+    return true;
+  }
+
+  Serial.printf("[%lu] [AppLoader] App not installed or updated, flashing...\n", millis());
+  const bool ok = flashApp(binPath, callback);
+  if (!ok) {
+    return false;
+  }
+
+  JsonDocument doc;
+  JsonObject installed = doc["installed"].to<JsonObject>();
+  installed["appId"] = appId;
+  installed["sha256"] = sha256;
+  installed["binPath"] = binPath;
+  installed["installedMs"] = millis();
+
+  if (!saveInstalledState(doc)) {
+    Serial.printf("[%lu] [AppLoader] Warning: failed to save installed state\n", millis());
+  }
+
+  Serial.printf("[%lu] [AppLoader] Rebooting...\n", millis());
   esp_restart();
   return true;
 }

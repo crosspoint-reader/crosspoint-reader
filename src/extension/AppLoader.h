@@ -84,17 +84,43 @@ class AppLoader {
   /**
    * @brief Flash an app binary from SD card to the OTA partition
    *
+   * On success, sets the boot partition to the flashed image, but does not
+   * reboot. Callers that want to run the flashed image should reboot.
+   *
    * @param binPath Full path to the binary file on SD card
    * @param callback Optional progress callback (values 0-100)
    * @return true if flashing succeeded, false on error
    */
   bool flashApp(const String& binPath, ProgressCallback callback = nullptr);
 
+  /**
+   * @brief Boot an app, flashing only if necessary
+   *
+   * Computes SHA256 of the requested app binary and compares it with the last
+   * installed app metadata stored on the SD card.
+   *
+   * If it matches, switches boot partition (no flash).
+   * If it differs or no metadata exists, flashes to the other OTA partition.
+   *
+   * On success, sets the boot partition and reboots.
+   *
+   * @param binPath Full path to the binary file on SD card
+   * @param appId Stable app identifier (directory name)
+   * @param callback Optional progress callback during flashing
+   * @return true if boot/flash succeeded, false on error
+   */
+  bool bootApp(const String& binPath, const String& appId, ProgressCallback callback = nullptr);
+
  private:
   /**
    * @brief Base path for apps directory
    */
   static constexpr const char* APPS_BASE_PATH = "/.crosspoint/apps";
+
+  /**
+   * @brief Installed app metadata path
+   */
+  static constexpr const char* INSTALLED_STATE_PATH = "/.crosspoint/apps/.installed.json";
 
   /**
    * @brief Name of the manifest file in each app directory
@@ -113,6 +139,12 @@ class AppLoader {
    * @return Full path to the app.json file
    */
   String buildManifestPath(const String& appDir) const;
+
+  String calculateFileSHA256(const String& path);
+  bool isAppInstalled(const String& appId, const String& sha256);
+  bool loadInstalledState(JsonDocument& doc);
+  bool saveInstalledState(const JsonDocument& doc);
+  bool switchPartition();
 
   /**
    * @brief Check if SD card is ready
