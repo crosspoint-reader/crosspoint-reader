@@ -19,7 +19,7 @@ CrossPoint discovers extensions by scanning `/.crosspoint/apps/*/app.json`.
 ## How it boots (high level)
 
 ```text
-SD app.bin -> CrossPoint flashes to the other OTA slot -> reboot into extension
+SD app.bin -> CrossPoint boots it (flash only if needed) -> reboot into extension
 ```
 
 Note: CrossPoint OTA updates may overwrite the currently-installed extension slot (two-slot OTA). The extension remains on SD and can be reinstalled.
@@ -28,9 +28,15 @@ Note: CrossPoint OTA updates may overwrite the currently-installed extension slo
 
 1. Home → Apps
 2. Select the app
-3. Press Launch/Install
+3. Press Install
 
-CrossPoint will flash `app.bin` to the OTA partition and reboot.
+CrossPoint will:
+- If this exact `app.bin` is already installed: switch boot partition and reboot (no flash)
+- Otherwise: flash `app.bin` to the other OTA slot, then reboot
+
+Notes:
+- Installing requires battery >= 20%.
+- CrossPoint tracks the last installed app in `/.crosspoint/apps/.installed.json` (by appId + SHA256 of `app.bin`).
 
 ## Fast iteration: upload apps over WiFi (no SD card removal)
 
