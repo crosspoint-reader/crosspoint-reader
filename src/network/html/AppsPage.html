@@ -180,40 +180,9 @@
       </div>
 
       <div class="field">
-        <label for="appId">App ID</label>
-        <input id="appId" type="text" placeholder="e.g. chess-puzzles or org.example.myapp" />
-        <div class="hint">Allowed: letters, numbers, dot, underscore, dash. No slashes. Max 64 chars.</div>
-      </div>
-
-      <div class="field">
-        <label for="name">Name</label>
-        <input id="name" type="text" placeholder="Display name" />
-      </div>
-
-      <div class="field">
-        <label for="version">Version</label>
-        <input id="version" type="text" placeholder="e.g. 0.1.0" />
-      </div>
-
-      <div class="field">
-        <label for="author">Author (optional)</label>
-        <input id="author" type="text" placeholder="Your name" />
-      </div>
-
-      <div class="field">
-        <label for="description">Description (optional)</label>
-        <input id="description" type="text" placeholder="Short description" />
-      </div>
-
-      <div class="field">
-        <label for="minFirmware">Min Firmware (optional)</label>
-        <input id="minFirmware" type="text" placeholder="e.g. 0.14.0" />
-      </div>
-
-      <div class="field">
         <label for="file">Upload Type</label>
         <div class="hint" style="margin-bottom: 8px">
-          Choose an app binary (.bin) or a ZIP containing <code>app.bin</code>.
+          Recommended: ZIP containing <code>app.bin</code> + <code>app.json</code> (zero fields).
         </div>
         <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom: 10px">
           <label style="display:flex; gap:6px; align-items:center; font-weight:500; margin:0">
@@ -222,11 +191,43 @@
           </label>
           <label style="display:flex; gap:6px; align-items:center; font-weight:500; margin:0">
             <input type="radio" name="uploadType" id="uploadTypeZip" value="zip" />
-            zip (contains app.bin)
+            zip (app.bin + app.json)
           </label>
         </div>
         <label for="file">File</label>
         <input id="file" type="file" />
+      </div>
+
+      <div id="binFields">
+        <div class="field">
+          <label for="appId">App ID</label>
+          <input id="appId" type="text" placeholder="e.g. chess-puzzles or org.example.myapp" />
+          <div class="hint">Required for app.bin. Allowed: letters, numbers, dot, underscore, dash. No slashes. Max 64 chars.</div>
+        </div>
+
+        <details class="field">
+          <summary style="cursor:pointer; font-weight:600; color:#34495e;">Optional metadata</summary>
+          <div style="margin-top:10px">
+            <label for="name">Name (optional)</label>
+            <input id="name" type="text" placeholder="Display name (defaults to App ID)" />
+          </div>
+          <div class="field">
+            <label for="version">Version (optional)</label>
+            <input id="version" type="text" placeholder="e.g. 0.1.0 (defaults to 0.0.0)" />
+          </div>
+          <div class="field">
+            <label for="author">Author (optional)</label>
+            <input id="author" type="text" placeholder="Your name" />
+          </div>
+          <div class="field">
+            <label for="description">Description (optional)</label>
+            <input id="description" type="text" placeholder="Short description" />
+          </div>
+          <div class="field">
+            <label for="minFirmware">Min Firmware (optional)</label>
+            <input id="minFirmware" type="text" placeholder="e.g. 0.14.0" />
+          </div>
+        </details>
       </div>
 
       <div class="actions">
@@ -256,6 +257,7 @@
       const minFirmwareInput = document.getElementById('minFirmware');
       const fileInput = document.getElementById('file');
       const uploadBtn = document.getElementById('uploadBtn');
+      const binFields = document.getElementById('binFields');
 
       function setMessage(kind, text) {
         const el = document.getElementById('message');
@@ -280,11 +282,22 @@
       }
 
       function updateButtonState() {
-        const appId = appIdInput.value.trim();
-        const name = nameInput.value.trim();
-        const version = versionInput.value.trim();
         const file = fileInput.files && fileInput.files[0];
-        uploadBtn.disabled = !(isValidAppId(appId) && name && version && file);
+        const uploadType = selectedUploadType();
+        if (binFields) binFields.style.display = uploadType === 'zip' ? 'none' : '';
+
+        if (!file) {
+          uploadBtn.disabled = true;
+          return;
+        }
+
+        if (uploadType === 'zip') {
+          uploadBtn.disabled = false;
+          return;
+        }
+
+        const appId = appIdInput.value.trim();
+        uploadBtn.disabled = !isValidAppId(appId);
       }
 
       function selectedUploadType() {
@@ -292,13 +305,17 @@
         return (zip && zip.checked) ? 'zip' : 'bin';
       }
 
-      [appIdInput, nameInput, versionInput, authorInput, descriptionInput, minFirmwareInput, fileInput].forEach((el) => {
+      [appIdInput, nameInput, versionInput, authorInput, descriptionInput, minFirmwareInput, fileInput,
+       document.getElementById('uploadTypeBin'), document.getElementById('uploadTypeZip')].forEach((el) => {
+        if (!el) return;
         el.addEventListener('input', updateButtonState);
         el.addEventListener('change', updateButtonState);
       });
 
       function uploadApp() {
         clearMessage();
+
+        const uploadType = selectedUploadType();
 
         const appId = appIdInput.value.trim();
         const name = nameInput.value.trim();
@@ -308,26 +325,29 @@
         const minFirmware = minFirmwareInput.value.trim();
         const file = fileInput.files && fileInput.files[0];
 
-        if (!isValidAppId(appId)) {
-          setMessage('error', 'Invalid App ID. Use letters/numbers/dot/underscore/dash only.');
-          return;
-        }
-        if (!name || !version || !file) {
-          setMessage('error', 'App ID, Name, Version, and app.bin are required.');
+        if (!file) {
+          setMessage('error', 'Please choose a file to upload.');
           return;
         }
 
-        const uploadType = selectedUploadType();
+        if (uploadType === 'bin') {
+          if (!isValidAppId(appId)) {
+            setMessage('error', 'App ID is required for app.bin uploads.');
+            return;
+          }
+        }
 
         const qs = new URLSearchParams();
-        qs.set('appId', appId);
-        qs.set('name', name);
-        qs.set('version', version);
-        if (author) qs.set('author', author);
-        if (description) qs.set('description', description);
-        if (minFirmware) qs.set('minFirmware', minFirmware);
+        if (uploadType === 'bin') {
+          qs.set('appId', appId);
+          if (name) qs.set('name', name);
+          if (version) qs.set('version', version);
+          if (author) qs.set('author', author);
+          if (description) qs.set('description', description);
+          if (minFirmware) qs.set('minFirmware', minFirmware);
+        }
 
-        const url = (uploadType === 'zip' ? '/upload-app-zip?' : '/upload-app?') + qs.toString();
+        const url = uploadType === 'zip' ? '/upload-app-zip' : '/upload-app?' + qs.toString();
         const form = new FormData();
         form.append('file', file, uploadType === 'zip' ? 'upload.zip' : 'app.bin');
 
