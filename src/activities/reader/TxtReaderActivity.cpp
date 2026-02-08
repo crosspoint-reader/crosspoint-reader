@@ -21,22 +21,9 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
-}  // namespace
 
-void TxtReaderActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<TxtReaderActivity*>(param);
-  self->displayTaskLoop();
-}
-
-void TxtReaderActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
-
-  if (!txt) {
-    return;
-  }
-
-  // Configure screen orientation based on settings
-  switch (SETTINGS.orientation) {
+void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
+  switch (orientation) {
     case CrossPointSettings::ORIENTATION::PORTRAIT:
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
       break;
@@ -52,6 +39,23 @@ void TxtReaderActivity::onEnter() {
     default:
       break;
   }
+}
+}  // namespace
+
+void TxtReaderActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<TxtReaderActivity*>(param);
+  self->displayTaskLoop();
+}
+
+void TxtReaderActivity::onEnter() {
+  ActivityWithSubactivity::onEnter();
+
+  if (!txt) {
+    return;
+  }
+
+  // Configure screen orientation based on settings
+  applyReaderOrientation(renderer, SETTINGS.orientation);
 
   renderingMutex = xSemaphoreCreateMutex();
 
@@ -111,6 +115,21 @@ void TxtReaderActivity::loop() {
   // Short press BACK goes directly to home
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
     onGoHome();
+    return;
+  }
+
+  const bool powerRotate = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::ROTATE_ORIENTATION &&
+                           mappedInput.wasReleased(MappedInputManager::Button::Power);
+  if (powerRotate) {
+    const uint8_t nextOrientation =
+        static_cast<uint8_t>((SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION::ORIENTATION_COUNT);
+    SETTINGS.orientation = nextOrientation;
+    SETTINGS.saveToFile();
+    applyReaderOrientation(renderer, SETTINGS.orientation);
+    initialized = false;
+    pageOffsets.clear();
+    currentPageLines.clear();
+    updateRequired = true;
     return;
   }
 

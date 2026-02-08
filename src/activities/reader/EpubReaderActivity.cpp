@@ -216,6 +216,16 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  const bool powerRotate = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::ROTATE_ORIENTATION &&
+                           mappedInput.wasReleased(MappedInputManager::Button::Power);
+  if (powerRotate) {
+    const uint8_t nextOrientation =
+        static_cast<uint8_t>((SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION::ORIENTATION_COUNT);
+    applyOrientation(nextOrientation);
+    updateRequired = true;
+    return;
+  }
+
   // When long-press chapter skip is disabled, turn pages on press instead of release.
   const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
   const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
