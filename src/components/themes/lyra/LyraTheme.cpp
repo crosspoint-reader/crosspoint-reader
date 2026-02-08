@@ -1,7 +1,7 @@
 #include "LyraTheme.h"
 
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include <cstdint>
 #include <string>
@@ -283,7 +283,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
           // First time: load cover from SD and render
           FsFile file;
-          if (SdMan.openFileForRead("HOME", coverBmpPath, file)) {
+          if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
             Bitmap bitmap(file);
             if (bitmap.parseHeaders() == BmpReaderError::Ok) {
               float coverHeight = static_cast<float>(bitmap.getHeight());
