@@ -13,7 +13,7 @@ class BLEKeyboardHandler;
 
 /**
  * Memory-efficient Bluetooth Manager for CrossPoint Reader
- * 
+ *
  * Design principles:
  * - Singleton pattern to minimize memory usage
  * - Conditional compilation to avoid BLE overhead when disabled
@@ -22,109 +22,109 @@ class BLEKeyboardHandler;
  * - Clean shutdown to prevent memory leaks
  */
 class BluetoothManager {
-private:
+ private:
   // Private constructor for singleton
   BluetoothManager() = default;
-  
+
   // Static instance
   static BluetoothManager instance;
-  
+
   // State tracking (minimal memory usage)
   bool initialized = false;
   bool advertising = false;
-  
+
 #ifdef CONFIG_BT_ENABLED
   // BLE components (only allocated when BLE is enabled)
   BLEServer* pServer = nullptr;
   BLEAdvertising* pAdvertising = nullptr;
   BLEKeyboardHandler* pKeyboardHandler = nullptr;
-  
+
   // Device name (short to save memory)
   static constexpr const char* DEVICE_NAME = "CrossPoint";
 #endif
 
-public:
+ public:
   // Delete copy constructor and assignment
   BluetoothManager(const BluetoothManager&) = delete;
   BluetoothManager& operator=(const BluetoothManager&) = delete;
-  
+
   /**
    * Get singleton instance
    * @return Reference to BluetoothManager instance
    */
   static BluetoothManager& getInstance() { return instance; }
-  
+
   /**
    * Initialize Bluetooth stack
    * @return true if initialization successful, false otherwise
    */
   bool initialize();
-  
+
   /**
    * Shutdown Bluetooth stack to free memory
    */
   void shutdown();
-  
+
   /**
    * Start advertising device
    * @return true if advertising started successfully
    */
   bool startAdvertising();
-  
+
   /**
    * Stop advertising to save power
    */
   void stopAdvertising();
-  
+
   /**
    * Check if Bluetooth is initialized
    * @return true if initialized
    */
   bool isInitialized() const { return initialized; }
-  
+
   /**
    * Check if currently advertising
    * @return true if advertising
    */
   bool isAdvertising() const { return advertising; }
-  
+
   /**
    * Get memory usage information
    * @return Estimated RAM usage in bytes
    */
   size_t getMemoryUsage() const;
-  
+
   /**
    * Get keyboard handler instance
    * @return Pointer to keyboard handler or nullptr if not initialized
    */
   BLEKeyboardHandler* getKeyboardHandler() const;
-  
+
   /**
    * Force garbage collection to free unused memory
    */
   void collectGarbage();
-  
-private:
+
+ private:
 #ifdef CONFIG_BT_ENABLED
   /**
    * Create BLE server with minimal services
    * @return true if server created successfully
    */
   bool createServer();
-  
+
   /**
    * Setup advertising data with minimal payload
    */
   void setupAdvertising();
-  
+
   /**
    * BLE server callbacks (minimal implementation)
    */
-  class ServerCallbacks : public BLEServerCallbacks {
-  public:
-    void onConnect(BLEServer* pServer) override;
-    void onDisconnect(BLEServer* pServer) override;
+  class ServerCallbacks : public NimBLEServerCallbacks {
+   public:
+    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override;
+    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override;
   };
 #endif
 };

@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "Battery.h"
+#include "BLEKeyboardHandler.h"
 #include "BluetoothManager.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -337,10 +338,10 @@ void setup() {
     }
   }
 
-  // verify power button press duration after we've read settings.
-  verifyWakeupLongPress();
+  // Verify power button press duration after we've read settings.
+  // Skip verification after flashing (USB connected + unknown reset) to avoid
+  // immediately going back to sleep when the device restarts after a flash.
   if (!isWakeupAfterFlashing()) {
-    // For normal wakeups (not immediately after flashing), verify long press
     verifyWakeupLongPress();
   }
 
