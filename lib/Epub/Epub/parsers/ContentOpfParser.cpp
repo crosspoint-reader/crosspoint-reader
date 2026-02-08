@@ -232,6 +232,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         Serial.printf("[%lu] [COF] Found EPUB 3 nav document: %s\n", millis(), href.c_str());
       }
     }
+
+    // EPUB 3: Check for cover image (properties contains "cover-image")
+    if (!properties.empty() && self->coverItemHref.empty()) {
+      if (properties == "cover-image" || properties.find("cover-image ") == 0 ||
+          properties.find(" cover-image") != std::string::npos) {
+        self->coverItemHref = href;
+      }
+    }
     return;
   }
 
