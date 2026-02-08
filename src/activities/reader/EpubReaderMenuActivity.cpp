@@ -139,7 +139,7 @@ void EpubReaderMenuActivity::renderScreen() {
   }
 
   // Footer / Hints
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
+  const auto labels = mappedInput.mapLabels("« Back", "Select", "Prev", "Next");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

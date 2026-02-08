@@ -142,7 +142,7 @@ void RecentBooksActivity::render() const {
   }
 
   // Help text
-  const auto labels = mappedInput.mapLabels("« Home", "Open", "Up", "Down");
+  const auto labels = mappedInput.mapLabels("« Home", "Open", "Prev", "Next");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
