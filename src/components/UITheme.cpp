@@ -4,10 +4,10 @@
 
 #include <memory>
 
+#include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
-#include "MappedInputManager.h"
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
@@ -66,7 +66,7 @@ std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight
   return coverBmpPath;
 }
 
-void UITheme::handleListScrolling(const GfxRenderer& renderer,  int listSize, int pageItems, size_t& selectorIndex,
+void UITheme::handleListScrolling(const GfxRenderer& renderer, int listSize, int pageItems, size_t& selectorIndex,
                                   const MappedInputManager& mappedInput, bool& updateRequired) {
   const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
                           mappedInput.wasReleased(MappedInputManager::Button::Up);

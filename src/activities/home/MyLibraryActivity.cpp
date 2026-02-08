@@ -145,8 +145,8 @@ void MyLibraryActivity::loop() {
 
   auto theme = UITheme::getInstance();
   const int pageItems = theme.getNumberOfItemsPerPage(renderer, true, false, true, false);
-  theme.handleListScrolling(renderer, static_cast<int>(files.size()), pageItems,
-    selectorIndex, mappedInput, updateRequired);
+  theme.handleListScrolling(renderer, static_cast<int>(files.size()), pageItems, selectorIndex, mappedInput,
+                            updateRequired);
 }
 
 void MyLibraryActivity::displayTaskLoop() {

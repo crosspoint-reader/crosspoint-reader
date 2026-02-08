@@ -159,7 +159,7 @@ void WifiSelectionActivity::processWifiScanResults() {
   // Sort: saved-password networks first, then by signal strength (strongest first)
   std::sort(networks.begin(), networks.end(), [](const WifiNetworkInfo& a, const WifiNetworkInfo& b) {
     if (a.hasSavedPassword != b.hasSavedPassword) {
-      return a.hasSavedPassword && !b.hasSavedPassword;
+      return a.hasSavedPassword;
     }
     return a.rssi > b.rssi;
   });
@@ -421,8 +421,8 @@ void WifiSelectionActivity::loop() {
 
     auto theme = UITheme::getInstance();
     const int pageItems = theme.getNumberOfItemsPerPage(renderer, true, false, true, false);
-    theme.handleListScrolling(renderer, static_cast<int>(networks.size()), pageItems, selectedNetworkIndex,
-      mappedInput, updateRequired);
+    theme.handleListScrolling(renderer, static_cast<int>(networks.size()), pageItems, selectedNetworkIndex, mappedInput,
+                              updateRequired);
   }
 }
 
@@ -474,9 +474,10 @@ void WifiSelectionActivity::render() const {
 
   // Draw header
   char countStr[32];
-  snprintf(countStr, sizeof(countStr), "%zu found", networks.size()); 
+  snprintf(countStr, sizeof(countStr), "%zu found", networks.size());
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "WiFi Networks", countStr);
-  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, cachedMacAddress.c_str());
+  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                    cachedMacAddress.c_str());
 
   switch (state) {
     case WifiSelectionState::SCANNING:
@@ -520,20 +521,17 @@ void WifiSelectionActivity::renderNetworkList() const {
     int contentTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
     int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight},
-        static_cast<int>(networks.size()), selectedNetworkIndex,
-        [this](int index) { return networks[index].ssid; }, nullptr, nullptr, 
-      [this](int index) { 
-        auto network = networks[index];
-        return std::string(network.hasSavedPassword ? "+ " : "")
-         + (network.isEncrypted ? "* " : "")
-         + getSignalStrengthIndicator(network.rssi);
-      });
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(networks.size()),
+        selectedNetworkIndex, [this](int index) { return networks[index].ssid; }, nullptr, nullptr,
+        [this](int index) {
+          auto network = networks[index];
+          return std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
+                 getSignalStrengthIndicator(network.rssi);
+        });
   }
 
-  GUI.drawHelpText(renderer,
-      Rect{0, pageHeight - metrics.buttonHintsHeight - 26, pageWidth, 20},
-      "* = Encrypted  ||| = Strength  + = Saved");
+  GUI.drawHelpText(renderer, Rect{0, pageHeight - metrics.buttonHintsHeight - 26, pageWidth, 20},
+                   "* = Encrypted  ||| = Strength  + = Saved");
 
   const auto labels = mappedInput.mapLabels("« Back", "Connect", "Up", "Down");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

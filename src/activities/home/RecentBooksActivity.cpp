@@ -79,10 +79,10 @@ void RecentBooksActivity::loop() {
     onGoHome();
   }
 
-    auto theme = UITheme::getInstance();
+  auto theme = UITheme::getInstance();
   const int pageItems = theme.getNumberOfItemsPerPage(renderer, true, false, true, true);
-  theme.handleListScrolling(renderer, static_cast<int>(recentBooks.size()), pageItems,
-    selectorIndex, mappedInput, updateRequired);
+  theme.handleListScrolling(renderer, static_cast<int>(recentBooks.size()), pageItems, selectorIndex, mappedInput,
+                            updateRequired);
 }
 
 void RecentBooksActivity::displayTaskLoop() {
