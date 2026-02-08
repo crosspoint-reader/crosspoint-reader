@@ -515,7 +515,7 @@ void WifiSelectionActivity::renderNetworkList() const {
   const auto area = UIHelpers::contentAreaForRenderer(renderer);
   const int contentX = area.contentX;
   const int contentWidth = area.contentWidth;
-  
+
   // Draw header centered within content area
   const std::string truncTitle =
       UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, "WiFi Networks", area, EpdFontFamily::BOLD);
