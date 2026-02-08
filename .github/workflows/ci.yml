@@ -90,6 +90,16 @@ jobs:
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
 
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Run unit tests
+        run: ./test/run_unit_tests.sh
+
   # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
   # PR requirements.
   test-status:
@@ -98,6 +108,7 @@ jobs:
       - build
       - clang-format
       - cppcheck
+      - unit-tests
     if: always()
     runs-on: ubuntu-latest
     steps:
