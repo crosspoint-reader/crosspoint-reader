@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
@@ -316,7 +316,7 @@ void CrossPointWebServer::handleStatus() const {
 }
 
 void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
-  FsFile root = SdMan.open(path);
+  FsFile root = Storage.open(path);
   if (!root) {
     Serial.printf("[%lu] [WEB] Failed to open directory: %s\n", millis(), path);
     return;
@@ -458,12 +458,12 @@ void CrossPointWebServer::handleDownload() const {
     }
   }
 
-  if (!SdMan.exists(itemPath.c_str())) {
+  if (!Storage.exists(itemPath.c_str())) {
     server->send(404, "text/plain", "Item not found");
     return;
   }
 
-  FsFile file = SdMan.open(itemPath.c_str());
+  FsFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -574,15 +574,15 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
     // Check if file already exists - SD operations can be slow
     esp_task_wdt_reset();
-    if (SdMan.exists(filePath.c_str())) {
+    if (Storage.exists(filePath.c_str())) {
       Serial.printf("[%lu] [WEB] [UPLOAD] Overwriting existing file: %s\n", millis(), filePath.c_str());
       esp_task_wdt_reset();
-      SdMan.remove(filePath.c_str());
+      Storage.remove(filePath.c_str());
     }
 
     // Open file for writing - this can be slow due to FAT cluster allocation
     esp_task_wdt_reset();
-    if (!SdMan.openFileForWrite("WEB", filePath, state.file)) {
+    if (!Storage.openFileForWrite("WEB", filePath, state.file)) {
       state.error = "Failed to create file on SD card";
       Serial.printf("[%lu] [WEB] [UPLOAD] FAILED to create file: %s\n", millis(), filePath.c_str());
       return;
@@ -660,7 +660,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       String filePath = state.path;
       if (!filePath.endsWith("/")) filePath += "/";
       filePath += state.fileName;
-      SdMan.remove(filePath.c_str());
+      Storage.remove(filePath.c_str());
     }
     state.error = "Upload aborted";
     Serial.printf("[%lu] [WEB] Upload aborted\n", millis());
@@ -711,13 +711,13 @@ void CrossPointWebServer::handleCreateFolder() const {
   Serial.printf("[%lu] [WEB] Creating folder: %s\n", millis(), folderPath.c_str());
 
   // Check if already exists
-  if (SdMan.exists(folderPath.c_str())) {
+  if (Storage.exists(folderPath.c_str())) {
     server->send(400, "text/plain", "Folder already exists");
     return;
   }
 
   // Create the folder
-  if (SdMan.mkdir(folderPath.c_str())) {
+  if (Storage.mkdir(folderPath.c_str())) {
     Serial.printf("[%lu] [WEB] Folder created successfully: %s\n", millis(), folderPath.c_str());
     server->send(200, "text/plain", "Folder created: " + folderName);
   } else {
@@ -763,12 +763,12 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  if (!SdMan.exists(itemPath.c_str())) {
+  if (!Storage.exists(itemPath.c_str())) {
     server->send(404, "text/plain", "Item not found");
     return;
   }
 
-  FsFile file = SdMan.open(itemPath.c_str());
+  FsFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -789,7 +789,7 @@ void CrossPointWebServer::handleRename() const {
   }
   newPath += newName;
 
-  if (SdMan.exists(newPath.c_str())) {
+  if (Storage.exists(newPath.c_str())) {
     file.close();
     server->send(409, "text/plain", "Target already exists");
     return;
@@ -839,12 +839,12 @@ void CrossPointWebServer::handleMove() const {
     }
   }
 
-  if (!SdMan.exists(itemPath.c_str())) {
+  if (!Storage.exists(itemPath.c_str())) {
     server->send(404, "text/plain", "Item not found");
     return;
   }
 
-  FsFile file = SdMan.open(itemPath.c_str());
+  FsFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -855,12 +855,12 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  if (!SdMan.exists(destPath.c_str())) {
+  if (!Storage.exists(destPath.c_str())) {
     file.close();
     server->send(404, "text/plain", "Destination not found");
     return;
   }
-  FsFile destDir = SdMan.open(destPath.c_str());
+  FsFile destDir = Storage.open(destPath.c_str());
   if (!destDir || !destDir.isDirectory()) {
     if (destDir) {
       destDir.close();
@@ -882,7 +882,7 @@ void CrossPointWebServer::handleMove() const {
     server->send(200, "text/plain", "Already in destination");
     return;
   }
-  if (SdMan.exists(newPath.c_str())) {
+  if (Storage.exists(newPath.c_str())) {
     file.close();
     server->send(409, "text/plain", "Target already exists");
     return;
@@ -942,7 +942,7 @@ void CrossPointWebServer::handleDelete() const {
   }
 
   // Check if item exists
-  if (!SdMan.exists(itemPath.c_str())) {
+  if (!Storage.exists(itemPath.c_str())) {
     Serial.printf("[%lu] [WEB] Delete failed - item not found: %s\n", millis(), itemPath.c_str());
     server->send(404, "text/plain", "Item not found");
     return;
@@ -954,7 +954,7 @@ void CrossPointWebServer::handleDelete() const {
 
   if (itemType == "folder") {
     // For folders, try to remove (will fail if not empty)
-    FsFile dir = SdMan.open(itemPath.c_str());
+    FsFile dir = Storage.open(itemPath.c_str());
     if (dir && dir.isDirectory()) {
       // Check if folder is empty
       FsFile entry = dir.openNextFile();
@@ -968,10 +968,10 @@ void CrossPointWebServer::handleDelete() const {
       }
       dir.close();
     }
-    success = SdMan.rmdir(itemPath.c_str());
+    success = Storage.rmdir(itemPath.c_str());
   } else {
     // For files, use remove
-    success = SdMan.remove(itemPath.c_str());
+    success = Storage.remove(itemPath.c_str());
   }
 
   if (success) {
@@ -1007,7 +1007,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        SdMan.remove(filePath.c_str());
+        Storage.remove(filePath.c_str());
         Serial.printf("[%lu] [WS] Deleted incomplete upload: %s\n", millis(), filePath.c_str());
       }
       wsUploadInProgress = false;
@@ -1051,13 +1051,13 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
           // Check if file exists and remove it
           esp_task_wdt_reset();
-          if (SdMan.exists(filePath.c_str())) {
-            SdMan.remove(filePath.c_str());
+          if (Storage.exists(filePath.c_str())) {
+            Storage.remove(filePath.c_str());
           }
 
           // Open file for writing
           esp_task_wdt_reset();
-          if (!SdMan.openFileForWrite("WS", filePath, wsUploadFile)) {
+          if (!Storage.openFileForWrite("WS", filePath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
             wsUploadInProgress = false;
             return;

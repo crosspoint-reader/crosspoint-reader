@@ -3,7 +3,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
 
@@ -293,7 +293,7 @@ void setup() {
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
-  if (!SdMan.begin()) {
+  if (!Storage.begin()) {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
     setupDisplayAndFonts();
     exitActivity();

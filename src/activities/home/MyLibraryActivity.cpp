@@ -1,7 +1,7 @@
 #include "MyLibraryActivity.h"
 
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include <algorithm>
 
@@ -33,7 +33,7 @@ void MyLibraryActivity::taskTrampoline(void* param) {
 void MyLibraryActivity::loadFiles() {
   files.clear();
 
-  auto root = SdMan.open(basepath.c_str());
+  auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
     if (root) root.close();
     return;

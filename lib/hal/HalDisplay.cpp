@@ -1,6 +1,10 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 
+#ifdef EMULATED
+#include <EmulationUtils.h>
+#endif
+
 #define SD_SPI_MISO 7
 
 HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY) {}
@@ -29,6 +33,12 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+#ifdef EMULATED
+  Serial.printf("[%lu] [   ] Emulated display buffer with mode %d\n", millis(), static_cast<int>(mode));
+  EmulationUtils::Lock lock;
+  EmulationUtils::sendDisplayData(reinterpret_cast<char*>(einkDisplay.getFrameBuffer()), BUFFER_SIZE);
+  EmulationUtils::recvRespInt64();  // dummy
+#endif
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 

@@ -1,7 +1,7 @@
 #include "CrossPointState.h"
 
+#include <HalStorage.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
 #include <Serialization.h>
 
 namespace {
@@ -13,7 +13,7 @@ CrossPointState CrossPointState::instance;
 
 bool CrossPointState::saveToFile() const {
   FsFile outputFile;
-  if (!SdMan.openFileForWrite("CPS", STATE_FILE, outputFile)) {
+  if (!Storage.openFileForWrite("CPS", STATE_FILE, outputFile)) {
     return false;
   }
 
@@ -28,7 +28,7 @@ bool CrossPointState::saveToFile() const {
 
 bool CrossPointState::loadFromFile() {
   FsFile inputFile;
-  if (!SdMan.openFileForRead("CPS", STATE_FILE, inputFile)) {
+  if (!Storage.openFileForRead("CPS", STATE_FILE, inputFile)) {
     return false;
   }
 

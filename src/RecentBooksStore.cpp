@@ -1,8 +1,8 @@
 #include "RecentBooksStore.h"
 
 #include <Epub.h>
+#include <HalStorage.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
 #include <Serialization.h>
 #include <Xtc.h>
 
@@ -53,10 +53,10 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
 
 bool RecentBooksStore::saveToFile() const {
   // Make sure the directory exists
-  SdMan.mkdir("/.crosspoint");
+  Storage.mkdir("/.crosspoint");
 
   FsFile outputFile;
-  if (!SdMan.openFileForWrite("RBS", RECENT_BOOKS_FILE, outputFile)) {
+  if (!Storage.openFileForWrite("RBS", RECENT_BOOKS_FILE, outputFile)) {
     return false;
   }
 
@@ -106,7 +106,7 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
 
 bool RecentBooksStore::loadFromFile() {
   FsFile inputFile;
-  if (!SdMan.openFileForRead("RBS", RECENT_BOOKS_FILE, inputFile)) {
+  if (!Storage.openFileForRead("RBS", RECENT_BOOKS_FILE, inputFile)) {
     return false;
   }
 

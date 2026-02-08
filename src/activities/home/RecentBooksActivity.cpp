@@ -1,7 +1,7 @@
 #include "RecentBooksActivity.h"
 
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include <algorithm>
 
@@ -28,7 +28,7 @@ void RecentBooksActivity::loadRecentBooks() {
 
   for (const auto& book : books) {
     // Skip if file no longer exists
-    if (!SdMan.exists(book.path.c_str())) {
+    if (!Storage.exists(book.path.c_str())) {
       continue;
     }
     recentBooks.push_back(book);

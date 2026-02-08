@@ -1,8 +1,8 @@
 #include "KOReaderDocumentId.h"
 
+#include <HalStorage.h>
 #include <HardwareSerial.h>
 #include <MD5Builder.h>
-#include <SDCardManager.h>
 
 namespace {
 // Extract filename from path (everything after last '/')
@@ -43,7 +43,7 @@ size_t KOReaderDocumentId::getOffset(int i) {
 
 std::string KOReaderDocumentId::calculate(const std::string& filePath) {
   FsFile file;
-  if (!SdMan.openFileForRead("KODoc", filePath, file)) {
+  if (!Storage.openFileForRead("KODoc", filePath, file)) {
     Serial.printf("[%lu] [KODoc] Failed to open file: %s\n", millis(), filePath.c_str());
     return "";
   }
