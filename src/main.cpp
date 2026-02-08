@@ -251,6 +251,7 @@ void onGoHome() {
 
 void setupDisplayAndFonts() {
   display.begin();
+  renderer.begin();
   Serial.printf("[%lu] [   ] Display initialized\n", millis());
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS

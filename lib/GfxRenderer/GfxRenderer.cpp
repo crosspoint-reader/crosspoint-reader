@@ -2,61 +2,68 @@
 
 #include <Utf8.h>
 
+void GfxRenderer::begin() {
+  frameBuffer = display.getFrameBuffer();
+  if (!frameBuffer) {
+    Serial.printf("[%lu] [GFX] !! No framebuffer\n", millis());
+    assert(false);
+  }
+}
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
-void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
+// Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
+// This should always be inlined for better performance
+static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
+                                     int* phyY) {
   switch (orientation) {
-    case Portrait: {
+    case GfxRenderer::Portrait: {
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees clockwise
-      *rotatedX = y;
-      *rotatedY = HalDisplay::DISPLAY_HEIGHT - 1 - x;
+      *phyX = y;
+      *phyY = HalDisplay::DISPLAY_HEIGHT - 1 - x;
       break;
     }
-    case LandscapeClockwise: {
+    case GfxRenderer::LandscapeClockwise: {
       // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and left/right)
-      *rotatedX = HalDisplay::DISPLAY_WIDTH - 1 - x;
-      *rotatedY = HalDisplay::DISPLAY_HEIGHT - 1 - y;
+      *phyX = HalDisplay::DISPLAY_WIDTH - 1 - x;
+      *phyY = HalDisplay::DISPLAY_HEIGHT - 1 - y;
       break;
     }
-    case PortraitInverted: {
+    case GfxRenderer::PortraitInverted: {
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees counter-clockwise
-      *rotatedX = HalDisplay::DISPLAY_WIDTH - 1 - y;
-      *rotatedY = x;
+      *phyX = HalDisplay::DISPLAY_WIDTH - 1 - y;
+      *phyY = x;
       break;
     }
-    case LandscapeCounterClockwise: {
+    case GfxRenderer::LandscapeCounterClockwise: {
       // Logical landscape (800x480) aligned with panel orientation
-      *rotatedX = x;
-      *rotatedY = y;
+      *phyX = x;
+      *phyY = y;
       break;
     }
   }
 }
 
+// IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
+// efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
-  uint8_t* frameBuffer = display.getFrameBuffer();
+  int phyX = 0;
+  int phyY = 0;
 
-  // Early return if no framebuffer is set
-  if (!frameBuffer) {
-    Serial.printf("[%lu] [GFX] !! No framebuffer\n", millis());
-    return;
-  }
-
-  int rotatedX = 0;
-  int rotatedY = 0;
-  rotateCoordinates(x, y, &rotatedX, &rotatedY);
+  // Note: this call should be inlined for better performance
+  rotateCoordinates(orientation, x, y, &phyX, &phyY);
 
   // Bounds checking against physical panel dimensions
-  if (rotatedX < 0 || rotatedX >= HalDisplay::DISPLAY_WIDTH || rotatedY < 0 || rotatedY >= HalDisplay::DISPLAY_HEIGHT) {
-    Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n", millis(), x, y, rotatedX, rotatedY);
+  if (phyX < 0 || phyX >= HalDisplay::DISPLAY_WIDTH || phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) {
+    Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n", millis(), x, y, phyX, phyY);
     return;
   }
 
   // Calculate byte position and bit position
-  const uint16_t byteIndex = rotatedY * HalDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
-  const uint8_t bitPosition = 7 - (rotatedX % 8);  // MSB first
+  const uint16_t byteIndex = phyY * HalDisplay::DISPLAY_WIDTH_BYTES + (phyX / 8);
+  const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
 
   if (state) {
     frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit
@@ -376,7 +383,7 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   int rotatedX = 0;
   int rotatedY = 0;
-  rotateCoordinates(x, y, &rotatedX, &rotatedY);
+  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY);
   // Rotate origin corner
   switch (orientation) {
     case Portrait:
@@ -632,20 +639,23 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   free(nodeX);
 }
 
-void GfxRenderer::clearScreen(const uint8_t color) const { display.clearScreen(color); }
+// For performance measurement (using static to allow "const" methods)
+static unsigned long start_ms = 0;
+
+void GfxRenderer::clearScreen(const uint8_t color) const {
+  start_ms = millis();
+  display.clearScreen(color);
+}
 
 void GfxRenderer::invertScreen() const {
-  uint8_t* buffer = display.getFrameBuffer();
-  if (!buffer) {
-    Serial.printf("[%lu] [GFX] !! No framebuffer in invertScreen\n", millis());
-    return;
-  }
   for (int i = 0; i < HalDisplay::BUFFER_SIZE; i++) {
-    buffer[i] = ~buffer[i];
+    frameBuffer[i] = ~frameBuffer[i];
   }
 }
 
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
+  auto elapsed = millis() - start_ms;
+  Serial.printf("[%lu] [GFX] Time = %lu ms from clearScreen to displayBuffer\n", millis(), elapsed);
   display.displayBuffer(refreshMode, fadingFix);
 }
 
@@ -829,16 +839,16 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   }
 }
 
-uint8_t* GfxRenderer::getFrameBuffer() const { return display.getFrameBuffer(); }
+uint8_t* GfxRenderer::getFrameBuffer() const { return frameBuffer; }
 
 size_t GfxRenderer::getBufferSize() { return HalDisplay::BUFFER_SIZE; }
 
 // unused
 // void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
 
-void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuffers(display.getFrameBuffer()); }
+void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuffers(frameBuffer); }
 
-void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(display.getFrameBuffer()); }
+void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
 
 void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFix); }
 
@@ -858,12 +868,6 @@ void GfxRenderer::freeBwBufferChunks() {
  * Returns true if buffer was stored successfully, false if allocation failed.
  */
 bool GfxRenderer::storeBwBuffer() {
-  const uint8_t* frameBuffer = display.getFrameBuffer();
-  if (!frameBuffer) {
-    Serial.printf("[%lu] [GFX] !! No framebuffer in storeBwBuffer\n", millis());
-    return false;
-  }
-
   // Allocate and copy each chunk
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if any chunks are already allocated
@@ -913,13 +917,6 @@ void GfxRenderer::restoreBwBuffer() {
     return;
   }
 
-  uint8_t* frameBuffer = display.getFrameBuffer();
-  if (!frameBuffer) {
-    Serial.printf("[%lu] [GFX] !! No framebuffer in restoreBwBuffer\n", millis());
-    freeBwBufferChunks();
-    return;
-  }
-
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if chunk is missing
     if (!bwBufferChunks[i]) {
@@ -943,7 +940,6 @@ void GfxRenderer::restoreBwBuffer() {
  * Use this when BW buffer was re-rendered instead of stored/restored.
  */
 void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
-  uint8_t* frameBuffer = display.getFrameBuffer();
   if (frameBuffer) {
     display.cleanupGrayscaleBuffers(frameBuffer);
   }
