@@ -8,9 +8,9 @@
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/UIHelpers.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "components/UIHelpers.h"
 
 void WifiSelectionActivity::taskTrampoline(void* param) {
   auto* self = static_cast<WifiSelectionActivity*>(param);
@@ -518,7 +518,8 @@ void WifiSelectionActivity::renderNetworkList() const {
   const auto pageWidth = contentWidth + area.hintGutterWidth;
 
   // Draw header centered within content area
-  const std::string truncTitle = UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, "WiFi Networks", area, EpdFontFamily::BOLD);
+  const std::string truncTitle =
+      UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, "WiFi Networks", area, EpdFontFamily::BOLD);
   const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, truncTitle, area, EpdFontFamily::BOLD);
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + area.contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
@@ -558,7 +559,7 @@ void WifiSelectionActivity::renderNetworkList() const {
 
       // Draw network name (truncate if too long)
       std::string displayName = network.ssid;
-      const int maxNameLen = 33; // visually equivalent
+      const int maxNameLen = 33;  // visually equivalent
       if (displayName.length() > maxNameLen) {
         displayName.replace(maxNameLen - 3, displayName.length() - (maxNameLen - 3), "...");
       }

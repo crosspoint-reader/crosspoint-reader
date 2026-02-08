@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+
 #include "GfxRenderer.h"
 #include "components/UITheme.h"
 
@@ -46,16 +47,18 @@ Examples:
   const int optionY = area.contentY + std::max(10, area.contentHeight - (optionHeight * 3) - 10);
 
 Helper functions:
- - contentAreaForRenderer(renderer): computes a ContentArea that reserves side and bottom space according to the active Theme.
+ - contentAreaForRenderer(renderer): computes a ContentArea that reserves side and bottom space according to the active
+Theme.
  - centeredTextX(renderer, fontId, text, area, style): X coordinate that centers text inside `area.contentWidth`.
- - truncatedTextForContent(renderer, fontId, text, area, style): returns a truncated version of `text` that fits inside `area.contentWidth` with modest padding.
+ - truncatedTextForContent(renderer, fontId, text, area, style): returns a truncated version of `text` that fits inside
+`area.contentWidth` with modest padding.
 */
 
 struct ContentArea {
   int contentX;
   int contentY;
   int contentWidth;
-  int contentHeight;           // Height available for content (reserves bottom button hints)
+  int contentHeight;  // Height available for content (reserves bottom button hints)
   int hintGutterWidth;
   int hintGutterHeight;
   bool isLandscapeCw;
@@ -68,8 +71,8 @@ ContentArea contentAreaForRenderer(const GfxRenderer& renderer);
 
 // Returns an X coordinate that will horizontally center `text` within the
 // computed content area using the renderer's text metrics.
-int centeredTextX(const GfxRenderer& renderer, int fontId, const std::string& text,
-                  const ContentArea& area, EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR);
+int centeredTextX(const GfxRenderer& renderer, int fontId, const std::string& text, const ContentArea& area,
+                  EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR);
 
 // Convenience wrapper for truncating a string to fit inside the content area.
 std::string truncatedTextForContent(const GfxRenderer& renderer, int fontId, const std::string& text,
