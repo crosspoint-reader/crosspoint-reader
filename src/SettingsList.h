@@ -39,7 +39,7 @@ inline std::vector<SettingInfo> getSettingsList() {
       SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin", "Reader"),
       SettingInfo::Enum("Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
                         {"Justify", "Left", "Center", "Right", "Book's Style"}, "paragraphAlignment", "Reader"),
-      SettingInfo::Toggle("Embedded Style", &CrossPointSettings::embeddedStyle, "embeddedStyle", "Reader"),
+      SettingInfo::Toggle("Book's Embedded Style", &CrossPointSettings::embeddedStyle, "embeddedStyle", "Reader"),
       SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled, "hyphenationEnabled", "Reader"),
       SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
                         {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}, "orientation", "Reader"),

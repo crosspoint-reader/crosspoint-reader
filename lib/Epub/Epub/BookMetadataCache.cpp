@@ -29,7 +29,7 @@ bool BookMetadataCache::beginContentOpfPass() {
   Serial.printf("[%lu] [BMC] Beginning content opf pass\n", millis());
 
   // Open spine file for writing
-  return SdMan.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile);
+  return Storage.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile);
 }
 
 bool BookMetadataCache::endContentOpfPass() {
@@ -40,10 +40,10 @@ bool BookMetadataCache::endContentOpfPass() {
 bool BookMetadataCache::beginTocPass() {
   Serial.printf("[%lu] [BMC] Beginning toc pass\n", millis());
 
-  if (!SdMan.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
+  if (!Storage.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
   }
-  if (!SdMan.openFileForWrite("BMC", cachePath + tmpTocBinFile, tocFile)) {
+  if (!Storage.openFileForWrite("BMC", cachePath + tmpTocBinFile, tocFile)) {
     spineFile.close();
     return false;
   }
@@ -98,16 +98,16 @@ bool BookMetadataCache::endWrite() {
 
 bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata) {
   // Open all three files, writing to meta, reading from spine and toc
-  if (!SdMan.openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
+  if (!Storage.openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
   }
 
-  if (!SdMan.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
+  if (!Storage.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     bookFile.close();
     return false;
   }
 
-  if (!SdMan.openFileForRead("BMC", cachePath + tmpTocBinFile, tocFile)) {
+  if (!Storage.openFileForRead("BMC", cachePath + tmpTocBinFile, tocFile)) {
     bookFile.close();
     spineFile.close();
     return false;
@@ -275,11 +275,11 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 }
 
 bool BookMetadataCache::cleanupTmpFiles() const {
-  if (SdMan.exists((cachePath + tmpSpineBinFile).c_str())) {
-    SdMan.remove((cachePath + tmpSpineBinFile).c_str());
+  if (Storage.exists((cachePath + tmpSpineBinFile).c_str())) {
+    Storage.remove((cachePath + tmpSpineBinFile).c_str());
   }
-  if (SdMan.exists((cachePath + tmpTocBinFile).c_str())) {
-    SdMan.remove((cachePath + tmpTocBinFile).c_str());
+  if (Storage.exists((cachePath + tmpTocBinFile).c_str())) {
+    Storage.remove((cachePath + tmpTocBinFile).c_str());
   }
   return true;
 }
@@ -364,7 +364,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 /* ============= READING / LOADING FUNCTIONS ================ */
 
 bool BookMetadataCache::load() {
-  if (!SdMan.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
+  if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
   }
 
