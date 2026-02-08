@@ -13,11 +13,22 @@ class CrossPointSettings;
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE };
 
+enum class SettingAction {
+  None,
+  RemapFrontButtons,
+  KOReaderSync,
+  OPDSBrowser,
+  Network,
+  ClearCache,
+  CheckForUpdates,
+};
+
 struct SettingInfo {
   const char* name;
   SettingType type;
   uint8_t CrossPointSettings::* valuePtr;
   std::vector<std::string> enumValues;
+  SettingAction action;
 
   struct ValueRange {
     uint8_t min;
@@ -27,17 +38,19 @@ struct SettingInfo {
   ValueRange valueRange;
 
   static SettingInfo Toggle(const char* name, uint8_t CrossPointSettings::* ptr) {
-    return {name, SettingType::TOGGLE, ptr};
+    return {name, SettingType::TOGGLE, ptr, {}, SettingAction::None, {}};
   }
 
   static SettingInfo Enum(const char* name, uint8_t CrossPointSettings::* ptr, std::vector<std::string> values) {
-    return {name, SettingType::ENUM, ptr, std::move(values)};
+    return {name, SettingType::ENUM, ptr, std::move(values), SettingAction::None, {}};
   }
 
-  static SettingInfo Action(const char* name) { return {name, SettingType::ACTION, nullptr}; }
+  static SettingInfo Action(const char* name, SettingAction action) {
+    return {name, SettingType::ACTION, nullptr, {}, action, {}};
+  }
 
   static SettingInfo Value(const char* name, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange) {
-    return {name, SettingType::VALUE, ptr, {}, valueRange};
+    return {name, SettingType::VALUE, ptr, {}, SettingAction::None, valueRange};
   }
 };
 
