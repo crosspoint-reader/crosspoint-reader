@@ -10,6 +10,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "components/UIHelpers.h"
 
 void WifiSelectionActivity::taskTrampoline(void* param) {
   auto* self = static_cast<WifiSelectionActivity*>(param);
@@ -510,18 +511,28 @@ void WifiSelectionActivity::render() const {
 }
 
 void WifiSelectionActivity::renderNetworkList() const {
-  const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  const auto area = UIHelpers::contentAreaForRenderer(renderer);
+  const int contentX = area.contentX;
+  const int contentWidth = area.contentWidth;
+  const auto pageWidth = contentWidth + area.hintGutterWidth;
 
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "WiFi Networks", true, EpdFontFamily::BOLD);
+  // Draw header centered within content area
+  const std::string truncTitle = UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, "WiFi Networks", area, EpdFontFamily::BOLD);
+  const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, truncTitle, area, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, titleX, 15 + area.contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
   if (networks.empty()) {
-    // No networks found or scan failed
+    // No networks found or scan failed - center within content
     const auto height = renderer.getLineHeight(UI_10_FONT_ID);
     const auto top = (pageHeight - height) / 2;
-    renderer.drawCenteredText(UI_10_FONT_ID, top, "No networks found");
-    renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, "Press Connect to scan again");
+    const auto noNet = "No networks found";
+    const int noNetX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, noNet, area);
+    renderer.drawText(UI_10_FONT_ID, noNetX, top, noNet);
+
+    const auto press = "Press Connect to scan again";
+    const int pressX = UIHelpers::centeredTextX(renderer, SMALL_FONT_ID, press, area);
+    renderer.drawText(SMALL_FONT_ID, pressX, top + height + 10, press);
   } else {
     // Calculate how many networks we can display
     constexpr int startY = 60;
@@ -542,87 +553,105 @@ void WifiSelectionActivity::renderNetworkList() const {
 
       // Draw selection indicator
       if (static_cast<int>(i) == selectedNetworkIndex) {
-        renderer.drawText(UI_10_FONT_ID, 5, networkY, ">");
+        renderer.drawText(UI_10_FONT_ID, contentX + 5, networkY, ">");
       }
 
       // Draw network name (truncate if too long)
       std::string displayName = network.ssid;
-      if (displayName.length() > 33) {
-        displayName.replace(30, displayName.length() - 30, "...");
+      const int maxNameLen = 33; // visually equivalent
+      if (displayName.length() > maxNameLen) {
+        displayName.replace(maxNameLen - 3, displayName.length() - (maxNameLen - 3), "...");
       }
-      renderer.drawText(UI_10_FONT_ID, 20, networkY, displayName.c_str());
+      renderer.drawText(UI_10_FONT_ID, contentX + 20, networkY, displayName.c_str());
 
       // Draw signal strength indicator
       std::string signalStr = getSignalStrengthIndicator(network.rssi);
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 90, networkY, signalStr.c_str());
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 90, networkY, signalStr.c_str());
 
       // Draw saved indicator (checkmark) for networks with saved passwords
       if (network.hasSavedPassword) {
-        renderer.drawText(UI_10_FONT_ID, pageWidth - 50, networkY, "+");
+        renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 50, networkY, "+");
       }
 
       // Draw lock icon for encrypted networks
       if (network.isEncrypted) {
-        renderer.drawText(UI_10_FONT_ID, pageWidth - 30, networkY, "*");
+        renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 30, networkY, "*");
       }
     }
 
     // Draw scroll indicators if needed
     if (scrollOffset > 0) {
-      renderer.drawText(SMALL_FONT_ID, pageWidth - 15, startY - 10, "^");
+      renderer.drawText(SMALL_FONT_ID, contentX + contentWidth - 15, 60 - 10, "^");
     }
     if (scrollOffset + maxVisibleNetworks < static_cast<int>(networks.size())) {
-      renderer.drawText(SMALL_FONT_ID, pageWidth - 15, startY + maxVisibleNetworks * lineHeight, "v");
+      renderer.drawText(SMALL_FONT_ID, contentX + contentWidth - 15, 60 + maxVisibleNetworks * lineHeight, "v");
     }
 
     // Show network count
     char countStr[32];
     snprintf(countStr, sizeof(countStr), "%zu networks found", networks.size());
-    renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 90, countStr);
+    renderer.drawText(SMALL_FONT_ID, contentX + 20, pageHeight - 90, countStr);
   }
 
   // Show MAC address above the network count and legend
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 105, cachedMacAddress.c_str());
+  renderer.drawText(SMALL_FONT_ID, contentX + 20, pageHeight - 105, cachedMacAddress.c_str());
 
   // Draw help text
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 75, "* = Encrypted | + = Saved");
+  renderer.drawText(SMALL_FONT_ID, contentX + 20, pageHeight - 75, "* = Encrypted | + = Saved");
   const auto labels = mappedInput.mapLabels("« Back", "Connect", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void WifiSelectionActivity::renderConnecting() const {
   const auto pageHeight = renderer.getScreenHeight();
+  const auto area = UIHelpers::contentAreaForRenderer(renderer);
+  const int contentX = area.contentX;
+  const int contentWidth = area.contentWidth;
+
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
   if (state == WifiSelectionState::SCANNING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, "Scanning...");
+    const auto text = "Scanning...";
+    const int x = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, text)) / 2;
+    renderer.drawText(UI_10_FONT_ID, x, top, text);
   } else {
-    renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connecting...", true, EpdFontFamily::BOLD);
+    const auto title = "Connecting...";
+    const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, title, area, EpdFontFamily::BOLD);
+    renderer.drawText(UI_12_FONT_ID, titleX, top - 40, title, true, EpdFontFamily::BOLD);
 
     std::string ssidInfo = "to " + selectedSSID;
     if (ssidInfo.length() > 25) {
       ssidInfo.replace(22, ssidInfo.length() - 22, "...");
     }
-    renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
+    const int ssidX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, ssidInfo, area);
+    renderer.drawText(UI_10_FONT_ID, ssidX, top, ssidInfo.c_str());
   }
 }
 
 void WifiSelectionActivity::renderConnected() const {
   const auto pageHeight = renderer.getScreenHeight();
+  const auto area = UIHelpers::contentAreaForRenderer(renderer);
+  const int contentX = area.contentX;
+  const int contentWidth = area.contentWidth;
+
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 4) / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, top - 30, "Connected!", true, EpdFontFamily::BOLD);
+  const auto title = "Connected!";
+  const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, title, area, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, titleX, top - 30, title, true, EpdFontFamily::BOLD);
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
     ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
-  renderer.drawCenteredText(UI_10_FONT_ID, top + 10, ssidInfo.c_str());
+  const int ssidX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, ssidInfo, area);
+  renderer.drawText(UI_10_FONT_ID, ssidX, top + 10, ssidInfo.c_str());
 
   const std::string ipInfo = "IP Address: " + connectedIP;
-  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, ipInfo.c_str());
+  const int ipX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, ipInfo, area);
+  renderer.drawText(UI_10_FONT_ID, ipX, top + 40, ipInfo.c_str());
 
   // Use centralized button hints
   const auto labels = mappedInput.mapLabels("", "Continue", "", "");
@@ -630,27 +659,34 @@ void WifiSelectionActivity::renderConnected() const {
 }
 
 void WifiSelectionActivity::renderSavePrompt() const {
-  const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  const auto area = UIHelpers::contentAreaForRenderer(renderer);
+  const int contentX = area.contentX;
+  const int contentWidth = area.contentWidth;
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connected!", true, EpdFontFamily::BOLD);
+  const auto title = "Connected!";
+  const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, title, area, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, titleX, top - 40, title, true, EpdFontFamily::BOLD);
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
     ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
-  renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
+  const int ssidX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, ssidInfo, area);
+  renderer.drawText(UI_10_FONT_ID, ssidX, top, ssidInfo.c_str());
 
-  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, "Save password for next time?");
+  const auto prompt = "Save password for next time?";
+  const int promptX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, prompt, area);
+  renderer.drawText(UI_10_FONT_ID, promptX, top + 40, prompt);
 
   // Draw Yes/No buttons
   const int buttonY = top + 80;
   constexpr int buttonWidth = 60;
   constexpr int buttonSpacing = 30;
   constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
-  const int startX = (pageWidth - totalWidth) / 2;
+  const int startX = contentX + (contentWidth - totalWidth) / 2;
 
   // Draw "Yes" button
   if (savePromptSelection == 0) {
@@ -673,11 +709,18 @@ void WifiSelectionActivity::renderSavePrompt() const {
 
 void WifiSelectionActivity::renderConnectionFailed() const {
   const auto pageHeight = renderer.getScreenHeight();
+  const auto area = UIHelpers::contentAreaForRenderer(renderer);
+  const int contentX = area.contentX;
+  const int contentWidth = area.contentWidth;
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 2) / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, top - 20, "Connection Failed", true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(UI_10_FONT_ID, top + 20, connectionError.c_str());
+  const auto title = "Connection Failed";
+  const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, title, area, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, titleX, top - 20, title, true, EpdFontFamily::BOLD);
+
+  const int errX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, connectionError, area);
+  renderer.drawText(UI_10_FONT_ID, errX, top + 20, connectionError.c_str());
 
   // Use centralized button hints
   const auto labels = mappedInput.mapLabels("« Back", "Continue", "", "");
@@ -685,27 +728,34 @@ void WifiSelectionActivity::renderConnectionFailed() const {
 }
 
 void WifiSelectionActivity::renderForgetPrompt() const {
-  const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  const auto area = UIHelpers::contentAreaForRenderer(renderer);
+  const int contentX = area.contentX;
+  const int contentWidth = area.contentWidth;
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Connection Failed", true, EpdFontFamily::BOLD);
+  const auto title = "Connection Failed";
+  const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, title, area, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, titleX, top - 40, title, true, EpdFontFamily::BOLD);
 
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
     ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
-  renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
+  const int ssidX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, ssidInfo, area);
+  renderer.drawText(UI_10_FONT_ID, ssidX, top, ssidInfo.c_str());
 
-  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, "Forget network and remove saved password?");
+  const auto prompt = "Forget network and remove saved password?";
+  const int promptX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, prompt, area);
+  renderer.drawText(UI_10_FONT_ID, promptX, top + 40, prompt);
 
   // Draw Cancel/Forget network buttons
   const int buttonY = top + 80;
   constexpr int buttonWidth = 120;
   constexpr int buttonSpacing = 30;
   constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
-  const int startX = (pageWidth - totalWidth) / 2;
+  const int startX = contentX + (contentWidth - totalWidth) / 2;
 
   // Draw "Cancel" button
   if (forgetPromptSelection == 0) {

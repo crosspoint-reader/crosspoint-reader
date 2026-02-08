@@ -10,6 +10,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "components/UIHelpers.h"
 
 namespace {
 void syncTimeWithNTP() {
@@ -128,8 +129,22 @@ void KOReaderSyncActivity::performSync() {
   localProgress = ProgressMapper::toKOReader(epub, localPos);
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  // Pre-select the option corresponding to the more advanced progress (defensive):
+  // 0 = Apply remote progress, 1 = Upload local progress
+  int preselect = 0; // default to Apply remote
+  if (hasRemoteProgress) {
+    // localProgress should be available; choose based on percentage
+    if (localProgress.percentage > remoteProgress.percentage) {
+      preselect = 1;
+    } else {
+      preselect = 0;
+    }
+  } else {
+    // No remote progress — keep default (Apply remote not applicable but safe)
+    preselect = 0;
+  }
+  selectedOption = preselect;
   state = SHOWING_RESULT;
-  selectedOption = 0;  // Default to "Apply"
   xSemaphoreGive(renderingMutex);
   updateRequired = true;
 }
@@ -257,14 +272,32 @@ void KOReaderSyncActivity::render() {
     return;
   }
 
-  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto area = UIHelpers::contentAreaForRenderer(renderer);
+  const int contentX = area.contentX;
+  const int contentWidth = area.contentWidth;
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Sync", true, EpdFontFamily::BOLD);
+
+  // Base Y for layout: keep all vertical offsets relative to this value
+  constexpr int kTopOffset = 15;  // small gap from top of content area
+  const int startY = area.contentY + kTopOffset;
+
+  // Title centered within the content area
+  const std::string truncTitle = UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, "KOReader Sync", area, EpdFontFamily::BOLD);
+  const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, truncTitle, area, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, titleX, startY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
   if (state == NO_CREDENTIALS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "No credentials configured", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, "Set up KOReader account in Settings");
+    const int sectionBaseY = startY + 265;
+
+    const auto s1 = "No credentials configured";
+    const int s1x = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, s1, area, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, s1x, sectionBaseY, s1, true, EpdFontFamily::BOLD);
+
+    const auto s2 = "Set up KOReader account in Settings";
+    const int s2x = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, s2, area);
+    renderer.drawText(UI_10_FONT_ID, s2x, sectionBaseY + 40, s2);
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -273,14 +306,20 @@ void KOReaderSyncActivity::render() {
   }
 
   if (state == SYNCING || state == UPLOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, EpdFontFamily::BOLD);
+    const int sectionBaseY = startY + 285;
+    const auto msg = statusMessage.c_str();
+    const int msgX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, statusMessage, area, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, msgX, sectionBaseY, msg, true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == SHOWING_RESULT) {
-    // Show comparison
-    renderer.drawCenteredText(UI_10_FONT_ID, 120, "Progress found!", true, EpdFontFamily::BOLD);
+    // Show comparison header
+    const int sectionBaseY = startY + 55;
+    const auto header = "Progress found!";
+    const int headerX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, header, area, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, headerX, sectionBaseY, header, true, EpdFontFamily::BOLD);
 
     // Get chapter names from TOC
     const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
@@ -291,72 +330,84 @@ void KOReaderSyncActivity::render() {
     const std::string localChapter = (localTocIndex >= 0) ? epub->getTocItem(localTocIndex).title
                                                           : ("Section " + std::to_string(currentSpineIndex + 1));
 
-    // Remote progress - chapter and page
-    renderer.drawText(UI_10_FONT_ID, 20, 160, "Remote:", true);
+    // Remote progress - chapter and page (align inside content)
+    const int leftX = contentX + 20;
+    renderer.drawText(UI_10_FONT_ID, leftX, sectionBaseY + 40, "Remote:", true);
     char remoteChapterStr[128];
     snprintf(remoteChapterStr, sizeof(remoteChapterStr), "  %s", remoteChapter.c_str());
-    renderer.drawText(UI_10_FONT_ID, 20, 185, remoteChapterStr);
+    renderer.drawText(UI_10_FONT_ID, leftX, sectionBaseY + 65, remoteChapterStr);
     char remotePageStr[64];
     snprintf(remotePageStr, sizeof(remotePageStr), "  Page %d, %.2f%% overall", remotePosition.pageNumber + 1,
              remoteProgress.percentage * 100);
-    renderer.drawText(UI_10_FONT_ID, 20, 210, remotePageStr);
+    renderer.drawText(UI_10_FONT_ID, leftX, sectionBaseY + 90, remotePageStr);
 
     if (!remoteProgress.device.empty()) {
       char deviceStr[64];
       snprintf(deviceStr, sizeof(deviceStr), "  From: %s", remoteProgress.device.c_str());
-      renderer.drawText(UI_10_FONT_ID, 20, 235, deviceStr);
+      renderer.drawText(UI_10_FONT_ID, leftX, sectionBaseY + 115, deviceStr);
     }
 
     // Local progress - chapter and page
-    renderer.drawText(UI_10_FONT_ID, 20, 270, "Local:", true);
+    renderer.drawText(UI_10_FONT_ID, leftX, sectionBaseY + 150, "Local:", true);
     char localChapterStr[128];
     snprintf(localChapterStr, sizeof(localChapterStr), "  %s", localChapter.c_str());
-    renderer.drawText(UI_10_FONT_ID, 20, 295, localChapterStr);
+    renderer.drawText(UI_10_FONT_ID, leftX, sectionBaseY + 175, localChapterStr);
     char localPageStr[64];
     snprintf(localPageStr, sizeof(localPageStr), "  Page %d/%d, %.2f%% overall", currentPage + 1, totalPagesInSpine,
              localProgress.percentage * 100);
-    renderer.drawText(UI_10_FONT_ID, 20, 320, localPageStr);
+    renderer.drawText(UI_10_FONT_ID, leftX, sectionBaseY + 200, localPageStr);
 
-    // Options
-    const int optionY = 350;
+    // Options (anchor above button hints)
     const int optionHeight = 30;
+    const int optionY = startY + std::max(10, area.contentHeight - (optionHeight * 3) - 10);
 
     // Apply option
     if (selectedOption == 0) {
-      renderer.fillRect(0, optionY - 2, pageWidth - 1, optionHeight);
+      renderer.fillRect(contentX, optionY - 2, contentWidth - 1, optionHeight);
     }
-    renderer.drawText(UI_10_FONT_ID, 20, optionY, "Apply remote progress", selectedOption != 0);
+    renderer.drawText(UI_10_FONT_ID, leftX, optionY, "Apply remote progress", selectedOption != 0);
 
     // Upload option
     if (selectedOption == 1) {
-      renderer.fillRect(0, optionY + optionHeight - 2, pageWidth - 1, optionHeight);
+      renderer.fillRect(contentX, optionY + optionHeight - 2, contentWidth - 1, optionHeight);
     }
-    renderer.drawText(UI_10_FONT_ID, 20, optionY + optionHeight, "Upload local progress", selectedOption != 1);
+    renderer.drawText(UI_10_FONT_ID, leftX, optionY + optionHeight, "Upload local progress", selectedOption != 1);
 
     // Cancel option
     if (selectedOption == 2) {
-      renderer.fillRect(0, optionY + optionHeight * 2 - 2, pageWidth - 1, optionHeight);
+      renderer.fillRect(contentX, optionY + optionHeight * 2 - 2, contentWidth - 1, optionHeight);
     }
-    renderer.drawText(UI_10_FONT_ID, 20, optionY + optionHeight * 2, "Cancel", selectedOption != 2);
+    renderer.drawText(UI_10_FONT_ID, leftX, optionY + optionHeight * 2, "Cancel", selectedOption != 2);
 
-    const auto labels = mappedInput.mapLabels("", "Select", "", "");
+    const auto labels = mappedInput.mapLabels("Back", "Select", "Up", "Down");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == NO_REMOTE_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "No remote progress found", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, "Upload current position?");
+    const int sectionBaseY = startY + 265;
 
-    const auto labels = mappedInput.mapLabels("Cancel", "Upload", "", "");
+    const auto s1 = "No remote progress found";
+    const int s1x = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, s1, area, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, s1x, sectionBaseY, s1, true, EpdFontFamily::BOLD);
+
+    const auto s2 = "Upload current position?";
+    const int s2x = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, s2, area);
+    renderer.drawText(UI_10_FONT_ID, s2x, sectionBaseY + 40, s2);
+
+    const auto labels = mappedInput.mapLabels("Cancel", "Upload", "Up", "Down");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == UPLOAD_COMPLETE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Progress uploaded!", true, EpdFontFamily::BOLD);
+    const int sectionBaseY = startY + 285;
+
+    const auto msg = "Progress uploaded!";
+    const int msgX = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, msg, area, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, msgX, sectionBaseY, msg, true, EpdFontFamily::BOLD);
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -365,8 +416,14 @@ void KOReaderSyncActivity::render() {
   }
 
   if (state == SYNC_FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Sync failed", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, statusMessage.c_str());
+    const int sectionBaseY = startY + 265;
+
+    const auto s1 = "Sync failed";
+    const int s1x = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, s1, area, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, s1x, sectionBaseY, s1, true, EpdFontFamily::BOLD);
+
+    const int s2x = UIHelpers::centeredTextX(renderer, UI_10_FONT_ID, statusMessage, area);
+    renderer.drawText(UI_10_FONT_ID, s2x, sectionBaseY + 40, statusMessage.c_str());
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

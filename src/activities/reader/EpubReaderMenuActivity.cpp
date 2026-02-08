@@ -5,6 +5,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "components/UIHelpers.h"
 
 void EpubReaderMenuActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
@@ -83,29 +84,12 @@ void EpubReaderMenuActivity::loop() {
 
 void EpubReaderMenuActivity::renderScreen() {
   renderer.clearScreen();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto orientation = renderer.getOrientation();
-  // Landscape orientation: button hints are drawn along a vertical edge, so we
-  // reserve a horizontal gutter to prevent overlap with menu content.
-  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
-  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  // Inverted portrait: button hints appear near the logical top, so we reserve
-  // vertical space to keep the header and list clear.
-  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
-  // Landscape CW places hints on the left edge; CCW keeps them on the right.
-  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int contentWidth = pageWidth - hintGutterWidth;
-  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int contentY = hintGutterHeight;
+  const auto area = UIHelpers::contentAreaForRenderer(renderer);
 
   // Title
-  const std::string truncTitle =
-      renderer.truncatedText(UI_12_FONT_ID, title.c_str(), contentWidth - 40, EpdFontFamily::BOLD);
-  // Manual centering so we can respect the content gutter.
-  const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
+  const std::string truncTitle = UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, title, area, EpdFontFamily::BOLD);
+  const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, truncTitle, area, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, titleX, 15 + area.contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
   // Progress summary
   std::string progressLine;
@@ -116,7 +100,7 @@ void EpubReaderMenuActivity::renderScreen() {
   renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
 
   // Menu Items
-  const int startY = 75 + contentY;
+  const int startY = 75 + area.contentY;
   constexpr int lineHeight = 30;
 
   for (size_t i = 0; i < menuItems.size(); ++i) {
@@ -125,16 +109,16 @@ void EpubReaderMenuActivity::renderScreen() {
 
     if (isSelected) {
       // Highlight only the content area so we don't paint over hint gutters.
-      renderer.fillRect(contentX, displayY, contentWidth - 1, lineHeight, true);
+      renderer.fillRect(area.contentX, displayY, area.contentWidth - 1, lineHeight, true);
     }
 
-    renderer.drawText(UI_10_FONT_ID, contentX + 20, displayY, menuItems[i].label.c_str(), !isSelected);
+    renderer.drawText(UI_10_FONT_ID, area.contentX + 20, displayY, menuItems[i].label.c_str(), !isSelected);
 
     if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
       // Render current orientation value on the right edge of the content area.
       const auto value = orientationLabels[pendingOrientation];
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+      renderer.drawText(UI_10_FONT_ID, area.contentX + area.contentWidth - 20 - width, displayY, value, !isSelected);
     }
   }
 
