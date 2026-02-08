@@ -105,68 +105,56 @@ uint8_t quantize1bit(int gray, int x, int y) {
   return (gray >= adjustedThreshold) ? 1 : 0;
 }
 
-uint8_t* createBmp(const uint8_t* framebuffer, int width, int height, uint32_t* bmpSize) {
-  // BMP header
+uint8_t* createBmpHeader(int width, int height, uint32_t* headerSize) {
+  // BMP file header (14) + DIB header (40) + color palette (8) = 62
+  const uint32_t header_size = 62;
   uint32_t rowSize = (width + 31) / 32 * 4;
   uint32_t imageSize = rowSize * height;
-  // BMP file header (14) + DIB header (40) + color palette (8) = 62
-  uint32_t fileSize = 62 + imageSize;
+  uint32_t fileSize = header_size + imageSize;
 
-  uint8_t* bmpData = new uint8_t[fileSize];
-  if (!bmpData) {
-    *bmpSize = 0;
+  uint8_t* bmpHeader = new uint8_t[header_size];
+  if (!bmpHeader) {
+    *headerSize = 0;
     return nullptr;
   }
-  *bmpSize = fileSize;
-  memset(bmpData, 0, fileSize);
+  *headerSize = header_size;
+  memset(bmpHeader, 0, header_size);
 
-  uint8_t* header = bmpData;
   // BMP File Header
-  header[0] = 'B';
-  header[1] = 'M';
-  header[2] = fileSize;
-  header[3] = fileSize >> 8;
-  header[4] = fileSize >> 16;
-  header[5] = fileSize >> 24;
-  header[10] = 62;  // Offset to pixel data
+  bmpHeader[0] = 'B';
+  bmpHeader[1] = 'M';
+  bmpHeader[2] = fileSize;
+  bmpHeader[3] = fileSize >> 8;
+  bmpHeader[4] = fileSize >> 16;
+  bmpHeader[5] = fileSize >> 24;
+  bmpHeader[10] = header_size;  // Offset to pixel data
 
   // DIB Header (BITMAPINFOHEADER)
-  header[14] = 40;   // DIB header size
-  header[18] = width;
-  header[19] = width >> 8;
-  header[22] = height;
-  header[23] = height >> 8;
-  header[26] = 1;    // Planes
-  header[28] = 1;    // BPP (1-bit)
-  header[30] = 0;    // Compression (none)
-  header[34] = imageSize;
-  header[35] = imageSize >> 8;
-  header[36] = imageSize >> 16;
-  header[37] = imageSize >> 24;
+  bmpHeader[14] = 40;   // DIB header size
+  bmpHeader[18] = width;
+  bmpHeader[19] = width >> 8;
+  bmpHeader[22] = height;
+  bmpHeader[23] = height >> 8;
+  bmpHeader[26] = 1;    // Planes
+  bmpHeader[28] = 1;    // BPP (1-bit)
+  bmpHeader[30] = 0;    // Compression (none)
+  bmpHeader[34] = imageSize;
+  bmpHeader[35] = imageSize >> 8;
+  bmpHeader[36] = imageSize >> 16;
+  bmpHeader[37] = imageSize >> 24;
 
   // Color Palette (2 colors: black and white)
   // Color 0 (black)
-  header[54] = 0;
-  header[55] = 0;
-  header[56] = 0;
-  header[57] = 0;
+  bmpHeader[54] = 0;
+  bmpHeader[55] = 0;
+  bmpHeader[56] = 0;
+  bmpHeader[57] = 0;
   // Color 1 (white)
-  header[58] = 255;
-  header[59] = 255;
-  header[60] = 255;
-  header[61] = 0;
+  bmpHeader[58] = 255;
+  bmpHeader[59] = 255;
+  bmpHeader[60] = 255;
+  bmpHeader[61] = 0;
 
-  // Pixel data
-  uint8_t* pixelData = bmpData + 62;
-  uint32_t fbRowSize = width / 8;
-
-  for (int y = 0; y < height; y++) {
-    uint8_t* bmpRow = pixelData + y * rowSize;
-    // For BMP, rows are bottom-up. So we take the last row of the framebuffer first.
-    const uint8_t* fbRow = framebuffer + (height - 1 - y) * fbRowSize;
-    memcpy(bmpRow, fbRow, fbRowSize);
-  }
-
-  return bmpData;
+  return bmpHeader;
 }
 

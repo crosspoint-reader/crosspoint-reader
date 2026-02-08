@@ -313,23 +313,59 @@ void takeScreenshot() {
     return;
   }
 
-  uint32_t bmpSize = 0;
-  uint8_t* bmpData = createBmp(fb, HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT, &bmpSize);
-  if (!bmpData) {
-    Serial.println("[SCR] Failed to generate BMP data");
+  uint32_t headerSize = 0;
+  uint8_t* bmpHeader = createBmpHeader(HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT, &headerSize);
+  if (!bmpHeader) {
+    Serial.println("[SCR] Failed to generate BMP header");
+    file.close();
+    SdMan.remove(filename_str.c_str());
     return;
   }
 
+  bool write_error = false;
+  if (file.write(bmpHeader, headerSize) != headerSize) {
+    write_error = true;
+  }
+  delete[] bmpHeader;
 
-  if (file.write(bmpData, bmpSize) == bmpSize) {
-    Serial.println("[SCR] Screenshot saved to " + filename_str);
-  } else {
-    Serial.println("[SCR] Failed to write screenshot data");
+  if (write_error) {
+    Serial.println("[SCR] Failed to write BMP header");
+    file.close();
     SdMan.remove(filename_str.c_str());
+    return;
+  }
+
+  // Write pixel data
+  const int width = HalDisplay::DISPLAY_WIDTH;
+  const int height = HalDisplay::DISPLAY_HEIGHT;
+  uint32_t rowSize = (width + 31) / 32 * 4;
+  uint32_t fbRowSize = width / 8;
+  uint32_t paddingSize = rowSize - fbRowSize;
+  uint8_t padding[4] = {0, 0, 0, 0};
+
+  for (int y = 0; y < height; y++) {
+    // For BMP, rows are bottom-up. So we take the last row of the framebuffer first.
+    const uint8_t* fbRow = fb + (height - 1 - y) * fbRowSize;
+    if (file.write(fbRow, fbRowSize) != fbRowSize) {
+      write_error = true;
+      break;
+    }
+    if (paddingSize > 0) {
+      if (file.write(padding, paddingSize) != paddingSize) {
+        write_error = true;
+        break;
+      }
+    }
   }
 
   file.close();
-  delete[] bmpData;
+
+  if (write_error) {
+    Serial.println("[SCR] Failed to write screenshot data");
+    SdMan.remove(filename_str.c_str());
+  } else {
+    Serial.println("[SCR] Screenshot saved to " + filename_str);
+  }
 }
 
 void setup() {
