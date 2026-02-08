@@ -12,6 +12,7 @@
 #include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "FsHelpers.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -273,6 +274,22 @@ void setupDisplayAndFonts() {
   Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 
+void takeScreenshot() {
+  const uint8_t* fb = display.getFrameBuffer();
+  if (!fb) {
+    Serial.println("[SCR] Framebuffer not available");
+    return;
+  }
+
+  String filename_str = "/screenshots/screenshot-" + String(millis()) + ".bmp";
+  if (FsHelpers::saveFramebufferAsBmp(filename_str.c_str(), fb, HalDisplay::DISPLAY_WIDTH,
+                                      HalDisplay::DISPLAY_HEIGHT)) {
+    Serial.println("[SCR] Screenshot saved to " + filename_str);
+  } else {
+    Serial.println("[SCR] Failed to save screenshot");
+  }
+}
+
 void setup() {
   t1 = millis();
 
@@ -369,6 +386,23 @@ void loop() {
     lastActivityTime = millis();  // Reset inactivity timer
   }
 
+  static bool screenshotButtonsReleased = true;
+  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    if (screenshotButtonsReleased) {
+      screenshotButtonsReleased = false;
+      takeScreenshot();
+      if (renderer.storeBwBuffer()) {
+        renderer.drawRect(6, 6, HalDisplay::DISPLAY_HEIGHT - 12, HalDisplay::DISPLAY_WIDTH - 12, 2, true);
+        renderer.displayBuffer();
+        delay(1000);
+        renderer.restoreBwBuffer();
+        renderer.displayBuffer(HalDisplay::RefreshMode::HALF_REFRESH);
+      }
+    }
+    return;
+  } else {
+    screenshotButtonsReleased = true;
+  }
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (millis() - lastActivityTime >= sleepTimeoutMs) {
     Serial.printf("[%lu] [SLP] Auto-sleep triggered after %lu ms of inactivity\n", millis(), sleepTimeoutMs);

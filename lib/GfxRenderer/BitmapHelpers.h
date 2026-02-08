@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cstring>
 
 // Helper functions
@@ -7,6 +8,10 @@ uint8_t quantize(int gray, int x, int y);
 uint8_t quantizeSimple(int gray);
 uint8_t quantize1bit(int gray, int x, int y);
 int adjustPixel(int gray);
+// Creates a 1-bit BMP header in memory.
+// Returns a pointer to the BMP header data, and sets headerSize to the size of the data.
+// The caller is responsible for freeing the returned buffer.
+uint8_t* createBmpHeader(int width, int height, uint32_t* headerSize);
 
 // 1-bit Atkinson dithering - better quality than noise dithering for thumbnails
 // Error distribution pattern (same as 2-bit but quantizes to 2 levels):
