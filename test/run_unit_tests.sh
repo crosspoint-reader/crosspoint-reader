@@ -132,6 +132,37 @@ else
 fi
 echo ""
 
+# --- TextLayoutTest ---
+echo "--- TextLayoutTest ---"
+TEXTLAYOUT_EXTRA_FLAGS=(
+  -I"$ROOT_DIR/lib/Serialization"
+  -I"$ROOT_DIR/lib/EpdFont"
+  -include "HardwareSerial.h"
+)
+if c++ "${CXXFLAGS[@]}" "${TEXTLAYOUT_EXTRA_FLAGS[@]}" \
+  "$ROOT_DIR/test/unit/TextLayoutTest.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/ParsedText.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/blocks/TextBlock.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/Hyphenator.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/LanguageRegistry.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/LiangHyphenation.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/HyphenationCommon.cpp" \
+  "$ROOT_DIR/lib/EpdFont/EpdFont.cpp" \
+  "$ROOT_DIR/lib/Utf8/Utf8.cpp" \
+  -o "$BUILD_DIR/TextLayoutTest" 2>&1; then
+  if "$BUILD_DIR/TextLayoutTest"; then
+    PASSED=$((PASSED + 1))
+  else
+    FAILED=$((FAILED + 1))
+    ERRORS="$ERRORS  TextLayoutTest\n"
+  fi
+else
+  echo "  COMPILE ERROR"
+  FAILED=$((FAILED + 1))
+  ERRORS="$ERRORS  TextLayoutTest (compile error)\n"
+fi
+echo ""
+
 # --- Summary ---
 echo "==============================="
 echo "Unit tests: $PASSED passed, $FAILED failed"

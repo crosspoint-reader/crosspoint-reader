@@ -23,10 +23,10 @@ class PageElement {
 
 // a line from a block element
 class PageLine final : public PageElement {
-  std::shared_ptr<TextBlock> block;
+  std::unique_ptr<TextBlock> block;
 
  public:
-  PageLine(std::shared_ptr<TextBlock> block, const int16_t xPos, const int16_t yPos)
+  PageLine(std::unique_ptr<TextBlock> block, const int16_t xPos, const int16_t yPos)
       : PageElement(xPos, yPos), block(std::move(block)) {}
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
   bool serialize(FsFile& file) override;
@@ -36,7 +36,7 @@ class PageLine final : public PageElement {
 class Page {
  public:
   // the list of block index and line numbers on this page
-  std::vector<std::shared_ptr<PageElement>> elements;
+  std::vector<std::unique_ptr<PageElement>> elements;
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(FsFile& file) const;
   static std::unique_ptr<Page> deserialize(FsFile& file);

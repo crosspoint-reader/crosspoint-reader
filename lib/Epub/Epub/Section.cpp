@@ -103,13 +103,16 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   }
 
   serialization::readPod(file, pageCount);
+  serialization::readPod(file, cachedLutOffset);
   file.close();
   Serial.printf("[%lu] [SCT] Deserialization succeeded: %d pages\n", millis(), pageCount);
   return true;
 }
 
 // Your updated class method (assuming you are using the 'SD' object, which is a wrapper for a specific filesystem)
-bool Section::clearCache() const {
+bool Section::clearCache() {
+  file.close();
+  cachedLutOffset = 0;
   if (!Storage.exists(filePath.c_str())) {
     Serial.printf("[%lu] [SCT] Cache does not exist, no action needed\n", millis());
     return true;
@@ -196,7 +199,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     return false;
   }
 
-  const uint32_t lutOffset = file.position();
+  cachedLutOffset = file.position();
   bool hasFailedLutRecords = false;
   // Write LUT
   for (const uint32_t& pos : lut) {
@@ -217,25 +220,22 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   // Go back and write LUT offset
   file.seek(HEADER_SIZE - sizeof(uint32_t) - sizeof(pageCount));
   serialization::writePod(file, pageCount);
-  serialization::writePod(file, lutOffset);
+  serialization::writePod(file, cachedLutOffset);
   file.close();
   return true;
 }
 
 std::unique_ptr<Page> Section::loadPageFromSectionFile() {
-  if (!Storage.openFileForRead("SCT", filePath, file)) {
-    return nullptr;
+  if (!file) {
+    if (!Storage.openFileForRead("SCT", filePath, file)) {
+      return nullptr;
+    }
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t));
-  uint32_t lutOffset;
-  serialization::readPod(file, lutOffset);
-  file.seek(lutOffset + sizeof(uint32_t) * currentPage);
+  file.seek(cachedLutOffset + sizeof(uint32_t) * currentPage);
   uint32_t pagePos;
   serialization::readPod(file, pagePos);
   file.seek(pagePos);
 
-  auto page = Page::deserialize(file);
-  file.close();
-  return page;
+  return Page::deserialize(file);
 }

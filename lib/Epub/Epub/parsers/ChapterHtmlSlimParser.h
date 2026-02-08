@@ -91,5 +91,5 @@ class ChapterHtmlSlimParser {
 
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
-  void addLineToPage(std::shared_ptr<TextBlock> line);
+  void addLineToPage(std::unique_ptr<TextBlock> line);
 };

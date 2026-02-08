@@ -47,4 +47,23 @@ c++ "${CXXFLAGS[@]}" \
 "$BUILD_DIR/CssParserBench"
 echo ""
 
+# --- TextLayoutBench ---
+echo "--- TextLayoutBench ---"
+c++ "${CXXFLAGS[@]}" \
+  -I"$ROOT_DIR/lib/EpdFont" \
+  -I"$ROOT_DIR/lib/Serialization" \
+  -include "HardwareSerial.h" \
+  "$ROOT_DIR/test/perf/TextLayoutBench.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/ParsedText.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/blocks/TextBlock.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/Hyphenator.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/LanguageRegistry.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/LiangHyphenation.cpp" \
+  "$ROOT_DIR/lib/Epub/Epub/hyphenation/HyphenationCommon.cpp" \
+  "$ROOT_DIR/lib/EpdFont/EpdFont.cpp" \
+  "$ROOT_DIR/lib/Utf8/Utf8.cpp" \
+  -o "$BUILD_DIR/TextLayoutBench"
+"$BUILD_DIR/TextLayoutBench"
+echo ""
+
 echo "=== Benchmarks complete ==="
