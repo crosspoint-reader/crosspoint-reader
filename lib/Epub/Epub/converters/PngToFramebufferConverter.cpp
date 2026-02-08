@@ -6,6 +6,9 @@
 #include <SDCardManager.h>
 #include <SdFat.h>
 
+#include <cstdlib>
+#include <new>
+
 #include "DitherUtils.h"
 #include "PixelCache.h"
 
@@ -29,6 +32,8 @@ struct PngContext {
   PixelCache cache;
   bool caching;
 
+  uint8_t* grayLineBuffer;
+
   PngContext()
       : renderer(nullptr),
         config(nullptr),
@@ -40,7 +45,8 @@ struct PngContext {
         dstWidth(0),
         dstHeight(0),
         lastDstY(-1),
-        caching(false) {}
+        caching(false),
+        grayLineBuffer(nullptr) {}
 };
 
 // File I/O callbacks use pFile->fHandle to access the FsFile*,
@@ -75,23 +81,41 @@ static int32_t pngSeekWithHandle(PNGFILE* pFile, int32_t pos) {
   return f->seek(pos);
 }
 
-// Single static PNG object shared between getDimensions and decode
-// (these operations never happen simultaneously)
-static PNG png;
+// The PNG decoder (PNGdec) is ~42 KB due to internal zlib decompression buffers.
+// We heap-allocate it on demand rather than using a static instance, so this memory
+// is only consumed while actually decoding/querying PNG images. This is critical on
+// the ESP32-C3 where total RAM is ~320 KB.
+static constexpr size_t PNG_DECODER_APPROX_SIZE = 44 * 1024;  // ~42 KB + overhead
+static constexpr size_t MIN_FREE_HEAP_FOR_PNG = PNG_DECODER_APPROX_SIZE + 16 * 1024;  // decoder + 16 KB headroom
 
 bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
-  int rc =
-      png.open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle, nullptr);
-
-  if (rc != 0) {
-    Serial.printf("[%lu] [PNG] Failed to open PNG for dimensions: %d\n", millis(), rc);
+  size_t freeHeap = ESP.getFreeHeap();
+  if (freeHeap < MIN_FREE_HEAP_FOR_PNG) {
+    Serial.printf("[%lu] [PNG] Not enough heap for PNG decoder (%u free, need %u)\n", millis(), freeHeap,
+                  MIN_FREE_HEAP_FOR_PNG);
     return false;
   }
 
-  out.width = png.getWidth();
-  out.height = png.getHeight();
+  PNG* png = new (std::nothrow) PNG();
+  if (!png) {
+    Serial.printf("[%lu] [PNG] Failed to allocate PNG decoder for dimensions\n", millis());
+    return false;
+  }
 
-  png.close();
+  int rc =
+      png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle, nullptr);
+
+  if (rc != 0) {
+    Serial.printf("[%lu] [PNG] Failed to open PNG for dimensions: %d\n", millis(), rc);
+    delete png;
+    return false;
+  }
+
+  out.width = png->getWidth();
+  out.height = png->getHeight();
+
+  png->close();
+  delete png;
   return true;
 }
 
@@ -156,12 +180,9 @@ static void convertLineToGray(uint8_t* pPixels, uint8_t* grayLine, int width, in
   }
 }
 
-// Stack buffer for grayscale line conversion (max width from PNGdec)
-static uint8_t grayLineBuffer[PNG_MAX_BUFFERED_PIXELS / 2];
-
 int pngDrawCallback(PNGDRAW* pDraw) {
   PngContext* ctx = reinterpret_cast<PngContext*>(pDraw->pUser);
-  if (!ctx || !ctx->config || !ctx->renderer) return 0;
+  if (!ctx || !ctx->config || !ctx->renderer || !ctx->grayLineBuffer) return 0;
 
   int srcY = pDraw->y;
   int srcWidth = ctx->srcWidth;
@@ -180,7 +201,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   if (outY >= ctx->screenHeight) return 1;
 
   // Convert entire source line to grayscale (improves cache locality)
-  convertLineToGray(pDraw->pPixels, grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->pPalette, pDraw->iHasAlpha);
+  convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->pPalette, pDraw->iHasAlpha);
 
   // Render scaled row using Bresenham-style integer stepping (no floating-point division)
   int dstWidth = ctx->dstWidth;
@@ -195,7 +216,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   for (int dstX = 0; dstX < dstWidth; dstX++) {
     int outX = outXBase + dstX;
     if (outX < screenWidth) {
-      uint8_t gray = grayLineBuffer[srcX];
+      uint8_t gray = ctx->grayLineBuffer[srcX];
 
       uint8_t ditheredGray;
       if (useDithering) {
@@ -223,27 +244,43 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
                                                     const RenderConfig& config) {
   Serial.printf("[%lu] [PNG] Decoding PNG: %s\n", millis(), imagePath.c_str());
 
+  size_t freeHeap = ESP.getFreeHeap();
+  if (freeHeap < MIN_FREE_HEAP_FOR_PNG) {
+    Serial.printf("[%lu] [PNG] Not enough heap for PNG decoder (%u free, need %u)\n", millis(), freeHeap,
+                  MIN_FREE_HEAP_FOR_PNG);
+    return false;
+  }
+
+  // Heap-allocate PNG decoder (~42 KB) - freed at end of function
+  PNG* png = new (std::nothrow) PNG();
+  if (!png) {
+    Serial.printf("[%lu] [PNG] Failed to allocate PNG decoder\n", millis());
+    return false;
+  }
+
   PngContext ctx;
   ctx.renderer = &renderer;
   ctx.config = &config;
   ctx.screenWidth = renderer.getScreenWidth();
   ctx.screenHeight = renderer.getScreenHeight();
 
-  int rc = png.open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
-                    pngDrawCallback);
+  int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
+                     pngDrawCallback);
   if (rc != PNG_SUCCESS) {
     Serial.printf("[%lu] [PNG] Failed to open PNG: %d\n", millis(), rc);
+    delete png;
     return false;
   }
 
-  if (!validateImageDimensions(png.getWidth(), png.getHeight(), "PNG")) {
-    png.close();
+  if (!validateImageDimensions(png->getWidth(), png->getHeight(), "PNG")) {
+    png->close();
+    delete png;
     return false;
   }
 
   // Calculate output dimensions
-  ctx.srcWidth = png.getWidth();
-  ctx.srcHeight = png.getHeight();
+  ctx.srcWidth = png->getWidth();
+  ctx.srcHeight = png->getHeight();
 
   if (config.useExactDimensions && config.maxWidth > 0 && config.maxHeight > 0) {
     // Use exact dimensions as specified (avoids rounding mismatches with pre-calculated sizes)
@@ -263,10 +300,20 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.lastDstY = -1;  // Reset row tracking
 
   Serial.printf("[%lu] [PNG] PNG %dx%d -> %dx%d (scale %.2f), bpp: %d\n", millis(), ctx.srcWidth, ctx.srcHeight,
-                ctx.dstWidth, ctx.dstHeight, ctx.scale, png.getBpp());
+                ctx.dstWidth, ctx.dstHeight, ctx.scale, png->getBpp());
 
-  if (png.getBpp() != 8) {
-    warnUnsupportedFeature("bit depth (" + std::to_string(png.getBpp()) + "bpp)", imagePath);
+  if (png->getBpp() != 8) {
+    warnUnsupportedFeature("bit depth (" + std::to_string(png->getBpp()) + "bpp)", imagePath);
+  }
+
+  // Allocate grayscale line buffer on demand (~3.2 KB) - freed after decode
+  const size_t grayBufSize = PNG_MAX_BUFFERED_PIXELS / 2;
+  ctx.grayLineBuffer = static_cast<uint8_t*>(malloc(grayBufSize));
+  if (!ctx.grayLineBuffer) {
+    Serial.printf("[%lu] [PNG] Failed to allocate gray line buffer\n", millis());
+    png->close();
+    delete png;
+    return false;
   }
 
   // Allocate cache buffer using SCALED dimensions
@@ -279,15 +326,21 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   }
 
   unsigned long decodeStart = millis();
-  rc = png.decode(&ctx, 0);
+  rc = png->decode(&ctx, 0);
   unsigned long decodeTime = millis() - decodeStart;
+
+  free(ctx.grayLineBuffer);
+  ctx.grayLineBuffer = nullptr;
+
   if (rc != PNG_SUCCESS) {
     Serial.printf("[%lu] [PNG] Decode failed: %d\n", millis(), rc);
-    png.close();
+    png->close();
+    delete png;
     return false;
   }
 
-  png.close();
+  png->close();
+  delete png;
   Serial.printf("[%lu] [PNG] PNG decoding complete - render time: %lu ms\n", millis(), decodeTime);
 
   // Write cache file if caching was enabled and buffer was allocated

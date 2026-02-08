@@ -1,7 +1,5 @@
 #pragma once
 
-#include <PNGdec.h>
-
 #include "ImageToFramebufferDecoder.h"
 
 class PngToFramebufferConverter final : public ImageToFramebufferDecoder {
