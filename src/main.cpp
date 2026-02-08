@@ -33,6 +33,7 @@
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 
+#include "FsHelpers.h"
 #include <SD.h>
 #include "Bitmap.h"
 #include "BitmapHelpers.h"
@@ -299,72 +300,11 @@ void takeScreenshot() {
     return;
   }
 
-  if (!SdMan.exists("/screenshots")) {
-    if (!SdMan.mkdir("/screenshots")) {
-      Serial.println("[SCR] Failed to create screenshots directory");
-      return;
-    }
-  }
-
   String filename_str = "/screenshots/screenshot-" + String(millis()) + ".bmp";
-  FsFile file = SdMan.open(filename_str.c_str(), O_WR | O_CREAT);
-  if (!file) {
-    Serial.println("[SCR] Failed to create screenshot file");
-    return;
-  }
-
-  uint32_t headerSize = 0;
-  uint8_t* bmpHeader = createBmpHeader(HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT, &headerSize);
-  if (!bmpHeader) {
-    Serial.println("[SCR] Failed to generate BMP header");
-    file.close();
-    SdMan.remove(filename_str.c_str());
-    return;
-  }
-
-  bool write_error = false;
-  if (file.write(bmpHeader, headerSize) != headerSize) {
-    write_error = true;
-  }
-  delete[] bmpHeader;
-
-  if (write_error) {
-    Serial.println("[SCR] Failed to write BMP header");
-    file.close();
-    SdMan.remove(filename_str.c_str());
-    return;
-  }
-
-  // Write pixel data
-  const int width = HalDisplay::DISPLAY_WIDTH;
-  const int height = HalDisplay::DISPLAY_HEIGHT;
-  uint32_t rowSize = (width + 31) / 32 * 4;
-  uint32_t fbRowSize = width / 8;
-  uint32_t paddingSize = rowSize - fbRowSize;
-  uint8_t padding[4] = {0, 0, 0, 0};
-
-  for (int y = 0; y < height; y++) {
-    // For BMP, rows are bottom-up. So we take the last row of the framebuffer first.
-    const uint8_t* fbRow = fb + (height - 1 - y) * fbRowSize;
-    if (file.write(fbRow, fbRowSize) != fbRowSize) {
-      write_error = true;
-      break;
-    }
-    if (paddingSize > 0) {
-      if (file.write(padding, paddingSize) != paddingSize) {
-        write_error = true;
-        break;
-      }
-    }
-  }
-
-  file.close();
-
-  if (write_error) {
-    Serial.println("[SCR] Failed to write screenshot data");
-    SdMan.remove(filename_str.c_str());
-  } else {
+  if (FsHelpers::saveFramebufferAsBmp(filename_str.c_str(), fb, HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT)) {
     Serial.println("[SCR] Screenshot saved to " + filename_str);
+  } else {
+    Serial.println("[SCR] Failed to save screenshot");
   }
 }
 

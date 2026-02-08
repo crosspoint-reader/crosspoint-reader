@@ -1,5 +1,5 @@
 #include "BitmapHelpers.h"
-
+#include "Bitmap.h"
 #include <cstdint>
 
 // Brightness/Contrast adjustments:
@@ -106,55 +106,47 @@ uint8_t quantize1bit(int gray, int x, int y) {
 }
 
 uint8_t* createBmpHeader(int width, int height, uint32_t* headerSize) {
-  // BMP file header (14) + DIB header (40) + color palette (8) = 62
-  const uint32_t header_size = 62;
+  *headerSize = sizeof(BmpHeader);
   uint32_t rowSize = (width + 31) / 32 * 4;
   uint32_t imageSize = rowSize * height;
-  uint32_t fileSize = header_size + imageSize;
+  uint32_t fileSize = sizeof(BmpHeader) + imageSize;
 
-  uint8_t* bmpHeader = new uint8_t[header_size];
+  BmpHeader* bmpHeader = new BmpHeader();
   if (!bmpHeader) {
     *headerSize = 0;
     return nullptr;
   }
-  *headerSize = header_size;
-  memset(bmpHeader, 0, header_size);
+  
+  bmpHeader->fileHeader.bfType = 0x4D42;
+  bmpHeader->fileHeader.bfSize = fileSize;
+  bmpHeader->fileHeader.bfReserved1 = 0;
+  bmpHeader->fileHeader.bfReserved2 = 0;
+  bmpHeader->fileHeader.bfOffBits = sizeof(BmpHeader);
 
-  // BMP File Header
-  bmpHeader[0] = 'B';
-  bmpHeader[1] = 'M';
-  bmpHeader[2] = fileSize;
-  bmpHeader[3] = fileSize >> 8;
-  bmpHeader[4] = fileSize >> 16;
-  bmpHeader[5] = fileSize >> 24;
-  bmpHeader[10] = header_size;  // Offset to pixel data
+  bmpHeader->infoHeader.biSize = sizeof(bmpHeader->infoHeader);
+  bmpHeader->infoHeader.biWidth = width;
+  bmpHeader->infoHeader.biHeight = height;
+  bmpHeader->infoHeader.biPlanes = 1;
+  bmpHeader->infoHeader.biBitCount = 1;
+  bmpHeader->infoHeader.biCompression = 0;
+  bmpHeader->infoHeader.biSizeImage = imageSize;
+  bmpHeader->infoHeader.biXPelsPerMeter = 0;
+  bmpHeader->infoHeader.biYPelsPerMeter = 0;
+  bmpHeader->infoHeader.biClrUsed = 0;
+  bmpHeader->infoHeader.biClrImportant = 0;
 
-  // DIB Header (BITMAPINFOHEADER)
-  bmpHeader[14] = 40;   // DIB header size
-  bmpHeader[18] = width;
-  bmpHeader[19] = width >> 8;
-  bmpHeader[22] = height;
-  bmpHeader[23] = height >> 8;
-  bmpHeader[26] = 1;    // Planes
-  bmpHeader[28] = 1;    // BPP (1-bit)
-  bmpHeader[30] = 0;    // Compression (none)
-  bmpHeader[34] = imageSize;
-  bmpHeader[35] = imageSize >> 8;
-  bmpHeader[36] = imageSize >> 16;
-  bmpHeader[37] = imageSize >> 24;
-
-  // Color Palette (2 colors: black and white)
   // Color 0 (black)
-  bmpHeader[54] = 0;
-  bmpHeader[55] = 0;
-  bmpHeader[56] = 0;
-  bmpHeader[57] = 0;
-  // Color 1 (white)
-  bmpHeader[58] = 255;
-  bmpHeader[59] = 255;
-  bmpHeader[60] = 255;
-  bmpHeader[61] = 0;
+  bmpHeader->colors[0].rgbBlue = 0;
+  bmpHeader->colors[0].rgbGreen = 0;
+  bmpHeader->colors[0].rgbRed = 0;
+  bmpHeader->colors[0].rgbReserved = 0;
 
-  return bmpHeader;
+  // Color 1 (white)
+  bmpHeader->colors[1].rgbBlue = 255;
+  bmpHeader->colors[1].rgbGreen = 255;
+  bmpHeader->colors[1].rgbRed = 255;
+  bmpHeader->colors[1].rgbReserved = 0;
+
+  return (uint8_t*)bmpHeader;
 }
 
