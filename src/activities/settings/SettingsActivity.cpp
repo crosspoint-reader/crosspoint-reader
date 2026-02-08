@@ -67,11 +67,6 @@ const SettingInfo systemSettings[systemSettingsCount] = {
     SettingInfo::Action("Check for updates")};
 }  // namespace
 
-void SettingsActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<SettingsActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void SettingsActivity::onEnter() {
   Activity::onEnter();
   renderingMutex = xSemaphoreCreateMutex();
@@ -85,27 +80,11 @@ void SettingsActivity::onEnter() {
   settingsCount = displaySettingsCount;
 
   // Trigger first update
-  updateRequired = true;
-
-  xTaskCreate(&SettingsActivity::taskTrampoline, "SettingsActivityTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
 void SettingsActivity::onExit() {
   ActivityWithSubactivity::onExit();
-
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
 
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed
 }
@@ -122,10 +101,10 @@ void SettingsActivity::loop() {
     if (selectedSettingIndex == 0) {
       selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
       hasChangedCategory = true;
-      updateRequired = true;
+      requestUpdate();
     } else {
       toggleCurrentSetting();
-      updateRequired = true;
+      requestUpdate();
       return;
     }
   }
@@ -146,17 +125,17 @@ void SettingsActivity::loop() {
   if (upReleased && changeTab) {
     hasChangedCategory = true;
     selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
-    updateRequired = true;
+    requestUpdate();
   } else if (downReleased && changeTab) {
     hasChangedCategory = true;
     selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
-    updateRequired = true;
+    requestUpdate();
   } else if (upReleased || leftReleased) {
     selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount);
-    updateRequired = true;
+    requestUpdate();
   } else if (rightReleased || downReleased) {
     selectedSettingIndex = (selectedSettingIndex < settingsCount) ? (selectedSettingIndex + 1) : 0;
-    updateRequired = true;
+    requestUpdate();
   }
 
   if (hasChangedCategory) {
@@ -210,7 +189,7 @@ void SettingsActivity::toggleCurrentSetting() {
       exitActivity();
       enterNewActivity(new ButtonRemapActivity(renderer, mappedInput, [this] {
         exitActivity();
-        updateRequired = true;
+        requestUpdate();
       }));
       xSemaphoreGive(renderingMutex);
     } else if (strcmp(setting.name, "KOReader Sync") == 0) {
@@ -218,7 +197,7 @@ void SettingsActivity::toggleCurrentSetting() {
       exitActivity();
       enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
         exitActivity();
-        updateRequired = true;
+        requestUpdate();
       }));
       xSemaphoreGive(renderingMutex);
     } else if (strcmp(setting.name, "OPDS Browser") == 0) {
@@ -226,7 +205,7 @@ void SettingsActivity::toggleCurrentSetting() {
       exitActivity();
       enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
         exitActivity();
-        updateRequired = true;
+        requestUpdate();
       }));
       xSemaphoreGive(renderingMutex);
     } else if (strcmp(setting.name, "Clear Cache") == 0) {
@@ -234,7 +213,7 @@ void SettingsActivity::toggleCurrentSetting() {
       exitActivity();
       enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
         exitActivity();
-        updateRequired = true;
+        requestUpdate();
       }));
       xSemaphoreGive(renderingMutex);
     } else if (strcmp(setting.name, "Check for updates") == 0) {
@@ -242,7 +221,7 @@ void SettingsActivity::toggleCurrentSetting() {
       exitActivity();
       enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
         exitActivity();
-        updateRequired = true;
+        requestUpdate();
       }));
       xSemaphoreGive(renderingMutex);
     }
@@ -253,19 +232,7 @@ void SettingsActivity::toggleCurrentSetting() {
   SETTINGS.saveToFile();
 }
 
-void SettingsActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void SettingsActivity::render() const {
+void SettingsActivity::render() {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

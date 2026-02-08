@@ -1,6 +1,8 @@
 #pragma once
-
 #include <HardwareSerial.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 
 #include <string>
 #include <utility>
@@ -13,14 +15,25 @@ class Activity {
   std::string name;
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
+  // Task to render and display the activity
+  TaskHandle_t renderTaskHandle = nullptr;
+  // Mutex to protect rendering operations from being deleted mid-render
+  SemaphoreHandle_t renderingMutex = nullptr;
 
  public:
   explicit Activity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : name(std::move(name)), renderer(renderer), mappedInput(mappedInput) {}
-  virtual ~Activity() = default;
-  virtual void onEnter() { Serial.printf("[%lu] [ACT] Entering activity: %s\n", millis(), name.c_str()); }
-  virtual void onExit() { Serial.printf("[%lu] [ACT] Exiting activity: %s\n", millis(), name.c_str()); }
+      : name(std::move(name)), renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
+    assert(renderingMutex != nullptr && "Failed to create rendering mutex");
+  }
+  virtual ~Activity() {
+    vSemaphoreDelete(renderingMutex);
+    renderingMutex = nullptr;
+  };
+  virtual void onEnter();
+  virtual void onExit();
   virtual void loop() {}
+  virtual void render() {}
+  virtual void requestUpdate();
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
 };
