@@ -45,18 +45,21 @@ Use the File Transfer feature:
 1. On device: Home → File Transfer
 2. Connect to WiFi (STA) or create a hotspot (AP)
 3. From your computer/phone browser, open the URL shown on the device
-4. Open **Apps (Developer)**
+4. Open **Apps**
 5. Fill in:
    - App ID (e.g. `chess-puzzles` or `org.example.myapp`)
    - Name
    - Version
    - Optional: author, description, minFirmware
-6. Upload your app binary (`app.bin`)
+6. Upload either:
+   - `app.bin`, or
+   - a ZIP containing `app.bin`
 7. On device: Home → Apps → select app → Install
 
 Notes:
 - This page is upload-only. Installing always happens on device.
-- The Apps (Developer) page writes to `/.crosspoint/apps/<appId>/` and generates `app.json`.
+- The Apps page writes to `/.crosspoint/apps/<appId>/` and generates `app.json`.
+- You can disable the entire Apps feature via Settings → System → Enable Apps.
 
 ## Building apps with the community SDK
 
@@ -84,7 +87,7 @@ Typical setup (in your app repo):
    - `.pio/build/<env>/firmware.bin`
 
 For CrossPoint app uploads:
-- Rename/copy your output to `app.bin`, then upload via the Apps (Developer) page.
+- Rename/copy your output to `app.bin`, then upload via the Apps page.
 
 ## Example: Hello World app
 
@@ -99,7 +102,7 @@ Build:
 Upload the output:
 
 - File: `.pio/build/hello-world/firmware.bin`
-- Upload via: File Transfer → Apps (Developer)
+- Upload via: File Transfer → Apps
 - Suggested App ID: `hello-world`
 
 Then install on device:
