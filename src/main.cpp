@@ -422,15 +422,14 @@ void loop() {
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
-  static unsigned long lastScreenshotTime = 0;
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    static unsigned long lastScreenshotTime = 0; 
     if (millis() - lastScreenshotTime > 3000) {
-      takeScreenshot();
-      lastScreenshotTime = millis();
+        takeScreenshot();
+        lastScreenshotTime = millis();
     }
     return;
-  }
-
+}
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (millis() - lastActivityTime >= sleepTimeoutMs) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
