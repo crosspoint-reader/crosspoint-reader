@@ -849,14 +849,14 @@ void CrossPointWebServer::handleUploadApp() const {
 
     // NOTE: we use query args (not multipart fields) because multipart fields
     // aren't reliably available until after upload completes.
-    if (!server->hasArg("appId") || !server->hasArg("name") || !server->hasArg("version")) {
-      appUploadError = "Missing required fields: appId, name, version";
+    if (!server->hasArg("appId")) {
+      appUploadError = "Missing required field: appId";
       return;
     }
 
     appUploadAppId = server->arg("appId");
-    appUploadName = server->arg("name");
-    appUploadVersion = server->arg("version");
+    appUploadName = server->hasArg("name") ? server->arg("name") : appUploadAppId;
+    appUploadVersion = server->hasArg("version") ? server->arg("version") : "0.0.0";
     appUploadAuthor = server->hasArg("author") ? server->arg("author") : "";
     appUploadDescription = server->hasArg("description") ? server->arg("description") : "";
     appUploadMinFirmware = server->hasArg("minFirmware") ? server->arg("minFirmware") : "";
@@ -1036,37 +1036,21 @@ void CrossPointWebServer::handleUploadAppZip() {
     appZipUploadSize = 0;
     appZipUploadBufferPos = 0;
 
-    if (!server->hasArg("appId") || !server->hasArg("name") || !server->hasArg("version")) {
-      appZipUploadError = "Missing required fields: appId, name, version";
-      return;
-    }
-
-    appZipUploadAppId = server->arg("appId");
-    appZipUploadName = server->arg("name");
-    appZipUploadVersion = server->arg("version");
-    appZipUploadAuthor = server->hasArg("author") ? server->arg("author") : "";
-    appZipUploadDescription = server->hasArg("description") ? server->arg("description") : "";
-    appZipUploadMinFirmware = server->hasArg("minFirmware") ? server->arg("minFirmware") : "";
-
-    if (!isValidAppId(appZipUploadAppId)) {
-      appZipUploadError = "Invalid appId";
-      return;
-    }
-
     if (!SdMan.ready()) {
       appZipUploadError = "SD card not ready";
       return;
     }
 
-    appZipUploadAppDir = String("/.crosspoint/apps/") + appZipUploadAppId;
-    if (!SdMan.ensureDirectoryExists("/.crosspoint") || !SdMan.ensureDirectoryExists("/.crosspoint/apps") ||
-        !SdMan.ensureDirectoryExists(appZipUploadAppDir.c_str())) {
-      appZipUploadError = "Failed to create app directory";
+    // Upload ZIP to a temporary location first. We'll read app.json from the zip
+    // to determine the final appId and destination directory.
+    if (!SdMan.ensureDirectoryExists("/.crosspoint") || !SdMan.ensureDirectoryExists("/.crosspoint/apps")) {
+      appZipUploadError = "Failed to create apps directory";
       return;
     }
 
-    appZipUploadTempPath = appZipUploadAppDir + "/upload.zip.tmp";
-    appZipUploadExtractDir = appZipUploadAppDir + "/extract.tmp";
+    appZipUploadAppDir = "";
+    appZipUploadTempPath = "/.crosspoint/apps/upload.zip.tmp";
+    appZipUploadExtractDir = "/.crosspoint/apps/extract.tmp";
 
     if (SdMan.exists(appZipUploadTempPath.c_str())) {
       SdMan.remove(appZipUploadTempPath.c_str());
@@ -1077,8 +1061,7 @@ void CrossPointWebServer::handleUploadAppZip() {
       return;
     }
 
-    Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] START: %s (%s v%s)\n", millis(), appZipUploadAppId.c_str(),
-                  appZipUploadName.c_str(), appZipUploadVersion.c_str());
+    Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] START\n", millis());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (appZipUploadFile && appZipUploadError.isEmpty()) {
       const uint8_t* data = upload.buf;
@@ -1141,6 +1124,20 @@ void CrossPointWebServer::handleUploadAppZip() {
         return;
       }
 
+      size_t manifestSize = 0;
+      if (!zip.getInflatedFileSize("app.json", &manifestSize)) {
+        appZipUploadError = "ZIP must contain app.json";
+        zip.close();
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+      if (manifestSize == 0 || manifestSize > 16 * 1024) {
+        appZipUploadError = "Invalid app.json (too large)";
+        zip.close();
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
       size_t extractedSize = 0;
       if (!zip.getInflatedFileSize("app.bin", &extractedSize)) {
         appZipUploadError = "ZIP must contain app.bin";
@@ -1149,7 +1146,89 @@ void CrossPointWebServer::handleUploadAppZip() {
         return;
       }
 
+      if (SdMan.exists(appZipUploadExtractDir.c_str())) {
+        SdMan.rmdir(appZipUploadExtractDir.c_str());
+      }
       SdMan.ensureDirectoryExists(appZipUploadExtractDir.c_str());
+
+      const String extractedManifestPath = appZipUploadExtractDir + "/app.json";
+      if (SdMan.exists(extractedManifestPath.c_str())) {
+        SdMan.remove(extractedManifestPath.c_str());
+      }
+
+      FsFile manifestFile;
+      if (!SdMan.openFileForWrite("APPZIPUPLOAD", extractedManifestPath, manifestFile)) {
+        appZipUploadError = "Failed to extract app.json";
+        zip.close();
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      if (!zip.readFileToStream("app.json", manifestFile, 4096)) {
+        appZipUploadError = "Failed to extract app.json";
+        manifestFile.close();
+        zip.close();
+        SdMan.remove(extractedManifestPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+      manifestFile.close();
+
+      FsFile readManifest = SdMan.open(extractedManifestPath.c_str(), O_RDONLY);
+      if (!readManifest) {
+        appZipUploadError = "Failed to read extracted app.json";
+        zip.close();
+        SdMan.remove(extractedManifestPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      JsonDocument manifestDoc;
+      const DeserializationError manifestErr = deserializeJson(manifestDoc, readManifest);
+      readManifest.close();
+
+      if (manifestErr) {
+        appZipUploadError = String("Invalid app.json: ") + manifestErr.c_str();
+        zip.close();
+        SdMan.remove(extractedManifestPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      if (!manifestDoc["id"].is<const char*>() || !manifestDoc["name"].is<const char*>() ||
+          !manifestDoc["version"].is<const char*>()) {
+        appZipUploadError = "app.json must contain id, name, version";
+        zip.close();
+        SdMan.remove(extractedManifestPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      appZipUploadAppId = manifestDoc["id"].as<String>();
+      appZipUploadName = manifestDoc["name"].as<String>();
+      appZipUploadVersion = manifestDoc["version"].as<String>();
+      appZipUploadAuthor = manifestDoc["author"].is<const char*>() ? manifestDoc["author"].as<String>() : "";
+      appZipUploadDescription =
+          manifestDoc["description"].is<const char*>() ? manifestDoc["description"].as<String>() : "";
+      appZipUploadMinFirmware =
+          manifestDoc["minFirmware"].is<const char*>() ? manifestDoc["minFirmware"].as<String>() : "";
+
+      if (!isValidAppId(appZipUploadAppId)) {
+        appZipUploadError = "Invalid app id in app.json";
+        zip.close();
+        SdMan.remove(extractedManifestPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
+
+      appZipUploadAppDir = String("/.crosspoint/apps/") + appZipUploadAppId;
+      if (!SdMan.ensureDirectoryExists(appZipUploadAppDir.c_str())) {
+        appZipUploadError = "Failed to create app directory";
+        zip.close();
+        SdMan.remove(extractedManifestPath.c_str());
+        SdMan.remove(appZipUploadTempPath.c_str());
+        return;
+      }
 
       const String extractedTempPath = appZipUploadExtractDir + "/app.bin";
       if (SdMan.exists(extractedTempPath.c_str())) {
@@ -1218,32 +1297,29 @@ void CrossPointWebServer::handleUploadAppZip() {
 
       Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] app.bin extracted and moved successfully\n", millis());
 
-      SdMan.remove(appZipUploadTempPath.c_str());
-
       appZipUploadManifestPath = appZipUploadAppDir + "/app.json";
 
-      JsonDocument doc;
-      doc["name"] = appZipUploadName;
-      doc["version"] = appZipUploadVersion;
-      doc["description"] = appZipUploadDescription;
-      doc["author"] = appZipUploadAuthor;
-      doc["minFirmware"] = appZipUploadMinFirmware;
-      doc["id"] = appZipUploadAppId;
-      doc["uploadMs"] = millis();
-
+      // Write manifest from app.json (atomic), plus uploadMs.
+      manifestDoc["uploadMs"] = millis();
       String manifestJson;
-      serializeJson(doc, manifestJson);
+      serializeJson(manifestDoc, manifestJson);
 
       const String manifestTmp = appZipUploadManifestPath + ".tmp";
       if (!SdMan.writeFile(manifestTmp.c_str(), manifestJson)) {
         appZipUploadError = "Failed to write app.json";
+        SdMan.remove(appZipUploadTempPath.c_str());
         return;
       }
       if (!renameFileAtomic(manifestTmp, appZipUploadManifestPath)) {
         SdMan.remove(manifestTmp.c_str());
         appZipUploadError = "Failed to finalize app.json";
+        SdMan.remove(appZipUploadTempPath.c_str());
         return;
       }
+
+      SdMan.remove(extractedManifestPath.c_str());
+      SdMan.rmdir(appZipUploadExtractDir.c_str());
+      SdMan.remove(appZipUploadTempPath.c_str());
 
       appZipUploadSuccess = true;
       Serial.printf("[%lu] [WEB] [APPZIPUPLOAD] Complete: %s\n", millis(), appZipUploadAppId.c_str());
