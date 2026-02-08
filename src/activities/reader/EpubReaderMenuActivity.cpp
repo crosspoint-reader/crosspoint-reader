@@ -3,9 +3,9 @@
 #include <GfxRenderer.h>
 
 #include "MappedInputManager.h"
+#include "components/UIHelpers.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "components/UIHelpers.h"
 
 void EpubReaderMenuActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
@@ -87,7 +87,8 @@ void EpubReaderMenuActivity::renderScreen() {
   const auto area = UIHelpers::contentAreaForRenderer(renderer);
 
   // Title
-  const std::string truncTitle = UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, title, area, EpdFontFamily::BOLD);
+  const std::string truncTitle =
+      UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, title, area, EpdFontFamily::BOLD);
   const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, truncTitle, area, EpdFontFamily::BOLD);
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + area.contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
