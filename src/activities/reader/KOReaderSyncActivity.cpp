@@ -8,9 +8,9 @@
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "components/UIHelpers.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "components/UIHelpers.h"
 
 namespace {
 void syncTimeWithNTP() {
@@ -131,7 +131,7 @@ void KOReaderSyncActivity::performSync() {
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   // Pre-select the option corresponding to the more advanced progress (defensive):
   // 0 = Apply remote progress, 1 = Upload local progress
-  int preselect = 0; // default to Apply remote
+  int preselect = 0;  // default to Apply remote
   if (hasRemoteProgress) {
     // localProgress should be available; choose based on percentage
     if (localProgress.percentage > remoteProgress.percentage) {
@@ -284,7 +284,8 @@ void KOReaderSyncActivity::render() {
   const int startY = area.contentY + kTopOffset;
 
   // Title centered within the content area
-  const std::string truncTitle = UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, "KOReader Sync", area, EpdFontFamily::BOLD);
+  const std::string truncTitle =
+      UIHelpers::truncatedTextForContent(renderer, UI_12_FONT_ID, "KOReader Sync", area, EpdFontFamily::BOLD);
   const int titleX = UIHelpers::centeredTextX(renderer, UI_12_FONT_ID, truncTitle, area, EpdFontFamily::BOLD);
   renderer.drawText(UI_12_FONT_ID, titleX, startY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 

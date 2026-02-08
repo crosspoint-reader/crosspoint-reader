@@ -29,8 +29,8 @@ ContentArea contentAreaForRenderer(const GfxRenderer& renderer) {
   return area;
 }
 
-int centeredTextX(const GfxRenderer& renderer, int fontId, const std::string& text,
-                  const ContentArea& area, EpdFontFamily::Style fontStyle) {
+int centeredTextX(const GfxRenderer& renderer, int fontId, const std::string& text, const ContentArea& area,
+                  EpdFontFamily::Style fontStyle) {
   const int textWidth = renderer.getTextWidth(fontId, text.c_str(), fontStyle);
   return area.contentX + (area.contentWidth - textWidth) / 2;
 }
