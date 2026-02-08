@@ -3,7 +3,8 @@
 #include <GfxRenderer.h>
 #include <Serialization.h>
 
-void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
+void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y,
+                       const bool black) const {
   // Validate iterator bounds before rendering
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
     Serial.printf("[%lu] [TXB] Render skipped: size mismatch (words=%u, xpos=%u, styles=%u)\n", millis(),
@@ -17,7 +18,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = *wordXposIt + x;
     const EpdFontFamily::Style currentStyle = *wordStylesIt;
-    renderer.drawText(fontId, wordX, y, wordIt->c_str(), true, currentStyle);
+    renderer.drawText(fontId, wordX, y, wordIt->c_str(), black, currentStyle);
 
     if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
       const std::string& w = *wordIt;
@@ -38,7 +39,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         underlineWidth = visibleWidth;
       }
 
-      renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, true);
+      renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, black);
     }
 
     std::advance(wordIt, 1);

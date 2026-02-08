@@ -35,7 +35,7 @@ const SettingInfo displaySettings[displaySettingsCount] = {
     SettingInfo::Toggle("Sunlight Fading Fix", &CrossPointSettings::fadingFix),
 };
 
-constexpr int readerSettingsCount = 10;
+constexpr int readerSettingsCount = 11;
 const SettingInfo readerSettings[readerSettingsCount] = {
     SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"}),
     SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}),
@@ -48,7 +48,8 @@ const SettingInfo readerSettings[readerSettingsCount] = {
     SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
                       {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
     SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing),
-    SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing)};
+    SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing),
+    SettingInfo::Toggle("Inverse Display", &CrossPointSettings::inverseDisplay)};
 
 constexpr int controlsSettingsCount = 4;
 const SettingInfo controlsSettings[controlsSettingsCount] = {
