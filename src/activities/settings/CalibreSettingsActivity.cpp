@@ -1,6 +1,7 @@
 #include "CalibreSettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 
 #include <cstring>
 
@@ -12,7 +13,7 @@
 
 namespace {
 constexpr int MENU_ITEMS = 3;
-const char* menuNames[MENU_ITEMS] = {"OPDS Server URL", "Username", "Password"};
+const StrId menuNames[MENU_ITEMS] = {StrId::CALIBRE_WEB_URL, StrId::USERNAME, StrId::PASSWORD};
 }  // namespace
 
 void CalibreSettingsActivity::taskTrampoline(void* param) {
@@ -81,7 +82,7 @@ void CalibreSettingsActivity::handleSelection() {
     // OPDS Server URL
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "OPDS Server URL", SETTINGS.opdsServerUrl, 10,
+        renderer, mappedInput, i18n(CALIBRE_WEB_URL), SETTINGS.opdsServerUrl, 10,
         127,    // maxLength
         false,  // not password
         [this](const std::string& url) {
@@ -99,7 +100,7 @@ void CalibreSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Username", SETTINGS.opdsUsername, 10,
+        renderer, mappedInput, i18n(USERNAME), SETTINGS.opdsUsername, 10,
         63,     // maxLength
         false,  // not password
         [this](const std::string& username) {
@@ -117,7 +118,7 @@ void CalibreSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Password", SETTINGS.opdsPassword, 10,
+        renderer, mappedInput, i18n(PASSWORD), SETTINGS.opdsPassword, 10,
         63,     // maxLength
         false,  // not password mode
         [this](const std::string& password) {
@@ -154,10 +155,10 @@ void CalibreSettingsActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "OPDS Browser", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, i18n(OPDS_BROWSER), true, EpdFontFamily::BOLD);
 
   // Draw info text about Calibre
-  renderer.drawCenteredText(UI_10_FONT_ID, 40, "For Calibre, add /opds to your URL");
+  renderer.drawCenteredText(UI_10_FONT_ID, 40, i18n(CALIBRE_URL_HINT));
 
   // Draw selection highlight
   renderer.fillRect(0, 70 + selectedIndex * 30 - 2, pageWidth - 1, 30);
@@ -167,23 +168,26 @@ void CalibreSettingsActivity::render() {
     const int settingY = 70 + i * 30;
     const bool isSelected = (i == selectedIndex);
 
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, menuNames[i], !isSelected);
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, I18N.get(menuNames[i]), !isSelected);
 
     // Draw status for each setting
-    const char* status = "[Not Set]";
+    std::string status = std::string("[") + i18n(NOT_SET) + "]";
     if (i == 0) {
-      status = (strlen(SETTINGS.opdsServerUrl) > 0) ? "[Set]" : "[Not Set]";
+      status = (strlen(SETTINGS.opdsServerUrl) > 0) ? std::string("[") + i18n(SET) + "]"
+                                                    : std::string("[") + i18n(NOT_SET) + "]";
     } else if (i == 1) {
-      status = (strlen(SETTINGS.opdsUsername) > 0) ? "[Set]" : "[Not Set]";
+      status = (strlen(SETTINGS.opdsUsername) > 0) ? std::string("[") + i18n(SET) + "]"
+                                                   : std::string("[") + i18n(NOT_SET) + "]";
     } else if (i == 2) {
-      status = (strlen(SETTINGS.opdsPassword) > 0) ? "[Set]" : "[Not Set]";
+      status = (strlen(SETTINGS.opdsPassword) > 0) ? std::string("[") + i18n(SET) + "]"
+                                                   : std::string("[") + i18n(NOT_SET) + "]";
     }
-    const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
+    const auto width = renderer.getTextWidth(UI_10_FONT_ID, status.c_str());
+    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status.c_str(), !isSelected);
   }
 
   // Draw button hints
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
+  const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <I18n.h>
 #include <SDCardManager.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
@@ -294,11 +295,13 @@ void setup() {
     Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
     setupDisplayAndFonts();
     exitActivity();
-    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, "SD card error", EpdFontFamily::BOLD));
+    enterNewActivity(
+        new FullScreenMessageActivity(renderer, mappedInputManager, i18n(SD_CARD_ERROR), EpdFontFamily::BOLD));
     return;
   }
 
   SETTINGS.loadFromFile();
+  I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
 

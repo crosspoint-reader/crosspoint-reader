@@ -1,6 +1,7 @@
 #include "EpubReaderMenuActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -110,9 +111,10 @@ void EpubReaderMenuActivity::renderScreen() {
   // Progress summary
   std::string progressLine;
   if (totalPages > 0) {
-    progressLine = "Chapter: " + std::to_string(currentPage) + "/" + std::to_string(totalPages) + " pages  |  ";
+    progressLine = std::string(i18n(CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages) +
+                   std::string(i18n(PAGES_SEPARATOR));
   }
-  progressLine += "Book: " + std::to_string(bookProgressPercent) + "%";
+  progressLine += std::string(i18n(BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
   renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
 
   // Menu Items
@@ -128,18 +130,18 @@ void EpubReaderMenuActivity::renderScreen() {
       renderer.fillRect(contentX, displayY, contentWidth - 1, lineHeight, true);
     }
 
-    renderer.drawText(UI_10_FONT_ID, contentX + 20, displayY, menuItems[i].label.c_str(), !isSelected);
+    renderer.drawText(UI_10_FONT_ID, contentX + 20, displayY, I18N.get(menuItems[i].labelId), !isSelected);
 
     if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
       // Render current orientation value on the right edge of the content area.
-      const auto value = orientationLabels[pendingOrientation];
+      const char* value = I18N.get(orientationLabels[pendingOrientation]);
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
       renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
     }
   }
 
   // Footer / Hints
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
+  const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), i18n(DIR_UP), i18n(DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

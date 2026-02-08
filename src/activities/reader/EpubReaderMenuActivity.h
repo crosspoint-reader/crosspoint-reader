@@ -1,5 +1,6 @@
 #pragma once
 #include <Epub.h>
+#include <I18n.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -35,14 +36,16 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  private:
   struct MenuItem {
     MenuAction action;
-    std::string label;
+    StrId labelId;
   };
 
   // Fixed menu layout (order matters for up/down navigation).
-  const std::vector<MenuItem> menuItems = {
-      {MenuAction::SELECT_CHAPTER, "Go to Chapter"}, {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
-      {MenuAction::GO_TO_PERCENT, "Go to %"},        {MenuAction::GO_HOME, "Go Home"},
-      {MenuAction::SYNC, "Sync Progress"},           {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
+  const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, StrId::SELECT_CHAPTER},
+                                           {MenuAction::ROTATE_SCREEN, StrId::ORIENTATION},
+                                           {MenuAction::GO_TO_PERCENT, StrId::GO_TO_PERCENT},
+                                           {MenuAction::GO_HOME, StrId::GO_HOME_BUTTON},
+                                           {MenuAction::SYNC, StrId::SYNC_PROGRESS},
+                                           {MenuAction::DELETE_CACHE, StrId::DELETE_CACHE}};
 
   int selectedIndex = 0;
   bool updateRequired = false;
@@ -50,7 +53,8 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   SemaphoreHandle_t renderingMutex = nullptr;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
-  const std::vector<const char*> orientationLabels = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"};
+  const std::vector<StrId> orientationLabels = {StrId::PORTRAIT, StrId::LANDSCAPE_CW, StrId::INVERTED,
+                                                StrId::LANDSCAPE_CCW};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

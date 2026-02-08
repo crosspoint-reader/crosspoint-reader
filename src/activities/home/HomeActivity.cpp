@@ -3,6 +3,7 @@
 #include <Bitmap.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
 #include <Xtc.h>
@@ -74,7 +75,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           // Try to generate thumbnail image for Continue Reading card
           if (!showingLoading) {
             showingLoading = true;
-            popupRect = GUI.drawPopup(renderer, "Loading...");
+            popupRect = GUI.drawPopup(renderer, i18n(LOADING));
           }
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
           bool success = epub.generateThumbBmp(coverHeight);
@@ -92,7 +93,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             // Try to generate thumbnail image for Continue Reading card
             if (!showingLoading) {
               showingLoading = true;
-              popupRect = GUI.drawPopup(renderer, "Loading...");
+              popupRect = GUI.drawPopup(renderer, i18n(LOADING));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
             bool success = xtc.generateThumbBmp(coverHeight);
@@ -262,10 +263,11 @@ void HomeActivity::render() {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {"Browse Files", "Recents", "File Transfer", "Settings"};
+  std::vector<const char*> menuItems = {i18n(BROWSE_FILES), i18n(MENU_RECENT_BOOKS), i18n(FILE_TRANSFER),
+                                        i18n(SETTINGS_TITLE)};
   if (hasOpdsUrl) {
     // Insert OPDS Browser after My Library
-    menuItems.insert(menuItems.begin() + 2, "OPDS Browser");
+    menuItems.insert(menuItems.begin() + 2, i18n(OPDS_BROWSER));
   }
 
   GUI.drawButtonMenu(
@@ -276,7 +278,7 @@ void HomeActivity::render() {
       static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); }, nullptr);
 
-  const auto labels = mappedInput.mapLabels("", "Select", "Up", "Down");
+  const auto labels = mappedInput.mapLabels("", i18n(SELECT), i18n(DIR_UP), i18n(DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

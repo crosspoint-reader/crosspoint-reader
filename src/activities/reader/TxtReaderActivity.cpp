@@ -1,6 +1,7 @@
 #include "TxtReaderActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
 #include <Utf8.h>
@@ -217,7 +218,7 @@ void TxtReaderActivity::buildPageIndex() {
 
   Serial.printf("[%lu] [TRS] Building page index for %zu bytes...\n", millis(), fileSize);
 
-  GUI.drawPopup(renderer, "Indexing...");
+  GUI.drawPopup(renderer, i18n(INDEXING));
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
@@ -385,7 +386,7 @@ void TxtReaderActivity::renderScreen() {
 
   if (pageOffsets.empty()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty file", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, i18n(EMPTY_FILE), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
