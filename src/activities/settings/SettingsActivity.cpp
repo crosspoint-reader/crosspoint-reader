@@ -43,7 +43,7 @@ const SettingInfo readerSettings[readerSettingsCount] = {
     SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}),
     SettingInfo::Enum("Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
                       {"Justify", "Left", "Center", "Right", "Book's Style"}),
-    SettingInfo::Toggle("Embedded Style", &CrossPointSettings::embeddedStyle),
+    SettingInfo::Toggle("Book's Embedded Style", &CrossPointSettings::embeddedStyle),
     SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled),
     SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
                       {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}),
