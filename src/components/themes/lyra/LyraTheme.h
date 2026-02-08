@@ -55,4 +55,5 @@ class LyraTheme : public BaseTheme {
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const override;
+  void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const override;
 };
