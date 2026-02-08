@@ -1,6 +1,8 @@
 #include "BitmapHelpers.h"
-#include "Bitmap.h"
+
 #include <cstdint>
+
+#include "Bitmap.h"
 
 // Brightness/Contrast adjustments:
 constexpr bool USE_BRIGHTNESS = false;       // true: apply brightness/gamma adjustments
@@ -116,7 +118,7 @@ uint8_t* createBmpHeader(int width, int height, uint32_t* headerSize) {
     *headerSize = 0;
     return nullptr;
   }
-  
+
   bmpHeader->fileHeader.bfType = 0x4D42;
   bmpHeader->fileHeader.bfSize = fileSize;
   bmpHeader->fileHeader.bfReserved1 = 0;
@@ -149,4 +151,3 @@ uint8_t* createBmpHeader(int width, int height, uint32_t* headerSize) {
 
   return (uint8_t*)bmpHeader;
 }
-

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstring>
 #include <cstdint>
+#include <cstring>
 
 // Helper functions
 uint8_t quantize(int gray, int x, int y);

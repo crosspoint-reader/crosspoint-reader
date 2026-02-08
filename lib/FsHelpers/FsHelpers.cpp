@@ -1,9 +1,10 @@
 #include "FsHelpers.h"
 
-#include <SDCardManager.h>
 #include <BitmapHelpers.h>
-#include <vector>
+#include <SDCardManager.h>
+
 #include <string>
+#include <vector>
 
 std::string FsHelpers::normalisePath(const std::string& path) {
   std::vector<std::string> components;
