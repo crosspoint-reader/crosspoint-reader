@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -106,7 +108,7 @@ void MyLibraryActivity::loop() {
     return;
   }
 
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
+  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (files.empty()) {
@@ -147,26 +149,24 @@ void MyLibraryActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
-  constexpr auto upButton = MappedInputManager::Button::Up;
-  constexpr auto downButton = MappedInputManager::Button::Down;
 
-  buttonNavigator.onRelease({downButton}, [this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, listSize);
+  buttonNavigator.onNextRelease([this, listSize] {
+    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     updateRequired = true;
   });
 
-  buttonNavigator.onRelease({upButton}, [this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, listSize);
+  buttonNavigator.onPreviousRelease([this, listSize] {
+    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     updateRequired = true;
   });
 
-  buttonNavigator.onContinuous({downButton}, [this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, listSize, pageItems);
+  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
+    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     updateRequired = true;
   });
 
-  buttonNavigator.onContinuous({upButton}, [this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, listSize, pageItems);
+  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
+    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     updateRequired = true;
   });
 }
@@ -194,7 +194,7 @@ void MyLibraryActivity::render() const {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
   if (files.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, "No books found");
   } else {

@@ -174,7 +174,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     const int centerX = rect.x + rect.width - indicatorWidth / 2 - margin;
     const int indicatorTop = rect.y;  // Offset to avoid overlapping side button hints
-    const int indicatorBottom = rect.y + rect.height - 30;
+    const int indicatorBottom = rect.y + rect.height - arrowSize;
 
     // Draw up arrow at top (^) - narrow point at top, wide base at bottom
     for (int i = 0; i < arrowSize; ++i) {

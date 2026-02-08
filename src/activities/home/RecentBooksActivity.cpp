@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -92,14 +94,14 @@ void RecentBooksActivity::loop() {
   int listSize = static_cast<int>(recentBooks.size());
   if (upReleased) {
     if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + listSize) % listSize;
+      selectorIndex = std::max(static_cast<int>((selectorIndex / pageItems - 1) * pageItems), 0);
     } else {
       selectorIndex = (selectorIndex + listSize - 1) % listSize;
     }
     updateRequired = true;
   } else if (downReleased) {
     if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % listSize;
+      selectorIndex = std::min(static_cast<int>((selectorIndex / pageItems + 1) * pageItems), listSize - 1);
     } else {
       selectorIndex = (selectorIndex + 1) % listSize;
     }
@@ -129,7 +131,7 @@ void RecentBooksActivity::render() const {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Recent Books");
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   // Recent tab
   if (recentBooks.empty()) {
