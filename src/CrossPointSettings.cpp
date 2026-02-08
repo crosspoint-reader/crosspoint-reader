@@ -118,6 +118,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, frontButtonRight);
   serialization::writePod(outputFile, fadingFix);
   serialization::writePod(outputFile, embeddedStyle);
+  serialization::writePod(outputFile, showSleepScreen);
   // New fields added at end for backward compatibility
   outputFile.close();
 
@@ -222,6 +223,8 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, fadingFix);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, embeddedStyle);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, showSleepScreen);
     if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
   } while (false);

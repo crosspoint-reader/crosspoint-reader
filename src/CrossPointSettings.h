@@ -24,6 +24,7 @@ class CrossPointSettings {
     COVER_CUSTOM = 5,
     SLEEP_SCREEN_MODE_COUNT
   };
+  enum SHOW_SLEEP_SCREEN { ALWAYS = 0, EXCEPT_TIMEOUT = 1, NEVER = 2 };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
@@ -121,6 +122,8 @@ class CrossPointSettings {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Show sleep screen settings
+  uint8_t showSleepScreen = ALWAYS;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter

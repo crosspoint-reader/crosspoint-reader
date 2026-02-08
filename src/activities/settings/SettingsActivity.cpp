@@ -17,11 +17,12 @@ const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader
 
 namespace {
 constexpr int changeTabsMs = 700;
-constexpr int displaySettingsCount = 8;
+constexpr int displaySettingsCount = 9;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen,
                       {"Dark", "Light", "Custom", "Cover", "None", "Cover + Custom"}),
+    SettingInfo::Enum("Show Sleep Screen", &CrossPointSettings::showSleepScreen, {"Always", "Except Timeout", "Never"}),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
     SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
                       {"None", "Contrast", "Inverted"}),
