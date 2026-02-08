@@ -45,6 +45,13 @@ class CssParser {
   bool loadFromStream(FsFile& source);
 
   /**
+   * Load and parse CSS from a string.
+   * Can be called multiple times to accumulate rules from multiple stylesheets.
+   * @param css CSS content to parse
+   */
+  void loadFromString(const std::string& css);
+
+  /**
    * Look up the style for an HTML element, considering tag name and class attributes.
    * Applies CSS cascade: element style < class style < element.class style
    *

@@ -472,6 +472,20 @@ bool CssParser::loadFromStream(FsFile& source) {
   return true;
 }
 
+// Load and parse CSS from a string
+
+void CssParser::loadFromString(const std::string& content) {
+  if (content.empty()) return;
+
+  const std::string cleaned = stripComments(content);
+
+  size_t pos = 0;
+  std::string selector, body;
+  while (extractNextRule(cleaned, pos, selector, body)) {
+    processRuleBlock(selector, body);
+  }
+}
+
 // Style resolution
 
 CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& classAttr) const {
