@@ -57,10 +57,10 @@ Example:
 
 ```json
 {
-  "id": "hello-world",
-  "name": "Hello World",
+  "id": "chess",
+  "name": "Chess",
   "version": "0.1.0",
-  "description": "A minimal demo app",
+  "description": "A simple chess app",
   "author": "Your Name",
   "minFirmware": "0.16.0"
 }
@@ -139,25 +139,11 @@ Typical setup (in your app repo):
 For CrossPoint app uploads:
 - Rename/copy your output to `app.bin`, then upload via the Apps page.
 
-## Example: Hello World app
+## Example app firmware
 
-This repo includes a minimal Hello World app that can be built as a standalone firmware image and installed via the Apps menu.
+Sample firmware repo: `https://github.com/open-x4-epaper/sample-firmware`
 
-Build:
-
-```bash
-.venv/bin/pio run -e hello-world
-```
-
-Upload the output:
-
-- File: `.pio/build/hello-world/firmware.bin`
-- Upload via: File Transfer → Apps
-- Suggested App ID: `hello-world`
-
-Then install on device:
-
-Home → Apps → Hello World → Install
+Note: To return back to CrossPoint after launching an app, the app firmware must provide a way to switch the boot partition back (or reboot into the other slot). CrossPoint can only set the next boot target when launching.
 
 ## Distribution (proposed)
 
