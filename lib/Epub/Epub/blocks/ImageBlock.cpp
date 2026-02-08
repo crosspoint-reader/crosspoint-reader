@@ -19,7 +19,11 @@ ImageBlock::ImageBlock(const std::string& imagePath, int16_t width, int16_t heig
 
 bool ImageBlock::imageExists() const {
   FsFile file;
-  return Storage.openFileForRead("IMG", imagePath, file);
+  if (Storage.openFileForRead("IMG", imagePath, file)) {
+    file.close();
+    return true;
+  }
+  return false;
 }
 
 void ImageBlock::layout(GfxRenderer& renderer) {}
