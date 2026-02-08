@@ -1,8 +1,10 @@
 #include "CssParser.h"
 
+#include <Arduino.h>
 #include <HardwareSerial.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 
 namespace {
@@ -11,133 +13,23 @@ namespace {
 constexpr size_t READ_BUFFER_SIZE = 512;
 
 // Maximum CSS file size we'll process (prevent memory issues)
-constexpr size_t MAX_CSS_SIZE = 64 * 1024;
+// 256KB accommodates most real-world EPUB stylesheets while preventing OOM
+constexpr size_t MAX_CSS_SIZE = 256 * 1024;
+
+// Maximum number of CSS rules to store in the selector map
+// Prevents unbounded memory growth from pathological CSS files
+constexpr size_t MAX_RULES = 1500;
+
+// Minimum free heap required to apply CSS during rendering
+// If below this threshold, we skip CSS to avoid display artifacts.
+constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
+
+// Maximum length for a single selector string
+// Prevents parsing of extremely long or malformed selectors
+constexpr size_t MAX_SELECTOR_LENGTH = 256;
 
 // Check if character is CSS whitespace
 bool isCssWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
-
-// Read entire file into string (with size limit)
-std::string readFileContent(FsFile& file) {
-  std::string content;
-  content.reserve(std::min(static_cast<size_t>(file.size()), MAX_CSS_SIZE));
-
-  char buffer[READ_BUFFER_SIZE];
-  while (file.available() && content.size() < MAX_CSS_SIZE) {
-    const int bytesRead = file.read(buffer, sizeof(buffer));
-    if (bytesRead <= 0) break;
-    content.append(buffer, bytesRead);
-  }
-  return content;
-}
-
-// Remove CSS comments (/* ... */) from content
-std::string stripComments(const std::string& css) {
-  std::string result;
-  result.reserve(css.size());
-
-  size_t pos = 0;
-  while (pos < css.size()) {
-    // Look for start of comment
-    if (pos + 1 < css.size() && css[pos] == '/' && css[pos + 1] == '*') {
-      // Find end of comment
-      const size_t endPos = css.find("*/", pos + 2);
-      if (endPos == std::string::npos) {
-        // Unterminated comment - skip rest of file
-        break;
-      }
-      pos = endPos + 2;
-    } else {
-      result.push_back(css[pos]);
-      ++pos;
-    }
-  }
-  return result;
-}
-
-// Skip @-rules (like @media, @import, @font-face)
-// Returns position after the @-rule
-size_t skipAtRule(const std::string& css, const size_t start) {
-  // Find the end - either semicolon (simple @-rule) or matching brace
-  size_t pos = start + 1;  // Skip the '@'
-
-  // Skip identifier
-  while (pos < css.size() && (std::isalnum(css[pos]) || css[pos] == '-')) {
-    ++pos;
-  }
-
-  // Look for { or ;
-  int braceDepth = 0;
-  while (pos < css.size()) {
-    const char c = css[pos];
-    if (c == '{') {
-      ++braceDepth;
-    } else if (c == '}') {
-      --braceDepth;
-      if (braceDepth == 0) {
-        return pos + 1;
-      }
-    } else if (c == ';' && braceDepth == 0) {
-      return pos + 1;
-    }
-    ++pos;
-  }
-  return css.size();
-}
-
-// Extract next rule from CSS content
-// Returns true if a rule was found, with selector and body filled
-bool extractNextRule(const std::string& css, size_t& pos, std::string& selector, std::string& body) {
-  selector.clear();
-  body.clear();
-
-  // Skip whitespace and @-rules until we find a regular rule
-  while (pos < css.size()) {
-    // Skip whitespace
-    while (pos < css.size() && isCssWhitespace(css[pos])) {
-      ++pos;
-    }
-
-    if (pos >= css.size()) return false;
-
-    // Handle @-rules iteratively (avoids recursion/stack overflow)
-    if (css[pos] == '@') {
-      pos = skipAtRule(css, pos);
-      continue;  // Try again after skipping the @-rule
-    }
-
-    break;  // Found start of a regular rule
-  }
-
-  if (pos >= css.size()) return false;
-
-  // Find opening brace
-  const size_t bracePos = css.find('{', pos);
-  if (bracePos == std::string::npos) return false;
-
-  // Extract selector (everything before the brace)
-  selector = css.substr(pos, bracePos - pos);
-
-  // Find matching closing brace
-  int depth = 1;
-  const size_t bodyStart = bracePos + 1;
-  size_t bodyEnd = bodyStart;
-
-  while (bodyEnd < css.size() && depth > 0) {
-    if (css[bodyEnd] == '{')
-      ++depth;
-    else if (css[bodyEnd] == '}')
-      --depth;
-    ++bodyEnd;
-  }
-
-  // Extract body (between braces)
-  if (bodyEnd > bodyStart) {
-    body = css.substr(bodyStart, bodyEnd - bodyStart - 1);
-  }
-
-  pos = bodyEnd;
-  return true;
-}
 
 }  // anonymous namespace
 
@@ -165,6 +57,28 @@ std::string CssParser::normalized(const std::string& s) {
     result.pop_back();
   }
   return result;
+}
+
+void CssParser::normalizedInto(const std::string& s, std::string& out) {
+  out.clear();
+  out.reserve(s.size());
+
+  bool inSpace = true;  // Start true to skip leading space
+  for (const char c : s) {
+    if (isCssWhitespace(c)) {
+      if (!inSpace) {
+        out.push_back(' ');
+        inSpace = true;
+      }
+    } else {
+      out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+      inSpace = false;
+    }
+  }
+
+  if (!out.empty() && out.back() == ' ') {
+    out.pop_back();
+  }
 }
 
 std::vector<std::string> CssParser::splitOnChar(const std::string& s, const char delimiter) {
@@ -290,129 +204,95 @@ CssLength CssParser::interpretLength(const std::string& val) {
 
   return CssLength{numericValue, unit};
 }
+// Declaration parsing
 
-int8_t CssParser::interpretSpacing(const std::string& val) {
-  const std::string v = normalized(val);
-  if (v.empty()) return 0;
+void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& style, std::string& propNameBuf,
+                                          std::string& propValueBuf) {
+  const size_t colonPos = decl.find(':');
+  if (colonPos == std::string::npos || colonPos == 0) return;
 
-  // For spacing, we convert to "lines" (discrete units for e-ink)
-  // 1em ≈ 1 line, percentages based on ~30 lines per page
+  normalizedInto(decl.substr(0, colonPos), propNameBuf);
+  normalizedInto(decl.substr(colonPos + 1), propValueBuf);
 
-  float multiplier = 0.0f;
-  size_t unitStart = v.size();
+  if (propNameBuf.empty() || propValueBuf.empty()) return;
 
-  for (size_t i = 0; i < v.size(); ++i) {
-    const char c = v[i];
-    if (!std::isdigit(c) && c != '.' && c != '-' && c != '+') {
-      unitStart = i;
-      break;
+  if (propNameBuf == "text-align") {
+    style.textAlign = interpretAlignment(propValueBuf);
+    style.defined.textAlign = 1;
+  } else if (propNameBuf == "font-style") {
+    style.fontStyle = interpretFontStyle(propValueBuf);
+    style.defined.fontStyle = 1;
+  } else if (propNameBuf == "font-weight") {
+    style.fontWeight = interpretFontWeight(propValueBuf);
+    style.defined.fontWeight = 1;
+  } else if (propNameBuf == "text-decoration" || propNameBuf == "text-decoration-line") {
+    style.textDecoration = interpretDecoration(propValueBuf);
+    style.defined.textDecoration = 1;
+  } else if (propNameBuf == "text-indent") {
+    style.textIndent = interpretLength(propValueBuf);
+    style.defined.textIndent = 1;
+  } else if (propNameBuf == "margin-top") {
+    style.marginTop = interpretLength(propValueBuf);
+    style.defined.marginTop = 1;
+  } else if (propNameBuf == "margin-bottom") {
+    style.marginBottom = interpretLength(propValueBuf);
+    style.defined.marginBottom = 1;
+  } else if (propNameBuf == "margin-left") {
+    style.marginLeft = interpretLength(propValueBuf);
+    style.defined.marginLeft = 1;
+  } else if (propNameBuf == "margin-right") {
+    style.marginRight = interpretLength(propValueBuf);
+    style.defined.marginRight = 1;
+  } else if (propNameBuf == "margin") {
+    const auto values = splitWhitespace(propValueBuf);
+    if (!values.empty()) {
+      style.marginTop = interpretLength(values[0]);
+      style.marginRight = values.size() >= 2 ? interpretLength(values[1]) : style.marginTop;
+      style.marginBottom = values.size() >= 3 ? interpretLength(values[2]) : style.marginTop;
+      style.marginLeft = values.size() >= 4 ? interpretLength(values[3]) : style.marginRight;
+      style.defined.marginTop = style.defined.marginRight = style.defined.marginBottom = style.defined.marginLeft = 1;
+    }
+  } else if (propNameBuf == "padding-top") {
+    style.paddingTop = interpretLength(propValueBuf);
+    style.defined.paddingTop = 1;
+  } else if (propNameBuf == "padding-bottom") {
+    style.paddingBottom = interpretLength(propValueBuf);
+    style.defined.paddingBottom = 1;
+  } else if (propNameBuf == "padding-left") {
+    style.paddingLeft = interpretLength(propValueBuf);
+    style.defined.paddingLeft = 1;
+  } else if (propNameBuf == "padding-right") {
+    style.paddingRight = interpretLength(propValueBuf);
+    style.defined.paddingRight = 1;
+  } else if (propNameBuf == "padding") {
+    const auto values = splitWhitespace(propValueBuf);
+    if (!values.empty()) {
+      style.paddingTop = interpretLength(values[0]);
+      style.paddingRight = values.size() >= 2 ? interpretLength(values[1]) : style.paddingTop;
+      style.paddingBottom = values.size() >= 3 ? interpretLength(values[2]) : style.paddingTop;
+      style.paddingLeft = values.size() >= 4 ? interpretLength(values[3]) : style.paddingRight;
+      style.defined.paddingTop = style.defined.paddingRight = style.defined.paddingBottom = style.defined.paddingLeft =
+          1;
     }
   }
-
-  const std::string numPart = v.substr(0, unitStart);
-  const std::string unitPart = v.substr(unitStart);
-
-  if (unitPart == "em" || unitPart == "rem") {
-    multiplier = 1.0f;  // 1em = 1 line
-  } else if (unitPart == "%") {
-    multiplier = 0.3f;  // ~30 lines per page, so 10% = 3 lines
-  } else {
-    return 0;  // Unsupported unit for spacing
-  }
-
-  char* endPtr = nullptr;
-  const float numericValue = std::strtof(numPart.c_str(), &endPtr);
-
-  if (endPtr == numPart.c_str()) return 0;
-
-  int lines = static_cast<int>(numericValue * multiplier);
-
-  // Clamp to reasonable range (0-2 lines)
-  if (lines < 0) lines = 0;
-  if (lines > 2) lines = 2;
-
-  return static_cast<int8_t>(lines);
 }
-
-// Declaration parsing
 
 CssStyle CssParser::parseDeclarations(const std::string& declBlock) {
   CssStyle style;
+  std::string propNameBuf;
+  std::string propValueBuf;
 
-  // Split declarations by semicolon
-  const auto declarations = splitOnChar(declBlock, ';');
-
-  for (const auto& decl : declarations) {
-    // Find colon separator
-    const size_t colonPos = decl.find(':');
-    if (colonPos == std::string::npos || colonPos == 0) continue;
-
-    std::string propName = normalized(decl.substr(0, colonPos));
-    std::string propValue = normalized(decl.substr(colonPos + 1));
-
-    if (propName.empty() || propValue.empty()) continue;
-
-    // Match property and set value
-    if (propName == "text-align") {
-      style.textAlign = interpretAlignment(propValue);
-      style.defined.textAlign = 1;
-    } else if (propName == "font-style") {
-      style.fontStyle = interpretFontStyle(propValue);
-      style.defined.fontStyle = 1;
-    } else if (propName == "font-weight") {
-      style.fontWeight = interpretFontWeight(propValue);
-      style.defined.fontWeight = 1;
-    } else if (propName == "text-decoration" || propName == "text-decoration-line") {
-      style.textDecoration = interpretDecoration(propValue);
-      style.defined.textDecoration = 1;
-    } else if (propName == "text-indent") {
-      style.textIndent = interpretLength(propValue);
-      style.defined.textIndent = 1;
-    } else if (propName == "margin-top") {
-      style.marginTop = interpretLength(propValue);
-      style.defined.marginTop = 1;
-    } else if (propName == "margin-bottom") {
-      style.marginBottom = interpretLength(propValue);
-      style.defined.marginBottom = 1;
-    } else if (propName == "margin-left") {
-      style.marginLeft = interpretLength(propValue);
-      style.defined.marginLeft = 1;
-    } else if (propName == "margin-right") {
-      style.marginRight = interpretLength(propValue);
-      style.defined.marginRight = 1;
-    } else if (propName == "margin") {
-      // Shorthand: 1-4 values for top, right, bottom, left
-      const auto values = splitWhitespace(propValue);
-      if (!values.empty()) {
-        style.marginTop = interpretLength(values[0]);
-        style.marginRight = values.size() >= 2 ? interpretLength(values[1]) : style.marginTop;
-        style.marginBottom = values.size() >= 3 ? interpretLength(values[2]) : style.marginTop;
-        style.marginLeft = values.size() >= 4 ? interpretLength(values[3]) : style.marginRight;
-        style.defined.marginTop = style.defined.marginRight = style.defined.marginBottom = style.defined.marginLeft = 1;
+  size_t start = 0;
+  for (size_t i = 0; i <= declBlock.size(); ++i) {
+    if (i == declBlock.size() || declBlock[i] == ';') {
+      if (i > start) {
+        const size_t len = i - start;
+        std::string decl = declBlock.substr(start, len);
+        if (!decl.empty()) {
+          parseDeclarationIntoStyle(decl, style, propNameBuf, propValueBuf);
+        }
       }
-    } else if (propName == "padding-top") {
-      style.paddingTop = interpretLength(propValue);
-      style.defined.paddingTop = 1;
-    } else if (propName == "padding-bottom") {
-      style.paddingBottom = interpretLength(propValue);
-      style.defined.paddingBottom = 1;
-    } else if (propName == "padding-left") {
-      style.paddingLeft = interpretLength(propValue);
-      style.defined.paddingLeft = 1;
-    } else if (propName == "padding-right") {
-      style.paddingRight = interpretLength(propValue);
-      style.defined.paddingRight = 1;
-    } else if (propName == "padding") {
-      // Shorthand: 1-4 values for top, right, bottom, left
-      const auto values = splitWhitespace(propValue);
-      if (!values.empty()) {
-        style.paddingTop = interpretLength(values[0]);
-        style.paddingRight = values.size() >= 2 ? interpretLength(values[1]) : style.paddingTop;
-        style.paddingBottom = values.size() >= 3 ? interpretLength(values[2]) : style.paddingTop;
-        style.paddingLeft = values.size() >= 4 ? interpretLength(values[3]) : style.paddingRight;
-        style.defined.paddingTop = style.defined.paddingRight = style.defined.paddingBottom =
-            style.defined.paddingLeft = 1;
-      }
+      start = i + 1;
     }
   }
 
@@ -427,13 +307,35 @@ void CssParser::processRuleBlock(const std::string& selectorGroup, const std::st
   // Only store if any properties were set
   if (!style.defined.anySet()) return;
 
+  processRuleBlockWithStyle(selectorGroup, style);
+}
+
+void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, const CssStyle& style) {
+  // Check if we've reached the rule limit before processing
+  if (rulesBySelector_.size() >= MAX_RULES) {
+    Serial.printf("[%lu] [CSS] Reached max rules limit (%zu), stopping CSS parsing\n", millis(), MAX_RULES);
+    return;
+  }
+
   // Handle comma-separated selectors
   const auto selectors = splitOnChar(selectorGroup, ',');
 
   for (const auto& sel : selectors) {
+    // Validate selector length before processing
+    if (sel.size() > MAX_SELECTOR_LENGTH) {
+      Serial.printf("[%lu] [CSS] Selector too long (%zu > %zu), skipping\n", millis(), sel.size(), MAX_SELECTOR_LENGTH);
+      continue;
+    }
+
     // Normalize the selector
     std::string key = normalized(sel);
     if (key.empty()) continue;
+
+    // Skip if this would exceed the rule limit
+    if (rulesBySelector_.size() >= MAX_RULES) {
+      Serial.printf("[%lu] [CSS] Reached max rules limit, stopping selector processing\n", millis());
+      return;
+    }
 
     // Store or merge with existing
     auto it = rulesBySelector_.find(key);
@@ -453,21 +355,149 @@ bool CssParser::loadFromStream(FsFile& source) {
     return false;
   }
 
-  // Read file content
-  const std::string content = readFileContent(source);
-  if (content.empty()) {
-    return true;  // Empty file is valid
+  size_t totalRead = 0;
+
+  std::string selector;
+  std::string declBuffer;
+  std::string propNameBuf;
+  std::string propValueBuf;
+  selector.reserve(64);
+  declBuffer.reserve(64);
+
+  bool inComment = false;
+  bool maybeSlash = false;
+  bool prevStar = false;
+
+  bool inAtRule = false;
+  int atDepth = 0;
+
+  int bodyDepth = 0;
+  bool skippingRule = false;
+  CssStyle currentStyle;
+
+  auto handleChar = [&](const char c) {
+    if (inAtRule) {
+      if (c == '{') {
+        ++atDepth;
+      } else if (c == '}') {
+        if (atDepth > 0) --atDepth;
+        if (atDepth == 0) inAtRule = false;
+      } else if (c == ';' && atDepth == 0) {
+        inAtRule = false;
+      }
+      return;
+    }
+
+    if (bodyDepth == 0) {
+      if (selector.empty() && isCssWhitespace(c)) {
+        return;
+      }
+      if (c == '@' && selector.empty()) {
+        inAtRule = true;
+        atDepth = 0;
+        return;
+      }
+      if (c == '{') {
+        bodyDepth = 1;
+        currentStyle = CssStyle{};
+        declBuffer.clear();
+        if (selector.size() > MAX_SELECTOR_LENGTH * 4) {
+          skippingRule = true;
+        }
+        return;
+      }
+      selector.push_back(c);
+      return;
+    }
+
+    // bodyDepth > 0
+    if (c == '{') {
+      ++bodyDepth;
+      return;
+    }
+    if (c == '}') {
+      --bodyDepth;
+      if (bodyDepth == 0) {
+        if (!skippingRule && !declBuffer.empty()) {
+          parseDeclarationIntoStyle(declBuffer, currentStyle, propNameBuf, propValueBuf);
+        }
+        if (!skippingRule) {
+          processRuleBlockWithStyle(selector, currentStyle);
+        }
+        selector.clear();
+        declBuffer.clear();
+        skippingRule = false;
+        return;
+      }
+      return;
+    }
+    if (bodyDepth > 1) {
+      return;
+    }
+    if (!skippingRule) {
+      if (c == ';') {
+        if (!declBuffer.empty()) {
+          parseDeclarationIntoStyle(declBuffer, currentStyle, propNameBuf, propValueBuf);
+          declBuffer.clear();
+        }
+      } else {
+        declBuffer.push_back(c);
+      }
+    }
+  };
+
+  char buffer[READ_BUFFER_SIZE];
+  while (source.available() && totalRead < MAX_CSS_SIZE) {
+    int bytesRead = source.read(buffer, sizeof(buffer));
+    if (bytesRead <= 0) break;
+
+    if (totalRead + static_cast<size_t>(bytesRead) > MAX_CSS_SIZE) {
+      bytesRead = static_cast<int>(MAX_CSS_SIZE - totalRead);
+    }
+
+    totalRead += static_cast<size_t>(bytesRead);
+
+    for (int i = 0; i < bytesRead; ++i) {
+      const char c = buffer[i];
+
+      if (inComment) {
+        if (prevStar && c == '/') {
+          inComment = false;
+          prevStar = false;
+          continue;
+        }
+        prevStar = c == '*';
+        continue;
+      }
+
+      if (maybeSlash) {
+        if (c == '*') {
+          inComment = true;
+          maybeSlash = false;
+          prevStar = false;
+          continue;
+        }
+        handleChar('/');
+        maybeSlash = false;
+        // fall through to process current char
+      }
+
+      if (c == '/') {
+        maybeSlash = true;
+        continue;
+      }
+
+      handleChar(c);
+    }
   }
 
-  // Remove comments
-  const std::string cleaned = stripComments(content);
+  if (maybeSlash) {
+    handleChar('/');
+  }
 
-  // Parse rules
-  size_t pos = 0;
-  std::string selector, body;
-
-  while (extractNextRule(cleaned, pos, selector, body)) {
-    processRuleBlock(selector, body);
+  if (totalRead >= MAX_CSS_SIZE) {
+    Serial.printf("[%lu] [CSS] WARNING: CSS file truncated at %zu bytes (limit: %zu)\n", millis(), totalRead,
+                  MAX_CSS_SIZE);
   }
 
   Serial.printf("[%lu] [CSS] Parsed %zu rules\n", millis(), rulesBySelector_.size());
@@ -477,6 +507,10 @@ bool CssParser::loadFromStream(FsFile& source) {
 // Style resolution
 
 CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& classAttr) const {
+  if (ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_CSS) {
+    return CssStyle{};
+  }
+
   CssStyle result;
   const std::string tag = normalized(tagName);
 
@@ -527,42 +561,67 @@ bool CssParser::saveToCache(FsFile& file) const {
     return false;
   }
 
-  // Write version
-  file.write(CSS_CACHE_VERSION);
+  auto bufferedWrite = [](FsFile& out, std::array<uint8_t, 512>& buf, size_t& len, const void* data,
+                          const size_t dataLen) {
+    auto bytes = static_cast<const uint8_t*>(data);
+    size_t remaining = dataLen;
+    while (remaining > 0) {
+      const size_t space = buf.size() - len;
+      const size_t toCopy = remaining < space ? remaining : space;
+      memcpy(buf.data() + len, bytes, toCopy);
+      len += toCopy;
+      bytes += toCopy;
+      remaining -= toCopy;
+      if (len == buf.size()) {
+        out.write(buf.data(), len);
+        len = 0;
+      }
+    }
+  };
 
-  // Write rule count
+  std::array<uint8_t, 512> cacheBuf{};
+  size_t cacheLen = 0;
+
   const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
-  file.write(reinterpret_cast<const uint8_t*>(&ruleCount), sizeof(ruleCount));
+
+  // Write cache header
+  bufferedWrite(file, cacheBuf, cacheLen, &CSS_CACHE_VERSION, sizeof(CSS_CACHE_VERSION));
+  // Write rule count
+  bufferedWrite(file, cacheBuf, cacheLen, &ruleCount, sizeof(ruleCount));
 
   // Write each rule: selector string + CssStyle fields
   for (const auto& pair : rulesBySelector_) {
     // Write selector string (length-prefixed)
     const auto selectorLen = static_cast<uint16_t>(pair.first.size());
-    file.write(reinterpret_cast<const uint8_t*>(&selectorLen), sizeof(selectorLen));
-    file.write(reinterpret_cast<const uint8_t*>(pair.first.data()), selectorLen);
+    bufferedWrite(file, cacheBuf, cacheLen, &selectorLen, sizeof(selectorLen));
+    bufferedWrite(file, cacheBuf, cacheLen, pair.first.data(), selectorLen);
 
     // Write CssStyle fields (all are POD types)
     const CssStyle& style = pair.second;
-    file.write(static_cast<uint8_t>(style.textAlign));
-    file.write(static_cast<uint8_t>(style.fontStyle));
-    file.write(static_cast<uint8_t>(style.fontWeight));
-    file.write(static_cast<uint8_t>(style.textDecoration));
+    const auto textAlign = static_cast<uint8_t>(style.textAlign);
+    const auto fontStyle = static_cast<uint8_t>(style.fontStyle);
+    const auto fontWeight = static_cast<uint8_t>(style.fontWeight);
+    const auto textDecoration = static_cast<uint8_t>(style.textDecoration);
+    bufferedWrite(file, cacheBuf, cacheLen, &textAlign, sizeof(textAlign));
+    bufferedWrite(file, cacheBuf, cacheLen, &fontStyle, sizeof(fontStyle));
+    bufferedWrite(file, cacheBuf, cacheLen, &fontWeight, sizeof(fontWeight));
+    bufferedWrite(file, cacheBuf, cacheLen, &textDecoration, sizeof(textDecoration));
 
-    // Write CssLength fields (value + unit)
-    auto writeLength = [&file](const CssLength& len) {
-      file.write(reinterpret_cast<const uint8_t*>(&len.value), sizeof(len.value));
-      file.write(static_cast<uint8_t>(len.unit));
+    auto writeLengthBuffered = [&bufferedWrite, &file, &cacheBuf, &cacheLen](const CssLength& len) {
+      bufferedWrite(file, cacheBuf, cacheLen, &len.value, sizeof(len.value));
+      const auto unit = static_cast<uint8_t>(len.unit);
+      bufferedWrite(file, cacheBuf, cacheLen, &unit, sizeof(unit));
     };
 
-    writeLength(style.textIndent);
-    writeLength(style.marginTop);
-    writeLength(style.marginBottom);
-    writeLength(style.marginLeft);
-    writeLength(style.marginRight);
-    writeLength(style.paddingTop);
-    writeLength(style.paddingBottom);
-    writeLength(style.paddingLeft);
-    writeLength(style.paddingRight);
+    writeLengthBuffered(style.textIndent);
+    writeLengthBuffered(style.marginTop);
+    writeLengthBuffered(style.marginBottom);
+    writeLengthBuffered(style.marginLeft);
+    writeLengthBuffered(style.marginRight);
+    writeLengthBuffered(style.paddingTop);
+    writeLengthBuffered(style.paddingBottom);
+    writeLengthBuffered(style.paddingLeft);
+    writeLengthBuffered(style.paddingRight);
 
     // Write defined flags as uint16_t
     uint16_t definedBits = 0;
@@ -579,7 +638,11 @@ bool CssParser::saveToCache(FsFile& file) const {
     if (style.defined.paddingBottom) definedBits |= 1 << 10;
     if (style.defined.paddingLeft) definedBits |= 1 << 11;
     if (style.defined.paddingRight) definedBits |= 1 << 12;
-    file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
+    bufferedWrite(file, cacheBuf, cacheLen, &definedBits, sizeof(definedBits));
+  }
+
+  if (cacheLen > 0) {
+    file.write(cacheBuf.data(), cacheLen);
   }
 
   Serial.printf("[%lu] [CSS] Saved %u rules to cache\n", millis(), ruleCount);
@@ -695,5 +758,6 @@ bool CssParser::loadFromCache(FsFile& file) {
   }
 
   Serial.printf("[%lu] [CSS] Loaded %u rules from cache\n", millis(), ruleCount);
+  clear();
   return true;
 }

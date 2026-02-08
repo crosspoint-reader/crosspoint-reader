@@ -29,6 +29,7 @@
  */
 class CssParser {
  public:
+  static constexpr uint16_t SMALL_CSS_RULE_LIMIT = 200;
   CssParser() = default;
   ~CssParser() = default;
 
@@ -97,7 +98,10 @@ class CssParser {
 
   // Internal parsing helpers
   void processRuleBlock(const std::string& selectorGroup, const std::string& declarations);
+  void processRuleBlockWithStyle(const std::string& selectorGroup, const CssStyle& style);
   static CssStyle parseDeclarations(const std::string& declBlock);
+  static void parseDeclarationIntoStyle(const std::string& decl, CssStyle& style, std::string& propNameBuf,
+                                        std::string& propValueBuf);
 
   // Individual property value parsers
   static CssTextAlign interpretAlignment(const std::string& val);
@@ -105,10 +109,10 @@ class CssParser {
   static CssFontWeight interpretFontWeight(const std::string& val);
   static CssTextDecoration interpretDecoration(const std::string& val);
   static CssLength interpretLength(const std::string& val);
-  static int8_t interpretSpacing(const std::string& val);
 
   // String utilities
   static std::string normalized(const std::string& s);
+  static void normalizedInto(const std::string& s, std::string& out);
   static std::vector<std::string> splitOnChar(const std::string& s, char delimiter);
   static std::vector<std::string> splitWhitespace(const std::string& s);
 };

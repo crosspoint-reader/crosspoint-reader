@@ -180,11 +180,15 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                          viewportHeight, hyphenationEnabled, embeddedStyle);
   std::vector<uint32_t> lut = {};
 
+  CssParser* cssParser = nullptr;
+  if (embeddedStyle) {
+    cssParser = epub->getCssParser();
+  }
   ChapterHtmlSlimParser visitor(
       tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
       viewportHeight, hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
-      embeddedStyle, popupFn, embeddedStyle ? epub->getCssParser() : nullptr);
+      embeddedStyle, popupFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   success = visitor.parseAndBuildPages();
 
@@ -193,6 +197,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     Serial.printf("[%lu] [SCT] Failed to parse XML and build pages\n", millis());
     file.close();
     Storage.remove(filePath.c_str());
+    if (cssParser) {
+      cssParser->clear();
+    }
     return false;
   }
 
@@ -219,6 +226,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
   file.close();
+  if (cssParser) {
+    cssParser->clear();
+  }
   return true;
 }
 

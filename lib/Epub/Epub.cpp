@@ -214,6 +214,9 @@ bool Epub::loadCssRulesFromCache() const {
   FsFile cssCacheFile;
   if (Storage.openFileForRead("EBP", getCssRulesCache(), cssCacheFile)) {
     if (cssParser->loadFromCache(cssCacheFile)) {
+      if (cssParser->ruleCount() > CssParser::SMALL_CSS_RULE_LIMIT) {
+        cssParser->clear();
+      }
       cssCacheFile.close();
       Serial.printf("[%lu] [EBP] Loaded CSS rules from cache\n", millis());
       return true;
@@ -265,6 +268,9 @@ void Epub::parseCssFiles() const {
     FsFile cssCacheFile;
     if (Storage.openFileForWrite("EBP", getCssRulesCache(), cssCacheFile)) {
       cssParser->saveToCache(cssCacheFile);
+      if (cssParser->ruleCount() > CssParser::SMALL_CSS_RULE_LIMIT) {
+        cssParser->clear();
+      }
       cssCacheFile.close();
     }
 
