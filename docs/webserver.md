@@ -10,6 +10,7 @@ CrossPoint Reader includes a built-in web server that allows you to:
 - Browse and manage files on your device's SD card
 - Create folders to organize your ebooks
 - Delete files and folders
+- (Developer) Upload app binaries for installation via the on-device Apps menu
 
 ## Prerequisites
 
@@ -118,6 +119,7 @@ The home page displays:
 Navigation links:
 
 - **Home** - Returns to the status page
+- **Apps (Developer)** - Upload app binaries to `/.crosspoint/apps/<appId>/` (install on device)
 - **File Manager** - Access file management features
 
 <img src="./images/wifi/webserver_homepage.png" width="600">
