@@ -303,8 +303,19 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         }
 
         if (!hasCover) {
-          renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                            tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight);
+          const int coverX = tileX + hPaddingInSelection;
+          const int coverY = tileY + hPaddingInSelection;
+          const int coverW = tileWidth - 2 * hPaddingInSelection;
+          const int coverH = LyraMetrics::values.homeCoverHeight;
+          renderer.drawRect(coverX, coverY, coverW, coverH);
+
+          // Fallback: show title when cover image is missing/invalid.
+          const auto title = renderer.truncatedText(UI_10_FONT_ID, recentBooks[i].title.c_str(), coverW - 6);
+          const int textW = renderer.getTextWidth(UI_10_FONT_ID, title.c_str());
+          const int textH = renderer.getLineHeight(UI_10_FONT_ID);
+          const int textX = coverX + (coverW - textW) / 2;
+          const int textY = coverY + (coverH - textH) / 2;
+          renderer.drawText(UI_10_FONT_ID, textX, textY, title.c_str(), true);
         }
       }
 
