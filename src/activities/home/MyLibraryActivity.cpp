@@ -9,7 +9,6 @@
 #include "util/StringUtils.h"
 
 namespace {
-constexpr int SKIP_PAGE_MS = 700;
 constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
 
@@ -107,13 +106,6 @@ void MyLibraryActivity::loop() {
     return;
   }
 
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-                          mappedInput.wasReleased(MappedInputManager::Button::Up);
-  ;
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Down);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -155,21 +147,28 @@ void MyLibraryActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
-  if (upReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + listSize) % listSize;
-    } else {
-      selectorIndex = (selectorIndex + listSize - 1) % listSize;
-    }
+  constexpr auto upButton = MappedInputManager::Button::Up;
+  constexpr auto downButton = MappedInputManager::Button::Down;
+
+  buttonNavigator.onRelease({downButton}, [this, listSize] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, listSize);
     updateRequired = true;
-  } else if (downReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % listSize;
-    } else {
-      selectorIndex = (selectorIndex + 1) % listSize;
-    }
+  });
+
+  buttonNavigator.onRelease({upButton}, [this, listSize] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, listSize);
     updateRequired = true;
-  }
+  });
+
+  buttonNavigator.onContinuous({downButton}, [this, listSize, pageItems] {
+    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, listSize, pageItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onContinuous({upButton}, [this, listSize, pageItems] {
+    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, listSize, pageItems);
+    updateRequired = true;
+  });
 }
 
 void MyLibraryActivity::displayTaskLoop() {

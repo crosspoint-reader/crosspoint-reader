@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 // Structure to hold WiFi network information
 struct WifiNetworkInfo {
@@ -45,6 +46,7 @@ enum class WifiSelectionState {
 class WifiSelectionActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
   WifiSelectionState state = WifiSelectionState::SCANNING;
   int selectedNetworkIndex = 0;

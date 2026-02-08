@@ -8,6 +8,7 @@
 
 #include "../Activity.h"
 #include "./MyLibraryActivity.h"
+#include "util/ButtonNavigator.h"
 
 struct RecentBook;
 struct Rect;
@@ -15,6 +16,7 @@ struct Rect;
 class HomeActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   bool updateRequired = false;
   bool recentsLoading = false;
