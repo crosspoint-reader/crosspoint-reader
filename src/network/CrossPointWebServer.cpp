@@ -13,6 +13,7 @@
 #include "html/AppsPageHtml.generated.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "CrossPointSettings.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -302,6 +303,10 @@ void CrossPointWebServer::handleRoot() const {
 }
 
 void CrossPointWebServer::handleAppsPage() const {
+  if (!SETTINGS.appsEnabled) {
+    server->send(404, "text/plain", "Not found");
+    return;
+  }
   server->send(200, "text/html", AppsPageHtml);
   Serial.printf("[%lu] [WEB] Served apps page\n", millis());
 }
@@ -323,6 +328,7 @@ void CrossPointWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+  doc["appsEnabled"] = SETTINGS.appsEnabled != 0;
 
   String json;
   serializeJson(doc, json);
@@ -820,6 +826,11 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
 }
 
 void CrossPointWebServer::handleUploadApp() const {
+  if (!SETTINGS.appsEnabled) {
+    appUploadError = "Apps are disabled in Settings";
+    return;
+  }
+
   // Reset watchdog at start of every upload callback
   esp_task_wdt_reset();
 
@@ -989,6 +1000,11 @@ void CrossPointWebServer::handleUploadApp() const {
 }
 
 void CrossPointWebServer::handleUploadAppPost() const {
+  if (!SETTINGS.appsEnabled) {
+    server->send(403, "text/plain", "Apps are disabled in Settings");
+    return;
+  }
+
   if (appUploadSuccess) {
     server->send(200, "text/plain",
                  "App uploaded. Install on device: Home -> Apps -> " + appUploadName + " v" + appUploadVersion);
@@ -1000,6 +1016,11 @@ void CrossPointWebServer::handleUploadAppPost() const {
 }
 
 void CrossPointWebServer::handleUploadAppZip() {
+  if (!SETTINGS.appsEnabled) {
+    appZipUploadError = "Apps are disabled in Settings";
+    return;
+  }
+
   esp_task_wdt_reset();
 
   if (!running || !server) {
@@ -1241,6 +1262,11 @@ void CrossPointWebServer::handleUploadAppZip() {
 }
 
 void CrossPointWebServer::handleUploadAppZipPost() {
+  if (!SETTINGS.appsEnabled) {
+    server->send(403, "text/plain", "Apps are disabled in Settings");
+    return;
+  }
+
   if (appZipUploadSuccess) {
     server->send(200, "text/plain",
                  "App ZIP uploaded. Install on device: Home -> Apps -> " + appZipUploadName + " v" + appZipUploadVersion);
