@@ -8,6 +8,8 @@
 #include <SDCardManager.h>
 #include <fontIds.h>
 
+#include "components/UITheme.h"
+
 AppsActivity::AppsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, ExitCallback exitCallback)
     : Activity("Apps", renderer, mappedInput),
       renderer_(renderer),
@@ -177,7 +179,7 @@ void AppsActivity::render() {
   const char* btn4 = "<";
 
   auto labels = mappedInput_.mapLabels(btn1, btn2, btn3, btn4);
-  renderer_.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer_, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer_.displayBuffer();
 }
