@@ -16,6 +16,20 @@ An extension is a firmware binary plus a small manifest:
 
 CrossPoint discovers extensions by scanning `/.crosspoint/apps/*/app.json`.
 
+## Packaging (recommended)
+
+For uploads over WiFi, the recommended format is a ZIP containing:
+
+```
+app.bin
+app.json
+```
+
+Where `app.json` must include at least:
+- `id` (folder-safe app id)
+- `name`
+- `version`
+
 ## How it boots (high level)
 
 ```text
@@ -46,19 +60,15 @@ Use the File Transfer feature:
 2. Connect to WiFi (STA) or create a hotspot (AP)
 3. From your computer/phone browser, open the URL shown on the device
 4. Open **Apps**
-5. Fill in:
-   - App ID (e.g. `chess-puzzles` or `org.example.myapp`)
-   - Name
-   - Version
-   - Optional: author, description, minFirmware
-6. Upload either:
-   - `app.bin`, or
-   - a ZIP containing `app.bin`
+5. Upload either:
+   - a ZIP containing `app.bin` + `app.json` (recommended, zero fields), or
+   - `app.bin` (requires App ID; other metadata optional)
 7. On device: Home → Apps → select app → Install
 
 Notes:
 - This page is upload-only. Installing always happens on device.
-- The Apps page writes to `/.crosspoint/apps/<appId>/` and generates `app.json`.
+- For ZIP uploads, `app.json` is taken from the ZIP.
+- For BIN uploads, the server will generate `app.json` (Name defaults to App ID; Version defaults to 0.0.0).
 - You can disable the entire Apps feature via Settings → System → Enable Apps.
 
 ## Building apps with the community SDK
