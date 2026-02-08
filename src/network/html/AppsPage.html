@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CrossPoint Reader - Apps (Developer)</title>
+    <title>CrossPoint Reader - Apps</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
@@ -167,15 +167,15 @@
     <div class="nav-links">
       <a href="/">Home</a>
       <a href="/files">File Manager</a>
-      <a href="/apps">Apps (Developer)</a>
+      <a href="/apps">Apps</a>
     </div>
 
-    <h1>Apps (Developer)</h1>
-    <p class="subtitle">Upload an app binary to the device SD card for installation via the on-device Apps menu.</p>
+    <h1>Apps</h1>
+    <p class="subtitle">Upload apps to the SD card for installation via the on-device Apps menu.</p>
 
     <div class="card">
       <div class="warning">
-        This is a developer feature. It only uploads files to the SD card.
+        This page only uploads files to the SD card.
         To install/run an app, use the device UI: Home → Apps → select app → Install.
       </div>
 
@@ -211,7 +211,21 @@
       </div>
 
       <div class="field">
-        <label for="file">App Binary (app.bin)</label>
+        <label for="file">Upload Type</label>
+        <div class="hint" style="margin-bottom: 8px">
+          Choose an app binary (.bin) or a ZIP containing <code>app.bin</code>.
+        </div>
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom: 10px">
+          <label style="display:flex; gap:6px; align-items:center; font-weight:500; margin:0">
+            <input type="radio" name="uploadType" id="uploadTypeBin" value="bin" checked />
+            app.bin
+          </label>
+          <label style="display:flex; gap:6px; align-items:center; font-weight:500; margin:0">
+            <input type="radio" name="uploadType" id="uploadTypeZip" value="zip" />
+            zip (contains app.bin)
+          </label>
+        </div>
+        <label for="file">File</label>
         <input id="file" type="file" />
       </div>
 
@@ -273,6 +287,11 @@
         uploadBtn.disabled = !(isValidAppId(appId) && name && version && file);
       }
 
+      function selectedUploadType() {
+        const zip = document.getElementById('uploadTypeZip');
+        return (zip && zip.checked) ? 'zip' : 'bin';
+      }
+
       [appIdInput, nameInput, versionInput, authorInput, descriptionInput, minFirmwareInput, fileInput].forEach((el) => {
         el.addEventListener('input', updateButtonState);
         el.addEventListener('change', updateButtonState);
@@ -298,6 +317,8 @@
           return;
         }
 
+        const uploadType = selectedUploadType();
+
         const qs = new URLSearchParams();
         qs.set('appId', appId);
         qs.set('name', name);
@@ -306,9 +327,9 @@
         if (description) qs.set('description', description);
         if (minFirmware) qs.set('minFirmware', minFirmware);
 
-        const url = '/upload-app?' + qs.toString();
+        const url = (uploadType === 'zip' ? '/upload-app-zip?' : '/upload-app?') + qs.toString();
         const form = new FormData();
-        form.append('file', file, 'app.bin');
+        form.append('file', file, uploadType === 'zip' ? 'upload.zip' : 'app.bin');
 
         const progressContainer = document.getElementById('progress-container');
         const progressFill = document.getElementById('progress-fill');

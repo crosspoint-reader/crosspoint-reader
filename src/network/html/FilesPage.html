@@ -628,7 +628,7 @@
 <div class="nav-links">
   <a href="/">Home</a>
   <a href="/files">File Manager</a>
-  <a href="/apps">Apps (Developer)</a>
+  <a id="apps-link" href="/apps">Apps</a>
 </div>
 
 <div class="page-header">
@@ -772,6 +772,19 @@
   }
 
   async function hydrate() {
+    try {
+      const statusResp = await fetch('/api/status');
+      if (statusResp.ok) {
+        const status = await statusResp.json();
+        const appsLink = document.getElementById('apps-link');
+        if (appsLink && status.appsEnabled === false) {
+          appsLink.style.display = 'none';
+        }
+      }
+    } catch (e) {
+      // Ignore status fetch errors for file browser rendering.
+    }
+
     // Close modals when clicking overlay
     document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
       overlay.addEventListener('click', function(e) {
