@@ -277,6 +277,11 @@ void Epub::parseCssFiles() const {
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   Serial.printf("[%lu] [EBP] Loading ePub: %s\n", millis(), filepath.c_str());
 
+  // Avoid expensive/fragile CSS parsing when memory is tight.
+  // (ESP32-C3 without PSRAM can crash if C++ allocation throws during parsing.)
+  constexpr int MIN_HEAP_FOR_CSS_PARSE = 140 * 1024;
+  constexpr int LARGE_SPINE_SKIP_CSS_PARSE = 400;
+
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   // Always create CssParser - needed for inline style parsing even without CSS files
@@ -285,13 +290,26 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
     if (!skipLoadingCss && !loadCssRulesFromCache()) {
-      Serial.printf("[%lu] [EBP] Warning: CSS rules cache not found, attempting to parse CSS files\n", millis());
-      // to get CSS file list
-      if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
-        Serial.printf("[%lu] [EBP] Could not parse content.opf from cached bookMetadata for CSS files\n", millis());
-        // continue anyway - book will work without CSS and we'll still load any inline style CSS
+      const int freeHeap = ESP.getFreeHeap();
+      const int spineCount = bookMetadataCache->getSpineCount();
+      Serial.printf(
+          "[%lu] [EBP] CSS rules cache not found (freeHeap=%d, spine=%d). Skipping CSS parse to avoid crashes\n",
+          millis(), freeHeap, spineCount);
+
+      // Heuristic: parsing content.opf just to discover CSS files is expensive for large books.
+      // Also skip if memory is tight.
+      if (freeHeap >= MIN_HEAP_FOR_CSS_PARSE && spineCount < LARGE_SPINE_SKIP_CSS_PARSE) {
+        Serial.printf("[%lu] [EBP] Attempting best-effort CSS parse\n", millis());
+        try {
+          if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
+            Serial.printf("[%lu] [EBP] Could not parse content.opf for CSS files; continuing without CSS\n", millis());
+          } else {
+            parseCssFiles();
+          }
+        } catch (...) {
+          Serial.printf("[%lu] [EBP] Exception while parsing CSS files; continuing without CSS\n", millis());
+        }
       }
-      parseCssFiles();
     }
     Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());
     return true;
@@ -391,7 +409,17 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   if (!skipLoadingCss) {
     // Parse CSS files after cache reload
-    parseCssFiles();
+    const int freeHeap = ESP.getFreeHeap();
+    const int spineCount = bookMetadataCache->getSpineCount();
+    if (freeHeap < MIN_HEAP_FOR_CSS_PARSE || spineCount >= LARGE_SPINE_SKIP_CSS_PARSE) {
+      Serial.printf("[%lu] [EBP] Skipping CSS parse (freeHeap=%d, spine=%d)\n", millis(), freeHeap, spineCount);
+    } else {
+      try {
+        parseCssFiles();
+      } catch (...) {
+        Serial.printf("[%lu] [EBP] Exception while parsing CSS files; continuing without CSS\n", millis());
+      }
+    }
   }
 
   Serial.printf("[%lu] [EBP] Loaded ePub: %s\n", millis(), filepath.c_str());

@@ -59,11 +59,14 @@ const SettingInfo controlsSettings[controlsSettingsCount] = {
     SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip),
     SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"})};
 
-constexpr int systemSettingsCount = 5;
+constexpr int systemSettingsCount = 6;
 const SettingInfo systemSettings[systemSettingsCount] = {
     SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
                       {"1 min", "5 min", "10 min", "15 min", "30 min"}),
-    SettingInfo::Action("KOReader Sync"), SettingInfo::Action("OPDS Browser"), SettingInfo::Action("Clear Cache"),
+    SettingInfo::Toggle("Enable Apps", &CrossPointSettings::appsEnabled),
+    SettingInfo::Action("KOReader Sync"),
+    SettingInfo::Action("OPDS Browser"),
+    SettingInfo::Action("Clear Cache"),
     SettingInfo::Action("Check for updates")};
 }  // namespace
 

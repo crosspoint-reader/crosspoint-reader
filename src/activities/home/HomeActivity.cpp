@@ -25,7 +25,7 @@ void HomeActivity::taskTrampoline(void* param) {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // My Library, Recents, File transfer, Settings
+  int count = SETTINGS.appsEnabled ? 5 : 4;  // Browse Files, Recents, File transfer, [Apps], Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -211,6 +211,7 @@ void HomeActivity::loop() {
     const int recentsIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
+    const int appsIdx = SETTINGS.appsEnabled ? idx++ : -1;
     const int settingsIdx = idx;
 
     if (selectorIndex < recentBooks.size()) {
@@ -223,6 +224,8 @@ void HomeActivity::loop() {
       onOpdsBrowserOpen();
     } else if (menuSelectedIndex == fileTransferIdx) {
       onFileTransferOpen();
+    } else if (menuSelectedIndex == appsIdx) {
+      onAppsOpen();
     } else if (menuSelectedIndex == settingsIdx) {
       onSettingsOpen();
     }
@@ -262,7 +265,11 @@ void HomeActivity::render() {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
+  // Keep this list in sync with getMenuItemCount() and loop() index mapping.
   std::vector<const char*> menuItems = {"Browse Files", "Recents", "File Transfer", "Settings"};
+  if (SETTINGS.appsEnabled) {
+    menuItems.insert(menuItems.end() - 1, "Apps");
+  }
   if (hasOpdsUrl) {
     // Insert OPDS Browser after My Library
     menuItems.insert(menuItems.begin() + 2, "OPDS Browser");
