@@ -443,7 +443,11 @@ void WifiSelectionActivity::loop() {
       return;
     }
 
-    // Handle UP/DOWN navigation
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      startWifiScan();
+      return;
+    }
+
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
@@ -454,22 +458,18 @@ void WifiSelectionActivity::loop() {
         updateRequired = true;
         return;
       }
-
-      if (selectedNetworkIndex > 0) {
-        selectedNetworkIndex--;
-        updateRequired = true;
-      }
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-               mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-        startWifiScan();
-        return;
-      }
-      if (!networks.empty() && selectedNetworkIndex < static_cast<int>(networks.size()) - 1) {
-        selectedNetworkIndex++;
-        updateRequired = true;
-      }
     }
+
+    // Handle navigation
+    buttonNavigator.onNext([this] {
+      selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
+      updateRequired = true;
+    });
+
+    buttonNavigator.onPrevious([this] {
+      selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size());
+      updateRequired = true;
+    });
   }
 }
 
