@@ -125,7 +125,7 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
-    // Sleep screen overlay settings
+  // Sleep screen overlay settings
   uint8_t sleepScreenOverlay = 0;  // 1 = enabled, 0 = disabled
   // Status bar settings
   uint8_t statusBar = FULL;
