@@ -33,14 +33,16 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
+  uint8_t* frameBuffer = nullptr;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
-  void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
-  void drawPixelDither(int x, int y, Color color) const;
-  void fillArc(int maxRadius, int cx, int cy, int xDir, int yDir, Color color) const;
+  template <Color color>
+  void drawPixelDither(int x, int y) const;
+  template <Color color>
+  void fillArc(int maxRadius, int cx, int cy, int xDir, int yDir) const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
@@ -53,6 +55,7 @@ class GfxRenderer {
   static constexpr int VIEWABLE_MARGIN_LEFT = 3;
 
   // Setup
+  void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
 
   // Orientation control (affects logical width/height and coordinate transforms)
@@ -70,6 +73,7 @@ class GfxRenderer {
   // void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
+  void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
@@ -123,6 +127,4 @@ class GfxRenderer {
   // Low level functions
   uint8_t* getFrameBuffer() const;
   static size_t getBufferSize();
-  void grayscaleRevert() const;
-  void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
 };
