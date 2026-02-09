@@ -231,15 +231,11 @@ void EpubReaderActivity::loop() {
 
   // Decrease Button (Short: Font-, Long: Spacing)
   if (mappedInput.wasReleased(btnFormatDec)) {
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    bool changed = false;
+    bool limitReached = false;
 
-    // CRITICAL FIX: Save reading position before resetting the section!
-    // This prevents the "Out of bounds" error by telling the renderer how to scale the page number.
-    if (section) {
-      cachedSpineIndex = currentSpineIndex;
-      cachedChapterTotalPageCount = section->pageCount;
-      nextPageNumber = section->currentPage;
-    }
+    // Take lock safely
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
 
     if (mappedInput.getHeldTime() > formattingToggleMs) {
       // Long Press: Cycle Spacing
@@ -254,50 +250,83 @@ void EpubReaderActivity::loop() {
         spacingMsg = "Spacing: Wide";
       }
       GUI.drawPopup(renderer, spacingMsg);
+      changed = true;
     } else {
       // Short Press: Font Smaller
       if (SETTINGS.fontSize > CrossPointSettings::FONT_SIZE::SMALL) {
         SETTINGS.fontSize--;
+        changed = true;
+      } else {
+        limitReached = true;
       }
     }
-    SETTINGS.saveToFile();
-    section.reset();
-    xSemaphoreGive(renderingMutex);
-    updateRequired = true;
-    return;
-  }
 
-  // Increase Button (Short: Font+, Long: Toggle Orientation)
-  if (mappedInput.wasReleased(btnFormatInc)) {
-    if (mappedInput.getHeldTime() > formattingToggleMs) {
-      // Long Press: Toggle Orientation (Portrait <-> Landscape CCW)
-      // Note: applyOrientation handles its own locking, so we DON'T take the mutex here.
-      uint8_t newOrientation = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT)
-                                   ? CrossPointSettings::ORIENTATION::LANDSCAPE_CCW
-                                   : CrossPointSettings::ORIENTATION::PORTRAIT;
-      applyOrientation(newOrientation);
-      // Give feedback
-      const char* orientMsg = (newOrientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? "Portrait" : "Landscape";
-      GUI.drawPopup(renderer, orientMsg);
-    } else {
-      // Short Press: Font Larger
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-
-      // CRITICAL FIX: Save reading position before resetting!
+    if (changed) {
+      // CRITICAL FIX: Only save and reset if something actually changed!
+      // This prevents the page from jumping if we hit the limit.
       if (section) {
         cachedSpineIndex = currentSpineIndex;
         cachedChapterTotalPageCount = section->pageCount;
         nextPageNumber = section->currentPage;
       }
-
-      if (SETTINGS.fontSize < CrossPointSettings::FONT_SIZE::EXTRA_LARGE) {
-        SETTINGS.fontSize++;
-      }
       SETTINGS.saveToFile();
       section.reset();
+    }
+
+    xSemaphoreGive(renderingMutex);
+
+    if (changed) {
+      updateRequired = true;
+    } else if (limitReached) {
+      // If limit reached, show popup but do NOT trigger a full reset/update
+      GUI.drawPopup(renderer, "Min Size Reached");
+    }
+    return;
+  }
+
+  // Increase Button (Short: Font+, Long: Toggle Orientation)
+  if (mappedInput.wasReleased(btnFormatInc)) {
+    bool changed = false;
+    bool limitReached = false;
+    bool orientationChanged = false;
+
+    if (mappedInput.getHeldTime() > formattingToggleMs) {
+      // Long Press: Toggle Orientation (Portrait <-> Landscape CCW)
+      // applyOrientation handles its own locking, so we don't take mutex here yet.
+      uint8_t newOrientation = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT)
+                                   ? CrossPointSettings::ORIENTATION::LANDSCAPE_CCW
+                                   : CrossPointSettings::ORIENTATION::PORTRAIT;
+      applyOrientation(newOrientation);
+      const char* orientMsg = (newOrientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? "Portrait" : "Landscape";
+      GUI.drawPopup(renderer, orientMsg);
+      orientationChanged = true;
+    } else {
+      // Short Press: Font Larger
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      if (SETTINGS.fontSize < CrossPointSettings::FONT_SIZE::EXTRA_LARGE) {
+        SETTINGS.fontSize++;
+        changed = true;
+      } else {
+        limitReached = true;
+      }
+
+      if (changed) {
+        if (section) {
+          cachedSpineIndex = currentSpineIndex;
+          cachedChapterTotalPageCount = section->pageCount;
+          nextPageNumber = section->currentPage;
+        }
+        SETTINGS.saveToFile();
+        section.reset();
+      }
       xSemaphoreGive(renderingMutex);
     }
-    updateRequired = true;
+
+    if (changed || orientationChanged) {
+      updateRequired = true;
+    } else if (limitReached) {
+      GUI.drawPopup(renderer, "Max Size Reached");
+    }
     return;
   }
 
