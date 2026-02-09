@@ -30,11 +30,11 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
 }
 
 CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const KOReaderPosition& koPos,
-                                                int totalPagesInSpine) {
+                                                int currentSpineIndex, int totalPagesInCurrentSpine) {
   CrossPointPosition result;
   result.spineIndex = 0;
   result.pageNumber = 0;
-  result.totalPages = totalPagesInSpine;
+  result.totalPages = 0;
 
   const size_t bookSize = epub->getBookSize();
   if (bookSize == 0) {
@@ -55,22 +55,44 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   }
 
   // Estimate page number within the spine item using percentage
-  if (totalPagesInSpine > 0 && result.spineIndex < epub->getSpineItemsCount()) {
+  if (result.spineIndex < epub->getSpineItemsCount()) {
     const size_t prevCumSize = (result.spineIndex > 0) ? epub->getCumulativeSpineItemSize(result.spineIndex - 1) : 0;
     const size_t currentCumSize = epub->getCumulativeSpineItemSize(result.spineIndex);
     const size_t spineSize = currentCumSize - prevCumSize;
 
-    if (spineSize > 0) {
+    int estimatedTotalPages = 0;
+
+    // If we are in the same spine, use the known total pages
+    if (result.spineIndex == currentSpineIndex && totalPagesInCurrentSpine > 0) {
+      estimatedTotalPages = totalPagesInCurrentSpine;
+    }
+    // Otherwise try to estimate based on density from current spine
+    else if (currentSpineIndex >= 0 && totalPagesInCurrentSpine > 0) {
+      const size_t prevCurrCumSize =
+          (currentSpineIndex > 0) ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
+      const size_t currCumSize = epub->getCumulativeSpineItemSize(currentSpineIndex);
+      const size_t currSpineSize = currCumSize - prevCurrCumSize;
+
+      if (currSpineSize > 0) {
+        float ratio = static_cast<float>(spineSize) / static_cast<float>(currSpineSize);
+        estimatedTotalPages = static_cast<int>(totalPagesInCurrentSpine * ratio);
+        if (estimatedTotalPages < 1) estimatedTotalPages = 1;
+      }
+    }
+
+    result.totalPages = estimatedTotalPages;
+
+    if (spineSize > 0 && estimatedTotalPages > 0) {
       const size_t bytesIntoSpine = (targetBytes > prevCumSize) ? (targetBytes - prevCumSize) : 0;
       const float intraSpineProgress = static_cast<float>(bytesIntoSpine) / static_cast<float>(spineSize);
       const float clampedProgress = std::max(0.0f, std::min(1.0f, intraSpineProgress));
-      result.pageNumber = static_cast<int>(clampedProgress * totalPagesInSpine);
-      result.pageNumber = std::max(0, std::min(result.pageNumber, totalPagesInSpine - 1));
+      result.pageNumber = static_cast<int>(clampedProgress * estimatedTotalPages);
+      result.pageNumber = std::max(0, std::min(result.pageNumber, estimatedTotalPages - 1));
     }
   }
 
   Serial.printf("[%lu] [ProgressMapper] KOReader -> CrossPoint: %.2f%% -> spine=%d, page=%d/%d\n", millis(),
-                koPos.percentage * 100, result.spineIndex, result.pageNumber, totalPagesInSpine);
+                koPos.percentage * 100, result.spineIndex, result.pageNumber, result.totalPages);
 
   return result;
 }

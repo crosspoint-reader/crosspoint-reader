@@ -50,11 +50,12 @@ class ProgressMapper {
    *
    * @param epub The EPUB book
    * @param koPos KOReader position
-   * @param totalPagesInSpine Total pages in the target spine item (for page estimation)
+   * @param currentSpineIndex Index of the currently open spine item (for density estimation)
+   * @param totalPagesInCurrentSpine Total pages in the current spine item (for density estimation)
    * @return CrossPoint position
    */
   static CrossPointPosition toCrossPoint(const std::shared_ptr<Epub>& epub, const KOReaderPosition& koPos,
-                                         int totalPagesInSpine = 0);
+                                         int currentSpineIndex = -1, int totalPagesInCurrentSpine = 0);
 
  private:
   /**
