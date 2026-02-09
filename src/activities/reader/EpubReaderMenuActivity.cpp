@@ -48,16 +48,19 @@ void EpubReaderMenuActivity::loop() {
     return;
   }
 
+  // Handle navigation
+  buttonNavigator.onNext([this] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPrevious([this] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    updateRequired = true;
+  });
+
   // Use local variables for items we need to check after potential deletion
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    selectedIndex = (selectedIndex + menuItems.size() - 1) % menuItems.size();
-    updateRequired = true;
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-             mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    selectedIndex = (selectedIndex + 1) % menuItems.size();
-    updateRequired = true;
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto selectedAction = menuItems[selectedIndex].action;
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       // Cycle orientation preview locally; actual rotation happens on menu exit.

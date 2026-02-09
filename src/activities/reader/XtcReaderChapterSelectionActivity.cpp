@@ -8,10 +8,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-constexpr int SKIP_PAGE_MS = 700;
-}  // namespace
-
 int XtcReaderChapterSelectionActivity::getPageItems() const {
   constexpr int lineHeight = 30;
 
@@ -78,13 +74,8 @@ void XtcReaderChapterSelectionActivity::onExit() {
 }
 
 void XtcReaderChapterSelectionActivity::loop() {
-  const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Right);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = getPageItems();
+  const int totalItems = static_cast<int>(xtc->getChapters().size());
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto& chapters = xtc->getChapters();
@@ -93,29 +84,27 @@ void XtcReaderChapterSelectionActivity::loop() {
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();
-  } else if (prevReleased) {
-    const int total = static_cast<int>(xtc->getChapters().size());
-    if (total == 0) {
-      return;
-    }
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + total) % total;
-    } else {
-      selectorIndex = (selectorIndex + total - 1) % total;
-    }
-    updateRequired = true;
-  } else if (nextReleased) {
-    const int total = static_cast<int>(xtc->getChapters().size());
-    if (total == 0) {
-      return;
-    }
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % total;
-    } else {
-      selectorIndex = (selectorIndex + 1) % total;
-    }
-    updateRequired = true;
   }
+
+  buttonNavigator.onNextRelease([this, totalItems] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousRelease([this, totalItems] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
+    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
+    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
+    updateRequired = true;
+  });
 }
 
 void XtcReaderChapterSelectionActivity::displayTaskLoop() {

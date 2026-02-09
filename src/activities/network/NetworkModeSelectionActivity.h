@@ -6,6 +6,7 @@
 #include <functional>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 // Enum for network mode selection
 enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };
@@ -22,6 +23,8 @@ enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };
 class NetworkModeSelectionActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
+
   int selectedIndex = 0;
   bool updateRequired = false;
   const std::function<void(NetworkMode)> onModeSelected;

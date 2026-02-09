@@ -185,7 +185,16 @@ bool OtaUpdater::isUpdateNewer() const {
   /*
    * Check patch versions.
    */
-  return latestPatch > currentPatch;
+  if (latestPatch != currentPatch) return latestPatch > currentPatch;
+
+  // If we reach here, it means all segments are equal.
+  // One final check, if we're on an RC build (contains "-rc"), we should consider the latest version as newer even if
+  // the segments are equal, since RC builds are pre-release versions.
+  if (strstr(currentVersion, "-rc") != nullptr) {
+    return true;
+  }
+
+  return false;
 }
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }

@@ -4,7 +4,7 @@
 
 // Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings
 enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3, None = 4 };
-enum class CssUnit : uint8_t { Pixels = 0, Em = 1, Rem = 2, Points = 3 };
+enum class CssUnit : uint8_t { Pixels = 0, Em = 1, Rem = 2, Points = 3, Percent = 4 };
 
 // Represents a CSS length value with its unit, allowing deferred resolution to pixels
 struct CssLength {
@@ -17,21 +17,32 @@ struct CssLength {
   // Convenience constructor for pixel values (most common case)
   explicit CssLength(const float pixels) : value(pixels) {}
 
+  // Returns true if this length can be resolved to pixels with the given context.
+  // Percentage units require a non-zero containerWidth to resolve.
+  [[nodiscard]] bool isResolvable(const float containerWidth = 0) const {
+    return unit != CssUnit::Percent || containerWidth > 0;
+  }
+
   // Resolve to pixels given the current em size (font line height)
-  [[nodiscard]] float toPixels(const float emSize) const {
+  // containerWidth is needed for percentage units (e.g. viewport width)
+  [[nodiscard]] float toPixels(const float emSize, const float containerWidth = 0) const {
     switch (unit) {
       case CssUnit::Em:
       case CssUnit::Rem:
         return value * emSize;
       case CssUnit::Points:
         return value * 1.33f;  // Approximate pt to px conversion
+      case CssUnit::Percent:
+        return value * containerWidth / 100.0f;
       default:
         return value;
     }
   }
 
   // Resolve to int16_t pixels (for BlockStyle fields)
-  [[nodiscard]] int16_t toPixelsInt16(const float emSize) const { return static_cast<int16_t>(toPixels(emSize)); }
+  [[nodiscard]] int16_t toPixelsInt16(const float emSize, const float containerWidth = 0) const {
+    return static_cast<int16_t>(toPixels(emSize, containerWidth));
+  }
 };
 
 // Font style options matching CSS font-style property

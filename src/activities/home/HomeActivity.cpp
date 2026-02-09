@@ -3,7 +3,7 @@
 #include <Bitmap.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -47,7 +47,7 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
     }
 
     // Skip if file no longer exists
-    if (!SdMan.exists(book.path.c_str())) {
+    if (!Storage.exists(book.path.c_str())) {
       continue;
     }
 
@@ -64,7 +64,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   for (RecentBook& book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!SdMan.exists(coverPath.c_str())) {
+      if (!Storage.exists(coverPath.c_str())) {
         // If epub, try to load the metadata for title/author and cover
         if (StringUtils::checkFileExtension(book.path, ".epub")) {
           Epub epub(book.path, "/.crosspoint");
@@ -196,12 +196,17 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
-  const bool prevPressed = mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-                           mappedInput.wasPressed(MappedInputManager::Button::Left);
-  const bool nextPressed = mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-                           mappedInput.wasPressed(MappedInputManager::Button::Right);
-
   const int menuCount = getMenuItemCount();
+
+  buttonNavigator.onNext([this, menuCount] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPrevious([this, menuCount] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+    updateRequired = true;
+  });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Calculate dynamic indices based on which options are available
@@ -226,12 +231,6 @@ void HomeActivity::loop() {
     } else if (menuSelectedIndex == settingsIdx) {
       onSettingsOpen();
     }
-  } else if (prevPressed) {
-    selectorIndex = (selectorIndex + menuCount - 1) % menuCount;
-    updateRequired = true;
-  } else if (nextPressed) {
-    selectorIndex = (selectorIndex + 1) % menuCount;
-    updateRequired = true;
   }
 }
 

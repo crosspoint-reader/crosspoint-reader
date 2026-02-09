@@ -283,6 +283,8 @@ CssLength CssParser::interpretLength(const std::string& val) {
     unit = CssUnit::Rem;
   } else if (unitPart == "pt") {
     unit = CssUnit::Points;
+  } else if (unitPart == "%") {
+    unit = CssUnit::Percent;
   }
   // px and unitless default to Pixels
 
@@ -518,7 +520,7 @@ CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return par
 // Cache serialization
 
 // Cache format version - increment when format changes
-constexpr uint8_t CSS_CACHE_VERSION = 1;
+constexpr uint8_t CSS_CACHE_VERSION = 2;
 
 bool CssParser::saveToCache(FsFile& file) const {
   if (!file) {

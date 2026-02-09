@@ -17,7 +17,6 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
-constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
 
 void OpdsBookBrowserActivity::taskTrampoline(void* param) {
@@ -118,12 +117,6 @@ void OpdsBookBrowserActivity::loop() {
 
   // Handle browsing state
   if (state == BrowserState::BROWSING) {
-    const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-                              mappedInput.wasReleased(MappedInputManager::Button::Left);
-    const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-                              mappedInput.wasReleased(MappedInputManager::Button::Right);
-    const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
-
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!entries.empty()) {
         const auto& entry = entries[selectorIndex];
@@ -135,20 +128,29 @@ void OpdsBookBrowserActivity::loop() {
       }
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
-    } else if (prevReleased && !entries.empty()) {
-      if (skipPage) {
-        selectorIndex = ((selectorIndex / PAGE_ITEMS - 1) * PAGE_ITEMS + entries.size()) % entries.size();
-      } else {
-        selectorIndex = (selectorIndex + entries.size() - 1) % entries.size();
-      }
-      updateRequired = true;
-    } else if (nextReleased && !entries.empty()) {
-      if (skipPage) {
-        selectorIndex = ((selectorIndex / PAGE_ITEMS + 1) * PAGE_ITEMS) % entries.size();
-      } else {
-        selectorIndex = (selectorIndex + 1) % entries.size();
-      }
-      updateRequired = true;
+    }
+
+    // Handle navigation
+    if (!entries.empty()) {
+      buttonNavigator.onNextRelease([this] {
+        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
+        updateRequired = true;
+      });
+
+      buttonNavigator.onPreviousRelease([this] {
+        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
+        updateRequired = true;
+      });
+
+      buttonNavigator.onNextContinuous([this] {
+        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+        updateRequired = true;
+      });
+
+      buttonNavigator.onPreviousContinuous([this] {
+        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+        updateRequired = true;
+      });
     }
   }
 }

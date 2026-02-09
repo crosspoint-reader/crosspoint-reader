@@ -63,15 +63,16 @@ void CalibreSettingsActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
-    updateRequired = true;
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+  // Handle navigation
+  buttonNavigator.onNext([this] {
     selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
     updateRequired = true;
-  }
+  });
+
+  buttonNavigator.onPrevious([this] {
+    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
+    updateRequired = true;
+  });
 }
 
 void CalibreSettingsActivity::handleSelection() {
