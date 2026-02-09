@@ -1,5 +1,308 @@
-# CrossPoint Reader - English (Reference)
-# This file is optional. English is the built-in fallback.
-# Translation keys are the English strings themselves.
-
+# CrossPoint Reader - English
+# This file serves as a reference template for creating new translations.
+# Copy this file, rename it to your language code (e.g. es.lang for Spanish),
+# and translate the values on the right side of each = sign.
 language.name=English
+
+# === MAIN MENU ===
+Browse Files=Browse Files
+Recents=Recents
+File Transfer=File Transfer
+Settings=Settings
+OPDS Browser=OPDS Browser
+
+# === SETTINGS CATEGORIES ===
+Display=Display
+Reader=Reader
+Controls=Controls
+System=System
+
+# === SETTINGS - DISPLAY ===
+Sleep Screen=Sleep Screen
+Sleep Screen Cover Mode=Sleep Screen Cover Mode
+Sleep Screen Cover Filter=Sleep Screen Cover Filter
+Status Bar=Status Bar
+Hide Battery %=Hide Battery %
+Refresh Frequency=Refresh Frequency
+UI Theme=UI Theme
+Sunlight Fading Fix=Sunlight Fading Fix
+
+# === SETTINGS - READER ===
+Font Family=Font Family
+Font Size=Font Size
+Line Spacing=Line Spacing
+Screen Margin=Screen Margin
+Paragraph Alignment=Paragraph Alignment
+Book's Embedded Style=Book's Embedded Style
+Hyphenation=Hyphenation
+Reading Orientation=Reading Orientation
+Extra Paragraph Spacing=Extra Paragraph Spacing
+Text Anti-Aliasing=Text Anti-Aliasing
+
+# === SETTINGS - CONTROLS ===
+Remap Front Buttons=Remap Front Buttons
+Side Button Layout (reader)=Side Button Layout (reader)
+Long-press Chapter Skip=Long-press Chapter Skip
+Short Power Button Click=Short Power Button Click
+
+# === SETTINGS - SYSTEM ===
+Language=Language
+Time to Sleep=Time to Sleep
+KOReader Sync=KOReader Sync
+Clear Cache=Clear Cache
+Check for updates=Check for updates
+
+# === SETTINGS VALUES ===
+ON=ON
+OFF=OFF
+Dark=Dark
+Light=Light
+Custom=Custom
+Cover=Cover
+None=None
+Cover + Custom=Cover + Custom
+Fit=Fit
+Crop=Crop
+Contrast=Contrast
+Inverted=Inverted
+No Progress=No Progress
+Full w/ Percentage=Full w/ Percentage
+Full w/ Book Bar=Full w/ Book Bar
+Book Bar Only=Book Bar Only
+Full w/ Chapter Bar=Full w/ Chapter Bar
+Never=Never
+In Reader=In Reader
+Always=Always
+1 page=1 page
+5 pages=5 pages
+10 pages=10 pages
+15 pages=15 pages
+30 pages=30 pages
+Classic=Classic
+Lyra=Lyra
+Bookerly=Bookerly
+Noto Sans=Noto Sans
+Open Dyslexic=Open Dyslexic
+Small=Small
+Medium=Medium
+Large=Large
+X Large=X Large
+Tight=Tight
+Normal=Normal
+Wide=Wide
+Justify=Justify
+Left=Left
+Center=Center
+Right=Right
+Book's Style=Book's Style
+Portrait=Portrait
+Landscape CW=Landscape CW
+Landscape CCW=Landscape CCW
+Prev, Next=Prev, Next
+Next, Prev=Next, Prev
+Ignore=Ignore
+Sleep=Sleep
+Page Turn=Page Turn
+1 min=1 min
+5 min=5 min
+10 min=10 min
+15 min=15 min
+30 min=30 min
+
+# === BUTTON HINTS ===
+« Back=« Back
+Toggle=Toggle
+Up=Up
+Down=Down
+Select=Select
+Open=Open
+« Home=« Home
+« Cancel=« Cancel
+« Exit=« Exit
+« Skip=« Skip
+Connect=Connect
+Continue=Continue
+Retry=Retry
+Update=Update
+Clear=Clear
+Done=Done
+Upload=Upload
+Back=Back
+Cancel=Cancel
+-=-
++=+
+
+# === HOME SCREEN ===
+Continue Reading=Continue Reading
+No open book=No open book
+Start reading below=Start reading below
+Loading...=Loading...
+
+# === LIBRARY ===
+SD card=SD card
+No books found=No books found
+
+# === RECENT BOOKS ===
+Recent Books=Recent Books
+No recent books=No recent books
+
+# === READER MENU ===
+Go to Chapter=Go to Chapter
+Go to %=Go to %
+Go to Position=Go to Position
+Go Home=Go Home
+Sync Progress=Sync Progress
+Delete Book Cache=Delete Book Cache
+Select Chapter=Select Chapter
+Chapter: =Chapter:
+Book: =Book:
+ pages= pages
+End of book=End of book
+Empty chapter=Empty chapter
+Empty file=Empty file
+No chapters=No chapters
+Left/Right: 1%  Up/Down: 10%=Left/Right: 1%  Up/Down: 10%
+
+# === NETWORK ===
+Join a Network=Join a Network
+Connect to Calibre=Connect to Calibre
+Create Hotspot=Create Hotspot
+Connect to an existing WiFi network=Connect to an existing WiFi network
+Use Calibre wireless device transfers=Use Calibre wireless device transfers
+Create a WiFi network others can join=Create a WiFi network others can join
+How would you like to connect?=How would you like to connect?
+
+# === WIFI ===
+WiFi Networks=WiFi Networks
+No networks found=No networks found
+Press Connect to scan again=Press Connect to scan again
+* = Encrypted | + = Saved=* = Encrypted | + = Saved
+networks found=networks found
+Scanning...=Scanning...
+Connecting...=Connecting...
+Connected!=Connected!
+Network: =Network:
+IP Address: =IP Address:
+Save password for next time?=Save password for next time?
+Yes=Yes
+No=No
+Connection Failed=Connection Failed
+Error: General failure=Error: General failure
+Error: Network not found=Error: Network not found
+Error: Connection timeout=Error: Connection timeout
+Forget network and remove saved password?=Forget network and remove saved password?
+Forget network=Forget network
+Enter WiFi Password=Enter WiFi Password
+
+# === HOTSPOT / FILE TRANSFER ===
+Starting Hotspot...=Starting Hotspot...
+Hotspot Mode=Hotspot Mode
+Connect your device to this WiFi network=Connect your device to this WiFi network
+or scan QR code with your phone to connect to Wifi.=or scan QR code with your phone to connect to Wifi.
+Open this URL in your browser=Open this URL in your browser
+or scan QR code with your phone:=or scan QR code with your phone:
+
+# === CALIBRE ===
+Starting Calibre...=Starting Calibre...
+Calibre setup failed=Calibre setup failed
+Network=Network
+Setup=Setup
+1) Install CrossPoint Reader plugin=1) Install CrossPoint Reader plugin
+2) Be on the same WiFi network=2) Be on the same WiFi network
+3) In Calibre: "Send to device"=3) In Calibre: "Send to device"
+Keep this screen open while sending=Keep this screen open while sending
+Status=Status
+Receiving=Receiving
+Received: =Received:
+
+# === BUTTON REMAP ===
+Press a front button for each role=Press a front button for each role
+Unassigned=Unassigned
+Already assigned=Already assigned
+Confirm=Confirm
+Back (1st button)=Back (1st button)
+Confirm (2nd button)=Confirm (2nd button)
+Left (3rd button)=Left (3rd button)
+Right (4th button)=Right (4th button)
+Unknown=Unknown
+Side button Up: Reset to default layout=Side button Up: Reset to default layout
+Side button Down: Cancel remapping=Side button Down: Cancel remapping
+
+# === CLEAR CACHE ===
+This will clear all cached book data.=This will clear all cached book data.
+All reading progress will be lost!=All reading progress will be lost!
+Books will need to be re-indexed=Books will need to be re-indexed
+when opened again.=when opened again.
+Clearing cache...=Clearing cache...
+Cache Cleared=Cache Cleared
+ items removed= items removed
+ failed= failed
+Failed to clear cache=Failed to clear cache
+Check serial output for details=Check serial output for details
+
+# === OTA UPDATE ===
+Checking for update...=Checking for update...
+New update available!=New update available!
+Current Version: =Current Version:
+New Version: =New Version:
+Updating...=Updating...
+No update available=No update available
+Update failed=Update failed
+Update complete=Update complete
+Press and hold power button to turn back on=Press and hold power button to turn back on
+
+# === KOREADER ===
+Username=Username
+Password=Password
+Sync Server URL=Sync Server URL
+Document Matching=Document Matching
+Authenticate=Authenticate
+KOReader Username=KOReader Username
+KOReader Password=KOReader Password
+KOReader Auth=KOReader Auth
+Authenticating...=Authenticating...
+Success!=Success!
+KOReader sync is ready to use=KOReader sync is ready to use
+Authentication Failed=Authentication Failed
+
+# === KOREADER SYNC ===
+No credentials configured=No credentials configured
+Set up KOReader account in Settings=Set up KOReader account in Settings
+Syncing time...=Syncing time...
+Calculating document hash...=Calculating document hash...
+Fetching remote progress...=Fetching remote progress...
+Uploading progress...=Uploading progress...
+Failed to calculate document hash=Failed to calculate document hash
+Progress found!=Progress found!
+Remote:=Remote:
+Local:=Local:
+From: =From:
+Apply remote progress=Apply remote progress
+Upload local progress=Upload local progress
+No remote progress found=No remote progress found
+Upload current position?=Upload current position?
+Progress uploaded!=Progress uploaded!
+Sync failed=Sync failed
+
+# === OPDS ===
+OPDS Server URL=OPDS Server URL
+For Calibre, add /opds to your URL=For Calibre, add /opds to your URL
+Checking WiFi...=Checking WiFi...
+Downloading...=Downloading...
+Error:=Error:
+No entries found=No entries found
+Download=Download
+Download failed=Download failed
+
+# === STATUS ===
+[Not Set]=[Not Set]
+[Set]=[Set]
+[Default]=[Default]
+[Custom]=[Custom]
+[Filename]=[Filename]
+[Binary]=[Binary]
+[Set credentials first]=[Set credentials first]
+
+# === DIALOGS ===
+Filename=Filename
+Binary=Binary
