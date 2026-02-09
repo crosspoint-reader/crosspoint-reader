@@ -104,7 +104,8 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryUi will place text to the left
   const int batteryX = rect.x + rect.width - LyraMetrics::values.contentSidePadding - LyraMetrics::values.batteryWidth;
-  drawBatteryUi(renderer, Rect{batteryX, rect.y + 10, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
+  drawBatteryUi(renderer,
+                Rect{batteryX, rect.y + 10, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                 showBatteryPercentage);
 
   if (title) {
