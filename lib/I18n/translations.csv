@@ -312,3 +312,4 @@ SECTION_PREFIX,Section ,SECTION ,Section ,Section ,Section
 UPLOAD,Upload,UPLOAD,Upload,Upload,Upload
 BOOK_S_STYLE,Book's Style,BOOK'S STYLE,Book's Style,Book's Style,Book's Style
 EMBEDDED_STYLE,Embedded Style,EMBEDDED STYLE,Embedded Style,Embedded Style,Embedded Style
+OPDS_SERVER_URL,OPDS Server URL,OPDS SERVER URL,OPDS Server URL,OPDS Server URL,OPDS Server URL

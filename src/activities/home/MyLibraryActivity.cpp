@@ -1,8 +1,10 @@
 #include "MyLibraryActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
-#include <SDCardManager.h>
+
+#include <algorithm>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -10,7 +12,6 @@
 #include "util/StringUtils.h"
 
 namespace {
-constexpr int SKIP_PAGE_MS = 700;
 constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
 
@@ -32,7 +33,7 @@ void MyLibraryActivity::taskTrampoline(void* param) {
 void MyLibraryActivity::loadFiles() {
   files.clear();
 
-  auto root = SdMan.open(basepath.c_str());
+  auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
     if (root) root.close();
     return;
@@ -108,14 +109,7 @@ void MyLibraryActivity::loop() {
     return;
   }
 
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-                          mappedInput.wasReleased(MappedInputManager::Button::Up);
-  ;
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Down);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
+  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (files.empty()) {
@@ -156,21 +150,26 @@ void MyLibraryActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
-  if (upReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + listSize) % listSize;
-    } else {
-      selectorIndex = (selectorIndex + listSize - 1) % listSize;
-    }
+
+  buttonNavigator.onNextRelease([this, listSize] {
+    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     updateRequired = true;
-  } else if (downReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % listSize;
-    } else {
-      selectorIndex = (selectorIndex + 1) % listSize;
-    }
+  });
+
+  buttonNavigator.onPreviousRelease([this, listSize] {
+    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     updateRequired = true;
-  }
+  });
+
+  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
+    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
+    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    updateRequired = true;
+  });
 }
 
 void MyLibraryActivity::displayTaskLoop() {
@@ -196,7 +195,7 @@ void MyLibraryActivity::render() const {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
   if (files.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, i18n(NO_BOOKS_FOUND));
   } else {

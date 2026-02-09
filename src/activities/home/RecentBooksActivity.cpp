@@ -1,8 +1,10 @@
 #include "RecentBooksActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
-#include <SDCardManager.h>
+
+#include <algorithm>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -11,7 +13,6 @@
 #include "util/StringUtils.h"
 
 namespace {
-constexpr int SKIP_PAGE_MS = 700;
 constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
 
@@ -27,7 +28,7 @@ void RecentBooksActivity::loadRecentBooks() {
 
   for (const auto& book : books) {
     // Skip if file no longer exists
-    if (!SdMan.exists(book.path.c_str())) {
+    if (!Storage.exists(book.path.c_str())) {
       continue;
     }
     recentBooks.push_back(book);
@@ -69,13 +70,6 @@ void RecentBooksActivity::onExit() {
 }
 
 void RecentBooksActivity::loop() {
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-                          mappedInput.wasReleased(MappedInputManager::Button::Up);
-  ;
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Down);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -91,21 +85,26 @@ void RecentBooksActivity::loop() {
   }
 
   int listSize = static_cast<int>(recentBooks.size());
-  if (upReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + listSize) % listSize;
-    } else {
-      selectorIndex = (selectorIndex + listSize - 1) % listSize;
-    }
+
+  buttonNavigator.onNextRelease([this, listSize] {
+    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     updateRequired = true;
-  } else if (downReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % listSize;
-    } else {
-      selectorIndex = (selectorIndex + 1) % listSize;
-    }
+  });
+
+  buttonNavigator.onPreviousRelease([this, listSize] {
+    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     updateRequired = true;
-  }
+  });
+
+  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
+    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
+    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    updateRequired = true;
+  });
 }
 
 void RecentBooksActivity::displayTaskLoop() {
@@ -130,7 +129,7 @@ void RecentBooksActivity::render() const {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, i18n(MENU_RECENT_BOOKS));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   // Recent tab
   if (recentBooks.empty()) {

@@ -335,6 +335,7 @@ enum class StrId : uint16_t {
   UPLOAD,
   BOOK_S_STYLE,
   EMBEDDED_STYLE,
+  OPDS_SERVER_URL,
   // Sentinel - must be last
   _COUNT
 };

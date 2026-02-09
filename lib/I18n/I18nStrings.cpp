@@ -357,6 +357,7 @@ const char* const STRINGS_EN[] = {
     "Upload",
     "Book's Style",
     "Embedded Style",
+    "OPDS Server URL",
 };
 
 const char* const STRINGS_ES[] = {
@@ -680,6 +681,7 @@ const char* const STRINGS_ES[] = {
     "UPLOAD",
     "BOOK'S STYLE",
     "EMBEDDED STYLE",
+    "OPDS SERVER URL",
 };
 
 const char* const STRINGS_IT[] = {
@@ -1003,6 +1005,7 @@ const char* const STRINGS_IT[] = {
     "Upload",
     "Book's Style",
     "Embedded Style",
+    "OPDS Server URL",
 };
 
 const char* const STRINGS_SV[] = {
@@ -1326,6 +1329,7 @@ const char* const STRINGS_SV[] = {
     "Upload",
     "Book's Style",
     "Embedded Style",
+    "OPDS Server URL",
 };
 
 const char* const STRINGS_FR[] = {
@@ -1649,6 +1653,7 @@ const char* const STRINGS_FR[] = {
     "Upload",
     "Book's Style",
     "Embedded Style",
+    "OPDS Server URL",
 };
 
 }  // namespace i18n_strings

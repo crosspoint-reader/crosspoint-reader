@@ -319,7 +319,6 @@ void KOReaderSyncActivity::render() {
              localProgress.percentage * 100);
     renderer.drawText(UI_10_FONT_ID, 20, 320, localPageStr);
 
-    // Options
     const int optionY = 350;
     const int optionHeight = 30;
 
@@ -335,13 +334,8 @@ void KOReaderSyncActivity::render() {
     }
     renderer.drawText(UI_10_FONT_ID, 20, optionY + optionHeight, i18n(UPLOAD_LOCAL), selectedOption != 1);
 
-    // Cancel option
-    if (selectedOption == 2) {
-      renderer.fillRect(0, optionY + optionHeight * 2 - 2, pageWidth - 1, optionHeight);
-    }
-    renderer.drawText(UI_10_FONT_ID, 20, optionY + optionHeight * 2, i18n(CANCEL), selectedOption != 2);
-
-    const auto labels = mappedInput.mapLabels("", i18n(SELECT), "", "");
+    // Bottom button hints: show Back and Select
+    const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(SELECT), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -351,7 +345,7 @@ void KOReaderSyncActivity::render() {
     renderer.drawCenteredText(UI_10_FONT_ID, 280, i18n(NO_REMOTE_MSG), true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 320, i18n(UPLOAD_PROMPT));
 
-    const auto labels = mappedInput.mapLabels(i18n(CANCEL), i18n(UPLOAD), "", "");
+    const auto labels = mappedInput.mapLabels(i18n(BACK), i18n(UPLOAD), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -394,11 +388,11 @@ void KOReaderSyncActivity::loop() {
     // Navigate options
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      selectedOption = (selectedOption + 2) % 3;  // Wrap around
+      selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       updateRequired = true;
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
                mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      selectedOption = (selectedOption + 1) % 3;
+      selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       updateRequired = true;
     }
 
@@ -409,9 +403,6 @@ void KOReaderSyncActivity::loop() {
       } else if (selectedOption == 1) {
         // Upload local progress
         performUpload();
-      } else {
-        // Cancel
-        onCancel();
       }
     }
 

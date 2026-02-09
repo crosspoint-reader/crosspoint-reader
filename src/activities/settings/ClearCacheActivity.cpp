@@ -1,9 +1,9 @@
 #include "ClearCacheActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <HardwareSerial.h>
 #include <I18n.h>
-#include <SDCardManager.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -108,7 +108,7 @@ void ClearCacheActivity::clearCache() {
   Serial.printf("[%lu] [CLEAR_CACHE] Clearing cache...\n", millis());
 
   // Open .crosspoint directory
-  auto root = SdMan.open("/.crosspoint");
+  auto root = Storage.open("/.crosspoint");
   if (!root || !root.isDirectory()) {
     Serial.printf("[%lu] [CLEAR_CACHE] Failed to open cache directory\n", millis());
     if (root) root.close();
@@ -133,7 +133,7 @@ void ClearCacheActivity::clearCache() {
 
       file.close();  // Close before attempting to delete
 
-      if (SdMan.removeDir(fullPath.c_str())) {
+      if (Storage.removeDir(fullPath.c_str())) {
         clearedCount++;
       } else {
         Serial.printf("[%lu] [CLEAR_CACHE] Failed to remove: %s\n", millis(), fullPath.c_str());

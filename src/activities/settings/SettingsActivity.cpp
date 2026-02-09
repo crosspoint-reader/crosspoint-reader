@@ -11,71 +11,12 @@
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "SettingsList.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::CAT_DISPLAY, StrId::CAT_READER,
                                                               StrId::CAT_CONTROLS, StrId::CAT_SYSTEM};
-
-namespace {
-constexpr int changeTabsMs = 700;
-constexpr int displaySettingsCount = 8;
-const SettingInfo displaySettings[displaySettingsCount] = {
-    // Should match with SLEEP_SCREEN_MODE
-    SettingInfo::Enum(StrId::SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
-                      {StrId::DARK, StrId::LIGHT, StrId::CUSTOM, StrId::COVER, StrId::NONE_OPT, StrId::COVER_CUSTOM}),
-    SettingInfo::Enum(StrId::SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode, {StrId::FIT, StrId::CROP}),
-    SettingInfo::Enum(StrId::SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
-                      {StrId::NONE_OPT, StrId::FILTER_CONTRAST, StrId::INVERTED}),
-    SettingInfo::Enum(StrId::STATUS_BAR, &CrossPointSettings::statusBar,
-                      {StrId::NONE_OPT, StrId::NO_PROGRESS, StrId::STATUS_BAR_FULL_PERCENT, StrId::STATUS_BAR_FULL_BOOK,
-                       StrId::STATUS_BAR_BOOK_ONLY, StrId::STATUS_BAR_FULL_CHAPTER}),
-    SettingInfo::Enum(StrId::HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
-                      {StrId::NEVER, StrId::IN_READER, StrId::ALWAYS}),
-    SettingInfo::Enum(StrId::REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-                      {StrId::PAGES_1, StrId::PAGES_5, StrId::PAGES_10, StrId::PAGES_15, StrId::PAGES_30}),
-    SettingInfo::Enum(StrId::UI_THEME, &CrossPointSettings::uiTheme, {StrId::THEME_CLASSIC, StrId::THEME_LYRA}),
-    SettingInfo::Toggle(StrId::SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix),
-};
-
-constexpr int readerSettingsCount = 10;
-const SettingInfo readerSettings[readerSettingsCount] = {
-    SettingInfo::Enum(StrId::FONT_FAMILY, &CrossPointSettings::fontFamily,
-                      {StrId::BOOKERLY, StrId::NOTO_SANS, StrId::OPEN_DYSLEXIC}),
-    SettingInfo::Enum(StrId::FONT_SIZE, &CrossPointSettings::fontSize,
-                      {StrId::SMALL, StrId::MEDIUM, StrId::LARGE, StrId::X_LARGE}),
-    SettingInfo::Enum(StrId::LINE_SPACING, &CrossPointSettings::lineSpacing,
-                      {StrId::TIGHT, StrId::NORMAL, StrId::WIDE}),
-    SettingInfo::Value(StrId::SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}),
-    SettingInfo::Enum(StrId::PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
-                      {StrId::JUSTIFY, StrId::ALIGN_LEFT, StrId::CENTER, StrId::ALIGN_RIGHT, StrId::BOOK_S_STYLE}),
-    SettingInfo::Toggle(StrId::EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle),
-    SettingInfo::Toggle(StrId::HYPHENATION, &CrossPointSettings::hyphenationEnabled),
-    SettingInfo::Enum(StrId::ORIENTATION, &CrossPointSettings::orientation,
-                      {StrId::PORTRAIT, StrId::LANDSCAPE_CW, StrId::INVERTED, StrId::LANDSCAPE_CCW}),
-    SettingInfo::Toggle(StrId::EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing),
-    SettingInfo::Toggle(StrId::TEXT_AA, &CrossPointSettings::textAntiAliasing)};
-
-constexpr int controlsSettingsCount = 4;
-const SettingInfo controlsSettings[controlsSettingsCount] = {
-    // Launches the remap wizard for front buttons.
-    SettingInfo::Action(StrId::REMAP_FRONT_BUTTONS),
-    SettingInfo::Enum(StrId::SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
-                      {StrId::PREV_NEXT, StrId::NEXT_PREV}),
-    SettingInfo::Toggle(StrId::LONG_PRESS_SKIP, &CrossPointSettings::longPressChapterSkip),
-    SettingInfo::Enum(StrId::SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-                      {StrId::IGNORE, StrId::SLEEP, StrId::PAGE_TURN})};
-
-constexpr int systemSettingsCount = 6;
-const SettingInfo systemSettings[systemSettingsCount] = {
-    SettingInfo::Enum(StrId::TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
-                      {StrId::MIN_1, StrId::MIN_5, StrId::MIN_10, StrId::MIN_15, StrId::MIN_30}),
-    SettingInfo::Action(StrId::LANGUAGE),
-    SettingInfo::Action(StrId::KOREADER_SYNC),
-    SettingInfo::Action(StrId::OPDS_BROWSER),
-    SettingInfo::Action(StrId::CLEAR_READING_CACHE),
-    SettingInfo::Action(StrId::CHECK_UPDATES)};
-}  // namespace
 
 void SettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<SettingsActivity*>(param);
@@ -86,13 +27,41 @@ void SettingsActivity::onEnter() {
   Activity::onEnter();
   renderingMutex = xSemaphoreCreateMutex();
 
+  // Build per-category vectors from the shared settings list
+  displaySettings.clear();
+  readerSettings.clear();
+  controlsSettings.clear();
+  systemSettings.clear();
+
+  for (auto& setting : getSettingsList()) {
+    if (setting.category == StrId::NONE_OPT) continue;
+    if (setting.category == StrId::CAT_DISPLAY) {
+      displaySettings.push_back(std::move(setting));
+    } else if (setting.category == StrId::CAT_READER) {
+      readerSettings.push_back(std::move(setting));
+    } else if (setting.category == StrId::CAT_CONTROLS) {
+      controlsSettings.push_back(std::move(setting));
+    } else if (setting.category == StrId::CAT_SYSTEM) {
+      systemSettings.push_back(std::move(setting));
+    }
+    // Web-only categories (KOReader Sync, OPDS Browser) are skipped for device UI
+  }
+
+  // Append device-only ACTION items
+  controlsSettings.insert(controlsSettings.begin(), SettingInfo::Action(StrId::REMAP_FRONT_BUTTONS));
+  systemSettings.push_back(SettingInfo::Action(StrId::LANGUAGE));
+  systemSettings.push_back(SettingInfo::Action(StrId::KOREADER_SYNC));
+  systemSettings.push_back(SettingInfo::Action(StrId::OPDS_BROWSER));
+  systemSettings.push_back(SettingInfo::Action(StrId::CLEAR_READING_CACHE));
+  systemSettings.push_back(SettingInfo::Action(StrId::CHECK_UPDATES));
+
   // Reset selection to first category
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
 
   // Initialize with first category (Display)
-  settingsList = displaySettings;
-  settingsCount = displaySettingsCount;
+  currentSettings = &displaySettings;
+  settingsCount = static_cast<int>(displaySettings.size());
 
   // Trigger first update
   updateRequired = true;
@@ -146,49 +115,46 @@ void SettingsActivity::loop() {
     return;
   }
 
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Up);
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Down);
-  const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
-  const bool changeTab = mappedInput.getHeldTime() > changeTabsMs;
-
   // Handle navigation
-  if (upReleased && changeTab) {
+  buttonNavigator.onNextRelease([this] {
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
-    selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
+    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
     updateRequired = true;
-  } else if (downReleased && changeTab) {
+  });
+
+  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
-    selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
+    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
     updateRequired = true;
-  } else if (upReleased || leftReleased) {
-    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount);
-    updateRequired = true;
-  } else if (rightReleased || downReleased) {
-    selectedSettingIndex = (selectedSettingIndex < settingsCount) ? (selectedSettingIndex + 1) : 0;
-    updateRequired = true;
-  }
+  });
 
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
     switch (selectedCategoryIndex) {
-      case 0:  // Display
-        settingsList = displaySettings;
-        settingsCount = displaySettingsCount;
+      case 0:
+        currentSettings = &displaySettings;
         break;
-      case 1:  // Reader
-        settingsList = readerSettings;
-        settingsCount = readerSettingsCount;
+      case 1:
+        currentSettings = &readerSettings;
         break;
-      case 2:  // Controls
-        settingsList = controlsSettings;
-        settingsCount = controlsSettingsCount;
+      case 2:
+        currentSettings = &controlsSettings;
         break;
-      case 3:  // System
-        settingsList = systemSettings;
-        settingsCount = systemSettingsCount;
+      case 3:
+        currentSettings = &systemSettings;
         break;
     }
+    settingsCount = static_cast<int>(currentSettings->size());
   }
 }
 
@@ -198,7 +164,7 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
-  const auto& setting = settingsList[selectedSetting];
+  const auto& setting = (*currentSettings)[selectedSetting];
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
@@ -301,24 +267,25 @@ void SettingsActivity::render() const {
   GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
                  selectedSettingIndex == 0);
 
+  const auto& settings = *currentSettings;
   GUI.drawList(
       renderer,
       Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
                          metrics.verticalSpacing * 2)},
       settingsCount, selectedSettingIndex - 1,
-      [this](int index) { return std::string(I18N.get(settingsList[index].nameId)); }, nullptr, nullptr,
-      [this](int i) {
-        const auto& setting = settingsList[i];
+      [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
+      [&settings](int i) {
+        const auto& setting = settings[i];
         std::string valueText = "";
-        if (settingsList[i].type == SettingType::TOGGLE && settingsList[i].valuePtr != nullptr) {
-          const bool value = SETTINGS.*(settingsList[i].valuePtr);
+        if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+          const bool value = SETTINGS.*(setting.valuePtr);
           valueText = value ? i18n(STATE_ON) : i18n(STATE_OFF);
-        } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
-          const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
-          valueText = I18N.get(settingsList[i].enumValues[value]);
-        } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
-          valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
+        } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+          const uint8_t value = SETTINGS.*(setting.valuePtr);
+          valueText = I18N.get(setting.enumValues[value]);
+        } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+          valueText = std::to_string(SETTINGS.*(setting.valuePtr));
         }
         return valueText;
       });
