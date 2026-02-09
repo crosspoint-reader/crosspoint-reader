@@ -2,7 +2,7 @@
 
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <Txt.h>
 #include <Xtc.h>
 
@@ -32,7 +32,7 @@ void SleepActivity::onEnter() {
 
 void SleepActivity::renderCustomSleepScreen() const {
   // Check if we have a /sleep directory
-  auto dir = SdMan.open("/sleep");
+  auto dir = Storage.open("/sleep");
   if (dir && dir.isDirectory()) {
     std::vector<std::string> files;
     char name[500];
@@ -75,7 +75,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       APP_STATE.saveToFile();
       const auto filename = "/sleep/" + files[randomFileIndex];
       FsFile file;
-      if (SdMan.openFileForRead("SLP", filename, file)) {
+      if (Storage.openFileForRead("SLP", filename, file)) {
         Serial.printf("[%lu] [SLP] Randomly loading: /sleep/%s\n", millis(), files[randomFileIndex].c_str());
         delay(100);
         Bitmap bitmap(file, true);
@@ -92,7 +92,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   FsFile file;
-  if (SdMan.openFileForRead("SLP", "/sleep.bmp", file)) {
+  if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       Serial.printf("[%lu] [SLP] Loading: /sleep.bmp\n", millis());
@@ -262,7 +262,7 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   FsFile file;
-  if (SdMan.openFileForRead("SLP", coverBmpPath, file)) {
+  if (Storage.openFileForRead("SLP", coverBmpPath, file)) {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       Serial.printf("[SLP] Rendering sleep cover: %s\n", coverBmpPath.c_str());

@@ -3,7 +3,7 @@
 #include <Epub/Page.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -77,7 +77,7 @@ void EpubReaderActivity::onEnter() {
   epub->setupCacheDir();
 
   FsFile f;
-  if (SdMan.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
+  if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
     int dataSize = f.read(data, 6);
     if (dataSize == 4 || dataSize == 6) {
@@ -654,7 +654,7 @@ void EpubReaderActivity::renderScreen() {
 
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   FsFile f;
-  if (SdMan.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
+  if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
     data[0] = currentSpineIndex & 0xFF;
     data[1] = (currentSpineIndex >> 8) & 0xFF;

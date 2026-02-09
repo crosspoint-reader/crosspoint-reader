@@ -1,7 +1,7 @@
 #include "ZipFile.h"
 
+#include <HalStorage.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
 #include <miniz.h>
 
 #include <algorithm>
@@ -279,7 +279,7 @@ bool ZipFile::loadZipDetails() {
 }
 
 bool ZipFile::open() {
-  if (!SdMan.openFileForRead("ZIP", filePath, file)) {
+  if (!Storage.openFileForRead("ZIP", filePath, file)) {
     return false;
   }
   return true;

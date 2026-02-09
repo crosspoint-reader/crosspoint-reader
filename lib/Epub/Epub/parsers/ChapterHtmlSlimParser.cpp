@@ -1,8 +1,8 @@
 #include "ChapterHtmlSlimParser.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
 #include <expat.h>
 
 #include "../Page.h"
@@ -213,12 +213,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   const float emSize = static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
-  const auto userAlignmentBlockStyle =
-      BlockStyle::fromCssStyle(cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment));
+  const auto userAlignmentBlockStyle = BlockStyle::fromCssStyle(
+      cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
 
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
     self->currentCssStyle = cssStyle;
-    auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center);
+    auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
     headerBlockStyle.textAlignDefined = true;
     if (self->embeddedStyle && cssStyle.hasTextAlign()) {
       headerBlockStyle.alignment = cssStyle.textAlign;
@@ -482,7 +482,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   }
 
   FsFile file;
-  if (!SdMan.openFileForRead("EHP", filepath, file)) {
+  if (!Storage.openFileForRead("EHP", filepath, file)) {
     XML_ParserFree(parser);
     return false;
   }
