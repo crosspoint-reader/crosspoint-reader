@@ -2,12 +2,13 @@
 
 #include "Bitmap.h" // Required for BmpHeader struct definition
 #include <BitmapHelpers.h>
+#include <GfxRenderer.h>
 #include <SDCardManager.h>
 
 #include <string>
 #include <vector>
 
-std::string FsHelpers::normalisePath(const std::string& path) {
+std::string FsHelpers::normalisePath(const std::string &path) {
   std::vector<std::string> components;
   std::string component;
 
@@ -33,7 +34,7 @@ std::string FsHelpers::normalisePath(const std::string& path) {
   }
 
   std::string result;
-  for (const auto& c : components) {
+  for (const auto &c : components) {
     if (!result.empty()) {
       result += "/";
     }
@@ -43,7 +44,10 @@ std::string FsHelpers::normalisePath(const std::string& path) {
   return result;
 }
 
-bool FsHelpers::saveFramebufferAsBmp(const char* filename, const uint8_t* framebuffer, int width, int height) {
+bool FsHelpers::saveFramebufferAsBmp(const char *filename,
+                                     const uint8_t *framebuffer, int width,
+                                     int height,
+                                     GfxRenderer::Orientation orientation) {
   if (!framebuffer) {
     return false;
   }
@@ -69,7 +73,7 @@ bool FsHelpers::saveFramebufferAsBmp(const char* filename, const uint8_t* frameb
   createBmpHeader(&header, width, height);
 
   bool write_error = false;
-  if (file.write((uint8_t*)&header, sizeof(header)) != sizeof(header)) {
+  if (file.write((uint8_t *)&header, sizeof(header)) != sizeof(header)) {
     write_error = true;
   }
 
@@ -85,7 +89,7 @@ bool FsHelpers::saveFramebufferAsBmp(const char* filename, const uint8_t* frameb
   uint8_t padding[4] = {0, 0, 0, 0};
 
   for (int y = 0; y < height; y++) {
-    const uint8_t* fbRow = framebuffer + (height - 1 - y) * fbRowSize;
+    const uint8_t *fbRow = framebuffer + (height - 1 - y) * fbRowSize;
     if (file.write(fbRow, fbRowSize) != fbRowSize) {
       write_error = true;
       break;

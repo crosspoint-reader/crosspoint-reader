@@ -298,7 +298,7 @@ void takeScreenshot() {
 
   String filename_str = "/screenshots/screenshot-" + String(millis()) + ".bmp";
   if (FsHelpers::saveFramebufferAsBmp(filename_str.c_str(), fb, HalDisplay::DISPLAY_WIDTH,
-                                      HalDisplay::DISPLAY_HEIGHT)) {
+                                      HalDisplay::DISPLAY_HEIGHT, renderer.getOrientation())) {
     Serial.println("[SCR] Screenshot saved to " + filename_str);
   } else {
     Serial.println("[SCR] Failed to save screenshot");
