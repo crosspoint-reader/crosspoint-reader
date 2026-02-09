@@ -1,6 +1,7 @@
 #include "KeyboardEntryActivity.h"
 
 #include "MappedInputManager.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 // Keyboard layouts - lowercase
@@ -12,6 +13,9 @@ const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
 // Keyboard layouts - uppercase/symbols
 const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"",
                                                                     "ZXCVBNM<>?", "SPECIAL ROW"};
+
+// Shift state strings
+const char* const KeyboardEntryActivity::shiftString[3] = {"shift", "SHIFT", "LOCK"};
 
 void KeyboardEntryActivity::taskTrampoline(void* param) {
   auto* self = static_cast<KeyboardEntryActivity*>(param);
@@ -80,7 +84,7 @@ int KeyboardEntryActivity::getRowLength(const int row) const {
 }
 
 char KeyboardEntryActivity::getSelectedChar() const {
-  const char* const* layout = shiftActive ? keyboardShift : keyboard;
+  const char* const* layout = shiftState ? keyboardShift : keyboard;
 
   if (selectedRow < 0 || selectedRow >= NUM_ROWS) return '\0';
   if (selectedCol < 0 || selectedCol >= getRowLength(selectedRow)) return '\0';
@@ -92,8 +96,8 @@ void KeyboardEntryActivity::handleKeyPress() {
   // Handle special row (bottom row with shift, space, backspace, done)
   if (selectedRow == SPECIAL_ROW) {
     if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
-      // Shift toggle
-      shiftActive = !shiftActive;
+      // Shift toggle (0 = lower case, 1 = upper case, 2 = shift lock)
+      shiftState = (shiftState + 1) % 3;
       return;
     }
 
@@ -130,45 +134,32 @@ void KeyboardEntryActivity::handleKeyPress() {
 
   if (maxLength == 0 || text.length() < maxLength) {
     text += c;
-    // Auto-disable shift after typing a letter
-    if (shiftActive && ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) {
-      shiftActive = false;
+    // Auto-disable shift after typing a character in non-lock mode
+    if (shiftState == 1) {
+      shiftState = 0;
     }
   }
 }
 
 void KeyboardEntryActivity::loop() {
-  // Navigation
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-    if (selectedRow > 0) {
-      selectedRow--;
-      // Clamp column to valid range for new row
-      const int maxCol = getRowLength(selectedRow) - 1;
-      if (selectedCol > maxCol) selectedCol = maxCol;
-    } else {
-      // Wrap to bottom row
-      selectedRow = NUM_ROWS - 1;
-      const int maxCol = getRowLength(selectedRow) - 1;
-      if (selectedCol > maxCol) selectedCol = maxCol;
-    }
-    updateRequired = true;
-  }
+  // Handle navigation
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] {
+    selectedRow = ButtonNavigator::previousIndex(selectedRow, NUM_ROWS);
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    if (selectedRow < NUM_ROWS - 1) {
-      selectedRow++;
-      const int maxCol = getRowLength(selectedRow) - 1;
-      if (selectedCol > maxCol) selectedCol = maxCol;
-    } else {
-      // Wrap to top row
-      selectedRow = 0;
-      const int maxCol = getRowLength(selectedRow) - 1;
-      if (selectedCol > maxCol) selectedCol = maxCol;
-    }
+    const int maxCol = getRowLength(selectedRow) - 1;
+    if (selectedCol > maxCol) selectedCol = maxCol;
     updateRequired = true;
-  }
+  });
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] {
+    selectedRow = ButtonNavigator::nextIndex(selectedRow, NUM_ROWS);
+
+    const int maxCol = getRowLength(selectedRow) - 1;
+    if (selectedCol > maxCol) selectedCol = maxCol;
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] {
     const int maxCol = getRowLength(selectedRow) - 1;
 
     // Special bottom row case
@@ -187,20 +178,14 @@ void KeyboardEntryActivity::loop() {
         // At done button, move to backspace
         selectedCol = BACKSPACE_COL;
       }
-      updateRequired = true;
-      return;
-    }
-
-    if (selectedCol > 0) {
-      selectedCol--;
     } else {
-      // Wrap to end of current row
-      selectedCol = maxCol;
+      selectedCol = ButtonNavigator::previousIndex(selectedCol, maxCol + 1);
     }
-    updateRequired = true;
-  }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] {
     const int maxCol = getRowLength(selectedRow) - 1;
 
     // Special bottom row case
@@ -219,18 +204,11 @@ void KeyboardEntryActivity::loop() {
         // At done button, wrap to beginning of row
         selectedCol = SHIFT_COL;
       }
-      updateRequired = true;
-      return;
-    }
-
-    if (selectedCol < maxCol) {
-      selectedCol++;
     } else {
-      // Wrap to beginning of current row
-      selectedCol = 0;
+      selectedCol = ButtonNavigator::nextIndex(selectedCol, maxCol + 1);
     }
     updateRequired = true;
-  }
+  });
 
   // Selection
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
@@ -297,7 +275,7 @@ void KeyboardEntryActivity::render() const {
   constexpr int keyHeight = 18;
   constexpr int keySpacing = 3;
 
-  const char* const* layout = shiftActive ? keyboardShift : keyboard;
+  const char* const* layout = shiftState ? keyboardShift : keyboard;
 
   // Calculate left margin to center the longest row (13 keys)
   constexpr int maxRowWidth = KEYS_PER_ROW * (keyWidth + keySpacing);
@@ -318,7 +296,7 @@ void KeyboardEntryActivity::render() const {
 
       // SHIFT key (logical col 0, spans 2 key widths)
       const bool shiftSelected = (selectedRow == 4 && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
-      renderItemWithSelector(currentX + 2, rowY, shiftActive ? "SHIFT" : "shift", shiftSelected);
+      renderItemWithSelector(currentX + 2, rowY, shiftString[shiftState], shiftSelected);
       currentX += 2 * (keyWidth + keySpacing);
 
       // Space bar (logical cols 2-6, spans 5 key widths)
@@ -354,10 +332,10 @@ void KeyboardEntryActivity::render() const {
 
   // Draw help text
   const auto labels = mappedInput.mapLabels("« Back", "Select", "Left", "Right");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Draw side button hints for Up/Down navigation
-  renderer.drawSideButtonHints(UI_10_FONT_ID, "Up", "Down");
+  GUI.drawSideButtonHints(renderer, "Up", "Down");
 
   renderer.displayBuffer();
 }

@@ -8,6 +8,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -63,15 +64,16 @@ void KOReaderSettingsActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
-    updateRequired = true;
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+  // Handle navigation
+  buttonNavigator.onNext([this] {
     selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
     updateRequired = true;
-  }
+  });
+
+  buttonNavigator.onPrevious([this] {
+    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
+    updateRequired = true;
+  });
 }
 
 void KOReaderSettingsActivity::handleSelection() {
@@ -207,7 +209,7 @@ void KOReaderSettingsActivity::render() {
 
   // Draw button hints
   const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

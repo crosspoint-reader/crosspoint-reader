@@ -8,8 +8,8 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "ScreenComponents.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/StringUtils.h"
@@ -17,7 +17,6 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
-constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
 
 void OpdsBookBrowserActivity::taskTrampoline(void* param) {
@@ -118,12 +117,6 @@ void OpdsBookBrowserActivity::loop() {
 
   // Handle browsing state
   if (state == BrowserState::BROWSING) {
-    const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-                              mappedInput.wasReleased(MappedInputManager::Button::Left);
-    const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-                              mappedInput.wasReleased(MappedInputManager::Button::Right);
-    const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
-
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!entries.empty()) {
         const auto& entry = entries[selectorIndex];
@@ -135,20 +128,29 @@ void OpdsBookBrowserActivity::loop() {
       }
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
-    } else if (prevReleased && !entries.empty()) {
-      if (skipPage) {
-        selectorIndex = ((selectorIndex / PAGE_ITEMS - 1) * PAGE_ITEMS + entries.size()) % entries.size();
-      } else {
-        selectorIndex = (selectorIndex + entries.size() - 1) % entries.size();
-      }
-      updateRequired = true;
-    } else if (nextReleased && !entries.empty()) {
-      if (skipPage) {
-        selectorIndex = ((selectorIndex / PAGE_ITEMS + 1) * PAGE_ITEMS) % entries.size();
-      } else {
-        selectorIndex = (selectorIndex + 1) % entries.size();
-      }
-      updateRequired = true;
+    }
+
+    // Handle navigation
+    if (!entries.empty()) {
+      buttonNavigator.onNextRelease([this] {
+        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
+        updateRequired = true;
+      });
+
+      buttonNavigator.onPreviousRelease([this] {
+        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
+        updateRequired = true;
+      });
+
+      buttonNavigator.onNextContinuous([this] {
+        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+        updateRequired = true;
+      });
+
+      buttonNavigator.onPreviousContinuous([this] {
+        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+        updateRequired = true;
+      });
     }
   }
 }
@@ -176,7 +178,7 @@ void OpdsBookBrowserActivity::render() const {
   if (state == BrowserState::CHECK_WIFI) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
     const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -184,7 +186,7 @@ void OpdsBookBrowserActivity::render() const {
   if (state == BrowserState::LOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
     const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -193,7 +195,7 @@ void OpdsBookBrowserActivity::render() const {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Error:");
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errorMessage.c_str());
     const auto labels = mappedInput.mapLabels("« Back", "Retry", "", "");
-    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -206,7 +208,7 @@ void OpdsBookBrowserActivity::render() const {
       constexpr int barHeight = 20;
       constexpr int barX = 50;
       const int barY = pageHeight / 2 + 20;
-      ScreenComponents::drawProgressBar(renderer, barX, barY, barWidth, barHeight, downloadProgress, downloadTotal);
+      GUI.drawProgressBar(renderer, Rect{barX, barY, barWidth, barHeight}, downloadProgress, downloadTotal);
     }
     renderer.displayBuffer();
     return;
@@ -219,7 +221,7 @@ void OpdsBookBrowserActivity::render() const {
     confirmLabel = "Download";
   }
   const auto labels = mappedInput.mapLabels("« Back", confirmLabel, "", "");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (entries.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No entries found");

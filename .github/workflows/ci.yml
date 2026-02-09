@@ -1,10 +1,55 @@
-name: CI
-'on':
+name: CI (build)
+
+on:
   push:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install clang-format-21
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get update
+          sudo apt-get install -y clang-format-21
+
+      - name: Run clang-format
+        run: |
+          PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+          git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
+
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Run cppcheck
+        run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -19,19 +64,46 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
-      - name: Install clang-format-21
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 21
-          sudo apt-get update
-          sudo apt-get install -y clang-format-21
-
-      - name: Run cppcheck
-        run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
-
-      - name: Run clang-format
-        run: PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix && git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
-
       - name: Build CrossPoint
-        run: pio run
+        run: |
+          set -euo pipefail
+          pio run | tee pio.log
+
+      - name: Extract firmware stats
+
+        run: |
+          set -euo pipefail
+          ram_line="$(grep -E "RAM:\\s" -m1 pio.log || true)"
+          flash_line="$(grep -E "Flash:\\s" -m1 pio.log || true)"
+          echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
+          echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Firmware build stats"
+            if [ -n "$ram_line" ]; then echo "- ${ram_line}"; else echo "- RAM: not found"; fi
+            if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware.bin artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: firmware.bin
+          path: .pio/build/default/firmware.bin
+          if-no-files-found: error
+
+  # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
+  # PR requirements.
+  test-status:
+    name: Test Status
+    needs:
+      - build
+      - clang-format
+      - cppcheck
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail because needed jobs failed
+        # Fail if any job failed or was cancelled (skipped jobs are ok)
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+      - name: Success
+        run: exit 0

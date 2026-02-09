@@ -2,26 +2,25 @@
 
 #include <GfxRenderer.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-constexpr int SKIP_PAGE_MS = 700;
-}  // namespace
-
 int XtcReaderChapterSelectionActivity::getPageItems() const {
-  constexpr int startY = 60;
   constexpr int lineHeight = 30;
 
   const int screenHeight = renderer.getScreenHeight();
-  const int endY = screenHeight - lineHeight;
-
-  const int availableHeight = endY - startY;
-  int items = availableHeight / lineHeight;
-  if (items < 1) {
-    items = 1;
-  }
-  return items;
+  const auto orientation = renderer.getOrientation();
+  // In inverted portrait, the hint row is drawn near the logical top.
+  // Reserve vertical space so the list starts below the hints.
+  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
+  const int startY = 60 + hintGutterHeight;
+  const int availableHeight = screenHeight - startY - lineHeight;
+  // Clamp to at least one item to prevent empty page math.
+  return std::max(1, availableHeight / lineHeight);
 }
 
 int XtcReaderChapterSelectionActivity::findChapterIndexForPage(uint32_t page) const {
@@ -75,13 +74,8 @@ void XtcReaderChapterSelectionActivity::onExit() {
 }
 
 void XtcReaderChapterSelectionActivity::loop() {
-  const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Right);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = getPageItems();
+  const int totalItems = static_cast<int>(xtc->getChapters().size());
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto& chapters = xtc->getChapters();
@@ -90,29 +84,27 @@ void XtcReaderChapterSelectionActivity::loop() {
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();
-  } else if (prevReleased) {
-    const int total = static_cast<int>(xtc->getChapters().size());
-    if (total == 0) {
-      return;
-    }
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + total) % total;
-    } else {
-      selectorIndex = (selectorIndex + total - 1) % total;
-    }
-    updateRequired = true;
-  } else if (nextReleased) {
-    const int total = static_cast<int>(xtc->getChapters().size());
-    if (total == 0) {
-      return;
-    }
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % total;
-    } else {
-      selectorIndex = (selectorIndex + 1) % total;
-    }
-    updateRequired = true;
   }
+
+  buttonNavigator.onNextRelease([this, totalItems] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousRelease([this, totalItems] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
+    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
+    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
+    updateRequired = true;
+  });
 }
 
 void XtcReaderChapterSelectionActivity::displayTaskLoop() {
@@ -131,28 +123,46 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
+  const auto orientation = renderer.getOrientation();
+  // Landscape orientation: reserve a horizontal gutter for button hints.
+  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  // Inverted portrait: reserve vertical space for hints at the top.
+  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+  // Landscape CW places hints on the left edge; CCW keeps them on the right.
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int contentWidth = pageWidth - hintGutterWidth;
+  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
+  const int contentY = hintGutterHeight;
   const int pageItems = getPageItems();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Select Chapter", true, EpdFontFamily::BOLD);
+  // Manual centering to honor content gutters.
+  const int titleX =
+      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, "Select Chapter", EpdFontFamily::BOLD)) / 2;
+  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, "Select Chapter", true, EpdFontFamily::BOLD);
 
   const auto& chapters = xtc->getChapters();
   if (chapters.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 120, "No chapters");
+    // Center the empty state within the gutter-safe content region.
+    const int emptyX = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, "No chapters")) / 2;
+    renderer.drawText(UI_10_FONT_ID, emptyX, 120 + contentY, "No chapters");
     renderer.displayBuffer();
     return;
   }
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 - 2, pageWidth - 1, 30);
+  // Highlight only the content area, not the hint gutters.
+  renderer.fillRect(contentX, 60 + contentY + (selectorIndex % pageItems) * 30 - 2, contentWidth - 1, 30);
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
     const char* title = chapter.name.empty() ? "Unnamed" : chapter.name.c_str();
-    renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % pageItems) * 30, title, i != selectorIndex);
+    renderer.drawText(UI_10_FONT_ID, contentX + 20, 60 + contentY + (i % pageItems) * 30, title, i != selectorIndex);
   }
 
   // Skip button hints in landscape CW mode (they overlap content)
   if (renderer.getOrientation() != GfxRenderer::LandscapeClockwise) {
     const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
-    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

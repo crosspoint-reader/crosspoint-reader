@@ -1,5 +1,7 @@
 #include "ReaderActivity.h"
 
+#include <HalStorage.h>
+
 #include "Epub.h"
 #include "EpubReaderActivity.h"
 #include "Txt.h"
@@ -27,7 +29,7 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
 }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
-  if (!SdMan.exists(path.c_str())) {
+  if (!Storage.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }
@@ -42,7 +44,7 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
 }
 
 std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
-  if (!SdMan.exists(path.c_str())) {
+  if (!Storage.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }
@@ -57,7 +59,7 @@ std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
 }
 
 std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
-  if (!SdMan.exists(path.c_str())) {
+  if (!Storage.exists(path.c_str())) {
     Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
     return nullptr;
   }
@@ -74,7 +76,7 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
 void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   // If coming from a book, start in that book's folder; otherwise start from root
   const auto initialPath = fromBookPath.empty() ? "/" : extractFolderPath(fromBookPath);
-  onGoToLibrary(initialPath, libraryTab);
+  onGoToLibrary(initialPath);
 }
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {

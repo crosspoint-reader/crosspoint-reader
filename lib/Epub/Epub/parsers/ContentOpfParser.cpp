@@ -8,6 +8,7 @@
 
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
+constexpr char MEDIA_TYPE_CSS[] = "text/css";
 constexpr char itemCacheFile[] = "/.items.bin";
 }  // namespace
 
@@ -35,8 +36,8 @@ ContentOpfParser::~ContentOpfParser() {
   if (tempItemStore) {
     tempItemStore.close();
   }
-  if (SdMan.exists((cachePath + itemCacheFile).c_str())) {
-    SdMan.remove((cachePath + itemCacheFile).c_str());
+  if (Storage.exists((cachePath + itemCacheFile).c_str())) {
+    Storage.remove((cachePath + itemCacheFile).c_str());
   }
   itemIndex.clear();
   itemIndex.shrink_to_fit();
@@ -117,7 +118,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
   if (self->state == IN_PACKAGE && (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0)) {
     self->state = IN_MANIFEST;
-    if (!SdMan.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
+    if (!Storage.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
       Serial.printf(
           "[%lu] [COF] Couldn't open temp items file for writing. This is probably going to be a fatal error.\n",
           millis());
@@ -127,7 +128,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
   if (self->state == IN_PACKAGE && (strcmp(name, "spine") == 0 || strcmp(name, "opf:spine") == 0)) {
     self->state = IN_SPINE;
-    if (!SdMan.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
+    if (!Storage.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
       Serial.printf(
           "[%lu] [COF] Couldn't open temp items file for reading. This is probably going to be a fatal error.\n",
           millis());
@@ -148,7 +149,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     self->state = IN_GUIDE;
     // TODO Remove print
     Serial.printf("[%lu] [COF] Entering guide state.\n", millis());
-    if (!SdMan.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
+    if (!Storage.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
       Serial.printf(
           "[%lu] [COF] Couldn't open temp items file for reading. This is probably going to be a fatal error.\n",
           millis());
@@ -218,12 +219,25 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
     }
 
+    // Collect CSS files
+    if (mediaType == MEDIA_TYPE_CSS) {
+      self->cssFiles.push_back(href);
+    }
+
     // EPUB 3: Check for nav document (properties contains "nav")
     if (!properties.empty() && self->tocNavPath.empty()) {
       // Properties is space-separated, check if "nav" is present as a word
       if (properties == "nav" || properties.find("nav ") == 0 || properties.find(" nav") != std::string::npos) {
         self->tocNavPath = href;
         Serial.printf("[%lu] [COF] Found EPUB 3 nav document: %s\n", millis(), href.c_str());
+      }
+    }
+
+    // EPUB 3: Check for cover image (properties contains "cover-image")
+    if (!properties.empty() && self->coverItemHref.empty()) {
+      if (properties == "cover-image" || properties.find("cover-image ") == 0 ||
+          properties.find(" cover-image") != std::string::npos) {
+        self->coverItemHref = href;
       }
     }
     return;

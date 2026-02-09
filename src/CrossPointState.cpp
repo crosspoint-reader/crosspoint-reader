@@ -1,11 +1,11 @@
 #include "CrossPointState.h"
 
+#include <HalStorage.h>
 #include <HardwareSerial.h>
-#include <SDCardManager.h>
 #include <Serialization.h>
 
 namespace {
-constexpr uint8_t STATE_FILE_VERSION = 2;
+constexpr uint8_t STATE_FILE_VERSION = 4;
 constexpr char STATE_FILE[] = "/.crosspoint/state.bin";
 }  // namespace
 
@@ -13,20 +13,22 @@ CrossPointState CrossPointState::instance;
 
 bool CrossPointState::saveToFile() const {
   FsFile outputFile;
-  if (!SdMan.openFileForWrite("CPS", STATE_FILE, outputFile)) {
+  if (!Storage.openFileForWrite("CPS", STATE_FILE, outputFile)) {
     return false;
   }
 
   serialization::writePod(outputFile, STATE_FILE_VERSION);
   serialization::writeString(outputFile, openEpubPath);
   serialization::writePod(outputFile, lastSleepImage);
+  serialization::writePod(outputFile, readerActivityLoadCount);
+  serialization::writePod(outputFile, lastSleepFromReader);
   outputFile.close();
   return true;
 }
 
 bool CrossPointState::loadFromFile() {
   FsFile inputFile;
-  if (!SdMan.openFileForRead("CPS", STATE_FILE, inputFile)) {
+  if (!Storage.openFileForRead("CPS", STATE_FILE, inputFile)) {
     return false;
   }
 
@@ -43,6 +45,16 @@ bool CrossPointState::loadFromFile() {
     serialization::readPod(inputFile, lastSleepImage);
   } else {
     lastSleepImage = 0;
+  }
+
+  if (version >= 3) {
+    serialization::readPod(inputFile, readerActivityLoadCount);
+  }
+
+  if (version >= 4) {
+    serialization::readPod(inputFile, lastSleepFromReader);
+  } else {
+    lastSleepFromReader = false;
   }
 
   inputFile.close();
