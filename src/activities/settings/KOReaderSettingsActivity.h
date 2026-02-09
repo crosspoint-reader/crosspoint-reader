@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Submenu for KOReader Sync settings.
@@ -20,6 +21,11 @@ class KOReaderSettingsActivity final : public ActivityWithSubactivity {
   void render() override;
 
  private:
+
+
+  ButtonNavigator buttonNavigator;
+
+
   int selectedIndex = 0;
   const std::function<void()> onBack;
 

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Reusable keyboard entry activity for text input.
@@ -61,6 +62,10 @@ class KeyboardEntryActivity : public Activity {
   std::string text;
   size_t maxLength;
   bool isPassword;
+
+
+  ButtonNavigator buttonNavigator;
+
 
   // Keyboard state
   int selectedRow = 0;

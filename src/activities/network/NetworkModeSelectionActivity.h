@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 // Enum for network mode selection
 enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };
@@ -17,6 +18,8 @@ enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };
  * The onCancel callback is called if the user presses back.
  */
 class NetworkModeSelectionActivity final : public Activity {
+  ButtonNavigator buttonNavigator;
+
   int selectedIndex = 0;
 
   const std::function<void(NetworkMode)> onModeSelected;

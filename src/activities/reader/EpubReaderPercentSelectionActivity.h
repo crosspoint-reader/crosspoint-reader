@@ -4,6 +4,7 @@
 
 #include "MappedInputManager.h"
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 class EpubReaderPercentSelectionActivity final : public ActivityWithSubactivity {
  public:
@@ -26,7 +27,7 @@ class EpubReaderPercentSelectionActivity final : public ActivityWithSubactivity 
   int percent = 0;
   // Render dirty flag for the task loop.
 
-  // FreeRTOS task and mutex for rendering.
+  ButtonNavigator buttonNavigator;
 
   // Callback invoked when the user confirms a percent.
   const std::function<void(int)> onSelect;

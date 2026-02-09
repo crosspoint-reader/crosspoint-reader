@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Submenu for OPDS Browser settings.
@@ -20,6 +21,11 @@ class CalibreSettingsActivity final : public ActivityWithSubactivity {
   void render() override;
 
  private:
+
+
+  ButtonNavigator buttonNavigator;
+
+
   int selectedIndex = 0;
   const std::function<void()> onBack;
   void handleSelection();

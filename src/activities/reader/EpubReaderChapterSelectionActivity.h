@@ -4,11 +4,12 @@
 #include <memory>
 
 #include "../ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 class EpubReaderChapterSelectionActivity final : public ActivityWithSubactivity {
   std::shared_ptr<Epub> epub;
   std::string epubPath;
-
+  ButtonNavigator buttonNavigator;
   int currentSpineIndex = 0;
   int currentPage = 0;
   int totalPagesInSpine = 0;

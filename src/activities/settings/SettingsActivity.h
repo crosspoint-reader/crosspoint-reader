@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 class CrossPointSettings;
 
@@ -119,6 +120,10 @@ struct SettingInfo {
 };
 
 class SettingsActivity final : public ActivityWithSubactivity {
+
+
+  ButtonNavigator buttonNavigator;
+
   int selectedCategoryIndex = 0;  // Currently selected category
   int selectedSettingIndex = 0;
   int settingsCount = 0;

@@ -4,11 +4,13 @@
 
 #include "../Activity.h"
 #include "./MyLibraryActivity.h"
+#include "util/ButtonNavigator.h"
 
 struct RecentBook;
 struct Rect;
 
 class HomeActivity final : public Activity {
+  ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   bool recentsLoading = false;
   bool recentsLoaded = false;

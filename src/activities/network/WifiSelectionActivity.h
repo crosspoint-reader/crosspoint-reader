@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 // Structure to hold WiFi network information
 struct WifiNetworkInfo {
@@ -40,6 +41,8 @@ enum class WifiSelectionState {
  * The onComplete callback receives true if connected successfully, false if cancelled.
  */
 class WifiSelectionActivity final : public ActivityWithSubactivity {
+  ButtonNavigator buttonNavigator;
+
   WifiSelectionState state = WifiSelectionState::SCANNING;
   int selectedNetworkIndex = 0;
   std::vector<WifiNetworkInfo> networks;

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
@@ -33,6 +34,7 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   void render() override;
 
  private:
+  ButtonNavigator buttonNavigator;
   BrowserState state = BrowserState::LOADING;
   std::vector<OpdsEntry> entries;
   std::vector<std::string> navigationHistory;  // Stack of previous feed paths for back navigation

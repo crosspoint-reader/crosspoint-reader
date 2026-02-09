@@ -6,9 +6,12 @@
 
 #include "../Activity.h"
 #include "RecentBooksStore.h"
+#include "util/ButtonNavigator.h"
 
 class RecentBooksActivity final : public Activity {
  private:
+  ButtonNavigator buttonNavigator;
+
   size_t selectorIndex = 0;
 
   // Recent tab state

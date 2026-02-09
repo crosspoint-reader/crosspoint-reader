@@ -4,10 +4,11 @@
 #include <memory>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 class XtcReaderChapterSelectionActivity final : public Activity {
   std::shared_ptr<Xtc> xtc;
-
+  ButtonNavigator buttonNavigator;
   uint32_t currentPage = 0;
   int selectorIndex = 0;
 

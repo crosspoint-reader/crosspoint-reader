@@ -4,9 +4,13 @@
 #include <vector>
 
 #include "../Activity.h"
+#include "RecentBooksStore.h"
+#include "util/ButtonNavigator.h"
 
 class MyLibraryActivity final : public Activity {
  private:
+  ButtonNavigator buttonNavigator;
+
   size_t selectorIndex = 0;
 
   // Files state
