@@ -2,9 +2,9 @@
 #include <EpdFontFamily.h>
 #include <HalStorage.h>
 
-#include <list>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "Block.h"
 #include "BlockStyle.h"
@@ -12,14 +12,14 @@
 // Represents a line of text on a page
 class TextBlock final : public Block {
  private:
-  std::list<std::string> words;
-  std::list<uint16_t> wordXpos;
-  std::list<EpdFontFamily::Style> wordStyles;
+  std::vector<std::string> words;
+  std::vector<uint16_t> wordXpos;
+  std::vector<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
 
  public:
-  explicit TextBlock(std::list<std::string> words, std::list<uint16_t> word_xpos,
-                     std::list<EpdFontFamily::Style> word_styles, const BlockStyle& blockStyle = BlockStyle())
+  explicit TextBlock(std::vector<std::string> words, std::vector<uint16_t> word_xpos,
+                     std::vector<EpdFontFamily::Style> word_styles, const BlockStyle& blockStyle = BlockStyle())
       : words(std::move(words)),
         wordXpos(std::move(word_xpos)),
         wordStyles(std::move(word_styles)),
