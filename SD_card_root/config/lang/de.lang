@@ -1,0 +1,305 @@
+# CrossPoint Reader - German / Deutsch
+language.name=Deutsch
+
+# === MAIN MENU ===
+Browse Files=Dateien durchsuchen
+Recents=Zuletzt gelesen
+File Transfer=Dateitransfer
+Settings=Einstellungen
+OPDS Browser=OPDS Browser
+
+# === SETTINGS CATEGORIES ===
+Display=Anzeige
+Reader=Lesen
+Controls=Steuerung
+System=System
+
+# === SETTINGS - DISPLAY ===
+Sleep Screen=Ruhemodus
+Sleep Screen Cover Mode=Cover-Modus Ruhebildschirm
+Sleep Screen Cover Filter=Cover-Filter Ruhebildschirm
+Status Bar=Statusleiste
+Hide Battery %=Batterie % ausblenden
+Refresh Frequency=Aktualisierungsfrequenz
+UI Theme=Design
+Sunlight Fading Fix=Sonnenlicht-Korrektur
+
+# === SETTINGS - READER ===
+Font Family=Schriftart
+Font Size=Schriftgroesse
+Line Spacing=Zeilenabstand
+Screen Margin=Seitenraender
+Paragraph Alignment=Absatzausrichtung
+Book's Embedded Style=Eingebetteter Stil
+Hyphenation=Silbentrennung
+Reading Orientation=Leseausrichtung
+Extra Paragraph Spacing=Extra Absatzabstand
+Text Anti-Aliasing=Text-Glaettung
+
+# === SETTINGS - CONTROLS ===
+Remap Front Buttons=Tasten neu belegen
+Side Button Layout (reader)=Seitentasten-Layout
+Long-press Chapter Skip=Lang druecken: Kapitel
+Short Power Button Click=Kurzer Power-Tastendruck
+
+# === SETTINGS - SYSTEM ===
+Language=Sprache
+Time to Sleep=Zeit bis Ruhemodus
+KOReader Sync=KOReader Sync
+Clear Cache=Cache leeren
+Check for updates=Nach Updates suchen
+
+# === SETTINGS VALUES ===
+ON=EIN
+OFF=AUS
+Dark=Dunkel
+Light=Hell
+Custom=Benutzerdefiniert
+Cover=Cover
+None=Keine
+Cover + Custom=Cover + Benutzerdef.
+Fit=Einpassen
+Crop=Zuschneiden
+Contrast=Kontrast
+Inverted=Invertiert
+No Progress=Ohne Fortschritt
+Full w/ Percentage=Voll mit Prozent
+Full w/ Book Bar=Voll mit Buchleiste
+Book Bar Only=Nur Buchleiste
+Full w/ Chapter Bar=Voll mit Kapitelleiste
+Never=Nie
+In Reader=Im Reader
+Always=Immer
+1 page=1 Seite
+5 pages=5 Seiten
+10 pages=10 Seiten
+15 pages=15 Seiten
+30 pages=30 Seiten
+Classic=Klassisch
+Lyra=Lyra
+Bookerly=Bookerly
+Noto Sans=Noto Sans
+Open Dyslexic=Open Dyslexic
+Small=Klein
+Medium=Mittel
+Large=Gross
+X Large=Sehr gross
+Tight=Eng
+Normal=Normal
+Wide=Weit
+Justify=Blocksatz
+Left=Links
+Center=Zentriert
+Right=Rechts
+Book's Style=Buchstil
+Portrait=Hochformat
+Landscape CW=Querformat CW
+Landscape CCW=Querformat CCW
+Prev, Next=Zurueck, Weiter
+Next, Prev=Weiter, Zurueck
+Ignore=Ignorieren
+Sleep=Ruhemodus
+Page Turn=Seite umbleattern
+1 min=1 Min
+5 min=5 Min
+10 min=10 Min
+15 min=15 Min
+30 min=30 Min
+
+# === BUTTON HINTS ===
+« Back=« Zurueck
+Toggle=Umschalten
+Up=Hoch
+Down=Runter
+Select=Auswaehlen
+Open=Oeffnen
+« Home=« Start
+« Cancel=« Abbrechen
+« Exit=« Beenden
+« Skip=« Ueberspringen
+Connect=Verbinden
+Continue=Weiter
+Retry=Wiederholen
+Update=Aktualisieren
+Clear=Loeschen
+Done=Fertig
+Upload=Hochladen
+Back=Zurueck
+Cancel=Abbrechen
+-=-
++=+
+
+# === HOME SCREEN ===
+Continue Reading=Weiterlesen
+No open book=Kein offenes Buch
+Start reading below=Lesen Sie unten weiter
+Loading...=Laden...
+
+# === LIBRARY ===
+SD card=SD-Karte
+No books found=Keine Buecher gefunden
+
+# === RECENT BOOKS ===
+Recent Books=Zuletzt gelesen
+No recent books=Keine zuletzt gelesenen Buecher
+
+# === READER MENU ===
+Go to Chapter=Zum Kapitel
+Go to %=Gehe zu %
+Go to Position=Zur Position
+Go Home=Startseite
+Sync Progress=Sync Fortschritt
+Delete Book Cache=Buch-Cache loeschen
+Select Chapter=Kapitel waehlen
+Chapter: =Kapitel:
+Book: =Buch:
+ pages= Seiten
+End of book=Ende des Buches
+Empty chapter=Leeres Kapitel
+Empty file=Leere Datei
+No chapters=Keine Kapitel
+Left/Right: 1%  Up/Down: 10%=Links/Rechts: 1%  Hoch/Runter: 10%
+
+# === NETWORK ===
+Join a Network=Netzwerk beitreten
+Connect to Calibre=Mit Calibre verbinden
+Create Hotspot=Hotspot erstellen
+Connect to an existing WiFi network=Mit WiFi-Netzwerk verbinden
+Use Calibre wireless device transfers=Calibre drahtlos uebertragen
+Create a WiFi network others can join=WiFi-Netzwerk erstellen
+How would you like to connect?=Wie moechten Sie sich verbinden?
+
+# === WIFI ===
+WiFi Networks=WLAN-Netzwerke
+No networks found=Keine Netzwerke gefunden
+Press Connect to scan again=Druecken Sie Verbinden zum erneuten Suchen
+* = Encrypted | + = Saved=* = Verschluesselt | + = Gespeichert
+networks found=Netzwerke gefunden
+Scanning...=Suche...
+Connecting...=Verbinde...
+Connected!=Verbunden!
+Network: =Netzwerk:
+IP Address: =IP-Adresse:
+Save password for next time?=Passwort speichern?
+Yes=Ja
+No=Nein
+Connection Failed=Verbindung fehlgeschlagen
+Error: General failure=Fehler: Allgemeiner Fehler
+Error: Network not found=Fehler: Netzwerk nicht gefunden
+Error: Connection timeout=Fehler: Zeitlimit ueberschritten
+Forget network and remove saved password?=Netzwerk vergessen und Passwort loeschen?
+Forget network=Netzwerk vergessen
+Enter WiFi Password=WLAN-Passwort eingeben
+
+# === HOTSPOT / FILE TRANSFER ===
+Starting Hotspot...=Hotspot wird gestartet...
+Hotspot Mode=Hotspot-Modus
+Connect your device to this WiFi network=Verbinden Sie Ihr Geraet mit diesem WLAN
+or scan QR code with your phone to connect to Wifi.=oder scannen Sie den QR-Code zum Verbinden.
+Open this URL in your browser=Oeffnen Sie diese URL im Browser
+or scan QR code with your phone:=oder scannen Sie den QR-Code:
+
+# === CALIBRE ===
+Starting Calibre...=Calibre wird gestartet...
+Calibre setup failed=Calibre-Einrichtung fehlgeschlagen
+Network=Netzwerk
+Setup=Einrichtung
+1) Install CrossPoint Reader plugin=1) CrossPoint Reader Plugin installieren
+2) Be on the same WiFi network=2) Im gleichen WLAN sein
+3) In Calibre: "Send to device"=3) In Calibre: "Send to device"
+Keep this screen open while sending=Bildschirm waehrend des Sendens offen lassen
+Status=Status
+Receiving=Empfange
+Received: =Empfangen:
+
+# === BUTTON REMAP ===
+Press a front button for each role=Druecken Sie eine Taste fuer jede Rolle
+Unassigned=Nicht zugewiesen
+Already assigned=Bereits zugewiesen
+Confirm=Bestaetigen
+Back (1st button)=Zurueck (1. Taste)
+Confirm (2nd button)=Bestaetigen (2. Taste)
+Left (3rd button)=Links (3. Taste)
+Right (4th button)=Rechts (4. Taste)
+Unknown=Unbekannt
+Side button Up: Reset to default layout=Seitentaste hoch: Zuruecksetzen
+Side button Down: Cancel remapping=Seitentaste runter: Abbrechen
+
+# === CLEAR CACHE ===
+This will clear all cached book data.=Dies loescht alle zwischengespeicherten Buchdaten.
+All reading progress will be lost!=Aller Lesefortschritt geht verloren!
+Books will need to be re-indexed=Buecher muessen neu indexiert werden
+when opened again.=beim naechsten Oeffnen.
+Clearing cache...=Cache wird geleert...
+Cache Cleared=Cache geleert
+ items removed= Elemente entfernt
+ failed= fehlgeschlagen
+Failed to clear cache=Cache leeren fehlgeschlagen
+Check serial output for details=Details in der seriellen Ausgabe
+
+# === OTA UPDATE ===
+Checking for update...=Suche nach Updates...
+New update available!=Neues Update verfuegbar!
+Current Version: =Aktuelle Version:
+New Version: =Neue Version:
+Updating...=Aktualisiere...
+No update available=Kein Update verfuegbar
+Update failed=Update fehlgeschlagen
+Update complete=Update abgeschlossen
+Press and hold power button to turn back on=Power-Taste gedruckt halten zum Einschalten
+
+# === KOREADER ===
+Username=Benutzername
+Password=Passwort
+Sync Server URL=Sync-Server-URL
+Document Matching=Dokumentabgleich
+Authenticate=Authentifizieren
+KOReader Username=KOReader Benutzername
+KOReader Password=KOReader Passwort
+KOReader Auth=KOReader Auth.
+Authenticating...=Authentifiziere...
+Success!=Erfolg!
+KOReader sync is ready to use=KOReader Sync ist bereit
+Authentication Failed=Authentifizierung fehlgeschlagen
+
+# === KOREADER SYNC ===
+No credentials configured=Keine Zugangsdaten konfiguriert
+Set up KOReader account in Settings=KOReader-Konto in Einstellungen einrichten
+Syncing time...=Zeit synchronisieren...
+Calculating document hash...=Dokument-Hash berechnen...
+Fetching remote progress...=Entfernten Fortschritt abrufen...
+Uploading progress...=Fortschritt hochladen...
+Failed to calculate document hash=Hash-Berechnung fehlgeschlagen
+Progress found!=Fortschritt gefunden!
+Remote:=Entfernt:
+Local:=Lokal:
+From: =Von:
+Apply remote progress=Entfernten Fortschritt anwenden
+Upload local progress=Lokalen Fortschritt hochladen
+No remote progress found=Kein entfernter Fortschritt
+Upload current position?=Aktuelle Position hochladen?
+Progress uploaded!=Fortschritt hochgeladen!
+Sync failed=Sync fehlgeschlagen
+
+# === OPDS ===
+OPDS Server URL=OPDS-Server-URL
+For Calibre, add /opds to your URL=Fuer Calibre /opds zur URL hinzufuegen
+Checking WiFi...=Pruefe WiFi...
+Downloading...=Herunterladen...
+Error:=Fehler:
+No entries found=Keine Eintraege gefunden
+Download=Herunterladen
+Download failed=Download fehlgeschlagen
+
+# === STATUS ===
+[Not Set]=[Nicht gesetzt]
+[Set]=[Gesetzt]
+[Default]=[Standard]
+[Custom]=[Benutzerdefiniert]
+[Filename]=[Dateiname]
+[Binary]=[Binaer]
+[Set credentials first]=[Zugangsdaten zuerst setzen]
+
+# === DIALOGS ===
+Filename=Dateiname
+Binary=Binaer
