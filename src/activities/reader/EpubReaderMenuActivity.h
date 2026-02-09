@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../ActivityWithSubactivity.h"
+#include "i18n/TranslationManager.h"
 #include "util/ButtonNavigator.h"
 
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
@@ -41,9 +42,9 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
 
   // Fixed menu layout (order matters for up/down navigation).
   const std::vector<MenuItem> menuItems = {
-      {MenuAction::SELECT_CHAPTER, "Go to Chapter"}, {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
-      {MenuAction::GO_TO_PERCENT, "Go to %"},        {MenuAction::GO_HOME, "Go Home"},
-      {MenuAction::SYNC, "Sync Progress"},           {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
+      {MenuAction::SELECT_CHAPTER, T("Go to Chapter")}, {MenuAction::ROTATE_SCREEN, T("Reading Orientation")},
+      {MenuAction::GO_TO_PERCENT, T("Go to %")},        {MenuAction::GO_HOME, T("Go Home")},
+      {MenuAction::SYNC, T("Sync Progress")},           {MenuAction::DELETE_CACHE, T("Delete Book Cache")}};
 
   int selectedIndex = 0;
   bool updateRequired = false;
@@ -52,7 +53,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   ButtonNavigator buttonNavigator;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
-  const std::vector<const char*> orientationLabels = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"};
+  const std::vector<const char*> orientationLabels = {T("Portrait"), T("Landscape CW"), T("Inverted"), T("Landscape CCW")};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

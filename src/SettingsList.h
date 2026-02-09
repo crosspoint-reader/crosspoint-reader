@@ -5,6 +5,7 @@
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "activities/settings/SettingsActivity.h"
+#include "i18n/TranslationManager.h"
 
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
@@ -56,6 +57,19 @@ inline std::vector<SettingInfo> getSettingsList() {
                         "shortPwrBtn", "Controls"),
 
       // --- System ---
+      SettingInfo::DynamicEnum(
+          "Language", TranslationManager::getInstance().getAvailableLanguageNames(),
+          [] { return TranslationManager::getInstance().getCurrentLanguageIndex(); },
+          [](uint8_t idx) {
+            auto& tm = TranslationManager::getInstance();
+            auto& langs = tm.getAvailableLanguages();
+            if (idx < langs.size()) {
+              strncpy(SETTINGS.languageCode, langs[idx].code, sizeof(SETTINGS.languageCode) - 1);
+              SETTINGS.languageCode[sizeof(SETTINGS.languageCode) - 1] = '\0';
+              tm.init(SETTINGS.languageCode);
+            }
+          },
+          "language", "System"),
       SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
                         {"1 min", "5 min", "10 min", "15 min", "30 min"}, "sleepTimeout", "System"),
 

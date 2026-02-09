@@ -171,6 +171,8 @@ class CrossPointSettings {
   uint8_t fadingFix = 0;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // UI language code (ISO 639-1, e.g. "en", "cs", "de")
+  char languageCode[8] = "en";
 
   ~CrossPointSettings() = default;
 

@@ -14,6 +14,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
@@ -170,6 +171,10 @@ void SettingsActivity::toggleCurrentSetting() {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+  } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
+    // DynamicEnum: uses getter/setter instead of member pointer
+    const uint8_t currentValue = setting.valueGetter();
+    setting.valueSetter((currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size()));
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
@@ -248,12 +253,12 @@ void SettingsActivity::render() const {
 
   auto metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Settings");
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, T("Settings"));
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
   for (int i = 0; i < categoryCount; i++) {
-    tabs.push_back({categoryNames[i], selectedCategoryIndex == i});
+    tabs.push_back({T(categoryNames[i]), selectedCategoryIndex == i});
   }
   GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
                  selectedSettingIndex == 0);
@@ -264,16 +269,20 @@ void SettingsActivity::render() const {
       Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
                          metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex - 1, [&settings](int index) { return std::string(settings[index].name); },
-      nullptr, nullptr,
+      settingsCount, selectedSettingIndex - 1,
+      [&settings](int index) { return std::string(T(settings[index].name)); }, nullptr, nullptr,
       [&settings](int i) {
-        std::string valueText = "";
+        std::string valueText;
         if (settings[i].type == SettingType::TOGGLE && settings[i].valuePtr != nullptr) {
           const bool value = SETTINGS.*(settings[i].valuePtr);
-          valueText = value ? "ON" : "OFF";
+          valueText = value ? T("ON") : T("OFF");
+        } else if (settings[i].type == SettingType::ENUM && settings[i].valueGetter) {
+          // DynamicEnum: use getter for current value
+          const uint8_t value = settings[i].valueGetter();
+          valueText = settings[i].enumValues[value];
         } else if (settings[i].type == SettingType::ENUM && settings[i].valuePtr != nullptr) {
           const uint8_t value = SETTINGS.*(settings[i].valuePtr);
-          valueText = settings[i].enumValues[value];
+          valueText = T(settings[i].enumValues[value].c_str());
         } else if (settings[i].type == SettingType::VALUE && settings[i].valuePtr != nullptr) {
           valueText = std::to_string(SETTINGS.*(settings[i].valuePtr));
         }
@@ -286,7 +295,7 @@ void SettingsActivity::render() const {
                     metrics.versionTextY, CROSSPOINT_VERSION);
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels("« Back", "Toggle", "Up", "Down");
+  const auto labels = mappedInput.mapLabels(T("\xC2\xAB Back"), T("Toggle"), T("Up"), T("Down"));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

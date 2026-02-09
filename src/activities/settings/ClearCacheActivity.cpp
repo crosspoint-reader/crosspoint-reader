@@ -7,6 +7,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 void ClearCacheActivity::taskTrampoline(void* param) {
   auto* self = static_cast<ClearCacheActivity*>(param);
@@ -57,46 +58,46 @@ void ClearCacheActivity::render() {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Clear Cache", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, T("Clear Cache"), true, EpdFontFamily::BOLD);
 
   if (state == WARNING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 60, "This will clear all cached book data.", true);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 30, "All reading progress will be lost!", true,
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 60, T("This will clear all cached book data."), true);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 30, T("All reading progress will be lost!"), true,
                               EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, "Books will need to be re-indexed", true);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, "when opened again.", true);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, T("Books will need to be re-indexed"), true);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, T("when opened again."), true);
 
-    const auto labels = mappedInput.mapLabels("« Cancel", "Clear", "", "");
+    const auto labels = mappedInput.mapLabels(T("\xC2\xAB Cancel"), T("Clear"), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == CLEARING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Clearing cache...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, T("Clearing cache..."), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Cache Cleared", true, EpdFontFamily::BOLD);
-    String resultText = String(clearedCount) + " items removed";
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, T("Cache Cleared"), true, EpdFontFamily::BOLD);
+    String resultText = String(clearedCount) + T(" items removed");
     if (failedCount > 0) {
-      resultText += ", " + String(failedCount) + " failed";
+      resultText += ", " + String(failedCount) + T(" failed");
     }
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, resultText.c_str());
 
-    const auto labels = mappedInput.mapLabels("« Back", "", "", "");
+    const auto labels = mappedInput.mapLabels(T("\xC2\xAB Back"), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Failed to clear cache", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, "Check serial output for details");
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, T("Failed to clear cache"), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, T("Check serial output for details"));
 
-    const auto labels = mappedInput.mapLabels("« Back", "", "", "");
+    const auto labels = mappedInput.mapLabels(T("\xC2\xAB Back"), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;

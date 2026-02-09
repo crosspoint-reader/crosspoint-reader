@@ -15,6 +15,7 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 namespace {
 // AP Mode configuration
@@ -390,7 +391,7 @@ void CrossPointWebServerActivity::render() const {
   } else if (state == WebServerActivityState::AP_STARTING) {
     renderer.clearScreen();
     const auto pageHeight = renderer.getScreenHeight();
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, "Starting Hotspot...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, T("Starting Hotspot..."), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
   }
 }
@@ -421,21 +422,21 @@ void CrossPointWebServerActivity::renderServerRunning() const {
   // Use consistent line spacing
   constexpr int LINE_SPACING = 28;  // Space between lines
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, T("File Transfer"), true, EpdFontFamily::BOLD);
 
   if (isApMode) {
     // AP mode display - center the content block
     int startY = 55;
 
-    renderer.drawCenteredText(UI_10_FONT_ID, startY, "Hotspot Mode", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, T("Hotspot Mode"), true, EpdFontFamily::BOLD);
 
-    std::string ssidInfo = "Network: " + connectedSSID;
+    std::string ssidInfo = std::string(T("Network: ")) + connectedSSID;
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ssidInfo.c_str());
 
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, "Connect your device to this WiFi network");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, T("Connect your device to this WiFi network"));
 
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3,
-                              "or scan QR code with your phone to connect to Wifi.");
+                              T("or scan QR code with your phone to connect to Wifi."));
     // Show QR code for URL
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
@@ -448,16 +449,16 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     // Show IP address as fallback
     std::string ipUrl = "or http://" + connectedIP + "/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, ipUrl.c_str());
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "Open this URL in your browser");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, T("Open this URL in your browser"));
 
     // Show QR code for URL
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "or scan QR code with your phone:");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, T("or scan QR code with your phone:"));
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 7, hostnameUrl);
   } else {
     // STA mode display (original behavior)
     const int startY = 65;
 
-    std::string ssidInfo = "Network: " + connectedSSID;
+    std::string ssidInfo = std::string(T("Network: ")) + connectedSSID;
     if (ssidInfo.length() > 28) {
       ssidInfo.replace(25, ssidInfo.length() - 25, "...");
     }
@@ -474,13 +475,13 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     std::string hostnameUrl = std::string("or http://") + AP_HOSTNAME + ".local/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str());
 
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Open this URL in your browser");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, T("Open this URL in your browser"));
 
     // Show QR code for URL
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, T("or scan QR code with your phone:"));
   }
 
-  const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
+  const auto labels = mappedInput.mapLabels(T("\xC2\xAB Exit"), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

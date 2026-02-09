@@ -9,6 +9,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 void KOReaderAuthActivity::taskTrampoline(void* param) {
   auto* self = static_cast<KOReaderAuthActivity*>(param);
@@ -29,7 +30,7 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = AUTHENTICATING;
-  statusMessage = "Authenticating...";
+  statusMessage = T("Authenticating...");
   xSemaphoreGive(renderingMutex);
   updateRequired = true;
 
@@ -69,7 +70,7 @@ void KOReaderAuthActivity::onEnter() {
   // Check if already connected
   if (WiFi.status() == WL_CONNECTED) {
     state = AUTHENTICATING;
-    statusMessage = "Authenticating...";
+    statusMessage = T("Authenticating...");
     updateRequired = true;
 
     // Perform authentication in a separate task
@@ -124,7 +125,7 @@ void KOReaderAuthActivity::render() {
   }
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Auth", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, T("KOReader Auth"), true, EpdFontFamily::BOLD);
 
   if (state == AUTHENTICATING) {
     renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, EpdFontFamily::BOLD);
@@ -133,20 +134,20 @@ void KOReaderAuthActivity::render() {
   }
 
   if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Success!", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, "KOReader sync is ready to use");
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, T("Success!"), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 320, T("KOReader sync is ready to use"));
 
-    const auto labels = mappedInput.mapLabels("Done", "", "", "");
+    const auto labels = mappedInput.mapLabels(T("Done"), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Authentication Failed", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, T("Authentication Failed"), true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 320, errorMessage.c_str());
 
-    const auto labels = mappedInput.mapLabels("Back", "", "", "");
+    const auto labels = mappedInput.mapLabels(T("Back"), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;

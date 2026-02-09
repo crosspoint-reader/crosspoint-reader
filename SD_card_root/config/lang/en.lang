@@ -1,0 +1,5 @@
+# CrossPoint Reader - English (Reference)
+# This file is optional. English is the built-in fallback.
+# Translation keys are the English strings themselves.
+
+language.name=English

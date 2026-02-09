@@ -7,6 +7,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 int XtcReaderChapterSelectionActivity::getPageItems() const {
   constexpr int lineHeight = 30;
@@ -138,14 +139,14 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
   const int pageItems = getPageItems();
   // Manual centering to honor content gutters.
   const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, "Select Chapter", EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, "Select Chapter", true, EpdFontFamily::BOLD);
+      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, T("Select Chapter"), EpdFontFamily::BOLD)) / 2;
+  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, T("Select Chapter"), true, EpdFontFamily::BOLD);
 
   const auto& chapters = xtc->getChapters();
   if (chapters.empty()) {
     // Center the empty state within the gutter-safe content region.
-    const int emptyX = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, "No chapters")) / 2;
-    renderer.drawText(UI_10_FONT_ID, emptyX, 120 + contentY, "No chapters");
+    const int emptyX = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, T("No chapters"))) / 2;
+    renderer.drawText(UI_10_FONT_ID, emptyX, 120 + contentY, T("No chapters"));
     renderer.displayBuffer();
     return;
   }
@@ -161,7 +162,7 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
 
   // Skip button hints in landscape CW mode (they overlap content)
   if (renderer.getOrientation() != GfxRenderer::LandscapeClockwise) {
-    const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
+    const auto labels = mappedInput.mapLabels(T("\xC2\xAB Back"), T("Select"), T("Up"), T("Down"));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 

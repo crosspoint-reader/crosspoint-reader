@@ -6,6 +6,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 namespace {
 // UI steps correspond to logical roles in order: Back, Confirm, Left, Right.
@@ -138,8 +139,8 @@ void ButtonRemapActivity::render() {
     return "-";
   };
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Remap Front Buttons", true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(UI_10_FONT_ID, 40, "Press a front button for each role");
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, T("Remap Front Buttons"), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, 40, T("Press a front button for each role"));
 
   for (uint8_t i = 0; i < kRoleCount; i++) {
     const int y = 70 + i * 30;
@@ -154,7 +155,7 @@ void ButtonRemapActivity::render() {
     renderer.drawText(UI_10_FONT_ID, 20, y, roleName, !isSelected);
 
     // Show currently assigned hardware button (or unassigned).
-    const char* assigned = (tempMapping[i] == kUnassigned) ? "Unassigned" : getHardwareName(tempMapping[i]);
+    const char* assigned = (tempMapping[i] == kUnassigned) ? T("Unassigned") : getHardwareName(tempMapping[i]);
     const auto width = renderer.getTextWidth(UI_10_FONT_ID, assigned);
     renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, y, assigned, !isSelected);
   }
@@ -165,8 +166,8 @@ void ButtonRemapActivity::render() {
   }
 
   // Provide side button actions at the bottom of the screen (split across two lines).
-  renderer.drawCenteredText(SMALL_FONT_ID, 250, "Side button Up: Reset to default layout", true);
-  renderer.drawCenteredText(SMALL_FONT_ID, 280, "Side button Down: Cancel remapping", true);
+  renderer.drawCenteredText(SMALL_FONT_ID, 250, T("Side button Up: Reset to default layout"), true);
+  renderer.drawCenteredText(SMALL_FONT_ID, 280, T("Side button Down: Cancel remapping"), true);
 
   // Live preview of logical labels under front buttons.
   // This mirrors the on-device front button order: Back, Confirm, Left, Right.
@@ -189,7 +190,7 @@ bool ButtonRemapActivity::validateUnassigned(const uint8_t pressedButton) {
   // Block reusing a hardware button already assigned to another role.
   for (uint8_t i = 0; i < kRoleCount; i++) {
     if (tempMapping[i] == pressedButton && i != currentStep) {
-      errorMessage = "Already assigned";
+      errorMessage = T("Already assigned");
       errorUntil = millis() + kErrorDisplayMs;
       return false;
     }
@@ -200,28 +201,28 @@ bool ButtonRemapActivity::validateUnassigned(const uint8_t pressedButton) {
 const char* ButtonRemapActivity::getRoleName(const uint8_t roleIndex) const {
   switch (roleIndex) {
     case 0:
-      return "Back";
+      return T("Back");
     case 1:
-      return "Confirm";
+      return T("Confirm");
     case 2:
-      return "Left";
+      return T("Left");
     case 3:
     default:
-      return "Right";
+      return T("Right");
   }
 }
 
 const char* ButtonRemapActivity::getHardwareName(const uint8_t buttonIndex) const {
   switch (buttonIndex) {
     case CrossPointSettings::FRONT_HW_BACK:
-      return "Back (1st button)";
+      return T("Back (1st button)");
     case CrossPointSettings::FRONT_HW_CONFIRM:
-      return "Confirm (2nd button)";
+      return T("Confirm (2nd button)");
     case CrossPointSettings::FRONT_HW_LEFT:
-      return "Left (3rd button)";
+      return T("Left (3rd button)");
     case CrossPointSettings::FRONT_HW_RIGHT:
-      return "Right (4th button)";
+      return T("Right (4th button)");
     default:
-      return "Unknown";
+      return T("Unknown");
   }
 }
