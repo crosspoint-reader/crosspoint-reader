@@ -63,9 +63,7 @@ const char* TranslationManager::getString(const char* key) const {
   return key;
 }
 
-size_t TranslationManager::getMemoryUsage() const {
-  return poolSize + (pairCapacity * sizeof(Pair));
-}
+size_t TranslationManager::getMemoryUsage() const { return poolSize + (pairCapacity * sizeof(Pair)); }
 
 // ──────────────────────────────────────────────
 // Language scanning
@@ -163,9 +161,8 @@ std::vector<std::string> TranslationManager::getAvailableLanguageNames() {
   const auto& langs = getAvailableLanguages();
   std::vector<std::string> names;
   names.reserve(langs.size());
-  for (const auto& lang : langs) {
-    names.emplace_back(lang.name);
-  }
+  std::transform(langs.begin(), langs.end(), std::back_inserter(names),
+                 [](const LangInfo& lang) { return std::string(lang.name); });
   return names;
 }
 

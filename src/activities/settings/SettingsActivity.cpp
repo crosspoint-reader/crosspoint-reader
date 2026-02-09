@@ -269,8 +269,8 @@ void SettingsActivity::render() const {
       Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
                          metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex - 1,
-      [&settings](int index) { return std::string(T(settings[index].name)); }, nullptr, nullptr,
+      settingsCount, selectedSettingIndex - 1, [&settings](int index) { return std::string(T(settings[index].name)); },
+      nullptr, nullptr,
       [&settings](int i) {
         std::string valueText;
         if (settings[i].type == SettingType::TOGGLE && settings[i].valuePtr != nullptr) {

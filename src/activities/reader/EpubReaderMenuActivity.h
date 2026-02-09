@@ -53,7 +53,8 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   ButtonNavigator buttonNavigator;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
-  const std::vector<const char*> orientationLabels = {T("Portrait"), T("Landscape CW"), T("Inverted"), T("Landscape CCW")};
+  const std::vector<const char*> orientationLabels = {T("Portrait"), T("Landscape CW"), T("Inverted"),
+                                                      T("Landscape CCW")};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

@@ -94,7 +94,8 @@ void ClearCacheActivity::render() {
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, T("Failed to clear cache"), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, T("Failed to clear cache"), true,
+                              EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, T("Check serial output for details"));
 
     const auto labels = mappedInput.mapLabels(T("\xC2\xAB Back"), "", "", "");

@@ -114,7 +114,8 @@ void EpubReaderMenuActivity::renderScreen() {
   // Progress summary
   std::string progressLine;
   if (totalPages > 0) {
-    progressLine = std::string(T("Chapter: ")) + std::to_string(currentPage) + "/" + std::to_string(totalPages) + T(" pages  |  ");
+    progressLine =
+        std::string(T("Chapter: ")) + std::to_string(currentPage) + "/" + std::to_string(totalPages) + T(" pages  |  ");
   }
   progressLine += std::string(T("Book: ")) + std::to_string(bookProgressPercent) + "%";
   renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
