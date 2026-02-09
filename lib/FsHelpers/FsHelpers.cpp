@@ -3,7 +3,7 @@
 #include "Bitmap.h" // Required for BmpHeader struct definition
 #include <BitmapHelpers.h>
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include <string>
 #include <vector>
@@ -55,15 +55,15 @@ bool FsHelpers::saveFramebufferAsBmp(const char *filename,
   size_t last_slash = path.find_last_of('/');
   if (last_slash != std::string::npos) {
     std::string dir = path.substr(0, last_slash);
-    if (!SdMan.exists(dir.c_str())) {
-      if (!SdMan.mkdir(dir.c_str())) {
+    if (!Storage.exists(dir.c_str())) {
+      if (!Storage.mkdir(dir.c_str())) {
         return false;
       }
     }
   }
 
   FsFile file;
-  if (!SdMan.openFileForWrite("SCR", filename, file)) {
+  if (!Storage.openFileForWrite("SCR", filename, file)) {
     Serial.printf("[%lu] [SCR] Failed to open file for writing\n", millis());
     return false;
   }
@@ -78,7 +78,7 @@ bool FsHelpers::saveFramebufferAsBmp(const char *filename,
 
   if (write_error) {
     file.close();
-    SdMan.remove(filename);
+    Storage.remove(filename);
     return false;
   }
 
@@ -104,7 +104,7 @@ bool FsHelpers::saveFramebufferAsBmp(const char *filename,
   file.close();
 
   if (write_error) {
-    SdMan.remove(filename);
+    Storage.remove(filename);
     return false;
   }
 
