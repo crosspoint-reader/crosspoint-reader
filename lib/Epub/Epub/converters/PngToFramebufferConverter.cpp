@@ -85,7 +85,7 @@ static int32_t pngSeekWithHandle(PNGFILE* pFile, int32_t pos) {
 // We heap-allocate it on demand rather than using a static instance, so this memory
 // is only consumed while actually decoding/querying PNG images. This is critical on
 // the ESP32-C3 where total RAM is ~320 KB.
-static constexpr size_t PNG_DECODER_APPROX_SIZE = 44 * 1024;  // ~42 KB + overhead
+static constexpr size_t PNG_DECODER_APPROX_SIZE = 44 * 1024;                          // ~42 KB + overhead
 static constexpr size_t MIN_FREE_HEAP_FOR_PNG = PNG_DECODER_APPROX_SIZE + 16 * 1024;  // decoder + 16 KB headroom
 
 bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
@@ -102,8 +102,8 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
     return false;
   }
 
-  int rc =
-      png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle, nullptr);
+  int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
+                     nullptr);
 
   if (rc != 0) {
     Serial.printf("[%lu] [PNG] Failed to open PNG for dimensions: %d\n", millis(), rc);
@@ -201,7 +201,8 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   if (outY >= ctx->screenHeight) return 1;
 
   // Convert entire source line to grayscale (improves cache locality)
-  convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->pPalette, pDraw->iHasAlpha);
+  convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->pPalette,
+                    pDraw->iHasAlpha);
 
   // Render scaled row using Bresenham-style integer stepping (no floating-point division)
   int dstWidth = ctx->dstWidth;
