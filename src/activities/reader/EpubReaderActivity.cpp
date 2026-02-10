@@ -21,9 +21,10 @@ namespace {
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 constexpr unsigned long formattingToggleMs = 500;
+// New constant for double click speed
 constexpr unsigned long doubleClickMs = 300;
 
-// Global state for the Help Overlay (since we can't modify the header)
+// Global state for the Help Overlay
 static bool showHelpOverlay = false;
 
 constexpr int statusBarMargin = 19;
@@ -63,9 +64,12 @@ void drawHelpBox(GfxRenderer& renderer, int x, int y, const char* text, bool ali
   int w = renderer.getTextWidth(SMALL_FONT_ID, text) + 10;
   int h = 40;  // approximate height for 3 lines
   int drawX = alignRight ? (x - w) : x;
-  
-  renderer.drawRect(Rect{drawX, y, w, h}, 1); // White fill
-  renderer.drawRect(Rect{drawX, y, w, h}, 0); // Black border
+
+  // Fill White (Clear background) - false = white/clear
+  renderer.fillRect(drawX, y, w, h, false);
+  // Draw Border Black - true = black/set
+  renderer.drawRect(drawX, y, w, h, true);
+  // Draw Text Black
   renderer.drawText(SMALL_FONT_ID, drawX + 5, y + 5, text);
 }
 
@@ -78,6 +82,9 @@ void EpubReaderActivity::taskTrampoline(void* param) {
 
 void EpubReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
+
+  // Reset help overlay state when entering a book
+  showHelpOverlay = false;
 
   if (!epub) {
     return;
@@ -160,7 +167,7 @@ void EpubReaderActivity::loop() {
         mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
       showHelpOverlay = false;
       updateRequired = true;
-      return; 
+      return;
     }
     // Block other logic while overlay is shown
     return;
@@ -216,7 +223,7 @@ void EpubReaderActivity::loop() {
       // Long Press: Toggle Help Overlay
       showHelpOverlay = true;
       updateRequired = true;
-      return; 
+      return;
     }
 
     // Short Press: Open Menu
@@ -839,46 +846,46 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginLeft) {
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
-  
+
   // --- HELP OVERLAY RENDERING ---
   if (showHelpOverlay) {
     const int w = renderer.getScreenWidth();
     const int h = renderer.getScreenHeight();
-    
+
     // Dim the reading background slightly if possible, or just draw on top
     // Since we don't have alpha, we just draw readable boxes.
-    
+
     // NOTE: Coordinates are RAW screen pixels, need to respect orientation
     // But since we are drawing absolute button labels, we want logical positions?
     // Actually, renderer is already rotated. So (0,0) is top-left of *current view*.
-    
+
     // Draw Center "Dismiss" instruction
     drawHelpBox(renderer, w / 2 - 50, h / 2 - 20, "PRESS ANY KEY\nTO DISMISS");
 
     if (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) {
-        // PORTRAIT LABELS
-        
-        // Side Buttons (Right Edge)
-        drawHelpBox(renderer, w - 10, 50, "Prev Page", true);
-        drawHelpBox(renderer, w - 10, h - 150, "Next Page", true);
-        
-        // Front Left (Bottom Left)
-        drawHelpBox(renderer, 20, h - 60, "1x: Size -\n2x: Align\nHold: Space");
-        
-        // Front Right (Bottom Right)
-        drawHelpBox(renderer, w - 20, h - 60, "1x: Size +\n2x: AntiAlias\nHold: ROTATE", true);
-        
+      // PORTRAIT LABELS
+
+      // Side Buttons (Right Edge)
+      drawHelpBox(renderer, w - 10, 50, "Prev Page", true);
+      drawHelpBox(renderer, w - 10, h - 150, "Next Page", true);
+
+      // Front Left (Bottom Left)
+      drawHelpBox(renderer, 20, h - 60, "1x: Size -\n2x: Align\nHold: Space");
+
+      // Front Right (Bottom Right)
+      drawHelpBox(renderer, w - 20, h - 60, "1x: Size +\n2x: AntiAlias\nHold: ROTATE", true);
+
     } else {
-        // LANDSCAPE CCW LABELS
-        // Screen is rotated. Top is physical Side buttons. Right is physical Front buttons.
-        
-        // Top Buttons (Top Edge)
-        drawHelpBox(renderer, 20, 10, "1x: Size -\n2x: Align\nHold: Space");
-        drawHelpBox(renderer, w - 20, 10, "1x: Size +\n2x: AntiAlias\nHold: ROTATE", true);
-        
-        // Right Buttons (Right Edge)
-        drawHelpBox(renderer, w - 10, 50, "Prev Page", true);
-        drawHelpBox(renderer, w - 10, h - 50, "Next Page", true);
+      // LANDSCAPE CCW LABELS
+      // Screen is rotated. Top is physical Side buttons. Right is physical Front buttons.
+
+      // Top Buttons (Top Edge)
+      drawHelpBox(renderer, 20, 10, "1x: Size -\n2x: Align\nHold: Space");
+      drawHelpBox(renderer, w - 20, 10, "1x: Size +\n2x: AntiAlias\nHold: ROTATE", true);
+
+      // Right Buttons (Right Edge)
+      drawHelpBox(renderer, w - 10, 50, "Prev Page", true);
+      drawHelpBox(renderer, w - 10, h - 50, "Next Page", true);
     }
   }
 
@@ -892,7 +899,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   renderer.storeBwBuffer();
 
-  if (SETTINGS.textAntiAliasing && !showHelpOverlay) { // Don't anti-alias the help overlay
+  if (SETTINGS.textAntiAliasing && !showHelpOverlay) {  // Don't anti-alias the help overlay
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
