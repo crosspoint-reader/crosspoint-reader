@@ -108,12 +108,12 @@ python3 -m pip install pyserial colorama matplotlib
 ```
 after that run the script:
 ```sh
-# For Linux
-# This was tested on Debian and should work on most Linux systems.
+# The serial port is auto-detected on Linux and macOS.
 python3 scripts/debugging_monitor.py
 
-# For macOS
-python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
+# To specify a port manually:
+python3 scripts/debugging_monitor.py /dev/ttyACM0        # Linux
+python3 scripts/debugging_monitor.py /dev/tty.usbmodem2101  # macOS
 ```
 Minor adjustments may be required for Windows.
 

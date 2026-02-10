@@ -1,5 +1,7 @@
 import sys
 import argparse
+import glob
+import platform
 import re
 import threading
 from datetime import datetime
@@ -181,11 +183,41 @@ def update_graph(frame):
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
 
+def detect_serial_port():
+    """Auto-detect the serial port based on the platform."""
+    if platform.system() == "Darwin":
+        pattern = "/dev/tty.usbmodem*"
+    else:
+        pattern = "/dev/ttyACM*"
+
+    matches = sorted(glob.glob(pattern))
+
+    if len(matches) == 1:
+        return matches[0]
+
+    if len(matches) == 0:
+        print(f"{Fore.RED}Error: No serial devices found matching {pattern}{Style.RESET_ALL}")
+        print(f"Please specify the port manually, e.g.:")
+        print(f"    python3 {sys.argv[0]} /dev/ttyUSB0")
+        sys.exit(1)
+
+    print(f"{Fore.YELLOW}Multiple serial devices found:{Style.RESET_ALL}")
+    for i, port in enumerate(matches):
+        print(f"  {i + 1}) {port}")
+    print(f"\nPlease specify which port to use, e.g.:")
+    print(f"    python3 {sys.argv[0]} {matches[0]}")
+    sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="ESP32 Monitor with Graph")
-    parser.add_argument("port", nargs="?", default="/dev/ttyACM0", help="Serial port")
+    parser.add_argument("port", nargs="?", default=None, help="Serial port (auto-detected if omitted)")
     parser.add_argument("--baud", type=int, default=115200, help="Baud rate")
     args = parser.parse_args()
+
+    if args.port is None:
+        args.port = detect_serial_port()
+        print(f"{Fore.GREEN}Auto-detected port: {args.port}{Style.RESET_ALL}")
 
     # 1. Start the Serial Reader in a separate thread
     # Daemon=True means this thread dies when the main program closes
