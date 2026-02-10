@@ -22,15 +22,18 @@ The script will open a matplotlib window showing memory usage over time and prov
 an interactive command prompt for sending commands to the device. Press Ctrl-C or
 close the graph window to exit gracefully.
 """
+
 from __future__ import annotations
 
-import sys
 import argparse
+import glob
+import platform
 import re
-import threading
 import signal
-from datetime import datetime
+import sys
+import threading
 from collections import deque
+from datetime import datetime
 
 # Try to import potentially missing packages
 PACKAGE_MAPPING: dict[str, str] = {
@@ -41,9 +44,9 @@ PACKAGE_MAPPING: dict[str, str] = {
 }
 
 try:
-    import serial
-    from colorama import init, Fore, Style
     import matplotlib.pyplot as plt
+    import serial
+    from colorama import Fore, Style, init
     from matplotlib import animation
 
     try:
@@ -344,6 +347,33 @@ def update_graph(frame) -> list:  # pylint: disable=unused-argument
     return []
 
 
+def get_auto_detected_port() -> list[str]:
+    """
+    Attempts to auto-detect the serial port for the ESP32 device.
+    Returns a list of all detected ports.
+    If no suitable port is found, the list will be empty.
+    Darwin/Linux logic by jonasdiemer
+    """
+    port_list = []
+    system = platform.system()
+    # Code for darwin (macOS), linux, and windows
+    if system in ("Darwin", "Linux"):
+        pattern = "/dev/tty.usbmodem*" if system == "Darwin" else "/dev/ttyACM*"
+        port_list = sorted(glob.glob(pattern))
+    elif system == "Windows":
+        from serial.tools import list_ports
+
+        pattern_list = ["CP210x", "CH340", "USB Serial"]
+        found_ports = list_ports.comports()
+        port_list = [
+            port.device
+            for port in found_ports
+            if any(pat in port.description for pat in pattern_list)
+        ]
+
+    return port_list
+
+
 def main() -> None:
     """
     Main entry point for the ESP32 monitor application.
@@ -362,18 +392,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="ESP32 Serial Monitor with Memory Graph - Real-time monitoring, graphing, and command interface"
     )
-    if sys.platform.startswith("win"):
-        default_port = "COM8"
-    elif sys.platform.startswith("darwin"):
-        default_port = "/dev/cu.usbmodem101"
-    else:
-        default_port = "/dev/ttyACM0"
     default_baudrate = 115200
     parser.add_argument(
         "port",
         nargs="?",
-        default=default_port,
-        help=f"Serial port (default: {default_port})",
+        default=None,
+        help="Serial port (leave empty for autodetection)",
     )
     parser.add_argument(
         "--baud",
@@ -394,9 +418,25 @@ def main() -> None:
         help="Suppress lines containing this keyword (case-insensitive)",
     )
     args = parser.parse_args()
+    port = args.port
+    if port is None:
+        port_list = get_auto_detected_port()
+        if len(port_list) == 1:
+            port = port_list[0]
+            print(f"{Fore.CYAN}Auto-detected serial port: {port}{Style.RESET_ALL}")
+        elif len(port_list) > 1:
+            print(f"{Fore.YELLOW}Multiple serial ports found:{Style.RESET_ALL}")
+            for p in port_list:
+                print(f"  - {p}")
+            print(
+                f"{Fore.YELLOW}Please specify the desired port as a command-line argument.{Style.RESET_ALL}"
+            )
+    if port is None:
+        print(f"{Fore.RED}Error: No suitable serial port found.{Style.RESET_ALL}")
+        sys.exit(1)
 
     try:
-        ser = serial.Serial(args.port, args.baud, timeout=0.1)
+        ser = serial.Serial(port, args.baud, timeout=0.1)
         ser.dtr = False
         ser.rts = False
     except serial.SerialException as e:
