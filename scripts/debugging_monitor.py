@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 ESP32 Serial Monitor with Memory Graph
 
@@ -11,6 +12,7 @@ import sys
 import argparse
 import re
 import threading
+import signal
 from datetime import datetime
 from collections import deque
 
@@ -57,6 +59,9 @@ time_data: deque[str] = deque(maxlen=MAX_POINTS)
 free_mem_data: deque[float] = deque(maxlen=MAX_POINTS)
 total_mem_data: deque[float] = deque(maxlen=MAX_POINTS)
 data_lock: threading.Lock = threading.Lock()  # Prevent reading while writing
+
+# Global shutdown flag
+shutdown_event = threading.Event()
 
 # Initialize colors
 init(autoreset=True)
@@ -126,6 +131,13 @@ COLOR_KEYWORDS: dict[str, list[str]] = {
 }
 
 
+def signal_handler(signum, frame):
+    """Handle SIGINT (Ctrl-C) by setting the shutdown event."""
+    print(f"\n{Fore.YELLOW}Received signal {signum}. Shutting down...{Style.RESET_ALL}")
+    shutdown_event.set()
+    plt.close('all')
+
+
 # pylint: disable=R0912
 def get_color_for_line(line: str) -> str:
     """
@@ -183,7 +195,7 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
     screenshot_data = b''
 
     try:
-        while True:
+        while not shutdown_event.is_set():
             if expecting_screenshot:
                 data = ser.read(screenshot_size - len(screenshot_data))
                 if not data:
@@ -192,6 +204,8 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                 if len(screenshot_data) == screenshot_size:
                     if Image:
                         img = Image.frombytes('1', (800, 480), screenshot_data)
+                        # We need to rotate the image because the raw data is in landscape mode
+                        img = img.transpose(Image.ROTATE_270)
                         img.save('screenshot.bmp')
                         print(f"{Fore.GREEN}Screenshot saved to screenshot.bmp{Style.RESET_ALL}")
                     else:
@@ -253,7 +267,7 @@ def input_worker(ser):
     """
     Runs in a background thread. Handles user input to send commands.
     """
-    while True:
+    while not shutdown_event.is_set():
         try:
             cmd = input("Command: ")
             ser.write(f"CMD:{cmd}\n".encode())
@@ -265,6 +279,10 @@ def update_graph(frame) -> list:  # pylint: disable=unused-argument
     """
     Called by Matplotlib animation to redraw the chart.
     """
+    if shutdown_event.is_set():
+        plt.close('all')
+        return []
+
     with data_lock:
         if not time_data:
             return []
@@ -345,6 +363,9 @@ def main() -> None:
         print(f"{Fore.RED}Error opening port: {e}{Style.RESET_ALL}")
         return
 
+    # Set up signal handler for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+
     # 1. Start the Serial Reader in a separate thread
     # Daemon=True means this thread dies when the main program closes
     myargs = vars(args)  # Convert Namespace to dict for easier passing
@@ -381,11 +402,13 @@ def main() -> None:
 
     try:
         print(
-            f"{Fore.YELLOW}Starting Graph Window... (Close window to exit){Style.RESET_ALL}"
+            f"{Fore.YELLOW}Starting Graph Window... (Close window or press Ctrl-C to exit){Style.RESET_ALL}"
         )
         plt.show()
     except KeyboardInterrupt:
         print(f"\n{Fore.YELLOW}Exiting...{Style.RESET_ALL}")
+    finally:
+        shutdown_event.set()  # Ensure all threads know to stop
         plt.close("all")  # Force close any lingering plot windows
 
 
