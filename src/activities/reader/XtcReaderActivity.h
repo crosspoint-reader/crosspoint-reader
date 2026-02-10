@@ -21,6 +21,18 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
   bool updateRequired = false;
+  /*
+   * Pre-allocated page buffer and its size.
+   * Purpose: reserve one contiguous buffer early (in `onEnter`) sized to the
+   * page bitmap so later renders avoid large `malloc` calls that can fail
+   * due to heap fragmentation immediately after boot. If allocation fails
+   * we fall back to per-render `malloc` and continue normally.
+   *
+   * Lifecycle: allocated in `onEnter()`, reused by `renderPage()` when it
+   * fits, and freed in `onExit()`.
+   */
+  uint8_t* preallocPageBuffer = nullptr;
+  size_t preallocPageBufferSize = 0;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 

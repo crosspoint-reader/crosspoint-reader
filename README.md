@@ -106,7 +106,9 @@ First, make sure all required Python packages are installed:
 ```python
 python3 -m pip install pyserial colorama matplotlib
 ```
-after that run the script:
+
+Then run the debugging monitor script:
+
 ```sh
 # For Linux
 # This was tested on Debian and should work on most Linux systems.
@@ -115,6 +117,18 @@ python3 scripts/debugging_monitor.py
 # For macOS
 python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
 ```
+
+**Note:** If the device resets immediately when connecting the serial monitor, use the `--without-restart` flag to employ low-level POSIX serial handling on Linux/macOS:
+
+```sh
+python3 scripts/debugging_monitor.py --without-restart
+
+# Or with custom port
+python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101 --without-restart
+```
+
+This flag avoids DTR/RTS modem line toggling that can trigger device reset on some systems.
+
 Minor adjustments may be required for Windows.
 
 ## Internals
