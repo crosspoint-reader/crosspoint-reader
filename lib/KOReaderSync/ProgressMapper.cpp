@@ -46,12 +46,21 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   const size_t targetBytes = static_cast<size_t>(bookSize * koPos.percentage);
 
   // Find the spine item that contains this byte position
-  for (int i = 0; i < epub->getSpineItemsCount(); i++) {
+  const int spineCount = epub->getSpineItemsCount();
+  bool spineFound = false;
+  for (int i = 0; i < spineCount; i++) {
     const size_t cumulativeSize = epub->getCumulativeSpineItemSize(i);
     if (cumulativeSize >= targetBytes) {
       result.spineIndex = i;
+      spineFound = true;
       break;
     }
+  }
+
+  // If no spine item was found (e.g., targetBytes beyond last cumulative size),
+  // default to the last spine item so we map to the end of the book instead of the beginning.
+  if (!spineFound && spineCount > 0) {
+    result.spineIndex = spineCount - 1;
   }
 
   // Estimate page number within the spine item using percentage
@@ -67,7 +76,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       estimatedTotalPages = totalPagesInCurrentSpine;
     }
     // Otherwise try to estimate based on density from current spine
-    else if (currentSpineIndex >= 0 && totalPagesInCurrentSpine > 0) {
+    else if (currentSpineIndex >= 0 && currentSpineIndex < epub->getSpineItemsCount() && totalPagesInCurrentSpine > 0) {
       const size_t prevCurrCumSize =
           (currentSpineIndex > 0) ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
       const size_t currCumSize = epub->getCumulativeSpineItemSize(currentSpineIndex);
