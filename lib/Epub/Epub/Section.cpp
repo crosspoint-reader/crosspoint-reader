@@ -50,7 +50,7 @@ static bool writeEscapedXml(FsFile& file, const char* text) {
         memcpy(&buffer[bufferPos], "&quot;", 6);
         bufferPos += 6;
       }
-    } else if (c == '\''') {
+    } else if (c == '\'') {
       if (bufferPos + 6 < sizeof(buffer)) {
         memcpy(&buffer[bufferPos], "&apos;", 6);
         bufferPos += 6;
@@ -213,8 +213,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     // Normal file - stream from zip
     for (int attempt = 0; attempt < 3 && !success; attempt++) {
       if (attempt > 0) {
-        Serial.printf("[%lu] [SCT] Retrying stream (attempt %d)...
-", millis(), attempt + 1);
+        Serial.printf("[%lu] [SCT] Retrying stream (attempt %d)...\n", millis(), attempt + 1);
         delay(50);  // Brief delay before retry
       }
 
@@ -315,7 +314,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       file.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
       file.println("<!DOCTYPE html>");
       file.println("<html xmlns=\"http://www.w3.org/1999/xhtml\">");
-      file.println("<head><meta charset=\"UTF-8"/><title>Footnote</title></head>");
+      file.println("<head><meta charset=\"UTF-8\"/><title>Footnote</title></head>");
       file.println("<body>");
       file.print("<p id=\"");
       file.print(inlineId);
@@ -348,7 +347,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       file.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
       file.println("<!DOCTYPE html>");
       file.println("<html xmlns=\"http://www.w3.org/1999/xhtml\">");
-      file.println("<head><meta charset=\"UTF-8"/><title>Note</title></head>");
+      file.println("<head><meta charset=\"UTF-8\"/><title>Note</title></head>");
       file.println("<body>");
       file.print("<p id=\"");
       file.print(pnoteId);
