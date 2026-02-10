@@ -278,11 +278,11 @@ void EpubReaderActivity::loop() {
           nextPageNumber = section->currentPage;
         }
         // Toggle between Left and Justified
-        if (SETTINGS.paragraphAlignment == CrossPointSettings::ALIGNMENT::LEFT) {
-          SETTINGS.paragraphAlignment = CrossPointSettings::ALIGNMENT::JUSTIFIED;
+        if (SETTINGS.paragraphAlignment == CrossPointSettings::PARAGRAPH_ALIGNMENT::LEFT) {
+          SETTINGS.paragraphAlignment = CrossPointSettings::PARAGRAPH_ALIGNMENT::JUSTIFIED;
           GUI.drawPopup(renderer, "Align: Justified");
         } else {
-          SETTINGS.paragraphAlignment = CrossPointSettings::ALIGNMENT::LEFT;
+          SETTINGS.paragraphAlignment = CrossPointSettings::PARAGRAPH_ALIGNMENT::LEFT;
           GUI.drawPopup(renderer, "Align: Left");
         }
         SETTINGS.saveToFile();
