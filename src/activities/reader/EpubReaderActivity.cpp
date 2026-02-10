@@ -63,8 +63,11 @@ void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   }
 }
 
+// Enum for cleaner alignment logic
+enum class BoxAlign { LEFT, RIGHT, CENTER };
+
 // Helper to draw multi-line text cleanly
-void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, bool alignRight = false) {
+void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, BoxAlign align) {
   // Split text into lines
   std::vector<std::string> lines;
   std::stringstream ss(text);
@@ -81,22 +84,26 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, bo
   int boxWidth = maxWidth + 10;
   int boxHeight = (lines.size() * lineHeight) + 10;
 
-  int drawX = alignRight ? (x - boxWidth) : x;
-  int drawY = y;
+  int drawX = x;
+  if (align == BoxAlign::RIGHT) {
+    drawX = x - boxWidth;
+  } else if (align == BoxAlign::CENTER) {
+    drawX = x - (boxWidth / 2);
+  }
 
   // Ensure we don't draw off the bottom edge
-  if (drawY + boxHeight > renderer.getScreenHeight()) {
-    drawY = renderer.getScreenHeight() - boxHeight - 5;
+  if (y + boxHeight > renderer.getScreenHeight()) {
+    y = renderer.getScreenHeight() - boxHeight - 5;
   }
 
   // Fill White (Clear background)
-  renderer.fillRect(drawX, drawY, boxWidth, boxHeight, false);
+  renderer.fillRect(drawX, y, boxWidth, boxHeight, false);
   // Draw Border Black (Thickness: 2)
-  renderer.drawRect(drawX, drawY, boxWidth, boxHeight, 2, true);
+  renderer.drawRect(drawX, y, boxWidth, boxHeight, 2, true);
 
   // Draw each line
   for (size_t i = 0; i < lines.size(); i++) {
-    renderer.drawText(SMALL_FONT_ID, drawX + 5, drawY + 5 + (i * lineHeight), lines[i].c_str());
+    renderer.drawText(SMALL_FONT_ID, drawX + 5, y + 5 + (i * lineHeight), lines[i].c_str());
   }
 }
 
@@ -880,25 +887,25 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int h = renderer.getScreenHeight();
 
     // Draw Center "Dismiss" instruction
-    drawHelpBox(renderer, w / 2 - 50, h / 2 - 20, "PRESS ANY KEY\nTO DISMISS");
+    drawHelpBox(renderer, w / 2, h / 2 - 20, "PRESS ANY KEY\nTO DISMISS", BoxAlign::CENTER);
 
     if (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) {
       // PORTRAIT LABELS
       // Front Left (Bottom Left)
-      drawHelpBox(renderer, w - 135, h - 80, "1x: Size —\nHold: Spacing\n2x: Alignment", true);
+      drawHelpBox(renderer, w - 145, h - 80, "1x: Text size –\nHold: Spacing\n2x: Alignment", BoxAlign::RIGHT);
 
       // Front Right (Bottom Right)
-      drawHelpBox(renderer, w - 10, h - 80, "1x: Size +\nHold: ROTATE\n2x: AntiAlias", true);
+      drawHelpBox(renderer, w - 10, h - 80, "1x: Text size +\nHold: Rotate\n2x: AntiAlias", BoxAlign::RIGHT);
 
     } else {
       // LANDSCAPE CCW LABELS
 
       // Top Buttons (Top Edge - configuration)
       // Left (was Left)
-      drawHelpBox(renderer, w / 2 + 5, 20, "1x: Size —\nHold: Spacing\n2x: Alignment", true);
+      drawHelpBox(renderer, w / 2, 20, "1x: Text size –\nHold: Spacing\n2x: Alignment", BoxAlign::RIGHT);
 
-      // Right (was Right)
-      drawHelpBox(renderer, w / 2 + 15, 20, "1x: Size +\nHold: ROTATE\n2x: AntiAlias", false);
+      // Right (was Right) - Moved +10px
+      drawHelpBox(renderer, w / 2 + 10, 20, "1x: Text size +\nHold: Rotate\n2x: AntiAlias", BoxAlign::LEFT);
     }
   }
 
