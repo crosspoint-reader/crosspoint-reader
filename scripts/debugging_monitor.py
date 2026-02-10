@@ -1,12 +1,28 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 ESP32 Serial Monitor with Memory Graph
 
-This script provides a real-time serial monitor for ESP32 devices with
-integrated memory usage graphing capabilities. It reads serial output,
-parses memory information, and displays it in both console and graphical form.
+This script provides a comprehensive real-time serial monitor for ESP32 devices with
+integrated memory usage graphing capabilities. It reads serial output, parses memory
+information, and displays it in both console and graphical form.
+
+Features:
+- Real-time serial output monitoring with color-coded log levels
+- Interactive memory usage graphing with matplotlib
+- Command input interface for sending commands to the ESP32 device
+- Screenshot capture and processing (1-bit black/white format)
+- Graceful shutdown handling with Ctrl-C signal processing
+- Configurable filtering and suppression of log messages
+- Thread-safe operation with coordinated shutdown events
+
+Usage:
+    python debugging_monitor.py [port] [options]
+
+The script will open a matplotlib window showing memory usage over time and provide
+an interactive command prompt for sending commands to the device. Press Ctrl-C or
+close the graph window to exit gracefully.
 """
+from __future__ import annotations
 
 import sys
 import argparse
@@ -29,6 +45,7 @@ try:
     from colorama import init, Fore, Style
     import matplotlib.pyplot as plt
     from matplotlib import animation
+
     try:
         from PIL import Image
     except ImportError:
@@ -133,9 +150,11 @@ COLOR_KEYWORDS: dict[str, list[str]] = {
 
 def signal_handler(signum, frame):
     """Handle SIGINT (Ctrl-C) by setting the shutdown event."""
+    # frame parameter is required by signal handler signature but not used
+    del frame  # Explicitly mark as unused to satisfy linters
     print(f"\n{Fore.YELLOW}Received signal {signum}. Shutting down...{Style.RESET_ALL}")
     shutdown_event.set()
-    plt.close('all')
+    plt.close("all")
 
 
 # pylint: disable=R0912
@@ -169,8 +188,9 @@ def parse_memory_line(line: str) -> tuple[int | None, int | None]:
 
 def serial_worker(ser, kwargs: dict[str, str]) -> None:
     """
-    Runs in a background thread. Handles reading serial, printing to console,
-    and updating the data lists.
+    Runs in a background thread. Handles reading serial data, printing to console,
+    updating memory usage data for graphing, and processing screenshot data.
+    Monitors the global shutdown event for graceful termination.
     """
     print(f"{Fore.CYAN}--- Opening serial port ---{Style.RESET_ALL}")
     filter_keyword = kwargs.get("filter", "").lower()
@@ -192,7 +212,7 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
 
     expecting_screenshot = False
     screenshot_size = 0
-    screenshot_data = b''
+    screenshot_data = b""
 
     try:
         while not shutdown_event.is_set():
@@ -203,17 +223,21 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                 screenshot_data += data
                 if len(screenshot_data) == screenshot_size:
                     if Image:
-                        img = Image.frombytes('1', (800, 480), screenshot_data)
+                        img = Image.frombytes("1", (800, 480), screenshot_data)
                         # We need to rotate the image because the raw data is in landscape mode
                         img = img.transpose(Image.ROTATE_270)
-                        img.save('screenshot.bmp')
-                        print(f"{Fore.GREEN}Screenshot saved to screenshot.bmp{Style.RESET_ALL}")
+                        img.save("screenshot.bmp")
+                        print(
+                            f"{Fore.GREEN}Screenshot saved to screenshot.bmp{Style.RESET_ALL}"
+                        )
                     else:
-                        with open('screenshot.raw', 'wb') as f:
+                        with open("screenshot.raw", "wb") as f:
                             f.write(screenshot_data)
-                        print(f"{Fore.GREEN}Screenshot saved to screenshot.raw (PIL not available){Style.RESET_ALL}")
+                        print(
+                            f"{Fore.GREEN}Screenshot saved to screenshot.raw (PIL not available){Style.RESET_ALL}"
+                        )
                     expecting_screenshot = False
-                    screenshot_data = b''
+                    screenshot_data = b""
             else:
                 try:
                     raw_data = ser.readline().decode("utf-8", errors="replace")
@@ -225,11 +249,11 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                     if not clean_line:
                         continue
 
-                    if clean_line.startswith('SCREENSHOT_START:'):
-                        screenshot_size = int(clean_line.split(':')[1])
+                    if clean_line.startswith("SCREENSHOT_START:"):
+                        screenshot_size = int(clean_line.split(":")[1])
                         expecting_screenshot = True
                         continue
-                    elif clean_line == 'SCREENSHOT_END':
+                    elif clean_line == "SCREENSHOT_END":
                         continue  # ignore
 
                     # Add PC timestamp
@@ -254,7 +278,9 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                     print(f"{line_color}{formatted_line}")
 
                 except (OSError, UnicodeDecodeError):
-                    print(f"{Fore.RED}Device disconnected or data error.{Style.RESET_ALL}")
+                    print(
+                        f"{Fore.RED}Device disconnected or data error.{Style.RESET_ALL}"
+                    )
                     break
     except KeyboardInterrupt:
         # If thread is killed violently (e.g. main exit), silence errors
@@ -263,9 +289,10 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
         pass  # ser closed in main
 
 
-def input_worker(ser):
+def input_worker(ser) -> None:
     """
-    Runs in a background thread. Handles user input to send commands.
+    Runs in a background thread. Handles user input to send commands to the ESP32 device.
+    Monitors the global shutdown event for graceful termination on Ctrl-C.
     """
     while not shutdown_event.is_set():
         try:
@@ -277,10 +304,11 @@ def input_worker(ser):
 
 def update_graph(frame) -> list:  # pylint: disable=unused-argument
     """
-    Called by Matplotlib animation to redraw the chart.
+    Called by Matplotlib animation to redraw the memory usage chart.
+    Monitors the global shutdown event and closes the plot when shutdown is requested.
     """
     if shutdown_event.is_set():
-        plt.close('all')
+        plt.close("all")
         return []
 
     with data_lock:
@@ -319,9 +347,21 @@ def update_graph(frame) -> list:  # pylint: disable=unused-argument
 def main() -> None:
     """
     Main entry point for the ESP32 monitor application.
-    Sets up argument parsing, starts serial monitoring thread, and initializes the memory graph.
+
+    Sets up argument parsing, initializes serial communication, starts background threads
+    for serial monitoring and command input, and launches the memory usage graph.
+    Implements graceful shutdown handling with signal processing for clean termination.
+
+    Features:
+    - Serial port monitoring with color-coded output
+    - Real-time memory usage graphing
+    - Interactive command interface
+    - Screenshot capture capability
+    - Graceful shutdown on Ctrl-C or window close
     """
-    parser = argparse.ArgumentParser(description="ESP32 Monitor with Graph")
+    parser = argparse.ArgumentParser(
+        description="ESP32 Serial Monitor with Memory Graph - Real-time monitoring, graphing, and command interface"
+    )
     if sys.platform.startswith("win"):
         default_port = "COM8"
     elif sys.platform.startswith("darwin"):
@@ -369,9 +409,7 @@ def main() -> None:
     # 1. Start the Serial Reader in a separate thread
     # Daemon=True means this thread dies when the main program closes
     myargs = vars(args)  # Convert Namespace to dict for easier passing
-    t = threading.Thread(
-        target=serial_worker, args=(ser, myargs), daemon=True
-    )
+    t = threading.Thread(target=serial_worker, args=(ser, myargs), daemon=True)
     t.start()
 
     # Start input thread
@@ -381,7 +419,13 @@ def main() -> None:
     # 2. Set up the Graph (Main Thread)
     try:
         import matplotlib.style as mplstyle  # pylint: disable=import-outside-toplevel
-        default_styles = ("light_background", "ggplot", "seaborn", "dark_background", )
+
+        default_styles = (
+            "light_background",
+            "ggplot",
+            "seaborn",
+            "dark_background",
+        )
         styles = list(mplstyle.available)
         for default_style in default_styles:
             if default_style in styles:
