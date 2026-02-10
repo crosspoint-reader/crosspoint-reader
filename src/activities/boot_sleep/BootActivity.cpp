@@ -13,14 +13,15 @@ void BootActivity::onEnter() {
 
   renderer.clearScreen();
   renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
-  
+
   // Custom Mod Title
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "CrossPoint Button Mod", true, EpdFontFamily::BOLD);
-  
+  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "Crosspoint-Button-Mod", true,
+                            EpdFontFamily::BOLD);
+
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, "BOOTING");
-  
+
   // Custom Version Number
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "1.0.0-dev-ztrawhcs.1");
-  
+
   renderer.displayBuffer();
 }
