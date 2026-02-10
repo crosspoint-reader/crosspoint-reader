@@ -27,6 +27,7 @@
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ButtonNavigator.h"
 
 HalDisplay display;
 HalGPIO gpio;
@@ -304,6 +305,7 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
+  ButtonNavigator::setMappedInputManager(mappedInputManager);
 
   switch (gpio.getWakeupReason()) {
     case HalGPIO::WakeupReason::PowerButton:

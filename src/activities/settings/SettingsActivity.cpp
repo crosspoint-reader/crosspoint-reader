@@ -16,10 +16,6 @@
 
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
-namespace {
-constexpr int changeTabsMs = 700;
-}  // namespace
-
 void SettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<SettingsActivity*>(param);
   self->displayTaskLoop();
@@ -116,28 +112,28 @@ void SettingsActivity::loop() {
     return;
   }
 
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Up);
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Down);
-  const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
-  const bool changeTab = mappedInput.getHeldTime() > changeTabsMs;
-
   // Handle navigation
-  if (upReleased && changeTab) {
+  buttonNavigator.onNextRelease([this] {
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
-    selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
+    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
     updateRequired = true;
-  } else if (downReleased && changeTab) {
+  });
+
+  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
-    selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
+    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
     updateRequired = true;
-  } else if (upReleased || leftReleased) {
-    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount);
-    updateRequired = true;
-  } else if (rightReleased || downReleased) {
-    selectedSettingIndex = (selectedSettingIndex < settingsCount) ? (selectedSettingIndex + 1) : 0;
-    updateRequired = true;
-  }
+  });
 
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;

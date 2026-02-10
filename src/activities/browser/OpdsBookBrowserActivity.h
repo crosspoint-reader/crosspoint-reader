@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
@@ -37,6 +38,7 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
  private:
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
 
   BrowserState state = BrowserState::LOADING;
