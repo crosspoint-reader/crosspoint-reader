@@ -89,7 +89,7 @@ void KOReaderSyncActivity::performSync() {
   statusMessage = "Fetching remote progress...";
   xSemaphoreGive(renderingMutex);
   requestUpdate();
-  vTaskDelay(10 / portTICK_PERIOD_MS);
+  delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
 
   // Fetch remote progress
   const auto result = KOReaderSyncClient::getProgress(documentHash, remoteProgress);
@@ -135,7 +135,7 @@ void KOReaderSyncActivity::performUpload() {
   statusMessage = "Uploading progress...";
   xSemaphoreGive(renderingMutex);
   requestUpdate();
-  vTaskDelay(10 / portTICK_PERIOD_MS);
+  delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
 
   // Convert current position to KOReader format
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};

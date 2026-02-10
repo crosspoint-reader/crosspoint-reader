@@ -24,6 +24,8 @@ void ActivityWithSubactivity::loop() {
 
 void ActivityWithSubactivity::requestUpdate() {
   if (subActivity) {
+    // Note: no need lock here. If we reach this branch, that mean enterNewActivity() must have been called, acquired
+    // the lock and make sure there is no pending render requests before passing the control to subActivity
     subActivity->requestUpdate();
   } else {
     Activity::requestUpdate();

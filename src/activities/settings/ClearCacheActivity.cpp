@@ -122,7 +122,7 @@ void ClearCacheActivity::loop() {
       state = CLEARING;
       xSemaphoreGive(renderingMutex);
       requestUpdate();
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
 
       clearCache();
     }

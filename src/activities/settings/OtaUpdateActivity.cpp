@@ -24,7 +24,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   state = CHECKING_FOR_UPDATE;
   xSemaphoreGive(renderingMutex);
   requestUpdate();
-  vTaskDelay(10 / portTICK_PERIOD_MS);
+  delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
   const auto res = updater.checkForUpdate();
   if (res != OtaUpdater::OK) {
     Serial.printf("[%lu] [OTA] Update check failed: %d\n", millis(), res);
@@ -156,25 +156,28 @@ void OtaUpdateActivity::loop() {
   if (state == WAITING_CONFIRMATION) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      state = UPDATE_IN_PROGRESS;
-      xSemaphoreGive(renderingMutex);
+      {
+        RenderLock lock(*this);
+        state = UPDATE_IN_PROGRESS;
+      }
       requestUpdate();
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
       const auto res = updater.installUpdate();
 
       if (res != OtaUpdater::OK) {
         Serial.printf("[%lu] [OTA] Update failed: %d\n", millis(), res);
-        xSemaphoreTake(renderingMutex, portMAX_DELAY);
-        state = FAILED;
-        xSemaphoreGive(renderingMutex);
+        {
+          RenderLock lock(*this);
+          state = FAILED;
+        }
         requestUpdate();
         return;
       }
 
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      state = FINISHED;
-      xSemaphoreGive(renderingMutex);
+      {
+        RenderLock lock(*this);
+        state = FINISHED;
+      }
       requestUpdate();
     }
 

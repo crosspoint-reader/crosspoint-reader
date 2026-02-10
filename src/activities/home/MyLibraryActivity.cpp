@@ -63,8 +63,9 @@ void MyLibraryActivity::onEnter() {
   Activity::onEnter();
 
   loadFiles();
-
   selectorIndex = 0;
+
+  requestUpdate();
 }
 
 void MyLibraryActivity::onExit() {

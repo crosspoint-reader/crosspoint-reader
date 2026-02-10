@@ -7,7 +7,7 @@ void Activity::renderTaskTrampoline(void* param) {
 
 void Activity::renderTaskLoop() {
   while (true) {
-    ulTaskNotifyTake(pdFALSE, portMAX_DELAY);
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     {
       RenderLock lock(*this);
       render(std::move(lock));

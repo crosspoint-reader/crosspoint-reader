@@ -417,7 +417,7 @@ void WifiSelectionActivity::render(Activity::RenderLock&&) {
   // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
   // from the keyboard subactivity back to the main activity
   if (state == WifiSelectionState::PASSWORD_ENTRY) {
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
     return;
   }
 
