@@ -194,6 +194,11 @@ void EpubReaderActivity::loop() {
       return;
     }
 
+    if (!section) {
+      updateRequired = true;
+      return;
+    }
+
     const unsigned long currentTime = millis();
     if ((currentTime - lastPageTurnTime) >= pageTurnDuration) {
       lastPageTurnTime = currentTime;
