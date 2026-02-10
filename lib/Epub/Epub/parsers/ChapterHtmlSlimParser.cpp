@@ -189,8 +189,11 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
   if (currentTextBlock) {
+    // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
       // Merge with existing block style to accumulate CSS styling from parent block elements.
+      // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
+      // div's margin should be preserved, even though it has no direct text content.
       currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
       return;
     }
@@ -378,6 +381,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // Add placeholder text
     self->startNewTextBlock(centeredBlockStyle);
 
+    self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
     // Advance depth before processing character data (like you would for an element with text)
     self->depth += 1;
     self->characterData(userData, "[Table omitted]", strlen("[Table omitted]"));
@@ -404,7 +408,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
 
     self->startNewTextBlock(centeredBlockStyle);
-    // Advance depth before processing character data
+    self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
+    // Advance depth before processing character data (like you would for an element with text)
     self->depth += 1;
     self->characterData(userData, alt.c_str(), alt.length());
 
@@ -645,17 +650,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
   for (int i = 0; i < len; i++) {
     if (isWhitespace(s[i])) {
+      // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
       }
       // Whitespace is a real word boundary — reset continuation state
       self->nextWordContinues = false;
+      // Skip the whitespace char
       continue;
-    }
-
-    // If we're about to run out of space, then cut the word off and start a new one
-    if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
-      self->flushPartWordBuffer();
     }
 
     // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
@@ -666,14 +668,24 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     if (s[i] == FEFF_BYTE_1) {
       // Check if the next two bytes complete the 3-byte sequence
       if ((i + 2 < len) && (s[i + 1] == FEFF_BYTE_2) && (s[i + 2] == FEFF_BYTE_3)) {
+        // Sequence 0xEF 0xBB 0xBF found!
         i += 2;    // Skip the next two bytes
         continue;  // Move to the next iteration
       }
     }
 
+    // If we're about to run out of space, then cut the word off and start a new one
+    if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
+      self->flushPartWordBuffer();
+    }
+
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
 
+  // If we have > 750 words buffered up, perform the layout and consume out all but the last line
+  // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
+  // memory.
+  // Spotted when reading Intermezzo, there are some really long text blocks in there.
   if (self->currentTextBlock->size() > 750) {
     Serial.printf("[%lu] [EHP] Text block too long, splitting into multiple pages\n", millis());
     self->currentTextBlock->layoutAndExtractLines(
@@ -787,6 +799,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   // Check if any style state will change after we decrement depth
   // If so, we MUST flush the partWordBuffer with the CURRENT style first
+  // Note: depth hasn't been decremented yet, so we check against (depth - 1)
   const bool willPopStyleStack =
       !self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth - 1;
   const bool willClearBold = self->boldUntilDepth == self->depth - 1;
@@ -817,6 +830,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   self->depth -= 1;
 
+  // Leaving skip
   if (self->skipUntilDepth == self->depth) {
     self->skipUntilDepth = INT_MAX;
   }
@@ -837,6 +851,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 
   // Pop from inline style stack if we pushed an entry at this depth
+  // This handles all inline elements: b, i, u, span, etc.
   if (!self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth) {
     self->inlineStyleStack.pop_back();
     self->updateEffectiveInlineStyle();
@@ -943,24 +958,21 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;
+  // Resolve None sentinel to Justify for initial block (no CSS context yet)
   const auto align = (this->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
                          ? CssTextAlign::Justify
                          : static_cast<CssTextAlign>(this->paragraphAlignment);
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
 
-  const XML_Parser parser2 = XML_ParserCreate(nullptr);
-  if (!parser2) {
+  const XML_Parser parser = XML_ParserCreate(nullptr);
+  if (!parser) {
     Serial.printf("[%lu] [EHP] Couldn't allocate memory for parser\n", millis());
     return false;
   }
 
-  XML_SetUserData(parser2, this);
-  XML_SetElementHandler(parser2, startElement, endElement);
-  XML_SetCharacterDataHandler(parser2, characterData);
-
   if (!Storage.openFileForRead("EHP", filepath, file)) {
-    XML_ParserFree(parser2);
+    XML_ParserFree(parser);
     return false;
   }
 
@@ -969,11 +981,15 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     popupFn();
   }
 
+  XML_SetUserData(parser, this);
+  XML_SetElementHandler(parser, startElement, endElement);
+  XML_SetCharacterDataHandler(parser, characterData);
+
   do {
-    void* const buf = XML_GetBuffer(parser2, 1024);
+    void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
       Serial.printf("[%lu] [EHP] Couldn't allocate memory for buffer\n", millis());
-      XML_ParserFree(parser2);
+      XML_ParserFree(parser);
       file.close();
       return false;
     }
@@ -982,29 +998,32 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
     if (len == 0 && file.available() > 0) {
       Serial.printf("[%lu] [EHP] File read error\n", millis());
-      XML_StopParser(parser2, XML_FALSE);
-      XML_SetElementHandler(parser2, nullptr, nullptr);
-      XML_SetCharacterDataHandler(parser2, nullptr);
-      XML_ParserFree(parser2);
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
+      XML_ParserFree(parser);
       file.close();
       return false;
     }
 
     done = file.available() == 0;
 
-    if (XML_ParseBuffer(parser2, static_cast<int>(len), done) == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [EHP] Parse error at line %lu:\n%s\n", millis(), XML_GetCurrentLineNumber(parser2),
-                    XML_ErrorString(XML_GetErrorCode(parser2)));
-      XML_StopParser(parser2, XML_FALSE);
-      XML_SetElementHandler(parser2, nullptr, nullptr);
-      XML_SetCharacterDataHandler(parser2, nullptr);
-      XML_ParserFree(parser2);
+    if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
+      Serial.printf("[%lu] [EHP] Parse error at line %lu:\n%s\n", millis(), XML_GetCurrentLineNumber(parser),
+                    XML_ErrorString(XML_GetErrorCode(parser)));
+      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
+      XML_ParserFree(parser);
       file.close();
       return false;
     }
   } while (!done);
 
-  XML_ParserFree(parser2);
+  XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
+  XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+  XML_SetCharacterDataHandler(parser, nullptr);
+  XML_ParserFree(parser);
   file.close();
 
   // Process last page if there is still text
@@ -1088,7 +1107,7 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY += blockStyle.paddingBottom;
   }
 
-  // Extra paragraph spacing if enabled
+  // Extra paragraph spacing if enabled (default behavior)
   if (extraParagraphSpacing) {
     currentPageNextY += lineHeight / 2;
   }

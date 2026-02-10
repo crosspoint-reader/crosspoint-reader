@@ -363,9 +363,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     }
   }
 
-  // Write LUT (master)
   const uint32_t lutOffset = file.position();
   bool hasFailedLutRecords = false;
+  // Write LUT
   for (const uint32_t& pos : lut) {
     if (pos == 0) {
       hasFailedLutRecords = true;

@@ -166,12 +166,6 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
-  if (totalItems == 0) {
-    renderer.drawCenteredText(SMALL_FONT_ID, 300, "No chapters available", true);
-    renderer.displayBuffer();
-    return;
-  }
-
   // Manual centering to honor content gutters.
   const int titleX =
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, "Go to Chapter", EpdFontFamily::BOLD)) / 2;

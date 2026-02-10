@@ -49,8 +49,8 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 
 }  // namespace
 
-void ParsedText::addWord(std::string word, EpdFontFamily::Style fontStyle, std::unique_ptr<FootnoteEntry> footnote,
-                         bool underline, bool attachToPrevious) {
+void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
+                         std::unique_ptr<FootnoteEntry> footnote, const bool underline, const bool attachToPrevious) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
@@ -318,8 +318,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   return lineBreakIndices;
 }
 
-// Splits words[wordIndex] into prefix (adding a hyphen only when needed)
-// and remainder when a legal breakpoint fits the available width.
+// Splits words[wordIndex] into prefix (adding a hyphen only when needed) and remainder when a legal breakpoint fits the
+// available width.
 bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availableWidth, const GfxRenderer& renderer,
                                       const int fontId, std::vector<uint16_t>& wordWidths,
                                       const bool allowFallbackBreaks, std::vector<bool>* continuesVec) {
@@ -485,6 +485,7 @@ void ParsedText::extractLine(
   std::advance(wordStyleEndIt, lineWordCount);
   std::advance(wordContinuesEndIt, lineWordCount);
 
+  // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
   std::list<EpdFontFamily::Style> lineWordStyles;

@@ -46,14 +46,15 @@ class ParsedText {
       : blockStyle(blockStyle), extraParagraphSpacing(extraParagraphSpacing), hyphenationEnabled(hyphenationEnabled) {}
   ~ParsedText() = default;
 
-  void addWord(std::string word, EpdFontFamily::Style fontStyle, std::unique_ptr<FootnoteEntry> footnote = nullptr,
-               bool underline = false, bool attachToPrevious = false);
+  void addWord(std::string word, const EpdFontFamily::Style fontStyle,
+               std::unique_ptr<FootnoteEntry> footnote = nullptr, const bool underline = false,
+               const bool attachToPrevious = false);
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
   void layoutAndExtractLines(
-      const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
+      const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
       const std::function<void(std::shared_ptr<TextBlock>, const std::vector<FootnoteEntry>&)>& processLine,
-      bool includeLastLine = true);
+      const bool includeLastLine = true);
 };
