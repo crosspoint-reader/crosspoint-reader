@@ -369,6 +369,21 @@ void loop() {
     lastMemPrint = millis();
   }
 
+  // Handle incoming serial commands
+  if (Serial.available() > 0) {
+    String line = Serial.readStringUntil('\n');
+    if (line.startsWith("CMD:")) {
+      String cmd = line.substring(4);
+      cmd.trim();
+      if (cmd == "SCREENSHOT") {
+        Serial.printf("SCREENSHOT_START:%d\n", HalDisplay::BUFFER_SIZE);
+        uint8_t* buf = display.getFrameBuffer();
+        Serial.write(buf, HalDisplay::BUFFER_SIZE);
+        Serial.printf("SCREENSHOT_END\n");
+      }
+    }
+  }
+
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || (currentActivity && currentActivity->preventAutoSleep())) {

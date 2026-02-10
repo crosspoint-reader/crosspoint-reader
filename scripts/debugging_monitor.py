@@ -19,6 +19,7 @@ PACKAGE_MAPPING: dict[str, str] = {
     "serial": "pyserial",
     "colorama": "colorama",
     "matplotlib": "matplotlib",
+    "PIL": "Pillow",
 }
 
 try:
@@ -26,6 +27,10 @@ try:
     from colorama import init, Fore, Style
     import matplotlib.pyplot as plt
     from matplotlib import animation
+    try:
+        from PIL import Image
+    except ImportError:
+        Image = None
 except ImportError as e:
     ERROR_MSG = str(e).lower()
     missing_packages = [pkg for mod, pkg in PACKAGE_MAPPING.items() if mod in ERROR_MSG]
@@ -150,12 +155,12 @@ def parse_memory_line(line: str) -> tuple[int | None, int | None]:
     return None, None
 
 
-def serial_worker(port: str, baud: int, kwargs: dict[str, str]) -> None:
+def serial_worker(ser, kwargs: dict[str, str]) -> None:
     """
     Runs in a background thread. Handles reading serial, printing to console,
     and updating the data lists.
     """
-    print(f"{Fore.CYAN}--- Opening {port} at {baud} baud ---{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}--- Opening serial port ---{Style.RESET_ALL}")
     filter_keyword = kwargs.get("filter", "").lower()
     suppress = kwargs.get("suppress", "").lower()
     if filter_keyword and suppress and filter_keyword == suppress:
@@ -173,56 +178,87 @@ def serial_worker(port: str, baud: int, kwargs: dict[str, str]) -> None:
             f"{Fore.YELLOW}Suppressing lines containing: '{suppress}'{Style.RESET_ALL}"
         )
 
-    try:
-        ser = serial.Serial(port, baud, timeout=0.1)
-        ser.dtr = False
-        ser.rts = False
-    except serial.SerialException as e:
-        print(f"{Fore.RED}Error opening port: {e}{Style.RESET_ALL}")
-        return
+    expecting_screenshot = False
+    screenshot_size = 0
+    screenshot_data = b''
 
     try:
         while True:
-            try:
-                raw_data = ser.readline().decode("utf-8", errors="replace")
-
-                if not raw_data:
+            if expecting_screenshot:
+                data = ser.read(screenshot_size - len(screenshot_data))
+                if not data:
                     continue
+                screenshot_data += data
+                if len(screenshot_data) == screenshot_size:
+                    if Image:
+                        img = Image.frombytes('1', (800, 480), screenshot_data)
+                        img.save('screenshot.bmp')
+                        print(f"{Fore.GREEN}Screenshot saved to screenshot.bmp{Style.RESET_ALL}")
+                    else:
+                        with open('screenshot.raw', 'wb') as f:
+                            f.write(screenshot_data)
+                        print(f"{Fore.GREEN}Screenshot saved to screenshot.raw (PIL not available){Style.RESET_ALL}")
+                    expecting_screenshot = False
+                    screenshot_data = b''
+            else:
+                try:
+                    raw_data = ser.readline().decode("utf-8", errors="replace")
 
-                clean_line = raw_data.strip()
-                if not clean_line:
-                    continue
+                    if not raw_data:
+                        continue
 
-                # Add PC timestamp
-                pc_time = datetime.now().strftime("%H:%M:%S")
-                formatted_line = re.sub(r"^\[\d+\]", f"[{pc_time}]", clean_line)
+                    clean_line = raw_data.strip()
+                    if not clean_line:
+                        continue
 
-                # Check for Memory Line
-                if "[MEM]" in formatted_line:
-                    free_val, total_val = parse_memory_line(formatted_line)
-                    if free_val is not None and total_val is not None:
-                        with data_lock:
-                            time_data.append(pc_time)
-                            free_mem_data.append(free_val / 1024)  # Convert to KB
-                            total_mem_data.append(total_val / 1024)  # Convert to KB
-                # Apply filters
-                if filter_keyword and filter_keyword not in formatted_line.lower():
-                    continue
-                if suppress and suppress in formatted_line.lower():
-                    continue
-                # Print to console
-                line_color = get_color_for_line(formatted_line)
-                print(f"{line_color}{formatted_line}")
+                    if clean_line.startswith('SCREENSHOT_START:'):
+                        screenshot_size = int(clean_line.split(':')[1])
+                        expecting_screenshot = True
+                        continue
+                    elif clean_line == 'SCREENSHOT_END':
+                        continue  # ignore
 
-            except (OSError, UnicodeDecodeError):
-                print(f"{Fore.RED}Device disconnected or data error.{Style.RESET_ALL}")
-                break
+                    # Add PC timestamp
+                    pc_time = datetime.now().strftime("%H:%M:%S")
+                    formatted_line = re.sub(r"^\[\d+\]", f"[{pc_time}]", clean_line)
+
+                    # Check for Memory Line
+                    if "[MEM]" in formatted_line:
+                        free_val, total_val = parse_memory_line(formatted_line)
+                        if free_val is not None and total_val is not None:
+                            with data_lock:
+                                time_data.append(pc_time)
+                                free_mem_data.append(free_val / 1024)  # Convert to KB
+                                total_mem_data.append(total_val / 1024)  # Convert to KB
+                    # Apply filters
+                    if filter_keyword and filter_keyword not in formatted_line.lower():
+                        continue
+                    if suppress and suppress in formatted_line.lower():
+                        continue
+                    # Print to console
+                    line_color = get_color_for_line(formatted_line)
+                    print(f"{line_color}{formatted_line}")
+
+                except (OSError, UnicodeDecodeError):
+                    print(f"{Fore.RED}Device disconnected or data error.{Style.RESET_ALL}")
+                    break
     except KeyboardInterrupt:
         # If thread is killed violently (e.g. main exit), silence errors
         pass
     finally:
-        if "ser" in locals() and ser.is_open:
-            ser.close()
+        pass  # ser closed in main
+
+
+def input_worker(ser):
+    """
+    Runs in a background thread. Handles user input to send commands.
+    """
+    while True:
+        try:
+            cmd = input("Command: ")
+            ser.write(f"CMD:{cmd}\n".encode())
+        except (EOFError, KeyboardInterrupt):
+            break
 
 
 def update_graph(frame) -> list:  # pylint: disable=unused-argument
@@ -301,13 +337,25 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    try:
+        ser = serial.Serial(args.port, args.baud, timeout=0.1)
+        ser.dtr = False
+        ser.rts = False
+    except serial.SerialException as e:
+        print(f"{Fore.RED}Error opening port: {e}{Style.RESET_ALL}")
+        return
+
     # 1. Start the Serial Reader in a separate thread
     # Daemon=True means this thread dies when the main program closes
     myargs = vars(args)  # Convert Namespace to dict for easier passing
     t = threading.Thread(
-        target=serial_worker, args=(args.port, args.baud, myargs), daemon=True
+        target=serial_worker, args=(ser, myargs), daemon=True
     )
     t.start()
+
+    # Start input thread
+    input_thread = threading.Thread(target=input_worker, args=(ser,), daemon=True)
+    input_thread.start()
 
     # 2. Set up the Graph (Main Thread)
     try:
