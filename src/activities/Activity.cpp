@@ -42,6 +42,11 @@ void Activity::requestUpdate() {
   }
 }
 
+void Activity::requestUpdateAndWait() {
+  // FIXME @ngxson : properly implement this using freeRTOS notification
+  delay(100);
+}
+
 // RenderLock
 
 Activity::RenderLock::RenderLock(Activity& activity) : activity(activity) {

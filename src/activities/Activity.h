@@ -37,6 +37,7 @@ class Activity {
   virtual void loop() {}
   virtual void render(RenderLock&&) {}
   virtual void requestUpdate();
+  virtual void requestUpdateAndWait();
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }

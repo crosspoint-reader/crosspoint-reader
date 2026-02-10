@@ -23,8 +23,8 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = CHECKING_FOR_UPDATE;
   xSemaphoreGive(renderingMutex);
-  requestUpdate();
-  delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
+  requestUpdateAndWait();
+
   const auto res = updater.checkForUpdate();
   if (res != OtaUpdater::OK) {
     Serial.printf("[%lu] [OTA] Update check failed: %d\n", millis(), res);
@@ -166,7 +166,7 @@ void OtaUpdateActivity::loop() {
         state = UPDATE_IN_PROGRESS;
       }
       requestUpdate();
-      delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
+      requestUpdateAndWait();
       const auto res = updater.installUpdate();
 
       if (res != OtaUpdater::OK) {

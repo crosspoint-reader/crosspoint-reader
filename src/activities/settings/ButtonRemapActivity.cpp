@@ -64,7 +64,7 @@ void ButtonRemapActivity::loop() {
   {
     // Wait for the UI to refresh before accepting another assignment.
     // This avoids rapid double-presses that can advance the step without a visible redraw.
-    delay(100);  // FIXME @ngxson : use requestUpdateAndWait() one it's implemented
+    requestUpdateAndWait();
 
     // Wait for a front button press to assign to the current role.
     const int pressedButton = mappedInput.getPressedFrontButton();
