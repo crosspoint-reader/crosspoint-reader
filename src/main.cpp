@@ -360,6 +360,7 @@ void loop() {
   gpio.update();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
+  renderer.setInverseDisplay(SETTINGS.inverseDisplay);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
     Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),

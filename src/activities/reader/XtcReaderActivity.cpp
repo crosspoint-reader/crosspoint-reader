@@ -288,6 +288,7 @@ void XtcReaderActivity::renderPage() {
 
     // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
     // In LUT: 0 bit = apply gray effect, 1 bit = untouched
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderer.clearScreen(0x00);
     for (uint16_t y = 0; y < pageHeight; y++) {
       for (uint16_t x = 0; x < pageWidth; x++) {
@@ -300,6 +301,7 @@ void XtcReaderActivity::renderPage() {
 
     // Pass 3: MSB buffer - mark LIGHT AND DARK gray (XTH value 1 or 2)
     // In LUT: 0 bit = apply gray effect, 1 bit = untouched
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     renderer.clearScreen(0x00);
     for (uint16_t y = 0; y < pageHeight; y++) {
       for (uint16_t x = 0; x < pageWidth; x++) {
@@ -313,6 +315,7 @@ void XtcReaderActivity::renderPage() {
 
     // Display grayscale overlay
     renderer.displayGrayBuffer();
+    renderer.setRenderMode(GfxRenderer::BW);
 
     // Pass 4: Re-render BW to framebuffer (restore for next frame, instead of restoreBwBuffer)
     renderer.clearScreen();

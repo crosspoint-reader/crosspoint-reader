@@ -171,6 +171,8 @@ class CrossPointSettings {
   uint8_t fadingFix = 0;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // Inverse display (white text on black background)
+  uint8_t inverseDisplay = 0;
 
   ~CrossPointSettings() = default;
 

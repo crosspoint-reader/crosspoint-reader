@@ -49,6 +49,10 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
+  // In BW mode with inverse display, flip the pixel state so all drawing
+  // appears inverted without callers needing to know about it.
+  const bool effectiveState = (inverseDisplay && renderMode == BW) ? !state : state;
+
   int phyX = 0;
   int phyY = 0;
 
@@ -65,7 +69,7 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   const uint16_t byteIndex = phyY * HalDisplay::DISPLAY_WIDTH_BYTES + (phyX / 8);
   const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
 
-  if (state) {
+  if (effectiveState) {
     frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit
   } else {
     frameBuffer[byteIndex] |= 1 << bitPosition;  // Set bit
@@ -644,7 +648,8 @@ static unsigned long start_ms = 0;
 
 void GfxRenderer::clearScreen(const uint8_t color) const {
   start_ms = millis();
-  display.clearScreen(color);
+  const uint8_t effectiveColor = (inverseDisplay && renderMode == BW) ? ~color : color;
+  display.clearScreen(effectiveColor);
 }
 
 void GfxRenderer::invertScreen() const {
@@ -656,7 +661,12 @@ void GfxRenderer::invertScreen() const {
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   Serial.printf("[%lu] [GFX] Time = %lu ms from clearScreen to displayBuffer\n", millis(), elapsed);
-  display.displayBuffer(refreshMode, fadingFix);
+  auto effectiveMode = refreshMode;
+  if (fullRefreshPending) {
+    effectiveMode = HalDisplay::FULL_REFRESH;
+    fullRefreshPending = false;
+  }
+  display.displayBuffer(effectiveMode, fadingFix);
 }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
@@ -815,11 +825,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
             const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
             const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
 
-            if (renderMode == BW && bmpVal < 3) {
+            if (renderMode == BW && (inverseDisplay ? bmpVal == 0 : bmpVal < 3)) {
               drawPixel(screenX, screenY, black);
             } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
               drawPixel(screenX, screenY, false);
-            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+            } else if (renderMode == GRAYSCALE_LSB && bmpVal == (inverseDisplay ? 2 : 1)) {
               drawPixel(screenX, screenY, false);
             }
           } else {
@@ -982,15 +992,11 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
           // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
           const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
 
-          if (renderMode == BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
+          if (renderMode == BW && (inverseDisplay ? bmpVal == 0 : bmpVal < 3)) {
             drawPixel(screenX, screenY, pixelState);
           } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
             drawPixel(screenX, screenY, false);
-          } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
+          } else if (renderMode == GRAYSCALE_LSB && bmpVal == (inverseDisplay ? 2 : 1)) {
             drawPixel(screenX, screenY, false);
           }
         } else {

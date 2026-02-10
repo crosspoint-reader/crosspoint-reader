@@ -46,6 +46,7 @@ inline std::vector<SettingInfo> getSettingsList() {
       SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing,
                           "extraParagraphSpacing", "Reader"),
       SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing, "textAntiAliasing", "Reader"),
+      SettingInfo::Toggle("Inverse Display", &CrossPointSettings::inverseDisplay, "inverseDisplay", "Display"),
 
       // --- Controls ---
       SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,

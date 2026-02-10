@@ -471,13 +471,13 @@ void TxtReaderActivity::renderPage() {
     // Save BW buffer for restoration after grayscale pass
     renderer.storeBwBuffer();
 
-    renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    renderer.clearScreen(0x00);
     renderLines();
     renderer.copyGrayscaleLsbBuffers();
 
-    renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    renderer.clearScreen(0x00);
     renderLines();
     renderer.copyGrayscaleMsbBuffers();
 
