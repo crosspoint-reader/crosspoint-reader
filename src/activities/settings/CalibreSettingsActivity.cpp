@@ -110,7 +110,7 @@ void CalibreSettingsActivity::handleSelection() {
   }
 }
 
-void CalibreSettingsActivity::render() {
+void CalibreSettingsActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

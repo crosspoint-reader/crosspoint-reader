@@ -217,7 +217,7 @@ void KOReaderSyncActivity::onExit() {
   delay(100);
 }
 
-void KOReaderSyncActivity::render() {
+void KOReaderSyncActivity::render(Activity::RenderLock&&) {
   if (subActivity) {
     return;
   }

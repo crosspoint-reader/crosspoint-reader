@@ -83,7 +83,7 @@ void EpubReaderChapterSelectionActivity::loop() {
   });
 }
 
-void EpubReaderChapterSelectionActivity::render() {
+void EpubReaderChapterSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

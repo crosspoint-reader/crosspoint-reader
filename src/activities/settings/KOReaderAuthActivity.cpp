@@ -84,7 +84,7 @@ void KOReaderAuthActivity::onExit() {
   delay(100);
 }
 
-void KOReaderAuthActivity::render() {
+void KOReaderAuthActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
   renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Auth", true, EpdFontFamily::BOLD);
 

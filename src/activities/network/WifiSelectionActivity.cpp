@@ -413,7 +413,7 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
   return "    ";  // Very weak
 }
 
-void WifiSelectionActivity::render() {
+void WifiSelectionActivity::render(Activity::RenderLock&&) {
   // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
   // from the keyboard subactivity back to the main activity
   if (state == WifiSelectionState::PASSWORD_ENTRY) {

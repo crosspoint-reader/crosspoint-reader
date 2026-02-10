@@ -55,7 +55,7 @@ void EpubReaderPercentSelectionActivity::loop() {
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { adjustPercent(-kLargeStep); });
 }
 
-void EpubReaderPercentSelectionActivity::render() {
+void EpubReaderPercentSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   // Title and numeric percent value.

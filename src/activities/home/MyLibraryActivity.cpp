@@ -145,7 +145,7 @@ void MyLibraryActivity::loop() {
   });
 }
 
-void MyLibraryActivity::render() {
+void MyLibraryActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

@@ -73,7 +73,7 @@ void OtaUpdateActivity::onExit() {
   delay(100);  // Allow WiFi hardware to fully power down
 }
 
-void OtaUpdateActivity::render() {
+void OtaUpdateActivity::render(Activity::RenderLock&&) {
   if (subActivity) {
     // Subactivity handles its own rendering
     return;

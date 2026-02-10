@@ -95,7 +95,7 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render() override;
+  void render(Activity::RenderLock&&) override;
 
   // Get the IP address after successful connection
   const std::string& getConnectedIP() const { return connectedIP; }

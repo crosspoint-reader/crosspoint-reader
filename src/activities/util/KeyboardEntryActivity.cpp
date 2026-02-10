@@ -188,7 +188,7 @@ void KeyboardEntryActivity::loop() {
   }
 }
 
-void KeyboardEntryActivity::render() {
+void KeyboardEntryActivity::render(Activity::RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();

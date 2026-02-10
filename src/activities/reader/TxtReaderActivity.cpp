@@ -339,7 +339,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   return !outLines.empty();
 }
 
-void TxtReaderActivity::render() {
+void TxtReaderActivity::render(Activity::RenderLock&&) {
   if (!txt) {
     return;
   }

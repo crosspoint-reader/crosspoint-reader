@@ -59,7 +59,7 @@ void NetworkModeSelectionActivity::loop() {
   });
 }
 
-void NetworkModeSelectionActivity::render() {
+void NetworkModeSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

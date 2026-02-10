@@ -17,7 +17,7 @@ void ClearCacheActivity::onEnter() {
 
 void ClearCacheActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
-void ClearCacheActivity::render() {
+void ClearCacheActivity::render(Activity::RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();

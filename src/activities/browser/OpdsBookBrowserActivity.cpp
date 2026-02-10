@@ -135,7 +135,7 @@ void OpdsBookBrowserActivity::loop() {
   }
 }
 
-void OpdsBookBrowserActivity::render() {
+void OpdsBookBrowserActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

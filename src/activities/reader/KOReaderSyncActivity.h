@@ -42,7 +42,7 @@ class KOReaderSyncActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render() override;
+  void render(Activity::RenderLock&&) override;
   bool preventAutoSleep() override { return state == CONNECTING || state == SYNCING; }
 
  private:

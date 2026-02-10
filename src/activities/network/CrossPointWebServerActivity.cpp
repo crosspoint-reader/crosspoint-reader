@@ -237,7 +237,7 @@ void CrossPointWebServerActivity::startWebServer() {
     // that had its own rendering task. We need to make sure our display is shown.
     {
       RenderLock lock(*this);
-      render();
+      render(std::move(lock));
     }
     Serial.printf("[%lu] [WEBACT] Rendered File Transfer screen\n", millis());
   } else {
@@ -335,7 +335,7 @@ void CrossPointWebServerActivity::loop() {
   }
 }
 
-void CrossPointWebServerActivity::render() {
+void CrossPointWebServerActivity::render(Activity::RenderLock&&) {
   // Only render our own UI when server is running
   // Subactivities handle their own rendering
   if (state == WebServerActivityState::SERVER_RUNNING) {

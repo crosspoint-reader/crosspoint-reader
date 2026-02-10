@@ -31,10 +31,11 @@ class Activity {
     vSemaphoreDelete(renderingMutex);
     renderingMutex = nullptr;
   };
+  class RenderLock;
   virtual void onEnter();
   virtual void onExit();
   virtual void loop() {}
-  virtual void render() {}
+  virtual void render(RenderLock&&) {}
   virtual void requestUpdate();
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
@@ -46,6 +47,8 @@ class Activity {
 
    public:
     explicit RenderLock(Activity& activity);
+    RenderLock(const RenderLock&) = delete;
+    RenderLock& operator=(const RenderLock&) = delete;
     ~RenderLock();
   };
 };

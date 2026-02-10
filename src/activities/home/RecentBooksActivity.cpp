@@ -82,7 +82,7 @@ void RecentBooksActivity::loop() {
   });
 }
 
-void RecentBooksActivity::render() {
+void RecentBooksActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

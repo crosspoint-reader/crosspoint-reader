@@ -31,7 +31,7 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render() override;
+  void render(Activity::RenderLock&&) override;
 
  private:
   ButtonNavigator buttonNavigator;

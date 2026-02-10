@@ -85,7 +85,7 @@ void XtcReaderChapterSelectionActivity::loop() {
   });
 }
 
-void XtcReaderChapterSelectionActivity::render() {
+void XtcReaderChapterSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

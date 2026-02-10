@@ -93,7 +93,7 @@ void ButtonRemapActivity::loop() {
   }
 }
 
-void ButtonRemapActivity::render() {
+void ButtonRemapActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

@@ -134,7 +134,7 @@ void XtcReaderActivity::loop() {
   }
 }
 
-void XtcReaderActivity::render() {
+void XtcReaderActivity::render(Activity::RenderLock&&) {
   if (!xtc) {
     return;
   }

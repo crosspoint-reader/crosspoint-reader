@@ -167,7 +167,7 @@ void CalibreConnectActivity::loop() {
   }
 }
 
-void CalibreConnectActivity::render() {
+void CalibreConnectActivity::render(Activity::RenderLock&&) {
   if (state == CalibreConnectState::SERVER_RUNNING) {
     renderer.clearScreen();
     renderServerRunning();

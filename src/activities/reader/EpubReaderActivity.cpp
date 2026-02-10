@@ -478,7 +478,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 }
 
 // TODO: Failure handling
-void EpubReaderActivity::render() {
+void EpubReaderActivity::render(Activity::RenderLock&& lock) {
   if (!epub) {
     return;
   }
@@ -599,7 +599,7 @@ void EpubReaderActivity::render() {
       Serial.printf("[%lu] [ERS] Failed to load page from SD - clearing section cache\n", millis());
       section->clearCache();
       section.reset();
-      return render();
+      return render(std::move(lock));
     }
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);

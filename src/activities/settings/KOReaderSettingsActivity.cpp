@@ -132,7 +132,7 @@ void KOReaderSettingsActivity::handleSelection() {
   }
 }
 
-void KOReaderSettingsActivity::render() {
+void KOReaderSettingsActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

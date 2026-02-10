@@ -2,7 +2,7 @@
 
 void Activity::renderTaskTrampoline(void* param) {
   auto* self = static_cast<Activity*>(param);
-  return self->renderTaskLoop();
+  self->renderTaskLoop();
 }
 
 void Activity::renderTaskLoop() {
@@ -10,7 +10,7 @@ void Activity::renderTaskLoop() {
     ulTaskNotifyTake(pdFALSE, portMAX_DELAY);
     {
       RenderLock lock(*this);
-      render();
+      render(std::move(lock));
     }
   }
 }

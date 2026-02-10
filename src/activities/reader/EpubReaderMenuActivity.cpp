@@ -55,7 +55,7 @@ void EpubReaderMenuActivity::loop() {
   }
 }
 
-void EpubReaderMenuActivity::render() {
+void EpubReaderMenuActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
   const auto pageWidth = renderer.getScreenWidth();
   const auto orientation = renderer.getOrientation();
