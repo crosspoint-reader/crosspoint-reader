@@ -184,11 +184,17 @@ def update_graph(frame):
     plt.tight_layout()
 
 def detect_serial_port():
-    """Auto-detect the serial port based on the platform."""
-    if platform.system() == "Darwin":
+    """Auto-detect the serial port on Linux and macOS."""
+    system = platform.system()
+    if system == "Darwin":
         pattern = "/dev/tty.usbmodem*"
-    else:
+    elif system == "Linux":
         pattern = "/dev/ttyACM*"
+    else:
+        print(f"{Fore.RED}Error: Auto-detection is not supported on {system}.{Style.RESET_ALL}")
+        print(f"Please specify the port manually, e.g.:")
+        print(f"    python3 {sys.argv[0]} COM3")
+        sys.exit(1)
 
     matches = sorted(glob.glob(pattern))
 
