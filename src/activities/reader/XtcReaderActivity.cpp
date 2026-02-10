@@ -10,6 +10,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <esp_heap_caps.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -51,6 +52,34 @@ void XtcReaderActivity::onEnter() {
   // Trigger first update
   updateRequired = true;
 
+  // Pre-allocate a page buffer to avoid allocation failures due to fragmentation.
+  // Use the page dimensions from the XTC to size the buffer for the worst-case.
+  if (!preallocPageBuffer) {
+    // NOTE: This allocation is intentionally done here (on activity enter)
+    // rather than during rendering to increase the chance of getting a
+    // large contiguous block. Doing it early reduces fragmentation risk
+    // caused by other subsystems that allocate after boot.
+    const uint16_t pw = xtc->getPageWidth();
+    const uint16_t ph = xtc->getPageHeight();
+    const uint8_t bd = xtc->getBitDepth();
+    size_t bufSize = 0;
+    if (bd == 2) {
+      bufSize = ((static_cast<size_t>(pw) * ph + 7) / 8) * 2;
+    } else {
+      bufSize = ((pw + 7) / 8) * ph;
+    }
+
+    // Try to allocate once and reuse for subsequent renders
+    preallocPageBuffer = static_cast<uint8_t*>(malloc(bufSize));
+    if (preallocPageBuffer) {
+      preallocPageBufferSize = bufSize;
+      Serial.printf("[%lu] [XTR] Preallocated page buffer %lu bytes\n", millis(), preallocPageBufferSize);
+    } else {
+      preallocPageBufferSize = 0;
+      Serial.printf("[%lu] [XTR] Prealloc page buffer failed (%lu bytes)\n", millis(), bufSize);
+    }
+  }
+
   xTaskCreate(&XtcReaderActivity::taskTrampoline, "XtcReaderActivityTask",
               4096,               // Stack size (smaller than EPUB since no parsing needed)
               this,               // Parameters
@@ -73,6 +102,16 @@ void XtcReaderActivity::onExit() {
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   xtc.reset();
+
+  // Free pre-allocated page buffer if present
+  if (preallocPageBuffer) {
+    // Free the reserved buffer on activity exit. This ensures the memory is
+    // returned to the heap and avoids leaks if the activity is re-entered.
+    free(preallocPageBuffer);
+    preallocPageBuffer = nullptr;
+    preallocPageBufferSize = 0;
+    Serial.printf("[%lu] [XTR] Freed preallocated page buffer\n", millis());
+  }
 }
 
 void XtcReaderActivity::loop() {
@@ -203,21 +242,36 @@ void XtcReaderActivity::renderPage() {
     pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
   }
 
-  // Allocate page buffer
-  uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
-  if (!pageBuffer) {
-    Serial.printf("[%lu] [XTR] Failed to allocate page buffer (%lu bytes)\n", millis(), pageBufferSize);
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Memory error", true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
+  // Use pre-allocated buffer when available to avoid fragmentation failures.
+  uint8_t* pageBuffer = nullptr;
+  bool pageBufferIsPrealloc = false;
+  if (preallocPageBuffer && pageBufferSize <= preallocPageBufferSize) {
+    // Reuse the reserved buffer when the requested page fits within it.
+    // This avoids repeated large `malloc`/`free` operations during rendering.
+    pageBuffer = preallocPageBuffer;
+    pageBufferIsPrealloc = true;
+  } else {
+    // Allocate page buffer
+    pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
+    if (!pageBuffer) {
+      // If dynamic allocation fails, log diagnostics and show an error to
+      // the user. We keep this fallback so the reader can still function
+      // on platforms where preallocation wasn't possible.
+      Serial.printf("[%lu] [XTR] Failed to allocate page buffer (%lu bytes)\n", millis(), pageBufferSize);
+      renderer.clearScreen();
+      renderer.drawCenteredText(UI_12_FONT_ID, 300, "Memory error", true, EpdFontFamily::BOLD);
+      renderer.displayBuffer();
+      return;
+    }
   }
 
   // Load page data
   size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
   if (bytesRead == 0) {
     Serial.printf("[%lu] [XTR] Failed to load page %lu\n", millis(), currentPage);
-    free(pageBuffer);
+    if (!pageBufferIsPrealloc) {
+      free(pageBuffer);
+    }
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, "Page load error", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
@@ -327,7 +381,9 @@ void XtcReaderActivity::renderPage() {
     // Cleanup grayscale buffers with current frame buffer
     renderer.cleanupGrayscaleWithFrameBuffer();
 
-    free(pageBuffer);
+    if (!pageBufferIsPrealloc) {
+      free(pageBuffer);
+    }
 
     Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (2-bit grayscale)\n", millis(), currentPage + 1,
                   xtc->getPageCount());
@@ -353,7 +409,9 @@ void XtcReaderActivity::renderPage() {
   }
   // White pixels are already cleared by clearScreen()
 
-  free(pageBuffer);
+  if (!pageBufferIsPrealloc) {
+    free(pageBuffer);
+  }
 
   // XTC pages already have status bar pre-rendered, no need to add our own
 

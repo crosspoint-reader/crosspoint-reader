@@ -5,6 +5,8 @@ import threading
 from datetime import datetime
 from collections import deque
 import time
+import os
+import os
 
 # Try to import potentially missing packages
 try:
@@ -12,6 +14,11 @@ try:
     from colorama import init, Fore, Style
     import matplotlib.pyplot as plt
     import matplotlib.animation as animation
+    # Only import termios and fcntl if on POSIX system
+    if os.name == 'posix':
+        import termios
+        import fcntl
+        import struct
 except ImportError as e:
     missing_package = e.name
     print("\n" + "!" * 50)
@@ -93,25 +100,127 @@ def parse_memory_line(line):
             return None, None
     return None, None
 
-def serial_worker(port, baud):
+def serial_worker(port, baud, without_restart=False):
     """
     Runs in a background thread. Handles reading serial, printing to console,
     and updating the data lists.
+    
+    Args:
+        port: Serial port path
+        baud: Baud rate
+        without_restart: If True and on POSIX, use low-level open with explicit DTR/RTS clearing
+                        to avoid device reset. If False, use PySerial (may cause device reset).
     """
     print(f"{Fore.CYAN}--- Opening {port} at {baud} baud ---{Style.RESET_ALL}")
+    if without_restart and os.name == 'posix':
+        print(f"{Fore.CYAN}(Attempting low-level POSIX open to avoid device reset){Style.RESET_ALL}")
 
-    try:
-        ser = serial.Serial(port, baud, timeout=0.1)
-        ser.dtr = False
-        ser.rts = False
-    except serial.SerialException as e:
-        print(f"{Fore.RED}Error opening port: {e}{Style.RESET_ALL}")
-        return
+    # Prefer a low-level POSIX open on Unix-like systems to avoid the serial
+    # driver toggling modem control lines when the device file is opened.
+    # This opens the device with O_NOCTTY|O_NONBLOCK, configures termios
+    # attributes (baud/raw), then attempts multiple ioctl strategies to
+    # clear DTR/RTS. If this fails, fall back to the existing pyserial logic.
+    ser = None
+    if without_restart and os.name == 'posix':
+        try:
+            import fcntl, termios, struct
+
+            flags = os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK
+            fd = os.open(port, flags)
+
+            # Configure basic termios attributes (raw mode, baud)
+            attrs = termios.tcgetattr(fd)
+            try:
+                termios.cfmakeraw(attrs)
+            except AttributeError:
+                attrs[0] = attrs[0] & ~(termios.IXON | termios.IXOFF | termios.IXANY)
+            # Set baud (best-effort)
+            speed_const = getattr(termios, f'B{baud}', None)
+            if speed_const is not None:
+                try:
+                    termios.cfsetispeed(attrs, speed_const)
+                    termios.cfsetospeed(attrs, speed_const)
+                except Exception:
+                    pass
+            termios.tcsetattr(fd, termios.TCSANOW, attrs)
+
+            # Clear DTR/RTS using multiple ioctl strategies depending on platform
+            try:
+                TIOCMBIC = getattr(termios, 'TIOCMBIC', None)
+                TIOCM_DTR = getattr(termios, 'TIOCM_DTR', 0)
+                TIOCM_RTS = getattr(termios, 'TIOCM_RTS', 0)
+                if TIOCMBIC is not None and (TIOCM_DTR or TIOCM_RTS):
+                    mask = TIOCM_DTR | TIOCM_RTS
+                    fcntl.ioctl(fd, TIOCMBIC, struct.pack('I', mask))
+
+                for name in ('TIOCCDTR', 'TIOCSDTR'):
+                    val = getattr(termios, name, None)
+                    if val is not None:
+                        try:
+                            fcntl.ioctl(fd, val)
+                        except Exception:
+                            pass
+
+                TIOCMGET = getattr(termios, 'TIOCMGET', None)
+                TIOCMSET = getattr(termios, 'TIOCMSET', None)
+                if TIOCMGET is not None and TIOCMSET is not None:
+                    try:
+                        v = fcntl.ioctl(fd, TIOCMGET, struct.pack('I', 0))
+                        cur = struct.unpack('I', v)[0]
+                        mask = ~(TIOCM_DTR | TIOCM_RTS)
+                        new = cur & mask
+                        fcntl.ioctl(fd, TIOCMSET, struct.pack('I', new))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Switch fd back to blocking mode
+            try:
+                fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, fl & ~os.O_NONBLOCK)
+            except Exception:
+                pass
+
+            # Wrap fd with a file object for reading lines; manage it manually
+            ser = os.fdopen(fd, 'rb+', buffering=0)
+        except Exception:
+            ser = None
+
+    if ser is None:
+        # Existing pyserial-based logic (best-effort clearing)
+        try:
+            ser = serial.Serial()
+            ser.port = port
+            ser.baudrate = baud
+            ser.timeout = 0.1
+            try:
+                ser.dtr = False
+                ser.rts = False
+            except Exception:
+                pass
+            ser.open()
+        except serial.SerialException as e:
+            print(f"{Fore.RED}Error opening port: {e}{Style.RESET_ALL}")
+            return
 
     try:
         while True:
             try:
-                raw_data = ser.readline().decode('utf-8', errors='replace')
+                # Handle both binary mode (from os.fdopen) and text mode (from PySerial)
+                if isinstance(ser, serial.Serial):
+                    raw_data = ser.readline().decode('utf-8', errors='replace')
+                else:
+                    # File object from os.fdopen, read until newline
+                    raw_bytes = b''
+                    while True:
+                        byte = ser.read(1)
+                        if not byte:
+                            break
+                        raw_bytes += byte
+                        if byte == b'\n':
+                            break
+                    raw_data = raw_bytes.decode('utf-8', errors='replace')
 
                 if not raw_data:
                     continue
@@ -137,15 +246,22 @@ def serial_worker(port, baud):
                 line_color = get_color_for_line(formatted_line)
                 print(f"{line_color}{formatted_line}")
 
-            except OSError:
+            except (OSError, EOFError):
                 print(f"{Fore.RED}Device disconnected.{Style.RESET_ALL}")
                 break
     except Exception as e:
         # If thread is killed violently (e.g. main exit), silence errors
         pass
     finally:
-        if 'ser' in locals() and ser.is_open:
-            ser.close()
+        if 'ser' in locals():
+            try:
+                if isinstance(ser, serial.Serial):
+                    if ser.is_open:
+                        ser.close()
+                else:
+                    ser.close()
+            except Exception:
+                pass
 
 def update_graph(frame):
     """
@@ -185,11 +301,16 @@ def main():
     parser = argparse.ArgumentParser(description="ESP32 Monitor with Graph")
     parser.add_argument("port", nargs="?", default="/dev/ttyACM0", help="Serial port")
     parser.add_argument("--baud", type=int, default=115200, help="Baud rate")
+    parser.add_argument(
+        "--without-restart",
+        action="store_true",
+        help="Use low-level POSIX serial open to avoid device reset on connection (Linux/macOS only)"
+    )
     args = parser.parse_args()
 
     # 1. Start the Serial Reader in a separate thread
     # Daemon=True means this thread dies when the main program closes
-    t = threading.Thread(target=serial_worker, args=(args.port, args.baud), daemon=True)
+    t = threading.Thread(target=serial_worker, args=(args.port, args.baud, args.without_restart), daemon=True)
     t.start()
 
     # 2. Set up the Graph (Main Thread)
