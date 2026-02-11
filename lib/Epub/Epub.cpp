@@ -120,8 +120,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
 
       if (!imageRef.empty()) {
         bookMetadata.coverItemHref = FsHelpers::normalisePath(coverPageBase + imageRef);
-        Serial.printf("[%lu] [EBP] Found cover image from guide: %s\n", millis(),
-                      bookMetadata.coverItemHref.c_str());
+        Serial.printf("[%lu] [EBP] Found cover image from guide: %s\n", millis(), bookMetadata.coverItemHref.c_str());
       }
     }
   }
