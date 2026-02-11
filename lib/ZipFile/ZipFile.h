@@ -5,6 +5,9 @@
 #include <unordered_map>
 #include <vector>
 
+struct tinfl_decompressor_tag;
+typedef struct tinfl_decompressor_tag tinfl_decompressor;
+
 class ZipFile {
  public:
   struct FileStatSlim {
@@ -42,6 +45,7 @@ class ZipFile {
   FsFile file;
   ZipDetails zipDetails = {0, 0, false};
   std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
+  static tinfl_decompressor* sSharedDecompressor;
 
   // Cursor for sequential central-dir scanning optimization
   uint32_t lastCentralDirPos = 0;
@@ -54,6 +58,7 @@ class ZipFile {
  public:
   explicit ZipFile(const std::string& filePath) : filePath(filePath) {}
   ~ZipFile() = default;
+  static void setSharedDecompressor(tinfl_decompressor* d) { sSharedDecompressor = d; }
   // Zip file can be opened and closed by hand in order to allow for quick calculation of inflated file size
   // It is NOT recommended to pre-open it for any kind of inflation due to memory constraints
   bool isOpen() const { return !!file; }
