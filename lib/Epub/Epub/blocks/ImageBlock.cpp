@@ -19,7 +19,9 @@ ImageBlock::ImageBlock(const std::string& imagePath, int16_t width, int16_t heig
 
 bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str()); }
 
-static std::string getCachePath(const std::string& imagePath) {
+namespace {
+
+std::string getCachePath(const std::string& imagePath) {
   // Replace extension with .pxc (pixel cache)
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
@@ -28,7 +30,7 @@ static std::string getCachePath(const std::string& imagePath) {
   return imagePath + ".pxc";
 }
 
-static bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
+bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
                             int expectedHeight) {
   FsFile cacheFile;
   if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
@@ -89,6 +91,8 @@ static bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath,
   Serial.printf("[%lu] [IMG] Cache render complete\n", millis());
   return true;
 }
+
+}  // namespace
 
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   Serial.printf("[%lu] [IMG] Rendering image at %d,%d: %s (%dx%d)\n", millis(), x, y, imagePath.c_str(), width, height);
