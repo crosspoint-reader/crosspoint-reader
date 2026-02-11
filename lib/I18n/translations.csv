@@ -1,10 +1,10 @@
-KEYS,ENGLISH,,FRENCH,GERMAN,CZECH,PORTUGUESE,RUSSIA
+KEYS,ENGLISH,SPANISH,FRENCH,GERMAN,CZECH,PORTUGUESE,RUSSIA
 ,English,Español,Français,Deutsch,Čeština,Português (Brasil),Русский
 STR_CROSSPOINT,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint
 STR_BOOTING,BOOTING,BOOTING,DÉMARRAGE EN COURS,STARTEN,SPUŠTĚNÍ,INICIANDO,Загрузка
 STR_SLEEPING,SLEEPING,SLEEPING,VEILLE,STANDBY,SPÁNEK,EM REPOUSO,Спящий режим
 STR_ENTERING_SLEEP,Entering Sleep...,ENTERING SLEEP...,Mise en veille…,Standby...,Vstup do režimu spánku...,Entrando em repouso...,Переход в сон...
-STR_BROWSE_FILES,Browse Files,Buscar archivos,Fichiers,Durchsuchen,Procházet soubory,Procurar arquivos,Обзор файлов
+STR_BROWSE_FILES,Browse Files,Buscar archivos,Fichiers,Durchsuchen,Procházet soubory,Arquivos,Обзор файлов
 STR_FILE_TRANSFER,File Transfer,Transferencia de archivos,Transfert,Datentransfer,Přenos souborů,Transferência,Передача файлов
 STR_SETTINGS_TITLE,Settings,Configuración,Réglages,Einstellungen,Nastavení,Configurações,Настройки
 STR_CALIBRE_LIBRARY,Calibre Library,Libreria Calibre,Bibliothèque Calibre,Calibre-Bibliothek,Knihovna Calibre,Biblioteca do Calibre,Библиотека Calibre
@@ -12,8 +12,8 @@ STR_CONTINUE_READING,Continue Reading,Continuar leyendo,Continuer la lecture,Wei
 STR_NO_OPEN_BOOK,No open book,No hay libros abiertos,Aucun livre ouvert,Aktuell kein Buch,Žádná otevřená kniha,Nenhum livro aberto,Нет открытой книги
 STR_START_READING,Start reading below,Start reading below,Lisez votre premier livre ci-dessous,Lesen beginnen,Začněte číst níže,Comece a ler abaixo,Начать чтение ниже
 STR_BOOKS,Books,Libros,Livres,Bücher,Knihy,Livros,Книги
-STR_NO_BOOKS_FOUND,No books found,No se encontraron libros,Dossier vide,Keine Bücher,Žádné knihy nenalezeny,Sem livros,Книги не найдены
-STR_SELECT_CHAPTER,Select Chapter,Seleccionar capítulo,Choix du chapitre,Kapitel auswählen,Vybrat kapitolu,Selecionar capítulo,Выберите главу
+STR_NO_BOOKS_FOUND,No books found,No se encontraron libros,Dossier vide,Keine Bücher,Žádné knihy nenalezeny,Nenhum livro encontrado,Книги не найдены
+STR_SELECT_CHAPTER,Select Chapter,Seleccionar capítulo,Choix du chapitre,Kapitel auswählen,Vybrat kapitolu,Escolher capítulo,Выберите главу
 STR_NO_CHAPTERS,No chapters,Sin capítulos,Aucun chapitre,Keine Kapitel,Žádné kapitoly,Sem capítulos,Глав нет
 STR_END_OF_BOOK,End of book,Fin del libro,Fin du livre,Buchende,Konec knihy,Fim do livro,Конец книги
 STR_EMPTY_CHAPTER,Empty chapter,Capítulo vacío,Chapitre vide,Kapitelende,Prázdná kapitola,Capítulo vazio,Пустая глава
@@ -40,7 +40,7 @@ STR_SAVE_PASSWORD,Save password for next time?,Guardar contraseña para la próx
 STR_REMOVE_PASSWORD,Remove saved password?,Borrar contraseñas guardadas?,Supprimer le mot de passe enregistré ?,Passwort entfernen?,Odstranit uložené heslo?,Remover senha salva?,Удалить сохранённый пароль?
 STR_PRESS_OK_SCAN,Press OK to scan again,Presione OK para buscar de nuevo,Appuyez sur OK pour détecter à nouveau,OK für neue Suche,Stiskněte OK pro přeskenování,Pressione OK procurar novamente,Нажмите OK для повторного поиска
 STR_PRESS_ANY_CONTINUE,Press any button to continue,Presione cualquier botón para continuar,Appuyez sur une touche pour continuer,Beliebige Taste drücken,Pokračujte stiskem libovolné klávesy,Pressione qualquer botão continuar,Нажмите любую кнопку
-STR_SELECT_HINT,LEFT/RIGHT: Select | OK: Confirm,Izquierda/Derecha: Seleccionar | OK: Confirmar,GAUCHE/DROITE: Sélectionner | OK: Valider,links/rechts: Auswahl | OK: Best,VLEVO/VPRAVO: Vybrat | OK: Potvrdit,ESQ/DIR: Selecionar | OK: Confirmar,ВЛЕВО/ВПРАВО: выбор | OK: подтвердить
+STR_SELECT_HINT,LEFT/RIGHT: Select | OK: Confirm,Izquierda/Derecha: Seleccionar | OK: Confirmar,GAUCHE/DROITE: Sélectionner | OK: Valider,links/rechts: Auswahl | OK: Best,VLEVO/VPRAVO: Vybrat | OK: Potvrdit,ESQ/DIR: Escolher | OK: Confirmar,ВЛЕВО/ВПРАВО: выбор | OK: подтвердить
 STR_HOW_CONNECT,How would you like to connect?,Cómo te gustaría conectarte?,Comment voulez-vous vous connecter ?,Wie möchtest du dich verbinden?,Jak se chcete připojit?,Como você gostaria se conectar?,Как вы хотите подключиться?
 STR_JOIN_NETWORK,Join a Network,Unirse a una red,Connexion à un réseau,Netzwerk beitreten,Připojit se k síti,Entrar em uma rede,Подключиться к сети
 STR_CREATE_HOTSPOT,Create Hotspot,Crear punto de acceso,Créer un point d’accès,Hotspot erstellen,Vytvořit hotspot,Criar hotspot,Создать точку доступа
@@ -115,7 +115,7 @@ STR_CALIBRE_SETTINGS,Calibre Settings,Configuraciones de Calibre,Réglages Calib
 STR_KOREADER_SYNC,KOReader Sync,Síncronización de KOReader,Synchronisation KOReader,KOReader-Synchr.,KOReaderu Sync,Sincronização KOReader,Синхронизация KOReader
 STR_CHECK_UPDATES,Check for updates,Verificar actualizaciones,Mise à jour,Nach Updates suchen,Zkontrolovat aktualizace,Verificar atualizações,Проверить обновления
 STR_LANGUAGE,Language,Idioma,Langue,Sprache,Jazyk,Idioma,Язык
-STR_SELECT_WALLPAPER,Select Wallpaper,Seleccionar fondo,Fond d’écran,Bildauswahl Standby,Vybrat tapetu,Selecionar papel parede,Выбрать обои
+STR_SELECT_WALLPAPER,Select Wallpaper,Seleccionar fondo,Fond d’écran,Bildauswahl Standby,Vybrat tapetu,Escolher papel parede,Выбрать обои
 STR_CLEAR_READING_CACHE,Clear Reading Cache,Borrar caché de lectura,Vider le cache de lecture,Lese-Cache leeren,Vymazat mezipaměť čtení,Limpar cache de leitura,Очистить кэш чтения
 STR_CALIBRE,Calibre,Calibre,Calibre,Calibre,Calibre,Calibre,Calibre
 STR_USERNAME,Username,Nombre de usuario,Nom d’utilisateur,Benutzername,Uživatelské jméno,Nome de usuário,Имя пользователя
@@ -224,7 +224,7 @@ STR_BACK,« Back,« Atrás,« Retour,« Zurück,« Zpět,« Voltar,В« Наза
 STR_EXIT,« Exit,« SaliR,« Sortie,« Verlassen,« Konec,« Sair,В« Выход
 STR_HOME,« Home,« Inicio,« Accueil,« Start,« Domů,« Início,В« Главная
 STR_SAVE,« Save,« Guardar,« Sauver,« Speichern,« Uložit,« Salvar,В« Сохранить
-STR_SELECT,Select,Seleccionar,OK,Auswahl,Vybrat,Selecionar,Выбрать
+STR_SELECT,Select,Seleccionar,OK,Auswahl,Vybrat,Escolher,Выбрать
 STR_TOGGLE,Toggle,Cambiar,Modifier,Ändern,Přepnout,Alternar,Переключить
 STR_CONFIRM,Confirm,Confirmar,Confirmer,Bestätigen,Potvrdit,Confirmar,Подтвердить
 STR_CANCEL,Cancel,Cancelar,Annuler,Abbrechen,Zrušit,Cancelar,Отмена
@@ -234,28 +234,28 @@ STR_DOWNLOAD,Download,Descargar,Télécharger,Herunterladen,Stáhnout,Baixar,С�
 STR_RETRY,Retry,Reintentar,Réessayer,Wiederh.,Zkusit znovu,Tentar novamente,Повторить
 STR_YES,Yes,Sí,Oui,Ja,Ano,Sim,Да
 STR_NO,No,No,Non,Nein,Ne,Não,Нет
-STR_STATE_ON,ON,ENCENDIDO,ON,An,ZAP,LIGADO,ВКЛ
-STR_STATE_OFF,OFF,APAGADO,OFF,Aus,VYP,DESLIGADO,ВЫКЛ
+STR_STATE_ON,ON,ENCENDIDO,ON,An,ZAP,LIG.,ВКЛ
+STR_STATE_OFF,OFF,APAGADO,OFF,Aus,VYP,DESL.,ВЫКЛ
 STR_SET,Set,Configurar,Défini,Gesetzt,Nastavit,Definir,Установлено
 STR_NOT_SET,Not Set,No configurado,Non défini,Leer,Nenastaveno,Não definido,Не установлено
 STR_DIR_LEFT,Left,Izquierda,Gauche,Links,Vlevo,Esquerda,Влево
 STR_DIR_RIGHT,Right,Derecha,Droite,Rechts,Vpravo,Direita,Вправо
-STR_DIR_UP,Up,Arriba,Haut,Hoch,Nahoru,Acima,Вверх
-STR_DIR_DOWN,Down,Abajo,Bas,Runter,Dolů,Abaixo,Вниз
+STR_DIR_UP,Up,Arriba,Haut,Hoch,Nahoru,Cima,Вверх
+STR_DIR_DOWN,Down,Abajo,Bas,Runter,Dolů,Baixo,Вниз
 STR_CAPS_ON,CAPS,MAYÚSCULAS,MAJ,UMSCH,PÍSMO,CAPS,CAPS
 STR_CAPS_OFF,caps,caps,maj,umsch,písmo,caps,caps
 STR_OK_BUTTON,OK,OK,OK,OK,OK,OK,OK
-STR_ON_MARKER,[ON],[ENCENDIDO],[ON],[AN],[ZAP],[ON],[ВКЛ]
+STR_ON_MARKER,[ON],[ENCENDIDO],[ON],[AN],[ZAP],[LIGADO],[ВКЛ]
 STR_SLEEP_COVER_FILTER,Sleep Screen Cover Filter,Filtro de salva pantalla y protección de la pantalla,Filtre affichage veille,Standby-Coverfilter,Filtr obrazovky spánku,Filtro capa tela repouso,Фильтр обложки сна
 STR_FILTER_CONTRAST,Contrast,Contraste,Contraste,Kontrast,Kontrast,Contraste,Контраст
-STR_STATUS_BAR_FULL_PERCENT,Full w/ Percentage,Completa con porcentaje,Complète + %,Komplett + Prozent,Plný s procenty,Completa com porcentagem,Полная + процент
-STR_STATUS_BAR_FULL_BOOK,Full w/ Book Bar,Completa con progreso del libro,Complète + barre livre,Komplett + Buch,Plný s pruhem knih,Completa com barra livro,Полная + индикатор книги
-STR_STATUS_BAR_BOOK_ONLY,Book Bar Only,Solo progreso del libro,Barre livre,Nur Buch,Pouze pruh knih,Apenas barra do livro,Только индикатор книги
-STR_STATUS_BAR_FULL_CHAPTER,Full w/ Chapter Bar,Completa con progreso de capítulos,Complète + barre chapitre,Komplett + Kapitel,Plná s pruhem kapitol,Completa com barra capítulo,Полная + индикатор главы
+STR_STATUS_BAR_FULL_PERCENT,Full w/ Percentage,Completa con porcentaje,Complète + %,Komplett + Prozent,Plný s procenty,Completa c/ porcentagem,Полная + процент
+STR_STATUS_BAR_FULL_BOOK,Full w/ Book Bar,Completa con progreso del libro,Complète + barre livre,Komplett + Buch,Plný s pruhem knih,Completa c/ barra livro,Полная + индикатор книги
+STR_STATUS_BAR_BOOK_ONLY,Book Bar Only,Solo progreso del libro,Barre livre,Nur Buch,Pouze pruh knih,Só barra do livro,Только индикатор книги
+STR_STATUS_BAR_FULL_CHAPTER,Full w/ Chapter Bar,Completa con progreso de capítulos,Complète + barre chapitre,Komplett + Kapitel,Plná s pruhem kapitol,Completa c/ barra capítulo,Полная + индикатор главы
 STR_UI_THEME,UI Theme,Estilo de pantalla,Thème de l’interface,System-Design,Šablona rozhraní,Tema da interface,Тема интерфейса
 STR_THEME_CLASSIC,Classic,Clásico,Classique,Klassisch,Klasická,Clássico,Классическая
 STR_THEME_LYRA,Lyra,LYRA,Lyra,Lyra,Lyra,Lyra,Lyra
-STR_SUNLIGHT_FADING_FIX,Sunlight Fading Fix,Corrección de desvastado por sol,Amélioration de la lisibilité au soleil,Anti-Verblassen,Oprava blednutí na slunci,Correção de desbotamento ao sol,Исправление выцветания на солнце
+STR_SUNLIGHT_FADING_FIX,Sunlight Fading Fix,Corrección de desvastado por sol,Amélioration de la lisibilité au soleil,Anti-Verblassen,Oprava blednutí na slunci,Ajuste desbotamento ao sol,Исправление выцветания на солнце
 STR_REMAP_FRONT_BUTTONS,Remap Front Buttons,Reconfigurar botones frontales,Réassigner les boutons avant,Vordere Tasten belegen,Přemapovat přední tlačítka,Remapear botões frontais,Переназначить передние кнопки
 STR_OPDS_BROWSER,OPDS Browser,Navegador opds,Navigateur OPDS,OPDS-Browser,Prohlížeč OPDS,Navegador OPDS,OPDS браузер
 STR_COVER_CUSTOM,Cover + Custom,Portada + Personalizado,Couverture + Custom,Umschlag + Eigenes,Obálka + Vlastní,Capa + personalizado,Обложка + Своя

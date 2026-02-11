@@ -5,6 +5,9 @@
 // Language display names
 const char* const LANGUAGE_NAMES[] = {
     "English",
+    "Espa\xC3"
+    "\xB1"
+    "ol",
     "Fran\xC3"
     "\xA7"
     "ais",
@@ -39,6 +42,23 @@ const char* const CHARACTER_SETS[] = {
     " !\"%'()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUVWXY[\\]abcdefghijklmnopqrstuvwxyz|\xC2"
     "\xAB"
     "",  // English
+    " !\"%'()*+,-./01235:=?ABCDEFGHIJKLMNOPQRSTUVWXY[\\]abcdefghijlmnopqrstuvwxyz|\xC2"
+    "\xA1"
+    "\xC2"
+    "\xAB"
+    "\xC3"
+    "\x9A"
+    "\xC3"
+    "\xA1"
+    "\xC3"
+    "\xA9"
+    "\xC3"
+    "\xAD"
+    "\xC3"
+    "\xB1"
+    "\xC3"
+    "\xB3"
+    "",  // Español
     " !%()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUVWX[\\]abcdefghijklmnopqrstuvwxyz|\xC2"
     "\xAB"
     "\xC3"
@@ -618,6 +638,579 @@ const char* const STRINGS_EN[] = {
     "Book's Style",
     "Embedded Style",
     "OPDS Server URL",
+};
+
+const char* const STRINGS_ES[] = {
+    "CrossPoint",
+    "BOOTING",
+    "SLEEPING",
+    "ENTERING SLEEP...",
+    "Buscar archivos",
+    "Transferencia de archivos",
+    "Configuraci\xC3"
+    "\xB3"
+    "n",
+    "Libreria Calibre",
+    "Continuar leyendo",
+    "No hay libros abiertos",
+    "Start reading below",
+    "Libros",
+    "No se encontraron libros",
+    "Seleccionar cap\xC3"
+    "\xAD"
+    "tulo",
+    "Sin cap\xC3"
+    "\xAD"
+    "tulos",
+    "Fin del libro",
+    "Cap\xC3"
+    "\xAD"
+    "tulo vac\xC3"
+    "\xAD"
+    "o",
+    "Indexando...",
+    "Error de memoria",
+    "Error al cargar la p\xC3"
+    "\xA1"
+    "gina",
+    "Archivo vac\xC3"
+    "\xAD"
+    "o",
+    "Out of bounds",
+    "Cargando...",
+    "Error al cargar XTC",
+    "Error al cargar TXT",
+    "Error al cargar EPUB",
+    "Error en la tarjeta SD",
+    "Redes Wi-Fi",
+    "No hay redes disponibles",
+    "%zu redes encontradas",
+    "Buscando...",
+    "Conectando...",
+    "Conectado!",
+    "Error de conexion",
+    "Connection timeout",
+    "Olvidar la red?",
+    "Guardar contrase\xC3"
+    "\xB1"
+    "a para la pr\xC3"
+    "\xB3"
+    "xima vez?",
+    "Borrar contrase\xC3"
+    "\xB1"
+    "as guardadas?",
+    "Presione OK para buscar de nuevo",
+    "Presione cualquier bot\xC3"
+    "\xB3"
+    "n para continuar",
+    "Izquierda/Derecha: Seleccionar | OK: Confirmar",
+    "C\xC3"
+    "\xB3"
+    "mo te gustar\xC3"
+    "\xAD"
+    "a conectarte?",
+    "Unirse a una red",
+    "Crear punto de acceso",
+    "Conectarse a una red Wi-Fi existente",
+    "Crear una red Wi-Fi para que otros se unan",
+    "Iniciando punto de acceso...",
+    "Modo punto de acceso",
+    "Conectar su dispositivo a esta red Wi-Fi",
+    "Abre esta direcci\xC3"
+    "\xB3"
+    "n en tu navegador",
+    "o http://",
+    "o escanee este c\xC3"
+    "\xB3"
+    "digo QR con su m\xC3"
+    "\xB3"
+    "vil:",
+    "Calibre inal\xC3"
+    "\xA1"
+    "mbrico",
+    "URL del sitio web de Calibre",
+    "Conectar como dispositivo inal\xC3"
+    "\xA1"
+    "mbrico",
+    "* = Cifrado | + = Guardado",
+    "Direcci\xC3"
+    "\xB3"
+    "n MAC:",
+    "Verificando Wi-Fi...",
+    "Introduzca la contrase\xC3"
+    "\xB1"
+    "a de Wi-Fi",
+    "Introduzca el texto",
+    "a ",
+    "Discovering Calibre...",
+    "Conect\xC3"
+    "\xA1"
+    "ndose a",
+    "Conectado a ",
+    "Esperando comandos...",
+    "(Error de conexi\xC3"
+    "\xB3"
+    "n, intent\xC3"
+    "\xA1"
+    "ndolo nuevamente)",
+    "Calibre desconectado",
+    "Esperando transferencia...",
+    "Si la transferencia falla, habilite \n'Ignorar espacio libre' en las configuraciones del \nplugin smartdevice de "
+    "calibre.",
+    "Recibiendo: ",
+    "Recibido: ",
+    "Esperando m\xC3"
+    "\xA1"
+    "s...",
+    "Error al crear el archivo",
+    "Contrase\xC3"
+    "\xB1"
+    "a requerida",
+    "Transferencia interrumpida",
+    "1) Instala CrossPoint Reader plugin",
+    "2) Con\xC3"
+    "\xA9"
+    "ctese a la misma red Wi-Fi",
+    "3)  En Calibre: \"Enviar a dispotivo\"",
+    "\"Permanezca en esta pantalla mientras se env\xC3"
+    "\xAD"
+    "a\"",
+    "Pantalla",
+    "Lector",
+    "Control",
+    "Sistema",
+    "Salva Pantallas",
+    "Modo de salva pantallas",
+    "Barra de estado",
+    "Ocultar porcentaje de bater\xC3"
+    "\xAD"
+    "a",
+    "Espaciado extra de p\xC3"
+    "\xA1"
+    "rrafos",
+    "Suavizado de bordes de texto",
+    "Clic breve del bot\xC3"
+    "\xB3"
+    "n de encendido",
+    "Orientaci\xC3"
+    "\xB3"
+    "n de la lectura",
+    "Dise\xC3"
+    "\xB1"
+    "o de los botones frontales",
+    "Dise\xC3"
+    "\xB1"
+    "o de los botones laterales (Lector)",
+    "Pasar a la cap\xC3"
+    "\xAD"
+    "tulo al presi\xC3"
+    "\xB3"
+    "nar largamente",
+    "Familia de tipograf\xC3"
+    "\xAD"
+    "a del lector",
+    "Tipograf\xC3"
+    "\xAD"
+    "a externa",
+    "Tipograf\xC3"
+    "\xAD"
+    "a (Lectura)",
+    "Tipograf\xC3"
+    "\xAD"
+    "a (Pantalla)",
+    "Tama\xC3"
+    "\xB1"
+    "o de la fuente (Pantalla)",
+    "Interlineado (Lectura)",
+    "Espaciado de letras ASCII",
+    "Espaciado de d\xC3"
+    "\xAD"
+    "gitos ASCII",
+    "Espaciado CJK",
+    "Modo de color",
+    "Margen de lectura",
+    "Ajuste de par\xC3"
+    "\xA1"
+    "grafo del lector",
+    "Hyphenation",
+    "Tiempo para dormir",
+    "Frecuencia de actualizaci\xC3"
+    "\xB3"
+    "n",
+    "Configuraciones de Calibre",
+    "S\xC3"
+    "\xAD"
+    "ncronizaci\xC3"
+    "\xB3"
+    "n de KOReader",
+    "Verificar actualizaciones",
+    "Idioma",
+    "Seleccionar fondo",
+    "Borrar cach\xC3"
+    "\xA9"
+    " de lectura",
+    "Calibre",
+    "Nombre de usuario",
+    "Contrase\xC3"
+    "\xB1"
+    "a",
+    "URL del servidor de s\xC3"
+    "\xAD"
+    "ncronizaci\xC3"
+    "\xB3"
+    "n",
+    "Coincidencia de documentos",
+    "Autentificar",
+    "Nombre de usuario de KOReader",
+    "Contrase\xC3"
+    "\xB1"
+    "a de KOReader",
+    "Nombre del archivo",
+    "Binario",
+    "Configurar credenciales primero",
+    "Fall\xC3"
+    "\xB3"
+    " la conexi\xC3"
+    "\xB3"
+    "n Wi-Fi",
+    "Autentificando...",
+    "Autenticaci\xC3"
+    "\xB3"
+    "n exitsosa!",
+    "Autenticaci\xC3"
+    "\xB3"
+    "n KOReader",
+    "La s\xC3"
+    "\xAD"
+    "ncronizaci\xC3"
+    "\xB3"
+    "n de KOReader est\xC3"
+    "\xA1"
+    " lista para usarse",
+    "Fall\xC3"
+    "\xB3"
+    " la autenticaci\xC3"
+    "\xB3"
+    "n",
+    "Hecho",
+    "Esto borrar\xC3"
+    "\xA1"
+    " todos los datos en cache del libro.",
+    " \xC2"
+    "\xA1"
+    "Se perder\xC3"
+    "\xA1"
+    " todo el avance de leer!",
+    "Los libros deber\xC3"
+    "\xA1"
+    "n ser re\xC3"
+    "\xAD"
+    "ndexados",
+    "cuando se abran de nuevo.",
+    "Borrando cach\xC3"
+    "\xA9"
+    "...",
+    "Cache limpia",
+    "Elementos eliminados",
+    "Fall\xC3"
+    "\xB3"
+    "",
+    "No se pudo borrar la cache",
+    "Verifique la salida serial para detalles",
+    "Oscuro",
+    "Claro",
+    "Personalizado",
+    "Portada",
+    "Ninguno",
+    "Ajustar",
+    "Recortar",
+    "Sin avance",
+    "Completa",
+    "Nunca",
+    "En el lector",
+    "Siempre",
+    "Ignorar",
+    "Dormir",
+    "Paso de p\xC3"
+    "\xA1"
+    "gina",
+    "Portrato",
+    "Paisaje sentido horario",
+    "Invertido",
+    "Paisaje sentido antihorario",
+    "Atr\xC3"
+    "\xA1"
+    "s, Confirmar, Izquierda, Derecha",
+    "Izquierda, Derecha, Atr\xC3"
+    "\xA1"
+    "s, Confirmar",
+    "Izquierda, Atr\xC3"
+    "\xA1"
+    "s, Confirmar, Derecha",
+    "Anterior/Siguiente",
+    "Siguiente/Anterior",
+    "Relacionado con libros",
+    "Noto Sans",
+    "Open Dyslexic",
+    "Peque\xC3"
+    "\xB1"
+    "o",
+    "Medio",
+    "Grande",
+    "Extra grande",
+    "Ajustado",
+    "Normal",
+    "Ancho",
+    "Justificar",
+    "Izquierda",
+    "Centro",
+    "Derecha",
+    "1 Minuto",
+    "10 Minutos",
+    "5 Minutos",
+    "15 Minutos",
+    "30 Minutos",
+    "1 P\xC3"
+    "\xA1"
+    "gina",
+    "5 P\xC3"
+    "\xA1"
+    "ginas",
+    "10 P\xC3"
+    "\xA1"
+    "ginas",
+    "15 P\xC3"
+    "\xA1"
+    "ginas",
+    "30 P\xC3"
+    "\xA1"
+    "ginas",
+    "ActualizaR",
+    "Verificando actualizaci\xC3"
+    "\xB3"
+    "n...",
+    "\xC2"
+    "\xA1"
+    "Nueva actualizaci\xC3"
+    "\xB3"
+    "n disponible!",
+    "Versi\xC3"
+    "\xB3"
+    "n actual:",
+    "Nueva versi\xC3"
+    "\xB3"
+    "n:",
+    "Actualizando...",
+    "No hay actualizaciones disponibles",
+    "Fall\xC3"
+    "\xB3"
+    " la actualizaci\xC3"
+    "\xB3"
+    "n",
+    "Actualizaci\xC3"
+    "\xB3"
+    "n completada",
+    "Presione y mantenga presionado el bot\xC3"
+    "\xB3"
+    "n de encendido para volver a encender",
+    "Fuente externa",
+    "Incorporado (Desactivado)",
+    "No se encontraron elementos",
+    "Descargando...",
+    "Fall\xC3"
+    "\xB3"
+    " la descarga",
+    "Error",
+    "Sin nombre",
+    "No se ha configurado la url del servidor",
+    "Failed to fetch feed",
+    "Failed to parse feed",
+    "Red: ",
+    "Direcci\xC3"
+    "\xB3"
+    "n IP: ",
+    "O escanee el c\xC3"
+    "\xB3"
+    "digo QR con su tel\xC3"
+    "\xA9"
+    "fono para conectarse a WI-FI.",
+    "Error: Fallo general",
+    "Error: Red no encontrada",
+    "Error: Connection timeout",
+    "Tarjeta SD",
+    "\xC2"
+    "\xAB"
+    " Atr\xC3"
+    "\xA1"
+    "s",
+    "\xC2"
+    "\xAB"
+    " SaliR",
+    "\xC2"
+    "\xAB"
+    " Inicio",
+    "\xC2"
+    "\xAB"
+    " Guardar",
+    "Seleccionar",
+    "Cambiar",
+    "Confirmar",
+    "Cancelar",
+    "Conectar",
+    "Abrir",
+    "Descargar",
+    "Reintentar",
+    "S\xC3"
+    "\xAD"
+    "",
+    "No",
+    "ENCENDIDO",
+    "APAGADO",
+    "Configurar",
+    "No configurado",
+    "Izquierda",
+    "Derecha",
+    "Arriba",
+    "Abajo",
+    "MAY\xC3"
+    "\x9A"
+    "SCULAS",
+    "caps",
+    "OK",
+    "[ENCENDIDO]",
+    "Filtro de salva pantalla y protecci\xC3"
+    "\xB3"
+    "n de la pantalla",
+    "Contraste",
+    "Completa con porcentaje",
+    "Completa con progreso del libro",
+    "Solo progreso del libro",
+    "Completa con progreso de cap\xC3"
+    "\xAD"
+    "tulos",
+    "Estilo de pantalla",
+    "Cl\xC3"
+    "\xA1"
+    "sico",
+    "LYRA",
+    "Correcci\xC3"
+    "\xB3"
+    "n de desvastado por sol",
+    "Reconfigurar botones frontales",
+    "Navegador opds",
+    "Portada + Personalizado",
+    "Recientes",
+    "Libros recientes",
+    "No hay libros recientes",
+    "Utilice las transferencias dispositivos inal\xC3"
+    "\xA1"
+    "mbricos de calibre",
+    "Olvidar la red y eliminar la contrase\xC3"
+    "\xB1"
+    "a guardada?",
+    "Olvidar la red",
+    "Iniciando calibre...",
+    "Configuraci\xC3"
+    "\xB3"
+    "n",
+    "Estado",
+    "Borrar",
+    "Previo",
+    "Presione un bot\xC3"
+    "\xB3"
+    "n frontal para cada funci\xC3"
+    "\xB3"
+    "n",
+    "No asignado",
+    "Ya asignado",
+    "Bot\xC3"
+    "\xB3"
+    "n lateral arriba: Restablecer a la configuraci\xC3"
+    "\xB3"
+    "n previo",
+    "Bot\xC3"
+    "\xB3"
+    "n lateral abajo: Anular reconfiguraci\xC3"
+    "\xB3"
+    "n",
+    "Atr\xC3"
+    "\xA1"
+    "s (Primer bot\xC3"
+    "\xB3"
+    "n)",
+    "Confirmar (Segundo bot\xC3"
+    "\xB3"
+    "n)",
+    "Izquierda (Tercer bot\xC3"
+    "\xB3"
+    "n)",
+    "Derecha (Cuarto bot\xC3"
+    "\xB3"
+    "n)",
+    "Ir a %",
+    "Volver a inicio",
+    "Progreso de s\xC3"
+    "\xAD"
+    "ncronizaci\xC3"
+    "\xB3"
+    "n",
+    "Borrar cache del libro",
+    "Cap\xC3"
+    "\xAD"
+    "tulo:",
+    " P\xC3"
+    "\xA1"
+    "ginas |",
+    "Libro:",
+    "shift",
+    "SHIFT",
+    "BLOQUEAR",
+    "Para calibre, agregue /opds a su urL",
+    "Izquierda/Derecha: 1% Arriba/Abajo: 10%",
+    "Tiempo de s\xC3"
+    "\xAD"
+    "ncronizaci\xC3"
+    "\xB3"
+    "n...",
+    "Calculando hash del documento...",
+    "No se pudo calcular el hash del documento",
+    "Recuperando progreso remoto...",
+    "Subiendo progreso...",
+    "No se han configurado credenciales",
+    "Configure una cuenta de KOReader en la configuraci\xC3"
+    "\xB3"
+    "n",
+    "\xC2"
+    "\xA1"
+    "Progreso encontrado!",
+    "Remoto",
+    "Local",
+    "P\xC3"
+    "\xA1"
+    "gina %d, %.2f% Completada",
+    "P\xC3"
+    "\xA1"
+    "gina %d / %d, %.2f% Completada",
+    "  De: %s",
+    "Aplicar progreso remoto",
+    "Subir progreso local",
+    "No se encontr\xC3"
+    "\xB3"
+    " progreso remoto",
+    "Subir posicion actual?",
+    "\xC2"
+    "\xA1"
+    "Progreso subido!",
+    "Fallo de s\xC3"
+    "\xAD"
+    "ncronizaci\xC3"
+    "\xB3"
+    "n",
+    "Seccion",
+    "Subir",
+    "Estilo del libro",
+    "Estilo integrado",
+    "URL del servidor OPDS",
 };
 
 const char* const STRINGS_FR[] = {
@@ -3539,7 +4132,7 @@ const char* const STRINGS_PO[] = {
     "INICIANDO",
     "EM REPOUSO",
     "Entrando em repouso...",
-    "Procurar arquivos",
+    "Arquivos",
     "Transfer\xC3"
     "\xAA"
     "ncia",
@@ -3553,8 +4146,8 @@ const char* const STRINGS_PO[] = {
     "Nenhum livro aberto",
     "Comece a ler abaixo",
     "Livros",
-    "Sem livros",
-    "Selecionar cap\xC3"
+    "Nenhum livro encontrado",
+    "Escolher cap\xC3"
     "\xAD"
     "tulo",
     "Sem cap\xC3"
@@ -3604,7 +4197,7 @@ const char* const STRINGS_PO[] = {
     "Pressione qualquer bot\xC3"
     "\xA3"
     "o continuar",
-    "ESQ/DIR: Selecionar | OK: Confirmar",
+    "ESQ/DIR: Escolher | OK: Confirmar",
     "Como voc\xC3"
     "\xAA"
     " gostaria se conectar?",
@@ -3777,7 +4370,7 @@ const char* const STRINGS_PO[] = {
     "\xB5"
     "es",
     "Idioma",
-    "Selecionar papel parede",
+    "Escolher papel parede",
     "Limpar cache de leitura",
     "Calibre",
     "Nome de usu\xC3"
@@ -3992,7 +4585,7 @@ const char* const STRINGS_PO[] = {
     "\xC2"
     "\xAB"
     " Salvar",
-    "Selecionar",
+    "Escolher",
     "Alternar",
     "Confirmar",
     "Cancelar",
@@ -4004,26 +4597,28 @@ const char* const STRINGS_PO[] = {
     "N\xC3"
     "\xA3"
     "o",
-    "LIGADO",
-    "DESLIGADO",
+    "LIG.",
+    "DESL.",
     "Definir",
     "N\xC3"
     "\xA3"
     "o definido",
     "Esquerda",
     "Direita",
-    "Acima",
-    "Abaixo",
+    "Cima",
+    "Baixo",
     "CAPS",
     "caps",
     "OK",
-    "[ON]",
+    "[LIGADO]",
     "Filtro capa tela repouso",
     "Contraste",
-    "Completa com porcentagem",
-    "Completa com barra livro",
-    "Apenas barra do livro",
-    "Completa com barra cap\xC3"
+    "Completa c/ porcentagem",
+    "Completa c/ barra livro",
+    "S\xC3"
+    "\xB3"
+    " barra do livro",
+    "Completa c/ barra cap\xC3"
     "\xAD"
     "tulo",
     "Tema da interface",
@@ -4031,11 +4626,7 @@ const char* const STRINGS_PO[] = {
     "\xA1"
     "ssico",
     "Lyra",
-    "Corre\xC3"
-    "\xA7"
-    "\xC3"
-    "\xA3"
-    "o de desbotamento ao sol",
+    "Ajuste desbotamento ao sol",
     "Remapear bot\xC3"
     "\xB5"
     "es frontais",
@@ -12749,6 +13340,9 @@ const char* const STRINGS_RU[] = {
 static_assert(sizeof(i18n_strings::STRINGS_EN) / sizeof(i18n_strings::STRINGS_EN[0]) ==
                   static_cast<size_t>(StrId::_COUNT),
               "STRINGS_EN size mismatch");
+static_assert(sizeof(i18n_strings::STRINGS_ES) / sizeof(i18n_strings::STRINGS_ES[0]) ==
+                  static_cast<size_t>(StrId::_COUNT),
+              "STRINGS_ES size mismatch");
 static_assert(sizeof(i18n_strings::STRINGS_FR) / sizeof(i18n_strings::STRINGS_FR[0]) ==
                   static_cast<size_t>(StrId::_COUNT),
               "STRINGS_FR size mismatch");
