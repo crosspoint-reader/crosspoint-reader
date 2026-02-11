@@ -672,8 +672,9 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
-  // Force full refresh for pages with images to prevent ghosting artifacts
-  bool forceFullRefresh = page->hasImages();
+  // Force full refresh for pages with images when anti-aliasing is on,
+  // as grayscale tones require half refresh to display correctly
+  bool forceFullRefresh = page->hasImages() && SETTINGS.textAntiAliasing;
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
