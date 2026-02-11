@@ -11,10 +11,20 @@ extern const char* const STRINGS_IT[];
 extern const char* const STRINGS_SW[];
 extern const char* const STRINGS_FR[];
 extern const char* const STRINGS_DE[];
+extern const char* const STRINGS_CZ[];
 }  // namespace i18n_strings
 
 // Language enum
-enum class Language : uint8_t { ENGLISH = 0, SPANISH = 1, ITALIAN = 2, SWEDISH = 3, FRENCH = 4, GERMAN = 5, _COUNT };
+enum class Language : uint8_t {
+  ENGLISH = 0,
+  SPANISH = 1,
+  ITALIAN = 2,
+  SWEDISH = 3,
+  FRENCH = 4,
+  GERMAN = 5,
+  CZECH = 6,
+  _COUNT
+};
 
 // Language display names (defined in I18nStrings.cpp)
 extern const char* const LANGUAGE_NAMES[];
@@ -356,6 +366,8 @@ inline const char* const* getStringArray(Language lang) {
       return i18n_strings::STRINGS_FR;
     case Language::GERMAN:
       return i18n_strings::STRINGS_DE;
+    case Language::CZECH:
+      return i18n_strings::STRINGS_CZ;
     default:
       return i18n_strings::STRINGS_EN;
   }

@@ -14,6 +14,11 @@ const char* const LANGUAGE_NAMES[] = {
     "\xA7"
     "ais",
     "Deutsch",
+    "\xC4"
+    "\x8C"
+    "e\xC5"
+    "\xA1"
+    "tina",
 };
 
 // Character sets for each language
@@ -84,6 +89,62 @@ const char* const CHARACTER_SETS[] = {
     "\x80"
     "\xA6"
     "",  // Deutsch
+    " !%()*+,-./012345:=?ABCDEFHIJKLMNOPQRSTUVWXYZ[\\]abcdefghijklmnoprstuvwxyz|\xC2"
+    "\xAB"
+    "\xC3"
+    "\x81"
+    "\xC3"
+    "\x8D"
+    "\xC3"
+    "\x9A"
+    "\xC3"
+    "\xA1"
+    "\xC3"
+    "\xA9"
+    "\xC3"
+    "\xAD"
+    "\xC3"
+    "\xB3"
+    "\xC3"
+    "\xBA"
+    "\xC3"
+    "\xBD"
+    "\xC4"
+    "\x8C"
+    "\xC4"
+    "\x8D"
+    "\xC4"
+    "\x8F"
+    "\xC4"
+    "\x9A"
+    "\xC4"
+    "\x9B"
+    "\xC5"
+    "\x98"
+    "\xC5"
+    "\x99"
+    "\xC5"
+    "\xA0"
+    "\xC5"
+    "\xA1"
+    "\xC5"
+    "\xA5"
+    "\xC5"
+    "\xAF"
+    "\xC5"
+    "\xBD"
+    "\xC5"
+    "\xBE"
+    "\xE2"
+    "\x80"
+    "\x9C"
+    "\xE2"
+    "\x80"
+    "\x9E"
+    "\xE2"
+    "\x80"
+    "\xA6"
+    "",  // Čeština
 };
 
 namespace i18n_strings {
@@ -2692,6 +2753,1612 @@ const char* const STRINGS_DE[] = {
     "OPDS-Server-URL",
 };
 
+const char* const STRINGS_CZ[] = {
+    "CrossPoint",
+    "SPU\xC5"
+    "\xA0"
+    "T\xC4"
+    "\x9A"
+    "N\xC3"
+    "\x8D"
+    "",
+    "SP\xC3"
+    "\x81"
+    "NEK",
+    "Vstup do re\xC5"
+    "\xBE"
+    "imu sp\xC3"
+    "\xA1"
+    "nku...",
+    "Proch\xC3"
+    "\xA1"
+    "zet soubory",
+    "P\xC5"
+    "\x99"
+    "enos soubor\xC5"
+    "\xAF"
+    "",
+    "Nastaven\xC3"
+    "\xAD"
+    "",
+    "Knihovna Calibre",
+    "Pokra\xC4"
+    "\x8D"
+    "ovat ve \xC4"
+    "\x8D"
+    "ten\xC3"
+    "\xAD"
+    "",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xA1"
+    " otev\xC5"
+    "\x99"
+    "en\xC3"
+    "\xA1"
+    " kniha",
+    "Za\xC4"
+    "\x8D"
+    "n\xC4"
+    "\x9B"
+    "te \xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "st n\xC3"
+    "\xAD"
+    "\xC5"
+    "\xBE"
+    "e",
+    "Knihy",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xA9"
+    " knihy nenalezeny",
+    "Vybrat kapitolu",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xA9"
+    " kapitoly",
+    "Konec knihy",
+    "Pr\xC3"
+    "\xA1"
+    "zdn\xC3"
+    "\xA1"
+    " kapitola",
+    "Indexov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "...",
+    "Chyba pam\xC4"
+    "\x9B"
+    "ti",
+    "Chyba na\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "t\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " str\xC3"
+    "\xA1"
+    "nky",
+    "Pr\xC3"
+    "\xA1"
+    "zdn\xC3"
+    "\xBD"
+    " soubor",
+    "Mimo hranice",
+    "Na\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "t\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "...",
+    "Nepoda\xC5"
+    "\x99"
+    "ilo se na\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "st XTC",
+    "Nepoda\xC5"
+    "\x99"
+    "ilo se na\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "st TXT",
+    "Nepoda\xC5"
+    "\x99"
+    "ilo se na\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "st EPUB",
+    "Chyba SD karty",
+    "Wi-Fi s\xC3"
+    "\xAD"
+    "t\xC4"
+    "\x9B"
+    "",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xA9"
+    " s\xC3"
+    "\xAD"
+    "t\xC4"
+    "\x9B"
+    " nenalezeny",
+    "Nalezeno %zu s\xC3"
+    "\xAD"
+    "t\xC3"
+    "\xAD"
+    "",
+    "Skenov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "...",
+    "P\xC5"
+    "\x99"
+    "ipojov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "...",
+    "P\xC5"
+    "\x99"
+    "ipojeno!",
+    "P\xC5"
+    "\x99"
+    "ipojen\xC3"
+    "\xAD"
+    " se nezda\xC5"
+    "\x99"
+    "ilo",
+    "\xC4"
+    "\x8C"
+    "asov\xC3"
+    "\xBD"
+    " limit p\xC5"
+    "\x99"
+    "ipojen\xC3"
+    "\xAD"
+    "",
+    "Zapomenout s\xC3"
+    "\xAD"
+    "\xC5"
+    "\xA5"
+    "?",
+    "Ulo\xC5"
+    "\xBE"
+    "it heslo pro p\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "\xC5"
+    "\xA1"
+    "t\xC4"
+    "\x9B"
+    "?",
+    "Odstranit ulo\xC5"
+    "\xBE"
+    "en\xC3"
+    "\xA9"
+    " heslo?",
+    "Stiskn\xC4"
+    "\x9B"
+    "te OK pro p\xC5"
+    "\x99"
+    "eskenov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "",
+    "Pokra\xC4"
+    "\x8D"
+    "ujte stiskem libovoln\xC3"
+    "\xA9"
+    " kl\xC3"
+    "\xA1"
+    "vesy",
+    "VLEVO/VPRAVO: Vybrat | OK: Potvrdit",
+    "Jak se chcete p\xC5"
+    "\x99"
+    "ipojit?",
+    "P\xC5"
+    "\x99"
+    "ipojit se k s\xC3"
+    "\xAD"
+    "ti",
+    "Vytvo\xC5"
+    "\x99"
+    "it hotspot",
+    "P\xC5"
+    "\x99"
+    "ipojit se k existuj\xC3"
+    "\xAD"
+    "c\xC3"
+    "\xAD"
+    " s\xC3"
+    "\xAD"
+    "ti WiFi",
+    "Vytvo\xC5"
+    "\x99"
+    "it s\xC3"
+    "\xAD"
+    "\xC5"
+    "\xA5"
+    " WiFi, ke kter\xC3"
+    "\xA9"
+    " se mohou p\xC5"
+    "\x99"
+    "ipojit ostatn\xC3"
+    "\xAD"
+    "",
+    "Spou\xC5"
+    "\xA1"
+    "t\xC4"
+    "\x9B"
+    "n\xC3"
+    "\xAD"
+    " hotspotu...",
+    "Re\xC5"
+    "\xBE"
+    "im hotspotu",
+    "P\xC5"
+    "\x99"
+    "ipojte sv\xC3"
+    "\xA9"
+    " za\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "zen\xC3"
+    "\xAD"
+    " k t\xC3"
+    "\xA9"
+    "to s\xC3"
+    "\xAD"
+    "ti WiFi",
+    "Otev\xC5"
+    "\x99"
+    "ete tuto URL ve sv\xC3"
+    "\xA9"
+    "m prohl\xC3"
+    "\xAD"
+    "\xC5"
+    "\xBE"
+    "e\xC4"
+    "\x8D"
+    "i",
+    "nebo http://",
+    "nebo naskenujte QR k\xC3"
+    "\xB3"
+    "d telefonem:",
+    "Calibre Wireless",
+    "URL webu Calibre",
+    "P\xC5"
+    "\x99"
+    "ipojit jako bezdr\xC3"
+    "\xA1"
+    "tov\xC3"
+    "\xA9"
+    " za\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "zen\xC3"
+    "\xAD"
+    "",
+    "* = \xC5"
+    "\xA0"
+    "ifrov\xC3"
+    "\xA1"
+    "no | + = Ulo\xC5"
+    "\xBE"
+    "eno",
+    "MAC adresa:",
+    "Kontrola WiFi...",
+    "Zadejte heslo WiFi",
+    "Zadejte text",
+    "pro",
+    "Prozkoum\xC3"
+    "\xA1"
+    "v\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " Calibre...",
+    "P\xC5"
+    "\x99"
+    "ipojov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " k",
+    "P\xC5"
+    "\x99"
+    "ipojeno k",
+    "\xC4"
+    "\x8C"
+    "ek\xC3"
+    "\xA1"
+    "m na p\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "kazy\xE2"
+    "\x80"
+    "\xA6"
+    "",
+    "(P\xC5"
+    "\x99"
+    "ipojen\xC3"
+    "\xAD"
+    " se nezda\xC5"
+    "\x99"
+    "ilo, opakov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " pokusu)",
+    "Calibre odpojeno",
+    "\xC4"
+    "\x8C"
+    "ek\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " na p\xC5"
+    "\x99"
+    "enos...",
+    "Nezda\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "-li se p\xC5"
+    "\x99"
+    "enos, povolte\n\xE2"
+    "\x80"
+    "\x9E"
+    "Ignorovat voln\xC3"
+    "\xA9"
+    " m\xC3"
+    "\xAD"
+    "sto\xE2"
+    "\x80"
+    "\x9C"
+    " v Calibre\nnastaven\xC3"
+    "\xAD"
+    " pluginu SmartDevice.",
+    "P\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "jem:",
+    "P\xC5"
+    "\x99"
+    "ijato:",
+    "\xC4"
+    "\x8C"
+    "ek\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " na dal\xC5"
+    "\xA1"
+    "\xC3"
+    "\xAD"
+    "...",
+    "Nepoda\xC5"
+    "\x99"
+    "ilo se vytvo\xC5"
+    "\x99"
+    "it soubor",
+    "Vy\xC5"
+    "\xBE"
+    "adov\xC3"
+    "\xA1"
+    "no heslo",
+    "P\xC5"
+    "\x99"
+    "enos p\xC5"
+    "\x99"
+    "eru\xC5"
+    "\xA1"
+    "en",
+    "1) Nainstalujte plugin CrossPoint Reader",
+    "2) Bu\xC4"
+    "\x8F"
+    "te ve stejn\xC3"
+    "\xA9"
+    " s\xC3"
+    "\xAD"
+    "ti WiFi",
+    "3) V Calibre: \xE2"
+    "\x80"
+    "\x9E"
+    "Odeslat do za\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "zen\xC3"
+    "\xAD"
+    "\xE2"
+    "\x80"
+    "\x9C"
+    "",
+    "\xE2"
+    "\x80"
+    "\x9E"
+    "P\xC5"
+    "\x99"
+    "i odes\xC3"
+    "\xAD"
+    "l\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " ponechat tuto obrazovku otev\xC5"
+    "\x99"
+    "enou\xE2"
+    "\x80"
+    "\x9C"
+    "",
+    "Displej",
+    "\xC4"
+    "\x8C"
+    "te\xC4"
+    "\x8D"
+    "ka",
+    "Ovl\xC3"
+    "\xA1"
+    "dac\xC3"
+    "\xAD"
+    " prvky",
+    "Syst\xC3"
+    "\xA9"
+    "m",
+    "Obrazovka sp\xC3"
+    "\xA1"
+    "nku",
+    "Obrazovka sp\xC3"
+    "\xA1"
+    "nku Re\xC5"
+    "\xBE"
+    "im krytu",
+    "Stavov\xC3"
+    "\xBD"
+    " \xC5"
+    "\x99"
+    "\xC3"
+    "\xA1"
+    "dek",
+    "Skr\xC3"
+    "\xBD"
+    "t baterii %",
+    "Extra mezery mezi odstavci",
+    "Vyhlazov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " textu",
+    "Kr\xC3"
+    "\xA1"
+    "tk\xC3"
+    "\xA9"
+    " stisknut\xC3"
+    "\xAD"
+    " tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tka nap\xC3"
+    "\xA1"
+    "jen\xC3"
+    "\xAD"
+    "",
+    "Orientace \xC4"
+    "\x8D"
+    "ten\xC3"
+    "\xAD"
+    "",
+    "Rozvr\xC5"
+    "\xBE"
+    "en\xC3"
+    "\xAD"
+    " p\xC5"
+    "\x99"
+    "edn\xC3"
+    "\xAD"
+    "ch tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tek",
+    "Rozvr\xC5"
+    "\xBE"
+    "en\xC3"
+    "\xAD"
+    " bo\xC4"
+    "\x8D"
+    "n\xC3"
+    "\xAD"
+    "ch tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tek (\xC4"
+    "\x8D"
+    "te\xC4"
+    "\x8D"
+    "ka)",
+    "Dlouh\xC3"
+    "\xA9"
+    " stisknut\xC3"
+    "\xAD"
+    " P\xC5"
+    "\x99"
+    "esko\xC4"
+    "\x8D"
+    "it kapitolu",
+    "Rodina p\xC3"
+    "\xAD"
+    "sem \xC4"
+    "\x8D"
+    "te\xC4"
+    "\x8D"
+    "ky",
+    "P\xC3"
+    "\xAD"
+    "smo extern\xC3"
+    "\xAD"
+    " \xC4"
+    "\x8D"
+    "te\xC4"
+    "\x8D"
+    "ky",
+    "P\xC3"
+    "\xAD"
+    "smo \xC4"
+    "\x8D"
+    "te\xC4"
+    "\x8D"
+    "ky",
+    "P\xC3"
+    "\xAD"
+    "smo rozhran\xC3"
+    "\xAD"
+    "",
+    "Velikost p\xC3"
+    "\xAD"
+    "sma rozhran\xC3"
+    "\xAD"
+    "",
+    "\xC5"
+    "\x98"
+    "\xC3"
+    "\xA1"
+    "dkov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " \xC4"
+    "\x8D"
+    "te\xC4"
+    "\x8D"
+    "ky",
+    "Mezery p\xC3"
+    "\xAD"
+    "smen ASCII",
+    "Mezery \xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "slic ASCII",
+    "Mezery CJK",
+    "Re\xC5"
+    "\xBE"
+    "im barev",
+    "Okraj obrazovky \xC4"
+    "\x8D"
+    "te\xC4"
+    "\x8D"
+    "ky",
+    "Zarovn\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " odstavc\xC5"
+    "\xAF"
+    " \xC4"
+    "\x8D"
+    "te\xC4"
+    "\x8D"
+    "ky",
+    "D\xC4"
+    "\x9B"
+    "len\xC3"
+    "\xAD"
+    " slov",
+    "\xC4"
+    "\x8C"
+    "as do usp\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "",
+    "Frekvence obnoven\xC3"
+    "\xAD"
+    "",
+    "Nastaven\xC3"
+    "\xAD"
+    " Calibre",
+    "KOReaderu Sync",
+    "Zkontrolovat aktualizace",
+    "Jazyk",
+    "Vybrat tapetu",
+    "Vymazat mezipam\xC4"
+    "\x9B"
+    "\xC5"
+    "\xA5"
+    " \xC4"
+    "\x8D"
+    "ten\xC3"
+    "\xAD"
+    "",
+    "Calibre",
+    "U\xC5"
+    "\xBE"
+    "ivatelsk\xC3"
+    "\xA9"
+    " jm\xC3"
+    "\xA9"
+    "no",
+    "Heslo",
+    "URL synch. serveru",
+    "P\xC3"
+    "\xA1"
+    "rov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " dokument\xC5"
+    "\xAF"
+    "",
+    "Ov\xC4"
+    "\x9B"
+    "\xC5"
+    "\x99"
+    "en\xC3"
+    "\xAD"
+    "",
+    "U\xC5"
+    "\xBE"
+    "iv. jm\xC3"
+    "\xA9"
+    "no KOReaderu",
+    "Heslo KOReaderu",
+    "N\xC3"
+    "\xA1"
+    "zev souboru",
+    "Bin\xC3"
+    "\xA1"
+    "rn\xC3"
+    "\xAD"
+    "",
+    "Nastavte p\xC5"
+    "\x99"
+    "ihla\xC5"
+    "\xA1"
+    "ovac\xC3"
+    "\xAD"
+    " \xC3"
+    "\xBA"
+    "daje",
+    "P\xC5"
+    "\x99"
+    "ipojen\xC3"
+    "\xAD"
+    " k Wi-Fi selhalo",
+    "Ov\xC4"
+    "\x9B"
+    "\xC5"
+    "\x99"
+    "ov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "...",
+    "\xC3"
+    "\x9A"
+    "sp\xC4"
+    "\x9B"
+    "\xC5"
+    "\xA1"
+    "n\xC3"
+    "\xA9"
+    " ov\xC4"
+    "\x9B"
+    "\xC5"
+    "\x99"
+    "en\xC3"
+    "\xAD"
+    "!",
+    "Ov\xC4"
+    "\x9B"
+    "\xC5"
+    "\x99"
+    "en\xC3"
+    "\xAD"
+    " KOReaderu",
+    "Synchronizace KOReaderu je p\xC5"
+    "\x99"
+    "ipravena k pou\xC5"
+    "\xBE"
+    "it\xC3"
+    "\xAD"
+    "",
+    "Ov\xC4"
+    "\x9B"
+    "\xC5"
+    "\x99"
+    "en\xC3"
+    "\xAD"
+    " selhalo",
+    "Hotovo",
+    "T\xC3"
+    "\xAD"
+    "mto vyma\xC5"
+    "\xBE"
+    "ete v\xC5"
+    "\xA1"
+    "echna data knih v mezipam\xC4"
+    "\x9B"
+    "ti.",
+    "Ve\xC5"
+    "\xA1"
+    "ker\xC3"
+    "\xBD"
+    " pr\xC5"
+    "\xAF"
+    "b\xC4"
+    "\x9B"
+    "h \xC4"
+    "\x8D"
+    "ten\xC3"
+    "\xAD"
+    " bude ztracen!",
+    "Knihy bude nutn\xC3"
+    "\xA9"
+    " znovu indexovat",
+    "p\xC5"
+    "\x99"
+    "i op\xC4"
+    "\x9B"
+    "tovn\xC3"
+    "\xA9"
+    "m otev\xC5"
+    "\x99"
+    "en\xC3"
+    "\xAD"
+    ".",
+    "Maz\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " mezipam\xC4"
+    "\x9B"
+    "ti...",
+    "Mezipam\xC4"
+    "\x9B"
+    "\xC5"
+    "\xA5"
+    " vymaz\xC3"
+    "\xA1"
+    "na",
+    "polo\xC5"
+    "\xBE"
+    "ky odstran\xC4"
+    "\x9B"
+    "ny",
+    "selhalo",
+    "Vymaz\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " mezipam\xC4"
+    "\x9B"
+    "ti se nezda\xC5"
+    "\x99"
+    "ilo",
+    "Podrobnosti naleznete v s\xC3"
+    "\xA9"
+    "riov\xC3"
+    "\xA9"
+    "m v\xC3"
+    "\xBD"
+    "stupu",
+    "Tmav\xC3"
+    "\xBD"
+    "",
+    "Sv\xC4"
+    "\x9B"
+    "tl\xC3"
+    "\xBD"
+    "",
+    "Vlastn\xC3"
+    "\xAD"
+    "",
+    "Ob\xC3"
+    "\xA1"
+    "lka",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xBD"
+    "",
+    "P\xC5"
+    "\x99"
+    "izp\xC5"
+    "\xAF"
+    "sobit",
+    "O\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "znout",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xBD"
+    " postup",
+    "Pln\xC3"
+    "\xA1"
+    "",
+    "Nikdy",
+    "Ve \xC4"
+    "\x8D"
+    "te\xC4"
+    "\x8D"
+    "ce",
+    "V\xC5"
+    "\xBE"
+    "dy",
+    "Ignorovat",
+    "Sp\xC3"
+    "\xA1"
+    "nek",
+    "Ot\xC3"
+    "\xA1"
+    "\xC4"
+    "\x8D"
+    "en\xC3"
+    "\xAD"
+    " str\xC3"
+    "\xA1"
+    "nek",
+    "Na v\xC3"
+    "\xBD"
+    "\xC5"
+    "\xA1"
+    "ku",
+    "Na \xC5"
+    "\xA1"
+    "\xC3"
+    "\xAD"
+    "\xC5"
+    "\x99"
+    "ku po sm\xC4"
+    "\x9B"
+    "ru hod. ru\xC4"
+    "\x8D"
+    "i\xC4"
+    "\x8D"
+    "ek",
+    "Invertovan\xC3"
+    "\xBD"
+    "",
+    "Na \xC5"
+    "\xA1"
+    "\xC3"
+    "\xAD"
+    "\xC5"
+    "\x99"
+    "ku proti sm\xC4"
+    "\x9B"
+    "ru hod. ru\xC4"
+    "\x8D"
+    "i\xC4"
+    "\x8D"
+    "ek",
+    "Zp\xC4"
+    "\x9B"
+    "t, Potvrdit, Vlevo, Vpravo",
+    "Vlevo, Vpravo, Zp\xC4"
+    "\x9B"
+    "t, Potvrdit",
+    "Vlevo, Zp\xC4"
+    "\x9B"
+    "t, Potvrdit, Vpravo",
+    "P\xC5"
+    "\x99"
+    "edchoz\xC3"
+    "\xAD"
+    "/Dal\xC5"
+    "\xA1"
+    "\xC3"
+    "\xAD"
+    "",
+    "Dal\xC5"
+    "\xA1"
+    "\xC3"
+    "\xAD"
+    "/P\xC5"
+    "\x99"
+    "edchoz\xC3"
+    "\xAD"
+    "",
+    "Bookerly",
+    "Noto Sans",
+    "Open Dyslexic",
+    "Mal\xC3"
+    "\xBD"
+    "",
+    "St\xC5"
+    "\x99"
+    "edn\xC3"
+    "\xAD"
+    "",
+    "Velk\xC3"
+    "\xBD"
+    "",
+    "Ob\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "",
+    "T\xC4"
+    "\x9B"
+    "sn\xC3"
+    "\xBD"
+    "",
+    "Norm\xC3"
+    "\xA1"
+    "ln\xC3"
+    "\xAD"
+    "",
+    "\xC5"
+    "\xA0"
+    "irok\xC3"
+    "\xBD"
+    "",
+    "Zarovnat do bloku",
+    "Vlevo",
+    "Na st\xC5"
+    "\x99"
+    "ed",
+    "Vpravo",
+    "1 min",
+    "5 min",
+    "10 min",
+    "15 min",
+    "30 min",
+    "1 str\xC3"
+    "\xA1"
+    "nka",
+    "5 str\xC3"
+    "\xA1"
+    "nek",
+    "10 str\xC3"
+    "\xA1"
+    "nek",
+    "15 str\xC3"
+    "\xA1"
+    "nek",
+    "30 str\xC3"
+    "\xA1"
+    "nek",
+    "Aktualizace",
+    "Kontrola aktualizac\xC3"
+    "\xAD"
+    "\xE2"
+    "\x80"
+    "\xA6"
+    "",
+    "Nov\xC3"
+    "\xA1"
+    " aktualizace k dispozici!",
+    "Aktu\xC3"
+    "\xA1"
+    "ln\xC3"
+    "\xAD"
+    " verze:",
+    "Nov\xC3"
+    "\xA1"
+    " verze:",
+    "Aktualizace...",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xA1"
+    " aktualizace k dispozici",
+    "Aktualizace selhala",
+    "Aktualizace dokon\xC4"
+    "\x8D"
+    "ena",
+    "Stiskn\xC4"
+    "\x9B"
+    "te a podr\xC5"
+    "\xBE"
+    "te tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tko nap\xC3"
+    "\xA1"
+    "jen\xC3"
+    "\xAD"
+    " pro op\xC4"
+    "\x9B"
+    "tovn\xC3"
+    "\xA9"
+    " zapnut\xC3"
+    "\xAD"
+    "",
+    "Extern\xC3"
+    "\xAD"
+    " p\xC3"
+    "\xAD"
+    "smo",
+    "Vestav\xC4"
+    "\x9B"
+    "n\xC3"
+    "\xA9"
+    " (Zak\xC3"
+    "\xA1"
+    "z\xC3"
+    "\xA1"
+    "no)",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xA9"
+    " polo\xC5"
+    "\xBE"
+    "ky nenalezeny",
+    "Stahov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "...",
+    "Stahov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " selhalo",
+    "Chyba:",
+    "Nepojmenovan\xC3"
+    "\xA9"
+    "",
+    "Nen\xC3"
+    "\xAD"
+    " nakonfigurov\xC3"
+    "\xA1"
+    "na adresa URL serveru",
+    "Na\xC4"
+    "\x8D"
+    "ten\xC3"
+    "\xAD"
+    " kan\xC3"
+    "\xA1"
+    "lu se nezda\xC5"
+    "\x99"
+    "ilo",
+    "Analyzov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " kan\xC3"
+    "\xA1"
+    "lu se nezda\xC5"
+    "\x99"
+    "ilo",
+    "S\xC3"
+    "\xAD"
+    "\xC5"
+    "\xA5"
+    ":",
+    "IP adresa:",
+    "nebo naskenujte QR k\xC3"
+    "\xB3"
+    "d telefonem pro p\xC5"
+    "\x99"
+    "ipojen\xC3"
+    "\xAD"
+    " k Wi-Fi.",
+    "Chyba: Obecn\xC3"
+    "\xA1"
+    " chyba",
+    "Chyba: S\xC3"
+    "\xAD"
+    "\xC5"
+    "\xA5"
+    " nenalezena",
+    "Chyba: \xC4"
+    "\x8C"
+    "asov\xC3"
+    "\xBD"
+    " limit p\xC5"
+    "\x99"
+    "ipojen\xC3"
+    "\xAD"
+    "",
+    "SD karta",
+    "\xC2"
+    "\xAB"
+    " Zp\xC4"
+    "\x9B"
+    "t",
+    "\xC2"
+    "\xAB"
+    " Konec",
+    "\xC2"
+    "\xAB"
+    " Dom\xC5"
+    "\xAF"
+    "",
+    "\xC2"
+    "\xAB"
+    " Ulo\xC5"
+    "\xBE"
+    "it",
+    "Vybrat",
+    "P\xC5"
+    "\x99"
+    "epnout",
+    "Potvrdit",
+    "Zru\xC5"
+    "\xA1"
+    "it",
+    "P\xC5"
+    "\x99"
+    "ipojit",
+    "Otev\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "t",
+    "St\xC3"
+    "\xA1"
+    "hnout",
+    "Zkusit znovu",
+    "Ano",
+    "Ne",
+    "ZAP",
+    "VYP",
+    "Nastavit",
+    "Nenastaveno",
+    "Vlevo",
+    "Vpravo",
+    "Nahoru",
+    "Dol\xC5"
+    "\xAF"
+    "",
+    "P\xC3"
+    "\x8D"
+    "SMO",
+    "p\xC3"
+    "\xAD"
+    "smo",
+    "OK",
+    "[ZAP]",
+    "Filtr obrazovky sp\xC3"
+    "\xA1"
+    "nku",
+    "Kontrast",
+    "Pln\xC3"
+    "\xBD"
+    " s procenty",
+    "Pln\xC3"
+    "\xBD"
+    " s pruhem knih",
+    "Pouze pruh knih",
+    "Pln\xC3"
+    "\xA1"
+    " s pruhem kapitol",
+    "\xC5"
+    "\xA0"
+    "ablona rozhran\xC3"
+    "\xAD"
+    "",
+    "Klasick\xC3"
+    "\xA1"
+    "",
+    "Lyra",
+    "Oprava blednut\xC3"
+    "\xAD"
+    " na slunci",
+    "P\xC5"
+    "\x99"
+    "emapovat p\xC5"
+    "\x99"
+    "edn\xC3"
+    "\xAD"
+    " tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tka",
+    "Prohl\xC3"
+    "\xAD"
+    "\xC5"
+    "\xBE"
+    "e\xC4"
+    "\x8D"
+    " OPDS",
+    "Ob\xC3"
+    "\xA1"
+    "lka + Vlastn\xC3"
+    "\xAD"
+    "",
+    "Ned\xC3"
+    "\xA1"
+    "vn\xC3"
+    "\xA9"
+    "",
+    "Ned\xC3"
+    "\xA1"
+    "vn\xC3"
+    "\xA9"
+    " knihy",
+    "\xC5"
+    "\xBD"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xA9"
+    " ned\xC3"
+    "\xA1"
+    "vn\xC3"
+    "\xA9"
+    " knihy",
+    "Pou\xC5"
+    "\xBE"
+    "\xC3"
+    "\xAD"
+    "vat p\xC5"
+    "\x99"
+    "enosy bezdr\xC3"
+    "\xA1"
+    "tov\xC3"
+    "\xBD"
+    "ch za\xC5"
+    "\x99"
+    "\xC3"
+    "\xAD"
+    "zen\xC3"
+    "\xAD"
+    " Calibre",
+    "Zapomenout s\xC3"
+    "\xAD"
+    "\xC5"
+    "\xA5"
+    " a odstranit ulo\xC5"
+    "\xBE"
+    "en\xC3"
+    "\xA9"
+    " heslo?",
+    "Zapomenout na s\xC3"
+    "\xAD"
+    "\xC5"
+    "\xA5"
+    "",
+    "Spu\xC5"
+    "\xA1"
+    "t\xC4"
+    "\x9B"
+    "n\xC3"
+    "\xAD"
+    " Calibre...",
+    "Nastaven\xC3"
+    "\xAD"
+    "",
+    "Stav",
+    "Vymazat",
+    "V\xC3"
+    "\xBD"
+    "choz\xC3"
+    "\xAD"
+    "",
+    "Stiskn\xC4"
+    "\x9B"
+    "te p\xC5"
+    "\x99"
+    "edn\xC3"
+    "\xAD"
+    " tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tko pro ka\xC5"
+    "\xBE"
+    "dou roli",
+    "Nep\xC5"
+    "\x99"
+    "i\xC5"
+    "\x99"
+    "azeno",
+    "Ji\xC5"
+    "\xBE"
+    " p\xC5"
+    "\x99"
+    "i\xC5"
+    "\x99"
+    "azeno",
+    "Bo\xC4"
+    "\x8D"
+    "n\xC3"
+    "\xAD"
+    " tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tko Nahoru: Obnovit v\xC3"
+    "\xBD"
+    "choz\xC3"
+    "\xAD"
+    " rozvr\xC5"
+    "\xBE"
+    "en\xC3"
+    "\xAD"
+    "",
+    "Bo\xC4"
+    "\x8D"
+    "n\xC3"
+    "\xAD"
+    " tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tko Dol\xC5"
+    "\xAF"
+    ": Zru\xC5"
+    "\xA1"
+    "it p\xC5"
+    "\x99"
+    "emapov\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "",
+    "Zp\xC4"
+    "\x9B"
+    "t (1. tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tko)",
+    "Potvrdit (2. tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tko)",
+    "Vlevo (3. tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tko)",
+    "Vpravo (4. tla\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tko)",
+    "P\xC5"
+    "\x99"
+    "ej\xC3"
+    "\xAD"
+    "t na %",
+    "P\xC5"
+    "\x99"
+    "ej\xC3"
+    "\xAD"
+    "t Dom\xC5"
+    "\xAF"
+    "",
+    "Pr\xC5"
+    "\xAF"
+    "b\xC4"
+    "\x9B"
+    "h synchronizace",
+    "Smazat mezipam\xC4"
+    "\x9B"
+    "\xC5"
+    "\xA5"
+    " knihy",
+    "Kapitola:",
+    "str\xC3"
+    "\xA1"
+    "nek |",
+    "Kniha:",
+    "shift",
+    "SHIFT",
+    "Z\xC3"
+    "\x81"
+    "MEK",
+    "Pro Calibre p\xC5"
+    "\x99"
+    "idejte /opds do URL adresy",
+    "Vlevo/Vpravo: 1 % Nahoru/Dol\xC5"
+    "\xAF"
+    ": 10 %",
+    "\xC4"
+    "\x8C"
+    "as synchronizace...",
+    "V\xC3"
+    "\xBD"
+    "po\xC4"
+    "\x8D"
+    "et hashe dokumentu...",
+    "Nepoda\xC5"
+    "\x99"
+    "ilo se vypo\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "tat hash dokumentu",
+    "Na\xC4"
+    "\x8D"
+    "\xC3"
+    "\xAD"
+    "t\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    " vzd\xC3"
+    "\xA1"
+    "len\xC3"
+    "\xA9"
+    "ho pr\xC5"
+    "\xAF"
+    "b\xC4"
+    "\x9B"
+    "hu...",
+    "Pr\xC5"
+    "\xAF"
+    "b\xC4"
+    "\x9B"
+    "h nahr\xC3"
+    "\xA1"
+    "v\xC3"
+    "\xA1"
+    "n\xC3"
+    "\xAD"
+    "...",
+    "P\xC5"
+    "\x99"
+    "ihla\xC5"
+    "\xA1"
+    "ovac\xC3"
+    "\xAD"
+    " \xC3"
+    "\xBA"
+    "daje nejsou nakonfigurov\xC3"
+    "\xA1"
+    "ny",
+    "Nastavit \xC3"
+    "\xBA"
+    "\xC4"
+    "\x8D"
+    "et KOReader v Nastaven\xC3"
+    "\xAD"
+    "",
+    "Nalezen pr\xC5"
+    "\xAF"
+    "b\xC4"
+    "\x9B"
+    "h!",
+    "Vzd\xC3"
+    "\xA1"
+    "len\xC3"
+    "\xA9"
+    ":",
+    "Lok\xC3"
+    "\xA1"
+    "ln\xC3"
+    "\xAD"
+    ":",
+    "Str\xC3"
+    "\xA1"
+    "nka %d, celkov\xC4"
+    "\x9B"
+    " %.2f%%",
+    "Str\xC3"
+    "\xA1"
+    "nka %d/%d, celkov\xC4"
+    "\x9B"
+    " %.2f%%",
+    "  Od: %s",
+    "Pou\xC5"
+    "\xBE"
+    "\xC3"
+    "\xAD"
+    "t vzd\xC3"
+    "\xA1"
+    "len\xC3"
+    "\xBD"
+    " postup",
+    "Nahr\xC3"
+    "\xA1"
+    "t lok\xC3"
+    "\xA1"
+    "ln\xC3"
+    "\xAD"
+    " postup",
+    "Nenalezen \xC5"
+    "\xBE"
+    "\xC3"
+    "\xA1"
+    "dn\xC3"
+    "\xBD"
+    " vzd\xC3"
+    "\xA1"
+    "len\xC3"
+    "\xBD"
+    " postup",
+    "Nahr\xC3"
+    "\xA1"
+    "t aktu\xC3"
+    "\xA1"
+    "ln\xC3"
+    "\xAD"
+    " pozici?",
+    "Postup nahr\xC3"
+    "\xA1"
+    "n!",
+    "Synchronizace se nezda\xC5"
+    "\x99"
+    "ila",
+    "Sekce",
+    "Nahr\xC3"
+    "\xA1"
+    "t",
+    "Styl knihy",
+    "Vlo\xC5"
+    "\xBE"
+    "en\xC3"
+    "\xBD"
+    " styl",
+    "URL serveru OPDS",
+};
+
 }  // namespace i18n_strings
 
 // Compile-time validation of array sizes
@@ -2713,3 +4380,6 @@ static_assert(sizeof(i18n_strings::STRINGS_FR) / sizeof(i18n_strings::STRINGS_FR
 static_assert(sizeof(i18n_strings::STRINGS_DE) / sizeof(i18n_strings::STRINGS_DE[0]) ==
                   static_cast<size_t>(StrId::_COUNT),
               "STRINGS_DE size mismatch");
+static_assert(sizeof(i18n_strings::STRINGS_CZ) / sizeof(i18n_strings::STRINGS_CZ[0]) ==
+                  static_cast<size_t>(StrId::_COUNT),
+              "STRINGS_CZ size mismatch");

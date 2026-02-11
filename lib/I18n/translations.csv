@@ -1,315 +1,315 @@
-KEYS,ENGLISH,SPANISH,ITALIAN,SWEDISH,FRENCH,GERMAN
-,English,Español (placeholder),Italiano (placeholder),Svenska (placeholder),Français,Deutsch
-STR_CROSSPOINT,CrossPoint,CROSSPOINT,CrossPoint,CrossPoint,CrossPoint,CrossPoint
-STR_BOOTING,BOOTING,BOOTING,BOOTING,BOOTING,DÉMARRAGE EN COURS,STARTEN
-STR_SLEEPING,SLEEPING,SLEEPING,SLEEPING,SLEEPING,VEILLE,STANDBY
-STR_ENTERING_SLEEP,Entering Sleep...,ENTERING SLEEP...,Entering Sleep...,Entering Sleep...,Mise en veille…,Standby...
-STR_BROWSE_FILES,Browse Files,BROWSE FILES,Browse Files,Browse Files,Fichiers,Durchsuchen
-STR_FILE_TRANSFER,File Transfer,FILE TRANSFER,File Transfer,File Transfer,Transfert,Datentransfer
-STR_SETTINGS_TITLE,Settings,SETTINGS,Settings,Settings,Réglages,Einstellungen
-STR_CALIBRE_LIBRARY,Calibre Library,CALIBRE LIBRARY,Calibre Library,Calibre Library,Bibliothèque Calibre,Calibre-Bibliothek
-STR_CONTINUE_READING,Continue Reading,CONTINUE READING,Continue Reading,Continue Reading,Continuer la lecture,Weiterlesen
-STR_NO_OPEN_BOOK,No open book,NO OPEN BOOK,No open book,No open book,Aucun livre ouvert,Aktuell kein Buch
-STR_START_READING,Start reading below,START READING BELOW,Start reading below,Start reading below,Lisez votre premier livre ci-dessous,Lesen beginnen
-STR_BOOKS,Books,BOOKS,Books,Books,Livres,Bücher
-STR_NO_BOOKS_FOUND,No books found,NO BOOKS FOUND,No books found,No books found,Dossier vide,Keine Bücher
-STR_SELECT_CHAPTER,Select Chapter,SELECT CHAPTER,Select Chapter,Select Chapter,Choix du chapitre,Kapitel auswählen
-STR_NO_CHAPTERS,No chapters,NO CHAPTERS,No chapters,No chapters,Aucun chapitre,Keine Kapitel
-STR_END_OF_BOOK,End of book,END OF BOOK,End of book,End of book,Fin du livre,Buchende
-STR_EMPTY_CHAPTER,Empty chapter,EMPTY CHAPTER,Empty chapter,Empty chapter,Chapitre vide,Kapitelende
-STR_INDEXING,Indexing...,INDEXING...,Indexing...,Indexing...,Indexation en cours…,Indexieren…
-STR_MEMORY_ERROR,Memory error,MEMORY ERROR,Memory error,Memory error,Erreur de mémoire,Speicherfehler
-STR_PAGE_LOAD_ERROR,Page load error,PAGE LOAD ERROR,Page load error,Page load error,Erreur de chargement,Seitenladefehler
-STR_EMPTY_FILE,Empty file,EMPTY FILE,Empty file,Empty file,Fichier vide,Leere Datei
-STR_OUT_OF_BOUNDS,Out of bounds,OUT OF BOUNDS,Out of bounds,Out of bounds,Dépassement de mémoire,Zu groß
-STR_LOADING,Loading...,LOADING...,Loading...,Loading...,Chargement…,Laden…
-STR_LOAD_XTC_FAILED,Failed to load XTC,FAILED TO LOAD XTC,Failed to load XTC,Failed to load XTC,Erreur de chargement du fichier XTC,Ladefehler bei XTC
-STR_LOAD_TXT_FAILED,Failed to load TXT,FAILED TO LOAD TXT,Failed to load TXT,Failed to load TXT,Erreur de chargement du fichier TXT,Ladefehler bei TXT
-STR_LOAD_EPUB_FAILED,Failed to load EPUB,FAILED TO LOAD EPUB,Failed to load EPUB,Failed to load EPUB,Erreur de chargement du fichier EPUB,Ladefehler bei EPUB
-STR_SD_CARD_ERROR,SD card error,SD CARD ERROR,SD card error,SD card error,Carte mémoire absente,SD-Karten-Fehler
-STR_WIFI_NETWORKS,WiFi Networks,WIFI NETWORKS,WiFi Networks,WiFi Networks,Réseaux WiFi,WLAN-Netzwerke
-STR_NO_NETWORKS,No networks found,NO NETWORKS FOUND,No networks found,No networks found,Aucun réseau,Kein WLAN gefunden
-STR_NETWORKS_FOUND,%zu networks found,%zu NETWORKS FOUND,%zu networks found,%zu networks found,%zu réseaux,%zu WLAN-Netzwerke gefunden
-STR_SCANNING,Scanning...,SCANNING...,Scanning...,Scanning...,Recherche de réseaux en cours…,Suchen...
-STR_CONNECTING,Connecting...,CONNECTING...,Connecting...,Connecting...,Connexion en cours…,Verbinden...
-STR_CONNECTED,Connected!,CONNECTED!,Connected!,Connected!,Connecté !,Verbunden!
-STR_CONNECTION_FAILED,Connection Failed,CONNECTION FAILED,Connection Failed,Connection Failed,Échec de la connexion,Verbindungsfehler
-STR_CONNECTION_TIMEOUT,Connection timeout,CONNECTION TIMEOUT,Connection timeout,Connection timeout,Délai de connexion dépassé,Verbindungs-Timeout
-STR_FORGET_NETWORK,Forget Network?,FORGET NETWORK?,Forget Network?,Forget Network?,Oublier ce réseau ?,WLAN vergessen?
-STR_SAVE_PASSWORD,Save password for next time?,SAVE PASSWORD FOR NEXT TIME?,Save password for next time?,Save password for next time?,Enregistrer le mot de passe ?,Passwort speichern?
-STR_REMOVE_PASSWORD,Remove saved password?,REMOVE SAVED PASSWORD?,Remove saved password?,Remove saved password?,Supprimer le mot de passe enregistré ?,Passwort entfernen?
-STR_PRESS_OK_SCAN,Press OK to scan again,PRESS OK TO SCAN AGAIN,Press OK to scan again,Press OK to scan again,Appuyez sur OK pour détecter à nouveau,OK für neue Suche
-STR_PRESS_ANY_CONTINUE,Press any button to continue,PRESS ANY BUTTON TO CONTINUE,Press any button to continue,Press any button to continue,Appuyez sur une touche pour continuer,Beliebige Taste drücken
-STR_SELECT_HINT,LEFT/RIGHT: Select | OK: Confirm,LEFT/RIGHT: SELECT | OK: CONFIRM,LEFT/RIGHT: Select | OK: Confirm,LEFT/RIGHT: Select | OK: Confirm,GAUCHE/DROITE: Sélectionner | OK: Valider,links/rechts: Auswahl | OK: Best
-STR_HOW_CONNECT,How would you like to connect?,HOW WOULD YOU LIKE TO CONNECT?,How would you like to connect?,How would you like to connect?,Comment voulez-vous vous connecter ?,Wie möchtest du dich verbinden?
-STR_JOIN_NETWORK,Join a Network,JOIN A NETWORK,Join a Network,Join a Network,Connexion à un réseau,Netzwerk beitreten
-STR_CREATE_HOTSPOT,Create Hotspot,CREATE HOTSPOT,Create Hotspot,Create Hotspot,Créer un point d’accès,Hotspot erstellen
-STR_JOIN_DESC,Connect to an existing WiFi network,CONNECT TO AN EXISTING WIFI NETWORK,Connect to an existing WiFi network,Connect to an existing WiFi network,Se connecter à un réseau WiFi existant,Mit einem bestehenden WLAN verbinden
-STR_HOTSPOT_DESC,Create a WiFi network others can join,CREATE A WIFI NETWORK OTHERS CAN JOIN,Create a WiFi network others can join,Create a WiFi network others can join,Créer un réseau WiFi accessible depuis d’autres appareils,WLAN für andere erstellen
-STR_STARTING_HOTSPOT,Starting Hotspot...,STARTING HOTSPOT...,Starting Hotspot...,Starting Hotspot...,Création du point d’accès en cours…,Hotspot starten…
-STR_HOTSPOT_MODE,Hotspot Mode,HOTSPOT MODE,Hotspot Mode,Hotspot Mode,Mode point d’accès,Hotspot-Modus
-STR_CONNECT_WIFI_HINT,Connect your device to this WiFi network,CONNECT YOUR DEVICE TO THIS WIFI NETWORK,Connect your device to this WiFi network,Connect your device to this WiFi network,Connectez un appareil à ce réseau WiFi,Gerät mit diesem WLAN verbinden
-STR_OPEN_URL_HINT,Open this URL in your browser,OPEN THIS URL IN YOUR BROWSER,Open this URL in your browser,Open this URL in your browser,Ouvrez cette URL dans votre navigateur,Diese URL im Browser öffnen
-STR_OR_HTTP_PREFIX,or http://,OR HTTP://,or http://,or http://,ou http://,oder http://
-STR_SCAN_QR_HINT,or scan QR code with your phone:,OR SCAN QR CODE WITH YOUR PHONE:,or scan QR code with your phone:,or scan QR code with your phone:,ou scannez le QR code avec votre téléphone,oder QR-Code mit dem Handy scannen:
-STR_CALIBRE_WIRELESS,Calibre Wireless,CALIBRE WIRELESS,Calibre Wireless,Calibre Wireless,Connexion à Calibre sans fil,Calibre Wireless
-STR_CALIBRE_WEB_URL,Calibre Web URL,CALIBRE WEB URL,Calibre Web URL,Calibre Web URL,URL Web Calibre,Calibre-Web-URL
-STR_CONNECT_WIRELESS,Connect as Wireless Device,CONNECT AS WIRELESS DEVICE,Connect as Wireless Device,Connect as Wireless Device,Se connecter comme appareil sans fil,Als Drahtlos-Gerät hinzufügen
-STR_NETWORK_LEGEND,* = Encrypted | + = Saved,* = ENCRYPTED | + = SAVED,* = Encrypted | + = Saved,* = Encrypted | + = Saved,* = Sécurisé | + = Sauvegardé,* = Verschlüsselt | + = Gespeichert
-STR_MAC_ADDRESS,MAC address:,MAC ADDRESS:,MAC address:,MAC address:,Adresse MAC :,MAC-Adresse:
-STR_CHECKING_WIFI,Checking WiFi...,CHECKING WIFI...,Checking WiFi...,Checking WiFi...,Vérification du réseau WiFi...,WLAN prüfen…
-STR_ENTER_WIFI_PASSWORD,Enter WiFi Password,ENTER WIFI PASSWORD,Enter WiFi Password,Enter WiFi Password,Entrez le mot de passe WiFi,WLAN-Passwort eingeben
-STR_ENTER_TEXT,Enter Text,ENTER TEXT,Enter Text,Enter Text,Entrez le texte,Text eingeben
-STR_TO_PREFIX,to ,TO ,to ,to ,à ,bis
-STR_CALIBRE_DISCOVERING,Discovering Calibre...,DISCOVERING CALIBRE...,Discovering Calibre...,Discovering Calibre...,Recherche de Calibre en cours…,Calibre finden...
-STR_CALIBRE_CONNECTING_TO,Connecting to ,CONNECTING TO ,Connecting to ,Connecting to ,Connexion à ,Verbinden mit
-STR_CALIBRE_CONNECTED_TO,Connected to ,CONNECTED TO ,Connected to ,Connected to ,Connecté à  ,Verbunden mit
-STR_CALIBRE_WAITING_COMMANDS,Waiting for commands...,WAITING FOR COMMANDS...,Waiting for commands...,Waiting for commands...,En attente de commandes…,Auf Befehle warten…
-STR_CONNECTION_FAILED_RETRYING,"(Connection failed, retrying)","(CONNECTION FAILED, RETRYING)","(Connection failed, retrying)","(Connection failed, retrying)","(Échec de la connexion, nouvelle tentative)","(Keine Verbindung, wiederholen)"
-STR_CALIBRE_DISCONNECTED,Calibre disconnected,CALIBRE DISCONNECTED,Calibre disconnected,Calibre disconnected,Calibre déconnecté,Calibre getrennt
-STR_CALIBRE_WAITING_TRANSFER,Waiting for transfer...,WAITING FOR TRANSFER...,Waiting for transfer...,Waiting for transfer...,En attente de transfert…,Auf Übertragung warten...
-STR_CALIBRE_TRANSFER_HINT,"If transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice plugin settings.","IF TRANSFER FAILS, ENABLE\N'IGNORE FREE SPACE' IN CALIBRE'S\NSMARTDEVICE PLUGIN SETTINGS.","If transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice plugin settings.","If transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice plugin settings.","Si le transfert échoue, activez\n’Ignorer l’espace libre’ dans les\nparamètres du plugin SmartDevice de Calibre.",Bei Übertragungsfehler \n'Freien Speicher ign.' in den\nCalibre-Einstellungen einschalten.
-STR_CALIBRE_RECEIVING,Receiving: ,RECEIVING: ,Receiving: ,Receiving: ,Réception : ,Empfange:
-STR_CALIBRE_RECEIVED,Received: ,RECEIVED: ,Received: ,Received: ,Reçus : ,Empfangen:
-STR_CALIBRE_WAITING_MORE,Waiting for more...,WAITING FOR MORE...,Waiting for more...,Waiting for more...,En attente de données supplémentaires…,Auf mehr warten…
-STR_CALIBRE_FAILED_CREATE_FILE,Failed to create file,FAILED TO CREATE FILE,Failed to create file,Failed to create file,Échec de la création du fichier,Speicherfehler
-STR_CALIBRE_PASSWORD_REQUIRED,Password required,PASSWORD REQUIRED,Password required,Password required,Mot de passe requis,Passwort nötig
-STR_CALIBRE_TRANSFER_INTERRUPTED,Transfer interrupted,TRANSFER INTERRUPTED,Transfer interrupted,Transfer interrupted,Transfert interrompu,Übertragung unterbrochen
-STR_CALIBRE_INSTRUCTION_1,1) Install CrossPoint Reader plugin,1) INSTALL CROSSPOINT READER PLUGIN,1) Install CrossPoint Reader plugin,1) Install CrossPoint Reader plugin,1) Installer le plugin CrossPoint Reader,1) CrossPoint Reader-Plugin installieren
-STR_CALIBRE_INSTRUCTION_2,2) Be on the same WiFi network,2) BE ON THE SAME WIFI NETWORK,2) Be on the same WiFi network,2) Be on the same WiFi network,2) Se connecter au même réseau WiFi,2) Mit selbem WLAN verbinden
-STR_CALIBRE_INSTRUCTION_3,"3) In Calibre: ""Send to device""","3) IN CALIBRE: ""SEND TO DEVICE""","3) In Calibre: ""Send to device""","3) In Calibre: ""Send to device""",3) Dans Calibre : ‘Envoyer vers l’appareil’,"3) In Calibre: ""An Gerät senden"""
-STR_CALIBRE_INSTRUCTION_4,"""Keep this screen open while sending""","""KEEP THIS SCREEN OPEN WHILE SENDING""","""Keep this screen open while sending""","""Keep this screen open while sending""",“Gardez cet écran ouvert pendant le transfert”,Bildschirm beim Senden offenlassen
-STR_CAT_DISPLAY,Display,DISPLAY,Display,Display,Affichage,Anzeige
-STR_CAT_READER,Reader,READER,Reader,Reader,Lecteur,Lesen
-STR_CAT_CONTROLS,Controls,CONTROLS,Controls,Controls,Commandes,Bedienung
-STR_CAT_SYSTEM,System,SYSTEM,System,System,Système,System
-STR_SLEEP_SCREEN,Sleep Screen,SLEEP SCREEN,Sleep Screen,Sleep Screen,Écran de veille,Standby-Bild
-STR_SLEEP_COVER_MODE,Sleep Screen Cover Mode,SLEEP SCREEN COVER MODE,Sleep Screen Cover Mode,Sleep Screen Cover Mode,Mode d’image de l’écran de veille,Standby-Bildmodus
-STR_STATUS_BAR,Status Bar,STATUS BAR,Status Bar,Status Bar,Barre d’état,Statusleiste
-STR_HIDE_BATTERY,Hide Battery %,HIDE BATTERY %,Hide Battery %,Hide Battery %,Masquer % batterie,Batterie % ausblenden
-STR_EXTRA_SPACING,Extra Paragraph Spacing,EXTRA PARAGRAPH SPACING,Extra Paragraph Spacing,Extra Paragraph Spacing,Espacement des paragraphes,Absatzabstand
-STR_TEXT_AA,Text Anti-Aliasing,TEXT ANTI-ALIASING,Text Anti-Aliasing,Text Anti-Aliasing,Lissage du texte,Schriftglättung
-STR_SHORT_PWR_BTN,Short Power Button Click,SHORT POWER BUTTON CLICK,Short Power Button Click,Short Power Button Click,Appui court bout. alim.,An-Taste kurz drücken
-STR_ORIENTATION,Reading Orientation,READING ORIENTATION,Reading Orientation,Reading Orientation,Orientation de lecture,Leseausrichtung
-STR_FRONT_BTN_LAYOUT,Front Button Layout,FRONT BUTTON LAYOUT,Front Button Layout,Front Button Layout,Disposition des boutons avant,Vorderes Tastenlayout
-STR_SIDE_BTN_LAYOUT,Side Button Layout (reader),SIDE BUTTON LAYOUT (READER),Side Button Layout (reader),Side Button Layout (reader),Disposition des boutons latéraux,Seitliche Tasten (Lesen)
-STR_LONG_PRESS_SKIP,Long-press Chapter Skip,LONG-PRESS CHAPTER SKIP,Long-press Chapter Skip,Long-press Chapter Skip,Appui long pour saut de chapitre,Langes Drücken springt Kap.
-STR_FONT_FAMILY,Reader Font Family,READER FONT FAMILY,Reader Font Family,Reader Font Family,Police de caractères du lecteur,Lese-Schriftfamilie
-STR_EXT_READER_FONT,External Reader Font,EXTERNAL READER FONT,External Reader Font,External Reader Font,Police externe,Externe Schriftart
-STR_EXT_CHINESE_FONT,Reader Font,READER FONT,Reader Font,Reader Font,Police du lecteur,Lese-Schriftart
-STR_EXT_UI_FONT,UI Font,UI FONT,UI Font,UI Font,Police de l’interface,Menü-Schriftart
-STR_FONT_SIZE,UI Font Size,UI FONT SIZE,UI Font Size,UI Font Size,Taille du texte de l’interface,Schriftgröße
-STR_LINE_SPACING,Reader Line Spacing,READER LINE SPACING,Reader Line Spacing,Reader Line Spacing,Espacement des lignes,Lese-Zeilenabstand
-STR_ASCII_LETTER_SPACING,ASCII Letter Spacing,ASCII LETTER SPACING,ASCII Letter Spacing,ASCII Letter Spacing,Espacement des lettres ASCII,ASCII-Zeichenabstand
-STR_ASCII_DIGIT_SPACING,ASCII Digit Spacing,ASCII DIGIT SPACING,ASCII Digit Spacing,ASCII Digit Spacing,Espacement des chiffres ASCII,ASCII-Ziffernabstand
-STR_CJK_SPACING,CJK Spacing,CJK SPACING,CJK Spacing,CJK Spacing,Espacement CJK,CJK-Zeichenabstand
-STR_COLOR_MODE,Color Mode,COLOR MODE,Color Mode,Color Mode,Mode couleur,Farbmodus
-STR_SCREEN_MARGIN,Reader Screen Margin,READER SCREEN MARGIN,Reader Screen Margin,Reader Screen Margin,Marges du lecteur,Lese-Seitenränder
-STR_PARA_ALIGNMENT,Reader Paragraph Alignment,READER PARAGRAPH ALIGNMENT,Reader Paragraph Alignment,Reader Paragraph Alignment,Alignement des paragraphes,Lese-Absatzausrichtung
-STR_HYPHENATION,Hyphenation,HYPHENATION,Hyphenation,Hyphenation,Césure,Silbentrennung
-STR_TIME_TO_SLEEP,Time to Sleep,TIME TO SLEEP,Time to Sleep,Time to Sleep,Mise en veille automatique,Standby nach
-STR_REFRESH_FREQ,Refresh Frequency,REFRESH FREQUENCY,Refresh Frequency,Refresh Frequency,Fréquence de rafraîchissement,Anti-Ghosting nach
-STR_CALIBRE_SETTINGS,Calibre Settings,CALIBRE SETTINGS,Calibre Settings,Calibre Settings,Réglages Calibre,Calibre-Einstellungen
-STR_KOREADER_SYNC,KOReader Sync,KOREADER SYNC,KOReader Sync,KOReader Sync,Synchronisation KOReader,KOReader-Synchr.
-STR_CHECK_UPDATES,Check for updates,CHECK FOR UPDATES,Check for updates,Check for updates,Mise à jour,Nach Updates suchen
-STR_LANGUAGE,Language,LANGUAGE,Language,Language,Langue,Sprache
-STR_SELECT_WALLPAPER,Select Wallpaper,SELECT WALLPAPER,Select Wallpaper,Select Wallpaper,Fond d’écran,Bildauswahl Standby
-STR_CLEAR_READING_CACHE,Clear Reading Cache,CLEAR READING CACHE,Clear Reading Cache,Clear Reading Cache,Vider le cache de lecture,Lese-Cache leeren
-STR_CALIBRE,Calibre,CALIBRE,Calibre,Calibre,Calibre,Calibre
-STR_USERNAME,Username,USERNAME,Username,Username,Nom d’utilisateur,Benutzername
-STR_PASSWORD,Password,PASSWORD,Password,Password,Mot de passe,Passwort nötig
-STR_SYNC_SERVER_URL,Sync Server URL,SYNC SERVER URL,Sync Server URL,Sync Server URL,URL du serveur,Sync-Server-URL
-STR_DOCUMENT_MATCHING,Document Matching,DOCUMENT MATCHING,Document Matching,Document Matching,Correspondance,Dateizuordnung
-STR_AUTHENTICATE,Authenticate,AUTHENTICATE,Authenticate,Authenticate,Se connecter,Authentifizieren
-STR_KOREADER_USERNAME,KOReader Username,KOREADER USERNAME,KOReader Username,KOReader Username,Nom d’utilisateur,KOReader-Benutzername
-STR_KOREADER_PASSWORD,KOReader Password,KOREADER PASSWORD,KOReader Password,KOReader Password,Mot de passe,KOReader-Passwort
-STR_FILENAME,Filename,FILENAME,Filename,Filename,Nom de fichier,Dateiname
-STR_BINARY,Binary,BINARY,Binary,Binary,Binaire,Binärdatei
-STR_SET_CREDENTIALS_FIRST,Set credentials first,SET CREDENTIALS FIRST,Set credentials first,Set credentials first,Identifiants manquants,Zuerst anmelden
-STR_WIFI_CONN_FAILED,WiFi connection failed,WIFI CONNECTION FAILED,WiFi connection failed,WiFi connection failed,Échec de connexion WiFi,WLAN-Verbindung fehlgeschlagen
-STR_AUTHENTICATING,Authenticating...,AUTHENTICATING...,Authenticating...,Authenticating...,Connexion en cours…,Authentifizieren…
-STR_AUTH_SUCCESS,Successfully authenticated!,SUCCESSFULLY AUTHENTICATED!,Successfully authenticated!,Successfully authenticated!,Connexion réussie !,Erfolgreich authentifiziert!
-STR_KOREADER_AUTH,KOReader Auth,KOREADER AUTH,KOReader Auth,KOReader Auth,Auth KOReader,KOReader-Auth
-STR_SYNC_READY,KOReader sync is ready to use,KOREADER SYNC IS READY TO USE,KOReader sync is ready to use,KOReader sync is ready to use,Synchronisation KOReader prête,KOReader-Synchronisierung bereit
-STR_AUTH_FAILED,Authentication Failed,AUTHENTICATION FAILED,Authentication Failed,Authentication Failed,Échec de la connexion,Authentifizierung fehlg.
-STR_DONE,Done,DONE,Done,Done,OK,Erledigt
-STR_CLEAR_CACHE_WARNING_1,This will clear all cached book data.,THIS WILL CLEAR ALL CACHED BOOK DATA.,This will clear all cached book data.,This will clear all cached book data.,Le cache de votre bibliothèque sera entièrement vidé,Alle Buch-Caches werden geleert.
-STR_CLEAR_CACHE_WARNING_2,All reading progress will be lost!,ALL READING PROGRESS WILL BE LOST!,All reading progress will be lost!,All reading progress will be lost!,Votre progression de lecture sera perdue !,Lesefortschritt wird gelöscht!
-STR_CLEAR_CACHE_WARNING_3,Books will need to be re-indexed,BOOKS WILL NEED TO BE RE-INDEXED,Books will need to be re-indexed,Books will need to be re-indexed,Les livres devront être réindexés,Bücher müssen beim Öffnen
-STR_CLEAR_CACHE_WARNING_4,when opened again.,WHEN OPENED AGAIN.,when opened again.,when opened again.,à leur prochaine ouverture.,neu eingelesen werden.
-STR_CLEARING_CACHE,Clearing cache...,CLEARING CACHE...,Clearing cache...,Clearing cache...,Suppression du cache…,Cache leeren…
-STR_CACHE_CLEARED,Cache Cleared,CACHE CLEARED,Cache Cleared,Cache Cleared,Cache supprimé,Cache geleert
-STR_ITEMS_REMOVED,items removed,ITEMS REMOVED,items removed,items removed,éléments supprimés,Einträge entfernt
-STR_FAILED_LOWER,failed,FAILED,failed,failed,ont échoué,fehlgeschlagen
-STR_CLEAR_CACHE_FAILED,Failed to clear cache,FAILED TO CLEAR CACHE,Failed to clear cache,Failed to clear cache,Échec de la suppression du cache,Fehler beim Cache-Leeren
-STR_CHECK_SERIAL_OUTPUT,Check serial output for details,CHECK SERIAL OUTPUT FOR DETAILS,Check serial output for details,Check serial output for details,Vérifiez la console série pour plus de détails,Serielle Ausgabe prüfen
-STR_DARK,Dark,DARK,Dark,Dark,Sombre,Dunkel
-STR_LIGHT,Light,LIGHT,Light,Light,Clair,Hell
-STR_CUSTOM,Custom,CUSTOM,Custom,Custom,Custom,Eigenes
-STR_COVER,Cover,COVER,Cover,Cover,Couverture,Umschlag
-STR_NONE_OPT,None,NONE,None,None,Aucun,Leer
-STR_FIT,Fit,FIT,Fit,Fit,Ajusté,Anpassen
-STR_CROP,Crop,CROP,Crop,Crop,Rogné,Zuschnitt
-STR_NO_PROGRESS,No Progress,NO PROGRESS,No Progress,No Progress,Sans progression,Ohne Fortschr.
-STR_FULL_OPT,Full,FULL,Full,Full,Complète,Vollst.
-STR_NEVER,Never,NEVER,Never,Never,Jamais,Nie
-STR_IN_READER,In Reader,IN READER,In Reader,In Reader,Dans le lecteur,Beim Lesen
-STR_ALWAYS,Always,ALWAYS,Always,Always,Toujours,Immer
-STR_IGNORE,Ignore,IGNORE,Ignore,Ignore,Ignorer,Ignorieren
-STR_SLEEP,Sleep,SLEEP,Sleep,Sleep,Mise en veille,Standby
-STR_PAGE_TURN,Page Turn,PAGE TURN,Page Turn,Page Turn,Page suivante,Umblättern
-STR_PORTRAIT,Portrait,PORTRAIT,Portrait,Portrait,Portrait,Hochformat
-STR_LANDSCAPE_CW,Landscape CW,LANDSCAPE CW,Landscape CW,Landscape CW,Paysage,Querformat rechts
-STR_INVERTED,Inverted,INVERTED,Inverted,Inverted,Inversé,Invertiert
-STR_LANDSCAPE_CCW,Landscape CCW,LANDSCAPE CCW,Landscape CCW,Landscape CCW,Paysage inversé,Querformat links
-STR_FRONT_LAYOUT_BCLR,"Bck, Cnfrm, Lft, Rght","BCK, CNFRM, LFT, RGHT","Bck, Cnfrm, Lft, Rght","Bck, Cnfrm, Lft, Rght","Ret, OK, Gauche, Droite","Zurück, Bst, L, R"
-STR_FRONT_LAYOUT_LRBC,"Lft, Rght, Bck, Cnfrm","LFT, RGHT, BCK, CNFRM","Lft, Rght, Bck, Cnfrm","Lft, Rght, Bck, Cnfrm","Gauche, Droite, Ret, OK","L, R, Zurück, Bst"
-STR_FRONT_LAYOUT_LBCR,"Lft, Bck, Cnfrm, Rght","LFT, BCK, CNFRM, RGHT","Lft, Bck, Cnfrm, Rght","Lft, Bck, Cnfrm, Rght","Gauche, Ret, OK, Droite","L, Zurück, Bst, R"
-STR_PREV_NEXT,Prev/Next,PREV/NEXT,Prev/Next,Prev/Next,Prec/Suiv,Zurück/Weiter
-STR_NEXT_PREV,Next/Prev,NEXT/PREV,Next/Prev,Next/Prev,Suiv/Prec,Weiter/Zuürck
-STR_BOOKERLY,Bookerly,BOOKERLY,Bookerly,Bookerly,Bookerly,Bookerly
-STR_NOTO_SANS,Noto Sans,NOTO SANS,Noto Sans,Noto Sans,Noto Sans,Noto Sans
-STR_OPEN_DYSLEXIC,Open Dyslexic,OPEN DYSLEXIC,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic
-STR_SMALL,Small,SMALL,Small,Small,Petite,Klein
-STR_MEDIUM,Medium,MEDIUM,Medium,Medium,Moyenne,Mittel
-STR_LARGE,Large,LARGE,Large,Large,Grande,Groß
-STR_X_LARGE,X Large,X LARGE,X Large,X Large,T Grande,Extragroß
-STR_TIGHT,Tight,TIGHT,Tight,Tight,Serré,Eng
-STR_NORMAL,Normal,NORMAL,Normal,Normal,Normal,Normal
-STR_WIDE,Wide,WIDE,Wide,Wide,Large,Breit
-STR_JUSTIFY,Justify,JUSTIFY,Justify,Justify,Justifier,Blocksatz
-STR_ALIGN_LEFT,Left,LEFT,Left,Left,Gauche,Links
-STR_CENTER,Center,CENTER,Center,Center,Centre,Zentriert
-STR_ALIGN_RIGHT,Right,RIGHT,Right,Right,Droite,Rechts
-STR_MIN_1,1 min,1 MIN,1 min,1 min,1 min,1 Min
-STR_MIN_5,5 min,5 MIN,5 min,5 min,5 min,5 Min
-STR_MIN_10,10 min,10 MIN,10 min,10 min,10 min,10 Min
-STR_MIN_15,15 min,15 MIN,15 min,15 min,15 min,15 Min
-STR_MIN_30,30 min,30 MIN,30 min,30 min,30 min,30 Min
-STR_PAGES_1,1 page,1 PAGE,1 page,1 page,1 page,1 Seite
-STR_PAGES_5,5 pages,5 PAGES,5 pages,5 pages,5 pages,5 Seiten
-STR_PAGES_10,10 pages,10 PAGES,10 pages,10 pages,10 pages,10 Seiten
-STR_PAGES_15,15 pages,15 PAGES,15 pages,15 pages,15 pages,15 Seiten
-STR_PAGES_30,30 pages,30 PAGES,30 pages,30 pages,30 pages,30 Seiten
-STR_UPDATE,Update,UPDATE,Update,Update,Mise à jour,Update
-STR_CHECKING_UPDATE,Checking for update...,CHECKING FOR UPDATE...,Checking for update...,Checking for update...,Recherche de mises à jour en cours…,Update suchen…
-STR_NEW_UPDATE,New update available!,NEW UPDATE AVAILABLE!,New update available!,New update available!,Nouvelle mise à jour disponible !,Neues Update verfügbar!
-STR_CURRENT_VERSION,Current Version: ,CURRENT VERSION: ,Current Version: ,Current Version: ,Version actuelle :,Aktuelle Version:
-STR_NEW_VERSION,New Version: ,NEW VERSION: ,New Version: ,New Version: ,Nouvelle version : ,Neue Version:
-STR_UPDATING,Updating...,UPDATING...,Updating...,Updating...,Mise à jour en cours…,Aktualisiere…
-STR_NO_UPDATE,No update available,NO UPDATE AVAILABLE,No update available,No update available,Aucune mise à jour disponible,Kein Update verfügbar
-STR_UPDATE_FAILED,Update failed,UPDATE FAILED,Update failed,Update failed,Échec de la mise à jour,Updatefehler
-STR_UPDATE_COMPLETE,Update complete,UPDATE COMPLETE,Update complete,Update complete,Mise à jour effectuée,Update fertig
-STR_POWER_ON_HINT,Press and hold power button to turn back on,PRESS AND HOLD POWER BUTTON TO TURN BACK ON,Press and hold power button to turn back on,Press and hold power button to turn back on,Maintenir le bouton d’alimentation pour redémarrer,"An-Knopf lang drücken, um neuzustarten"
-STR_EXTERNAL_FONT,External Font,EXTERNAL FONT,External Font,External Font,Police externe,Externe Schrift
-STR_BUILTIN_DISABLED,Built-in (Disabled),BUILT-IN (DISABLED),Built-in (Disabled),Built-in (Disabled),Intégrée (désactivée),Vorinstalliert (aus)
-STR_NO_ENTRIES,No entries found,NO ENTRIES FOUND,No entries found,No entries found,Aucune entrée trouvée,Keine Einträge
-STR_DOWNLOADING,Downloading...,DOWNLOADING...,Downloading...,Downloading...,Téléchargement en cours…,Herunterladen…
-STR_DOWNLOAD_FAILED,Download failed,DOWNLOAD FAILED,Download failed,Download failed,Échec du téléchargement,Ladefehler
-STR_ERROR_MSG,Error:,ERROR,Error:,Error:,Erreur : ,Fehler:
-STR_UNNAMED,Unnamed,UNNAMED,Unnamed,Unnamed,Sans titre,Unbenannt
-STR_NO_SERVER_URL,No server URL configured,NO SERVER URL CONFIGURED,No server URL configured,No server URL configured,Aucune URL serveur configurée,Keine Server-URL konfiguriert
-STR_FETCH_FEED_FAILED,Failed to fetch feed,FAILED TO FETCH FEED,Failed to fetch feed,Failed to fetch feed,Échec du téléchargement du flux,Feedfehler
-STR_PARSE_FEED_FAILED,Failed to parse feed,FAILED TO PARSE FEED,Failed to parse feed,Failed to parse feed,Échec de l’analyse du flux,Feed-Format ungültig
-STR_NETWORK_PREFIX,Network: ,NETWORK: ,Network: ,Network: ,Réseau : ,Netzwerk:
-STR_IP_ADDRESS_PREFIX,IP Address: ,IP ADDRESS: ,IP Address: ,IP Address: ,Adresse IP : ,IP-Adresse:
-STR_SCAN_QR_WIFI_HINT,or scan QR code with your phone to connect to Wifi.,OR SCAN QR CODE WITH YOUR PHONE TO CONNECT TO WIFI.,or scan QR code with your phone to connect to Wifi.,or scan QR code with your phone to connect to Wifi.,or scan QR code with your phone to connect to Wifi.,oder QR-Code mit dem Handy scannen für WLAN.
-STR_ERROR_GENERAL_FAILURE,Error: General failure,ERROR: GENERAL FAILURE,Error: General failure,Error: General failure,Erreur : Échec général,Fehler: Allgemeiner Fehler
-STR_ERROR_NETWORK_NOT_FOUND,Error: Network not found,ERROR: NETWORK NOT FOUND,Error: Network not found,Error: Network not found,Erreur : Réseau introuvable,Fehler: Kein Netzwerk
-STR_ERROR_CONNECTION_TIMEOUT,Error: Connection timeout,ERROR: CONNECTION TIMEOUT,Error: Connection timeout,Error: Connection timeout,Erreur : Délai de connexion dépassé,Fehler: Zeitüberschreitung
-STR_SD_CARD,SD card,SD CARD,SD card,SD card,Carte SD,SD-Karte
-STR_BACK,« Back,« BACK,« Back,« Back,« Retour,« Zurück
-STR_EXIT,« Exit,« EXIT,« Exit,« Exit,« Sortie,« Verlassen
-STR_HOME,« Home,« HOME,« Home,« Home,« Accueil,« Start
-STR_SAVE,« Save,« SAVE,« Save,« Save,« Sauver,« Speichern
-STR_SELECT,Select,SELECT,Select,Select,OK,Auswahl
-STR_TOGGLE,Toggle,TOGGLE,Toggle,Toggle,Modifier,Ändern
-STR_CONFIRM,Confirm,CONFIRM,Confirm,Confirm,Confirmer,Bestätigen
-STR_CANCEL,Cancel,CANCEL,Cancel,Cancel,Annuler,Abbrechen
-STR_CONNECT,Connect,CONNECT,Connect,Connect,OK,Verbinden
-STR_OPEN,Open,OPEN,Open,Open,Ouvrir,Öffnen
-STR_DOWNLOAD,Download,DOWNLOAD,Download,Download,Télécharger,Herunterladen
-STR_RETRY,Retry,RETRY,Retry,Retry,Réessayer,Wiederh.
-STR_YES,Yes,YES,Yes,Yes,Oui,Ja
-STR_NO,No,NO,No,No,Non,Nein
-STR_STATE_ON,ON,ON,ON,ON,ON,An
-STR_STATE_OFF,OFF,OFF,OFF,OFF,OFF,Aus
-STR_SET,Set,SET,Set,Set,Défini,Gesetzt
-STR_NOT_SET,Not Set,NOT SET,Not Set,Not Set,Non défini,Leer
-STR_DIR_LEFT,Left,LEFT,Left,Left,Gauche,Links
-STR_DIR_RIGHT,Right,RIGHT,Right,Right,Droite,Rechts
-STR_DIR_UP,Up,UP,Up,Up,Haut,Hoch
-STR_DIR_DOWN,Down,DOWN,Down,Down,Bas,Runter
-STR_CAPS_ON,CAPS,CAPS,CAPS,CAPS,MAJ,UMSCH
-STR_CAPS_OFF,caps,CAPS,caps,caps,maj,umsch
-STR_OK_BUTTON,OK,OK,OK,OK,OK,OK
-STR_ON_MARKER,[ON],[ON],[ON],[ON],[ON],[AN]
-STR_SLEEP_COVER_FILTER,Sleep Screen Cover Filter,SLEEP SCREEN COVER FILTER,Sleep Screen Cover Filter,Sleep Screen Cover Filter,Filtre affichage veille,Standby-Coverfilter
-STR_FILTER_CONTRAST,Contrast,CONTRAST,Contrast,Contrast,Contraste,Kontrast
-STR_STATUS_BAR_FULL_PERCENT,Full w/ Percentage,FULL W/ PERCENTAGE,Full w/ Percentage,Full w/ Percentage,Complète + %,Komplett + Prozent
-STR_STATUS_BAR_FULL_BOOK,Full w/ Book Bar,FULL W/ BOOK BAR,Full w/ Book Bar,Full w/ Book Bar,Complète + barre livre,Komplett + Buch
-STR_STATUS_BAR_BOOK_ONLY,Book Bar Only,BOOK BAR ONLY,Book Bar Only,Book Bar Only,Barre livre,Nur Buch
-STR_STATUS_BAR_FULL_CHAPTER,Full w/ Chapter Bar,FULL W/ CHAPTER BAR,Full w/ Chapter Bar,Full w/ Chapter Bar,Complète + barre chapitre,Komplett + Kapitel
-STR_UI_THEME,UI Theme,UI THEME,UI Theme,UI Theme,Thème de l’interface,System-Design
-STR_THEME_CLASSIC,Classic,CLASSIC,Classic,Classic,Classique,Klassisch
-STR_THEME_LYRA,Lyra,LYRA,Lyra,Lyra,Lyra,Lyra
-STR_SUNLIGHT_FADING_FIX,Sunlight Fading Fix,SUNLIGHT FADING FIX,Sunlight Fading Fix,Sunlight Fading Fix,Amélioration de la lisibilité au soleil,Anti-Verblassen
-STR_REMAP_FRONT_BUTTONS,Remap Front Buttons,REMAP FRONT BUTTONS,Remap Front Buttons,Remap Front Buttons,Réassigner les boutons avant,Vordere Tasten belegen
-STR_OPDS_BROWSER,OPDS Browser,OPDS BROWSER,OPDS Browser,OPDS Browser,Navigateur OPDS,OPDS-Browser
-STR_COVER_CUSTOM,Cover + Custom,COVER + CUSTOM,Cover + Custom,Cover + Custom,Couverture + Custom,Umschlag + Eigenes
-STR_RECENTS,Recents,RECENTS,Recents,Recents,Récents,Zuletzt
-STR_MENU_RECENT_BOOKS,Recent Books,RECENT BOOKS,Recent Books,Recent Books,Livres récents,Zuletzt gelesen
-STR_NO_RECENT_BOOKS,No recent books,NO RECENT BOOKS,No recent books,No recent books,Aucun livre récent,Keine Bücher
-STR_CALIBRE_DESC,Use Calibre wireless device transfers,USE CALIBRE WIRELESS DEVICE TRANSFERS,Use Calibre wireless device transfers,Use Calibre wireless device transfers,Utiliser les transferts sans fil Calibre,Calibre-Übertragung (WLAN)
-STR_FORGET_AND_REMOVE,Forget network and remove saved password?,FORGET NETWORK AND REMOVE SAVED PASSWORD?,Forget network and remove saved password?,Forget network and remove saved password?,Oublier le réseau et supprimer le mot de passe enregistré ?,WLAN entfernen & Passwort löschen?
-STR_FORGET_BUTTON,Forget network,FORGET NETWORK,Forget network,Forget network,Oublier le réseau,WLAN entfernen
-STR_CALIBRE_STARTING,Starting Calibre...,STARTING CALIBRE...,Starting Calibre...,Starting Calibre...,Démarrage de Calibre...,Calibre starten…
-STR_CALIBRE_SETUP,Setup,SETUP,Setup,Setup,Configuration,Installation
-STR_CALIBRE_STATUS,Status,STATUS,Status,Status,Statut,Status
-STR_CLEAR_BUTTON,Clear,CLEAR,Clear,Clear,Effacer,Leeren
-STR_DEFAULT_VALUE,Default,DEFAULT,Default,Default,Défaut,Standard
-STR_REMAP_PROMPT,Press a front button for each role,PRESS A FRONT BUTTON FOR EACH ROLE,Press a front button for each role,Press a front button for each role,Appuyez sur un bouton avant pour chaque rôle,Entsprechende Vordertaste drücken
-STR_UNASSIGNED,Unassigned,UNASSIGNED,Unassigned,Unassigned,Non assigné,Leer
-STR_ALREADY_ASSIGNED,Already assigned,ALREADY ASSIGNED,Already assigned,Already assigned,Déjà assigné,Bereits zugeordnet
-STR_REMAP_RESET_HINT,Side button Up: Reset to default layout,SIDE BUTTON UP: RESET TO DEFAULT LAYOUT,Side button Up: Reset to default layout,Side button Up: Reset to default layout,Bouton latéral haut : Réinitialiser,Seitentaste hoch: Standard
-STR_REMAP_CANCEL_HINT,Side button Down: Cancel remapping,SIDE BUTTON DOWN: CANCEL REMAPPING,Side button Down: Cancel remapping,Side button Down: Cancel remapping,Bouton latéral bas : Annuler le réglage,Seitentaste runter: Abbrechen
-STR_HW_BACK_LABEL,Back (1st button),BACK (1ST BUTTON),Back (1st button),Back (1st button),Retour (1er bouton),Zurück (1. Taste)
-STR_HW_CONFIRM_LABEL,Confirm (2nd button),CONFIRM (2ND BUTTON),Confirm (2nd button),Confirm (2nd button),OK (2ème bouton),Bestätigen (2. Taste)
-STR_HW_LEFT_LABEL,Left (3rd button),LEFT (3RD BUTTON),Left (3rd button),Left (3rd button),Gauche (3ème bouton),Links (3. Taste)
-STR_HW_RIGHT_LABEL,Right (4th button),RIGHT (4TH BUTTON),Right (4th button),Right (4th button),Droite (4ème bouton),Rechts (4. Taste)
-STR_GO_TO_PERCENT,Go to %,GO TO %,Go to %,Go to %,Aller à %,Gehe zu %
-STR_GO_HOME_BUTTON,Go Home,GO HOME,Go Home,Go Home,Aller à l’accueil,Zum Anfang
-STR_SYNC_PROGRESS,Sync Progress,SYNC PROGRESS,Sync Progress,Sync Progress,Synchroniser la progression,Fortschritt synchronisieren
-STR_DELETE_CACHE,Delete Book Cache,DELETE BOOK CACHE,Delete Book Cache,Delete Book Cache,Supprimer le cache du livre,Buch-Cache leeren
-STR_CHAPTER_PREFIX,Chapter: ,CHAPTER: ,Chapter: ,Chapter: ,Chapitre : ,Kapitel:
-STR_PAGES_SEPARATOR, pages  |  , PAGES  |  , pages  |  , pages  |  , pages  |  , Seiten  |  
-STR_BOOK_PREFIX,Book: ,BOOK: ,Book: ,Book: ,Livre : ,Buch: 
-STR_KBD_SHIFT,shift,SHIFT,shift,shift,maj,umsch
-STR_KBD_SHIFT_CAPS,SHIFT,SHIFT,SHIFT,SHIFT,MAJ,UMSCH
-STR_KBD_LOCK,LOCK,LOCK,LOCK,LOCK,VERR MAJ,FESTST
-STR_CALIBRE_URL_HINT,"For Calibre, add /opds to your URL","FOR CALIBRE, ADD /OPDS TO YOUR URL","For Calibre, add /opds to your URL","For Calibre, add /opds to your URL","Pour Calibre, ajoutez /opds à l’URL",Calibre: URL um /opds ergänzen
-STR_PERCENT_STEP_HINT,Left/Right: 1%  Up/Down: 10%,LEFT/RIGHT: 1%  UP/DOWN: 10%,Left/Right: 1%  Up/Down: 10%,Left/Right: 1%  Up/Down: 10%,Gauche/Droite : 1%  Haut/Bas : 10%,links/rechts: 1% hoch/runter: 10%
-STR_SYNCING_TIME,Syncing time...,SYNCING TIME...,Syncing time...,Syncing time...,Synchronisation de l’heure…,Zeit synchonisieren…
-STR_CALC_HASH,Calculating document hash...,CALCULATING DOCUMENT HASH...,Calculating document hash...,Calculating document hash...,Calcul du hash du document…,Dokument-Hash berechnen…
-STR_HASH_FAILED,Failed to calculate document hash,FAILED TO CALCULATE DOCUMENT HASH,Failed to calculate document hash,Failed to calculate document hash,Échec du calcul du hash du document,Dokument-Hash fehlgeschlagen
-STR_FETCH_PROGRESS,Fetching remote progress...,FETCHING REMOTE PROGRESS...,Fetching remote progress...,Fetching remote progress...,Téléchargement de la progression…,Externen Fortschritt abrufen...
-STR_UPLOAD_PROGRESS,Uploading progress...,UPLOADING PROGRESS...,Uploading progress...,Uploading progress...,Envoi de la progression…,Fortschritt hochladen…
-STR_NO_CREDENTIALS_MSG,No credentials configured,NO CREDENTIALS CONFIGURED,No credentials configured,No credentials configured,Aucun identifiant configuré,Zugangsdaten fehlen
-STR_KOREADER_SETUP_HINT,Set up KOReader account in Settings,SET UP KOREADER ACCOUNT IN SETTINGS,Set up KOReader account in Settings,Set up KOReader account in Settings,Configurez le compte KOReader dans les réglages,KOReader-Konto unter Einst. anlegen
-STR_PROGRESS_FOUND,Progress found!,PROGRESS FOUND!,Progress found!,Progress found!,Progression trouvée !,Gefunden!
-STR_REMOTE_LABEL,Remote:,REMOTE,Remote:,Remote:,En ligne :,Extern:
-STR_LOCAL_LABEL,Local:,LOCAL,Local:,Local:,Locale :,Lokal:
-STR_PAGE_OVERALL_FORMAT,"Page %d, %.2f%% overall","PAGE %d, %.2f%% OVERALL","Page %d, %.2f%% overall","Page %d, %.2f%% overall","Page %d, %.2f%% au total","  Seite %d, %.2f%% insgesamt"
-STR_PAGE_TOTAL_OVERALL_FORMAT,"Page %d/%d, %.2f%% overall","PAGE %d/%d, %.2f%% OVERALL","Page %d/%d, %.2f%% overall","Page %d/%d, %.2f%% overall","Page %d/%d, %.2f%% au total","  Seite %d/%d, %.2f%% insgesamt"
-STR_DEVICE_FROM_FORMAT,  From: %s,  FROM: %s,  From: %s,  From: %s,  De : %s,  Von: %s
-STR_APPLY_REMOTE,Apply remote progress,APPLY REMOTE PROGRESS,Apply remote progress,Apply remote progress,Appliquer la progression en ligne,Ext. Fortschritt übern.
-STR_UPLOAD_LOCAL,Upload local progress,UPLOAD LOCAL PROGRESS,Upload local progress,Upload local progress,Envoyer la progression locale,Lokalen Fortschritt hochl.
-STR_NO_REMOTE_MSG,No remote progress found,NO REMOTE PROGRESS FOUND,No remote progress found,No remote progress found,Aucune progression en ligne trouvée,Kein externer Fortschritt
-STR_UPLOAD_PROMPT,Upload current position?,UPLOAD CURRENT POSITION?,Upload current position?,Upload current position?,Envoyer la position actuelle ?,Aktuelle Position hochladen?
-STR_UPLOAD_SUCCESS,Progress uploaded!,PROGRESS UPLOADED!,Progress uploaded!,Progress uploaded!,Progression envoyée !,Hochgeladen!
-STR_SYNC_FAILED_MSG,Sync failed,SYNC FAILED,Sync failed,Sync failed,Échec de la synchronisation,Fehlgeschlagen
-STR_SECTION_PREFIX,Section ,SECTION ,Section ,Section ,Section ,Abschnitt
-STR_UPLOAD,Upload,UPLOAD,Upload,Upload,Envoi,Hochladen
-STR_BOOK_S_STYLE,Book's Style,BOOK'S STYLE,Book's Style,Book's Style,Style du livre,Buch-Stil
-STR_EMBEDDED_STYLE,Embedded Style,EMBEDDED STYLE,Embedded Style,Embedded Style,Style intégré,Eingebetteter Stil
-STR_OPDS_SERVER_URL,OPDS Server URL,OPDS SERVER URL,OPDS Server URL,OPDS Server URL,URL du serveur OPDS,OPDS-Server-URL
+KEYS,ENGLISH,SPANISH,ITALIAN,SWEDISH,FRENCH,GERMAN,CZECH
+,English,Español (placeholder),Italiano (placeholder),Svenska (placeholder),Français,Deutsch,Čeština
+STR_CROSSPOINT,CrossPoint,CROSSPOINT,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint
+STR_BOOTING,BOOTING,BOOTING,BOOTING,BOOTING,DÉMARRAGE EN COURS,STARTEN,SPUŠTĚNÍ
+STR_SLEEPING,SLEEPING,SLEEPING,SLEEPING,SLEEPING,VEILLE,STANDBY,SPÁNEK
+STR_ENTERING_SLEEP,Entering Sleep...,ENTERING SLEEP...,Entering Sleep...,Entering Sleep...,Mise en veille…,Standby...,Vstup do režimu spánku...
+STR_BROWSE_FILES,Browse Files,BROWSE FILES,Browse Files,Browse Files,Fichiers,Durchsuchen,Procházet soubory
+STR_FILE_TRANSFER,File Transfer,FILE TRANSFER,File Transfer,File Transfer,Transfert,Datentransfer,Přenos souborů
+STR_SETTINGS_TITLE,Settings,SETTINGS,Settings,Settings,Réglages,Einstellungen,Nastavení
+STR_CALIBRE_LIBRARY,Calibre Library,CALIBRE LIBRARY,Calibre Library,Calibre Library,Bibliothèque Calibre,Calibre-Bibliothek,Knihovna Calibre
+STR_CONTINUE_READING,Continue Reading,CONTINUE READING,Continue Reading,Continue Reading,Continuer la lecture,Weiterlesen,Pokračovat ve čtení
+STR_NO_OPEN_BOOK,No open book,NO OPEN BOOK,No open book,No open book,Aucun livre ouvert,Aktuell kein Buch,Žádná otevřená kniha
+STR_START_READING,Start reading below,START READING BELOW,Start reading below,Start reading below,Lisez votre premier livre ci-dessous,Lesen beginnen,Začněte číst níže
+STR_BOOKS,Books,BOOKS,Books,Books,Livres,Bücher,Knihy
+STR_NO_BOOKS_FOUND,No books found,NO BOOKS FOUND,No books found,No books found,Dossier vide,Keine Bücher,Žádné knihy nenalezeny
+STR_SELECT_CHAPTER,Select Chapter,SELECT CHAPTER,Select Chapter,Select Chapter,Choix du chapitre,Kapitel auswählen,Vybrat kapitolu
+STR_NO_CHAPTERS,No chapters,NO CHAPTERS,No chapters,No chapters,Aucun chapitre,Keine Kapitel,Žádné kapitoly
+STR_END_OF_BOOK,End of book,END OF BOOK,End of book,End of book,Fin du livre,Buchende,Konec knihy
+STR_EMPTY_CHAPTER,Empty chapter,EMPTY CHAPTER,Empty chapter,Empty chapter,Chapitre vide,Kapitelende,Prázdná kapitola
+STR_INDEXING,Indexing...,INDEXING...,Indexing...,Indexing...,Indexation en cours…,Indexieren…,Indexování...
+STR_MEMORY_ERROR,Memory error,MEMORY ERROR,Memory error,Memory error,Erreur de mémoire,Speicherfehler,Chyba paměti
+STR_PAGE_LOAD_ERROR,Page load error,PAGE LOAD ERROR,Page load error,Page load error,Erreur de chargement,Seitenladefehler,Chyba načítání stránky
+STR_EMPTY_FILE,Empty file,EMPTY FILE,Empty file,Empty file,Fichier vide,Leere Datei,Prázdný soubor
+STR_OUT_OF_BOUNDS,Out of bounds,OUT OF BOUNDS,Out of bounds,Out of bounds,Dépassement de mémoire,Zu groß,Mimo hranice
+STR_LOADING,Loading...,LOADING...,Loading...,Loading...,Chargement…,Laden…,Načítání...
+STR_LOAD_XTC_FAILED,Failed to load XTC,FAILED TO LOAD XTC,Failed to load XTC,Failed to load XTC,Erreur de chargement du fichier XTC,Ladefehler bei XTC,Nepodařilo se načíst XTC
+STR_LOAD_TXT_FAILED,Failed to load TXT,FAILED TO LOAD TXT,Failed to load TXT,Failed to load TXT,Erreur de chargement du fichier TXT,Ladefehler bei TXT,Nepodařilo se načíst TXT
+STR_LOAD_EPUB_FAILED,Failed to load EPUB,FAILED TO LOAD EPUB,Failed to load EPUB,Failed to load EPUB,Erreur de chargement du fichier EPUB,Ladefehler bei EPUB,Nepodařilo se načíst EPUB
+STR_SD_CARD_ERROR,SD card error,SD CARD ERROR,SD card error,SD card error,Carte mémoire absente,SD-Karten-Fehler,Chyba SD karty
+STR_WIFI_NETWORKS,WiFi Networks,WIFI NETWORKS,WiFi Networks,WiFi Networks,Réseaux WiFi,WLAN-Netzwerke,Wi-Fi sítě
+STR_NO_NETWORKS,No networks found,NO NETWORKS FOUND,No networks found,No networks found,Aucun réseau,Kein WLAN gefunden,Žádné sítě nenalezeny
+STR_NETWORKS_FOUND,%zu networks found,%zu NETWORKS FOUND,%zu networks found,%zu networks found,%zu réseaux,%zu WLAN-Netzwerke gefunden,Nalezeno %zu sítí
+STR_SCANNING,Scanning...,SCANNING...,Scanning...,Scanning...,Recherche de réseaux en cours…,Suchen...,Skenování...
+STR_CONNECTING,Connecting...,CONNECTING...,Connecting...,Connecting...,Connexion en cours…,Verbinden...,Připojování...
+STR_CONNECTED,Connected!,CONNECTED!,Connected!,Connected!,Connecté !,Verbunden!,Připojeno!
+STR_CONNECTION_FAILED,Connection Failed,CONNECTION FAILED,Connection Failed,Connection Failed,Échec de la connexion,Verbindungsfehler,Připojení se nezdařilo
+STR_CONNECTION_TIMEOUT,Connection timeout,CONNECTION TIMEOUT,Connection timeout,Connection timeout,Délai de connexion dépassé,Verbindungs-Timeout,Časový limit připojení
+STR_FORGET_NETWORK,Forget Network?,FORGET NETWORK?,Forget Network?,Forget Network?,Oublier ce réseau ?,WLAN vergessen?,Zapomenout síť?
+STR_SAVE_PASSWORD,Save password for next time?,SAVE PASSWORD FOR NEXT TIME?,Save password for next time?,Save password for next time?,Enregistrer le mot de passe ?,Passwort speichern?,Uložit heslo pro příště?
+STR_REMOVE_PASSWORD,Remove saved password?,REMOVE SAVED PASSWORD?,Remove saved password?,Remove saved password?,Supprimer le mot de passe enregistré ?,Passwort entfernen?,Odstranit uložené heslo?
+STR_PRESS_OK_SCAN,Press OK to scan again,PRESS OK TO SCAN AGAIN,Press OK to scan again,Press OK to scan again,Appuyez sur OK pour détecter à nouveau,OK für neue Suche,Stiskněte OK pro přeskenování
+STR_PRESS_ANY_CONTINUE,Press any button to continue,PRESS ANY BUTTON TO CONTINUE,Press any button to continue,Press any button to continue,Appuyez sur une touche pour continuer,Beliebige Taste drücken,Pokračujte stiskem libovolné klávesy
+STR_SELECT_HINT,LEFT/RIGHT: Select | OK: Confirm,LEFT/RIGHT: SELECT | OK: CONFIRM,LEFT/RIGHT: Select | OK: Confirm,LEFT/RIGHT: Select | OK: Confirm,GAUCHE/DROITE: Sélectionner | OK: Valider,links/rechts: Auswahl | OK: Best,VLEVO/VPRAVO: Vybrat | OK: Potvrdit
+STR_HOW_CONNECT,How would you like to connect?,HOW WOULD YOU LIKE TO CONNECT?,How would you like to connect?,How would you like to connect?,Comment voulez-vous vous connecter ?,Wie möchtest du dich verbinden?,Jak se chcete připojit?
+STR_JOIN_NETWORK,Join a Network,JOIN A NETWORK,Join a Network,Join a Network,Connexion à un réseau,Netzwerk beitreten,Připojit se k síti
+STR_CREATE_HOTSPOT,Create Hotspot,CREATE HOTSPOT,Create Hotspot,Create Hotspot,Créer un point d’accès,Hotspot erstellen,Vytvořit hotspot
+STR_JOIN_DESC,Connect to an existing WiFi network,CONNECT TO AN EXISTING WIFI NETWORK,Connect to an existing WiFi network,Connect to an existing WiFi network,Se connecter à un réseau WiFi existant,Mit einem bestehenden WLAN verbinden,Připojit se k existující síti WiFi
+STR_HOTSPOT_DESC,Create a WiFi network others can join,CREATE A WIFI NETWORK OTHERS CAN JOIN,Create a WiFi network others can join,Create a WiFi network others can join,Créer un réseau WiFi accessible depuis d’autres appareils,WLAN für andere erstellen,"Vytvořit síť WiFi, ke které se mohou připojit ostatní"
+STR_STARTING_HOTSPOT,Starting Hotspot...,STARTING HOTSPOT...,Starting Hotspot...,Starting Hotspot...,Création du point d’accès en cours…,Hotspot starten…,Spouštění hotspotu...
+STR_HOTSPOT_MODE,Hotspot Mode,HOTSPOT MODE,Hotspot Mode,Hotspot Mode,Mode point d’accès,Hotspot-Modus,Režim hotspotu
+STR_CONNECT_WIFI_HINT,Connect your device to this WiFi network,CONNECT YOUR DEVICE TO THIS WIFI NETWORK,Connect your device to this WiFi network,Connect your device to this WiFi network,Connectez un appareil à ce réseau WiFi,Gerät mit diesem WLAN verbinden,Připojte své zařízení k této síti WiFi
+STR_OPEN_URL_HINT,Open this URL in your browser,OPEN THIS URL IN YOUR BROWSER,Open this URL in your browser,Open this URL in your browser,Ouvrez cette URL dans votre navigateur,Diese URL im Browser öffnen,Otevřete tuto URL ve svém prohlížeči
+STR_OR_HTTP_PREFIX,or http://,OR HTTP://,or http://,or http://,ou http://,oder http://,nebo http://
+STR_SCAN_QR_HINT,or scan QR code with your phone:,OR SCAN QR CODE WITH YOUR PHONE:,or scan QR code with your phone:,or scan QR code with your phone:,ou scannez le QR code avec votre téléphone,oder QR-Code mit dem Handy scannen:,nebo naskenujte QR kód telefonem:
+STR_CALIBRE_WIRELESS,Calibre Wireless,CALIBRE WIRELESS,Calibre Wireless,Calibre Wireless,Connexion à Calibre sans fil,Calibre Wireless,Calibre Wireless
+STR_CALIBRE_WEB_URL,Calibre Web URL,CALIBRE WEB URL,Calibre Web URL,Calibre Web URL,URL Web Calibre,Calibre-Web-URL,URL webu Calibre
+STR_CONNECT_WIRELESS,Connect as Wireless Device,CONNECT AS WIRELESS DEVICE,Connect as Wireless Device,Connect as Wireless Device,Se connecter comme appareil sans fil,Als Drahtlos-Gerät hinzufügen,Připojit jako bezdrátové zařízení
+STR_NETWORK_LEGEND,* = Encrypted | + = Saved,* = ENCRYPTED | + = SAVED,* = Encrypted | + = Saved,* = Encrypted | + = Saved,* = Sécurisé | + = Sauvegardé,* = Verschlüsselt | + = Gespeichert,* = Šifrováno | + = Uloženo
+STR_MAC_ADDRESS,MAC address:,MAC ADDRESS:,MAC address:,MAC address:,Adresse MAC :,MAC-Adresse:,MAC adresa:
+STR_CHECKING_WIFI,Checking WiFi...,CHECKING WIFI...,Checking WiFi...,Checking WiFi...,Vérification du réseau WiFi...,WLAN prüfen…,Kontrola WiFi...
+STR_ENTER_WIFI_PASSWORD,Enter WiFi Password,ENTER WIFI PASSWORD,Enter WiFi Password,Enter WiFi Password,Entrez le mot de passe WiFi,WLAN-Passwort eingeben,Zadejte heslo WiFi
+STR_ENTER_TEXT,Enter Text,ENTER TEXT,Enter Text,Enter Text,Entrez le texte,Text eingeben,Zadejte text
+STR_TO_PREFIX,to ,TO ,to ,to ,à ,bis,pro
+STR_CALIBRE_DISCOVERING,Discovering Calibre...,DISCOVERING CALIBRE...,Discovering Calibre...,Discovering Calibre...,Recherche de Calibre en cours…,Calibre finden...,Prozkoumávání Calibre...
+STR_CALIBRE_CONNECTING_TO,Connecting to ,CONNECTING TO ,Connecting to ,Connecting to ,Connexion à ,Verbinden mit,Připojování k
+STR_CALIBRE_CONNECTED_TO,Connected to ,CONNECTED TO ,Connected to ,Connected to ,Connecté à  ,Verbunden mit,Připojeno k
+STR_CALIBRE_WAITING_COMMANDS,Waiting for commands...,WAITING FOR COMMANDS...,Waiting for commands...,Waiting for commands...,En attente de commandes…,Auf Befehle warten…,Čekám na příkazy…
+STR_CONNECTION_FAILED_RETRYING,"(Connection failed, retrying)","(CONNECTION FAILED, RETRYING)","(Connection failed, retrying)","(Connection failed, retrying)","(Échec de la connexion, nouvelle tentative)","(Keine Verbindung, wiederholen)","(Připojení se nezdařilo, opakování pokusu)"
+STR_CALIBRE_DISCONNECTED,Calibre disconnected,CALIBRE DISCONNECTED,Calibre disconnected,Calibre disconnected,Calibre déconnecté,Calibre getrennt,Calibre odpojeno
+STR_CALIBRE_WAITING_TRANSFER,Waiting for transfer...,WAITING FOR TRANSFER...,Waiting for transfer...,Waiting for transfer...,En attente de transfert…,Auf Übertragung warten...,Čekání na přenos...
+STR_CALIBRE_TRANSFER_HINT,"If transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice plugin settings.","IF TRANSFER FAILS, ENABLE\N'IGNORE FREE SPACE' IN CALIBRE'S\NSMARTDEVICE PLUGIN SETTINGS.","If transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice plugin settings.","If transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice plugin settings.","Si le transfert échoue, activez\n’Ignorer l’espace libre’ dans les\nparamètres du plugin SmartDevice de Calibre.",Bei Übertragungsfehler \n'Freien Speicher ign.' in den\nCalibre-Einstellungen einschalten.,"Nezdaří-li se přenos, povolte\n„Ignorovat volné místo“ v Calibre\nnastavení pluginu SmartDevice."
+STR_CALIBRE_RECEIVING,Receiving: ,RECEIVING: ,Receiving: ,Receiving: ,Réception : ,Empfange:,Příjem:
+STR_CALIBRE_RECEIVED,Received: ,RECEIVED: ,Received: ,Received: ,Reçus : ,Empfangen:,Přijato:
+STR_CALIBRE_WAITING_MORE,Waiting for more...,WAITING FOR MORE...,Waiting for more...,Waiting for more...,En attente de données supplémentaires…,Auf mehr warten…,Čekání na další...
+STR_CALIBRE_FAILED_CREATE_FILE,Failed to create file,FAILED TO CREATE FILE,Failed to create file,Failed to create file,Échec de la création du fichier,Speicherfehler,Nepodařilo se vytvořit soubor
+STR_CALIBRE_PASSWORD_REQUIRED,Password required,PASSWORD REQUIRED,Password required,Password required,Mot de passe requis,Passwort nötig,Vyžadováno heslo
+STR_CALIBRE_TRANSFER_INTERRUPTED,Transfer interrupted,TRANSFER INTERRUPTED,Transfer interrupted,Transfer interrupted,Transfert interrompu,Übertragung unterbrochen,Přenos přerušen
+STR_CALIBRE_INSTRUCTION_1,1) Install CrossPoint Reader plugin,1) INSTALL CROSSPOINT READER PLUGIN,1) Install CrossPoint Reader plugin,1) Install CrossPoint Reader plugin,1) Installer le plugin CrossPoint Reader,1) CrossPoint Reader-Plugin installieren,1) Nainstalujte plugin CrossPoint Reader
+STR_CALIBRE_INSTRUCTION_2,2) Be on the same WiFi network,2) BE ON THE SAME WIFI NETWORK,2) Be on the same WiFi network,2) Be on the same WiFi network,2) Se connecter au même réseau WiFi,2) Mit selbem WLAN verbinden,2) Buďte ve stejné síti WiFi
+STR_CALIBRE_INSTRUCTION_3,"3) In Calibre: ""Send to device""","3) IN CALIBRE: ""SEND TO DEVICE""","3) In Calibre: ""Send to device""","3) In Calibre: ""Send to device""",3) Dans Calibre : ‘Envoyer vers l’appareil’,"3) In Calibre: ""An Gerät senden""",3) V Calibre: „Odeslat do zařízení“
+STR_CALIBRE_INSTRUCTION_4,"""Keep this screen open while sending""","""KEEP THIS SCREEN OPEN WHILE SENDING""","""Keep this screen open while sending""","""Keep this screen open while sending""",“Gardez cet écran ouvert pendant le transfert”,Bildschirm beim Senden offenlassen,„Při odesílání ponechat tuto obrazovku otevřenou“
+STR_CAT_DISPLAY,Display,DISPLAY,Display,Display,Affichage,Anzeige,Displej
+STR_CAT_READER,Reader,READER,Reader,Reader,Lecteur,Lesen,Čtečka
+STR_CAT_CONTROLS,Controls,CONTROLS,Controls,Controls,Commandes,Bedienung,Ovládací prvky
+STR_CAT_SYSTEM,System,SYSTEM,System,System,Système,System,Systém
+STR_SLEEP_SCREEN,Sleep Screen,SLEEP SCREEN,Sleep Screen,Sleep Screen,Écran de veille,Standby-Bild,Obrazovka spánku
+STR_SLEEP_COVER_MODE,Sleep Screen Cover Mode,SLEEP SCREEN COVER MODE,Sleep Screen Cover Mode,Sleep Screen Cover Mode,Mode d’image de l’écran de veille,Standby-Bildmodus,Obrazovka spánku Režim krytu
+STR_STATUS_BAR,Status Bar,STATUS BAR,Status Bar,Status Bar,Barre d’état,Statusleiste,Stavový řádek
+STR_HIDE_BATTERY,Hide Battery %,HIDE BATTERY %,Hide Battery %,Hide Battery %,Masquer % batterie,Batterie % ausblenden,Skrýt baterii %
+STR_EXTRA_SPACING,Extra Paragraph Spacing,EXTRA PARAGRAPH SPACING,Extra Paragraph Spacing,Extra Paragraph Spacing,Espacement des paragraphes,Absatzabstand,Extra mezery mezi odstavci
+STR_TEXT_AA,Text Anti-Aliasing,TEXT ANTI-ALIASING,Text Anti-Aliasing,Text Anti-Aliasing,Lissage du texte,Schriftglättung,Vyhlazování textu
+STR_SHORT_PWR_BTN,Short Power Button Click,SHORT POWER BUTTON CLICK,Short Power Button Click,Short Power Button Click,Appui court bout. alim.,An-Taste kurz drücken,Krátké stisknutí tlačítka napájení
+STR_ORIENTATION,Reading Orientation,READING ORIENTATION,Reading Orientation,Reading Orientation,Orientation de lecture,Leseausrichtung,Orientace čtení
+STR_FRONT_BTN_LAYOUT,Front Button Layout,FRONT BUTTON LAYOUT,Front Button Layout,Front Button Layout,Disposition des boutons avant,Vorderes Tastenlayout,Rozvržení předních tlačítek
+STR_SIDE_BTN_LAYOUT,Side Button Layout (reader),SIDE BUTTON LAYOUT (READER),Side Button Layout (reader),Side Button Layout (reader),Disposition des boutons latéraux,Seitliche Tasten (Lesen),Rozvržení bočních tlačítek (čtečka)
+STR_LONG_PRESS_SKIP,Long-press Chapter Skip,LONG-PRESS CHAPTER SKIP,Long-press Chapter Skip,Long-press Chapter Skip,Appui long pour saut de chapitre,Langes Drücken springt Kap.,Dlouhé stisknutí Přeskočit kapitolu
+STR_FONT_FAMILY,Reader Font Family,READER FONT FAMILY,Reader Font Family,Reader Font Family,Police de caractères du lecteur,Lese-Schriftfamilie,Rodina písem čtečky
+STR_EXT_READER_FONT,External Reader Font,EXTERNAL READER FONT,External Reader Font,External Reader Font,Police externe,Externe Schriftart,Písmo externí čtečky
+STR_EXT_CHINESE_FONT,Reader Font,READER FONT,Reader Font,Reader Font,Police du lecteur,Lese-Schriftart,Písmo čtečky
+STR_EXT_UI_FONT,UI Font,UI FONT,UI Font,UI Font,Police de l’interface,Menü-Schriftart,Písmo rozhraní
+STR_FONT_SIZE,UI Font Size,UI FONT SIZE,UI Font Size,UI Font Size,Taille du texte de l’interface,Schriftgröße,Velikost písma rozhraní
+STR_LINE_SPACING,Reader Line Spacing,READER LINE SPACING,Reader Line Spacing,Reader Line Spacing,Espacement des lignes,Lese-Zeilenabstand,Řádkování čtečky
+STR_ASCII_LETTER_SPACING,ASCII Letter Spacing,ASCII LETTER SPACING,ASCII Letter Spacing,ASCII Letter Spacing,Espacement des lettres ASCII,ASCII-Zeichenabstand,Mezery písmen ASCII
+STR_ASCII_DIGIT_SPACING,ASCII Digit Spacing,ASCII DIGIT SPACING,ASCII Digit Spacing,ASCII Digit Spacing,Espacement des chiffres ASCII,ASCII-Ziffernabstand,Mezery číslic ASCII
+STR_CJK_SPACING,CJK Spacing,CJK SPACING,CJK Spacing,CJK Spacing,Espacement CJK,CJK-Zeichenabstand,Mezery CJK
+STR_COLOR_MODE,Color Mode,COLOR MODE,Color Mode,Color Mode,Mode couleur,Farbmodus,Režim barev
+STR_SCREEN_MARGIN,Reader Screen Margin,READER SCREEN MARGIN,Reader Screen Margin,Reader Screen Margin,Marges du lecteur,Lese-Seitenränder,Okraj obrazovky čtečky
+STR_PARA_ALIGNMENT,Reader Paragraph Alignment,READER PARAGRAPH ALIGNMENT,Reader Paragraph Alignment,Reader Paragraph Alignment,Alignement des paragraphes,Lese-Absatzausrichtung,Zarovnání odstavců čtečky
+STR_HYPHENATION,Hyphenation,HYPHENATION,Hyphenation,Hyphenation,Césure,Silbentrennung,Dělení slov
+STR_TIME_TO_SLEEP,Time to Sleep,TIME TO SLEEP,Time to Sleep,Time to Sleep,Mise en veille automatique,Standby nach,Čas do uspání
+STR_REFRESH_FREQ,Refresh Frequency,REFRESH FREQUENCY,Refresh Frequency,Refresh Frequency,Fréquence de rafraîchissement,Anti-Ghosting nach,Frekvence obnovení
+STR_CALIBRE_SETTINGS,Calibre Settings,CALIBRE SETTINGS,Calibre Settings,Calibre Settings,Réglages Calibre,Calibre-Einstellungen,Nastavení Calibre
+STR_KOREADER_SYNC,KOReader Sync,KOREADER SYNC,KOReader Sync,KOReader Sync,Synchronisation KOReader,KOReader-Synchr.,KOReaderu Sync
+STR_CHECK_UPDATES,Check for updates,CHECK FOR UPDATES,Check for updates,Check for updates,Mise à jour,Nach Updates suchen,Zkontrolovat aktualizace
+STR_LANGUAGE,Language,LANGUAGE,Language,Language,Langue,Sprache,Jazyk
+STR_SELECT_WALLPAPER,Select Wallpaper,SELECT WALLPAPER,Select Wallpaper,Select Wallpaper,Fond d’écran,Bildauswahl Standby,Vybrat tapetu
+STR_CLEAR_READING_CACHE,Clear Reading Cache,CLEAR READING CACHE,Clear Reading Cache,Clear Reading Cache,Vider le cache de lecture,Lese-Cache leeren,Vymazat mezipaměť čtení
+STR_CALIBRE,Calibre,CALIBRE,Calibre,Calibre,Calibre,Calibre,Calibre
+STR_USERNAME,Username,USERNAME,Username,Username,Nom d’utilisateur,Benutzername,Uživatelské jméno
+STR_PASSWORD,Password,PASSWORD,Password,Password,Mot de passe,Passwort nötig,Heslo
+STR_SYNC_SERVER_URL,Sync Server URL,SYNC SERVER URL,Sync Server URL,Sync Server URL,URL du serveur,Sync-Server-URL,URL synch. serveru
+STR_DOCUMENT_MATCHING,Document Matching,DOCUMENT MATCHING,Document Matching,Document Matching,Correspondance,Dateizuordnung,Párování dokumentů
+STR_AUTHENTICATE,Authenticate,AUTHENTICATE,Authenticate,Authenticate,Se connecter,Authentifizieren,Ověření
+STR_KOREADER_USERNAME,KOReader Username,KOREADER USERNAME,KOReader Username,KOReader Username,Nom d’utilisateur,KOReader-Benutzername,Uživ. jméno KOReaderu
+STR_KOREADER_PASSWORD,KOReader Password,KOREADER PASSWORD,KOReader Password,KOReader Password,Mot de passe,KOReader-Passwort,Heslo KOReaderu
+STR_FILENAME,Filename,FILENAME,Filename,Filename,Nom de fichier,Dateiname,Název souboru
+STR_BINARY,Binary,BINARY,Binary,Binary,Binaire,Binärdatei,Binární
+STR_SET_CREDENTIALS_FIRST,Set credentials first,SET CREDENTIALS FIRST,Set credentials first,Set credentials first,Identifiants manquants,Zuerst anmelden,Nastavte přihlašovací údaje
+STR_WIFI_CONN_FAILED,WiFi connection failed,WIFI CONNECTION FAILED,WiFi connection failed,WiFi connection failed,Échec de connexion WiFi,WLAN-Verbindung fehlgeschlagen,Připojení k Wi-Fi selhalo
+STR_AUTHENTICATING,Authenticating...,AUTHENTICATING...,Authenticating...,Authenticating...,Connexion en cours…,Authentifizieren…,Ověřování...
+STR_AUTH_SUCCESS,Successfully authenticated!,SUCCESSFULLY AUTHENTICATED!,Successfully authenticated!,Successfully authenticated!,Connexion réussie !,Erfolgreich authentifiziert!,Úspěšné ověření!
+STR_KOREADER_AUTH,KOReader Auth,KOREADER AUTH,KOReader Auth,KOReader Auth,Auth KOReader,KOReader-Auth,Ověření KOReaderu
+STR_SYNC_READY,KOReader sync is ready to use,KOREADER SYNC IS READY TO USE,KOReader sync is ready to use,KOReader sync is ready to use,Synchronisation KOReader prête,KOReader-Synchronisierung bereit,Synchronizace KOReaderu je připravena k použití
+STR_AUTH_FAILED,Authentication Failed,AUTHENTICATION FAILED,Authentication Failed,Authentication Failed,Échec de la connexion,Authentifizierung fehlg.,Ověření selhalo
+STR_DONE,Done,DONE,Done,Done,OK,Erledigt,Hotovo
+STR_CLEAR_CACHE_WARNING_1,This will clear all cached book data.,THIS WILL CLEAR ALL CACHED BOOK DATA.,This will clear all cached book data.,This will clear all cached book data.,Le cache de votre bibliothèque sera entièrement vidé,Alle Buch-Caches werden geleert.,Tímto vymažete všechna data knih v mezipaměti.
+STR_CLEAR_CACHE_WARNING_2,All reading progress will be lost!,ALL READING PROGRESS WILL BE LOST!,All reading progress will be lost!,All reading progress will be lost!,Votre progression de lecture sera perdue !,Lesefortschritt wird gelöscht!,Veškerý průběh čtení bude ztracen!
+STR_CLEAR_CACHE_WARNING_3,Books will need to be re-indexed,BOOKS WILL NEED TO BE RE-INDEXED,Books will need to be re-indexed,Books will need to be re-indexed,Les livres devront être réindexés,Bücher müssen beim Öffnen,Knihy bude nutné znovu indexovat
+STR_CLEAR_CACHE_WARNING_4,when opened again.,WHEN OPENED AGAIN.,when opened again.,when opened again.,à leur prochaine ouverture.,neu eingelesen werden.,při opětovném otevření.
+STR_CLEARING_CACHE,Clearing cache...,CLEARING CACHE...,Clearing cache...,Clearing cache...,Suppression du cache…,Cache leeren…,Mazání mezipaměti...
+STR_CACHE_CLEARED,Cache Cleared,CACHE CLEARED,Cache Cleared,Cache Cleared,Cache supprimé,Cache geleert,Mezipaměť vymazána
+STR_ITEMS_REMOVED,items removed,ITEMS REMOVED,items removed,items removed,éléments supprimés,Einträge entfernt,položky odstraněny
+STR_FAILED_LOWER,failed,FAILED,failed,failed,ont échoué,fehlgeschlagen,selhalo
+STR_CLEAR_CACHE_FAILED,Failed to clear cache,FAILED TO CLEAR CACHE,Failed to clear cache,Failed to clear cache,Échec de la suppression du cache,Fehler beim Cache-Leeren,Vymazání mezipaměti se nezdařilo
+STR_CHECK_SERIAL_OUTPUT,Check serial output for details,CHECK SERIAL OUTPUT FOR DETAILS,Check serial output for details,Check serial output for details,Vérifiez la console série pour plus de détails,Serielle Ausgabe prüfen,Podrobnosti naleznete v sériovém výstupu
+STR_DARK,Dark,DARK,Dark,Dark,Sombre,Dunkel,Tmavý
+STR_LIGHT,Light,LIGHT,Light,Light,Clair,Hell,Světlý
+STR_CUSTOM,Custom,CUSTOM,Custom,Custom,Custom,Eigenes,Vlastní
+STR_COVER,Cover,COVER,Cover,Cover,Couverture,Umschlag,Obálka
+STR_NONE_OPT,None,NONE,None,None,Aucun,Leer,Žádný
+STR_FIT,Fit,FIT,Fit,Fit,Ajusté,Anpassen,Přizpůsobit
+STR_CROP,Crop,CROP,Crop,Crop,Rogné,Zuschnitt,Oříznout
+STR_NO_PROGRESS,No Progress,NO PROGRESS,No Progress,No Progress,Sans progression,Ohne Fortschr.,Žádný postup
+STR_FULL_OPT,Full,FULL,Full,Full,Complète,Vollst.,Plná
+STR_NEVER,Never,NEVER,Never,Never,Jamais,Nie,Nikdy
+STR_IN_READER,In Reader,IN READER,In Reader,In Reader,Dans le lecteur,Beim Lesen,Ve čtečce
+STR_ALWAYS,Always,ALWAYS,Always,Always,Toujours,Immer,Vždy
+STR_IGNORE,Ignore,IGNORE,Ignore,Ignore,Ignorer,Ignorieren,Ignorovat
+STR_SLEEP,Sleep,SLEEP,Sleep,Sleep,Mise en veille,Standby,Spánek
+STR_PAGE_TURN,Page Turn,PAGE TURN,Page Turn,Page Turn,Page suivante,Umblättern,Otáčení stránek
+STR_PORTRAIT,Portrait,PORTRAIT,Portrait,Portrait,Portrait,Hochformat,Na výšku
+STR_LANDSCAPE_CW,Landscape CW,LANDSCAPE CW,Landscape CW,Landscape CW,Paysage,Querformat rechts,Na šířku po směru hod. ručiček
+STR_INVERTED,Inverted,INVERTED,Inverted,Inverted,Inversé,Invertiert,Invertovaný
+STR_LANDSCAPE_CCW,Landscape CCW,LANDSCAPE CCW,Landscape CCW,Landscape CCW,Paysage inversé,Querformat links,Na šířku proti směru hod. ručiček
+STR_FRONT_LAYOUT_BCLR,"Bck, Cnfrm, Lft, Rght","BCK, CNFRM, LFT, RGHT","Bck, Cnfrm, Lft, Rght","Bck, Cnfrm, Lft, Rght","Ret, OK, Gauche, Droite","Zurück, Bst, L, R","Zpět, Potvrdit, Vlevo, Vpravo"
+STR_FRONT_LAYOUT_LRBC,"Lft, Rght, Bck, Cnfrm","LFT, RGHT, BCK, CNFRM","Lft, Rght, Bck, Cnfrm","Lft, Rght, Bck, Cnfrm","Gauche, Droite, Ret, OK","L, R, Zurück, Bst","Vlevo, Vpravo, Zpět, Potvrdit"
+STR_FRONT_LAYOUT_LBCR,"Lft, Bck, Cnfrm, Rght","LFT, BCK, CNFRM, RGHT","Lft, Bck, Cnfrm, Rght","Lft, Bck, Cnfrm, Rght","Gauche, Ret, OK, Droite","L, Zurück, Bst, R","Vlevo, Zpět, Potvrdit, Vpravo"
+STR_PREV_NEXT,Prev/Next,PREV/NEXT,Prev/Next,Prev/Next,Prec/Suiv,Zurück/Weiter,Předchozí/Další
+STR_NEXT_PREV,Next/Prev,NEXT/PREV,Next/Prev,Next/Prev,Suiv/Prec,Weiter/Zuürck,Další/Předchozí
+STR_BOOKERLY,Bookerly,BOOKERLY,Bookerly,Bookerly,Bookerly,Bookerly,Bookerly
+STR_NOTO_SANS,Noto Sans,NOTO SANS,Noto Sans,Noto Sans,Noto Sans,Noto Sans,Noto Sans
+STR_OPEN_DYSLEXIC,Open Dyslexic,OPEN DYSLEXIC,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic
+STR_SMALL,Small,SMALL,Small,Small,Petite,Klein,Malý
+STR_MEDIUM,Medium,MEDIUM,Medium,Medium,Moyenne,Mittel,Střední
+STR_LARGE,Large,LARGE,Large,Large,Grande,Groß,Velký
+STR_X_LARGE,X Large,X LARGE,X Large,X Large,T Grande,Extragroß,Obří
+STR_TIGHT,Tight,TIGHT,Tight,Tight,Serré,Eng,Těsný
+STR_NORMAL,Normal,NORMAL,Normal,Normal,Normal,Normal,Normální
+STR_WIDE,Wide,WIDE,Wide,Wide,Large,Breit,Široký
+STR_JUSTIFY,Justify,JUSTIFY,Justify,Justify,Justifier,Blocksatz,Zarovnat do bloku
+STR_ALIGN_LEFT,Left,LEFT,Left,Left,Gauche,Links,Vlevo
+STR_CENTER,Center,CENTER,Center,Center,Centre,Zentriert,Na střed
+STR_ALIGN_RIGHT,Right,RIGHT,Right,Right,Droite,Rechts,Vpravo
+STR_MIN_1,1 min,1 MIN,1 min,1 min,1 min,1 Min,1 min
+STR_MIN_5,5 min,5 MIN,5 min,5 min,5 min,5 Min,5 min
+STR_MIN_10,10 min,10 MIN,10 min,10 min,10 min,10 Min,10 min
+STR_MIN_15,15 min,15 MIN,15 min,15 min,15 min,15 Min,15 min
+STR_MIN_30,30 min,30 MIN,30 min,30 min,30 min,30 Min,30 min
+STR_PAGES_1,1 page,1 PAGE,1 page,1 page,1 page,1 Seite,1 stránka
+STR_PAGES_5,5 pages,5 PAGES,5 pages,5 pages,5 pages,5 Seiten,5 stránek
+STR_PAGES_10,10 pages,10 PAGES,10 pages,10 pages,10 pages,10 Seiten,10 stránek
+STR_PAGES_15,15 pages,15 PAGES,15 pages,15 pages,15 pages,15 Seiten,15 stránek
+STR_PAGES_30,30 pages,30 PAGES,30 pages,30 pages,30 pages,30 Seiten,30 stránek
+STR_UPDATE,Update,UPDATE,Update,Update,Mise à jour,Update,Aktualizace
+STR_CHECKING_UPDATE,Checking for update...,CHECKING FOR UPDATE...,Checking for update...,Checking for update...,Recherche de mises à jour en cours…,Update suchen…,Kontrola aktualizací…
+STR_NEW_UPDATE,New update available!,NEW UPDATE AVAILABLE!,New update available!,New update available!,Nouvelle mise à jour disponible !,Neues Update verfügbar!,Nová aktualizace k dispozici!
+STR_CURRENT_VERSION,Current Version: ,CURRENT VERSION: ,Current Version: ,Current Version: ,Version actuelle :,Aktuelle Version:,Aktuální verze:
+STR_NEW_VERSION,New Version: ,NEW VERSION: ,New Version: ,New Version: ,Nouvelle version : ,Neue Version:,Nová verze:
+STR_UPDATING,Updating...,UPDATING...,Updating...,Updating...,Mise à jour en cours…,Aktualisiere…,Aktualizace...
+STR_NO_UPDATE,No update available,NO UPDATE AVAILABLE,No update available,No update available,Aucune mise à jour disponible,Kein Update verfügbar,Žádná aktualizace k dispozici
+STR_UPDATE_FAILED,Update failed,UPDATE FAILED,Update failed,Update failed,Échec de la mise à jour,Updatefehler,Aktualizace selhala
+STR_UPDATE_COMPLETE,Update complete,UPDATE COMPLETE,Update complete,Update complete,Mise à jour effectuée,Update fertig,Aktualizace dokončena
+STR_POWER_ON_HINT,Press and hold power button to turn back on,PRESS AND HOLD POWER BUTTON TO TURN BACK ON,Press and hold power button to turn back on,Press and hold power button to turn back on,Maintenir le bouton d’alimentation pour redémarrer,"An-Knopf lang drücken, um neuzustarten",Stiskněte a podržte tlačítko napájení pro opětovné zapnutí
+STR_EXTERNAL_FONT,External Font,EXTERNAL FONT,External Font,External Font,Police externe,Externe Schrift,Externí písmo
+STR_BUILTIN_DISABLED,Built-in (Disabled),BUILT-IN (DISABLED),Built-in (Disabled),Built-in (Disabled),Intégrée (désactivée),Vorinstalliert (aus),Vestavěné (Zakázáno)
+STR_NO_ENTRIES,No entries found,NO ENTRIES FOUND,No entries found,No entries found,Aucune entrée trouvée,Keine Einträge,Žádné položky nenalezeny
+STR_DOWNLOADING,Downloading...,DOWNLOADING...,Downloading...,Downloading...,Téléchargement en cours…,Herunterladen…,Stahování...
+STR_DOWNLOAD_FAILED,Download failed,DOWNLOAD FAILED,Download failed,Download failed,Échec du téléchargement,Ladefehler,Stahování selhalo
+STR_ERROR_MSG,Error:,ERROR,Error:,Error:,Erreur : ,Fehler:,Chyba:
+STR_UNNAMED,Unnamed,UNNAMED,Unnamed,Unnamed,Sans titre,Unbenannt,Nepojmenované
+STR_NO_SERVER_URL,No server URL configured,NO SERVER URL CONFIGURED,No server URL configured,No server URL configured,Aucune URL serveur configurée,Keine Server-URL konfiguriert,Není nakonfigurována adresa URL serveru
+STR_FETCH_FEED_FAILED,Failed to fetch feed,FAILED TO FETCH FEED,Failed to fetch feed,Failed to fetch feed,Échec du téléchargement du flux,Feedfehler,Načtení kanálu se nezdařilo
+STR_PARSE_FEED_FAILED,Failed to parse feed,FAILED TO PARSE FEED,Failed to parse feed,Failed to parse feed,Échec de l’analyse du flux,Feed-Format ungültig,Analyzování kanálu se nezdařilo
+STR_NETWORK_PREFIX,Network: ,NETWORK: ,Network: ,Network: ,Réseau : ,Netzwerk:,Síť:
+STR_IP_ADDRESS_PREFIX,IP Address: ,IP ADDRESS: ,IP Address: ,IP Address: ,Adresse IP : ,IP-Adresse:,IP adresa:
+STR_SCAN_QR_WIFI_HINT,or scan QR code with your phone to connect to Wifi.,OR SCAN QR CODE WITH YOUR PHONE TO CONNECT TO WIFI.,or scan QR code with your phone to connect to Wifi.,or scan QR code with your phone to connect to Wifi.,or scan QR code with your phone to connect to Wifi.,oder QR-Code mit dem Handy scannen für WLAN.,nebo naskenujte QR kód telefonem pro připojení k Wi-Fi.
+STR_ERROR_GENERAL_FAILURE,Error: General failure,ERROR: GENERAL FAILURE,Error: General failure,Error: General failure,Erreur : Échec général,Fehler: Allgemeiner Fehler,Chyba: Obecná chyba
+STR_ERROR_NETWORK_NOT_FOUND,Error: Network not found,ERROR: NETWORK NOT FOUND,Error: Network not found,Error: Network not found,Erreur : Réseau introuvable,Fehler: Kein Netzwerk,Chyba: Síť nenalezena
+STR_ERROR_CONNECTION_TIMEOUT,Error: Connection timeout,ERROR: CONNECTION TIMEOUT,Error: Connection timeout,Error: Connection timeout,Erreur : Délai de connexion dépassé,Fehler: Zeitüberschreitung,Chyba: Časový limit připojení
+STR_SD_CARD,SD card,SD CARD,SD card,SD card,Carte SD,SD-Karte,SD karta
+STR_BACK,« Back,« BACK,« Back,« Back,« Retour,« Zurück,« Zpět
+STR_EXIT,« Exit,« EXIT,« Exit,« Exit,« Sortie,« Verlassen,« Konec
+STR_HOME,« Home,« HOME,« Home,« Home,« Accueil,« Start,« Domů
+STR_SAVE,« Save,« SAVE,« Save,« Save,« Sauver,« Speichern,« Uložit
+STR_SELECT,Select,SELECT,Select,Select,OK,Auswahl,Vybrat
+STR_TOGGLE,Toggle,TOGGLE,Toggle,Toggle,Modifier,Ändern,Přepnout
+STR_CONFIRM,Confirm,CONFIRM,Confirm,Confirm,Confirmer,Bestätigen,Potvrdit
+STR_CANCEL,Cancel,CANCEL,Cancel,Cancel,Annuler,Abbrechen,Zrušit
+STR_CONNECT,Connect,CONNECT,Connect,Connect,OK,Verbinden,Připojit
+STR_OPEN,Open,OPEN,Open,Open,Ouvrir,Öffnen,Otevřít
+STR_DOWNLOAD,Download,DOWNLOAD,Download,Download,Télécharger,Herunterladen,Stáhnout
+STR_RETRY,Retry,RETRY,Retry,Retry,Réessayer,Wiederh.,Zkusit znovu
+STR_YES,Yes,YES,Yes,Yes,Oui,Ja,Ano
+STR_NO,No,NO,No,No,Non,Nein,Ne
+STR_STATE_ON,ON,ON,ON,ON,ON,An,ZAP
+STR_STATE_OFF,OFF,OFF,OFF,OFF,OFF,Aus,VYP
+STR_SET,Set,SET,Set,Set,Défini,Gesetzt,Nastavit
+STR_NOT_SET,Not Set,NOT SET,Not Set,Not Set,Non défini,Leer,Nenastaveno
+STR_DIR_LEFT,Left,LEFT,Left,Left,Gauche,Links,Vlevo
+STR_DIR_RIGHT,Right,RIGHT,Right,Right,Droite,Rechts,Vpravo
+STR_DIR_UP,Up,UP,Up,Up,Haut,Hoch,Nahoru
+STR_DIR_DOWN,Down,DOWN,Down,Down,Bas,Runter,Dolů
+STR_CAPS_ON,CAPS,CAPS,CAPS,CAPS,MAJ,UMSCH,PÍSMO
+STR_CAPS_OFF,caps,CAPS,caps,caps,maj,umsch,písmo
+STR_OK_BUTTON,OK,OK,OK,OK,OK,OK,OK
+STR_ON_MARKER,[ON],[ON],[ON],[ON],[ON],[AN],[ZAP]
+STR_SLEEP_COVER_FILTER,Sleep Screen Cover Filter,SLEEP SCREEN COVER FILTER,Sleep Screen Cover Filter,Sleep Screen Cover Filter,Filtre affichage veille,Standby-Coverfilter,Filtr obrazovky spánku
+STR_FILTER_CONTRAST,Contrast,CONTRAST,Contrast,Contrast,Contraste,Kontrast,Kontrast
+STR_STATUS_BAR_FULL_PERCENT,Full w/ Percentage,FULL W/ PERCENTAGE,Full w/ Percentage,Full w/ Percentage,Complète + %,Komplett + Prozent,Plný s procenty
+STR_STATUS_BAR_FULL_BOOK,Full w/ Book Bar,FULL W/ BOOK BAR,Full w/ Book Bar,Full w/ Book Bar,Complète + barre livre,Komplett + Buch,Plný s pruhem knih
+STR_STATUS_BAR_BOOK_ONLY,Book Bar Only,BOOK BAR ONLY,Book Bar Only,Book Bar Only,Barre livre,Nur Buch,Pouze pruh knih
+STR_STATUS_BAR_FULL_CHAPTER,Full w/ Chapter Bar,FULL W/ CHAPTER BAR,Full w/ Chapter Bar,Full w/ Chapter Bar,Complète + barre chapitre,Komplett + Kapitel,Plná s pruhem kapitol
+STR_UI_THEME,UI Theme,UI THEME,UI Theme,UI Theme,Thème de l’interface,System-Design,Šablona rozhraní
+STR_THEME_CLASSIC,Classic,CLASSIC,Classic,Classic,Classique,Klassisch,Klasická
+STR_THEME_LYRA,Lyra,LYRA,Lyra,Lyra,Lyra,Lyra,Lyra
+STR_SUNLIGHT_FADING_FIX,Sunlight Fading Fix,SUNLIGHT FADING FIX,Sunlight Fading Fix,Sunlight Fading Fix,Amélioration de la lisibilité au soleil,Anti-Verblassen,Oprava blednutí na slunci
+STR_REMAP_FRONT_BUTTONS,Remap Front Buttons,REMAP FRONT BUTTONS,Remap Front Buttons,Remap Front Buttons,Réassigner les boutons avant,Vordere Tasten belegen,Přemapovat přední tlačítka
+STR_OPDS_BROWSER,OPDS Browser,OPDS BROWSER,OPDS Browser,OPDS Browser,Navigateur OPDS,OPDS-Browser,Prohlížeč OPDS
+STR_COVER_CUSTOM,Cover + Custom,COVER + CUSTOM,Cover + Custom,Cover + Custom,Couverture + Custom,Umschlag + Eigenes,Obálka + Vlastní
+STR_RECENTS,Recents,RECENTS,Recents,Recents,Récents,Zuletzt,Nedávné
+STR_MENU_RECENT_BOOKS,Recent Books,RECENT BOOKS,Recent Books,Recent Books,Livres récents,Zuletzt gelesen,Nedávné knihy
+STR_NO_RECENT_BOOKS,No recent books,NO RECENT BOOKS,No recent books,No recent books,Aucun livre récent,Keine Bücher,Žádné nedávné knihy
+STR_CALIBRE_DESC,Use Calibre wireless device transfers,USE CALIBRE WIRELESS DEVICE TRANSFERS,Use Calibre wireless device transfers,Use Calibre wireless device transfers,Utiliser les transferts sans fil Calibre,Calibre-Übertragung (WLAN),Používat přenosy bezdrátových zařízení Calibre
+STR_FORGET_AND_REMOVE,Forget network and remove saved password?,FORGET NETWORK AND REMOVE SAVED PASSWORD?,Forget network and remove saved password?,Forget network and remove saved password?,Oublier le réseau et supprimer le mot de passe enregistré ?,WLAN entfernen & Passwort löschen?,Zapomenout síť a odstranit uložené heslo?
+STR_FORGET_BUTTON,Forget network,FORGET NETWORK,Forget network,Forget network,Oublier le réseau,WLAN entfernen,Zapomenout na síť
+STR_CALIBRE_STARTING,Starting Calibre...,STARTING CALIBRE...,Starting Calibre...,Starting Calibre...,Démarrage de Calibre...,Calibre starten…,Spuštění Calibre...
+STR_CALIBRE_SETUP,Setup,SETUP,Setup,Setup,Configuration,Installation,Nastavení
+STR_CALIBRE_STATUS,Status,STATUS,Status,Status,Statut,Status,Stav
+STR_CLEAR_BUTTON,Clear,CLEAR,Clear,Clear,Effacer,Leeren,Vymazat
+STR_DEFAULT_VALUE,Default,DEFAULT,Default,Default,Défaut,Standard,Výchozí
+STR_REMAP_PROMPT,Press a front button for each role,PRESS A FRONT BUTTON FOR EACH ROLE,Press a front button for each role,Press a front button for each role,Appuyez sur un bouton avant pour chaque rôle,Entsprechende Vordertaste drücken,Stiskněte přední tlačítko pro každou roli
+STR_UNASSIGNED,Unassigned,UNASSIGNED,Unassigned,Unassigned,Non assigné,Leer,Nepřiřazeno
+STR_ALREADY_ASSIGNED,Already assigned,ALREADY ASSIGNED,Already assigned,Already assigned,Déjà assigné,Bereits zugeordnet,Již přiřazeno
+STR_REMAP_RESET_HINT,Side button Up: Reset to default layout,SIDE BUTTON UP: RESET TO DEFAULT LAYOUT,Side button Up: Reset to default layout,Side button Up: Reset to default layout,Bouton latéral haut : Réinitialiser,Seitentaste hoch: Standard,Boční tlačítko Nahoru: Obnovit výchozí rozvržení
+STR_REMAP_CANCEL_HINT,Side button Down: Cancel remapping,SIDE BUTTON DOWN: CANCEL REMAPPING,Side button Down: Cancel remapping,Side button Down: Cancel remapping,Bouton latéral bas : Annuler le réglage,Seitentaste runter: Abbrechen,Boční tlačítko Dolů: Zrušit přemapování
+STR_HW_BACK_LABEL,Back (1st button),BACK (1ST BUTTON),Back (1st button),Back (1st button),Retour (1er bouton),Zurück (1. Taste),Zpět (1. tlačítko)
+STR_HW_CONFIRM_LABEL,Confirm (2nd button),CONFIRM (2ND BUTTON),Confirm (2nd button),Confirm (2nd button),OK (2ème bouton),Bestätigen (2. Taste),Potvrdit (2. tlačítko)
+STR_HW_LEFT_LABEL,Left (3rd button),LEFT (3RD BUTTON),Left (3rd button),Left (3rd button),Gauche (3ème bouton),Links (3. Taste),Vlevo (3. tlačítko)
+STR_HW_RIGHT_LABEL,Right (4th button),RIGHT (4TH BUTTON),Right (4th button),Right (4th button),Droite (4ème bouton),Rechts (4. Taste),Vpravo (4. tlačítko)
+STR_GO_TO_PERCENT,Go to %,GO TO %,Go to %,Go to %,Aller à %,Gehe zu %,Přejít na %
+STR_GO_HOME_BUTTON,Go Home,GO HOME,Go Home,Go Home,Aller à l’accueil,Zum Anfang,Přejít Domů
+STR_SYNC_PROGRESS,Sync Progress,SYNC PROGRESS,Sync Progress,Sync Progress,Synchroniser la progression,Fortschritt synchronisieren,Průběh synchronizace
+STR_DELETE_CACHE,Delete Book Cache,DELETE BOOK CACHE,Delete Book Cache,Delete Book Cache,Supprimer le cache du livre,Buch-Cache leeren,Smazat mezipaměť knihy
+STR_CHAPTER_PREFIX,Chapter: ,CHAPTER: ,Chapter: ,Chapter: ,Chapitre : ,Kapitel:,Kapitola:
+STR_PAGES_SEPARATOR, pages  |  , PAGES  |  , pages  |  , pages  |  , pages  |  , Seiten  |  ,stránek |
+STR_BOOK_PREFIX,Book: ,BOOK: ,Book: ,Book: ,Livre : ,Buch: ,Kniha:
+STR_KBD_SHIFT,shift,SHIFT,shift,shift,maj,umsch,shift
+STR_KBD_SHIFT_CAPS,SHIFT,SHIFT,SHIFT,SHIFT,MAJ,UMSCH,SHIFT
+STR_KBD_LOCK,LOCK,LOCK,LOCK,LOCK,VERR MAJ,FESTST,ZÁMEK
+STR_CALIBRE_URL_HINT,"For Calibre, add /opds to your URL","FOR CALIBRE, ADD /OPDS TO YOUR URL","For Calibre, add /opds to your URL","For Calibre, add /opds to your URL","Pour Calibre, ajoutez /opds à l’URL",Calibre: URL um /opds ergänzen,Pro Calibre přidejte /opds do URL adresy
+STR_PERCENT_STEP_HINT,Left/Right: 1%  Up/Down: 10%,LEFT/RIGHT: 1%  UP/DOWN: 10%,Left/Right: 1%  Up/Down: 10%,Left/Right: 1%  Up/Down: 10%,Gauche/Droite : 1%  Haut/Bas : 10%,links/rechts: 1% hoch/runter: 10%,Vlevo/Vpravo: 1 % Nahoru/Dolů: 10 %
+STR_SYNCING_TIME,Syncing time...,SYNCING TIME...,Syncing time...,Syncing time...,Synchronisation de l’heure…,Zeit synchonisieren…,Čas synchronizace...
+STR_CALC_HASH,Calculating document hash...,CALCULATING DOCUMENT HASH...,Calculating document hash...,Calculating document hash...,Calcul du hash du document…,Dokument-Hash berechnen…,Výpočet hashe dokumentu...
+STR_HASH_FAILED,Failed to calculate document hash,FAILED TO CALCULATE DOCUMENT HASH,Failed to calculate document hash,Failed to calculate document hash,Échec du calcul du hash du document,Dokument-Hash fehlgeschlagen,Nepodařilo se vypočítat hash dokumentu
+STR_FETCH_PROGRESS,Fetching remote progress...,FETCHING REMOTE PROGRESS...,Fetching remote progress...,Fetching remote progress...,Téléchargement de la progression…,Externen Fortschritt abrufen...,Načítání vzdáleného průběhu...
+STR_UPLOAD_PROGRESS,Uploading progress...,UPLOADING PROGRESS...,Uploading progress...,Uploading progress...,Envoi de la progression…,Fortschritt hochladen…,Průběh nahrávání...
+STR_NO_CREDENTIALS_MSG,No credentials configured,NO CREDENTIALS CONFIGURED,No credentials configured,No credentials configured,Aucun identifiant configuré,Zugangsdaten fehlen,Přihlašovací údaje nejsou nakonfigurovány
+STR_KOREADER_SETUP_HINT,Set up KOReader account in Settings,SET UP KOREADER ACCOUNT IN SETTINGS,Set up KOReader account in Settings,Set up KOReader account in Settings,Configurez le compte KOReader dans les réglages,KOReader-Konto unter Einst. anlegen,Nastavit účet KOReader v Nastavení
+STR_PROGRESS_FOUND,Progress found!,PROGRESS FOUND!,Progress found!,Progress found!,Progression trouvée !,Gefunden!,Nalezen průběh!
+STR_REMOTE_LABEL,Remote:,REMOTE,Remote:,Remote:,En ligne :,Extern:,Vzdálené:
+STR_LOCAL_LABEL,Local:,LOCAL,Local:,Local:,Locale :,Lokal:,Lokální:
+STR_PAGE_OVERALL_FORMAT,"Page %d, %.2f%% overall","PAGE %d, %.2f%% OVERALL","Page %d, %.2f%% overall","Page %d, %.2f%% overall","Page %d, %.2f%% au total","  Seite %d, %.2f%% insgesamt","Stránka %d, celkově %.2f%%"
+STR_PAGE_TOTAL_OVERALL_FORMAT,"Page %d/%d, %.2f%% overall","PAGE %d/%d, %.2f%% OVERALL","Page %d/%d, %.2f%% overall","Page %d/%d, %.2f%% overall","Page %d/%d, %.2f%% au total","  Seite %d/%d, %.2f%% insgesamt","Stránka %d/%d, celkově %.2f%%"
+STR_DEVICE_FROM_FORMAT,  From: %s,  FROM: %s,  From: %s,  From: %s,  De : %s,  Von: %s,  Od: %s
+STR_APPLY_REMOTE,Apply remote progress,APPLY REMOTE PROGRESS,Apply remote progress,Apply remote progress,Appliquer la progression en ligne,Ext. Fortschritt übern.,Použít vzdálený postup
+STR_UPLOAD_LOCAL,Upload local progress,UPLOAD LOCAL PROGRESS,Upload local progress,Upload local progress,Envoyer la progression locale,Lokalen Fortschritt hochl.,Nahrát lokální postup
+STR_NO_REMOTE_MSG,No remote progress found,NO REMOTE PROGRESS FOUND,No remote progress found,No remote progress found,Aucune progression en ligne trouvée,Kein externer Fortschritt,Nenalezen žádný vzdálený postup
+STR_UPLOAD_PROMPT,Upload current position?,UPLOAD CURRENT POSITION?,Upload current position?,Upload current position?,Envoyer la position actuelle ?,Aktuelle Position hochladen?,Nahrát aktuální pozici?
+STR_UPLOAD_SUCCESS,Progress uploaded!,PROGRESS UPLOADED!,Progress uploaded!,Progress uploaded!,Progression envoyée !,Hochgeladen!,Postup nahrán!
+STR_SYNC_FAILED_MSG,Sync failed,SYNC FAILED,Sync failed,Sync failed,Échec de la synchronisation,Fehlgeschlagen,Synchronizace se nezdařila
+STR_SECTION_PREFIX,Section ,SECTION ,Section ,Section ,Section ,Abschnitt,Sekce
+STR_UPLOAD,Upload,UPLOAD,Upload,Upload,Envoi,Hochladen,Nahrát
+STR_BOOK_S_STYLE,Book's Style,BOOK'S STYLE,Book's Style,Book's Style,Style du livre,Buch-Stil,Styl knihy
+STR_EMBEDDED_STYLE,Embedded Style,EMBEDDED STYLE,Embedded Style,Embedded Style,Style intégré,Eingebetteter Stil,Vložený styl
+STR_OPDS_SERVER_URL,OPDS Server URL,OPDS SERVER URL,OPDS Server URL,OPDS Server URL,URL du serveur OPDS,OPDS-Server-URL,URL serveru OPDS
