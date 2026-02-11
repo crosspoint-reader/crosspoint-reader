@@ -218,12 +218,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     // Handle XTC file
     Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastXtc.load()) {
-      Serial.println("[SLP] Failed to load last XTC");
+      Serial.printf("[%lu] [SLP] Failed to load last XTC\n", millis());
       return (this->*renderNoCoverSleepScreen)();
     }
 
     if (!lastXtc.generateCoverBmp()) {
-      Serial.println("[SLP] Failed to generate XTC cover bmp");
+      Serial.printf("[%lu] [SLP] Failed to generate XTC cover bmp\n", millis());
       return (this->*renderNoCoverSleepScreen)();
     }
 
@@ -232,12 +232,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     // Handle TXT file - looks for cover image in the same folder
     Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastTxt.load()) {
-      Serial.println("[SLP] Failed to load last TXT");
+      Serial.printf("[%lu] [SLP] Failed to load last TXT\n", millis());
       return (this->*renderNoCoverSleepScreen)();
     }
 
     if (!lastTxt.generateCoverBmp()) {
-      Serial.println("[SLP] No cover image found for TXT file");
+      Serial.printf("[%lu] [SLP] No cover image found for TXT file\n", millis());
       return (this->*renderNoCoverSleepScreen)();
     }
 
@@ -247,12 +247,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
     // Skip loading css since we only need metadata here
     if (!lastEpub.load(true, true)) {
-      Serial.println("[SLP] Failed to load last epub");
+      Serial.printf("[%lu] [SLP] Failed to load last epub\n", millis());
       return (this->*renderNoCoverSleepScreen)();
     }
 
     if (!lastEpub.generateCoverBmp(cropped)) {
-      Serial.println("[SLP] Failed to generate cover bmp");
+      Serial.printf("[%lu] [SLP] Failed to generate cover bmp\n", millis());
       return (this->*renderNoCoverSleepScreen)();
     }
 
@@ -265,7 +265,7 @@ void SleepActivity::renderCoverSleepScreen() const {
   if (Storage.openFileForRead("SLP", coverBmpPath, file)) {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      Serial.printf("[SLP] Rendering sleep cover: %s\n", coverBmpPath.c_str());
+      Serial.printf("[%lu] [SLP] Rendering sleep cover: %s\n", millis(), coverBmpPath.c_str());
       renderBitmapSleepScreen(bitmap);
       return;
     }
