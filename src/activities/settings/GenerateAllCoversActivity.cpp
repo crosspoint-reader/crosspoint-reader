@@ -243,7 +243,6 @@ void GenerateAllCoversActivity::renderProgress() {
   renderer.clearScreen();
 
   const int screenWidth = renderer.getScreenWidth();
-  const int screenHeight = renderer.getScreenHeight();
   int y = SCREEN_MARGIN;
 
   // Title
@@ -320,7 +319,6 @@ void GenerateAllCoversActivity::renderProgress() {
 void GenerateAllCoversActivity::renderSummary() {
   renderer.clearScreen();
 
-  const int screenWidth = renderer.getScreenWidth();
   int y = SCREEN_MARGIN + 20;
 
   // Title
