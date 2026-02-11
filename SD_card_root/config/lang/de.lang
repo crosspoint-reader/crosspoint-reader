@@ -154,6 +154,8 @@ Select Chapter=Kapitel waehlen
 Chapter: =Kapitel:
 Book: =Buch:
  pages= Seiten
+ pages  |  = Seiten  |
+Out of bounds=Ausserhalb des Bereichs
 End of book=Ende des Buches
 Empty chapter=Leeres Kapitel
 Empty file=Leere Datei
@@ -187,8 +189,11 @@ Connection Failed=Verbindung fehlgeschlagen
 Error: General failure=Fehler: Allgemeiner Fehler
 Error: Network not found=Fehler: Netzwerk nicht gefunden
 Error: Connection timeout=Fehler: Zeitlimit ueberschritten
+Forget=Vergessen
+Forget Network=Netzwerk vergessen
 Forget network and remove saved password?=Netzwerk vergessen und Passwort loeschen?
 Forget network=Netzwerk vergessen
+Refresh=Aktualisieren
 Enter WiFi Password=WLAN-Passwort eingeben
 
 # === HOTSPOT / FILE TRANSFER ===

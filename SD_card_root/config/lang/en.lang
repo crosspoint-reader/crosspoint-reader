@@ -157,6 +157,8 @@ Select Chapter=Select Chapter
 Chapter: =Chapter:
 Book: =Book:
  pages= pages
+ pages  |  = pages  |
+Out of bounds=Out of bounds
 End of book=End of book
 Empty chapter=Empty chapter
 Empty file=Empty file
@@ -190,8 +192,11 @@ Connection Failed=Connection Failed
 Error: General failure=Error: General failure
 Error: Network not found=Error: Network not found
 Error: Connection timeout=Error: Connection timeout
+Forget=Forget
+Forget Network=Forget Network
 Forget network and remove saved password?=Forget network and remove saved password?
 Forget network=Forget network
+Refresh=Refresh
 Enter WiFi Password=Enter WiFi Password
 
 # === HOTSPOT / FILE TRANSFER ===

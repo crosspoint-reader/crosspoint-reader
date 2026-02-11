@@ -637,12 +637,10 @@ void WifiSelectionActivity::renderNetworkList() const {
   // Draw help text
   renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 75, T("* = Encrypted | + = Saved"));
 
-  const bool hasSavedPassword =
-      !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
+  const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
   const char* forgetLabel = hasSavedPassword ? T("Forget") : "";
 
-  const auto labels =
-      mappedInput.mapLabels(T("\xC2\xAB Back"), T("Connect"), forgetLabel, T("Refresh"));
+  const auto labels = mappedInput.mapLabels(T("\xC2\xAB Back"), T("Connect"), forgetLabel, T("Refresh"));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

@@ -154,6 +154,8 @@ Select Chapter=Vybrat kapitolu
 Chapter: =Kapitola:
 Book: =Kniha:
  pages= stránek
+ pages  |  = stránek  |
+Out of bounds=Mimo rozsah
 End of book=Konec knihy
 Empty chapter=Prázdná kapitola
 Empty file=Prázdný soubor
@@ -187,8 +189,11 @@ Connection Failed=Připojení selhalo
 Error: General failure=Chyba: Obecná chyba
 Error: Network not found=Chyba: Síť nenalezena
 Error: Connection timeout=Chyba: Vypršel časový limit
+Forget=Zapomenout
+Forget Network=Zapomenout síť
 Forget network and remove saved password?=Zapomenout síť a smazat uložené heslo?
 Forget network=Zapomenout síť
+Refresh=Obnovit
 Enter WiFi Password=Zadejte heslo WiFi
 
 # === HOTSPOT / FILE TRANSFER ===
