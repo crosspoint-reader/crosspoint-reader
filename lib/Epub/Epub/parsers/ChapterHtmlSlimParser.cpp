@@ -316,10 +316,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
         strncpy(self->currentAsideId, id, sizeof(self->currentAsideId) - 1);
         self->currentAsideId[sizeof(self->currentAsideId) - 1] = '\0';
-      } else {
-        // Pass 2: Skip the aside (we already have it from Pass 1)
-        self->skipUntilDepth = self->depth;
       }
+      // Pass 2: Don't skip - just display the aside normally
+      // Virtual files will be created separately for same-file references
     }
 
     self->depth += 1;
@@ -339,8 +338,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // Check for internal EPUB link
     bool isInternalLink = isInternalEpubLink(href);
 
+    // Special case: javascript:void(0) links with data attributes
+    // Example: <a href="javascript:void(0)"
+    // data-xyz="{&quot;name&quot;:&quot;OPS/ch2.xhtml&quot;,&quot;frag&quot;:&quot;id46&quot;}">
     if (href && strncmp(href, "javascript:", 11) == 0) {
       isInternalLink = false;
+      // TODO: Parse data-* attributes to extract actual href
     }
 
     // If it's an internal link, treat it as a footnote

@@ -317,7 +317,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     return false;
   }
 
-  // --- Footnote Generation Logic (Merged from HEAD) ---
+  // --- Footnote Generation Logic ---
 
   // Inline footnotes
   for (int i = 0; i < visitor->inlineFootnoteCount; i++) {
@@ -331,19 +331,19 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     snprintf(inlineFilename, sizeof(inlineFilename), "inline_%s.html", inlineId);
     std::string fullPath = epub->getCachePath() + "/" + std::string(inlineFilename);
 
-    FsFile file;
-    if (Storage.openFileForWrite("SCT", fullPath, file)) {
-      file.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-      file.println("<!DOCTYPE html>");
-      file.println("<html xmlns=\"http://www.w3.org/1999/xhtml\">");
-      file.println("<head><meta charset=\"UTF-8\"/><title>Footnote</title></head>");
-      file.println("<body>");
-      file.print("<p id=\"");
-      file.print(inlineId);
-      file.print("\">");
-      writeEscapedXml(file, inlineText);
-      file.println("</p></body></html>");
-      file.close();
+    FsFile inlineFile;  // Different name - doesn't shadow this->file
+    if (Storage.openFileForWrite("SCT", fullPath, inlineFile)) {
+      inlineFile.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+      inlineFile.println("<!DOCTYPE html>");
+      inlineFile.println("<html xmlns=\"http://www.w3.org/1999/xhtml\">");
+      inlineFile.println("<head><meta charset=\"UTF-8\"/><title>Footnote</title></head>");
+      inlineFile.println("<body>");
+      inlineFile.print("<p id=\"");
+      inlineFile.print(inlineId);
+      inlineFile.print("\">");
+      writeEscapedXml(inlineFile, inlineText);
+      inlineFile.println("</p></body></html>");
+      inlineFile.close();
 
       int virtualIndex = epub->addVirtualSpineItem(fullPath);
       char newHref[128];
@@ -364,19 +364,19 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     snprintf(pnoteFilename, sizeof(pnoteFilename), "pnote_%s.html", pnoteId);
     std::string fullPath = epub->getCachePath() + "/" + std::string(pnoteFilename);
 
-    FsFile file;
-    if (Storage.openFileForWrite("SCT", fullPath, file)) {
-      file.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-      file.println("<!DOCTYPE html>");
-      file.println("<html xmlns=\"http://www.w3.org/1999/xhtml\">");
-      file.println("<head><meta charset=\"UTF-8\"/><title>Note</title></head>");
-      file.println("<body>");
-      file.print("<p id=\"");
-      file.print(pnoteId);
-      file.print("\">");
-      writeEscapedXml(file, pnoteText);
-      file.println("</p></body></html>");
-      file.close();
+    FsFile pnoteFile;  // Different name - doesn't shadow this->file
+    if (Storage.openFileForWrite("SCT", fullPath, pnoteFile)) {
+      pnoteFile.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+      pnoteFile.println("<!DOCTYPE html>");
+      pnoteFile.println("<html xmlns=\"http://www.w3.org/1999/xhtml\">");
+      pnoteFile.println("<head><meta charset=\"UTF-8\"/><title>Note</title></head>");
+      pnoteFile.println("<body>");
+      pnoteFile.print("<p id=\"");
+      pnoteFile.print(pnoteId);
+      pnoteFile.print("\">");
+      writeEscapedXml(pnoteFile, pnoteText);
+      pnoteFile.println("</p></body></html>");
+      pnoteFile.close();
 
       int virtualIndex = epub->addVirtualSpineItem(fullPath);
       char newHref[128];
@@ -385,6 +385,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     }
   }
 
+  // Continue with LUT writing (file is still open)
   const uint32_t lutOffset = file.position();
   bool hasFailedLutRecords = false;
   // Write LUT
