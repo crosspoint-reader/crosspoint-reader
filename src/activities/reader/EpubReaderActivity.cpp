@@ -68,9 +68,9 @@ enum class BoxAlign { LEFT, RIGHT, CENTER };
 
 // Helper to draw multi-line text cleanly
 void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, BoxAlign align) {
-  // Use a slightly larger font for better readability
-  const auto FONT_ID = UI_12_FONT_ID;
-  const int LINE_HEIGHT_PX = 24; // Increased for larger font
+  // Use NotoSans 14 for better readability
+  const auto FONT_ID = NOTOSANS_14_FONT_ID;
+  const int LINE_HEIGHT_PX = 26;  // Adjusted for larger font
 
   // Split text into lines
   std::vector<std::string> lines;
@@ -84,8 +84,8 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, Bo
     if (w > maxWidth) maxWidth = w;
   }
 
-  int boxWidth = maxWidth + 14; // A bit more padding
-  int boxHeight = (lines.size() * LINE_HEIGHT_PX) + 14;
+  int boxWidth = maxWidth + 16;  // Padding
+  int boxHeight = (lines.size() * LINE_HEIGHT_PX) + 16;
 
   int drawX = x;
   if (align == BoxAlign::RIGHT) {
@@ -106,7 +106,7 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, Bo
 
   // Draw each line
   for (size_t i = 0; i < lines.size(); i++) {
-    int lineX = drawX + 7;  // Default left alignment inside box (increased padding)
+    int lineX = drawX + 8;  // Default left alignment inside box
 
     // Calculate center alignment relative to the box width if requested
     if (align == BoxAlign::CENTER) {
@@ -114,7 +114,7 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, Bo
       lineX = drawX + (boxWidth - lineWidth) / 2;
     }
 
-    renderer.drawText(FONT_ID, lineX, y + 7 + (i * LINE_HEIGHT_PX), lines[i].c_str());
+    renderer.drawText(FONT_ID, lineX, y + 8 + (i * LINE_HEIGHT_PX), lines[i].c_str());
   }
 }
 
@@ -130,6 +130,11 @@ void EpubReaderActivity::onEnter() {
 
   // Reset help overlay state when entering a book
   showHelpOverlay = false;
+
+  // ENABLE GLOBAL FADING FIX
+  // This ensures the screen power is cut after EVERY render operation.
+  // This prevents the "Gray Haze" (VCOM drift) without needing aggressive triple-flashes.
+  renderer.setFadingFix(true);
 
   if (!epub) {
     return;
@@ -178,7 +183,7 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
-  // Disable fading fix when leaving (safer)
+  // Disable fading fix when leaving to return to standard behavior
   renderer.setFadingFix(false);
 
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -205,20 +210,19 @@ void EpubReaderActivity::loop() {
   }
 
   // --- HELP OVERLAY INTERCEPTION ---
-  // If overlay is showing, ANY button press dismisses it.
   if (showHelpOverlay) {
+    // Dismiss on ANY button press (including Power)
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Left) ||
         mappedInput.wasReleased(MappedInputManager::Button::Right) ||
         mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
         mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Power)) { // Added Power button
+        mappedInput.wasReleased(MappedInputManager::Button::Power)) {
       showHelpOverlay = false;
       updateRequired = true;
       return;
     }
-    // Block other logic while overlay is shown
     return;
   }
 
@@ -902,9 +906,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int h = renderer.getScreenHeight();
 
     // Draw Center "Dismiss" instruction
-    // Landscape: y = 250 (lowered)
-    // Portrait: y = 300 (hardcoded vertical center-ish)
-    int dismissY = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? 300 : 250;
+    // Landscape: y = 300 (lowered to be below buttons)
+    // Portrait: y = h / 2 (centered vertically)
+    int dismissY = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? h / 2 : 300;
 
     // Landscape adjustment for center
     int dismissX = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? w / 2 : w / 2 + 25;
@@ -913,8 +917,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
     if (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) {
       // PORTRAIT LABELS
-      // Front Left (Bottom Left) - Reverted to w-150 for tightness
-      drawHelpBox(renderer, w - 150, h - 80, "1x: Text size –\nHold: Spacing\n2x: Alignment", BoxAlign::RIGHT);
+      // Front Left (Bottom Left) - Adjusted for larger font and correct gap (w - 175)
+      drawHelpBox(renderer, w - 175, h - 80, "1x: Text size –\nHold: Spacing\n2x: Alignment", BoxAlign::RIGHT);
 
       // Front Right (Bottom Right)
       drawHelpBox(renderer, w - 10, h - 80, "1x: Text size +\nHold: Rotate\n2x: AntiAlias", BoxAlign::RIGHT);
@@ -931,26 +935,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
   }
 
-  // --- SAFE FADING FIX IMPLEMENTATION (FASTER) ---
-  // We want to clear the haze WITHOUT the slow "triple flash" full refresh.
-  // The trick:
-  // 1. Disable the fix first to keep rails on (fast render)
-  // 2. Render twice rapidly (half refresh) to scrub ghosting
-  // 3. Enable the fix at the very end to power down (prevents future drift)
+  // --- STANDARD REFRESH + GLOBAL FADING FIX ---
+  // We use HALF_REFRESH to avoid the triple-flash "seizure".
+  // The global 'renderer.setFadingFix(true)' in onEnter() ensures VCOM is cleared
+  // after this render, preventing the gray haze.
 
   if (pagesUntilFullRefresh <= 1) {
-    const_cast<GfxRenderer&>(renderer).setFadingFix(false);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-
-    const_cast<GfxRenderer&>(renderer).setFadingFix(true);
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
-    // Normal page turn - just render once
-    // (Optional: can toggle fading fix here too if drift happens on every page,
-    // but usually only needed periodically)
-    const_cast<GfxRenderer&>(renderer).setFadingFix(true);
     renderer.displayBuffer();
     pagesUntilFullRefresh--;
   }
