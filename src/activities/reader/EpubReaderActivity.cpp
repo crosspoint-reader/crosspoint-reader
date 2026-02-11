@@ -560,12 +560,23 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
   if (selectedPageTurnOption == 0) {
     automaticPageTurnActive = false;
-    return;
+  } else {
+    lastPageTurnTime = millis();
+    // calculates page turn duration by dividing by number of pages
+    pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_LABELS[selectedPageTurnOption];
+    automaticPageTurnActive = true;
   }
-  lastPageTurnTime = millis();
-  // calculates page turn duration by dividing by number of pages
-  pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_LABELS[selectedPageTurnOption];
-  automaticPageTurnActive = true;
+
+  // resets cached section so that space is reserved for auto page turn indicator when progress bar is None
+  if (SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NONE) {
+    // Preserve current reading position so we can restore after reflow.
+    if (section) {
+      cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = section->pageCount;
+      nextPageNumber = section->currentPage;
+    }
+    section.reset();
+  }
 }
 
 void EpubReaderActivity::displayTaskLoop() {
@@ -624,6 +635,9 @@ void EpubReaderActivity::renderScreen() {
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
     orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
                             (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
+  } else if (automaticPageTurnActive) {
+    // reserves space for automatic page turn indicator when no status bar is shown
+    orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin;
   }
 
   if (!section) {
