@@ -166,28 +166,32 @@ void MyLibraryActivity::loop() {
 
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
+  // Long press CONFIRM (1s+) enters delete confirmation (triggers while held, like Back/Power)
+  if (!files.empty() && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= DELETE_CONFIRM_MS) {
+    state = State::DELETE_CONFIRM;
+    deleteError.clear();
+    updateRequired = true;
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (files.empty()) {
       return;
     }
 
-    // Long press CONFIRM (1s+) enters delete confirmation
-    if (mappedInput.getHeldTime() >= DELETE_CONFIRM_MS) {
-      state = State::DELETE_CONFIRM;
-      deleteError.clear();
-      updateRequired = true;
-      return;
-    }
-
-    if (basepath.back() != '/') basepath += "/";
-    if (files[selectorIndex].back() == '/') {
-      basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
-      loadFiles();
-      selectorIndex = 0;
-      updateRequired = true;
-    } else {
-      onSelectBook(basepath + files[selectorIndex]);
-      return;
+    // Only open on short press (long press already handled above)
+    if (mappedInput.getHeldTime() < DELETE_CONFIRM_MS) {
+      if (basepath.back() != '/') basepath += "/";
+      if (files[selectorIndex].back() == '/') {
+        basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
+        loadFiles();
+        selectorIndex = 0;
+        updateRequired = true;
+      } else {
+        onSelectBook(basepath + files[selectorIndex]);
+        return;
+      }
     }
   }
 
