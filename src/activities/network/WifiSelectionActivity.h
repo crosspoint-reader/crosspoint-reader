@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 // Structure to hold WiFi network information
 struct WifiNetworkInfo {
@@ -21,6 +22,7 @@ struct WifiNetworkInfo {
 
 // WiFi selection states
 enum class WifiSelectionState {
+  AUTO_CONNECTING,    // Trying to connect to the last known network
   SCANNING,           // Scanning for networks
   NETWORK_LIST,       // Displaying available networks
   PASSWORD_ENTRY,     // Entering password for selected network
@@ -45,6 +47,7 @@ enum class WifiSelectionState {
 class WifiSelectionActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
   WifiSelectionState state = WifiSelectionState::SCANNING;
   int selectedNetworkIndex = 0;
@@ -67,6 +70,12 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
 
   // Whether network was connected using a saved password (skip save prompt)
   bool usedSavedPassword = false;
+
+  // Whether to attempt auto-connect on entry
+  const bool allowAutoConnect;
+
+  // Whether we are attempting to auto-connect
+  bool autoConnecting = false;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;
@@ -96,8 +105,10 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
 
  public:
   explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 const std::function<void(bool connected)>& onComplete)
-      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput), onComplete(onComplete) {}
+                                 const std::function<void(bool connected)>& onComplete, bool autoConnect = true)
+      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput),
+        onComplete(onComplete),
+        allowAutoConnect(autoConnect) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

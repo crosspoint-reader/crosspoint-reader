@@ -8,16 +8,28 @@
 #include <vector>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 class CrossPointSettings;
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
+
+enum class SettingAction {
+  None,
+  RemapFrontButtons,
+  KOReaderSync,
+  OPDSBrowser,
+  Network,
+  ClearCache,
+  CheckForUpdates,
+};
 
 struct SettingInfo {
   const char* name;
   SettingType type;
   uint8_t CrossPointSettings::* valuePtr = nullptr;
   std::vector<std::string> enumValues;
+  SettingAction action = SettingAction::None;
 
   struct ValueRange {
     uint8_t min;
@@ -62,10 +74,11 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo Action(const char* name) {
+  static SettingInfo Action(const char* name, SettingAction action) {
     SettingInfo s;
     s.name = name;
     s.type = SettingType::ACTION;
+    s.action = action;
     return s;
   }
 
@@ -124,6 +137,7 @@ struct SettingInfo {
 class SettingsActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
   int selectedCategoryIndex = 0;  // Currently selected category
   int selectedSettingIndex = 0;

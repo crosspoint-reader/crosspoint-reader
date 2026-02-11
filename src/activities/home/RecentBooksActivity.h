@@ -9,11 +9,13 @@
 
 #include "../Activity.h"
 #include "RecentBooksStore.h"
+#include "util/ButtonNavigator.h"
 
 class RecentBooksActivity final : public Activity {
  private:
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
   bool updateRequired = false;
