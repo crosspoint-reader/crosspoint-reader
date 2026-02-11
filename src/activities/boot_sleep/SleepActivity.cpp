@@ -8,9 +8,9 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "i18n/TranslationManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 #include "images/Logo120.h"
 #include "util/StringUtils.h"
 
