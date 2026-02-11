@@ -134,6 +134,9 @@ Continue Reading=Continua a leggere
 No open book=Nessun libro aperto
 Start reading below=Inizia a leggere qui sotto
 Loading...=Caricamento...
+Entering Sleep...=Sospensione...
+BOOTING=AVVIO
+SLEEPING=SOSPENSIONE
 
 # === LIBRARY ===
 SD card=Scheda SD
@@ -175,7 +178,7 @@ How would you like to connect?=Come vuoi connetterti?
 WiFi Networks=Reti WiFi
 No networks found=Nessuna rete trovata
 Press Connect to scan again=Premi Connetti per cercare ancora
-* = Encrypted | + = Saved=* = Crittografata | + = Salvata
+* Encrypted | + Saved=* Crittografata | + Salvata
 networks found=reti trovate
 Scanning...=Ricerca...
 Connecting...=Connessione...

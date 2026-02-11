@@ -134,6 +134,9 @@ Continue Reading=Weiterlesen
 No open book=Kein offenes Buch
 Start reading below=Lesen Sie unten weiter
 Loading...=Laden...
+Entering Sleep...=Ruhemodus...
+BOOTING=STARTEN
+SLEEPING=RUHEMODUS
 
 # === LIBRARY ===
 SD card=SD-Karte
@@ -175,7 +178,7 @@ How would you like to connect?=Wie moechten Sie sich verbinden?
 WiFi Networks=WLAN-Netzwerke
 No networks found=Keine Netzwerke gefunden
 Press Connect to scan again=Druecken Sie Verbinden zum erneuten Suchen
-* = Encrypted | + = Saved=* = Verschluesselt | + = Gespeichert
+* Encrypted | + Saved=* Verschluesselt | + Gespeichert
 networks found=Netzwerke gefunden
 Scanning...=Suche...
 Connecting...=Verbinde...

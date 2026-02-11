@@ -137,6 +137,9 @@ Continue Reading=Continue Reading
 No open book=No open book
 Start reading below=Start reading below
 Loading...=Loading...
+Entering Sleep...=Entering Sleep...
+BOOTING=BOOTING
+SLEEPING=SLEEPING
 
 # === LIBRARY ===
 SD card=SD card
@@ -178,7 +181,7 @@ How would you like to connect?=How would you like to connect?
 WiFi Networks=WiFi Networks
 No networks found=No networks found
 Press Connect to scan again=Press Connect to scan again
-* = Encrypted | + = Saved=* = Encrypted | + = Saved
+* Encrypted | + Saved=* Encrypted | + Saved
 networks found=networks found
 Scanning...=Scanning...
 Connecting...=Connecting...

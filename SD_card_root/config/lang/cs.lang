@@ -134,6 +134,9 @@ Continue Reading=Pokračovat ve čtení
 No open book=Žádná otevřená kniha
 Start reading below=Začněte číst níže
 Loading...=Načítání...
+Entering Sleep...=Uspávání...
+BOOTING=SPOUŠTĚNÍ
+SLEEPING=SPÁNEK
 
 # === LIBRARY ===
 SD card=SD karta
@@ -175,7 +178,7 @@ How would you like to connect?=Jak se chcete připojit?
 WiFi Networks=WiFi sítě
 No networks found=Nenalezeny žádné sítě
 Press Connect to scan again=Stiskněte Připojit pro nové hledání
-* = Encrypted | + = Saved=* = Šifrovaná | + = Uložená
+* Encrypted | + Saved=* Šifrovaná | + Uložená
 networks found=nalezených sítí
 Scanning...=Hledání...
 Connecting...=Připojování...

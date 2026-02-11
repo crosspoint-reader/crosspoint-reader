@@ -635,7 +635,7 @@ void WifiSelectionActivity::renderNetworkList() const {
   renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 105, cachedMacAddress.c_str());
 
   // Draw help text
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 75, T("* = Encrypted | + = Saved"));
+  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 75, T("* Encrypted | + Saved"));
 
   const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
   const char* forgetLabel = hasSavedPassword ? T("Forget") : "";
