@@ -10,6 +10,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "components/StatusBar.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -142,13 +143,11 @@ void TxtReaderActivity::initializeReader() {
   auto metrics = UITheme::getInstance().getMetrics();
 
   // Add status bar margin
+  const bool showStatusBar = SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
+                             SETTINGS.statusBarChapterTitle || SETTINGS.statusBarBattery;
   const bool showProgressBar = SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
-  if (SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage || showProgressBar ||
-      SETTINGS.statusBarChapterTitle || SETTINGS.statusBarBattery) {
-    // Add additional margin for status bar if progress bar is shown
-    orientedMarginBottom += statusBarMargin - cachedScreenMargin +
-                            (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
-  }
+  orientedMarginBottom += (showStatusBar ? (statusBarMargin - cachedScreenMargin) : 0) +
+                          (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
 
   viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
@@ -457,57 +456,11 @@ void TxtReaderActivity::renderPage() {
 
 void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) const {
-  auto metrics = UITheme::getInstance().getMetrics();
-  const auto screenHeight = renderer.getScreenHeight();
-  // Adjust text position upward when progress bar is shown to avoid overlap
-  const auto textY = screenHeight - orientedMarginBottom - 4;
-  int progressTextWidth = 0;
-
   const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
+  std::string title = txt->getTitle();
 
-  if (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount) {
-    char progressStr[32];
-
-    if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage + 1, totalPages, progress);
-    } else if (SETTINGS.statusBarBookProgressPercentage) {
-      snprintf(progressStr, sizeof(progressStr), "%.0f%%", progress);
-    } else {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage + 1, totalPages);
-    }
-
-    progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-    renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - orientedMarginRight - progressTextWidth, textY,
-                      progressStr);
-  }
-
-  // Draw progress bar at the very bottom of the screen, from edge to edge of viewable area
-  // For text mode, treat the entire book as one chapter, so chapter progress == book progress
-  if (SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS ||
-      SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::CHAPTER_PROGRESS) {
-    GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress));
-  }
-
-  if (SETTINGS.statusBarBattery) {
-    GUI.drawBattery(renderer, Rect{orientedMarginLeft, textY, metrics.batteryWidth, metrics.batteryHeight},
-                    SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER);
-  }
-
-  // For text mode, treat the entire book as one chapter, so chapter title == book title
-  if (SETTINGS.statusBarChapterTitle) {
-    const int titleMarginLeft = 50 + 30 + orientedMarginLeft;
-    const int titleMarginRight = progressTextWidth + 30 + orientedMarginRight;
-    const int availableTextWidth = renderer.getScreenWidth() - titleMarginLeft - titleMarginRight;
-
-    std::string title = txt->getTitle();
-    int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-    if (titleWidth > availableTextWidth) {
-      title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), availableTextWidth);
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-    }
-
-    renderer.drawText(SMALL_FONT_ID, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, title.c_str());
-  }
+  StatusBar::renderStatusBar(renderer, orientedMarginRight, orientedMarginBottom, orientedMarginLeft, progress,
+                             currentPage + 1, totalPages, title);
 }
 
 void TxtReaderActivity::saveProgress() const {
