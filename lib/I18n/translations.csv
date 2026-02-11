@@ -1,11 +1,11 @@
 KEYS,ENGLISH,SPANISH,ITALIAN,SWEDISH,FRENCH,GERMAN
 ,English,Español (placeholder),Italiano (placeholder),Svenska (placeholder),Français,Deutsch
 STR_CROSSPOINT,CrossPoint,CROSSPOINT,CrossPoint,CrossPoint,CrossPoint,CrossPoint
-STR_BOOTING,BOOTING,BOOTING,BOOTING,BOOTING,DÉMARRAGE EN COURS,STARTE
+STR_BOOTING,BOOTING,BOOTING,BOOTING,BOOTING,DÉMARRAGE EN COURS,STARTEN
 STR_SLEEPING,SLEEPING,SLEEPING,SLEEPING,SLEEPING,VEILLE,STANDBY
 STR_ENTERING_SLEEP,Entering Sleep...,ENTERING SLEEP...,Entering Sleep...,Entering Sleep...,Mise en veille…,Standby...
 STR_BROWSE_FILES,Browse Files,BROWSE FILES,Browse Files,Browse Files,Fichiers,Durchsuchen
-STR_FILE_TRANSFER,File Transfer,FILE TRANSFER,File Transfer,File Transfer,Transfert,Dateiübertragung
+STR_FILE_TRANSFER,File Transfer,FILE TRANSFER,File Transfer,File Transfer,Transfert,Datentransfer
 STR_SETTINGS_TITLE,Settings,SETTINGS,Settings,Settings,Réglages,Einstellungen
 STR_CALIBRE_LIBRARY,Calibre Library,CALIBRE LIBRARY,Calibre Library,Calibre Library,Bibliothèque Calibre,Calibre-Bibliothek
 STR_CONTINUE_READING,Continue Reading,CONTINUE READING,Continue Reading,Continue Reading,Continuer la lecture,Weiterlesen
@@ -29,7 +29,7 @@ STR_LOAD_EPUB_FAILED,Failed to load EPUB,FAILED TO LOAD EPUB,Failed to load EPUB
 STR_SD_CARD_ERROR,SD card error,SD CARD ERROR,SD card error,SD card error,Carte mémoire absente,SD-Karten-Fehler
 STR_WIFI_NETWORKS,WiFi Networks,WIFI NETWORKS,WiFi Networks,WiFi Networks,Réseaux WiFi,WLAN-Netzwerke
 STR_NO_NETWORKS,No networks found,NO NETWORKS FOUND,No networks found,No networks found,Aucun réseau,Kein WLAN gefunden
-STR_NETWORKS_FOUND,%zu networks found,%zu NETWORKS FOUND,%zu networks found,%zu networks found,%zu réseaux,%zu Netze gefunden
+STR_NETWORKS_FOUND,%zu networks found,%zu NETWORKS FOUND,%zu networks found,%zu networks found,%zu réseaux,%zu WLAN-Netzwerke gefunden
 STR_SCANNING,Scanning...,SCANNING...,Scanning...,Scanning...,Recherche de réseaux en cours…,Suchen...
 STR_CONNECTING,Connecting...,CONNECTING...,Connecting...,Connecting...,Connexion en cours…,Verbinden...
 STR_CONNECTED,Connected!,CONNECTED!,Connected!,Connected!,Connecté !,Verbunden!
@@ -40,7 +40,7 @@ STR_SAVE_PASSWORD,Save password for next time?,SAVE PASSWORD FOR NEXT TIME?,Save
 STR_REMOVE_PASSWORD,Remove saved password?,REMOVE SAVED PASSWORD?,Remove saved password?,Remove saved password?,Supprimer le mot de passe enregistré ?,Passwort entfernen?
 STR_PRESS_OK_SCAN,Press OK to scan again,PRESS OK TO SCAN AGAIN,Press OK to scan again,Press OK to scan again,Appuyez sur OK pour détecter à nouveau,OK für neue Suche
 STR_PRESS_ANY_CONTINUE,Press any button to continue,PRESS ANY BUTTON TO CONTINUE,Press any button to continue,Press any button to continue,Appuyez sur une touche pour continuer,Beliebige Taste drücken
-STR_SELECT_HINT,LEFT/RIGHT: Select | OK: Confirm,LEFT/RIGHT: SELECT | OK: CONFIRM,LEFT/RIGHT: Select | OK: Confirm,LEFT/RIGHT: Select | OK: Confirm,GAUCHE/DROITE: Sélectionner | OK: Valider,links/rechts: Auswählen | OK: Best
+STR_SELECT_HINT,LEFT/RIGHT: Select | OK: Confirm,LEFT/RIGHT: SELECT | OK: CONFIRM,LEFT/RIGHT: Select | OK: Confirm,LEFT/RIGHT: Select | OK: Confirm,GAUCHE/DROITE: Sélectionner | OK: Valider,links/rechts: Auswahl | OK: Best
 STR_HOW_CONNECT,How would you like to connect?,HOW WOULD YOU LIKE TO CONNECT?,How would you like to connect?,How would you like to connect?,Comment voulez-vous vous connecter ?,Wie möchtest du dich verbinden?
 STR_JOIN_NETWORK,Join a Network,JOIN A NETWORK,Join a Network,Join a Network,Connexion à un réseau,Netzwerk beitreten
 STR_CREATE_HOTSPOT,Create Hotspot,CREATE HOTSPOT,Create Hotspot,Create Hotspot,Créer un point d’accès,Hotspot erstellen
@@ -55,7 +55,7 @@ STR_SCAN_QR_HINT,or scan QR code with your phone:,OR SCAN QR CODE WITH YOUR PHON
 STR_CALIBRE_WIRELESS,Calibre Wireless,CALIBRE WIRELESS,Calibre Wireless,Calibre Wireless,Connexion à Calibre sans fil,Calibre Wireless
 STR_CALIBRE_WEB_URL,Calibre Web URL,CALIBRE WEB URL,Calibre Web URL,Calibre Web URL,URL Web Calibre,Calibre-Web-URL
 STR_CONNECT_WIRELESS,Connect as Wireless Device,CONNECT AS WIRELESS DEVICE,Connect as Wireless Device,Connect as Wireless Device,Se connecter comme appareil sans fil,Als Drahtlos-Gerät hinzufügen
-STR_NETWORK_LEGEND,* = Encrypted | + = Saved,* = ENCRYPTED | + = SAVED,* = Encrypted | + = Saved,* = Encrypted | + = Saved,* = Sécurisé | + = Sauvegardé,* = Verschl | + = Gesp
+STR_NETWORK_LEGEND,* = Encrypted | + = Saved,* = ENCRYPTED | + = SAVED,* = Encrypted | + = Saved,* = Encrypted | + = Saved,* = Sécurisé | + = Sauvegardé,* = Verschlüsselt | + = Gespeichert
 STR_MAC_ADDRESS,MAC address:,MAC ADDRESS:,MAC address:,MAC address:,Adresse MAC :,MAC-Adresse:
 STR_CHECKING_WIFI,Checking WiFi...,CHECKING WIFI...,Checking WiFi...,Checking WiFi...,Vérification du réseau WiFi...,WLAN prüfen…
 STR_ENTER_WIFI_PASSWORD,Enter WiFi Password,ENTER WIFI PASSWORD,Enter WiFi Password,Enter WiFi Password,Entrez le mot de passe WiFi,WLAN-Passwort eingeben
@@ -83,22 +83,22 @@ STR_CAT_DISPLAY,Display,DISPLAY,Display,Display,Affichage,Anzeige
 STR_CAT_READER,Reader,READER,Reader,Reader,Lecteur,Lesen
 STR_CAT_CONTROLS,Controls,CONTROLS,Controls,Controls,Commandes,Bedienung
 STR_CAT_SYSTEM,System,SYSTEM,System,System,Système,System
-STR_SLEEP_SCREEN,Sleep Screen,SLEEP SCREEN,Sleep Screen,Sleep Screen,Écran de veille,Standby
-STR_SLEEP_COVER_MODE,Sleep Screen Cover Mode,SLEEP SCREEN COVER MODE,Sleep Screen Cover Mode,Sleep Screen Cover Mode,Mode d’image de l’écran de veille,Standby-Covermodus
+STR_SLEEP_SCREEN,Sleep Screen,SLEEP SCREEN,Sleep Screen,Sleep Screen,Écran de veille,Standby-Bild
+STR_SLEEP_COVER_MODE,Sleep Screen Cover Mode,SLEEP SCREEN COVER MODE,Sleep Screen Cover Mode,Sleep Screen Cover Mode,Mode d’image de l’écran de veille,Standby-Bildmodus
 STR_STATUS_BAR,Status Bar,STATUS BAR,Status Bar,Status Bar,Barre d’état,Statusleiste
-STR_HIDE_BATTERY,Hide Battery %,HIDE BATTERY %,Hide Battery %,Hide Battery %,Masquer % batterie,Ohne Batterie %
+STR_HIDE_BATTERY,Hide Battery %,HIDE BATTERY %,Hide Battery %,Hide Battery %,Masquer % batterie,Batterie % ausblenden
 STR_EXTRA_SPACING,Extra Paragraph Spacing,EXTRA PARAGRAPH SPACING,Extra Paragraph Spacing,Extra Paragraph Spacing,Espacement des paragraphes,Absatzabstand
 STR_TEXT_AA,Text Anti-Aliasing,TEXT ANTI-ALIASING,Text Anti-Aliasing,Text Anti-Aliasing,Lissage du texte,Schriftglättung
 STR_SHORT_PWR_BTN,Short Power Button Click,SHORT POWER BUTTON CLICK,Short Power Button Click,Short Power Button Click,Appui court bout. alim.,An-Taste kurz drücken
 STR_ORIENTATION,Reading Orientation,READING ORIENTATION,Reading Orientation,Reading Orientation,Orientation de lecture,Leseausrichtung
 STR_FRONT_BTN_LAYOUT,Front Button Layout,FRONT BUTTON LAYOUT,Front Button Layout,Front Button Layout,Disposition des boutons avant,Vorderes Tastenlayout
-STR_SIDE_BTN_LAYOUT,Side Button Layout (reader),SIDE BUTTON LAYOUT (READER),Side Button Layout (reader),Side Button Layout (reader),Disposition des boutons latéraux,Seitliches Tastenlayout (Lesen)
+STR_SIDE_BTN_LAYOUT,Side Button Layout (reader),SIDE BUTTON LAYOUT (READER),Side Button Layout (reader),Side Button Layout (reader),Disposition des boutons latéraux,Seitliche Tasten (Lesen)
 STR_LONG_PRESS_SKIP,Long-press Chapter Skip,LONG-PRESS CHAPTER SKIP,Long-press Chapter Skip,Long-press Chapter Skip,Appui long pour saut de chapitre,Langes Drücken springt Kap.
 STR_FONT_FAMILY,Reader Font Family,READER FONT FAMILY,Reader Font Family,Reader Font Family,Police de caractères du lecteur,Lese-Schriftfamilie
 STR_EXT_READER_FONT,External Reader Font,EXTERNAL READER FONT,External Reader Font,External Reader Font,Police externe,Externe Schriftart
 STR_EXT_CHINESE_FONT,Reader Font,READER FONT,Reader Font,Reader Font,Police du lecteur,Lese-Schriftart
 STR_EXT_UI_FONT,UI Font,UI FONT,UI Font,UI Font,Police de l’interface,Menü-Schriftart
-STR_FONT_SIZE,UI Font Size,UI FONT SIZE,UI Font Size,UI Font Size,Taille du texte de l’interface,Menü-Schriftgröße
+STR_FONT_SIZE,UI Font Size,UI FONT SIZE,UI Font Size,UI Font Size,Taille du texte de l’interface,Schriftgröße
 STR_LINE_SPACING,Reader Line Spacing,READER LINE SPACING,Reader Line Spacing,Reader Line Spacing,Espacement des lignes,Lese-Zeilenabstand
 STR_ASCII_LETTER_SPACING,ASCII Letter Spacing,ASCII LETTER SPACING,ASCII Letter Spacing,ASCII Letter Spacing,Espacement des lettres ASCII,ASCII-Zeichenabstand
 STR_ASCII_DIGIT_SPACING,ASCII Digit Spacing,ASCII DIGIT SPACING,ASCII Digit Spacing,ASCII Digit Spacing,Espacement des chiffres ASCII,ASCII-Ziffernabstand
@@ -108,7 +108,7 @@ STR_SCREEN_MARGIN,Reader Screen Margin,READER SCREEN MARGIN,Reader Screen Margin
 STR_PARA_ALIGNMENT,Reader Paragraph Alignment,READER PARAGRAPH ALIGNMENT,Reader Paragraph Alignment,Reader Paragraph Alignment,Alignement des paragraphes,Lese-Absatzausrichtung
 STR_HYPHENATION,Hyphenation,HYPHENATION,Hyphenation,Hyphenation,Césure,Silbentrennung
 STR_TIME_TO_SLEEP,Time to Sleep,TIME TO SLEEP,Time to Sleep,Time to Sleep,Mise en veille automatique,Standby nach
-STR_REFRESH_FREQ,Refresh Frequency,REFRESH FREQUENCY,Refresh Frequency,Refresh Frequency,Fréquence de rafraîchissement,Aktualisierungsrate
+STR_REFRESH_FREQ,Refresh Frequency,REFRESH FREQUENCY,Refresh Frequency,Refresh Frequency,Fréquence de rafraîchissement,Anti-Ghosting nach
 STR_CALIBRE_SETTINGS,Calibre Settings,CALIBRE SETTINGS,Calibre Settings,Calibre Settings,Réglages Calibre,Calibre-Einstellungen
 STR_KOREADER_SYNC,KOReader Sync,KOREADER SYNC,KOReader Sync,KOReader Sync,Synchronisation KOReader,KOReader-Synchr.
 STR_CHECK_UPDATES,Check for updates,CHECK FOR UPDATES,Check for updates,Check for updates,Mise à jour,Nach Updates suchen
@@ -145,9 +145,9 @@ STR_CLEAR_CACHE_FAILED,Failed to clear cache,FAILED TO CLEAR CACHE,Failed to cle
 STR_CHECK_SERIAL_OUTPUT,Check serial output for details,CHECK SERIAL OUTPUT FOR DETAILS,Check serial output for details,Check serial output for details,Vérifiez la console série pour plus de détails,Serielle Ausgabe prüfen
 STR_DARK,Dark,DARK,Dark,Dark,Sombre,Dunkel
 STR_LIGHT,Light,LIGHT,Light,Light,Clair,Hell
-STR_CUSTOM,Custom,CUSTOM,Custom,Custom,Custom,Angepasst
-STR_COVER,Cover,COVER,Cover,Cover,Couverture,Titelbild
-STR_NONE_OPT,None,NONE,None,None,Aucun,Keine
+STR_CUSTOM,Custom,CUSTOM,Custom,Custom,Custom,Eigenes
+STR_COVER,Cover,COVER,Cover,Cover,Couverture,Umschlag
+STR_NONE_OPT,None,NONE,None,None,Aucun,Leer
 STR_FIT,Fit,FIT,Fit,Fit,Ajusté,Anpassen
 STR_CROP,Crop,CROP,Crop,Crop,Rogné,Zuschnitt
 STR_NO_PROGRESS,No Progress,NO PROGRESS,No Progress,No Progress,Sans progression,Ohne Fortschr.
@@ -160,7 +160,7 @@ STR_SLEEP,Sleep,SLEEP,Sleep,Sleep,Mise en veille,Standby
 STR_PAGE_TURN,Page Turn,PAGE TURN,Page Turn,Page Turn,Page suivante,Umblättern
 STR_PORTRAIT,Portrait,PORTRAIT,Portrait,Portrait,Portrait,Hochformat
 STR_LANDSCAPE_CW,Landscape CW,LANDSCAPE CW,Landscape CW,Landscape CW,Paysage,Querformat rechts
-STR_INVERTED,Inverted,INVERTED,Inverted,Inverted,Inversé,Umgedreht
+STR_INVERTED,Inverted,INVERTED,Inverted,Inverted,Inversé,Invertiert
 STR_LANDSCAPE_CCW,Landscape CCW,LANDSCAPE CCW,Landscape CCW,Landscape CCW,Paysage inversé,Querformat links
 STR_FRONT_LAYOUT_BCLR,"Bck, Cnfrm, Lft, Rght","BCK, CNFRM, LFT, RGHT","Bck, Cnfrm, Lft, Rght","Bck, Cnfrm, Lft, Rght","Ret, OK, Gauche, Droite","Zurück, Bst, L, R"
 STR_FRONT_LAYOUT_LRBC,"Lft, Rght, Bck, Cnfrm","LFT, RGHT, BCK, CNFRM","Lft, Rght, Bck, Cnfrm","Lft, Rght, Bck, Cnfrm","Gauche, Droite, Ret, OK","L, R, Zurück, Bst"
@@ -222,8 +222,8 @@ STR_BACK,« Back,« BACK,« Back,« Back,« Retour,« Zurück
 STR_EXIT,« Exit,« EXIT,« Exit,« Exit,« Sortie,« Verlassen
 STR_HOME,« Home,« HOME,« Home,« Home,« Accueil,« Start
 STR_SAVE,« Save,« SAVE,« Save,« Save,« Sauver,« Speichern
-STR_SELECT,Select,SELECT,Select,Select,OK,Auswählen
-STR_TOGGLE,Toggle,TOGGLE,Toggle,Toggle,Modifier,Umschalten
+STR_SELECT,Select,SELECT,Select,Select,OK,Auswahl
+STR_TOGGLE,Toggle,TOGGLE,Toggle,Toggle,Modifier,Ändern
 STR_CONFIRM,Confirm,CONFIRM,Confirm,Confirm,Confirmer,Bestätigen
 STR_CANCEL,Cancel,CANCEL,Cancel,Cancel,Annuler,Abbrechen
 STR_CONNECT,Connect,CONNECT,Connect,Connect,OK,Verbinden
@@ -232,10 +232,10 @@ STR_DOWNLOAD,Download,DOWNLOAD,Download,Download,Télécharger,Herunterladen
 STR_RETRY,Retry,RETRY,Retry,Retry,Réessayer,Wiederh.
 STR_YES,Yes,YES,Yes,Yes,Oui,Ja
 STR_NO,No,NO,No,No,Non,Nein
-STR_STATE_ON,ON,ON,ON,ON,ON,AN
-STR_STATE_OFF,OFF,OFF,OFF,OFF,OFF,AUS
+STR_STATE_ON,ON,ON,ON,ON,ON,An
+STR_STATE_OFF,OFF,OFF,OFF,OFF,OFF,Aus
 STR_SET,Set,SET,Set,Set,Défini,Gesetzt
-STR_NOT_SET,Not Set,NOT SET,Not Set,Not Set,Non défini,Keine
+STR_NOT_SET,Not Set,NOT SET,Not Set,Not Set,Non défini,Leer
 STR_DIR_LEFT,Left,LEFT,Left,Left,Gauche,Links
 STR_DIR_RIGHT,Right,RIGHT,Right,Right,Droite,Rechts
 STR_DIR_UP,Up,UP,Up,Up,Haut,Hoch
@@ -256,7 +256,7 @@ STR_THEME_LYRA,Lyra,LYRA,Lyra,Lyra,Lyra,Lyra
 STR_SUNLIGHT_FADING_FIX,Sunlight Fading Fix,SUNLIGHT FADING FIX,Sunlight Fading Fix,Sunlight Fading Fix,Amélioration de la lisibilité au soleil,Anti-Verblassen
 STR_REMAP_FRONT_BUTTONS,Remap Front Buttons,REMAP FRONT BUTTONS,Remap Front Buttons,Remap Front Buttons,Réassigner les boutons avant,Vordere Tasten belegen
 STR_OPDS_BROWSER,OPDS Browser,OPDS BROWSER,OPDS Browser,OPDS Browser,Navigateur OPDS,OPDS-Browser
-STR_COVER_CUSTOM,Cover + Custom,COVER + CUSTOM,Cover + Custom,Cover + Custom,Couverture + Custom,Titel + Angepasst
+STR_COVER_CUSTOM,Cover + Custom,COVER + CUSTOM,Cover + Custom,Cover + Custom,Couverture + Custom,Umschlag + Eigenes
 STR_RECENTS,Recents,RECENTS,Recents,Recents,Récents,Zuletzt
 STR_MENU_RECENT_BOOKS,Recent Books,RECENT BOOKS,Recent Books,Recent Books,Livres récents,Zuletzt gelesen
 STR_NO_RECENT_BOOKS,No recent books,NO RECENT BOOKS,No recent books,No recent books,Aucun livre récent,Keine Bücher
@@ -279,7 +279,7 @@ STR_HW_LEFT_LABEL,Left (3rd button),LEFT (3RD BUTTON),Left (3rd button),Left (3r
 STR_HW_RIGHT_LABEL,Right (4th button),RIGHT (4TH BUTTON),Right (4th button),Right (4th button),Droite (4ème bouton),Rechts (4. Taste)
 STR_GO_TO_PERCENT,Go to %,GO TO %,Go to %,Go to %,Aller à %,Gehe zu %
 STR_GO_HOME_BUTTON,Go Home,GO HOME,Go Home,Go Home,Aller à l’accueil,Zum Anfang
-STR_SYNC_PROGRESS,Sync Progress,SYNC PROGRESS,Sync Progress,Sync Progress,Synchroniser la progression,Fortschritt synchr.
+STR_SYNC_PROGRESS,Sync Progress,SYNC PROGRESS,Sync Progress,Sync Progress,Synchroniser la progression,Fortschritt synchronisieren
 STR_DELETE_CACHE,Delete Book Cache,DELETE BOOK CACHE,Delete Book Cache,Delete Book Cache,Supprimer le cache du livre,Buch-Cache leeren
 STR_CHAPTER_PREFIX,Chapter: ,CHAPTER: ,Chapter: ,Chapter: ,Chapitre : ,Kapitel:
 STR_PAGES_SEPARATOR, pages  |  , PAGES  |  , pages  |  , pages  |  , pages  |  , Seiten  |  

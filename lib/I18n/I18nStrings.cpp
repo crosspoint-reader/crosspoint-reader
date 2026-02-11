@@ -67,6 +67,8 @@ const char* const CHARACTER_SETS[] = {
     " !\"%&'()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]abcdefghiklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xC3"
+    "\x84"
+    "\xC3"
     "\x96"
     "\xC3"
     "\x9C"
@@ -2201,13 +2203,11 @@ const char* const STRINGS_FR[] = {
 
 const char* const STRINGS_DE[] = {
     "CrossPoint",
-    "STARTE",
+    "STARTEN",
     "STANDBY",
     "Standby...",
     "Durchsuchen",
-    "Datei\xC3"
-    "\xBC"
-    "bertragung",
+    "Datentransfer",
     "Einstellungen",
     "Calibre-Bibliothek",
     "Weiterlesen",
@@ -2245,7 +2245,7 @@ const char* const STRINGS_DE[] = {
     "SD-Karten-Fehler",
     "WLAN-Netzwerke",
     "Kein WLAN gefunden",
-    "%zu Netze gefunden",
+    "%zu WLAN-Netzwerke gefunden",
     "Suchen...",
     "Verbinden...",
     "Verbunden!",
@@ -2260,9 +2260,7 @@ const char* const STRINGS_DE[] = {
     "Beliebige Taste dr\xC3"
     "\xBC"
     "cken",
-    "links/rechts: Ausw\xC3"
-    "\xA4"
-    "hlen | OK: Best",
+    "links/rechts: Auswahl | OK: Best",
     "Wie m\xC3"
     "\xB6"
     "chtest du dich verbinden?",
@@ -2292,7 +2290,9 @@ const char* const STRINGS_DE[] = {
     "t hinzuf\xC3"
     "\xBC"
     "gen",
-    "* = Verschl | + = Gesp",
+    "* = Verschl\xC3"
+    "\xBC"
+    "sselt | + = Gespeichert",
     "MAC-Adresse:",
     "WLAN pr\xC3"
     "\xBC"
@@ -2341,10 +2341,10 @@ const char* const STRINGS_DE[] = {
     "Lesen",
     "Bedienung",
     "System",
-    "Standby",
-    "Standby-Covermodus",
+    "Standby-Bild",
+    "Standby-Bildmodus",
     "Statusleiste",
-    "Ohne Batterie %",
+    "Batterie % ausblenden",
     "Absatzabstand",
     "Schriftgl\xC3"
     "\xA4"
@@ -2354,7 +2354,7 @@ const char* const STRINGS_DE[] = {
     "cken",
     "Leseausrichtung",
     "Vorderes Tastenlayout",
-    "Seitliches Tastenlayout (Lesen)",
+    "Seitliche Tasten (Lesen)",
     "Langes Dr\xC3"
     "\xBC"
     "cken springt Kap.",
@@ -2364,9 +2364,7 @@ const char* const STRINGS_DE[] = {
     "Men\xC3"
     "\xBC"
     "-Schriftart",
-    "Men\xC3"
-    "\xBC"
-    "-Schriftgr\xC3"
+    "Schriftgr\xC3"
     "\xB6"
     "\xC3"
     "\x9F"
@@ -2382,7 +2380,7 @@ const char* const STRINGS_DE[] = {
     "Lese-Absatzausrichtung",
     "Silbentrennung",
     "Standby nach",
-    "Aktualisierungsrate",
+    "Anti-Ghosting nach",
     "Calibre-Einstellungen",
     "KOReader-Synchr.",
     "Nach Updates suchen",
@@ -2441,9 +2439,9 @@ const char* const STRINGS_DE[] = {
     "fen",
     "Dunkel",
     "Hell",
-    "Angepasst",
-    "Titelbild",
-    "Keine",
+    "Eigenes",
+    "Umschlag",
+    "Leer",
     "Anpassen",
     "Zuschnitt",
     "Ohne Fortschr.",
@@ -2458,7 +2456,7 @@ const char* const STRINGS_DE[] = {
     "ttern",
     "Hochformat",
     "Querformat rechts",
-    "Umgedreht",
+    "Invertiert",
     "Querformat links",
     "Zur\xC3"
     "\xBC"
@@ -2567,10 +2565,10 @@ const char* const STRINGS_DE[] = {
     "\xC2"
     "\xAB"
     " Speichern",
-    "Ausw\xC3"
-    "\xA4"
-    "hlen",
-    "Umschalten",
+    "Auswahl",
+    "\xC3"
+    "\x84"
+    "ndern",
     "Best\xC3"
     "\xA4"
     "tigen",
@@ -2583,10 +2581,10 @@ const char* const STRINGS_DE[] = {
     "Wiederh.",
     "Ja",
     "Nein",
-    "AN",
-    "AUS",
+    "An",
+    "Aus",
     "Gesetzt",
-    "Keine",
+    "Leer",
     "Links",
     "Rechts",
     "Hoch",
@@ -2607,7 +2605,7 @@ const char* const STRINGS_DE[] = {
     "Anti-Verblassen",
     "Vordere Tasten belegen",
     "OPDS-Browser",
-    "Titel + Angepasst",
+    "Umschlag + Eigenes",
     "Zuletzt",
     "Zuletzt gelesen",
     "Keine B\xC3"
@@ -2645,7 +2643,7 @@ const char* const STRINGS_DE[] = {
     "Rechts (4. Taste)",
     "Gehe zu %",
     "Zum Anfang",
-    "Fortschritt synchr.",
+    "Fortschritt synchronisieren",
     "Buch-Cache leeren",
     "Kapitel:",
     " Seiten  |  ",
