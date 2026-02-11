@@ -5,7 +5,6 @@
 #include <GfxRenderer.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
-#include <qrcode.h>
 
 #include <cstddef>
 
@@ -15,18 +14,14 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/NetworkConstants.h"
+#include "util/QRCodeHelper.h"
+
+using namespace NetworkConstants;
 
 namespace {
-// AP Mode configuration
-constexpr const char* AP_SSID = "CrossPoint-Reader";
-constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
-constexpr const char* AP_HOSTNAME = "crosspoint";
-constexpr uint8_t AP_CHANNEL = 1;
-constexpr uint8_t AP_MAX_CONNECTIONS = 4;
-
 // DNS server for captive portal (redirects all DNS queries to our IP)
 DNSServer* dnsServer = nullptr;
-constexpr uint16_t DNS_PORT = 53;
 }  // namespace
 
 void CrossPointWebServerActivity::taskTrampoline(void* param) {
@@ -245,7 +240,7 @@ void CrossPointWebServerActivity::startAccessPoint() {
   // This redirects all DNS queries to our IP, making any domain typed resolve to us
   dnsServer = new DNSServer();
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
-  dnsServer->start(DNS_PORT, "*", apIP);
+  dnsServer->start(NetworkConstants::DNS_PORT, "*", apIP);
   Serial.printf("[%lu] [WEBACT] DNS server started for captive portal\n", millis());
 
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap after AP start: %d bytes\n", millis(), ESP.getFreeHeap());
@@ -396,28 +391,6 @@ void CrossPointWebServerActivity::render() const {
   }
 }
 
-void drawQRCode(const GfxRenderer& renderer, const int x, const int y, const std::string& data) {
-  // Implementation of QR code calculation
-  // The structure to manage the QR code
-  QRCode qrcode;
-  uint8_t qrcodeBytes[qrcode_getBufferSize(4)];
-  Serial.printf("[%lu] [WEBACT] QR Code (%lu): %s\n", millis(), data.length(), data.c_str());
-
-  qrcode_initText(&qrcode, qrcodeBytes, 4, ECC_LOW, data.c_str());
-  const uint8_t px = 6;  // pixels per module
-  for (uint8_t cy = 0; cy < qrcode.size; cy++) {
-    for (uint8_t cx = 0; cx < qrcode.size; cx++) {
-      if (qrcode_getModule(&qrcode, cx, cy)) {
-        // Serial.print("**");
-        renderer.fillRect(x + px * cx, y + px * cy, px, px, true);
-      } else {
-        // Serial.print("  ");
-      }
-    }
-    // Serial.print("\n");
-  }
-}
-
 void CrossPointWebServerActivity::renderServerRunning() const {
   // Use consistent line spacing
   constexpr int LINE_SPACING = 28;  // Space between lines
@@ -437,11 +410,12 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3,
                               "or scan QR code with your phone to connect to Wifi.");
-    // Show QR code for URL
+    // Show QR code for WiFi
+    const auto pageWidth = renderer.getScreenWidth();
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
+    QRCodeHelper::drawQRCode(renderer, (pageWidth - QRCodeHelper::qrSize()) / 2, startY + LINE_SPACING * 4, wifiConfig);
 
-    startY += 6 * 29 + 3 * LINE_SPACING;
+    startY += QRCodeHelper::qrSize() - 4 * QRCodeHelper::DEFAULT_PX + 3 * LINE_SPACING;
     // Show primary URL (hostname)
     std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str(), true, EpdFontFamily::BOLD);
@@ -453,7 +427,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // Show QR code for URL
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "or scan QR code with your phone:");
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 7, hostnameUrl);
+    QRCodeHelper::drawQRCode(renderer, (pageWidth - QRCodeHelper::qrSize()) / 2, startY + LINE_SPACING * 7,
+                             hostnameUrl);
   } else {
     // STA mode display (original behavior)
     const int startY = 65;
@@ -478,7 +453,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Open this URL in your browser");
 
     // Show QR code for URL
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
+    const auto pageWidth = renderer.getScreenWidth();
+    QRCodeHelper::drawQRCode(renderer, (pageWidth - QRCodeHelper::qrSize()) / 2, startY + LINE_SPACING * 6, webInfo);
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
   }
 

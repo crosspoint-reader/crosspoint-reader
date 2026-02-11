@@ -3,11 +3,13 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/NetworkConstants.h"
+#include "util/QRCodeHelper.h"
 
 // Keyboard layouts - lowercase
 const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
     "`1234567890-=", "qwertyuiop[]\\", "asdfghjkl;'", "zxcvbnm,./",
-    "^  _____<OK"  // ^ = shift, _ = space, < = backspace, OK = done
+    "^  ____<QR OK"  // ^ = shift, _ = space, < = backspace, QR = remote input, OK = done
 };
 
 // Keyboard layouts - uppercase/symbols
@@ -43,7 +45,7 @@ void KeyboardEntryActivity::onEnter() {
   updateRequired = true;
 
   xTaskCreate(&KeyboardEntryActivity::taskTrampoline, "KeyboardEntryActivity",
-              2048,               // Stack size
+              4096,               // Stack size (increased for QR code rendering)
               this,               // Parameters
               1,                  // Priority
               &displayTaskHandle  // Task handle
@@ -52,6 +54,9 @@ void KeyboardEntryActivity::onEnter() {
 
 void KeyboardEntryActivity::onExit() {
   Activity::onExit();
+
+  // Stop web input server if running
+  stopWebInputServer();
 
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -77,7 +82,7 @@ int KeyboardEntryActivity::getRowLength(const int row) const {
     case 3:
       return 10;  // zxcvbnm,./
     case 4:
-      return 10;  // shift (2 wide), space (5 wide), backspace (2 wide), OK
+      return 12;  // shift(2), space(4), backspace(2), QR(2), OK(2)
     default:
       return 0;
   }
@@ -93,7 +98,7 @@ char KeyboardEntryActivity::getSelectedChar() const {
 }
 
 void KeyboardEntryActivity::handleKeyPress() {
-  // Handle special row (bottom row with shift, space, backspace, done)
+  // Handle special row (bottom row with shift, space, backspace, QR, done)
   if (selectedRow == SPECIAL_ROW) {
     if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
       // Shift toggle (0 = lower case, 1 = upper case, 2 = shift lock)
@@ -109,11 +114,17 @@ void KeyboardEntryActivity::handleKeyPress() {
       return;
     }
 
-    if (selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL) {
+    if (selectedCol >= BACKSPACE_COL && selectedCol < QR_COL) {
       // Backspace
       if (!text.empty()) {
         text.pop_back();
       }
+      return;
+    }
+
+    if (selectedCol >= QR_COL && selectedCol < DONE_COL) {
+      // QR button - start web input server and show QR screen
+      startWebInputServer();
       return;
     }
 
@@ -142,6 +153,33 @@ void KeyboardEntryActivity::handleKeyPress() {
 }
 
 void KeyboardEntryActivity::loop() {
+  // In QR mode, only handle Back button and web server polling
+  if (showingQR) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      stopWebInputServer();
+      showingQR = false;
+      updateRequired = true;
+    }
+
+    // Poll the web server for incoming requests
+    if (webInputServer && webInputServer->isRunning()) {
+      webInputServer->handleClient();
+
+      if (webInputServer->hasReceivedText()) {
+        std::string received = webInputServer->consumeReceivedText();
+        if (maxLength > 0 && text.length() + received.length() > maxLength) {
+          received = received.substr(0, maxLength - text.length());
+        }
+        text += received;
+        // Return to keyboard view with the new text
+        stopWebInputServer();
+        showingQR = false;
+        updateRequired = true;
+      }
+    }
+    return;
+  }
+
   // Handle navigation
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] {
     selectedRow = ButtonNavigator::previousIndex(selectedRow, NUM_ROWS);
@@ -166,17 +204,20 @@ void KeyboardEntryActivity::loop() {
     if (selectedRow == SPECIAL_ROW) {
       // Bottom row has special key widths
       if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
-        // In shift key, wrap to end of row
-        selectedCol = maxCol;
+        // In shift key, wrap to end of row (OK)
+        selectedCol = DONE_COL;
       } else if (selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL) {
         // In space bar, move to shift
         selectedCol = SHIFT_COL;
-      } else if (selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL) {
+      } else if (selectedCol >= BACKSPACE_COL && selectedCol < QR_COL) {
         // In backspace, move to space
         selectedCol = SPACE_COL;
-      } else if (selectedCol >= DONE_COL) {
-        // At done button, move to backspace
+      } else if (selectedCol >= QR_COL && selectedCol < DONE_COL) {
+        // In QR, move to backspace
         selectedCol = BACKSPACE_COL;
+      } else if (selectedCol >= DONE_COL) {
+        // At done button, move to QR
+        selectedCol = QR_COL;
       }
     } else {
       selectedCol = ButtonNavigator::previousIndex(selectedCol, maxCol + 1);
@@ -197,11 +238,14 @@ void KeyboardEntryActivity::loop() {
       } else if (selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL) {
         // In space bar, move to backspace
         selectedCol = BACKSPACE_COL;
-      } else if (selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL) {
-        // In backspace, move to done
+      } else if (selectedCol >= BACKSPACE_COL && selectedCol < QR_COL) {
+        // In backspace, move to QR
+        selectedCol = QR_COL;
+      } else if (selectedCol >= QR_COL && selectedCol < DONE_COL) {
+        // In QR, move to done
         selectedCol = DONE_COL;
       } else if (selectedCol >= DONE_COL) {
-        // At done button, wrap to beginning of row
+        // At done button, wrap to beginning of row (shift)
         selectedCol = SHIFT_COL;
       }
     } else {
@@ -226,6 +270,11 @@ void KeyboardEntryActivity::loop() {
 }
 
 void KeyboardEntryActivity::render() const {
+  if (showingQR) {
+    renderQRScreen();
+    return;
+  }
+
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
@@ -289,30 +338,34 @@ void KeyboardEntryActivity::render() const {
 
     // Handle bottom row (row 4) specially with proper multi-column keys
     if (row == 4) {
-      // Bottom row layout: SHIFT (2 cols) | SPACE (5 cols) | <- (2 cols) | OK (2 cols)
-      // Total: 11 visual columns, but we use logical positions for selection
+      // Bottom row layout: SHIFT (2 cols) | SPACE (4 cols) | <- (2 cols) | QR (2 cols) | OK (2 cols)
 
       int currentX = startX;
 
-      // SHIFT key (logical col 0, spans 2 key widths)
+      // SHIFT key (logical cols 0-1, spans 2 key widths)
       const bool shiftSelected = (selectedRow == 4 && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
       renderItemWithSelector(currentX + 2, rowY, shiftString[shiftState], shiftSelected);
       currentX += 2 * (keyWidth + keySpacing);
 
-      // Space bar (logical cols 2-6, spans 5 key widths)
+      // Space bar (logical cols 2-5, spans 4 key widths)
       const bool spaceSelected = (selectedRow == 4 && selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL);
-      const int spaceTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "_____");
-      const int spaceXWidth = 5 * (keyWidth + keySpacing);
+      const int spaceTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "____");
+      const int spaceXWidth = 4 * (keyWidth + keySpacing);
       const int spaceXPos = currentX + (spaceXWidth - spaceTextWidth) / 2;
-      renderItemWithSelector(spaceXPos, rowY, "_____", spaceSelected);
+      renderItemWithSelector(spaceXPos, rowY, "____", spaceSelected);
       currentX += spaceXWidth;
 
-      // Backspace key (logical col 7, spans 2 key widths)
-      const bool bsSelected = (selectedRow == 4 && selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL);
+      // Backspace key (logical cols 6-7, spans 2 key widths)
+      const bool bsSelected = (selectedRow == 4 && selectedCol >= BACKSPACE_COL && selectedCol < QR_COL);
       renderItemWithSelector(currentX + 2, rowY, "<-", bsSelected);
       currentX += 2 * (keyWidth + keySpacing);
 
-      // OK button (logical col 9, spans 2 key widths)
+      // QR button (logical cols 8-9, spans 2 key widths)
+      const bool qrSelected = (selectedRow == 4 && selectedCol >= QR_COL && selectedCol < DONE_COL);
+      renderItemWithSelector(currentX + 2, rowY, "QR", qrSelected);
+      currentX += 2 * (keyWidth + keySpacing);
+
+      // OK button (logical cols 10-11, spans 2 key widths)
       const bool okSelected = (selectedRow == 4 && selectedCol >= DONE_COL);
       renderItemWithSelector(currentX + 2, rowY, "OK", okSelected);
     } else {
@@ -348,4 +401,109 @@ void KeyboardEntryActivity::renderItemWithSelector(const int x, const int y, con
     renderer.drawText(UI_10_FONT_ID, x + itemWidth, y, "]");
   }
   renderer.drawText(UI_10_FONT_ID, x, y, item);
+}
+
+void KeyboardEntryActivity::renderQRScreen() const {
+  const auto pageWidth = renderer.getScreenWidth();
+
+  // Use same line spacing as File Transfer for consistency
+  constexpr int LINE_SPACING = 28;
+  // QR size: same as File Transfer (6px per module)
+  constexpr int QR_TOTAL = QRCodeHelper::qrSize();  // 198px
+
+  renderer.clearScreen();
+
+  // Title - matching File Transfer style
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Remote Text Input", true, EpdFontFamily::BOLD);
+
+  if (webInputServer && webInputServer->isRunning()) {
+    if (webInputServer->isApMode()) {
+      // === AP mode layout (matching File Transfer) ===
+      int startY = 55;
+
+      renderer.drawCenteredText(UI_10_FONT_ID, startY, "Hotspot Mode", true, EpdFontFamily::BOLD);
+
+      std::string ssidInfo = "Network: " + webInputServer->getApSSID();
+      renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ssidInfo.c_str());
+
+      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, "Connect your device to this WiFi network");
+
+      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3,
+                                "or scan QR code with your phone to connect to Wifi.");
+
+      // WiFi QR code (same size as File Transfer)
+      const std::string wifiQR = webInputServer->getWifiQRString();
+      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, startY + LINE_SPACING * 4, wifiQR);
+
+      startY += QR_TOTAL - 4 * QRCodeHelper::DEFAULT_PX + 3 * LINE_SPACING;
+
+      // URL section
+      const std::string url = webInputServer->getUrl();
+      renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, url.c_str(), true, EpdFontFamily::BOLD);
+
+      // Show IP address as fallback
+      std::string ipUrl = "or http://" + webInputServer->getIP() + "/";
+      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, ipUrl.c_str());
+
+      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "Open this URL in your browser");
+
+      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "or scan QR code with your phone:");
+
+      // URL QR code (same size as File Transfer)
+      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, startY + LINE_SPACING * 7, url);
+
+    } else {
+      // === STA mode layout (WiFi already connected, matching File Transfer) ===
+      const int startY = 65;
+
+      const std::string ip = webInputServer->getIP();
+
+      std::string ipInfo = "IP Address: " + ip;
+      renderer.drawCenteredText(UI_10_FONT_ID, startY, ipInfo.c_str());
+
+      // Show web server URL prominently
+      std::string webUrl = "http://" + ip + "/";
+      renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 2, webUrl.c_str(), true, EpdFontFamily::BOLD);
+
+      // Also show hostname URL using shared constant
+      std::string hostnameUrl = std::string("or http://") + NetworkConstants::AP_HOSTNAME + ".local/";
+      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str());
+
+      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Open this URL in your browser");
+
+      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
+
+      // URL QR code (same size as File Transfer)
+      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, startY + LINE_SPACING * 6, webUrl);
+    }
+  } else {
+    const auto pageHeight = renderer.getScreenHeight();
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, "Starting server...", true, EpdFontFamily::BOLD);
+  }
+
+  // Button hints - matching File Transfer style
+  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  renderer.displayBuffer();
+}
+
+void KeyboardEntryActivity::startWebInputServer() {
+  if (!webInputServer) {
+    webInputServer.reset(new KeyboardWebInputServer());
+  }
+
+  if (!webInputServer->isRunning()) {
+    webInputServer->start();
+  }
+
+  showingQR = true;
+  updateRequired = true;
+}
+
+void KeyboardEntryActivity::stopWebInputServer() {
+  if (webInputServer) {
+    webInputServer->stop();
+    webInputServer.reset();
+  }
 }
