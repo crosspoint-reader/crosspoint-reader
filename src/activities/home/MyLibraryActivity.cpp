@@ -176,6 +176,10 @@ void MyLibraryActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (skipNextConfirmRelease) {
+      skipNextConfirmRelease = false;
+      return;
+    }
     if (files.empty()) {
       return;
     }
@@ -272,6 +276,7 @@ void MyLibraryActivity::deleteSelectedItem() {
     }
     state = State::BROWSING;
     deleteError.clear();
+    skipNextConfirmRelease = true;
   } else {
     Serial.printf("[%lu] [MY_LIBRARY] Failed to delete: %s\n", millis(), fullPath.c_str());
     deleteError = isDir ? "Folder must be empty" : "Failed to delete file";

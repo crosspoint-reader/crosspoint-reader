@@ -23,6 +23,7 @@ class MyLibraryActivity final : public Activity {
   bool updateRequired = false;
   State state = State::BROWSING;
   std::string deleteError;
+  bool skipNextConfirmRelease = false;
 
   // Files state
   std::string basepath = "/";
