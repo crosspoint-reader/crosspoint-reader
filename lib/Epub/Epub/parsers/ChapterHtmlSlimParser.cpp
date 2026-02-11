@@ -11,7 +11,7 @@ const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
-constexpr size_t MIN_SIZE_FOR_POPUP = 50 * 1024;  // 50KB
+constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 
 const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
 constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
