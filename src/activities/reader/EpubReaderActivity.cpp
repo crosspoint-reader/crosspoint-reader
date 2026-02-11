@@ -81,8 +81,8 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, Bo
     if (w > maxWidth) maxWidth = w;
   }
 
-  // Increased padding for better vertical spacing
-  int padding = 20;
+  // Tighter padding to fit small text nicely (6px top/bottom)
+  int padding = 12;
   int boxWidth = maxWidth + padding;
   int boxHeight = (lines.size() * lineHeight) + padding;
 
@@ -109,6 +109,7 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, Bo
     int lineWidth = renderer.getTextWidth(fontId, lines[i].c_str());
     int lineX = drawX + (boxWidth - lineWidth) / 2;
 
+    // padding/2 = 6px offset from top
     renderer.drawText(fontId, lineX, y + (padding / 2) + (i * lineHeight), lines[i].c_str());
   }
 }
@@ -893,20 +894,25 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int w = renderer.getScreenWidth();
     const int h = renderer.getScreenHeight();
 
-    // Determine font and positioning based on orientation
-    int32_t overlayFontId;
-    int overlayLineHeight;
+    // Use UI_12_FONT_ID (explicitly small/standard) for EVERYTHING to ensure proper sizing
+    // and no clipping in landscape.
+    int32_t overlayFontId = UI_12_FONT_ID;
+    int overlayLineHeight = 18;  // Tight line height for small font
+
+    // Draw Center "Dismiss" instruction
+    // Landscape: y = 300 (lowered to be below buttons)
+    // Portrait: y = 500 (centered vertical lower half)
+    int dismissY = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? 500 : 300;
+
+    // Landscape adjustment for center (matching the shift of the top buttons)
+    int dismissX = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? w / 2 : w / 2 + 25;
+
+    drawHelpBox(renderer, dismissX, dismissY, "PRESS ANY KEY\nTO DISMISS", BoxAlign::CENTER, overlayFontId,
+                overlayLineHeight);
 
     if (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) {
-      // PORTRAIT: Use smaller font to prevent overlap
-      overlayFontId = SMALL_FONT_ID;
-      overlayLineHeight = 20;
-
-      // Draw Center "Dismiss" instruction - Centered vertically (500)
-      drawHelpBox(renderer, w / 2, 500, "PRESS ANY KEY\nTO DISMISS", BoxAlign::CENTER, overlayFontId,
-                  overlayLineHeight);
-
-      // Front Left (Bottom Left) - Reverted to w-160 for smaller font gap
+      // PORTRAIT LABELS
+      // Front Left (Bottom Left) - Corrected to w-160 for clean gap with small font
       drawHelpBox(renderer, w - 160, h - 80, "1x: Text size –\nHold: Spacing\n2x: Alignment", BoxAlign::RIGHT,
                   overlayFontId, overlayLineHeight);
 
@@ -915,13 +921,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                   overlayFontId, overlayLineHeight);
 
     } else {
-      // LANDSCAPE: Use smaller font as requested to keep inside boxes
-      overlayFontId = SMALL_FONT_ID;
-      overlayLineHeight = 20;
-
-      // Draw Center "Dismiss" instruction - Below buttons (300)
-      drawHelpBox(renderer, w / 2 + 25, 300, "PRESS ANY KEY\nTO DISMISS", BoxAlign::CENTER, overlayFontId,
-                  overlayLineHeight);
+      // LANDSCAPE CCW LABELS
 
       // Top Buttons (Top Edge - configuration)
       // Left (was Left) - shifted right by 20
@@ -934,7 +934,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
   }
 
-  // --- STANDARD REFRESH (Original behavior) ---
+  // --- STANDARD REFRESH (Reverted to original behavior) ---
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
