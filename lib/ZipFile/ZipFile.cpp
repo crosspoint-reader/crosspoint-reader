@@ -461,7 +461,8 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 
     bool success;
     if (sSharedDecompressor) {
-      success = inflateOneShotWithDecompressor(sSharedDecompressor, deflatedData, deflatedDataSize, data, inflatedDataSize);
+      success =
+          inflateOneShotWithDecompressor(sSharedDecompressor, deflatedData, deflatedDataSize, data, inflatedDataSize);
     } else {
       success = inflateOneShot(deflatedData, deflatedDataSize, data, inflatedDataSize);
     }

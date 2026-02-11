@@ -86,8 +86,8 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
   size_t outBytes = group.uncompressedSize;
   const uint8_t* inputBuf = &fontData->bitmap[group.compressedOffset];
 
-  tinfl_status status =
-      tinfl_decompress(decompressor, inputBuf, &inBytes, nullptr, outBuf, &outBytes, TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+  tinfl_status status = tinfl_decompress(decompressor, inputBuf, &inBytes, nullptr, outBuf, &outBytes,
+                                         TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
 
   if (status != TINFL_STATUS_DONE) {
     Serial.printf("[%lu] [FDC] Decompression failed for group %u (status %d)\n", millis(), groupIndex, status);

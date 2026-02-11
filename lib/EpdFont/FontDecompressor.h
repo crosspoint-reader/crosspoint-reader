@@ -1,7 +1,8 @@
 #pragma once
 
-#include <cstdint>
 #include <miniz.h>
+
+#include <cstdint>
 
 #include "EpdFontData.h"
 

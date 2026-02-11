@@ -17,11 +17,11 @@ typedef struct {
 
 /// Compressed font group: a DEFLATE-compressed block of glyph bitmaps
 typedef struct {
-  uint32_t compressedOffset;   ///< Byte offset into compressed data array
-  uint32_t compressedSize;     ///< Compressed DEFLATE stream size
-  uint32_t uncompressedSize;   ///< Decompressed size
-  uint16_t glyphCount;         ///< Number of glyphs in this group
-  uint16_t firstGlyphIndex;    ///< First glyph index in the global glyph array
+  uint32_t compressedOffset;  ///< Byte offset into compressed data array
+  uint32_t compressedSize;    ///< Compressed DEFLATE stream size
+  uint32_t uncompressedSize;  ///< Decompressed size
+  uint16_t glyphCount;        ///< Number of glyphs in this group
+  uint16_t firstGlyphIndex;   ///< First glyph index in the global glyph array
 } EpdFontGroup;
 
 /// Glyph interval structure
@@ -41,6 +41,6 @@ typedef struct {
   int ascender;                         ///< Maximal height of a glyph above the base line
   int descender;                        ///< Maximal height of a glyph below the base line
   bool is2Bit;
-  const EpdFontGroup* groups;   ///< NULL for uncompressed fonts
-  uint16_t groupCount;          ///< 0 for uncompressed fonts
+  const EpdFontGroup* groups;  ///< NULL for uncompressed fonts
+  uint16_t groupCount;         ///< 0 for uncompressed fonts
 } EpdFontData;
