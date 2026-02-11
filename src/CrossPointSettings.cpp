@@ -5,6 +5,8 @@
 #include <Serialization.h>
 
 #include <cstring>
+#include <functional>
+#include <vector>
 
 #include "fontIds.h"
 
@@ -21,8 +23,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
-// Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 30;
+// SETTINGS_COUNT is now calculated automatically in saveToFile
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 
 // Validate front button mapping to ensure each hardware button is unique.
@@ -86,42 +87,50 @@ bool CrossPointSettings::saveToFile() const {
     return false;
   }
 
+  // Define the serialization writers in order
+  std::vector<std::function<void(FsFile&)>> writers = {
+      [&](FsFile& f) { serialization::writePod(f, sleepScreen); },
+      [&](FsFile& f) { serialization::writePod(f, extraParagraphSpacing); },
+      [&](FsFile& f) { serialization::writePod(f, shortPwrBtn); },
+      [&](FsFile& f) { serialization::writePod(f, statusBar); },
+      [&](FsFile& f) { serialization::writePod(f, orientation); },
+      [&](FsFile& f) { serialization::writePod(f, frontButtonLayout); },  // legacy
+      [&](FsFile& f) { serialization::writePod(f, sideButtonLayout); },
+      [&](FsFile& f) { serialization::writePod(f, fontFamily); },
+      [&](FsFile& f) { serialization::writePod(f, fontSize); },
+      [&](FsFile& f) { serialization::writePod(f, lineSpacing); },
+      [&](FsFile& f) { serialization::writePod(f, paragraphAlignment); },
+      [&](FsFile& f) { serialization::writePod(f, sleepTimeout); },
+      [&](FsFile& f) { serialization::writePod(f, refreshFrequency); },
+      [&](FsFile& f) { serialization::writePod(f, screenMargin); },
+      [&](FsFile& f) { serialization::writePod(f, sleepScreenCoverMode); },
+      [&](FsFile& f) { serialization::writeString(f, std::string(opdsServerUrl)); },
+      [&](FsFile& f) { serialization::writePod(f, textAntiAliasing); },
+      [&](FsFile& f) { serialization::writePod(f, hideBatteryPercentage); },
+      [&](FsFile& f) { serialization::writePod(f, longPressChapterSkip); },
+      [&](FsFile& f) { serialization::writePod(f, hyphenationEnabled); },
+      [&](FsFile& f) { serialization::writeString(f, std::string(opdsUsername)); },
+      [&](FsFile& f) { serialization::writeString(f, std::string(opdsPassword)); },
+      [&](FsFile& f) { serialization::writePod(f, sleepScreenCoverFilter); },
+      [&](FsFile& f) { serialization::writePod(f, uiTheme); },
+      [&](FsFile& f) { serialization::writePod(f, frontButtonBack); },
+      [&](FsFile& f) { serialization::writePod(f, frontButtonConfirm); },
+      [&](FsFile& f) { serialization::writePod(f, frontButtonLeft); },
+      [&](FsFile& f) { serialization::writePod(f, frontButtonRight); },
+      [&](FsFile& f) { serialization::writePod(f, fadingFix); },
+      [&](FsFile& f) { serialization::writePod(f, embeddedStyle); },
+      // New fields need to be added at end for backward compatibility
+  };
+
   serialization::writePod(outputFile, SETTINGS_FILE_VERSION);
-  serialization::writePod(outputFile, SETTINGS_COUNT);
-  serialization::writePod(outputFile, sleepScreen);
-  serialization::writePod(outputFile, extraParagraphSpacing);
-  serialization::writePod(outputFile, shortPwrBtn);
-  serialization::writePod(outputFile, statusBar);
-  serialization::writePod(outputFile, orientation);
-  serialization::writePod(outputFile, frontButtonLayout);  // legacy
-  serialization::writePod(outputFile, sideButtonLayout);
-  serialization::writePod(outputFile, fontFamily);
-  serialization::writePod(outputFile, fontSize);
-  serialization::writePod(outputFile, lineSpacing);
-  serialization::writePod(outputFile, paragraphAlignment);
-  serialization::writePod(outputFile, sleepTimeout);
-  serialization::writePod(outputFile, refreshFrequency);
-  serialization::writePod(outputFile, screenMargin);
-  serialization::writePod(outputFile, sleepScreenCoverMode);
-  serialization::writeString(outputFile, std::string(opdsServerUrl));
-  serialization::writePod(outputFile, textAntiAliasing);
-  serialization::writePod(outputFile, hideBatteryPercentage);
-  serialization::writePod(outputFile, longPressChapterSkip);
-  serialization::writePod(outputFile, hyphenationEnabled);
-  serialization::writeString(outputFile, std::string(opdsUsername));
-  serialization::writeString(outputFile, std::string(opdsPassword));
-  serialization::writePod(outputFile, sleepScreenCoverFilter);
-  serialization::writePod(outputFile, uiTheme);
-  serialization::writePod(outputFile, frontButtonBack);
-  serialization::writePod(outputFile, frontButtonConfirm);
-  serialization::writePod(outputFile, frontButtonLeft);
-  serialization::writePod(outputFile, frontButtonRight);
-  serialization::writePod(outputFile, fadingFix);
-  serialization::writePod(outputFile, embeddedStyle);
-  // New fields added at end for backward compatibility
+  serialization::writePod(outputFile, static_cast<uint8_t>(writers.size()));
+  for (const auto& writer : writers) {
+    writer(outputFile);
+  }
+
   outputFile.close();
 
-  Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
+  Serial.printf("[%lu] [CPS] %u settings saved to file\n", millis(), writers.size());
   return true;
 }
 
