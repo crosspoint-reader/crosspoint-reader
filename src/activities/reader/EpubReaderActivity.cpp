@@ -28,8 +28,9 @@ constexpr unsigned long formattingToggleMs = 500;
 // New constant for double click speed
 constexpr unsigned long doubleClickMs = 300;
 
-// Global state for the Help Overlay
+// Global state for the Help Overlay and Night Mode
 static bool showHelpOverlay = false;
+static bool isNightMode = false;
 
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
@@ -81,8 +82,8 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, Bo
     if (w > maxWidth) maxWidth = w;
   }
 
-  // Tighter padding to fit small text nicely (6px top/bottom)
-  int padding = 12;
+  // Padding
+  int padding = 16;
   int boxWidth = maxWidth + padding;
   int boxHeight = (lines.size() * lineHeight) + padding;
 
@@ -109,7 +110,6 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, Bo
     int lineWidth = renderer.getTextWidth(fontId, lines[i].c_str());
     int lineX = drawX + (boxWidth - lineWidth) / 2;
 
-    // padding/2 = 6px offset from top
     renderer.drawText(fontId, lineX, y + (padding / 2) + (i * lineHeight), lines[i].c_str());
   }
 }
@@ -126,6 +126,8 @@ void EpubReaderActivity::onEnter() {
 
   // Reset help overlay state when entering a book
   showHelpOverlay = false;
+  // Reset Night Mode on entry
+  isNightMode = false;
 
   if (!epub) {
     return;
@@ -220,6 +222,10 @@ void EpubReaderActivity::loop() {
   static bool waitingForFormatDec = false;
   static unsigned long lastFormatIncRelease = 0;
   static bool waitingForFormatInc = false;
+  
+  // Double click state for Back button (Dark Mode Toggle)
+  static unsigned long lastBackRelease = 0;
+  static bool waitingForBack = false;
 
   if (subActivity) {
     subActivity->loop();
@@ -286,14 +292,34 @@ void EpubReaderActivity::loop() {
     xSemaphoreGive(renderingMutex);
   }
 
+  // --- BACK BUTTON LOGIC (Go Home / Dark Mode) ---
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
     onGoBack();
     return;
   }
 
+  // Replace standard single-click logic with Double Click detection for Dark Mode
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
-    onGoHome();
-    return;
+    if (waitingForBack && (millis() - lastBackRelease < doubleClickMs)) {
+        // DOUBLE CLICK: Toggle Dark Mode
+        waitingForBack = false;
+        isNightMode = !isNightMode;
+        GUI.drawPopup(renderer, isNightMode ? "Dark Mode" : "Light Mode");
+        clearPopupTimer = millis() + 1000;
+        updateRequired = true;
+        return;
+    } else {
+        // First click
+        waitingForBack = true;
+        lastBackRelease = millis();
+    }
+  }
+  
+  // Timeout for Single Click (Go Home)
+  if (waitingForBack && (millis() - lastBackRelease > doubleClickMs)) {
+      waitingForBack = false;
+      onGoHome();
+      return;
   }
 
   // =========================================================================================
@@ -349,7 +375,7 @@ void EpubReaderActivity::loop() {
       return;
     } else {
       if (waitingForFormatDec && (millis() - lastFormatDecRelease < doubleClickMs)) {
-        // DOUBLE CLICK: Toggle Alignment
+        // DOUBLE CLICK: Toggle Alignment (Restored)
         waitingForFormatDec = false;
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
         if (section) {
@@ -889,22 +915,25 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
+  if (isNightMode) {
+    renderer.invertScreen();
+  }
+
   // --- HELP OVERLAY RENDERING ---
   if (showHelpOverlay) {
     const int w = renderer.getScreenWidth();
     const int h = renderer.getScreenHeight();
 
-    // Use UI_12_FONT_ID (explicitly small/standard) for EVERYTHING to ensure proper sizing
-    // and no clipping in landscape.
+    // Use UI_12_FONT_ID (small/standard) for EVERYTHING
     int32_t overlayFontId = UI_12_FONT_ID;
-    int overlayLineHeight = 18;  // Tight line height for small font
+    int overlayLineHeight = 18;  // Tight line height
 
     // Draw Center "Dismiss" instruction
-    // Landscape: y = 300 (lowered to be below buttons)
-    // Portrait: y = 500 (centered vertical lower half)
+    // Landscape: y = 300 (below buttons)
+    // Portrait: y = 500 (lower half center)
     int dismissY = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? 500 : 300;
 
-    // Landscape adjustment for center (matching the shift of the top buttons)
+    // Landscape adjustment for center
     int dismissX = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) ? w / 2 : w / 2 + 25;
 
     drawHelpBox(renderer, dismissX, dismissY, "PRESS ANY KEY\nTO DISMISS", BoxAlign::CENTER, overlayFontId,
@@ -913,7 +942,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     if (SETTINGS.orientation == CrossPointSettings::ORIENTATION::PORTRAIT) {
       // PORTRAIT LABELS
       // Front Left (Bottom Left) - Corrected to w-160 for clean gap with small font
-      drawHelpBox(renderer, w - 160, h - 80, "1x: Text size –\nHold: Spacing\n2x: Alignment", BoxAlign::RIGHT,
+      // Added "2x Back: Dark" to prompt user
+      drawHelpBox(renderer, w - 160, h - 80, "1x: Text size –\nHold: Spacing\n2x: Alignment\n2x Back: Dark", BoxAlign::RIGHT,
                   overlayFontId, overlayLineHeight);
 
       // Front Right (Bottom Right)
@@ -925,7 +955,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
       // Top Buttons (Top Edge - configuration)
       // Left (was Left) - shifted right by 20
-      drawHelpBox(renderer, w / 2 + 20, 20, "1x: Text size –\nHold: Spacing\n2x: Alignment", BoxAlign::RIGHT,
+      drawHelpBox(renderer, w / 2 + 20, 20, "1x: Text size –\nHold: Spacing\n2x: Alignment\n2x Back: Dark", BoxAlign::RIGHT,
                   overlayFontId, overlayLineHeight);
 
       // Right (was Right) - shifted right by 30
@@ -934,7 +964,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
   }
 
-  // --- STANDARD REFRESH (Reverted to original behavior) ---
+  // --- STANDARD REFRESH (Original behavior) ---
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
@@ -945,7 +975,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   renderer.storeBwBuffer();
 
-  if (SETTINGS.textAntiAliasing && !showHelpOverlay) {  // Don't anti-alias the help overlay
+  if (SETTINGS.textAntiAliasing && !showHelpOverlay && !isNightMode) {  // Don't anti-alias the help overlay
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
