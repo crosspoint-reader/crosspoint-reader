@@ -4,9 +4,9 @@
 #include <HardwareSerial.h>
 
 bool ImageToFramebufferDecoder::validateImageDimensions(int width, int height, const std::string& format) {
-  if (width > MAX_SOURCE_WIDTH || height > MAX_SOURCE_HEIGHT) {
-    Serial.printf("[%lu] [IMG] Image too large (%dx%d %s), max supported: %dx%d\n", millis(), width, height,
-                  format.c_str(), MAX_SOURCE_WIDTH, MAX_SOURCE_HEIGHT);
+  if (width * height > MAX_SOURCE_PIXELS) {
+    Serial.printf("[%lu] [IMG] Image too large (%dx%d = %d pixels %s), max supported: %d pixels\n", millis(), width,
+                  height, width * height, format.c_str(), MAX_SOURCE_PIXELS);
     return false;
   }
   return true;
