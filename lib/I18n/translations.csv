@@ -1,317 +1,317 @@
-KEYS,ENGLISH,FRENCH,GERMAN,CZECH,PORTUGUESE,RUSSIA
-,English,Français,Deutsch,Čeština,Português (Brasil),Русский
-STR_CROSSPOINT,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint
-STR_BOOTING,BOOTING,DÉMARRAGE EN COURS,STARTEN,SPUŠTĚNÍ,INICIANDO,Загрузка
-STR_SLEEPING,SLEEPING,VEILLE,STANDBY,SPÁNEK,EM REPOUSO,Спящий режим
-STR_ENTERING_SLEEP,Entering Sleep...,Mise en veille…,Standby...,Vstup do režimu spánku...,Entrando em repouso...,Переход в сон...
-STR_BROWSE_FILES,Browse Files,Fichiers,Durchsuchen,Procházet soubory,Procurar arquivos,Обзор файлов
-STR_FILE_TRANSFER,File Transfer,Transfert,Datentransfer,Přenos souborů,Transferência,Передача файлов
-STR_SETTINGS_TITLE,Settings,Réglages,Einstellungen,Nastavení,Configurações,Настройки
-STR_CALIBRE_LIBRARY,Calibre Library,Bibliothèque Calibre,Calibre-Bibliothek,Knihovna Calibre,Biblioteca do Calibre,Библиотека Calibre
-STR_CONTINUE_READING,Continue Reading,Continuer la lecture,Weiterlesen,Pokračovat ve čtení,Continuar lendo,Продолжить чтение
-STR_NO_OPEN_BOOK,No open book,Aucun livre ouvert,Aktuell kein Buch,Žádná otevřená kniha,Nenhum livro aberto,Нет открытой книги
-STR_START_READING,Start reading below,Lisez votre premier livre ci-dessous,Lesen beginnen,Začněte číst níže,Comece a ler abaixo,Начать чтение ниже
-STR_BOOKS,Books,Livres,Bücher,Knihy,Livros,Книги
-STR_NO_BOOKS_FOUND,No books found,Dossier vide,Keine Bücher,Žádné knihy nenalezeny,Sem livros,Книги не найдены
-STR_SELECT_CHAPTER,Select Chapter,Choix du chapitre,Kapitel auswählen,Vybrat kapitolu,Selecionar capítulo,Выберите главу
-STR_NO_CHAPTERS,No chapters,Aucun chapitre,Keine Kapitel,Žádné kapitoly,Sem capítulos,Глав нет
-STR_END_OF_BOOK,End of book,Fin du livre,Buchende,Konec knihy,Fim do livro,Конец книги
-STR_EMPTY_CHAPTER,Empty chapter,Chapitre vide,Kapitelende,Prázdná kapitola,Capítulo vazio,Пустая глава
-STR_INDEXING,Indexing...,Indexation en cours…,Indexieren…,Indexování...,Indexando...,Индексация...
-STR_MEMORY_ERROR,Memory error,Erreur de mémoire,Speicherfehler,Chyba paměti,Erro de memória,Ошибка памяти
-STR_PAGE_LOAD_ERROR,Page load error,Erreur de chargement,Seitenladefehler,Chyba načítání stránky,Erro página,Ошибка загрузки страницы
-STR_EMPTY_FILE,Empty file,Fichier vide,Leere Datei,Prázdný soubor,Arquivo vazio,Пустой файл
-STR_OUT_OF_BOUNDS,Out of bounds,Dépassement de mémoire,Zu groß,Mimo hranice,Fora dos limites,Выход за пределы
-STR_LOADING,Loading...,Chargement…,Laden…,Načítání...,Carregando...,Загрузка...
-STR_LOAD_XTC_FAILED,Failed to load XTC,Erreur de chargement du fichier XTC,Ladefehler bei XTC,Nepodařilo se načíst XTC,Falha ao carregar XTC,Не удалось загрузить XTC
-STR_LOAD_TXT_FAILED,Failed to load TXT,Erreur de chargement du fichier TXT,Ladefehler bei TXT,Nepodařilo se načíst TXT,Falha ao carregar TXT,Не удалось загрузить TXT
-STR_LOAD_EPUB_FAILED,Failed to load EPUB,Erreur de chargement du fichier EPUB,Ladefehler bei EPUB,Nepodařilo se načíst EPUB,Falha ao carregar EPUB,Не удалось загрузить EPUB
-STR_SD_CARD_ERROR,SD card error,Carte mémoire absente,SD-Karten-Fehler,Chyba SD karty,Erro no cartão SD,Ошибка SD-карты
-STR_WIFI_NETWORKS,WiFi Networks,Réseaux WiFi,WLAN-Netzwerke,Wi-Fi sítě,Redes Wi‑Fi,Wi-Fi сети
-STR_NO_NETWORKS,No networks found,Aucun réseau,Kein WLAN gefunden,Žádné sítě nenalezeny,Sem redes,Сети не найдены
-STR_NETWORKS_FOUND,%zu networks found,%zu réseaux,%zu WLAN-Netzwerke gefunden,Nalezeno %zu sítí,%zu redes encontradas,Найдено сетей: %zu
-STR_SCANNING,Scanning...,Recherche de réseaux en cours…,Suchen...,Skenování...,Procurando...,Сканирование...
-STR_CONNECTING,Connecting...,Connexion en cours…,Verbinden...,Připojování...,Conectando...,Подключение...
-STR_CONNECTED,Connected!,Connecté !,Verbunden!,Připojeno!,Conectado!,Подключено!
-STR_CONNECTION_FAILED,Connection Failed,Échec de la connexion,Verbindungsfehler,Připojení se nezdařilo,Falha na conexão,Ошибка подключения
-STR_CONNECTION_TIMEOUT,Connection timeout,Délai de connexion dépassé,Verbindungs-Timeout,Časový limit připojení,Tempo limite conexão,Тайм-аут подключения
-STR_FORGET_NETWORK,Forget Network?,Oublier ce réseau ?,WLAN vergessen?,Zapomenout síť?,Esquecer rede?,Забыть сеть?
-STR_SAVE_PASSWORD,Save password for next time?,Enregistrer le mot de passe ?,Passwort speichern?,Uložit heslo pro příště?,Salvar senha a próxima vez?,Сохранить пароль?
-STR_REMOVE_PASSWORD,Remove saved password?,Supprimer le mot de passe enregistré ?,Passwort entfernen?,Odstranit uložené heslo?,Remover senha salva?,Удалить сохранённый пароль?
-STR_PRESS_OK_SCAN,Press OK to scan again,Appuyez sur OK pour détecter à nouveau,OK für neue Suche,Stiskněte OK pro přeskenování,Pressione OK procurar novamente,Нажмите OK для повторного поиска
-STR_PRESS_ANY_CONTINUE,Press any button to continue,Appuyez sur une touche pour continuer,Beliebige Taste drücken,Pokračujte stiskem libovolné klávesy,Pressione qualquer botão continuar,Нажмите любую кнопку
-STR_SELECT_HINT,LEFT/RIGHT: Select | OK: Confirm,GAUCHE/DROITE: Sélectionner | OK: Valider,links/rechts: Auswahl | OK: Best,VLEVO/VPRAVO: Vybrat | OK: Potvrdit,ESQ/DIR: Selecionar | OK: Confirmar,ВЛЕВО/ВПРАВО: выбор | OK: подтвердить
-STR_HOW_CONNECT,How would you like to connect?,Comment voulez-vous vous connecter ?,Wie möchtest du dich verbinden?,Jak se chcete připojit?,Como você gostaria se conectar?,Как вы хотите подключиться?
-STR_JOIN_NETWORK,Join a Network,Connexion à un réseau,Netzwerk beitreten,Připojit se k síti,Entrar em uma rede,Подключиться к сети
-STR_CREATE_HOTSPOT,Create Hotspot,Créer un point d’accès,Hotspot erstellen,Vytvořit hotspot,Criar hotspot,Создать точку доступа
-STR_JOIN_DESC,Connect to an existing WiFi network,Se connecter à un réseau WiFi existant,Mit einem bestehenden WLAN verbinden,Připojit se k existující síti WiFi,Conecte-se a uma rede Wi‑Fi existente,Подключение к существующей сети Wi-Fi
-STR_HOTSPOT_DESC,Create a WiFi network others can join,Créer un réseau WiFi accessible depuis d’autres appareils,WLAN für andere erstellen,"Vytvořit síť WiFi, ke které se mohou připojit ostatní",Crie uma rede Wi‑Fi outras pessoas entrarem,Создать сеть Wi-Fi для подключения других
-STR_STARTING_HOTSPOT,Starting Hotspot...,Création du point d’accès en cours…,Hotspot starten…,Spouštění hotspotu...,Iniciando hotspot...,Запуск точки доступа...
-STR_HOTSPOT_MODE,Hotspot Mode,Mode point d’accès,Hotspot-Modus,Režim hotspotu,Modo hotspot,Режим точки доступа
-STR_CONNECT_WIFI_HINT,Connect your device to this WiFi network,Connectez un appareil à ce réseau WiFi,Gerät mit diesem WLAN verbinden,Připojte své zařízení k této síti WiFi,Conecte seu dispositivo a esta rede Wi‑Fi,Подключите устройство к этой сети Wi-Fi
-STR_OPEN_URL_HINT,Open this URL in your browser,Ouvrez cette URL dans votre navigateur,Diese URL im Browser öffnen,Otevřete tuto URL ve svém prohlížeči,Abra este URL seu navegador,Откройте этот адрес в браузере
-STR_OR_HTTP_PREFIX,or http://,ou http://,oder http://,nebo http://,ou http://,или http://
-STR_SCAN_QR_HINT,or scan QR code with your phone:,ou scannez le QR code avec votre téléphone,oder QR-Code mit dem Handy scannen:,nebo naskenujte QR kód telefonem:,ou escaneie o QR code com seu celular:,или отсканируйте QR-код:
-STR_CALIBRE_WIRELESS,Calibre Wireless,Connexion à Calibre sans fil,Calibre Wireless,Calibre Wireless,Calibre sem fio,Calibre по Wi-Fi
-STR_CALIBRE_WEB_URL,Calibre Web URL,URL Web Calibre,Calibre-Web-URL,URL webu Calibre,URL do Calibre Web,Web-адрес Calibre
-STR_CONNECT_WIRELESS,Connect as Wireless Device,Se connecter comme appareil sans fil,Als Drahtlos-Gerät hinzufügen,Připojit jako bezdrátové zařízení,Conectar como dispositivo sem fio,Подключить как беспроводное устройство
-STR_NETWORK_LEGEND,* = Encrypted | + = Saved,* = Sécurisé | + = Sauvegardé,* = Verschlüsselt | + = Gespeichert,* = Šifrováno | + = Uloženo,* = Criptografada | + = Salva,* = Защищена | + = Сохранена
-STR_MAC_ADDRESS,MAC address:,Adresse MAC :,MAC-Adresse:,MAC adresa:,Endereço MAC:,MAC-адрес:
-STR_CHECKING_WIFI,Checking WiFi...,Vérification du réseau WiFi...,WLAN prüfen…,Kontrola WiFi...,Verificando Wi‑Fi...,Проверка Wi-Fi...
-STR_ENTER_WIFI_PASSWORD,Enter WiFi Password,Entrez le mot de passe WiFi,WLAN-Passwort eingeben,Zadejte heslo WiFi,Digite a senha Wi‑Fi,Введите пароль Wi-Fi
-STR_ENTER_TEXT,Enter Text,Entrez le texte,Text eingeben,Zadejte text,Inserir texto,Введите текст
-STR_TO_PREFIX,to ,à ,bis,pro,para,к 
-STR_CALIBRE_DISCOVERING,Discovering Calibre...,Recherche de Calibre en cours…,Calibre finden...,Prozkoumávání Calibre...,Procurando o Calibre...,Поиск Calibre...
-STR_CALIBRE_CONNECTING_TO,Connecting to ,Connexion à ,Verbinden mit,Připojování k,Conectando a,Подключение к 
-STR_CALIBRE_CONNECTED_TO,Connected to ,Connecté à  ,Verbunden mit,Připojeno k,Conectado a,Подключено к 
-STR_CALIBRE_WAITING_COMMANDS,Waiting for commands...,En attente de commandes…,Auf Befehle warten…,Čekám na příkazy…,Aguardando comandos...,Ожидание команд...
-STR_CONNECTION_FAILED_RETRYING,"(Connection failed, retrying)","(Échec de la connexion, nouvelle tentative)","(Keine Verbindung, wiederholen)","(Připojení se nezdařilo, opakování pokusu)","(Falha conexão, tentando novamente)","(Ошибка подключения,  повтор)"
-STR_CALIBRE_DISCONNECTED,Calibre disconnected,Calibre déconnecté,Calibre getrennt,Calibre odpojeno,Calibre desconectado,Соединение с Calibre разорвано
-STR_CALIBRE_WAITING_TRANSFER,Waiting for transfer...,En attente de transfert…,Auf Übertragung warten...,Čekání na přenos...,Aguardando transferência...,Ожидание передачи...
-STR_CALIBRE_TRANSFER_HINT,"If transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice plugin settings.","Si le transfert échoue, activez\n’Ignorer l’espace libre’ dans les\nparamètres du plugin SmartDevice de Calibre.",Bei Übertragungsfehler \n'Freien Speicher ign.' in den\nCalibre-Einstellungen einschalten.,"Nezdaří-li se přenos, povolte\n„Ignorovat volné místo“ v Calibre\nnastavení pluginu SmartDevice.","Se a transferência falhar, ative
+KEYS,ENGLISH,,FRENCH,GERMAN,CZECH,PORTUGUESE,RUSSIA
+,English,Español,Français,Deutsch,Čeština,Português (Brasil),Русский
+STR_CROSSPOINT,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint,CrossPoint
+STR_BOOTING,BOOTING,BOOTING,DÉMARRAGE EN COURS,STARTEN,SPUŠTĚNÍ,INICIANDO,Загрузка
+STR_SLEEPING,SLEEPING,SLEEPING,VEILLE,STANDBY,SPÁNEK,EM REPOUSO,Спящий режим
+STR_ENTERING_SLEEP,Entering Sleep...,ENTERING SLEEP...,Mise en veille…,Standby...,Vstup do režimu spánku...,Entrando em repouso...,Переход в сон...
+STR_BROWSE_FILES,Browse Files,Buscar archivos,Fichiers,Durchsuchen,Procházet soubory,Procurar arquivos,Обзор файлов
+STR_FILE_TRANSFER,File Transfer,Transferencia de archivos,Transfert,Datentransfer,Přenos souborů,Transferência,Передача файлов
+STR_SETTINGS_TITLE,Settings,Configuración,Réglages,Einstellungen,Nastavení,Configurações,Настройки
+STR_CALIBRE_LIBRARY,Calibre Library,Libreria Calibre,Bibliothèque Calibre,Calibre-Bibliothek,Knihovna Calibre,Biblioteca do Calibre,Библиотека Calibre
+STR_CONTINUE_READING,Continue Reading,Continuar leyendo,Continuer la lecture,Weiterlesen,Pokračovat ve čtení,Continuar lendo,Продолжить чтение
+STR_NO_OPEN_BOOK,No open book,No hay libros abiertos,Aucun livre ouvert,Aktuell kein Buch,Žádná otevřená kniha,Nenhum livro aberto,Нет открытой книги
+STR_START_READING,Start reading below,Start reading below,Lisez votre premier livre ci-dessous,Lesen beginnen,Začněte číst níže,Comece a ler abaixo,Начать чтение ниже
+STR_BOOKS,Books,Libros,Livres,Bücher,Knihy,Livros,Книги
+STR_NO_BOOKS_FOUND,No books found,No se encontraron libros,Dossier vide,Keine Bücher,Žádné knihy nenalezeny,Sem livros,Книги не найдены
+STR_SELECT_CHAPTER,Select Chapter,Seleccionar capítulo,Choix du chapitre,Kapitel auswählen,Vybrat kapitolu,Selecionar capítulo,Выберите главу
+STR_NO_CHAPTERS,No chapters,Sin capítulos,Aucun chapitre,Keine Kapitel,Žádné kapitoly,Sem capítulos,Глав нет
+STR_END_OF_BOOK,End of book,Fin del libro,Fin du livre,Buchende,Konec knihy,Fim do livro,Конец книги
+STR_EMPTY_CHAPTER,Empty chapter,Capítulo vacío,Chapitre vide,Kapitelende,Prázdná kapitola,Capítulo vazio,Пустая глава
+STR_INDEXING,Indexing...,Indexando...,Indexation en cours…,Indexieren…,Indexování...,Indexando...,Индексация...
+STR_MEMORY_ERROR,Memory error,Error de memoria,Erreur de mémoire,Speicherfehler,Chyba paměti,Erro de memória,Ошибка памяти
+STR_PAGE_LOAD_ERROR,Page load error,Error al cargar la página,Erreur de chargement,Seitenladefehler,Chyba načítání stránky,Erro página,Ошибка загрузки страницы
+STR_EMPTY_FILE,Empty file,Archivo vacío,Fichier vide,Leere Datei,Prázdný soubor,Arquivo vazio,Пустой файл
+STR_OUT_OF_BOUNDS,Out of bounds,Out of bounds,Dépassement de mémoire,Zu groß,Mimo hranice,Fora dos limites,Выход за пределы
+STR_LOADING,Loading...,Cargando...,Chargement…,Laden…,Načítání...,Carregando...,Загрузка...
+STR_LOAD_XTC_FAILED,Failed to load XTC,Error al cargar XTC,Erreur de chargement du fichier XTC,Ladefehler bei XTC,Nepodařilo se načíst XTC,Falha ao carregar XTC,Не удалось загрузить XTC
+STR_LOAD_TXT_FAILED,Failed to load TXT,Error al cargar TXT,Erreur de chargement du fichier TXT,Ladefehler bei TXT,Nepodařilo se načíst TXT,Falha ao carregar TXT,Не удалось загрузить TXT
+STR_LOAD_EPUB_FAILED,Failed to load EPUB,Error al cargar EPUB,Erreur de chargement du fichier EPUB,Ladefehler bei EPUB,Nepodařilo se načíst EPUB,Falha ao carregar EPUB,Не удалось загрузить EPUB
+STR_SD_CARD_ERROR,SD card error,Error en la tarjeta SD,Carte mémoire absente,SD-Karten-Fehler,Chyba SD karty,Erro no cartão SD,Ошибка SD-карты
+STR_WIFI_NETWORKS,WiFi Networks,Redes Wi-Fi,Réseaux WiFi,WLAN-Netzwerke,Wi-Fi sítě,Redes Wi‑Fi,Wi-Fi сети
+STR_NO_NETWORKS,No networks found,No hay redes disponibles,Aucun réseau,Kein WLAN gefunden,Žádné sítě nenalezeny,Sem redes,Сети не найдены
+STR_NETWORKS_FOUND,%zu networks found,%zu redes encontradas,%zu réseaux,%zu WLAN-Netzwerke gefunden,Nalezeno %zu sítí,%zu redes encontradas,Найдено сетей: %zu
+STR_SCANNING,Scanning...,Buscando...,Recherche de réseaux en cours…,Suchen...,Skenování...,Procurando...,Сканирование...
+STR_CONNECTING,Connecting...,Conectando...,Connexion en cours…,Verbinden...,Připojování...,Conectando...,Подключение...
+STR_CONNECTED,Connected!,Conectado!,Connecté !,Verbunden!,Připojeno!,Conectado!,Подключено!
+STR_CONNECTION_FAILED,Connection Failed,Error de conexion,Échec de la connexion,Verbindungsfehler,Připojení se nezdařilo,Falha na conexão,Ошибка подключения
+STR_CONNECTION_TIMEOUT,Connection timeout,Connection timeout,Délai de connexion dépassé,Verbindungs-Timeout,Časový limit připojení,Tempo limite conexão,Тайм-аут подключения
+STR_FORGET_NETWORK,Forget Network?,Olvidar la red?,Oublier ce réseau ?,WLAN vergessen?,Zapomenout síť?,Esquecer rede?,Забыть сеть?
+STR_SAVE_PASSWORD,Save password for next time?,Guardar contraseña para la próxima vez?,Enregistrer le mot de passe ?,Passwort speichern?,Uložit heslo pro příště?,Salvar senha a próxima vez?,Сохранить пароль?
+STR_REMOVE_PASSWORD,Remove saved password?,Borrar contraseñas guardadas?,Supprimer le mot de passe enregistré ?,Passwort entfernen?,Odstranit uložené heslo?,Remover senha salva?,Удалить сохранённый пароль?
+STR_PRESS_OK_SCAN,Press OK to scan again,Presione OK para buscar de nuevo,Appuyez sur OK pour détecter à nouveau,OK für neue Suche,Stiskněte OK pro přeskenování,Pressione OK procurar novamente,Нажмите OK для повторного поиска
+STR_PRESS_ANY_CONTINUE,Press any button to continue,Presione cualquier botón para continuar,Appuyez sur une touche pour continuer,Beliebige Taste drücken,Pokračujte stiskem libovolné klávesy,Pressione qualquer botão continuar,Нажмите любую кнопку
+STR_SELECT_HINT,LEFT/RIGHT: Select | OK: Confirm,Izquierda/Derecha: Seleccionar | OK: Confirmar,GAUCHE/DROITE: Sélectionner | OK: Valider,links/rechts: Auswahl | OK: Best,VLEVO/VPRAVO: Vybrat | OK: Potvrdit,ESQ/DIR: Selecionar | OK: Confirmar,ВЛЕВО/ВПРАВО: выбор | OK: подтвердить
+STR_HOW_CONNECT,How would you like to connect?,Cómo te gustaría conectarte?,Comment voulez-vous vous connecter ?,Wie möchtest du dich verbinden?,Jak se chcete připojit?,Como você gostaria se conectar?,Как вы хотите подключиться?
+STR_JOIN_NETWORK,Join a Network,Unirse a una red,Connexion à un réseau,Netzwerk beitreten,Připojit se k síti,Entrar em uma rede,Подключиться к сети
+STR_CREATE_HOTSPOT,Create Hotspot,Crear punto de acceso,Créer un point d’accès,Hotspot erstellen,Vytvořit hotspot,Criar hotspot,Создать точку доступа
+STR_JOIN_DESC,Connect to an existing WiFi network,Conectarse a una red Wi-Fi existente,Se connecter à un réseau WiFi existant,Mit einem bestehenden WLAN verbinden,Připojit se k existující síti WiFi,Conecte-se a uma rede Wi‑Fi existente,Подключение к существующей сети Wi-Fi
+STR_HOTSPOT_DESC,Create a WiFi network others can join,Crear una red Wi-Fi para que otros se unan,Créer un réseau WiFi accessible depuis d’autres appareils,WLAN für andere erstellen,"Vytvořit síť WiFi, ke které se mohou připojit ostatní",Crie uma rede Wi‑Fi outras pessoas entrarem,Создать сеть Wi-Fi для подключения других
+STR_STARTING_HOTSPOT,Starting Hotspot...,Iniciando punto de acceso...,Création du point d’accès en cours…,Hotspot starten…,Spouštění hotspotu...,Iniciando hotspot...,Запуск точки доступа...
+STR_HOTSPOT_MODE,Hotspot Mode,Modo punto de acceso,Mode point d’accès,Hotspot-Modus,Režim hotspotu,Modo hotspot,Режим точки доступа
+STR_CONNECT_WIFI_HINT,Connect your device to this WiFi network,Conectar su dispositivo a esta red Wi-Fi,Connectez un appareil à ce réseau WiFi,Gerät mit diesem WLAN verbinden,Připojte své zařízení k této síti WiFi,Conecte seu dispositivo a esta rede Wi‑Fi,Подключите устройство к этой сети Wi-Fi
+STR_OPEN_URL_HINT,Open this URL in your browser,Abre esta dirección en tu navegador,Ouvrez cette URL dans votre navigateur,Diese URL im Browser öffnen,Otevřete tuto URL ve svém prohlížeči,Abra este URL seu navegador,Откройте этот адрес в браузере
+STR_OR_HTTP_PREFIX,or http://,o http://,ou http://,oder http://,nebo http://,ou http://,или http://
+STR_SCAN_QR_HINT,or scan QR code with your phone:,o escanee este código QR con su móvil:,ou scannez le QR code avec votre téléphone,oder QR-Code mit dem Handy scannen:,nebo naskenujte QR kód telefonem:,ou escaneie o QR code com seu celular:,или отсканируйте QR-код:
+STR_CALIBRE_WIRELESS,Calibre Wireless,Calibre inalámbrico,Connexion à Calibre sans fil,Calibre Wireless,Calibre Wireless,Calibre sem fio,Calibre по Wi-Fi
+STR_CALIBRE_WEB_URL,Calibre Web URL,URL del sitio web de Calibre,URL Web Calibre,Calibre-Web-URL,URL webu Calibre,URL do Calibre Web,Web-адрес Calibre
+STR_CONNECT_WIRELESS,Connect as Wireless Device,Conectar como dispositivo inalámbrico,Se connecter comme appareil sans fil,Als Drahtlos-Gerät hinzufügen,Připojit jako bezdrátové zařízení,Conectar como dispositivo sem fio,Подключить как беспроводное устройство
+STR_NETWORK_LEGEND,* = Encrypted | + = Saved,* = Cifrado | + = Guardado,* = Sécurisé | + = Sauvegardé,* = Verschlüsselt | + = Gespeichert,* = Šifrováno | + = Uloženo,* = Criptografada | + = Salva,* = Защищена | + = Сохранена
+STR_MAC_ADDRESS,MAC address:,Dirección MAC:,Adresse MAC :,MAC-Adresse:,MAC adresa:,Endereço MAC:,MAC-адрес:
+STR_CHECKING_WIFI,Checking WiFi...,Verificando Wi-Fi...,Vérification du réseau WiFi...,WLAN prüfen…,Kontrola WiFi...,Verificando Wi‑Fi...,Проверка Wi-Fi...
+STR_ENTER_WIFI_PASSWORD,Enter WiFi Password,Introduzca la contraseña de Wi-Fi,Entrez le mot de passe WiFi,WLAN-Passwort eingeben,Zadejte heslo WiFi,Digite a senha Wi‑Fi,Введите пароль Wi-Fi
+STR_ENTER_TEXT,Enter Text,Introduzca el texto,Entrez le texte,Text eingeben,Zadejte text,Inserir texto,Введите текст
+STR_TO_PREFIX,to ,a ,à ,bis,pro,para,к 
+STR_CALIBRE_DISCOVERING,Discovering Calibre...,Discovering Calibre...,Recherche de Calibre en cours…,Calibre finden...,Prozkoumávání Calibre...,Procurando o Calibre...,Поиск Calibre...
+STR_CALIBRE_CONNECTING_TO,Connecting to ,Conectándose a,Connexion à ,Verbinden mit,Připojování k,Conectando a,Подключение к 
+STR_CALIBRE_CONNECTED_TO,Connected to ,Conectado a ,Connecté à  ,Verbunden mit,Připojeno k,Conectado a,Подключено к 
+STR_CALIBRE_WAITING_COMMANDS,Waiting for commands...,Esperando comandos...,En attente de commandes…,Auf Befehle warten…,Čekám na příkazy…,Aguardando comandos...,Ожидание команд...
+STR_CONNECTION_FAILED_RETRYING,"(Connection failed, retrying)","(Error de conexión, intentándolo nuevamente)","(Échec de la connexion, nouvelle tentative)","(Keine Verbindung, wiederholen)","(Připojení se nezdařilo, opakování pokusu)","(Falha conexão, tentando novamente)","(Ошибка подключения,  повтор)"
+STR_CALIBRE_DISCONNECTED,Calibre disconnected,Calibre desconectado,Calibre déconnecté,Calibre getrennt,Calibre odpojeno,Calibre desconectado,Соединение с Calibre разорвано
+STR_CALIBRE_WAITING_TRANSFER,Waiting for transfer...,Esperando transferencia...,En attente de transfert…,Auf Übertragung warten...,Čekání na přenos...,Aguardando transferência...,Ожидание передачи...
+STR_CALIBRE_TRANSFER_HINT,"If transfer fails, enable\n'Ignore free space' in Calibre's\nSmartDevice plugin settings.","Si la transferencia falla, habilite \n'Ignorar espacio libre' en las configuraciones del \nplugin smartdevice de calibre.","Si le transfert échoue, activez\n’Ignorer l’espace libre’ dans les\nparamètres du plugin SmartDevice de Calibre.",Bei Übertragungsfehler \n'Freien Speicher ign.' in den\nCalibre-Einstellungen einschalten.,"Nezdaří-li se přenos, povolte\n„Ignorovat volné místo“ v Calibre\nnastavení pluginu SmartDevice.","Se a transferência falhar, ative
 \n'Ignorar espaço livre'\n nas \nconfigurações do
 plugin SmartDevice\n Calibre.","Если передача не удаётся,  включите\n'Ignore free space' в настройках\nплагина SmartDevice в Calibre."
-STR_CALIBRE_RECEIVING,Receiving: ,Réception : ,Empfange:,Příjem:,Recebendo:,Получение: 
-STR_CALIBRE_RECEIVED,Received: ,Reçus : ,Empfangen:,Přijato:,Recebido:,Получено: 
-STR_CALIBRE_WAITING_MORE,Waiting for more...,En attente de données supplémentaires…,Auf mehr warten…,Čekání na další...,Aguardando mais...,Ожидание следующих файлов...
-STR_CALIBRE_FAILED_CREATE_FILE,Failed to create file,Échec de la création du fichier,Speicherfehler,Nepodařilo se vytvořit soubor,Falha ao criar o arquivo,Не удалось создать файл
-STR_CALIBRE_PASSWORD_REQUIRED,Password required,Mot de passe requis,Passwort nötig,Vyžadováno heslo,Senha obrigatória,Требуется пароль
-STR_CALIBRE_TRANSFER_INTERRUPTED,Transfer interrupted,Transfert interrompu,Übertragung unterbrochen,Přenos přerušen,Transf. interrompida,Передача прервана
-STR_CALIBRE_INSTRUCTION_1,1) Install CrossPoint Reader plugin,1) Installer le plugin CrossPoint Reader,1) CrossPoint Reader-Plugin installieren,1) Nainstalujte plugin CrossPoint Reader,1) Instale o plugin CrossPoint Reader,1) Установите плагин CrossPoint Reader
-STR_CALIBRE_INSTRUCTION_2,2) Be on the same WiFi network,2) Se connecter au même réseau WiFi,2) Mit selbem WLAN verbinden,2) Buďte ve stejné síti WiFi,2) Esteja mesma rede Wi‑Fi,2) Подключитесь к той же сети Wi-Fi
-STR_CALIBRE_INSTRUCTION_3,"3) In Calibre: ""Send to device""",3) Dans Calibre : ‘Envoyer vers l’appareil’,"3) In Calibre: ""An Gerät senden""",3) V Calibre: „Odeslat do zařízení“,"3) No Calibre: ""Enviar o dispositivo""",3) В Calibre выберите: «Отправить на устройство»
-STR_CALIBRE_INSTRUCTION_4,"""Keep this screen open while sending""",“Gardez cet écran ouvert pendant le transfert”,Bildschirm beim Senden offenlassen,„Při odesílání ponechat tuto obrazovku otevřenou“,"""Mantenha esta tela aberta durante o envio""",Не закрывайте этот экран во время отправки
-STR_CAT_DISPLAY,Display,Affichage,Anzeige,Displej,Tela,Экран
-STR_CAT_READER,Reader,Lecteur,Lesen,Čtečka,Leitor,Чтение
-STR_CAT_CONTROLS,Controls,Commandes,Bedienung,Ovládací prvky,Controles,Управление
-STR_CAT_SYSTEM,System,Système,System,Systém,Sistema,Система
-STR_SLEEP_SCREEN,Sleep Screen,Écran de veille,Standby-Bild,Obrazovka spánku,Tela de repouso,Экран сна
-STR_SLEEP_COVER_MODE,Sleep Screen Cover Mode,Mode d’image de l’écran de veille,Standby-Bildmodus,Obrazovka spánku Režim krytu,Modo capa tela repouso,Режим обложки сна
-STR_STATUS_BAR,Status Bar,Barre d’état,Statusleiste,Stavový řádek,Barra de status,Строка состояния
-STR_HIDE_BATTERY,Hide Battery %,Masquer % batterie,Batterie % ausblenden,Skrýt baterii %,Ocultar % da bateria,Скрыть % батареи
-STR_EXTRA_SPACING,Extra Paragraph Spacing,Espacement des paragraphes,Absatzabstand,Extra mezery mezi odstavci,Espaço de parágrafos extra,Доп. интервал абзаца
-STR_TEXT_AA,Text Anti-Aliasing,Lissage du texte,Schriftglättung,Vyhlazování textu,Suavização de texto,Сглаживание текста
-STR_SHORT_PWR_BTN,Short Power Button Click,Appui court bout. alim.,An-Taste kurz drücken,Krátké stisknutí tlačítka napájení,Clique curto botão ligar,Короткое нажатие кнопки питания
-STR_ORIENTATION,Reading Orientation,Orientation de lecture,Leseausrichtung,Orientace čtení,Orientação de leitura,Ориентация чтения
-STR_FRONT_BTN_LAYOUT,Front Button Layout,Disposition des boutons avant,Vorderes Tastenlayout,Rozvržení předních tlačítek,Disposição botões frontais,Расположение передних кнопок
-STR_SIDE_BTN_LAYOUT,Side Button Layout (reader),Disposition des boutons latéraux,Seitliche Tasten (Lesen),Rozvržení bočních tlačítek (čtečka),Disposição botões laterais,Расположение боковых кнопок
-STR_LONG_PRESS_SKIP,Long-press Chapter Skip,Appui long pour saut de chapitre,Langes Drücken springt Kap.,Dlouhé stisknutí Přeskočit kapitolu,Pular capítulo com pressão longa,Долгое нажатие - смена главы
-STR_FONT_FAMILY,Reader Font Family,Police de caractères du lecteur,Lese-Schriftfamilie,Rodina písem čtečky,Fonte do leitor,Шрифт чтения
-STR_EXT_READER_FONT,External Reader Font,Police externe,Externe Schriftart,Písmo externí čtečky,Fonte leitor externo,Внешний шрифт чтения
-STR_EXT_CHINESE_FONT,Reader Font,Police du lecteur,Lese-Schriftart,Písmo čtečky,Fonte do leitor,Шрифт CJK
-STR_EXT_UI_FONT,UI Font,Police de l’interface,Menü-Schriftart,Písmo rozhraní,Fonte da interface,Шрифт интерфейса
-STR_FONT_SIZE,UI Font Size,Taille du texte de l’interface,Schriftgröße,Velikost písma rozhraní,Tam. fonte UI,Размер шрифта интерфейса
-STR_LINE_SPACING,Reader Line Spacing,Espacement des lignes,Lese-Zeilenabstand,Řádkování čtečky,Espaçamento entre linhas,Межстрочный интервал
-STR_ASCII_LETTER_SPACING,ASCII Letter Spacing,Espacement des lettres ASCII,ASCII-Zeichenabstand,Mezery písmen ASCII,Espaçamento letras ASCII,Интервал букв ASCII
-STR_ASCII_DIGIT_SPACING,ASCII Digit Spacing,Espacement des chiffres ASCII,ASCII-Ziffernabstand,Mezery číslic ASCII,Espaçamento dígitos ASCII,Интервал цифр ASCII
-STR_CJK_SPACING,CJK Spacing,Espacement CJK,CJK-Zeichenabstand,Mezery CJK,Espaçamento CJK,Интервал CJK
-STR_COLOR_MODE,Color Mode,Mode couleur,Farbmodus,Režim barev,Modo de cor,Цветовой режим
-STR_SCREEN_MARGIN,Reader Screen Margin,Marges du lecteur,Lese-Seitenränder,Okraj obrazovky čtečky,Margens da tela,Поля экрана
-STR_PARA_ALIGNMENT,Reader Paragraph Alignment,Alignement des paragraphes,Lese-Absatzausrichtung,Zarovnání odstavců čtečky,Alinhamento parágrafo,Выравнивание абзаца
-STR_HYPHENATION,Hyphenation,Césure,Silbentrennung,Dělení slov,Hifenização,Перенос слов
-STR_TIME_TO_SLEEP,Time to Sleep,Mise en veille automatique,Standby nach,Čas do uspání,Tempo para repousar,Сон Через
-STR_REFRESH_FREQ,Refresh Frequency,Fréquence de rafraîchissement,Anti-Ghosting nach,Frekvence obnovení,Frequência atualização,Частота обновления
-STR_CALIBRE_SETTINGS,Calibre Settings,Réglages Calibre,Calibre-Einstellungen,Nastavení Calibre,Configuração do Calibre,Настройки Calibre
-STR_KOREADER_SYNC,KOReader Sync,Synchronisation KOReader,KOReader-Synchr.,KOReaderu Sync,Sincronização KOReader,Синхронизация KOReader
-STR_CHECK_UPDATES,Check for updates,Mise à jour,Nach Updates suchen,Zkontrolovat aktualizace,Verificar atualizações,Проверить обновления
-STR_LANGUAGE,Language,Langue,Sprache,Jazyk,Idioma,Язык
-STR_SELECT_WALLPAPER,Select Wallpaper,Fond d’écran,Bildauswahl Standby,Vybrat tapetu,Selecionar papel parede,Выбрать обои
-STR_CLEAR_READING_CACHE,Clear Reading Cache,Vider le cache de lecture,Lese-Cache leeren,Vymazat mezipaměť čtení,Limpar cache de leitura,Очистить кэш чтения
-STR_CALIBRE,Calibre,Calibre,Calibre,Calibre,Calibre,Calibre
-STR_USERNAME,Username,Nom d’utilisateur,Benutzername,Uživatelské jméno,Nome de usuário,Имя пользователя
-STR_PASSWORD,Password,Mot de passe,Passwort nötig,Heslo,Senha,Пароль
-STR_SYNC_SERVER_URL,Sync Server URL,URL du serveur,Sync-Server-URL,URL synch. serveru,URL servidor sincronização,URL сервера синхронизации
-STR_DOCUMENT_MATCHING,Document Matching,Correspondance,Dateizuordnung,Párování dokumentů,Documento correspondente,Сопоставление документов
-STR_AUTHENTICATE,Authenticate,Se connecter,Authentifizieren,Ověření,Autenticar,Авторизация
-STR_KOREADER_USERNAME,KOReader Username,Nom d’utilisateur,KOReader-Benutzername,Uživ. jméno KOReaderu,Usuário do KOReader,Имя пользователя KOReader
-STR_KOREADER_PASSWORD,KOReader Password,Mot de passe,KOReader-Passwort,Heslo KOReaderu,Senha do KOReader,Пароль KOReader
-STR_FILENAME,Filename,Nom de fichier,Dateiname,Název souboru,Nome do arquivo,Имя файла
-STR_BINARY,Binary,Binaire,Binärdatei,Binární,Binário,Бинарный
-STR_SET_CREDENTIALS_FIRST,Set credentials first,Identifiants manquants,Zuerst anmelden,Nastavte přihlašovací údaje,Defina as credenciais primeiro,Сначала укажите данные
-STR_WIFI_CONN_FAILED,WiFi connection failed,Échec de connexion WiFi,WLAN-Verbindung fehlgeschlagen,Připojení k Wi-Fi selhalo,Falha na conexão Wi‑Fi,Не удалось подключиться к Wi-Fi
-STR_AUTHENTICATING,Authenticating...,Connexion en cours…,Authentifizieren…,Ověřování...,Autenticando...,Авторизация...
-STR_AUTH_SUCCESS,Successfully authenticated!,Connexion réussie !,Erfolgreich authentifiziert!,Úspěšné ověření!,Autenticado com sucesso!,Авторизация успешна!
-STR_KOREADER_AUTH,KOReader Auth,Auth KOReader,KOReader-Auth,Ověření KOReaderu,Autenticação KOReader,Авторизация KOReader
-STR_SYNC_READY,KOReader sync is ready to use,Synchronisation KOReader prête,KOReader-Synchronisierung bereit,Synchronizace KOReaderu je připravena k použití,A sincronização KOReader está pronta uso,Синхронизация KOReader готова
-STR_AUTH_FAILED,Authentication Failed,Échec de la connexion,Authentifizierung fehlg.,Ověření selhalo,Falha na autenticação,Ошибка авторизации
-STR_DONE,Done,OK,Erledigt,Hotovo,Feito,Готово
-STR_CLEAR_CACHE_WARNING_1,This will clear all cached book data.,Le cache de votre bibliothèque sera entièrement vidé,Alle Buch-Caches werden geleert.,Tímto vymažete všechna data knih v mezipaměti.,Isso vai limpar todos os dados livros em cache.,Будут удалены все данные кэша книг.
-STR_CLEAR_CACHE_WARNING_2,All reading progress will be lost!,Votre progression de lecture sera perdue !,Lesefortschritt wird gelöscht!,Veškerý průběh čtení bude ztracen!,Todo o progresso de leitura será perdido!,Весь прогресс чтения будет потерян!
-STR_CLEAR_CACHE_WARNING_3,Books will need to be re-indexed,Les livres devront être réindexés,Bücher müssen beim Öffnen,Knihy bude nutné znovu indexovat,Os livros precisarão ser reindexados,Книги потребуется переиндексировать
-STR_CLEAR_CACHE_WARNING_4,when opened again.,à leur prochaine ouverture.,neu eingelesen werden.,při opětovném otevření.,quando forem abertos novamente.,при повторном открытии.
-STR_CLEARING_CACHE,Clearing cache...,Suppression du cache…,Cache leeren…,Mazání mezipaměti...,Limpando cache...,Очистка кэша...
-STR_CACHE_CLEARED,Cache Cleared,Cache supprimé,Cache geleert,Mezipaměť vymazána,Cache limpo,Кэш очищен
-STR_ITEMS_REMOVED,items removed,éléments supprimés,Einträge entfernt,položky odstraněny,itens removidos,элементов удалено
-STR_FAILED_LOWER,failed,ont échoué,fehlgeschlagen,selhalo,falhou,ошибка
-STR_CLEAR_CACHE_FAILED,Failed to clear cache,Échec de la suppression du cache,Fehler beim Cache-Leeren,Vymazání mezipaměti se nezdařilo,Falha ao limpar o cache,Не удалось очистить кэш
-STR_CHECK_SERIAL_OUTPUT,Check serial output for details,Vérifiez la console série pour plus de détails,Serielle Ausgabe prüfen,Podrobnosti naleznete v sériovém výstupu,Ver saída serial,Проверьте вывод по UART для деталей
-STR_DARK,Dark,Sombre,Dunkel,Tmavý,Escuro,Тёмная
-STR_LIGHT,Light,Clair,Hell,Světlý,Claro,Светлая
-STR_CUSTOM,Custom,Custom,Eigenes,Vlastní,Personalizado,Своя
-STR_COVER,Cover,Couverture,Umschlag,Obálka,Capa,Обложка
-STR_NONE_OPT,None,Aucun,Leer,Žádný,Nenhum,Нет
-STR_FIT,Fit,Ajusté,Anpassen,Přizpůsobit,Ajustar,Вписать
-STR_CROP,Crop,Rogné,Zuschnitt,Oříznout,Recortar,Обрезать
-STR_NO_PROGRESS,No Progress,Sans progression,Ohne Fortschr.,Žádný postup,Sem progresso,Без прогресса
-STR_FULL_OPT,Full,Complète,Vollst.,Plná,Completo,Полная
-STR_NEVER,Never,Jamais,Nie,Nikdy,Nunca,Никогда
-STR_IN_READER,In Reader,Dans le lecteur,Beim Lesen,Ve čtečce,No leitor,В режиме чтения
-STR_ALWAYS,Always,Toujours,Immer,Vždy,Sempre,Всегда
-STR_IGNORE,Ignore,Ignorer,Ignorieren,Ignorovat,Ignorar,Игнорировать
-STR_SLEEP,Sleep,Mise en veille,Standby,Spánek,Repouso,Сон
-STR_PAGE_TURN,Page Turn,Page suivante,Umblättern,Otáčení stránek,Virar página,Перелистывание
-STR_PORTRAIT,Portrait,Portrait,Hochformat,Na výšku,Retrato,Портрет
-STR_LANDSCAPE_CW,Landscape CW,Paysage,Querformat rechts,Na šířku po směru hod. ručiček,Paisagem H,Ландшафт (по часовой)
-STR_INVERTED,Inverted,Inversé,Invertiert,Invertovaný,Invertido,Перевёрнуто
-STR_LANDSCAPE_CCW,Landscape CCW,Paysage inversé,Querformat links,Na šířku proti směru hod. ručiček,Paisagem AH,Ландшафт (против часовой)
-STR_FRONT_LAYOUT_BCLR,"Bck, Cnfrm, Lft, Rght","Ret, OK, Gauche, Droite","Zurück, Bst, L, R","Zpět, Potvrdit, Vlevo, Vpravo","Vol, Conf, Esq, Dir","Наз, ОК, Лев, Прав "
-STR_FRONT_LAYOUT_LRBC,"Lft, Rght, Bck, Cnfrm","Gauche, Droite, Ret, OK","L, R, Zurück, Bst","Vlevo, Vpravo, Zpět, Potvrdit","Esq, Dir, Vol, Conf","Лев, Прав, Наз, ОК "
-STR_FRONT_LAYOUT_LBCR,"Lft, Bck, Cnfrm, Rght","Gauche, Ret, OK, Droite","L, Zurück, Bst, R","Vlevo, Zpět, Potvrdit, Vpravo","Esq, Vol, Conf, Dir","Лев,  Наз, ОК, Прав "
-STR_PREV_NEXT,Prev/Next,Prec/Suiv,Zurück/Weiter,Předchozí/Další,Ant/Próx,Назад/Вперёд
-STR_NEXT_PREV,Next/Prev,Suiv/Prec,Weiter/Zuürck,Další/Předchozí,Próx/Ant,Вперёд/Назад
-STR_BOOKERLY,Bookerly,Bookerly,Bookerly,Bookerly,Bookerly,Bookerly
-STR_NOTO_SANS,Noto Sans,Noto Sans,Noto Sans,Noto Sans,Noto Sans,Noto Sans
-STR_OPEN_DYSLEXIC,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic
-STR_SMALL,Small,Petite,Klein,Malý,Pequeno,Маленький
-STR_MEDIUM,Medium,Moyenne,Mittel,Střední,Médio,Средний
-STR_LARGE,Large,Grande,Groß,Velký,Grande,Большой
-STR_X_LARGE,X Large,T Grande,Extragroß,Obří,Extra grande,Очень большой
-STR_TIGHT,Tight,Serré,Eng,Těsný,Apertado,Узкий
-STR_NORMAL,Normal,Normal,Normal,Normální,Normal,Обычный
-STR_WIDE,Wide,Large,Breit,Široký,Largo,Широкий
-STR_JUSTIFY,Justify,Justifier,Blocksatz,Zarovnat do bloku,Justificar,По ширине
-STR_ALIGN_LEFT,Left,Gauche,Links,Vlevo,Esquerda,По левому краю
-STR_CENTER,Center,Centre,Zentriert,Na střed,Centralizar,По центру
-STR_ALIGN_RIGHT,Right,Droite,Rechts,Vpravo,Direita,По правому краю
-STR_MIN_1,1 min,1 min,1 Min,1 min,1 min,1 мин
-STR_MIN_5,5 min,5 min,5 Min,5 min,5 min,5 мин
-STR_MIN_10,10 min,10 min,10 Min,10 min,10 min,10 мин
-STR_MIN_15,15 min,15 min,15 Min,15 min,15 min,15 мин
-STR_MIN_30,30 min,30 min,30 Min,30 min,30 min,30 мин
-STR_PAGES_1,1 page,1 page,1 Seite,1 stránka,1 página,1 стр.
-STR_PAGES_5,5 pages,5 pages,5 Seiten,5 stránek,5 páginas,5 стр.
-STR_PAGES_10,10 pages,10 pages,10 Seiten,10 stránek,10 páginas,10 стр.
-STR_PAGES_15,15 pages,15 pages,15 Seiten,15 stránek,15 páginas,15 стр.
-STR_PAGES_30,30 pages,30 pages,30 Seiten,30 stránek,30 páginas,30 стр.
-STR_UPDATE,Update,Mise à jour,Update,Aktualizace,Atualizar,Обновление
-STR_CHECKING_UPDATE,Checking for update...,Recherche de mises à jour en cours…,Update suchen…,Kontrola aktualizací…,Verificando atualização...,Проверка обновлений...
-STR_NEW_UPDATE,New update available!,Nouvelle mise à jour disponible !,Neues Update verfügbar!,Nová aktualizace k dispozici!,Nova atualização disponível!,Доступно новое обновление!
-STR_CURRENT_VERSION,Current Version: ,Version actuelle :,Aktuelle Version:,Aktuální verze:,Versão atual:,Текущая версия: 
-STR_NEW_VERSION,New Version: ,Nouvelle version : ,Neue Version:,Nová verze:,Nova versão:,Новая версия: 
-STR_UPDATING,Updating...,Mise à jour en cours…,Aktualisiere…,Aktualizace...,Atualizando...,Обновление...
-STR_NO_UPDATE,No update available,Aucune mise à jour disponible,Kein Update verfügbar,Žádná aktualizace k dispozici,Nenhuma atualização disponível,Обновлений нет
-STR_UPDATE_FAILED,Update failed,Échec de la mise à jour,Updatefehler,Aktualizace selhala,Falha na atualização,Ошибка обновления
-STR_UPDATE_COMPLETE,Update complete,Mise à jour effectuée,Update fertig,Aktualizace dokončena,Atualização concluída,Обновление завершено
-STR_POWER_ON_HINT,Press and hold power button to turn back on,Maintenir le bouton d’alimentation pour redémarrer,"An-Knopf lang drücken, um neuzustarten",Stiskněte a podržte tlačítko napájení pro opětovné zapnutí,Pressione e segure o botão energia ligar novamente,Удерживайте кнопку питания для включения
-STR_EXTERNAL_FONT,External Font,Police externe,Externe Schrift,Externí písmo,Fonte externa,Внешний шрифт
-STR_BUILTIN_DISABLED,Built-in (Disabled),Intégrée (désactivée),Vorinstalliert (aus),Vestavěné (Zakázáno),Integrada (desativada),Встроенный (отключён)
-STR_NO_ENTRIES,No entries found,Aucune entrée trouvée,Keine Einträge,Žádné položky nenalezeny,Nenhum entries encontrado,Записи не найдены
-STR_DOWNLOADING,Downloading...,Téléchargement en cours…,Herunterladen…,Stahování...,Baixando...,Загрузка...
-STR_DOWNLOAD_FAILED,Download failed,Échec du téléchargement,Ladefehler,Stahování selhalo,Falha no download,Ошибка загрузки
-STR_ERROR_MSG,Error:,Erreur : ,Fehler:,Chyba:,Erro:,Ошибка:
-STR_UNNAMED,Unnamed,Sans titre,Unbenannt,Nepojmenované,Sem nome,Без имени
-STR_NO_SERVER_URL,No server URL configured,Aucune URL serveur configurée,Keine Server-URL konfiguriert,Není nakonfigurována adresa URL serveru,Nenhum URL servidor configurado,URL сервера не настроен
-STR_FETCH_FEED_FAILED,Failed to fetch feed,Échec du téléchargement du flux,Feedfehler,Načtení kanálu se nezdařilo,Falha ao buscar o feed,Не удалось получить ленту
-STR_PARSE_FEED_FAILED,Failed to parse feed,Échec de l’analyse du flux,Feed-Format ungültig,Analyzování kanálu se nezdařilo,Falha ao interpretar o feed,Не удалось обработать ленту
-STR_NETWORK_PREFIX,Network: ,Réseau : ,Netzwerk:,Síť:,Rede:,Сеть: 
-STR_IP_ADDRESS_PREFIX,IP Address: ,Adresse IP : ,IP-Adresse:,IP adresa:,Endereço IP:,IP-адрес: 
-STR_SCAN_QR_WIFI_HINT,or scan QR code with your phone to connect to Wifi.,or scan QR code with your phone to connect to Wifi.,oder QR-Code mit dem Handy scannen für WLAN.,nebo naskenujte QR kód telefonem pro připojení k Wi-Fi.,ou escaneie o QR code com seu celular conectar ao Wi‑Fi.,или отсканируйте QR-код для подключения к Wi-Fi.
-STR_ERROR_GENERAL_FAILURE,Error: General failure,Erreur : Échec général,Fehler: Allgemeiner Fehler,Chyba: Obecná chyba,Erro: falha geral,Ошибка: Общая ошибка
-STR_ERROR_NETWORK_NOT_FOUND,Error: Network not found,Erreur : Réseau introuvable,Fehler: Kein Netzwerk,Chyba: Síť nenalezena,Erro: rede não encontrada,Ошибка: Сеть не найдена
-STR_ERROR_CONNECTION_TIMEOUT,Error: Connection timeout,Erreur : Délai de connexion dépassé,Fehler: Zeitüberschreitung,Chyba: Časový limit připojení,Erro: tempo limite conexão,Ошибка: Тайм-аут соединения
-STR_SD_CARD,SD card,Carte SD,SD-Karte,SD karta,Cartão SD,SD-карта
-STR_BACK,« Back,« Retour,« Zurück,« Zpět,« Voltar,В« Назад
-STR_EXIT,« Exit,« Sortie,« Verlassen,« Konec,« Sair,В« Выход
-STR_HOME,« Home,« Accueil,« Start,« Domů,« Início,В« Главная
-STR_SAVE,« Save,« Sauver,« Speichern,« Uložit,« Salvar,В« Сохранить
-STR_SELECT,Select,OK,Auswahl,Vybrat,Selecionar,Выбрать
-STR_TOGGLE,Toggle,Modifier,Ändern,Přepnout,Alternar,Переключить
-STR_CONFIRM,Confirm,Confirmer,Bestätigen,Potvrdit,Confirmar,Подтвердить
-STR_CANCEL,Cancel,Annuler,Abbrechen,Zrušit,Cancelar,Отмена
-STR_CONNECT,Connect,OK,Verbinden,Připojit,Conectar,Подключить
-STR_OPEN,Open,Ouvrir,Öffnen,Otevřít,Abrir,Открыть
-STR_DOWNLOAD,Download,Télécharger,Herunterladen,Stáhnout,Baixar,Скачать
-STR_RETRY,Retry,Réessayer,Wiederh.,Zkusit znovu,Tentar novamente,Повторить
-STR_YES,Yes,Oui,Ja,Ano,Sim,Да
-STR_NO,No,Non,Nein,Ne,Não,Нет
-STR_STATE_ON,ON,ON,An,ZAP,LIGADO,ВКЛ
-STR_STATE_OFF,OFF,OFF,Aus,VYP,DESLIGADO,ВЫКЛ
-STR_SET,Set,Défini,Gesetzt,Nastavit,Definir,Установлено
-STR_NOT_SET,Not Set,Non défini,Leer,Nenastaveno,Não definido,Не установлено
-STR_DIR_LEFT,Left,Gauche,Links,Vlevo,Esquerda,Влево
-STR_DIR_RIGHT,Right,Droite,Rechts,Vpravo,Direita,Вправо
-STR_DIR_UP,Up,Haut,Hoch,Nahoru,Acima,Вверх
-STR_DIR_DOWN,Down,Bas,Runter,Dolů,Abaixo,Вниз
-STR_CAPS_ON,CAPS,MAJ,UMSCH,PÍSMO,CAPS,CAPS
-STR_CAPS_OFF,caps,maj,umsch,písmo,caps,caps
-STR_OK_BUTTON,OK,OK,OK,OK,OK,OK
-STR_ON_MARKER,[ON],[ON],[AN],[ZAP],[ON],[ВКЛ]
-STR_SLEEP_COVER_FILTER,Sleep Screen Cover Filter,Filtre affichage veille,Standby-Coverfilter,Filtr obrazovky spánku,Filtro capa tela repouso,Фильтр обложки сна
-STR_FILTER_CONTRAST,Contrast,Contraste,Kontrast,Kontrast,Contraste,Контраст
-STR_STATUS_BAR_FULL_PERCENT,Full w/ Percentage,Complète + %,Komplett + Prozent,Plný s procenty,Completa com porcentagem,Полная + процент
-STR_STATUS_BAR_FULL_BOOK,Full w/ Book Bar,Complète + barre livre,Komplett + Buch,Plný s pruhem knih,Completa com barra livro,Полная + индикатор книги
-STR_STATUS_BAR_BOOK_ONLY,Book Bar Only,Barre livre,Nur Buch,Pouze pruh knih,Apenas barra do livro,Только индикатор книги
-STR_STATUS_BAR_FULL_CHAPTER,Full w/ Chapter Bar,Complète + barre chapitre,Komplett + Kapitel,Plná s pruhem kapitol,Completa com barra capítulo,Полная + индикатор главы
-STR_UI_THEME,UI Theme,Thème de l’interface,System-Design,Šablona rozhraní,Tema da interface,Тема интерфейса
-STR_THEME_CLASSIC,Classic,Classique,Klassisch,Klasická,Clássico,Классическая
-STR_THEME_LYRA,Lyra,Lyra,Lyra,Lyra,Lyra,Lyra
-STR_SUNLIGHT_FADING_FIX,Sunlight Fading Fix,Amélioration de la lisibilité au soleil,Anti-Verblassen,Oprava blednutí na slunci,Correção de desbotamento ao sol,Исправление выцветания на солнце
-STR_REMAP_FRONT_BUTTONS,Remap Front Buttons,Réassigner les boutons avant,Vordere Tasten belegen,Přemapovat přední tlačítka,Remapear botões frontais,Переназначить передние кнопки
-STR_OPDS_BROWSER,OPDS Browser,Navigateur OPDS,OPDS-Browser,Prohlížeč OPDS,Navegador OPDS,OPDS браузер
-STR_COVER_CUSTOM,Cover + Custom,Couverture + Custom,Umschlag + Eigenes,Obálka + Vlastní,Capa + personalizado,Обложка + Своя
-STR_RECENTS,Recents,Récents,Zuletzt,Nedávné,Recentes,Недавние
-STR_MENU_RECENT_BOOKS,Recent Books,Livres récents,Zuletzt gelesen,Nedávné knihy,Livros recentes,Недавние книги
-STR_NO_RECENT_BOOKS,No recent books,Aucun livre récent,Keine Bücher,Žádné nedávné knihy,Sem livros recentes,Нет недавних книг
-STR_CALIBRE_DESC,Use Calibre wireless device transfers,Utiliser les transferts sans fil Calibre,Calibre-Übertragung (WLAN),Používat přenosy bezdrátových zařízení Calibre,Usar transferências sem fio Calibre,Использовать беспроводную передачу Calibre
-STR_FORGET_AND_REMOVE,Forget network and remove saved password?,Oublier le réseau et supprimer le mot de passe enregistré ?,WLAN entfernen & Passwort löschen?,Zapomenout síť a odstranit uložené heslo?,Esquecer a rede e remover a senha salva?,Забыть сеть и удалить сохранённый пароль?
-STR_FORGET_BUTTON,Forget network,Oublier le réseau,WLAN entfernen,Zapomenout na síť,Esquecer rede,Забыть сеть
-STR_CALIBRE_STARTING,Starting Calibre...,Démarrage de Calibre...,Calibre starten…,Spuštění Calibre...,Iniciando Calibre...,Запуск Calibre...
-STR_CALIBRE_SETUP,Setup,Configuration,Installation,Nastavení,Configuração,Настройка
-STR_CALIBRE_STATUS,Status,Statut,Status,Stav,Status,Статус
-STR_CLEAR_BUTTON,Clear,Effacer,Leeren,Vymazat,Limpar,Очистить
-STR_DEFAULT_VALUE,Default,Défaut,Standard,Výchozí,Padrão,По умолчанию
-STR_REMAP_PROMPT,Press a front button for each role,Appuyez sur un bouton avant pour chaque rôle,Entsprechende Vordertaste drücken,Stiskněte přední tlačítko pro každou roli,Pressione um botão frontal cada função,Назначьте роль для каждой кнопки
-STR_UNASSIGNED,Unassigned,Non assigné,Leer,Nepřiřazeno,Não atribuído,Не назначено
-STR_ALREADY_ASSIGNED,Already assigned,Déjà assigné,Bereits zugeordnet,Již přiřazeno,Já atribuído,Уже назначено
-STR_REMAP_RESET_HINT,Side button Up: Reset to default layout,Bouton latéral haut : Réinitialiser,Seitentaste hoch: Standard,Boční tlačítko Nahoru: Obnovit výchozí rozvržení,Botão lateral cima: redefinir o disposição padrão,Боковая кнопка вверх: сбросить по умолчанию
-STR_REMAP_CANCEL_HINT,Side button Down: Cancel remapping,Bouton latéral bas : Annuler le réglage,Seitentaste runter: Abbrechen,Boční tlačítko Dolů: Zrušit přemapování,Botão lateral baixo: cancelar remapeamento,Боковая кнопка вниз: отменить переназначение
-STR_HW_BACK_LABEL,Back (1st button),Retour (1er bouton),Zurück (1. Taste),Zpět (1. tlačítko),Voltar (1º botão),Назад (1-я кнопка)
-STR_HW_CONFIRM_LABEL,Confirm (2nd button),OK (2ème bouton),Bestätigen (2. Taste),Potvrdit (2. tlačítko),Confirmar (2º botão),Подтвердить (2-я кнопка)
-STR_HW_LEFT_LABEL,Left (3rd button),Gauche (3ème bouton),Links (3. Taste),Vlevo (3. tlačítko),Esquerda (3º botão),Влево (3-я кнопка)
-STR_HW_RIGHT_LABEL,Right (4th button),Droite (4ème bouton),Rechts (4. Taste),Vpravo (4. tlačítko),Direita (4º botão),Вправо (4-я кнопка)
-STR_GO_TO_PERCENT,Go to %,Aller à %,Gehe zu %,Přejít na %,Ir para %,Перейти к %
-STR_GO_HOME_BUTTON,Go Home,Aller à l’accueil,Zum Anfang,Přejít Domů,Ir para o início,На главную
-STR_SYNC_PROGRESS,Sync Progress,Synchroniser la progression,Fortschritt synchronisieren,Průběh synchronizace,Sincronizar progresso,Синхронизировать прогресс
-STR_DELETE_CACHE,Delete Book Cache,Supprimer le cache du livre,Buch-Cache leeren,Smazat mezipaměť knihy,Excluir cache do livro,Удалить кэш книги
-STR_CHAPTER_PREFIX,Chapter: ,Chapitre : ,Kapitel:,Kapitola:,Capítulo:,Глава: 
-STR_PAGES_SEPARATOR, pages  |  , pages  |  , Seiten  |  ,stránek |,páginas  |,стр.  |  
-STR_BOOK_PREFIX,Book: ,Livre : ,Buch: ,Kniha:,Livro:,Книга: 
-STR_KBD_SHIFT,shift,maj,umsch,shift,shift,shift
-STR_KBD_SHIFT_CAPS,SHIFT,MAJ,UMSCH,SHIFT,SHIFT,SHIFT
-STR_KBD_LOCK,LOCK,VERR MAJ,FESTST,ZÁMEK,TRAVAR,LOCK
-STR_CALIBRE_URL_HINT,"For Calibre, add /opds to your URL","Pour Calibre, ajoutez /opds à l’URL",Calibre: URL um /opds ergänzen,Pro Calibre přidejte /opds do URL adresy,"Para o Calibre, adicione /opds ao seu URL",Для Calibre добавьте /opds к URL
-STR_PERCENT_STEP_HINT,Left/Right: 1%  Up/Down: 10%,Gauche/Droite : 1%  Haut/Bas : 10%,links/rechts: 1% hoch/runter: 10%,Vlevo/Vpravo: 1 % Nahoru/Dolů: 10 %,Esq/Dir: 1%  Cima/Baixo: 10%,Влево/Вправо: 1%  Вверх/Вниз: 10%
-STR_SYNCING_TIME,Syncing time...,Synchronisation de l’heure…,Zeit synchonisieren…,Čas synchronizace...,Sincronizando horário...,Синхронизация времени...
-STR_CALC_HASH,Calculating document hash...,Calcul du hash du document…,Dokument-Hash berechnen…,Výpočet hashe dokumentu...,Calculando hash documento...,Расчёт хэша документа...
-STR_HASH_FAILED,Failed to calculate document hash,Échec du calcul du hash du document,Dokument-Hash fehlgeschlagen,Nepodařilo se vypočítat hash dokumentu,Falha ao calcular o hash documento,Не удалось вычислить хэш документа
-STR_FETCH_PROGRESS,Fetching remote progress...,Téléchargement de la progression…,Externen Fortschritt abrufen...,Načítání vzdáleného průběhu...,Buscando progresso remoto...,Получение удалённого прогресса...
-STR_UPLOAD_PROGRESS,Uploading progress...,Envoi de la progression…,Fortschritt hochladen…,Průběh nahrávání...,Enviando progresso...,Отправка прогресса...
-STR_NO_CREDENTIALS_MSG,No credentials configured,Aucun identifiant configuré,Zugangsdaten fehlen,Přihlašovací údaje nejsou nakonfigurovány,Nenhuma credencial configurada,Данные для входа не настроены
-STR_KOREADER_SETUP_HINT,Set up KOReader account in Settings,Configurez le compte KOReader dans les réglages,KOReader-Konto unter Einst. anlegen,Nastavit účet KOReader v Nastavení,Configure a conta do KOReader em Config.,Настройте аккаунт KOReader в настройках
-STR_PROGRESS_FOUND,Progress found!,Progression trouvée !,Gefunden!,Nalezen průběh!,Progresso encontrado!,Прогресс найден!
-STR_REMOTE_LABEL,Remote:,En ligne :,Extern:,Vzdálené:,Remoto:,Удалённый:
-STR_LOCAL_LABEL,Local:,Locale :,Lokal:,Lokální:,Local:,Локальный:
-STR_PAGE_OVERALL_FORMAT,"Page %d, %.2f%% overall","Page %d, %.2f%% au total","  Seite %d, %.2f%% insgesamt","Stránka %d, celkově %.2f%%","Página %d, %.2f%% total","Страница %d,  %.2f%% всего"
-STR_PAGE_TOTAL_OVERALL_FORMAT,"Page %d/%d, %.2f%% overall","Page %d/%d, %.2f%% au total","  Seite %d/%d, %.2f%% insgesamt","Stránka %d/%d, celkově %.2f%%","Página %d/%d, %.2f%% total","Страница %d/%d,  %.2f%% всего"
-STR_DEVICE_FROM_FORMAT,  From: %s,  De : %s,  Von: %s,  Od: %s,De: %s,От: %s
-STR_APPLY_REMOTE,Apply remote progress,Appliquer la progression en ligne,Ext. Fortschritt übern.,Použít vzdálený postup,Aplicar progresso remoto,Применить удалённый прогресс
-STR_UPLOAD_LOCAL,Upload local progress,Envoyer la progression locale,Lokalen Fortschritt hochl.,Nahrát lokální postup,Enviar progresso local,Отправить локальный прогресс
-STR_NO_REMOTE_MSG,No remote progress found,Aucune progression en ligne trouvée,Kein externer Fortschritt,Nenalezen žádný vzdálený postup,Nenhum progresso remoto encontrado,Удалённый прогресс не найден
-STR_UPLOAD_PROMPT,Upload current position?,Envoyer la position actuelle ?,Aktuelle Position hochladen?,Nahrát aktuální pozici?,Enviar posição atual?,Отправить текущую позицию?
-STR_UPLOAD_SUCCESS,Progress uploaded!,Progression envoyée !,Hochgeladen!,Postup nahrán!,Progresso enviado!,Прогресс отправлен!
-STR_SYNC_FAILED_MSG,Sync failed,Échec de la synchronisation,Fehlgeschlagen,Synchronizace se nezdařila,Falha na sincronização,Ошибка синхронизации
-STR_SECTION_PREFIX,Section ,Section ,Abschnitt,Sekce,Seção,Раздел 
-STR_UPLOAD,Upload,Envoi,Hochladen,Nahrát,Enviar,Отправить
-STR_BOOK_S_STYLE,Book's Style,Style du livre,Buch-Stil,Styl knihy,Estilo do livro,Стиль книги
-STR_EMBEDDED_STYLE,Embedded Style,Style intégré,Eingebetteter Stil,Vložený styl,Estilo embutido,Встроенный стиль
-STR_OPDS_SERVER_URL,OPDS Server URL,URL du serveur OPDS,OPDS-Server-URL,URL serveru OPDS,URL do servidor OPDS,URL OPDS сервера
+STR_CALIBRE_RECEIVING,Receiving: ,Recibiendo: ,Réception : ,Empfange:,Příjem:,Recebendo:,Получение: 
+STR_CALIBRE_RECEIVED,Received: ,Recibido: ,Reçus : ,Empfangen:,Přijato:,Recebido:,Получено: 
+STR_CALIBRE_WAITING_MORE,Waiting for more...,Esperando más...,En attente de données supplémentaires…,Auf mehr warten…,Čekání na další...,Aguardando mais...,Ожидание следующих файлов...
+STR_CALIBRE_FAILED_CREATE_FILE,Failed to create file,Error al crear el archivo,Échec de la création du fichier,Speicherfehler,Nepodařilo se vytvořit soubor,Falha ao criar o arquivo,Не удалось создать файл
+STR_CALIBRE_PASSWORD_REQUIRED,Password required,Contraseña requerida,Mot de passe requis,Passwort nötig,Vyžadováno heslo,Senha obrigatória,Требуется пароль
+STR_CALIBRE_TRANSFER_INTERRUPTED,Transfer interrupted,Transferencia interrumpida,Transfert interrompu,Übertragung unterbrochen,Přenos přerušen,Transf. interrompida,Передача прервана
+STR_CALIBRE_INSTRUCTION_1,1) Install CrossPoint Reader plugin,1) Instala CrossPoint Reader plugin,1) Installer le plugin CrossPoint Reader,1) CrossPoint Reader-Plugin installieren,1) Nainstalujte plugin CrossPoint Reader,1) Instale o plugin CrossPoint Reader,1) Установите плагин CrossPoint Reader
+STR_CALIBRE_INSTRUCTION_2,2) Be on the same WiFi network,2) Conéctese a la misma red Wi-Fi,2) Se connecter au même réseau WiFi,2) Mit selbem WLAN verbinden,2) Buďte ve stejné síti WiFi,2) Esteja mesma rede Wi‑Fi,2) Подключитесь к той же сети Wi-Fi
+STR_CALIBRE_INSTRUCTION_3,"3) In Calibre: ""Send to device""","3)  En Calibre: ""Enviar a dispotivo""",3) Dans Calibre : ‘Envoyer vers l’appareil’,"3) In Calibre: ""An Gerät senden""",3) V Calibre: „Odeslat do zařízení“,"3) No Calibre: ""Enviar o dispositivo""",3) В Calibre выберите: «Отправить на устройство»
+STR_CALIBRE_INSTRUCTION_4,"""Keep this screen open while sending""","""Permanezca en esta pantalla mientras se envía""",“Gardez cet écran ouvert pendant le transfert”,Bildschirm beim Senden offenlassen,„Při odesílání ponechat tuto obrazovku otevřenou“,"""Mantenha esta tela aberta durante o envio""",Не закрывайте этот экран во время отправки
+STR_CAT_DISPLAY,Display,Pantalla,Affichage,Anzeige,Displej,Tela,Экран
+STR_CAT_READER,Reader,Lector,Lecteur,Lesen,Čtečka,Leitor,Чтение
+STR_CAT_CONTROLS,Controls,Control,Commandes,Bedienung,Ovládací prvky,Controles,Управление
+STR_CAT_SYSTEM,System,Sistema,Système,System,Systém,Sistema,Система
+STR_SLEEP_SCREEN,Sleep Screen,Salva Pantallas,Écran de veille,Standby-Bild,Obrazovka spánku,Tela de repouso,Экран сна
+STR_SLEEP_COVER_MODE,Sleep Screen Cover Mode,Modo de salva pantallas,Mode d’image de l’écran de veille,Standby-Bildmodus,Obrazovka spánku Režim krytu,Modo capa tela repouso,Режим обложки сна
+STR_STATUS_BAR,Status Bar,Barra de estado,Barre d’état,Statusleiste,Stavový řádek,Barra de status,Строка состояния
+STR_HIDE_BATTERY,Hide Battery %,Ocultar porcentaje de batería,Masquer % batterie,Batterie % ausblenden,Skrýt baterii %,Ocultar % da bateria,Скрыть % батареи
+STR_EXTRA_SPACING,Extra Paragraph Spacing,Espaciado extra de párrafos,Espacement des paragraphes,Absatzabstand,Extra mezery mezi odstavci,Espaço de parágrafos extra,Доп. интервал абзаца
+STR_TEXT_AA,Text Anti-Aliasing,Suavizado de bordes de texto,Lissage du texte,Schriftglättung,Vyhlazování textu,Suavização de texto,Сглаживание текста
+STR_SHORT_PWR_BTN,Short Power Button Click,Clic breve del botón de encendido,Appui court bout. alim.,An-Taste kurz drücken,Krátké stisknutí tlačítka napájení,Clique curto botão ligar,Короткое нажатие кнопки питания
+STR_ORIENTATION,Reading Orientation,Orientación de la lectura,Orientation de lecture,Leseausrichtung,Orientace čtení,Orientação de leitura,Ориентация чтения
+STR_FRONT_BTN_LAYOUT,Front Button Layout,Diseño de los botones frontales,Disposition des boutons avant,Vorderes Tastenlayout,Rozvržení předních tlačítek,Disposição botões frontais,Расположение передних кнопок
+STR_SIDE_BTN_LAYOUT,Side Button Layout (reader),Diseño de los botones laterales (Lector),Disposition des boutons latéraux,Seitliche Tasten (Lesen),Rozvržení bočních tlačítek (čtečka),Disposição botões laterais,Расположение боковых кнопок
+STR_LONG_PRESS_SKIP,Long-press Chapter Skip,Pasar a la capítulo al presiónar largamente,Appui long pour saut de chapitre,Langes Drücken springt Kap.,Dlouhé stisknutí Přeskočit kapitolu,Pular capítulo com pressão longa,Долгое нажатие - смена главы
+STR_FONT_FAMILY,Reader Font Family,Familia de tipografía del lector,Police de caractères du lecteur,Lese-Schriftfamilie,Rodina písem čtečky,Fonte do leitor,Шрифт чтения
+STR_EXT_READER_FONT,External Reader Font,Tipografía externa,Police externe,Externe Schriftart,Písmo externí čtečky,Fonte leitor externo,Внешний шрифт чтения
+STR_EXT_CHINESE_FONT,Reader Font,Tipografía (Lectura),Police du lecteur,Lese-Schriftart,Písmo čtečky,Fonte do leitor,Шрифт CJK
+STR_EXT_UI_FONT,UI Font,Tipografía (Pantalla),Police de l’interface,Menü-Schriftart,Písmo rozhraní,Fonte da interface,Шрифт интерфейса
+STR_FONT_SIZE,UI Font Size,Tamaño de la fuente (Pantalla),Taille du texte de l’interface,Schriftgröße,Velikost písma rozhraní,Tam. fonte UI,Размер шрифта интерфейса
+STR_LINE_SPACING,Reader Line Spacing,Interlineado (Lectura),Espacement des lignes,Lese-Zeilenabstand,Řádkování čtečky,Espaçamento entre linhas,Межстрочный интервал
+STR_ASCII_LETTER_SPACING,ASCII Letter Spacing,Espaciado de letras ASCII,Espacement des lettres ASCII,ASCII-Zeichenabstand,Mezery písmen ASCII,Espaçamento letras ASCII,Интервал букв ASCII
+STR_ASCII_DIGIT_SPACING,ASCII Digit Spacing,Espaciado de dígitos ASCII,Espacement des chiffres ASCII,ASCII-Ziffernabstand,Mezery číslic ASCII,Espaçamento dígitos ASCII,Интервал цифр ASCII
+STR_CJK_SPACING,CJK Spacing,Espaciado CJK,Espacement CJK,CJK-Zeichenabstand,Mezery CJK,Espaçamento CJK,Интервал CJK
+STR_COLOR_MODE,Color Mode,Modo de color,Mode couleur,Farbmodus,Režim barev,Modo de cor,Цветовой режим
+STR_SCREEN_MARGIN,Reader Screen Margin,Margen de lectura,Marges du lecteur,Lese-Seitenränder,Okraj obrazovky čtečky,Margens da tela,Поля экрана
+STR_PARA_ALIGNMENT,Reader Paragraph Alignment,Ajuste de parágrafo del lector,Alignement des paragraphes,Lese-Absatzausrichtung,Zarovnání odstavců čtečky,Alinhamento parágrafo,Выравнивание абзаца
+STR_HYPHENATION,Hyphenation,Hyphenation,Césure,Silbentrennung,Dělení slov,Hifenização,Перенос слов
+STR_TIME_TO_SLEEP,Time to Sleep,Tiempo para dormir,Mise en veille automatique,Standby nach,Čas do uspání,Tempo para repousar,Сон Через
+STR_REFRESH_FREQ,Refresh Frequency,Frecuencia de actualización,Fréquence de rafraîchissement,Anti-Ghosting nach,Frekvence obnovení,Frequência atualização,Частота обновления
+STR_CALIBRE_SETTINGS,Calibre Settings,Configuraciones de Calibre,Réglages Calibre,Calibre-Einstellungen,Nastavení Calibre,Configuração do Calibre,Настройки Calibre
+STR_KOREADER_SYNC,KOReader Sync,Síncronización de KOReader,Synchronisation KOReader,KOReader-Synchr.,KOReaderu Sync,Sincronização KOReader,Синхронизация KOReader
+STR_CHECK_UPDATES,Check for updates,Verificar actualizaciones,Mise à jour,Nach Updates suchen,Zkontrolovat aktualizace,Verificar atualizações,Проверить обновления
+STR_LANGUAGE,Language,Idioma,Langue,Sprache,Jazyk,Idioma,Язык
+STR_SELECT_WALLPAPER,Select Wallpaper,Seleccionar fondo,Fond d’écran,Bildauswahl Standby,Vybrat tapetu,Selecionar papel parede,Выбрать обои
+STR_CLEAR_READING_CACHE,Clear Reading Cache,Borrar caché de lectura,Vider le cache de lecture,Lese-Cache leeren,Vymazat mezipaměť čtení,Limpar cache de leitura,Очистить кэш чтения
+STR_CALIBRE,Calibre,Calibre,Calibre,Calibre,Calibre,Calibre,Calibre
+STR_USERNAME,Username,Nombre de usuario,Nom d’utilisateur,Benutzername,Uživatelské jméno,Nome de usuário,Имя пользователя
+STR_PASSWORD,Password,Contraseña,Mot de passe,Passwort nötig,Heslo,Senha,Пароль
+STR_SYNC_SERVER_URL,Sync Server URL,URL del servidor de síncronización,URL du serveur,Sync-Server-URL,URL synch. serveru,URL servidor sincronização,URL сервера синхронизации
+STR_DOCUMENT_MATCHING,Document Matching,Coincidencia de documentos,Correspondance,Dateizuordnung,Párování dokumentů,Documento correspondente,Сопоставление документов
+STR_AUTHENTICATE,Authenticate,Autentificar,Se connecter,Authentifizieren,Ověření,Autenticar,Авторизация
+STR_KOREADER_USERNAME,KOReader Username,Nombre de usuario de KOReader,Nom d’utilisateur,KOReader-Benutzername,Uživ. jméno KOReaderu,Usuário do KOReader,Имя пользователя KOReader
+STR_KOREADER_PASSWORD,KOReader Password,Contraseña de KOReader,Mot de passe,KOReader-Passwort,Heslo KOReaderu,Senha do KOReader,Пароль KOReader
+STR_FILENAME,Filename,Nombre del archivo,Nom de fichier,Dateiname,Název souboru,Nome do arquivo,Имя файла
+STR_BINARY,Binary,Binario,Binaire,Binärdatei,Binární,Binário,Бинарный
+STR_SET_CREDENTIALS_FIRST,Set credentials first,Configurar credenciales primero,Identifiants manquants,Zuerst anmelden,Nastavte přihlašovací údaje,Defina as credenciais primeiro,Сначала укажите данные
+STR_WIFI_CONN_FAILED,WiFi connection failed,Falló la conexión Wi-Fi,Échec de connexion WiFi,WLAN-Verbindung fehlgeschlagen,Připojení k Wi-Fi selhalo,Falha na conexão Wi‑Fi,Не удалось подключиться к Wi-Fi
+STR_AUTHENTICATING,Authenticating...,Autentificando...,Connexion en cours…,Authentifizieren…,Ověřování...,Autenticando...,Авторизация...
+STR_AUTH_SUCCESS,Successfully authenticated!,Autenticación exitsosa!,Connexion réussie !,Erfolgreich authentifiziert!,Úspěšné ověření!,Autenticado com sucesso!,Авторизация успешна!
+STR_KOREADER_AUTH,KOReader Auth,Autenticación KOReader,Auth KOReader,KOReader-Auth,Ověření KOReaderu,Autenticação KOReader,Авторизация KOReader
+STR_SYNC_READY,KOReader sync is ready to use,La síncronización de KOReader está lista para usarse,Synchronisation KOReader prête,KOReader-Synchronisierung bereit,Synchronizace KOReaderu je připravena k použití,A sincronização KOReader está pronta uso,Синхронизация KOReader готова
+STR_AUTH_FAILED,Authentication Failed,Falló la autenticación,Échec de la connexion,Authentifizierung fehlg.,Ověření selhalo,Falha na autenticação,Ошибка авторизации
+STR_DONE,Done,Hecho,OK,Erledigt,Hotovo,Feito,Готово
+STR_CLEAR_CACHE_WARNING_1,This will clear all cached book data.,Esto borrará todos los datos en cache del libro.,Le cache de votre bibliothèque sera entièrement vidé,Alle Buch-Caches werden geleert.,Tímto vymažete všechna data knih v mezipaměti.,Isso vai limpar todos os dados livros em cache.,Будут удалены все данные кэша книг.
+STR_CLEAR_CACHE_WARNING_2,All reading progress will be lost!, ¡Se perderá todo el avance de leer!,Votre progression de lecture sera perdue !,Lesefortschritt wird gelöscht!,Veškerý průběh čtení bude ztracen!,Todo o progresso de leitura será perdido!,Весь прогресс чтения будет потерян!
+STR_CLEAR_CACHE_WARNING_3,Books will need to be re-indexed,Los libros deberán ser reíndexados,Les livres devront être réindexés,Bücher müssen beim Öffnen,Knihy bude nutné znovu indexovat,Os livros precisarão ser reindexados,Книги потребуется переиндексировать
+STR_CLEAR_CACHE_WARNING_4,when opened again.,cuando se abran de nuevo.,à leur prochaine ouverture.,neu eingelesen werden.,při opětovném otevření.,quando forem abertos novamente.,при повторном открытии.
+STR_CLEARING_CACHE,Clearing cache...,Borrando caché...,Suppression du cache…,Cache leeren…,Mazání mezipaměti...,Limpando cache...,Очистка кэша...
+STR_CACHE_CLEARED,Cache Cleared,Cache limpia,Cache supprimé,Cache geleert,Mezipaměť vymazána,Cache limpo,Кэш очищен
+STR_ITEMS_REMOVED,items removed,Elementos eliminados,éléments supprimés,Einträge entfernt,položky odstraněny,itens removidos,элементов удалено
+STR_FAILED_LOWER,failed,Falló,ont échoué,fehlgeschlagen,selhalo,falhou,ошибка
+STR_CLEAR_CACHE_FAILED,Failed to clear cache,No se pudo borrar la cache,Échec de la suppression du cache,Fehler beim Cache-Leeren,Vymazání mezipaměti se nezdařilo,Falha ao limpar o cache,Не удалось очистить кэш
+STR_CHECK_SERIAL_OUTPUT,Check serial output for details,Verifique la salida serial para detalles,Vérifiez la console série pour plus de détails,Serielle Ausgabe prüfen,Podrobnosti naleznete v sériovém výstupu,Ver saída serial,Проверьте вывод по UART для деталей
+STR_DARK,Dark,Oscuro,Sombre,Dunkel,Tmavý,Escuro,Тёмная
+STR_LIGHT,Light,Claro,Clair,Hell,Světlý,Claro,Светлая
+STR_CUSTOM,Custom,Personalizado,Custom,Eigenes,Vlastní,Personalizado,Своя
+STR_COVER,Cover,Portada,Couverture,Umschlag,Obálka,Capa,Обложка
+STR_NONE_OPT,None,Ninguno,Aucun,Leer,Žádný,Nenhum,Нет
+STR_FIT,Fit,Ajustar,Ajusté,Anpassen,Přizpůsobit,Ajustar,Вписать
+STR_CROP,Crop,Recortar,Rogné,Zuschnitt,Oříznout,Recortar,Обрезать
+STR_NO_PROGRESS,No Progress,Sin avance,Sans progression,Ohne Fortschr.,Žádný postup,Sem progresso,Без прогресса
+STR_FULL_OPT,Full,Completa,Complète,Vollst.,Plná,Completo,Полная
+STR_NEVER,Never,Nunca,Jamais,Nie,Nikdy,Nunca,Никогда
+STR_IN_READER,In Reader,En el lector,Dans le lecteur,Beim Lesen,Ve čtečce,No leitor,В режиме чтения
+STR_ALWAYS,Always,Siempre,Toujours,Immer,Vždy,Sempre,Всегда
+STR_IGNORE,Ignore,Ignorar,Ignorer,Ignorieren,Ignorovat,Ignorar,Игнорировать
+STR_SLEEP,Sleep,Dormir,Mise en veille,Standby,Spánek,Repouso,Сон
+STR_PAGE_TURN,Page Turn,Paso de página,Page suivante,Umblättern,Otáčení stránek,Virar página,Перелистывание
+STR_PORTRAIT,Portrait,Portrato,Portrait,Hochformat,Na výšku,Retrato,Портрет
+STR_LANDSCAPE_CW,Landscape CW,Paisaje sentido horario,Paysage,Querformat rechts,Na šířku po směru hod. ručiček,Paisagem H,Ландшафт (по часовой)
+STR_INVERTED,Inverted,Invertido,Inversé,Invertiert,Invertovaný,Invertido,Перевёрнуто
+STR_LANDSCAPE_CCW,Landscape CCW,Paisaje sentido antihorario,Paysage inversé,Querformat links,Na šířku proti směru hod. ručiček,Paisagem AH,Ландшафт (против часовой)
+STR_FRONT_LAYOUT_BCLR,"Bck, Cnfrm, Lft, Rght","Atrás, Confirmar, Izquierda, Derecha","Ret, OK, Gauche, Droite","Zurück, Bst, L, R","Zpět, Potvrdit, Vlevo, Vpravo","Vol, Conf, Esq, Dir","Наз, ОК, Лев, Прав "
+STR_FRONT_LAYOUT_LRBC,"Lft, Rght, Bck, Cnfrm","Izquierda, Derecha, Atrás, Confirmar","Gauche, Droite, Ret, OK","L, R, Zurück, Bst","Vlevo, Vpravo, Zpět, Potvrdit","Esq, Dir, Vol, Conf","Лев, Прав, Наз, ОК "
+STR_FRONT_LAYOUT_LBCR,"Lft, Bck, Cnfrm, Rght","Izquierda, Atrás, Confirmar, Derecha","Gauche, Ret, OK, Droite","L, Zurück, Bst, R","Vlevo, Zpět, Potvrdit, Vpravo","Esq, Vol, Conf, Dir","Лев,  Наз, ОК, Прав "
+STR_PREV_NEXT,Prev/Next,Anterior/Siguiente,Prec/Suiv,Zurück/Weiter,Předchozí/Další,Ant/Próx,Назад/Вперёд
+STR_NEXT_PREV,Next/Prev,Siguiente/Anterior,Suiv/Prec,Weiter/Zuürck,Další/Předchozí,Próx/Ant,Вперёд/Назад
+STR_BOOKERLY,Bookerly,Relacionado con libros,Bookerly,Bookerly,Bookerly,Bookerly,Bookerly
+STR_NOTO_SANS,Noto Sans,Noto Sans,Noto Sans,Noto Sans,Noto Sans,Noto Sans,Noto Sans
+STR_OPEN_DYSLEXIC,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic,Open Dyslexic
+STR_SMALL,Small,Pequeño,Petite,Klein,Malý,Pequeno,Маленький
+STR_MEDIUM,Medium,Medio,Moyenne,Mittel,Střední,Médio,Средний
+STR_LARGE,Large,Grande,Grande,Groß,Velký,Grande,Большой
+STR_X_LARGE,X Large,Extra grande,T Grande,Extragroß,Obří,Extra grande,Очень большой
+STR_TIGHT,Tight,Ajustado,Serré,Eng,Těsný,Apertado,Узкий
+STR_NORMAL,Normal,Normal,Normal,Normal,Normální,Normal,Обычный
+STR_WIDE,Wide,Ancho,Large,Breit,Široký,Largo,Широкий
+STR_JUSTIFY,Justify,Justificar,Justifier,Blocksatz,Zarovnat do bloku,Justificar,По ширине
+STR_ALIGN_LEFT,Left,Izquierda,Gauche,Links,Vlevo,Esquerda,По левому краю
+STR_CENTER,Center,Centro,Centre,Zentriert,Na střed,Centralizar,По центру
+STR_ALIGN_RIGHT,Right,Derecha,Droite,Rechts,Vpravo,Direita,По правому краю
+STR_MIN_1,1 min,1 Minuto,1 min,1 Min,1 min,1 min,1 мин
+STR_MIN_5,5 min,10 Minutos,5 min,5 Min,5 min,5 min,5 мин
+STR_MIN_10,10 min,5 Minutos,10 min,10 Min,10 min,10 min,10 мин
+STR_MIN_15,15 min,15 Minutos,15 min,15 Min,15 min,15 min,15 мин
+STR_MIN_30,30 min,30 Minutos,30 min,30 Min,30 min,30 min,30 мин
+STR_PAGES_1,1 page,1 Página,1 page,1 Seite,1 stránka,1 página,1 стр.
+STR_PAGES_5,5 pages,5 Páginas,5 pages,5 Seiten,5 stránek,5 páginas,5 стр.
+STR_PAGES_10,10 pages,10 Páginas,10 pages,10 Seiten,10 stránek,10 páginas,10 стр.
+STR_PAGES_15,15 pages,15 Páginas,15 pages,15 Seiten,15 stránek,15 páginas,15 стр.
+STR_PAGES_30,30 pages,30 Páginas,30 pages,30 Seiten,30 stránek,30 páginas,30 стр.
+STR_UPDATE,Update,ActualizaR,Mise à jour,Update,Aktualizace,Atualizar,Обновление
+STR_CHECKING_UPDATE,Checking for update...,Verificando actualización...,Recherche de mises à jour en cours…,Update suchen…,Kontrola aktualizací…,Verificando atualização...,Проверка обновлений...
+STR_NEW_UPDATE,New update available!,¡Nueva actualización disponible!,Nouvelle mise à jour disponible !,Neues Update verfügbar!,Nová aktualizace k dispozici!,Nova atualização disponível!,Доступно новое обновление!
+STR_CURRENT_VERSION,Current Version: ,Versión actual:,Version actuelle :,Aktuelle Version:,Aktuální verze:,Versão atual:,Текущая версия: 
+STR_NEW_VERSION,New Version: ,Nueva versión:,Nouvelle version : ,Neue Version:,Nová verze:,Nova versão:,Новая версия: 
+STR_UPDATING,Updating...,Actualizando...,Mise à jour en cours…,Aktualisiere…,Aktualizace...,Atualizando...,Обновление...
+STR_NO_UPDATE,No update available,No hay actualizaciones disponibles,Aucune mise à jour disponible,Kein Update verfügbar,Žádná aktualizace k dispozici,Nenhuma atualização disponível,Обновлений нет
+STR_UPDATE_FAILED,Update failed,Falló la actualización,Échec de la mise à jour,Updatefehler,Aktualizace selhala,Falha na atualização,Ошибка обновления
+STR_UPDATE_COMPLETE,Update complete,Actualización completada,Mise à jour effectuée,Update fertig,Aktualizace dokončena,Atualização concluída,Обновление завершено
+STR_POWER_ON_HINT,Press and hold power button to turn back on,Presione y mantenga presionado el botón de encendido para volver a encender,Maintenir le bouton d’alimentation pour redémarrer,"An-Knopf lang drücken, um neuzustarten",Stiskněte a podržte tlačítko napájení pro opětovné zapnutí,Pressione e segure o botão energia ligar novamente,Удерживайте кнопку питания для включения
+STR_EXTERNAL_FONT,External Font,Fuente externa,Police externe,Externe Schrift,Externí písmo,Fonte externa,Внешний шрифт
+STR_BUILTIN_DISABLED,Built-in (Disabled),Incorporado (Desactivado),Intégrée (désactivée),Vorinstalliert (aus),Vestavěné (Zakázáno),Integrada (desativada),Встроенный (отключён)
+STR_NO_ENTRIES,No entries found,No se encontraron elementos,Aucune entrée trouvée,Keine Einträge,Žádné položky nenalezeny,Nenhum entries encontrado,Записи не найдены
+STR_DOWNLOADING,Downloading...,Descargando...,Téléchargement en cours…,Herunterladen…,Stahování...,Baixando...,Загрузка...
+STR_DOWNLOAD_FAILED,Download failed,Falló la descarga,Échec du téléchargement,Ladefehler,Stahování selhalo,Falha no download,Ошибка загрузки
+STR_ERROR_MSG,Error:,Error,Erreur : ,Fehler:,Chyba:,Erro:,Ошибка:
+STR_UNNAMED,Unnamed,Sin nombre,Sans titre,Unbenannt,Nepojmenované,Sem nome,Без имени
+STR_NO_SERVER_URL,No server URL configured,No se ha configurado la url del servidor,Aucune URL serveur configurée,Keine Server-URL konfiguriert,Není nakonfigurována adresa URL serveru,Nenhum URL servidor configurado,URL сервера не настроен
+STR_FETCH_FEED_FAILED,Failed to fetch feed,Failed to fetch feed,Échec du téléchargement du flux,Feedfehler,Načtení kanálu se nezdařilo,Falha ao buscar o feed,Не удалось получить ленту
+STR_PARSE_FEED_FAILED,Failed to parse feed,Failed to parse feed,Échec de l’analyse du flux,Feed-Format ungültig,Analyzování kanálu se nezdařilo,Falha ao interpretar o feed,Не удалось обработать ленту
+STR_NETWORK_PREFIX,Network: ,Red: ,Réseau : ,Netzwerk:,Síť:,Rede:,Сеть: 
+STR_IP_ADDRESS_PREFIX,IP Address: ,Dirección IP: ,Adresse IP : ,IP-Adresse:,IP adresa:,Endereço IP:,IP-адрес: 
+STR_SCAN_QR_WIFI_HINT,or scan QR code with your phone to connect to Wifi.,O escanee el código QR con su teléfono para conectarse a WI-FI.,or scan QR code with your phone to connect to Wifi.,oder QR-Code mit dem Handy scannen für WLAN.,nebo naskenujte QR kód telefonem pro připojení k Wi-Fi.,ou escaneie o QR code com seu celular conectar ao Wi‑Fi.,или отсканируйте QR-код для подключения к Wi-Fi.
+STR_ERROR_GENERAL_FAILURE,Error: General failure,Error: Fallo general,Erreur : Échec général,Fehler: Allgemeiner Fehler,Chyba: Obecná chyba,Erro: falha geral,Ошибка: Общая ошибка
+STR_ERROR_NETWORK_NOT_FOUND,Error: Network not found,Error: Red no encontrada,Erreur : Réseau introuvable,Fehler: Kein Netzwerk,Chyba: Síť nenalezena,Erro: rede não encontrada,Ошибка: Сеть не найдена
+STR_ERROR_CONNECTION_TIMEOUT,Error: Connection timeout,Error: Connection timeout,Erreur : Délai de connexion dépassé,Fehler: Zeitüberschreitung,Chyba: Časový limit připojení,Erro: tempo limite conexão,Ошибка: Тайм-аут соединения
+STR_SD_CARD,SD card,Tarjeta SD,Carte SD,SD-Karte,SD karta,Cartão SD,SD-карта
+STR_BACK,« Back,« Atrás,« Retour,« Zurück,« Zpět,« Voltar,В« Назад
+STR_EXIT,« Exit,« SaliR,« Sortie,« Verlassen,« Konec,« Sair,В« Выход
+STR_HOME,« Home,« Inicio,« Accueil,« Start,« Domů,« Início,В« Главная
+STR_SAVE,« Save,« Guardar,« Sauver,« Speichern,« Uložit,« Salvar,В« Сохранить
+STR_SELECT,Select,Seleccionar,OK,Auswahl,Vybrat,Selecionar,Выбрать
+STR_TOGGLE,Toggle,Cambiar,Modifier,Ändern,Přepnout,Alternar,Переключить
+STR_CONFIRM,Confirm,Confirmar,Confirmer,Bestätigen,Potvrdit,Confirmar,Подтвердить
+STR_CANCEL,Cancel,Cancelar,Annuler,Abbrechen,Zrušit,Cancelar,Отмена
+STR_CONNECT,Connect,Conectar,OK,Verbinden,Připojit,Conectar,Подключить
+STR_OPEN,Open,Abrir,Ouvrir,Öffnen,Otevřít,Abrir,Открыть
+STR_DOWNLOAD,Download,Descargar,Télécharger,Herunterladen,Stáhnout,Baixar,Скачать
+STR_RETRY,Retry,Reintentar,Réessayer,Wiederh.,Zkusit znovu,Tentar novamente,Повторить
+STR_YES,Yes,Sí,Oui,Ja,Ano,Sim,Да
+STR_NO,No,No,Non,Nein,Ne,Não,Нет
+STR_STATE_ON,ON,ENCENDIDO,ON,An,ZAP,LIGADO,ВКЛ
+STR_STATE_OFF,OFF,APAGADO,OFF,Aus,VYP,DESLIGADO,ВЫКЛ
+STR_SET,Set,Configurar,Défini,Gesetzt,Nastavit,Definir,Установлено
+STR_NOT_SET,Not Set,No configurado,Non défini,Leer,Nenastaveno,Não definido,Не установлено
+STR_DIR_LEFT,Left,Izquierda,Gauche,Links,Vlevo,Esquerda,Влево
+STR_DIR_RIGHT,Right,Derecha,Droite,Rechts,Vpravo,Direita,Вправо
+STR_DIR_UP,Up,Arriba,Haut,Hoch,Nahoru,Acima,Вверх
+STR_DIR_DOWN,Down,Abajo,Bas,Runter,Dolů,Abaixo,Вниз
+STR_CAPS_ON,CAPS,MAYÚSCULAS,MAJ,UMSCH,PÍSMO,CAPS,CAPS
+STR_CAPS_OFF,caps,caps,maj,umsch,písmo,caps,caps
+STR_OK_BUTTON,OK,OK,OK,OK,OK,OK,OK
+STR_ON_MARKER,[ON],[ENCENDIDO],[ON],[AN],[ZAP],[ON],[ВКЛ]
+STR_SLEEP_COVER_FILTER,Sleep Screen Cover Filter,Filtro de salva pantalla y protección de la pantalla,Filtre affichage veille,Standby-Coverfilter,Filtr obrazovky spánku,Filtro capa tela repouso,Фильтр обложки сна
+STR_FILTER_CONTRAST,Contrast,Contraste,Contraste,Kontrast,Kontrast,Contraste,Контраст
+STR_STATUS_BAR_FULL_PERCENT,Full w/ Percentage,Completa con porcentaje,Complète + %,Komplett + Prozent,Plný s procenty,Completa com porcentagem,Полная + процент
+STR_STATUS_BAR_FULL_BOOK,Full w/ Book Bar,Completa con progreso del libro,Complète + barre livre,Komplett + Buch,Plný s pruhem knih,Completa com barra livro,Полная + индикатор книги
+STR_STATUS_BAR_BOOK_ONLY,Book Bar Only,Solo progreso del libro,Barre livre,Nur Buch,Pouze pruh knih,Apenas barra do livro,Только индикатор книги
+STR_STATUS_BAR_FULL_CHAPTER,Full w/ Chapter Bar,Completa con progreso de capítulos,Complète + barre chapitre,Komplett + Kapitel,Plná s pruhem kapitol,Completa com barra capítulo,Полная + индикатор главы
+STR_UI_THEME,UI Theme,Estilo de pantalla,Thème de l’interface,System-Design,Šablona rozhraní,Tema da interface,Тема интерфейса
+STR_THEME_CLASSIC,Classic,Clásico,Classique,Klassisch,Klasická,Clássico,Классическая
+STR_THEME_LYRA,Lyra,LYRA,Lyra,Lyra,Lyra,Lyra,Lyra
+STR_SUNLIGHT_FADING_FIX,Sunlight Fading Fix,Corrección de desvastado por sol,Amélioration de la lisibilité au soleil,Anti-Verblassen,Oprava blednutí na slunci,Correção de desbotamento ao sol,Исправление выцветания на солнце
+STR_REMAP_FRONT_BUTTONS,Remap Front Buttons,Reconfigurar botones frontales,Réassigner les boutons avant,Vordere Tasten belegen,Přemapovat přední tlačítka,Remapear botões frontais,Переназначить передние кнопки
+STR_OPDS_BROWSER,OPDS Browser,Navegador opds,Navigateur OPDS,OPDS-Browser,Prohlížeč OPDS,Navegador OPDS,OPDS браузер
+STR_COVER_CUSTOM,Cover + Custom,Portada + Personalizado,Couverture + Custom,Umschlag + Eigenes,Obálka + Vlastní,Capa + personalizado,Обложка + Своя
+STR_RECENTS,Recents,Recientes,Récents,Zuletzt,Nedávné,Recentes,Недавние
+STR_MENU_RECENT_BOOKS,Recent Books,Libros recientes,Livres récents,Zuletzt gelesen,Nedávné knihy,Livros recentes,Недавние книги
+STR_NO_RECENT_BOOKS,No recent books,No hay libros recientes,Aucun livre récent,Keine Bücher,Žádné nedávné knihy,Sem livros recentes,Нет недавних книг
+STR_CALIBRE_DESC,Use Calibre wireless device transfers,Utilice las transferencias dispositivos inalámbricos de calibre,Utiliser les transferts sans fil Calibre,Calibre-Übertragung (WLAN),Používat přenosy bezdrátových zařízení Calibre,Usar transferências sem fio Calibre,Использовать беспроводную передачу Calibre
+STR_FORGET_AND_REMOVE,Forget network and remove saved password?,Olvidar la red y eliminar la contraseña guardada?,Oublier le réseau et supprimer le mot de passe enregistré ?,WLAN entfernen & Passwort löschen?,Zapomenout síť a odstranit uložené heslo?,Esquecer a rede e remover a senha salva?,Забыть сеть и удалить сохранённый пароль?
+STR_FORGET_BUTTON,Forget network,Olvidar la red,Oublier le réseau,WLAN entfernen,Zapomenout na síť,Esquecer rede,Забыть сеть
+STR_CALIBRE_STARTING,Starting Calibre...,Iniciando calibre...,Démarrage de Calibre...,Calibre starten…,Spuštění Calibre...,Iniciando Calibre...,Запуск Calibre...
+STR_CALIBRE_SETUP,Setup,Configuración,Configuration,Installation,Nastavení,Configuração,Настройка
+STR_CALIBRE_STATUS,Status,Estado,Statut,Status,Stav,Status,Статус
+STR_CLEAR_BUTTON,Clear,Borrar,Effacer,Leeren,Vymazat,Limpar,Очистить
+STR_DEFAULT_VALUE,Default,Previo,Défaut,Standard,Výchozí,Padrão,По умолчанию
+STR_REMAP_PROMPT,Press a front button for each role,Presione un botón frontal para cada función,Appuyez sur un bouton avant pour chaque rôle,Entsprechende Vordertaste drücken,Stiskněte přední tlačítko pro každou roli,Pressione um botão frontal cada função,Назначьте роль для каждой кнопки
+STR_UNASSIGNED,Unassigned,No asignado,Non assigné,Leer,Nepřiřazeno,Não atribuído,Не назначено
+STR_ALREADY_ASSIGNED,Already assigned,Ya asignado,Déjà assigné,Bereits zugeordnet,Již přiřazeno,Já atribuído,Уже назначено
+STR_REMAP_RESET_HINT,Side button Up: Reset to default layout,Botón lateral arriba: Restablecer a la configuración previo,Bouton latéral haut : Réinitialiser,Seitentaste hoch: Standard,Boční tlačítko Nahoru: Obnovit výchozí rozvržení,Botão lateral cima: redefinir o disposição padrão,Боковая кнопка вверх: сбросить по умолчанию
+STR_REMAP_CANCEL_HINT,Side button Down: Cancel remapping,Botón lateral abajo: Anular reconfiguración,Bouton latéral bas : Annuler le réglage,Seitentaste runter: Abbrechen,Boční tlačítko Dolů: Zrušit přemapování,Botão lateral baixo: cancelar remapeamento,Боковая кнопка вниз: отменить переназначение
+STR_HW_BACK_LABEL,Back (1st button),Atrás (Primer botón),Retour (1er bouton),Zurück (1. Taste),Zpět (1. tlačítko),Voltar (1º botão),Назад (1-я кнопка)
+STR_HW_CONFIRM_LABEL,Confirm (2nd button),Confirmar (Segundo botón),OK (2ème bouton),Bestätigen (2. Taste),Potvrdit (2. tlačítko),Confirmar (2º botão),Подтвердить (2-я кнопка)
+STR_HW_LEFT_LABEL,Left (3rd button),Izquierda (Tercer botón),Gauche (3ème bouton),Links (3. Taste),Vlevo (3. tlačítko),Esquerda (3º botão),Влево (3-я кнопка)
+STR_HW_RIGHT_LABEL,Right (4th button),Derecha (Cuarto botón),Droite (4ème bouton),Rechts (4. Taste),Vpravo (4. tlačítko),Direita (4º botão),Вправо (4-я кнопка)
+STR_GO_TO_PERCENT,Go to %,Ir a %,Aller à %,Gehe zu %,Přejít na %,Ir para %,Перейти к %
+STR_GO_HOME_BUTTON,Go Home,Volver a inicio,Aller à l’accueil,Zum Anfang,Přejít Domů,Ir para o início,На главную
+STR_SYNC_PROGRESS,Sync Progress,Progreso de síncronización,Synchroniser la progression,Fortschritt synchronisieren,Průběh synchronizace,Sincronizar progresso,Синхронизировать прогресс
+STR_DELETE_CACHE,Delete Book Cache,Borrar cache del libro,Supprimer le cache du livre,Buch-Cache leeren,Smazat mezipaměť knihy,Excluir cache do livro,Удалить кэш книги
+STR_CHAPTER_PREFIX,Chapter: ,Capítulo:,Chapitre : ,Kapitel:,Kapitola:,Capítulo:,Глава: 
+STR_PAGES_SEPARATOR, pages  |  , Páginas |, pages  |  , Seiten  |  ,stránek |,páginas  |,стр.  |  
+STR_BOOK_PREFIX,Book: ,Libro:,Livre : ,Buch: ,Kniha:,Livro:,Книга: 
+STR_KBD_SHIFT,shift,shift,maj,umsch,shift,shift,shift
+STR_KBD_SHIFT_CAPS,SHIFT,SHIFT,MAJ,UMSCH,SHIFT,SHIFT,SHIFT
+STR_KBD_LOCK,LOCK,BLOQUEAR,VERR MAJ,FESTST,ZÁMEK,TRAVAR,LOCK
+STR_CALIBRE_URL_HINT,"For Calibre, add /opds to your URL","Para calibre, agregue /opds a su urL","Pour Calibre, ajoutez /opds à l’URL",Calibre: URL um /opds ergänzen,Pro Calibre přidejte /opds do URL adresy,"Para o Calibre, adicione /opds ao seu URL",Для Calibre добавьте /opds к URL
+STR_PERCENT_STEP_HINT,Left/Right: 1%  Up/Down: 10%,Izquierda/Derecha: 1% Arriba/Abajo: 10%,Gauche/Droite : 1%  Haut/Bas : 10%,links/rechts: 1% hoch/runter: 10%,Vlevo/Vpravo: 1 % Nahoru/Dolů: 10 %,Esq/Dir: 1%  Cima/Baixo: 10%,Влево/Вправо: 1%  Вверх/Вниз: 10%
+STR_SYNCING_TIME,Syncing time...,Tiempo de síncronización...,Synchronisation de l’heure…,Zeit synchonisieren…,Čas synchronizace...,Sincronizando horário...,Синхронизация времени...
+STR_CALC_HASH,Calculating document hash...,Calculando hash del documento...,Calcul du hash du document…,Dokument-Hash berechnen…,Výpočet hashe dokumentu...,Calculando hash documento...,Расчёт хэша документа...
+STR_HASH_FAILED,Failed to calculate document hash,No se pudo calcular el hash del documento,Échec du calcul du hash du document,Dokument-Hash fehlgeschlagen,Nepodařilo se vypočítat hash dokumentu,Falha ao calcular o hash documento,Не удалось вычислить хэш документа
+STR_FETCH_PROGRESS,Fetching remote progress...,Recuperando progreso remoto...,Téléchargement de la progression…,Externen Fortschritt abrufen...,Načítání vzdáleného průběhu...,Buscando progresso remoto...,Получение удалённого прогресса...
+STR_UPLOAD_PROGRESS,Uploading progress...,Subiendo progreso...,Envoi de la progression…,Fortschritt hochladen…,Průběh nahrávání...,Enviando progresso...,Отправка прогресса...
+STR_NO_CREDENTIALS_MSG,No credentials configured,No se han configurado credenciales,Aucun identifiant configuré,Zugangsdaten fehlen,Přihlašovací údaje nejsou nakonfigurovány,Nenhuma credencial configurada,Данные для входа не настроены
+STR_KOREADER_SETUP_HINT,Set up KOReader account in Settings,Configure una cuenta de KOReader en la configuración,Configurez le compte KOReader dans les réglages,KOReader-Konto unter Einst. anlegen,Nastavit účet KOReader v Nastavení,Configure a conta do KOReader em Config.,Настройте аккаунт KOReader в настройках
+STR_PROGRESS_FOUND,Progress found!,¡Progreso encontrado!,Progression trouvée !,Gefunden!,Nalezen průběh!,Progresso encontrado!,Прогресс найден!
+STR_REMOTE_LABEL,Remote:,Remoto,En ligne :,Extern:,Vzdálené:,Remoto:,Удалённый:
+STR_LOCAL_LABEL,Local:,Local,Locale :,Lokal:,Lokální:,Local:,Локальный:
+STR_PAGE_OVERALL_FORMAT,"Page %d, %.2f%% overall","Página %d, %.2f% Completada","Page %d, %.2f%% au total","  Seite %d, %.2f%% insgesamt","Stránka %d, celkově %.2f%%","Página %d, %.2f%% total","Страница %d,  %.2f%% всего"
+STR_PAGE_TOTAL_OVERALL_FORMAT,"Page %d/%d, %.2f%% overall","Página %d / %d, %.2f% Completada","Page %d/%d, %.2f%% au total","  Seite %d/%d, %.2f%% insgesamt","Stránka %d/%d, celkově %.2f%%","Página %d/%d, %.2f%% total","Страница %d/%d,  %.2f%% всего"
+STR_DEVICE_FROM_FORMAT,  From: %s,  De: %s,  De : %s,  Von: %s,  Od: %s,De: %s,От: %s
+STR_APPLY_REMOTE,Apply remote progress,Aplicar progreso remoto,Appliquer la progression en ligne,Ext. Fortschritt übern.,Použít vzdálený postup,Aplicar progresso remoto,Применить удалённый прогресс
+STR_UPLOAD_LOCAL,Upload local progress,Subir progreso local,Envoyer la progression locale,Lokalen Fortschritt hochl.,Nahrát lokální postup,Enviar progresso local,Отправить локальный прогресс
+STR_NO_REMOTE_MSG,No remote progress found,No se encontró progreso remoto,Aucune progression en ligne trouvée,Kein externer Fortschritt,Nenalezen žádný vzdálený postup,Nenhum progresso remoto encontrado,Удалённый прогресс не найден
+STR_UPLOAD_PROMPT,Upload current position?,Subir posicion actual?,Envoyer la position actuelle ?,Aktuelle Position hochladen?,Nahrát aktuální pozici?,Enviar posição atual?,Отправить текущую позицию?
+STR_UPLOAD_SUCCESS,Progress uploaded!,¡Progreso subido!,Progression envoyée !,Hochgeladen!,Postup nahrán!,Progresso enviado!,Прогресс отправлен!
+STR_SYNC_FAILED_MSG,Sync failed,Fallo de síncronización,Échec de la synchronisation,Fehlgeschlagen,Synchronizace se nezdařila,Falha na sincronização,Ошибка синхронизации
+STR_SECTION_PREFIX,Section ,Seccion,Section ,Abschnitt,Sekce,Seção,Раздел 
+STR_UPLOAD,Upload,Subir,Envoi,Hochladen,Nahrát,Enviar,Отправить
+STR_BOOK_S_STYLE,Book's Style,Estilo del libro,Style du livre,Buch-Stil,Styl knihy,Estilo do livro,Стиль книги
+STR_EMBEDDED_STYLE,Embedded Style,Estilo integrado,Style intégré,Eingebetteter Stil,Vložený styl,Estilo embutido,Встроенный стиль
+STR_OPDS_SERVER_URL,OPDS Server URL,URL del servidor OPDS,URL du serveur OPDS,OPDS-Server-URL,URL serveru OPDS,URL do servidor OPDS,URL OPDS сервера
