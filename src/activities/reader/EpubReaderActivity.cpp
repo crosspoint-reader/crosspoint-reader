@@ -108,9 +108,9 @@ void drawHelpBox(const GfxRenderer& renderer, int x, int y, const char* text, Bo
   for (size_t i = 0; i < lines.size(); i++) {
     // ALWAYS center text horizontally within the box
     int lineWidth = renderer.getTextWidth(fontId, lines[i].c_str());
-    int lineX_centered = drawX + (boxWidth - lineWidth) / 2;
+    int lineX = drawX + (boxWidth - lineWidth) / 2;
 
-    renderer.drawText(fontId, lineX_centered, y + (padding / 2) + (i * lineHeight), lines[i].c_str());
+    renderer.drawText(fontId, lineX, y + (padding / 2) + (i * lineHeight), lines[i].c_str());
   }
 }
 
@@ -200,6 +200,7 @@ void EpubReaderActivity::loop() {
   }
 
   // --- HELP OVERLAY INTERCEPTION ---
+  // If overlay is showing, ANY button press dismisses it.
   if (showHelpOverlay) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back) ||
@@ -207,20 +208,21 @@ void EpubReaderActivity::loop() {
         mappedInput.wasReleased(MappedInputManager::Button::Right) ||
         mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
         mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Power)) { 
+        mappedInput.wasReleased(MappedInputManager::Button::Power)) {
       showHelpOverlay = false;
       updateRequired = true;
       return;
     }
+    // Block other logic while overlay is shown
     return;
   }
 
-  // --- DOUBLE CLICK STATE VARIABLES ---
+  // --- DOUBLE CLICK STATE ---
   static unsigned long lastFormatDecRelease = 0;
   static bool waitingForFormatDec = false;
   static unsigned long lastFormatIncRelease = 0;
   static bool waitingForFormatInc = false;
-  
+
   // Double click state for Back button (Dark Mode Toggle)
   static unsigned long lastBackRelease = 0;
   static bool waitingForBack = false;
@@ -294,63 +296,64 @@ void EpubReaderActivity::loop() {
     xSemaphoreGive(renderingMutex);
   }
 
-  // --- BACK BUTTON LOGIC (Delayed Single Click for Double Click Support) ---
+  // --- BACK BUTTON LOGIC (Go Home / Dark Mode) ---
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
     onGoBack();
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  // Replace standard single-click logic with Double Click detection for Dark Mode
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
     if (waitingForBack && (millis() - lastBackRelease < doubleClickMs)) {
-        // DOUBLE CLICK DETECTED: Toggle Dark Mode
-        waitingForBack = false;
-        isNightMode = !isNightMode;
-        GUI.drawPopup(renderer, isNightMode ? "Dark Mode" : "Light Mode");
-        clearPopupTimer = millis() + 1000;
-        updateRequired = true;
-        return;
+      // DOUBLE CLICK DETECTED: Toggle Dark Mode
+      waitingForBack = false;
+      isNightMode = !isNightMode;
+      GUI.drawPopup(renderer, isNightMode ? "Dark Mode" : "Light Mode");
+      clearPopupTimer = millis() + 1000;
+      updateRequired = true;
+      return;
     } else {
-        // First click: Start timer
-        waitingForBack = true;
-        lastBackRelease = millis();
+      // First click: Start timer
+      waitingForBack = true;
+      lastBackRelease = millis();
     }
   }
-  
+
   // Execute Delayed Single Click (Go Home)
   if (waitingForBack && (millis() - lastBackRelease > doubleClickMs)) {
-      waitingForBack = false;
-      onGoHome();
-      return;
+    waitingForBack = false;
+    onGoHome();
+    return;
   }
 
   // --- POWER BUTTON LOGIC (Landscape Only Double Click) ---
   bool powerPressed = mappedInput.wasReleased(MappedInputManager::Button::Power);
-  
+
   if (powerPressed) {
-      // Check if we are in landscape (Power button is on the left)
-      bool isLandscape = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW || 
-                          SETTINGS.orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW);
-      
-      if (isLandscape) {
-          if (waitingForPower && (millis() - lastPowerRelease < doubleClickMs)) {
-              // Double Click Power in Landscape: Toggle Dark Mode
-              waitingForPower = false;
-              isNightMode = !isNightMode;
-              GUI.drawPopup(renderer, isNightMode ? "Dark Mode" : "Light Mode");
-              clearPopupTimer = millis() + 1000;
-              updateRequired = true;
-              return; // Consume the event
-          } else {
-              waitingForPower = true;
-              lastPowerRelease = millis();
-              // Don't return yet, we might want to allow default single-press behavior if no second click comes...
-              // But standard power behavior handles sleep/page turn. 
-              // To avoid double-handling, we effectively consume the single press here 
-              // and would need to re-trigger it after timeout, OR we accept that
-              // trying to double-click might trigger one page turn first.
-              // Given the complexity, let's allow the single press to pass through below for now.
-          }
+    // Check if we are in landscape (Power button is on the left)
+    bool isLandscape = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW ||
+                        SETTINGS.orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW);
+
+    if (isLandscape) {
+      if (waitingForPower && (millis() - lastPowerRelease < doubleClickMs)) {
+        // Double Click Power in Landscape: Toggle Dark Mode
+        waitingForPower = false;
+        isNightMode = !isNightMode;
+        GUI.drawPopup(renderer, isNightMode ? "Dark Mode" : "Light Mode");
+        clearPopupTimer = millis() + 1000;
+        updateRequired = true;
+        return;  // Consume the event
+      } else {
+        waitingForPower = true;
+        lastPowerRelease = millis();
+        // Don't return yet, we might want to allow default single-press behavior if no second click comes...
+        // But standard power behavior handles sleep/page turn.
+        // To avoid double-handling, we effectively consume the single press here
+        // and would need to re-trigger it after timeout, OR we accept that
+        // trying to double-click might trigger one page turn first.
+        // Given the complexity, let's allow the single press to pass through below for now.
       }
+    }
   }
 
   // =========================================================================================
@@ -546,7 +549,7 @@ void EpubReaderActivity::loop() {
   const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
   const bool prevTriggered =
       usePressForPageTurn ? mappedInput.wasPressed(btnNavPrev) : mappedInput.wasReleased(btnNavPrev);
-  
+
   // Power button page turn handled separately or passed through?
   // We already detected double-click power above.
   // Standard logic:
@@ -978,8 +981,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       // PORTRAIT LABELS
       // Front Left (Bottom Left) - Corrected to w-160 for clean gap with small font
       // Added "2x Back: Dark" to prompt user
-      drawHelpBox(renderer, w - 160, h - 80, "1x: Text size –\nHold: Spacing\n2x: Alignment\n2x Back: Dark", BoxAlign::RIGHT,
-                  overlayFontId, overlayLineHeight);
+      drawHelpBox(renderer, w - 160, h - 80, "1x: Text size –\nHold: Spacing\n2x: Alignment\n2x Back: Dark",
+                  BoxAlign::RIGHT, overlayFontId, overlayLineHeight);
 
       // Front Right (Bottom Right)
       drawHelpBox(renderer, w - 10, h - 80, "1x: Text size +\nHold: Rotate\n2x: AntiAlias", BoxAlign::RIGHT,
@@ -990,8 +993,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
       // Top Buttons (Top Edge - configuration)
       // Left (was Left) - shifted right by 20
-      drawHelpBox(renderer, w / 2 + 20, 20, "1x: Text size –\nHold: Spacing\n2x: Alignment\n2x Pwr: Dark", BoxAlign::RIGHT,
-                  overlayFontId, overlayLineHeight);
+      drawHelpBox(renderer, w / 2 + 20, 20, "1x: Text size –\nHold: Spacing\n2x: Alignment\n2x Pwr: Dark",
+                  BoxAlign::RIGHT, overlayFontId, overlayLineHeight);
 
       // Right (was Right) - shifted right by 30
       drawHelpBox(renderer, w / 2 + 30, 20, "1x: Text size +\nHold: Rotate\n2x: AntiAlias", BoxAlign::LEFT,
