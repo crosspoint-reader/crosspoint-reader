@@ -26,8 +26,6 @@ bool ImageBlock::imageExists() const {
   return false;
 }
 
-void ImageBlock::layout(GfxRenderer& renderer) {}
-
 static std::string getCachePath(const std::string& imagePath) {
   // Replace extension with .pxc (pixel cache)
   size_t dotPos = imagePath.rfind('.');

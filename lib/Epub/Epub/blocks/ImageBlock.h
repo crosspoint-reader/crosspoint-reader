@@ -17,7 +17,6 @@ class ImageBlock final : public Block {
 
   bool imageExists() const;
 
-  void layout(GfxRenderer& renderer) override;
   BlockType getType() override { return IMAGE_BLOCK; }
   bool isEmpty() override { return false; }
 
