@@ -64,4 +64,5 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
   void downloadBook(const OpdsEntry& book);
+  bool preventAutoSleep() override { return true; }
 };
