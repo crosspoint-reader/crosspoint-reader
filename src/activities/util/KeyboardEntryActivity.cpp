@@ -11,7 +11,7 @@
 // Keyboard layouts - lowercase
 const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
     "`1234567890-=", "qwertyuiop[]\\", "asdfghjkl;'", "zxcvbnm,./",
-  "^  ____<QR OK"  // ^ = shift, _ = space, < = backspace, QR = remote input, OK = done
+    "^  ____<QR OK"  // ^ = shift, _ = space, < = backspace, QR = remote input, OK = done
 };
 
 // Keyboard layouts - uppercase/symbols
@@ -375,6 +375,7 @@ void KeyboardEntryActivity::renderQRScreen() const {
 
   if (webInputServer && webInputServer->isRunning()) {
     if (webInputServer->isApMode()) {
+      // === AP mode layout (matching File Transfer) ===
       int apStartY = 55;
 
       renderer.drawCenteredText(UI_10_FONT_ID, apStartY, "Hotspot Mode", true, EpdFontFamily::BOLD);
@@ -382,8 +383,7 @@ void KeyboardEntryActivity::renderQRScreen() const {
       std::string ssidInfo = "Network: " + webInputServer->getApSSID();
       renderer.drawCenteredText(UI_10_FONT_ID, apStartY + LINE_SPACING, ssidInfo.c_str());
 
-      renderer.drawCenteredText(SMALL_FONT_ID, apStartY + LINE_SPACING * 2,
-                                "Connect your device to this WiFi network");
+      renderer.drawCenteredText(SMALL_FONT_ID, apStartY + LINE_SPACING * 2, "Connect your device to this WiFi network");
       renderer.drawCenteredText(SMALL_FONT_ID, apStartY + LINE_SPACING * 3,
                                 "or scan QR code with your phone to connect to Wifi.");
 
@@ -402,6 +402,7 @@ void KeyboardEntryActivity::renderQRScreen() const {
       QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, apStartY + LINE_SPACING * 7, url);
 
     } else {
+      // === STA mode layout (WiFi already connected, matching File Transfer) ===
       constexpr int staStartY = 65;
 
       const std::string ip = webInputServer->getIP();
@@ -409,8 +410,7 @@ void KeyboardEntryActivity::renderQRScreen() const {
       renderer.drawCenteredText(UI_10_FONT_ID, staStartY, ipInfo.c_str());
 
       std::string webUrl = "http://" + ip + "/";
-      renderer.drawCenteredText(UI_10_FONT_ID, staStartY + LINE_SPACING * 2, webUrl.c_str(), true,
-                                EpdFontFamily::BOLD);
+      renderer.drawCenteredText(UI_10_FONT_ID, staStartY + LINE_SPACING * 2, webUrl.c_str(), true, EpdFontFamily::BOLD);
 
       std::string hostnameUrl = std::string("or http://") + NetworkConstants::AP_HOSTNAME + ".local/";
       renderer.drawCenteredText(SMALL_FONT_ID, staStartY + LINE_SPACING * 3, hostnameUrl.c_str());
