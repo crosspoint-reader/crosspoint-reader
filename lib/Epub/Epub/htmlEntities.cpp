@@ -4,7 +4,6 @@
 #include "htmlEntities.h"
 
 #include <cstring>
-#include <cstring>
 
 const int MAX_ENTITY_LENGTH = 10;
 
