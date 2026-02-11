@@ -22,6 +22,7 @@
         padding: 20px;
         background-color: var(--background);
         color: var(--font-color);
+        font-size: 16px;
       }
       @media (prefers-color-scheme: dark) {
         body {
@@ -30,7 +31,7 @@
           --title-color: #ecf0f1;
           --card-background: #444;
           --label-color: #bdc3c7;
-          --border-color: #666;
+          --border-color: #555;
         }
       }
       h1 {
@@ -54,11 +55,12 @@
       h2 {
         color: var(--title-color);
         margin-top: 0;
+        font-size: 20px;
       }
       .card {
         background: var(--card-background);
-        border-radius: 8px;
-        padding: 20px;
+        border-radius: 4px;
+        padding: 15px;
         margin: 15px 0;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
@@ -66,15 +68,15 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        min-height: 42px;
-        padding: 4px 0;
+        min-height: 25px;
+        padding: 8px 0;
         border-bottom: 1px solid var(--border-color);
       }
       .info-row:last-child {
         border-bottom: none;
+        padding-bottom: 0;
       }
       .label {
-        font-weight: 600;
         color: var(--label-color);
       }
       .value {
@@ -82,14 +84,14 @@
       }
       .status {
         display: inline-block;
-        padding: 4px 12px;
-        border-radius: 12px;
+        padding: 4px 10px;
+        border-radius: 4px;
         background-color: #27ae60;
         color: white;
         font-size: 0.9em;
       }
       .nav-links {
-        margin: 20px 0;
+        margin: 20px 0 15px;
       }
       .nav-links a {
         display: inline-block;
@@ -101,11 +103,20 @@
       }
       .nav-links a.active {
         background-color: var(--accent-color);
-        color: #222;
+        color: white;
+        text-decoration: none;
       }
       .nav-links a:hover {
         background-color: var(--accent-color);
-        color: #222;
+        color: white;
+        text-decoration: none;
+      }
+      a {
+        color: var(--accent-color);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
       }
     </style>
   </head>
@@ -146,7 +157,7 @@
     </div>
 
     <div class="footer">
-      CrossPoint E-Reader • Open Source
+      <a href="https://github.com/crosspoint-reader/crosspoint-reader" target="_blank">CrossPoint E-Reader • Open Source</a>
     </div>
   <script>
     async function fetchStatus() {
