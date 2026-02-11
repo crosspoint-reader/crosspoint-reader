@@ -170,14 +170,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
     Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
 
-    self->startNewTextBlock(centeredBlockStyle);
-    self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
-    // Advance depth before processing character data (like you would for an element with text)
-    self->depth += 1;
-    self->characterData(userData, alt.c_str(), alt.length());
+    if (!self->suppressPlaceholder) {
+      self->startNewTextBlock(centeredBlockStyle);
+      self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
+      // Advance depth before processing character data (like you would for an element with text)
+      self->depth += 1;
+      self->characterData(userData, alt.c_str(), alt.length());
+    } else {
+      // Skip image contents but don't display placeholder text
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+    }
 
-    // Skip table contents (skip until parent as we pre-advanced depth above)
-    self->skipUntilDepth = self->depth - 1;
     return;
   }
 

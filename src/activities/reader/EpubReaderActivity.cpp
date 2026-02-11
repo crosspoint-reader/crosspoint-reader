@@ -575,14 +575,16 @@ void EpubReaderActivity::renderScreen() {
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle)) {
+                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                  SETTINGS.suppressPlaceholder)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       const auto popupFn = [this]() { GUI.drawPopup(renderer, "Indexing..."); };
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, popupFn)) {
+                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                      SETTINGS.suppressPlaceholder, popupFn)) {
         Serial.printf("[%lu] [ERS] Failed to persist page data to SD\n", millis());
         section.reset();
         return;
