@@ -168,7 +168,7 @@ void KeyboardEntryActivity::loop() {
       if (webInputServer->hasReceivedText()) {
         std::string received = webInputServer->consumeReceivedText();
         if (maxLength > 0 && text.length() + received.length() > maxLength) {
-          received = received.substr(0, maxLength - text.length());
+          received.resize(maxLength - text.length());
         }
         text += received;
         // Return to keyboard view with the new text
@@ -419,62 +419,62 @@ void KeyboardEntryActivity::renderQRScreen() const {
   if (webInputServer && webInputServer->isRunning()) {
     if (webInputServer->isApMode()) {
       // === AP mode layout (matching File Transfer) ===
-      int startY = 55;
+      int apStartY = 55;
 
-      renderer.drawCenteredText(UI_10_FONT_ID, startY, "Hotspot Mode", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(UI_10_FONT_ID, apStartY, "Hotspot Mode", true, EpdFontFamily::BOLD);
 
       std::string ssidInfo = "Network: " + webInputServer->getApSSID();
-      renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ssidInfo.c_str());
+      renderer.drawCenteredText(UI_10_FONT_ID, apStartY + LINE_SPACING, ssidInfo.c_str());
 
-      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, "Connect your device to this WiFi network");
+      renderer.drawCenteredText(SMALL_FONT_ID, apStartY + LINE_SPACING * 2, "Connect your device to this WiFi network");
 
-      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3,
+      renderer.drawCenteredText(SMALL_FONT_ID, apStartY + LINE_SPACING * 3,
                                 "or scan QR code with your phone to connect to Wifi.");
 
       // WiFi QR code (same size as File Transfer)
       const std::string wifiQR = webInputServer->getWifiQRString();
-      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, startY + LINE_SPACING * 4, wifiQR);
+      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, apStartY + LINE_SPACING * 4, wifiQR);
 
-      startY += QR_TOTAL - 4 * QRCodeHelper::DEFAULT_PX + 3 * LINE_SPACING;
+      apStartY += QR_TOTAL - 4 * QRCodeHelper::DEFAULT_PX + 3 * LINE_SPACING;
 
       // URL section
       const std::string url = webInputServer->getUrl();
-      renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, url.c_str(), true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(UI_10_FONT_ID, apStartY + LINE_SPACING * 3, url.c_str(), true, EpdFontFamily::BOLD);
 
       // Show IP address as fallback
       std::string ipUrl = "or http://" + webInputServer->getIP() + "/";
-      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, ipUrl.c_str());
+      renderer.drawCenteredText(SMALL_FONT_ID, apStartY + LINE_SPACING * 4, ipUrl.c_str());
 
-      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "Open this URL in your browser");
+      renderer.drawCenteredText(SMALL_FONT_ID, apStartY + LINE_SPACING * 5, "Open this URL in your browser");
 
-      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 6, "or scan QR code with your phone:");
+      renderer.drawCenteredText(SMALL_FONT_ID, apStartY + LINE_SPACING * 6, "or scan QR code with your phone:");
 
       // URL QR code (same size as File Transfer)
-      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, startY + LINE_SPACING * 7, url);
+      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, apStartY + LINE_SPACING * 7, url);
 
     } else {
       // === STA mode layout (WiFi already connected, matching File Transfer) ===
-      const int startY = 65;
+      constexpr int staStartY = 65;
 
       const std::string ip = webInputServer->getIP();
 
       std::string ipInfo = "IP Address: " + ip;
-      renderer.drawCenteredText(UI_10_FONT_ID, startY, ipInfo.c_str());
+      renderer.drawCenteredText(UI_10_FONT_ID, staStartY, ipInfo.c_str());
 
       // Show web server URL prominently
       std::string webUrl = "http://" + ip + "/";
-      renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 2, webUrl.c_str(), true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(UI_10_FONT_ID, staStartY + LINE_SPACING * 2, webUrl.c_str(), true, EpdFontFamily::BOLD);
 
       // Also show hostname URL using shared constant
       std::string hostnameUrl = std::string("or http://") + NetworkConstants::AP_HOSTNAME + ".local/";
-      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str());
+      renderer.drawCenteredText(SMALL_FONT_ID, staStartY + LINE_SPACING * 3, hostnameUrl.c_str());
 
-      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Open this URL in your browser");
+      renderer.drawCenteredText(SMALL_FONT_ID, staStartY + LINE_SPACING * 4, "Open this URL in your browser");
 
-      renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
+      renderer.drawCenteredText(SMALL_FONT_ID, staStartY + LINE_SPACING * 5, "or scan QR code with your phone:");
 
       // URL QR code (same size as File Transfer)
-      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, startY + LINE_SPACING * 6, webUrl);
+      QRCodeHelper::drawQRCode(renderer, (pageWidth - QR_TOTAL) / 2, staStartY + LINE_SPACING * 6, webUrl);
     }
   } else {
     const auto pageHeight = renderer.getScreenHeight();
