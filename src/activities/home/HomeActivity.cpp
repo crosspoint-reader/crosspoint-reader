@@ -64,7 +64,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   for (RecentBook& book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      if (!Epub::isValidThumbnailBmp(coverPath)) {
         // If epub, try to load the metadata for title/author and cover
         if (StringUtils::checkFileExtension(book.path, ".epub")) {
           Epub epub(book.path, "/.crosspoint");
@@ -103,6 +103,12 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             coverRendered = false;
             updateRequired = true;
           }
+        } else {
+          // For other formats, if thumbnail is invalid, clear it
+          RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+          book.coverBmpPath = "";
+          coverRendered = false;
+          updateRequired = true;
         }
       }
     }
