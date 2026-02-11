@@ -5,59 +5,117 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CrossPoint Reader - Settings</title>
   <style>
-    body {
+  body {
+      --font-color: #333;
+      --background: #f5f5f5;
+      --title-color: #2c3e50;
+      --card-background: white;
+      --label-color: #7f8c8d;
+      --status-ok: #27ae60;
+      --border-color: #eee;
+      --accent-color: #6e9a82;
+
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         Oxygen, Ubuntu, sans-serif;
       max-width: 800px;
       margin: 0 auto;
       padding: 20px;
-      background-color: #f5f5f5;
-      color: #333;
+      background-color: var(--background);
+      color: var(--font-color);
+      font-size: 16px;
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        --font-color: #f5f5f5;
+        --background: #333;
+        --title-color: #ecf0f1;
+        --card-background: #444;
+        --label-color: #bdc3c7;
+        --border-color: #555;
+
+        color-scheme: dark;
+      }
     }
     h1 {
-      color: #2c3e50;
-      border-bottom: 2px solid #3498db;
+      margin-top: 0;
+      color: var(--title-color);
+      display: flex;
+      gap: 8px;
+      font-size: 24px;
+      align-items: center;
       padding-bottom: 10px;
     }
+    h1 .logo {
+      background-color: #6e9a82;
+      padding: 0 4px;
+      border-radius: 4px;
+    }
+    h1 .logo svg {
+      width: 18px;
+      height: 18px;
+    }
     h2 {
-      color: #34495e;
+      color: var(--title-color);
       margin-top: 0;
+      font-size: 20px;
     }
     .card {
-      background: white;
-      border-radius: 8px;
-      padding: 20px;
+      background: var(--card-background);
+      border-radius: 4px;
+      padding: 15px;
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
+    .card h3 {
+      margin: 0;
+      color: var(--title-color);
+      font-size: 18px;
+      padding-bottom: 8px;
+    }
     .nav-links {
-      margin: 20px 0;
+      margin: 20px 0 15px;
+      border-bottom: solid 2px var(--border-color);
+      display: flex;
+      gap: 8px;
+      padding-bottom: 8px;
     }
     .nav-links a {
-      display: inline-block;
-      padding: 10px 20px;
-      background-color: #3498db;
-      color: white;
+      padding: 8px 15px;
+      font-size: 0.85em;
+      color: var(--font-color);
       text-decoration: none;
       border-radius: 4px;
-      margin-right: 10px;
     }
-    .nav-links a:hover {
-      background-color: #2980b9;
+    .nav-links a.active {
+      color: var(--font-color);
+      text-decoration: none;
+      background: var(--accent-color);
+    }
+    .nav-links a:not(.active):hover {
+      color: var(--font-color);
+      text-decoration: none;
+      background: var(--border-color);
+    }
+    a {
+      color: var(--accent-color);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
     }
     .setting-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 10px 0;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid var(--border-color);
     }
     .setting-row:last-child {
       border-bottom: none;
+      padding-bottom: 0;
     }
     .setting-name {
-      font-weight: 500;
-      color: #2c3e50;
+      color: var(--title-color);
       flex: 1;
       min-width: 0;
       padding-right: 12px;
@@ -73,7 +131,6 @@
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 0.95em;
-      background: white;
     }
     .setting-control select {
       min-width: 160px;
@@ -211,13 +268,22 @@
   </style>
 </head>
 <body>
-  <h1>⚙️ Settings</h1>
+  <h1>
+    <span class="logo">
+      <svg viewBox="0 0 162 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M141.133 1.93774C150.102 -3.44192 161.517 3.01665 161.521 13.4749V166.526C161.517 176.984 150.102 183.442 141.133 178.063L80.7588 141.837L20.3867 178.063C11.4176 183.442 0.00328866 176.984 0 166.526V13.4749C0.00337257 3.01685 11.4176 -3.44137 20.3867 1.93774L80.7598 38.1614L141.133 1.93774ZM121.275 117.524L92.3848 134.864L147.281 167.811C148.277 168.408 149.542 167.685 149.545 166.526V100.567L121.275 117.524ZM14.2393 12.1897C13.2438 11.5924 11.979 12.3152 11.9756 13.4749V86.6125L74.7725 124.29V48.51L14.2393 12.1897Z" fill="black"/>
+      </svg>
+    </span>
+    CrossPoint Reader
+  </h1>
 
   <div class="nav-links">
     <a href="/">Home</a>
     <a href="/files">File Manager</a>
-    <a href="/settings">Settings</a>
+    <a href="/settings" class="active">Settings</a>
   </div>
+
+  <h2>Settings</h2>
 
   <div id="message" class="message"></div>
 
@@ -231,11 +297,13 @@
     <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
   </div>
 
-  <div class="card">
-    <p style="text-align: center; color: #95a5a6; margin: 0;">
-      CrossPoint E-Reader • Open Source
-    </p>
-  </div>
+  <footer>
+    <a
+      href="https://github.com/crosspoint-reader/crosspoint-reader"
+      target="_blank"
+      >CrossPoint E-Reader • Open Source</a
+    >
+  </footer>
 
 <script>
   let allSettings = [];
@@ -319,11 +387,23 @@
 
   async function loadSettings() {
     try {
-      const response = await fetch('/api/settings');
-      if (!response.ok) {
-        throw new Error('Failed to load settings: ' + response.status);
-      }
-      allSettings = await response.json();
+      // TODO: Uncomment before merge
+      // const response = await fetch('/api/settings');
+      // if (!response.ok) {
+      //   throw new Error('Failed to load settings: ' + response.status);
+      // }
+      // allSettings = await response.json();
+      allSettings = [
+        { category: 'Display', key: 'sleep_screen', name: 'Sleep Screen', type: 'enum', options: ['Cover', 'None', 'Dark'], value: 0 },
+        { category: 'Display', key: 'sleep_screen_cover_mode', name: 'Sleep Screen Cover Mode', type: 'enum', options: ['Fit', 'Crop'], value: 1 },
+        { category: 'Display', key: 'sleep_screen_cover_filter', name: 'Sleep Screen Cover Filter', type: 'enum', options: ['None', 'Grayscale', 'Inverted'], value: 0 },
+        { category: 'Reader', key: 'font_family', name: 'Font Family', type: 'enum', options: ['Bookerly'], value: 0 },
+        { category: 'Reader', key: 'font_size', name: 'Font Size', type: 'enum', options: ['Small', 'Medium', 'Large'], value: 1 },
+        { category: 'Reader', key: 'line_spacing', name: 'Line Spacing', type: 'enum', options: ['Tight', 'Normal', 'Loose'], value: 1 },
+        { category: 'Reader', key: 'margin_size', name: 'Screen Margin', type: 'enum', options: ['15'], value: 0 },
+        { category: 'Controls', key: 'side_button_layout', name: 'Side Button Layout', type: 'enum', options: ['Prev, Next', 'Next, Prev'], value: 0 },
+        { category: 'Controls', key: 'long_press_chapter_skip', name: 'Long Press Chapter Skip', type: 'toggle', value: 1 },
+      ];
 
       // Store original values
       originalValues = {};
@@ -342,7 +422,7 @@
       let html = '';
 
       for (const category in groups) {
-        html += '<div class="card"><h2>' + escapeHtml(category) + '</h2>';
+        html += '<div class="card"><h3>' + escapeHtml(category) + '</h3>';
         groups[category].forEach(function(s) {
           html += '<div class="setting-row">' +
             '<span class="setting-name">' + escapeHtml(s.name) + '</span>' +

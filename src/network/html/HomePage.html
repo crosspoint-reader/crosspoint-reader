@@ -32,6 +32,8 @@
           --card-background: #444;
           --label-color: #bdc3c7;
           --border-color: #555;
+
+          color-scheme: dark;
         }
       }
       h1 {
@@ -85,31 +87,34 @@
       .status {
         display: inline-block;
         padding: 4px 10px;
-        border-radius: 4px;
+        border-radius: 12px;
         background-color: #27ae60;
         color: white;
         font-size: 0.9em;
       }
       .nav-links {
         margin: 20px 0 15px;
+        border-bottom: solid 2px var(--border-color);
+        display: flex;
+        gap: 8px;
+        padding-bottom: 8px;
       }
       .nav-links a {
-        display: inline-block;
-        padding: 10px 20px;
+        padding: 8px 15px;
+        font-size: 0.85em;
         color: var(--font-color);
         text-decoration: none;
         border-radius: 4px;
-        margin-right: 10px;
       }
       .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
+        color: var(--font-color);
         text-decoration: none;
+        background: var(--accent-color);
       }
-      .nav-links a:hover {
-        background-color: var(--accent-color);
-        color: white;
+      .nav-links a:not(.active):hover {
+        color: var(--font-color);
         text-decoration: none;
+        background: var(--border-color);
       }
       a {
         color: var(--accent-color);
@@ -117,6 +122,29 @@
       }
       a:hover {
         text-decoration: underline;
+      }
+      @media (max-width: 600px) {
+        body {
+          padding: 10px;
+          font-size: 14px;
+        }
+        h1 {
+          justify-content: center;
+        }
+        .card {
+          padding: 12px;
+          margin: 10px 0;
+        }
+        .nav-links a {
+          padding: 8px 12px;
+          margin-right: 6px;
+          font-size: 0.9em;
+          flex: 1;
+          text-align: center;
+        }
+        footer {
+          text-align: center;
+        }
       }
     </style>
   </head>
@@ -156,9 +184,9 @@
       </div>
     </div>
 
-    <div class="footer">
+    <footer>
       <a href="https://github.com/crosspoint-reader/crosspoint-reader" target="_blank">CrossPoint E-Reader • Open Source</a>
-    </div>
+    </footer>
   <script>
     async function fetchStatus() {
       try {
