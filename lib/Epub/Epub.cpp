@@ -460,9 +460,19 @@ std::string Epub::getCoverBmpPath(bool cropped) const {
 }
 
 bool Epub::generateCoverBmp(bool cropped) const {
+  bool invalid = false;
   // Already generated, return true
   if (Storage.exists(getCoverBmpPath(cropped).c_str())) {
-    return true;
+    // is this a valid cover or just an empty file we created to mark generation attempts?
+    invalid = !isValidThumbnailBmp(getCoverBmpPath(cropped));
+    if (invalid) {
+      // Remove the old invalid cover so we can attempt to generate a new one
+      Storage.remove(getCoverBmpPath(cropped).c_str());
+      Serial.printf("[%lu] [EBP] Previous cover generation attempt failed for %s mode, retrying\n", millis(),
+                    cropped ? "cropped" : "fit");
+    } else {
+      return true;
+    }
   }
 
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
@@ -477,15 +487,12 @@ bool Epub::generateCoverBmp(bool cropped) const {
     std::vector<std::string> coverCandidates = {"cover.jpg", "OEBPS/cover.jpg"};
     for (const auto& candidate : coverCandidates) {
       effectiveCoverImageHref = candidate;
-      Serial.printf("[%lu] [EBP] Trying fallback cover for sleep screen: %s\n", millis(), candidate.c_str());
       // Try to read a small amount to check if exists
       uint8_t* test = readItemContentsToBytes(candidate, nullptr, false);
       if (test) {
         free(test);
-        Serial.printf("[%lu] [EBP] Found fallback cover for sleep screen: %s\n", millis(), candidate.c_str());
         break;
       } else {
-        Serial.printf("[%lu] [EBP] Fallback cover not found for sleep screen: %s\n", millis(), candidate.c_str());
         effectiveCoverImageHref.clear();
       }
     }
@@ -564,22 +571,18 @@ bool Epub::generateThumbBmp(int height) const {
   }
 
   const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
-  Serial.printf("[%lu] [EBP] coverImageHref: '%s'\n", millis(), coverImageHref.c_str());
   std::string effectiveCoverImageHref = coverImageHref;
   if (coverImageHref.empty()) {
     // Fallback: try common cover filenames
     std::vector<std::string> coverCandidates = {"cover.jpg", "OEBPS/cover.jpg"};
     for (const auto& candidate : coverCandidates) {
       effectiveCoverImageHref = candidate;
-      Serial.printf("[%lu] [EBP] Trying fallback cover: %s\n", millis(), candidate.c_str());
       // Try to read a small amount to check if exists
       uint8_t* test = readItemContentsToBytes(candidate, nullptr, false);
       if (test) {
         free(test);
-        Serial.printf("[%lu] [EBP] Found fallback cover: %s\n", millis(), candidate.c_str());
         break;
       } else {
-        Serial.printf("[%lu] [EBP] Fallback cover not found: %s\n", millis(), candidate.c_str());
         effectiveCoverImageHref.clear();
       }
     }
