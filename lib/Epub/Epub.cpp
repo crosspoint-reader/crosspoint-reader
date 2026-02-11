@@ -8,6 +8,8 @@
 
 #include <algorithm>
 
+#include <HalDisplay.h>
+
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
@@ -534,12 +536,17 @@ bool Epub::generateCoverBmp(bool cropped) const {
 
     if (!success) {
       Serial.printf("[%lu] [EBP] Failed to generate BMP from JPG cover image\n", millis());
-      Storage.remove(getCoverBmpPath(cropped).c_str());
+      // Instead of removing the file, create a dummy cover with X pattern
+      coverBmp.close();
+      Storage.remove(coverJpgTempPath.c_str());
+      return generateInvalidFormatCoverBmp(cropped);
     }
     Serial.printf("[%lu] [EBP] Generated BMP from JPG cover image, success: %s\n", millis(), success ? "yes" : "no");
     return success;
   } else {
-    Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping\n", millis());
+    Serial.printf("[%lu] [EBP] Cover image is not a JPG, creating invalid format cover\n", millis());
+    // Create a dummy cover to indicate unsupported format
+    return generateInvalidFormatCoverBmp(cropped);
   }
 
   return false;
@@ -627,13 +634,18 @@ bool Epub::generateThumbBmp(int height) const {
 
       if (!success) {
         Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
-        Storage.remove(getThumbBmpPath(height).c_str());
+        // Instead of removing the file, create a dummy thumbnail with X pattern
+        thumbBmp.close();
+        Storage.remove(coverJpgTempPath.c_str());
+        return generateInvalidFormatThumbBmp(height);
       }
       Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
                     success ? "yes" : "no");
       return success;
     } else {
-      Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping thumbnail\n", millis());
+      Serial.printf("[%lu] [EBP] Cover image is not a JPG, creating invalid format thumbnail\n", millis());
+      // Create a dummy thumbnail to indicate unsupported format
+      return generateInvalidFormatThumbBmp(height);
     }
   }
 
@@ -644,181 +656,355 @@ bool Epub::generateThumbBmp(int height) const {
   return false;
 }
 
-uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
-  if (itemHref.empty()) {
-    Serial.printf("[%lu] [EBP] Failed to read item, empty href\n", millis());
-    return nullptr;
-  }
+bool Epub::generateInvalidFormatThumbBmp(int height) const {
+    // Create a simple 1-bit BMP with an X pattern to indicate invalid format.
+    // This BMP is a valid 1-bit file used as a marker to prevent repeated
+    // generation attempts when conversion fails (e.g., progressive JPG).
+    const int width = height * 0.6;        // Same aspect ratio as normal thumbnails
+    const int rowBytes = ((width + 31) / 32) * 4;  // 1-bit rows padded to 4-byte boundary
+    const int imageSize = rowBytes * height;
+    const int fileSize = 14 + 40 + 8 + imageSize;  // Header + DIB + palette + data
+    const int dataOffset = 14 + 40 + 8;
 
-  const std::string path = FsHelpers::normalisePath(itemHref);
-
-  const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
-  if (!content) {
-    Serial.printf("[%lu] [EBP] Failed to read item %s\n", millis(), path.c_str());
-    return nullptr;
-  }
-
-  return content;
-}
-
-bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize) const {
-  if (itemHref.empty()) {
-    Serial.printf("[%lu] [EBP] Failed to read item, empty href\n", millis());
-    return false;
-  }
-
-  const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
-}
-
-bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
-  const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
-}
-
-int Epub::getSpineItemsCount() const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    return 0;
-  }
-  return bookMetadataCache->getSpineCount();
-}
-
-size_t Epub::getCumulativeSpineItemSize(const int spineIndex) const { return getSpineItem(spineIndex).cumulativeSize; }
-
-BookMetadataCache::SpineEntry Epub::getSpineItem(const int spineIndex) const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    Serial.printf("[%lu] [EBP] getSpineItem called but cache not loaded\n", millis());
-    return {};
-  }
-
-  if (spineIndex < 0 || spineIndex >= bookMetadataCache->getSpineCount()) {
-    Serial.printf("[%lu] [EBP] getSpineItem index:%d is out of range\n", millis(), spineIndex);
-    return bookMetadataCache->getSpineEntry(0);
-  }
-
-  return bookMetadataCache->getSpineEntry(spineIndex);
-}
-
-BookMetadataCache::TocEntry Epub::getTocItem(const int tocIndex) const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    Serial.printf("[%lu] [EBP] getTocItem called but cache not loaded\n", millis());
-    return {};
-  }
-
-  if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
-    Serial.printf("[%lu] [EBP] getTocItem index:%d is out of range\n", millis(), tocIndex);
-    return {};
-  }
-
-  return bookMetadataCache->getTocEntry(tocIndex);
-}
-
-int Epub::getTocItemsCount() const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    return 0;
-  }
-
-  return bookMetadataCache->getTocCount();
-}
-
-// work out the section index for a toc index
-int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    Serial.printf("[%lu] [EBP] getSpineIndexForTocIndex called but cache not loaded\n", millis());
-    return 0;
-  }
-
-  if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
-    Serial.printf("[%lu] [EBP] getSpineIndexForTocIndex: tocIndex %d out of range\n", millis(), tocIndex);
-    return 0;
-  }
-
-  const int spineIndex = bookMetadataCache->getTocEntry(tocIndex).spineIndex;
-  if (spineIndex < 0) {
-    Serial.printf("[%lu] [EBP] Section not found for TOC index %d\n", millis(), tocIndex);
-    return 0;
-  }
-
-  return spineIndex;
-}
-
-int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }
-
-size_t Epub::getBookSize() const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded() || bookMetadataCache->getSpineCount() == 0) {
-    return 0;
-  }
-  return getCumulativeSpineItemSize(getSpineItemsCount() - 1);
-}
-
-int Epub::getSpineIndexForTextReference() const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    Serial.printf("[%lu] [EBP] getSpineIndexForTextReference called but cache not loaded\n", millis());
-    return 0;
-  }
-  Serial.printf("[%lu] [ERS] Core Metadata: cover(%d)=%s, textReference(%d)=%s\n", millis(),
-                bookMetadataCache->coreMetadata.coverItemHref.size(),
-                bookMetadataCache->coreMetadata.coverItemHref.c_str(),
-                bookMetadataCache->coreMetadata.textReferenceHref.size(),
-                bookMetadataCache->coreMetadata.textReferenceHref.c_str());
-
-  if (bookMetadataCache->coreMetadata.textReferenceHref.empty()) {
-    // there was no textReference in epub, so we return 0 (the first chapter)
-    return 0;
-  }
-
-  // loop through spine items to get the correct index matching the text href
-  for (size_t i = 0; i < getSpineItemsCount(); i++) {
-    if (getSpineItem(i).href == bookMetadataCache->coreMetadata.textReferenceHref) {
-      Serial.printf("[%lu] [ERS] Text reference %s found at index %d\n", millis(),
-                    bookMetadataCache->coreMetadata.textReferenceHref.c_str(), i);
-      return i;
+    FsFile thumbBmp;
+    if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
+      return false;
     }
-  }
-  // This should not happen, as we checked for empty textReferenceHref earlier
-  Serial.printf("[%lu] [EBP] Section not found for text reference\n", millis());
-  return 0;
-}
 
-// Calculate progress in book (returns 0.0-1.0)
-float Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
-  const size_t bookSize = getBookSize();
-  if (bookSize == 0) {
-    return 0.0f;
-  }
-  const size_t prevChapterSize = (currentSpineIndex >= 1) ? getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
-  const size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
-  const float sectionProgSize = currentSpineRead * static_cast<float>(curChapterSize);
-  const float totalProgress = static_cast<float>(prevChapterSize) + sectionProgSize;
-  return totalProgress / static_cast<float>(bookSize);
-}
+    // BMP file header (14 bytes)
+    thumbBmp.write('B');
+    thumbBmp.write('M');
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&fileSize), 4);
+    uint32_t reserved = 0;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&reserved), 4);
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&dataOffset), 4);
 
-bool Epub::isValidThumbnailBmp(const std::string& bmpPath) {
-  if (!Storage.exists(bmpPath.c_str())) {
-    // Serial.printf("[%lu] [EBP] Thumbnail BMP does not exist at path: %s\n", millis(), bmpPath.c_str());
-    return false;
+    // DIB header (BITMAPINFOHEADER - 40 bytes)
+    uint32_t dibHeaderSize = 40;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&dibHeaderSize), 4);
+    int32_t bmpWidth = width;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&bmpWidth), 4);
+    int32_t bmpHeight = -height;  // Negative for top-down
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeight), 4);
+    uint16_t planes = 1;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&planes), 2);
+    uint16_t bitsPerPixel = 1;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&bitsPerPixel), 2);
+    uint32_t compression = 0;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&compression), 4);
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&imageSize), 4);
+    int32_t ppmX = 2835;  // 72 DPI
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&ppmX), 4);
+    int32_t ppmY = 2835;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&ppmY), 4);
+    uint32_t colorsUsed = 2;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&colorsUsed), 4);
+    uint32_t colorsImportant = 2;
+    thumbBmp.write(reinterpret_cast<const uint8_t*>(&colorsImportant), 4);
+
+    // Color palette (2 colors for 1-bit)
+    uint8_t black[4] = {0x00, 0x00, 0x00, 0x00};  // Color 0: Black
+    thumbBmp.write(black, 4);
+    uint8_t white[4] = {0xFF, 0xFF, 0xFF, 0x00};  // Color 1: White
+    thumbBmp.write(white, 4);
+
+    // Generate X pattern bitmap data
+    // In BMP, 0 = black (first color in palette), 1 = white
+    // We'll draw black pixels on white background
+    for (int y = 0; y < height; y++) {
+      std::vector<uint8_t> rowData(rowBytes, 0xFF);  // Initialize to all white (1s)
+
+      // Map this row to a horizontal position for diagonals
+      const int scaledY = (y * width) / height;
+      const int thickness = 2;  // thickness of diagonal lines in pixels
+
+      for (int x = 0; x < width; x++) {
+        bool drawPixel = false;
+        // Main diagonal (top-left to bottom-right)
+        if (std::abs(x - scaledY) <= thickness) drawPixel = true;
+        // Other diagonal (top-right to bottom-left)
+        if (std::abs(x - (width - 1 - scaledY)) <= thickness) drawPixel = true;
+
+        if (drawPixel) {
+          const int byteIndex = x / 8;
+          const int bitIndex = 7 - (x % 8);  // MSB first
+          rowData[byteIndex] &= static_cast<uint8_t>(~(1 << bitIndex));
+        }
+      }
+
+      // Write the row data
+      thumbBmp.write(rowData.data(), rowBytes);
+    }
+
+    thumbBmp.close();
+    Serial.printf("[%lu] [EBP] Generated invalid format thumbnail BMP\n", millis());
+    return true;
   }
-  FsFile file = Storage.open(bmpPath.c_str());
-  if (!file) {
-    Serial.printf("[%lu] [EBP] Failed to open Thumbnail BMP at path: %s\n", millis(), bmpPath.c_str());
-    return false;
+
+  bool Epub::generateInvalidFormatCoverBmp(bool cropped) const {
+    // Create a simple 1-bit BMP with an X pattern to indicate invalid format.
+    // This BMP is intentionally a valid image that visually indicates a
+    // malformed/unsupported cover image instead of leaving an empty marker
+    // file that would cause repeated generation attempts.
+    // Derive logical portrait dimensions from the display hardware constants
+    // EInkDisplay reports native panel orientation as 800x480; use min/max
+    const int hwW = HalDisplay::DISPLAY_WIDTH;
+    const int hwH = HalDisplay::DISPLAY_HEIGHT;
+    const int width = std::min(hwW, hwH);   // logical portrait width (480)
+    const int height = std::max(hwW, hwH);  // logical portrait height (800)
+    const int rowBytes = ((width + 31) / 32) * 4;  // 1-bit rows padded to 4-byte boundary
+    const int imageSize = rowBytes * height;
+    const int fileSize = 14 + 40 + 8 + imageSize;  // Header + DIB + palette + data
+    const int dataOffset = 14 + 40 + 8;
+
+    FsFile coverBmp;
+    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
+      return false;
+    }
+
+    // BMP file header (14 bytes)
+    coverBmp.write('B');
+    coverBmp.write('M');
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&fileSize), 4);
+    uint32_t reserved = 0;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&reserved), 4);
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&dataOffset), 4);
+
+    // DIB header (BITMAPINFOHEADER - 40 bytes)
+    uint32_t dibHeaderSize = 40;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&dibHeaderSize), 4);
+    int32_t bmpWidth = width;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpWidth), 4);
+    int32_t bmpHeight = -height;  // Negative for top-down
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeight), 4);
+    uint16_t planes = 1;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&planes), 2);
+    uint16_t bitsPerPixel = 1;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&bitsPerPixel), 2);
+    uint32_t compression = 0;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&compression), 4);
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&imageSize), 4);
+    int32_t ppmX = 2835;  // 72 DPI
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&ppmX), 4);
+    int32_t ppmY = 2835;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&ppmY), 4);
+    uint32_t colorsUsed = 2;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&colorsUsed), 4);
+    uint32_t colorsImportant = 2;
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&colorsImportant), 4);
+
+    // Color palette (2 colors for 1-bit)
+    uint8_t black[4] = {0x00, 0x00, 0x00, 0x00};  // Color 0: Black
+    coverBmp.write(black, 4);
+    uint8_t white[4] = {0xFF, 0xFF, 0xFF, 0x00};  // Color 1: White
+    coverBmp.write(white, 4);
+
+    // Generate X pattern bitmap data
+    // In BMP, 0 = black (first color in palette), 1 = white
+    // We'll draw black pixels on white background
+    for (int y = 0; y < height; y++) {
+      std::vector<uint8_t> rowData(rowBytes, 0xFF);  // Initialize to all white (1s)
+
+      const int scaledY = (y * width) / height;
+      const int thickness = 6;  // thicker lines for full-cover visibility
+
+      for (int x = 0; x < width; x++) {
+        bool drawPixel = false;
+        if (std::abs(x - scaledY) <= thickness) drawPixel = true;
+        if (std::abs(x - (width - 1 - scaledY)) <= thickness) drawPixel = true;
+
+        if (drawPixel) {
+          const int byteIndex = x / 8;
+          const int bitIndex = 7 - (x % 8);
+          rowData[byteIndex] &= static_cast<uint8_t>(~(1 << bitIndex));
+        }
+      }
+
+      coverBmp.write(rowData.data(), rowBytes);
+    }
+
+    coverBmp.close();
+    Serial.printf("[%lu] [EBP] Generated invalid format cover BMP\n", millis());
+    return true;
   }
-  size_t fileSize = file.size();
-  if (fileSize == 0) {
-    // Empty file is a marker for "no cover available"
-    Serial.printf("[%lu] [EBP] Thumbnail BMP is empty (no cover marker) at path: %s\n", millis(), bmpPath.c_str());
+
+  uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
+    if (itemHref.empty()) {
+      Serial.printf("[%lu] [EBP] Failed to read item, empty href\n", millis());
+      return nullptr;
+    }
+
+    const std::string path = FsHelpers::normalisePath(itemHref);
+
+    const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
+    if (!content) {
+      Serial.printf("[%lu] [EBP] Failed to read item %s\n", millis(), path.c_str());
+      return nullptr;
+    }
+
+    return content;
+  }
+
+  bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize) const {
+    if (itemHref.empty()) {
+      Serial.printf("[%lu] [EBP] Failed to read item, empty href\n", millis());
+      return false;
+    }
+
+    const std::string path = FsHelpers::normalisePath(itemHref);
+    return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
+  }
+
+  bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
+    const std::string path = FsHelpers::normalisePath(itemHref);
+    return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+  }
+
+  int Epub::getSpineItemsCount() const {
+    if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+      return 0;
+    }
+    return bookMetadataCache->getSpineCount();
+  }
+
+  size_t Epub::getCumulativeSpineItemSize(const int spineIndex) const {
+    return getSpineItem(spineIndex).cumulativeSize;
+  }
+
+  BookMetadataCache::SpineEntry Epub::getSpineItem(const int spineIndex) const {
+    if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+      Serial.printf("[%lu] [EBP] getSpineItem called but cache not loaded\n", millis());
+      return {};
+    }
+
+    if (spineIndex < 0 || spineIndex >= bookMetadataCache->getSpineCount()) {
+      Serial.printf("[%lu] [EBP] getSpineItem index:%d is out of range\n", millis(), spineIndex);
+      return bookMetadataCache->getSpineEntry(0);
+    }
+
+    return bookMetadataCache->getSpineEntry(spineIndex);
+  }
+
+  BookMetadataCache::TocEntry Epub::getTocItem(const int tocIndex) const {
+    if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+      Serial.printf("[%lu] [EBP] getTocItem called but cache not loaded\n", millis());
+      return {};
+    }
+
+    if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
+      Serial.printf("[%lu] [EBP] getTocItem index:%d is out of range\n", millis(), tocIndex);
+      return {};
+    }
+
+    return bookMetadataCache->getTocEntry(tocIndex);
+  }
+
+  int Epub::getTocItemsCount() const {
+    if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+      return 0;
+    }
+
+    return bookMetadataCache->getTocCount();
+  }
+
+  // work out the section index for a toc index
+  int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
+    if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+      Serial.printf("[%lu] [EBP] getSpineIndexForTocIndex called but cache not loaded\n", millis());
+      return 0;
+    }
+
+    if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
+      Serial.printf("[%lu] [EBP] getSpineIndexForTocIndex: tocIndex %d out of range\n", millis(), tocIndex);
+      return 0;
+    }
+
+    const int spineIndex = bookMetadataCache->getTocEntry(tocIndex).spineIndex;
+    if (spineIndex < 0) {
+      Serial.printf("[%lu] [EBP] Section not found for TOC index %d\n", millis(), tocIndex);
+      return 0;
+    }
+
+    return spineIndex;
+  }
+
+  int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }
+
+  size_t Epub::getBookSize() const {
+    if (!bookMetadataCache || !bookMetadataCache->isLoaded() || bookMetadataCache->getSpineCount() == 0) {
+      return 0;
+    }
+    return getCumulativeSpineItemSize(getSpineItemsCount() - 1);
+  }
+
+  int Epub::getSpineIndexForTextReference() const {
+    if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+      Serial.printf("[%lu] [EBP] getSpineIndexForTextReference called but cache not loaded\n", millis());
+      return 0;
+    }
+    Serial.printf("[%lu] [ERS] Core Metadata: cover(%d)=%s, textReference(%d)=%s\n", millis(),
+                  bookMetadataCache->coreMetadata.coverItemHref.size(),
+                  bookMetadataCache->coreMetadata.coverItemHref.c_str(),
+                  bookMetadataCache->coreMetadata.textReferenceHref.size(),
+                  bookMetadataCache->coreMetadata.textReferenceHref.c_str());
+
+    if (bookMetadataCache->coreMetadata.textReferenceHref.empty()) {
+      // there was no textReference in epub, so we return 0 (the first chapter)
+      return 0;
+    }
+
+    // loop through spine items to get the correct index matching the text href
+    for (size_t i = 0; i < getSpineItemsCount(); i++) {
+      if (getSpineItem(i).href == bookMetadataCache->coreMetadata.textReferenceHref) {
+        Serial.printf("[%lu] [ERS] Text reference %s found at index %d\n", millis(),
+                      bookMetadataCache->coreMetadata.textReferenceHref.c_str(), i);
+        return i;
+      }
+    }
+    // This should not happen, as we checked for empty textReferenceHref earlier
+    Serial.printf("[%lu] [EBP] Section not found for text reference\n", millis());
+    return 0;
+  }
+
+  // Calculate progress in book (returns 0.0-1.0)
+  float Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
+    const size_t bookSize = getBookSize();
+    if (bookSize == 0) {
+      return 0.0f;
+    }
+    const size_t prevChapterSize = (currentSpineIndex >= 1) ? getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
+    const size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
+    const float sectionProgSize = currentSpineRead * static_cast<float>(curChapterSize);
+    const float totalProgress = static_cast<float>(prevChapterSize) + sectionProgSize;
+    return totalProgress / static_cast<float>(bookSize);
+  }
+
+  bool Epub::isValidThumbnailBmp(const std::string& bmpPath) {
+    if (!Storage.exists(bmpPath.c_str())) {
+      // Serial.printf("[%lu] [EBP] Thumbnail BMP does not exist at path: %s\n", millis(), bmpPath.c_str());
+      return false;
+    }
+    FsFile file = Storage.open(bmpPath.c_str());
+    if (!file) {
+      Serial.printf("[%lu] [EBP] Failed to open Thumbnail BMP at path: %s\n", millis(), bmpPath.c_str());
+      return false;
+    }
+    size_t fileSize = file.size();
+    if (fileSize == 0) {
+      // Empty file is a marker for "no cover available"
+      Serial.printf("[%lu] [EBP] Thumbnail BMP is empty (no cover marker) at path: %s\n", millis(), bmpPath.c_str());
+      file.close();
+      return false;
+    }
+    // BMP header starts with 'B' 'M'
+    uint8_t header[2];
+    size_t bytesRead = file.read(header, 2);
+    if (bytesRead != 2) {
+      Serial.printf("[%lu] [EBP] Failed to read Thumbnail BMP header at path: %s\n", millis(), bmpPath.c_str());
+      file.close();
+      return false;
+    }
+    Serial.printf("[%lu] [EBP] Thumbnail BMP header: %c%c\n", millis(), header[0], header[1]);
     file.close();
-    return false;
+    return header[0] == 'B' && header[1] == 'M';
   }
-  // BMP header starts with 'B' 'M'
-  uint8_t header[2];
-  size_t bytesRead = file.read(header, 2);
-  if (bytesRead != 2) {
-    Serial.printf("[%lu] [EBP] Failed to read Thumbnail BMP header at path: %s\n", millis(), bmpPath.c_str());
-    file.close();
-    return false;
-  }
-  Serial.printf("[%lu] [EBP] Thumbnail BMP header: %c%c\n", millis(), header[0], header[1]);
-  file.close();
-  return header[0] == 'B' && header[1] == 'M';
-}
