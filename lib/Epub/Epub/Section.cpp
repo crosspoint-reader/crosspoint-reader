@@ -6,13 +6,14 @@
 #include <fstream>
 #include <set>
 
-#include "FsHelpers.h"
 #include "Page.h"
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 12;
+// Version 13: Page now includes footnote serialization (number + href)
+constexpr uint8_t SECTION_FILE_VERSION = 13;
+
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint32_t);
@@ -22,54 +23,75 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) +
 static bool writeEscapedXml(FsFile& file, const char* text) {
   if (!text) return true;
 
-  // Use a static buffer to avoid heap allocation
-  static char buffer[2048];
-  int bufferPos = 0;
+  char buffer[2048];
+  size_t bufferPos = 0;
 
-  while (*text && bufferPos < sizeof(buffer) - 10) {  // Leave margin for entities
-    unsigned char c = (unsigned char)*text;
+  // Helper to flush current buffer contents to the file
+  auto flushBuffer = [&]() -> bool {
+    if (bufferPos == 0) return true;
+
+    size_t totalWritten = 0;
+    while (totalWritten < bufferPos) {
+      const size_t written =
+          file.write(reinterpret_cast<const uint8_t*>(buffer) + totalWritten, bufferPos - totalWritten);
+      if (written == 0) {
+        return false;  // Write failed
+      }
+      totalWritten += written;
+    }
+    bufferPos = 0;
+    return true;
+  };
+
+  while (*text) {
+    const unsigned char c = static_cast<unsigned char>(*text);
+    const char* entity = nullptr;
+    size_t entityLen = 0;
 
     // Only escape the 5 XML special characters
-    if (c == '<') {
-      if (bufferPos + 4 < sizeof(buffer)) {
-        memcpy(&buffer[bufferPos], "&lt;", 4);
-        bufferPos += 4;
-      }
-    } else if (c == '>') {
-      if (bufferPos + 4 < sizeof(buffer)) {
-        memcpy(&buffer[bufferPos], "&gt;", 4);
-        bufferPos += 4;
-      }
-    } else if (c == '&') {
-      if (bufferPos + 5 < sizeof(buffer)) {
-        memcpy(&buffer[bufferPos], "&amp;", 5);
-        bufferPos += 5;
-      }
-    } else if (c == '"') {
-      if (bufferPos + 6 < sizeof(buffer)) {
-        memcpy(&buffer[bufferPos], "&quot;", 6);
-        bufferPos += 6;
-      }
-    } else if (c == '\'') {
-      if (bufferPos + 6 < sizeof(buffer)) {
-        memcpy(&buffer[bufferPos], "&apos;", 6);
-        bufferPos += 6;
-      }
-    } else {
-      // Keep everything else (include UTF8)
-      buffer[bufferPos++] = (char)c;
+    switch (c) {
+      case '<':
+        entity = "&lt;";
+        entityLen = 4;
+        break;
+      case '>':
+        entity = "&gt;";
+        entityLen = 4;
+        break;
+      case '&':
+        entity = "&amp;";
+        entityLen = 5;
+        break;
+      case '"':
+        entity = "&quot;";
+        entityLen = 6;
+        break;
+      case '\'':
+        entity = "&apos;";
+        entityLen = 6;
+        break;
     }
 
-    text++;
+    if (entity) {
+      // Ensure there is enough space for the entity, flushing if necessary
+      if (bufferPos + entityLen > sizeof(buffer)) {
+        if (!flushBuffer()) return false;
+      }
+      memcpy(&buffer[bufferPos], entity, entityLen);
+      bufferPos += entityLen;
+    } else {
+      // Keep everything else (including UTF-8 bytes)
+      if (bufferPos + 1 > sizeof(buffer)) {
+        if (!flushBuffer()) return false;
+      }
+      buffer[bufferPos++] = static_cast<char>(c);
+    }
+
+    ++text;
   }
 
-  buffer[bufferPos] = '\0';
-
-  // Write all at once
-  size_t written = file.write((const uint8_t*)buffer, bufferPos);
-  file.flush();
-
-  return written == bufferPos;
+  // Flush any remaining data in the buffer
+  return flushBuffer();
 }
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {

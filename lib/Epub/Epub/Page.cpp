@@ -47,10 +47,15 @@ bool Page::serialize(FsFile& file) const {
   int32_t fCount = footnotes.size();
   serialization::writePod(file, fCount);
   for (const auto& fn : footnotes) {
-    file.write(fn.number, 3);
-    file.write(fn.href, 64);
+    if (file.write(fn.number, 24) != 24 || file.write(fn.href, 64) != 64) {
+      Serial.printf("[%lu] [PGE] Serialization failed: Write error for footnote\n", millis());
+      return false;
+    }
     uint8_t isInlineFlag = fn.isInline ? 1 : 0;
-    file.write(&isInlineFlag, 1);
+    if (file.write(&isInlineFlag, 1) != 1) {
+      Serial.printf("[%lu] [PGE] Serialization failed: Write error for footnote flag\n", millis());
+      return false;
+    }
   }
 
   return true;
@@ -78,15 +83,38 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   int32_t footnoteCount;
   serialization::readPod(file, footnoteCount);
 
+  // Sanity check: limit footnoteCount to reasonable maximum
+  constexpr int32_t MAX_FOOTNOTES_PER_PAGE = 16;
+  if (footnoteCount < 0 || footnoteCount > MAX_FOOTNOTES_PER_PAGE) {
+    Serial.printf("[%lu] [PGE] Deserialization failed: Invalid footnote count %d (max %d)\n", millis(), footnoteCount,
+                  MAX_FOOTNOTES_PER_PAGE);
+    return nullptr;
+  }
+
   for (int i = 0; i < footnoteCount; i++) {
     FootnoteEntry entry;
-    file.read(entry.number, 3);
-    file.read(entry.href, 64);
+
+    // Read buffers and check for errors
+    size_t numberBytesRead = file.read(entry.number, 24);
+    size_t hrefBytesRead = file.read(entry.href, 64);
     uint8_t isInlineFlag = 0;
-    file.read(&isInlineFlag, 1);
+    size_t flagBytesRead = file.read(&isInlineFlag, 1);
+
+    // Verify all reads succeeded
+    if (numberBytesRead != 24 || hrefBytesRead != 64 || flagBytesRead != 1) {
+      Serial.printf("[%lu] [PGE] Deserialization failed: Incomplete footnote read at index %d\n", millis(), i);
+      return nullptr;
+    }
+
+    // Force null-termination to prevent buffer overruns
+    entry.number[23] = '\0';
+    entry.href[63] = '\0';
+
     entry.isInline = (isInlineFlag != 0);
     page->footnotes.push_back(entry);
   }
+
+  return page;
 
   return page;
 }

@@ -25,7 +25,7 @@ struct Noteref {
 
 // Struct to store collected inline footnotes (aside elements)
 struct InlineFootnote {
-  char id[3];
+  char id[16];
   char* text;
 
   InlineFootnote() : text(nullptr) { id[0] = '\0'; }
@@ -100,7 +100,7 @@ class ChapterHtmlSlimParser {
   // Inline footnotes (aside) tracking
   bool insideAsideFootnote = false;
   int asideDepth = 0;
-  char currentAsideId[3] = {0};
+  char currentAsideId[16] = {0};
 
   // Paragraph note tracking
   bool insideParagraphNote = false;
@@ -154,8 +154,6 @@ class ChapterHtmlSlimParser {
 
       : filepath(filepath),
         renderer(renderer),
-        completePageFn(completePageFn),
-        popupFn(popupFn),
         fontId(fontId),
         lineCompression(lineCompression),
         extraParagraphSpacing(extraParagraphSpacing),
@@ -163,6 +161,8 @@ class ChapterHtmlSlimParser {
         viewportWidth(viewportWidth),
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
+        completePageFn(completePageFn),
+        popupFn(popupFn),
         cssParser(cssParser),
         embeddedStyle(embeddedStyle),
         boldUntilDepth(INT_MAX),

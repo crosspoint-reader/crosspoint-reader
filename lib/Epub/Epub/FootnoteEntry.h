@@ -1,7 +1,7 @@
 #pragma once
 
 struct FootnoteEntry {
-  char number[3];
+  char number[24];
   char href[64];
   bool isInline;
 

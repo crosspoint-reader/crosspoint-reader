@@ -208,8 +208,8 @@ std::unique_ptr<FootnoteEntry> ChapterHtmlSlimParser::createFootnoteEntry(const 
   Serial.printf("[%lu] [ADDFT] Creating footnote: num=%s, href=%s\n", millis(), number, href);
 
   // Copy number
-  strncpy(entry->number, number, 2);
-  entry->number[2] = '\0';
+  strncpy(entry->number, number, sizeof(entry->number) - 1);
+  entry->number[sizeof(entry->number) - 1] = '\0';
 
   // Check if this is an inline footnote reference
   const char* hashPos = strchr(href, '#');
@@ -291,8 +291,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     const char* id = getAttribute(atts, "id");
 
     if (id && strncmp(id, "rnote", 5) == 0) {
-      strncpy(self->currentParagraphNoteId, id, 15);
-      self->currentParagraphNoteId[15] = '\0';
+      strncpy(self->currentParagraphNoteId, id, sizeof(self->currentParagraphNoteId) - 1);
+      self->currentParagraphNoteId[sizeof(self->currentParagraphNoteId) - 1] = '\0';
     }
 
     self->depth += 1;
@@ -314,8 +314,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->currentAsideTextLen = 0;
         self->currentAsideText[0] = '\0';
 
-        strncpy(self->currentAsideId, id, 2);
-        self->currentAsideId[2] = '\0';
+        strncpy(self->currentAsideId, id, sizeof(self->currentAsideId) - 1);
+        self->currentAsideId[sizeof(self->currentAsideId) - 1] = '\0';
       } else {
         // Pass 2: Skip the aside (we already have it from Pass 1)
         self->skipUntilDepth = self->depth;
@@ -709,8 +709,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       if (self->inlineFootnoteCount < 16) {
         InlineFootnote& fn = self->inlineFootnotes[self->inlineFootnoteCount];
 
-        strncpy(fn.id, self->currentAsideId, 2);
-        fn.id[2] = '\0';
+        strncpy(fn.id, self->currentAsideId, sizeof(fn.id) - 1);
+        fn.id[sizeof(fn.id) - 1] = '\0';
 
         // Allocate memory for text
         fn.text = (char*)malloc(self->currentAsideTextLen + 1);
@@ -739,8 +739,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       if (self->paragraphNoteCount < 16) {
         ParagraphNote& pn = self->paragraphNotes[self->paragraphNoteCount];
 
-        strncpy(pn.id, self->currentParagraphNoteId, 15);
-        pn.id[15] = '\0';
+        strncpy(pn.id, self->currentParagraphNoteId, sizeof(pn.id) - 1);
+        pn.id[sizeof(pn.id) - 1] = '\0';
 
         // Allocate memory
         pn.text = (char*)malloc(self->currentParagraphNoteTextLen + 1);
@@ -767,15 +767,23 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   if (!self->isPass1CollectingAsides && strcmp(name, "a") == 0 && self->insideFootnoteLink &&
       self->depth == self->footnoteLinkDepth + 1) {
     if (self->currentFootnoteLinkText[0] != '\0' && self->currentFootnoteLinkHref[0] != '\0') {
-      // Add footnote to current text block
       if (self->currentTextBlock) {
         auto footnote = self->createFootnoteEntry(self->currentFootnoteLinkText, self->currentFootnoteLinkHref);
+
+        // Invoke the noteref callback if set
+        if (self->noterefCallback && footnote) {
+          Noteref noteref;
+          strncpy(noteref.number, footnote->number, sizeof(noteref.number) - 1);
+          noteref.number[sizeof(noteref.number) - 1] = '\0';
+          strncpy(noteref.href, footnote->href, sizeof(noteref.href) - 1);
+          noteref.href[sizeof(noteref.href) - 1] = '\0';
+          self->noterefCallback(noteref);
+        }
 
         // Format the noteref text with brackets
         char formattedNoteref[32];
         snprintf(formattedNoteref, sizeof(formattedNoteref), "[%s]", self->currentFootnoteLinkText);
 
-        // Add it as a word to the current text block with the footnote attached
         // Determine font style from CSS effective style
         const bool isBold = self->effectiveBold;
         const bool isItalic = self->effectiveItalic;
@@ -1045,24 +1053,26 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line,
                                           const std::vector<FootnoteEntry>& footnotes) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
+  if (lineHeight > viewportHeight) {
+    Serial.printf("[%lu] [EHP] WARNING: Line taller than viewport\n", millis());
+  }
+
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage));
     currentPage.reset(new Page());
     currentPageNextY = 0;
   }
 
-  if (currentPage && currentPage->elements.size() < 24) {  // Assuming generic capacity check or vector size
-    // Apply horizontal left inset (margin + padding) as x position offset
-    const int16_t xOffset = line->getBlockStyle().leftInset();
-    currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
-    currentPageNextY += lineHeight;
+  if (!currentPage) return;
 
-    // Add footnotes for this line to the current page
-    for (const auto& fn : footnotes) {
-      currentPage->addFootnote(fn.number, fn.href);
-    }
-  } else if (currentPage) {
-    Serial.printf("[%lu] [EHP] WARNING: Page element capacity reached, skipping element\n", millis());
+  // Apply horizontal left inset (margin + padding) as x position offset
+  const int16_t xOffset = line->getBlockStyle().leftInset();
+  currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
+
+  currentPageNextY += lineHeight;
+
+  for (const auto& fn : footnotes) {
+    currentPage->addFootnote(fn.number, fn.href);
   }
 }
 

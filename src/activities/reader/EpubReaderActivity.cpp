@@ -678,7 +678,7 @@ void EpubReaderActivity::renderScreen() {
 
     // Copy footnotes from page to currentPageFootnotes
     currentPageFootnotes.clear();
-    int maxFootnotes = (p->footnotes.size() < 8) ? p->footnotes.size() : 8;
+    int maxFootnotes = (p->footnotes.size() < 16) ? p->footnotes.size() : 16;
 
     for (int i = 0; i < maxFootnotes; i++) {
       const FootnoteEntry& footnote = p->footnotes[i];
