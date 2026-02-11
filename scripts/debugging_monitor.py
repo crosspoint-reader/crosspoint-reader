@@ -363,12 +363,20 @@ def get_auto_detected_port() -> list[str]:
     elif system == "Windows":
         from serial.tools import list_ports
 
+        # Be careful with this pattern list - it should be specific
+        # enough to avoid picking up unrelated devices, but broad enough
+        # to catch all common USB-serial adapters used with ESP32
+        # Caveat: localized versions of Windows may have different descriptions,
+        # so we also check for specific VID:PID (but that may not cover all clones)
         pattern_list = ["CP210x", "CH340", "USB Serial"]
         found_ports = list_ports.comports()
         port_list = [
             port.device
             for port in found_ports
             if any(pat in port.description for pat in pattern_list)
+            or port.hwid.startswith(
+                "USB VID:PID=303A:1001"
+            )  # Add specific VID:PID for XTEINK X4
         ]
 
     return port_list
