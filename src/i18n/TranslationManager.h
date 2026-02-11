@@ -8,7 +8,8 @@
 class FsFile;
 
 /// Compact translation manager for ESP32.
-/// Uses a sorted array + string pool instead of std::map for minimal heap fragmentation.
+/// Uses a flash-resident hash table for O(1) key→ID lookup,
+/// and a values-only RAM pool (keys are NOT stored in RAM).
 /// English is the implicit fallback: T("key") returns "key" itself when no translation is found.
 /// Additional languages load from SD card .lang files in key=value format.
 class TranslationManager {
@@ -33,9 +34,9 @@ class TranslationManager {
   const char* getCurrentLanguage() const { return currentLang; }
 
   /// Number of translations currently loaded.
-  uint16_t getCount() const { return pairCount; }
+  uint16_t getCount() const { return loadedCount; }
 
-  /// Approximate heap bytes used by the string pool + index.
+  /// Approximate heap bytes used by the values pool + offset table.
   size_t getMemoryUsage() const;
 
   /// Language info returned by getAvailableLanguages().
@@ -46,7 +47,6 @@ class TranslationManager {
 
   /// Scan SD card for available .lang files.
   /// Returns cached list: English first, then alphabetically by display name.
-  /// Each .lang file must contain a `language.name=...` line for its display name.
   const std::vector<LangInfo>& getAvailableLanguages();
 
   /// Build a vector of display names suitable for SettingInfo::DynamicEnum.
@@ -58,24 +58,35 @@ class TranslationManager {
   /// Invalidate the cached language list (e.g. after SD card changes).
   void invalidateLanguageCache() { languagesScanned = false; }
 
+  /// FNV-1a 32-bit hash. Must match the Python implementation in lang_compile.py.
+  static inline uint32_t fnv1a(const char* s) {
+    uint32_t h = 2166136261u;
+    for (; *s; ++s) {
+      h = (h ^ static_cast<uint8_t>(*s)) * 16777619u;
+    }
+    return h;
+  }
+
  private:
   TranslationManager();
   ~TranslationManager();
 
-  struct Pair {
-    uint16_t keyOffset;
-    uint16_t valueOffset;
-  };
+  /// Look up a key hash in the flash hash table.
+  /// @return Key ID (0..LANG_KEY_COUNT-1), or -1 if not found.
+  static int16_t lookupId(uint32_t hash);
 
-  // String pool: single contiguous allocation holding all key\0value\0 data.
+  // Values pool: only translated strings (no keys).
+  // Allocated only for non-English languages.
   char* pool = nullptr;
   size_t poolSize = 0;
   size_t poolUsed = 0;
 
-  // Sorted index for binary search.
-  Pair* pairs = nullptr;
-  uint16_t pairCount = 0;
-  uint16_t pairCapacity = 0;
+  // Offset table: valueOffsets[ID] = offset into pool.
+  // 0xFFFF means no translation loaded for this ID (English fallback).
+  uint16_t* valueOffsets = nullptr;
+
+  // Number of translations actually loaded.
+  uint16_t loadedCount = 0;
 
   char currentLang[8] = "en";
 
@@ -84,10 +95,6 @@ class TranslationManager {
   bool languagesScanned = false;
 
   void freeAll();
-  bool ensurePoolCapacity(size_t bytes);
-  bool ensurePairCapacity();
-  bool putString(const char* key, const char* value);
-  int findKey(const char* key) const;
   bool loadFromSD(const char* lang);
   static bool isValidLangCode(const char* lang);
 };

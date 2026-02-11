@@ -7,8 +7,9 @@
 #include <cstdlib>
 #include <cstring>
 
-static constexpr size_t INITIAL_POOL_SIZE = 8192;
-static constexpr uint16_t INITIAL_PAIR_CAP = 256;
+#include "LangKeys.inc"
+
+static constexpr size_t INITIAL_POOL_SIZE = 4096;
 static constexpr size_t MAX_LINE_LENGTH = 256;
 
 // ──────────────────────────────────────────────
@@ -50,20 +51,42 @@ bool TranslationManager::init(const char* lang) {
   strncpy(currentLang, sdLoaded ? lang : "en", sizeof(currentLang) - 1);
   currentLang[sizeof(currentLang) - 1] = '\0';
 
-  Serial.printf("[i18n] Active: %s (%u strings, %u bytes)\n", currentLang, pairCount, static_cast<unsigned>(poolUsed));
+  Serial.printf("[i18n] Active: %s (%u strings, %u bytes pool)\n", currentLang, loadedCount,
+                static_cast<unsigned>(poolUsed));
   return sdLoaded;
 }
 
 const char* TranslationManager::getString(const char* key) const {
-  const int idx = findKey(key);
-  if (idx >= 0) {
-    return pool + pairs[idx].valueOffset;
-  }
-  // Key not found — return the key itself (works as English fallback).
-  return key;
+  // Fast path: English or not initialized — return the key itself.
+  if (!pool) return key;
+
+  const int16_t id = lookupId(fnv1a(key));
+  if (id < 0) return key;  // Unknown key
+
+  const uint16_t offset = valueOffsets[id];
+  if (offset == 0xFFFF) return key;  // No translation for this key
+
+  return pool + offset;
 }
 
-size_t TranslationManager::getMemoryUsage() const { return poolSize + (pairCapacity * sizeof(Pair)); }
+size_t TranslationManager::getMemoryUsage() const { return poolSize + (LANG_KEY_COUNT * sizeof(uint16_t)); }
+
+// ──────────────────────────────────────────────
+// Hash table lookup — O(1) amortized
+// ──────────────────────────────────────────────
+
+int16_t TranslationManager::lookupId(uint32_t hash) {
+  if (hash == 0) return -1;  // 0 is the empty-slot marker
+
+  uint16_t slot = hash % LANG_HASH_TABLE_SIZE;
+  for (uint16_t i = 0; i < LANG_HASH_TABLE_SIZE; i++) {
+    const auto& entry = LANG_HASH_TABLE[slot];
+    if (entry.hash == 0) return -1;                    // Empty slot = not found
+    if (entry.hash == hash) return (int16_t)entry.id;  // Found
+    slot = (slot + 1) % LANG_HASH_TABLE_SIZE;          // Linear probe
+  }
+  return -1;  // Table full (should never happen)
+}
 
 // ──────────────────────────────────────────────
 // Language scanning
@@ -186,127 +209,10 @@ void TranslationManager::freeAll() {
   poolSize = 0;
   poolUsed = 0;
 
-  free(pairs);
-  pairs = nullptr;
-  pairCount = 0;
-  pairCapacity = 0;
-}
+  free(valueOffsets);
+  valueOffsets = nullptr;
 
-bool TranslationManager::ensurePoolCapacity(const size_t bytes) {
-  if (pool && poolUsed + bytes <= poolSize) {
-    return true;
-  }
-
-  size_t newSize = poolSize == 0 ? INITIAL_POOL_SIZE : poolSize;
-  while (newSize < poolUsed + bytes) {
-    newSize *= 2;
-  }
-
-  char* newPool = static_cast<char*>(realloc(pool, newSize));
-  if (!newPool) {
-    Serial.println("[i18n] ERROR: Pool realloc failed");
-    return false;
-  }
-  pool = newPool;
-  poolSize = newSize;
-  return true;
-}
-
-bool TranslationManager::ensurePairCapacity() {
-  if (pairs && pairCount < pairCapacity) {
-    return true;
-  }
-
-  const uint16_t newCap = pairCapacity == 0 ? INITIAL_PAIR_CAP : pairCapacity * 2;
-  auto* newPairs = static_cast<Pair*>(realloc(pairs, newCap * sizeof(Pair)));
-  if (!newPairs) {
-    Serial.println("[i18n] ERROR: Pairs realloc failed");
-    return false;
-  }
-  pairs = newPairs;
-  pairCapacity = newCap;
-  return true;
-}
-
-// ──────────────────────────────────────────────
-// Key-value storage (sorted array + binary search)
-// ──────────────────────────────────────────────
-
-int TranslationManager::findKey(const char* key) const {
-  if (!pairs || pairCount == 0) {
-    return -1;
-  }
-
-  int lo = 0;
-  int hi = pairCount - 1;
-  while (lo <= hi) {
-    const int mid = lo + (hi - lo) / 2;
-    const int cmp = strcmp(key, pool + pairs[mid].keyOffset);
-    if (cmp == 0) {
-      return mid;
-    }
-    if (cmp < 0) {
-      hi = mid - 1;
-    } else {
-      lo = mid + 1;
-    }
-  }
-  return -1;
-}
-
-bool TranslationManager::putString(const char* key, const char* value) {
-  const size_t keyLen = strlen(key) + 1;
-  const size_t valLen = strlen(value) + 1;
-
-  // Check if key already exists (update value).
-  const int existingIdx = findKey(key);
-  if (existingIdx >= 0) {
-    if (!ensurePoolCapacity(valLen)) {
-      return false;
-    }
-    const uint16_t newValOffset = static_cast<uint16_t>(poolUsed);
-    memcpy(pool + poolUsed, value, valLen);
-    poolUsed += valLen;
-    pairs[existingIdx].valueOffset = newValOffset;
-    return true;
-  }
-
-  // New key — append both key and value to pool.
-  if (!ensurePoolCapacity(keyLen + valLen) || !ensurePairCapacity()) {
-    return false;
-  }
-
-  const uint16_t keyOffset = static_cast<uint16_t>(poolUsed);
-  memcpy(pool + poolUsed, key, keyLen);
-  poolUsed += keyLen;
-
-  const uint16_t valOffset = static_cast<uint16_t>(poolUsed);
-  memcpy(pool + poolUsed, value, valLen);
-  poolUsed += valLen;
-
-  // Find insertion point to keep sorted order.
-  int insertPos = 0;
-  {
-    int lo = 0;
-    int hi = pairCount;
-    while (lo < hi) {
-      const int mid = lo + (hi - lo) / 2;
-      if (strcmp(key, pool + pairs[mid].keyOffset) > 0) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-    insertPos = lo;
-  }
-
-  if (insertPos < pairCount) {
-    memmove(&pairs[insertPos + 1], &pairs[insertPos], (pairCount - insertPos) * sizeof(Pair));
-  }
-
-  pairs[insertPos] = {keyOffset, valOffset};
-  pairCount++;
-  return true;
+  loadedCount = 0;
 }
 
 // ──────────────────────────────────────────────
@@ -330,15 +236,34 @@ bool TranslationManager::loadFromSD(const char* lang) {
     return false;
   }
 
+  // Allocate valueOffsets array, initialized to 0xFFFF (no translation).
+  valueOffsets = static_cast<uint16_t*>(malloc(LANG_KEY_COUNT * sizeof(uint16_t)));
+  if (!valueOffsets) {
+    Serial.println("[i18n] ERROR: Failed to allocate valueOffsets");
+    file.close();
+    return false;
+  }
+  memset(valueOffsets, 0xFF, LANG_KEY_COUNT * sizeof(uint16_t));
+
+  // Allocate initial string pool.
+  pool = static_cast<char*>(malloc(INITIAL_POOL_SIZE));
+  if (!pool) {
+    Serial.println("[i18n] ERROR: Failed to allocate pool");
+    free(valueOffsets);
+    valueOffsets = nullptr;
+    file.close();
+    return false;
+  }
+  poolSize = INITIAL_POOL_SIZE;
+  poolUsed = 0;
+  loadedCount = 0;
+
   char lineBuf[MAX_LINE_LENGTH];
   int lineNum = 0;
-  int loaded = 0;
 
   while (file.available()) {
     const int bytesRead = file.fgets(lineBuf, sizeof(lineBuf));
-    if (bytesRead <= 0) {
-      break;
-    }
+    if (bytesRead <= 0) break;
     lineNum++;
 
     // Strip trailing newline/carriage return.
@@ -348,15 +273,10 @@ bool TranslationManager::loadFromSD(const char* lang) {
     }
 
     // Skip empty lines and comments.
-    if (len == 0 || lineBuf[0] == '#') {
-      continue;
-    }
+    if (len == 0 || lineBuf[0] == '#') continue;
 
     char* eq = strchr(lineBuf, '=');
-    if (!eq) {
-      Serial.printf("[i18n] WARNING: Invalid line %d\n", lineNum);
-      continue;
-    }
+    if (!eq) continue;
 
     *eq = '\0';
     const char* key = lineBuf;
@@ -373,22 +293,53 @@ bool TranslationManager::loadFromSD(const char* lang) {
     // Trim leading spaces from value.
     while (*value == ' ') value++;
 
-    if (key[0] == '\0') {
-      continue;
+    if (key[0] == '\0') continue;
+
+    // Skip metadata keys.
+    if (strncmp(key, "language.", 9) == 0) continue;
+
+    // Look up the key's ID via hash table.
+    const uint32_t h = fnv1a(key);
+    const int16_t id = lookupId(h);
+    if (id < 0) continue;  // Unknown key, skip
+
+    // Ensure pool has enough space.
+    const size_t valLen = strlen(value) + 1;
+    if (poolUsed + valLen > poolSize) {
+      size_t newSize = poolSize;
+      while (newSize < poolUsed + valLen) {
+        newSize *= 2;
+      }
+      char* newPool = static_cast<char*>(realloc(pool, newSize));
+      if (!newPool) {
+        Serial.printf("[i18n] ERROR: Pool realloc failed at line %d\n", lineNum);
+        break;
+      }
+      pool = newPool;
+      poolSize = newSize;
     }
 
-    // Skip metadata keys (language.name is only used during scanning).
-    if (strncmp(key, "language.", 9) == 0) {
-      continue;
-    }
-
-    putString(key, value);
-    loaded++;
+    // Store value in pool and record its offset.
+    memcpy(pool + poolUsed, value, valLen);
+    valueOffsets[id] = static_cast<uint16_t>(poolUsed);
+    poolUsed += valLen;
+    loadedCount++;
   }
 
   file.close();
-  Serial.printf("[i18n] Parsed %d lines, loaded %d translations\n", lineNum, loaded);
-  return loaded > 0;
+
+  // Shrink pool to actual usage.
+  if (poolUsed > 0 && poolUsed < poolSize) {
+    char* shrunk = static_cast<char*>(realloc(pool, poolUsed));
+    if (shrunk) {
+      pool = shrunk;
+      poolSize = poolUsed;
+    }
+  }
+
+  Serial.printf("[i18n] Parsed %d lines, loaded %u/%u translations, pool %u bytes\n", lineNum, loadedCount,
+                LANG_KEY_COUNT, static_cast<unsigned>(poolUsed));
+  return loadedCount > 0;
 }
 
 // ──────────────────────────────────────────────
