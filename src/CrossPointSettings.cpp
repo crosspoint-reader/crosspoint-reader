@@ -21,6 +21,19 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
   }
 }
 
+// Template wrappers to avoid lambda overhead and allow for future extensions
+template <typename T>
+static void writePodSafe(FsFile& f, const T& val) {
+  serialization::writePod(f, val);
+  // add your code here (e.g., error checking, logging)
+}
+
+template <typename T>
+static void writeStringSafe(FsFile& f, const T& val) {
+  serialization::writeString(f, val);
+  // add your code here (e.g., error checking, logging)
+}
+
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // SETTINGS_COUNT is now calculated automatically in saveToFile
@@ -89,36 +102,36 @@ bool CrossPointSettings::saveToFile() const {
 
   // Define the serialization writers in order
   std::vector<std::function<void(FsFile&)>> writers = {
-      [&](FsFile& f) { serialization::writePod(f, sleepScreen); },
-      [&](FsFile& f) { serialization::writePod(f, extraParagraphSpacing); },
-      [&](FsFile& f) { serialization::writePod(f, shortPwrBtn); },
-      [&](FsFile& f) { serialization::writePod(f, statusBar); },
-      [&](FsFile& f) { serialization::writePod(f, orientation); },
-      [&](FsFile& f) { serialization::writePod(f, frontButtonLayout); },  // legacy
-      [&](FsFile& f) { serialization::writePod(f, sideButtonLayout); },
-      [&](FsFile& f) { serialization::writePod(f, fontFamily); },
-      [&](FsFile& f) { serialization::writePod(f, fontSize); },
-      [&](FsFile& f) { serialization::writePod(f, lineSpacing); },
-      [&](FsFile& f) { serialization::writePod(f, paragraphAlignment); },
-      [&](FsFile& f) { serialization::writePod(f, sleepTimeout); },
-      [&](FsFile& f) { serialization::writePod(f, refreshFrequency); },
-      [&](FsFile& f) { serialization::writePod(f, screenMargin); },
-      [&](FsFile& f) { serialization::writePod(f, sleepScreenCoverMode); },
-      [&](FsFile& f) { serialization::writeString(f, std::string(opdsServerUrl)); },
-      [&](FsFile& f) { serialization::writePod(f, textAntiAliasing); },
-      [&](FsFile& f) { serialization::writePod(f, hideBatteryPercentage); },
-      [&](FsFile& f) { serialization::writePod(f, longPressChapterSkip); },
-      [&](FsFile& f) { serialization::writePod(f, hyphenationEnabled); },
-      [&](FsFile& f) { serialization::writeString(f, std::string(opdsUsername)); },
-      [&](FsFile& f) { serialization::writeString(f, std::string(opdsPassword)); },
-      [&](FsFile& f) { serialization::writePod(f, sleepScreenCoverFilter); },
-      [&](FsFile& f) { serialization::writePod(f, uiTheme); },
-      [&](FsFile& f) { serialization::writePod(f, frontButtonBack); },
-      [&](FsFile& f) { serialization::writePod(f, frontButtonConfirm); },
-      [&](FsFile& f) { serialization::writePod(f, frontButtonLeft); },
-      [&](FsFile& f) { serialization::writePod(f, frontButtonRight); },
-      [&](FsFile& f) { serialization::writePod(f, fadingFix); },
-      [&](FsFile& f) { serialization::writePod(f, embeddedStyle); },
+      [&](FsFile& f) { writePodSafe(f, sleepScreen); },
+      [&](FsFile& f) { writePodSafe(f, extraParagraphSpacing); },
+      [&](FsFile& f) { writePodSafe(f, shortPwrBtn); },
+      [&](FsFile& f) { writePodSafe(f, statusBar); },
+      [&](FsFile& f) { writePodSafe(f, orientation); },
+      [&](FsFile& f) { writePodSafe(f, frontButtonLayout); },  // legacy
+      [&](FsFile& f) { writePodSafe(f, sideButtonLayout); },
+      [&](FsFile& f) { writePodSafe(f, fontFamily); },
+      [&](FsFile& f) { writePodSafe(f, fontSize); },
+      [&](FsFile& f) { writePodSafe(f, lineSpacing); },
+      [&](FsFile& f) { writePodSafe(f, paragraphAlignment); },
+      [&](FsFile& f) { writePodSafe(f, sleepTimeout); },
+      [&](FsFile& f) { writePodSafe(f, refreshFrequency); },
+      [&](FsFile& f) { writePodSafe(f, screenMargin); },
+      [&](FsFile& f) { writePodSafe(f, sleepScreenCoverMode); },
+      [&](FsFile& f) { writeStringSafe(f, std::string(opdsServerUrl)); },
+      [&](FsFile& f) { writePodSafe(f, textAntiAliasing); },
+      [&](FsFile& f) { writePodSafe(f, hideBatteryPercentage); },
+      [&](FsFile& f) { writePodSafe(f, longPressChapterSkip); },
+      [&](FsFile& f) { writePodSafe(f, hyphenationEnabled); },
+      [&](FsFile& f) { writeStringSafe(f, std::string(opdsUsername)); },
+      [&](FsFile& f) { writeStringSafe(f, std::string(opdsPassword)); },
+      [&](FsFile& f) { writePodSafe(f, sleepScreenCoverFilter); },
+      [&](FsFile& f) { writePodSafe(f, uiTheme); },
+      [&](FsFile& f) { writePodSafe(f, frontButtonBack); },
+      [&](FsFile& f) { writePodSafe(f, frontButtonConfirm); },
+      [&](FsFile& f) { writePodSafe(f, frontButtonLeft); },
+      [&](FsFile& f) { writePodSafe(f, frontButtonRight); },
+      [&](FsFile& f) { writePodSafe(f, fadingFix); },
+      [&](FsFile& f) { writePodSafe(f, embeddedStyle); },
       // New fields need to be added at end for backward compatibility
   };
 
