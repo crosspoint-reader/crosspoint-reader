@@ -2,10 +2,12 @@
 #include <GfxRenderer.h>
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "../Activity.h"
+#include "network/KeyboardWebInputServer.h"
 #include "util/ButtonNavigator.h"
 
 /**
@@ -69,10 +71,14 @@ class KeyboardEntryActivity : public Activity {
   int selectedRow = 0;
   int selectedCol = 0;
   int shiftState = 0;  // 0 = lower case, 1 = upper case, 2 = shift lock)
+  bool showingQR = false;
 
   // Callbacks
   OnCompleteCallback onComplete;
   OnCancelCallback onCancel;
+
+  // Remote text input server
+  std::unique_ptr<KeyboardWebInputServer> webInputServer;
 
   // Keyboard layout
   static constexpr int NUM_ROWS = 5;
@@ -85,11 +91,15 @@ class KeyboardEntryActivity : public Activity {
   static constexpr int SPECIAL_ROW = 4;
   static constexpr int SHIFT_COL = 0;
   static constexpr int SPACE_COL = 2;
-  static constexpr int BACKSPACE_COL = 7;
-  static constexpr int DONE_COL = 9;
+  static constexpr int BACKSPACE_COL = 6;
+  static constexpr int QR_COL = 8;
+  static constexpr int DONE_COL = 10;
 
   char getSelectedChar() const;
   void handleKeyPress();
   int getRowLength(int row) const;
+  void renderQRScreen() const;
   void renderItemWithSelector(int x, int y, const char* item, bool isSelected) const;
+  void startWebInputServer();
+  void stopWebInputServer();
 };
