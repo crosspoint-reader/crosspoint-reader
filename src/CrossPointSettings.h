@@ -117,7 +117,7 @@ class CrossPointSettings {
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
 
   // UI Theme
-  enum UI_THEME { CLASSIC = 0, LYRA = 1 };
+  enum UI_THEME { CLASSIC = 0, LYRA = 1, FILE_BROWSER = 2, UI_THEME_COUNT };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;

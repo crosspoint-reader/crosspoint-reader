@@ -340,7 +340,11 @@ void setup() {
   // crashed (indicated by readerActivityLoadCount > 0)
   if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
       mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
-    onGoHome();
+    if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::FILE_BROWSER) {
+      onGoToMyLibrary();
+    } else {
+      onGoHome();
+    }
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
