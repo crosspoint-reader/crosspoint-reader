@@ -4,8 +4,6 @@
 #pragma once
 #include <string>
 
-std::string replaceHtmlEntities(const char* text);
-
 // Lookup a single HTML entity (including & and ;) and return its UTF-8 value
 // Returns nullptr if entity is not found
 const char* lookupHtmlEntity(const char* entity, int len);

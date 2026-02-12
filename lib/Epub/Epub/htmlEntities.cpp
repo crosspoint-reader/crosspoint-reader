@@ -5,10 +5,6 @@
 
 #include <cstring>
 
-const int MAX_ENTITY_LENGTH = 10;
-
-// Use book: entities_ww2.epub to test this (Page 7: Entities parser test)
-// Note the supported keys are only in lowercase
 struct EntityPair {
   const char* key;
   const char* value;
@@ -54,8 +50,8 @@ static const EntityPair ENTITY_LOOKUP[] = {
     {"&sigma;", "σ"},  {"&tau;", "τ"},     {"&upsilon;", "υ"},     {"&phi;", "φ"},    {"&chi;", "χ"},
     {"&psi;", "ψ"},    {"&omega;", "ω"},   {"&thetasym;", "ϑ"},    {"&upsih;", "ϒ"},  {"&piv;", "ϖ"},
     {"&OElig;", "Œ"},  {"&oelig;", "œ"},   {"&Scaron;", "Š"},      {"&scaron;", "š"}, {"&Yuml;", "Ÿ"},
-    {"&fnof;", "ƒ"},   {"&circ;", "ˆ"},    {"&tilde;", "˜"},       {"&ensp;", ""},    {"&emsp;", ""},
-    {"&thinsp;", ""},  {"&zwnj;", "‌"},  {"&zwj;", "‍"},       {"&lrm;", "‎"},  {"&rlm;", "‏"},
+    {"&fnof;", "ƒ"},   {"&circ;", "ˆ"},    {"&tilde;", "˜"},       {"&ensp;", " "},   {"&emsp;", " "},
+    {"&thinsp;", " "}, {"&zwnj;", "‌"},  {"&zwj;", "‍"},       {"&lrm;", "‎"},  {"&rlm;", "‏"},
     {"&ndash;", "–"},  {"&mdash;", "—"},   {"&lsquo;", "‘"},       {"&rsquo;", "’"},  {"&sbquo;", "‚"},
     {"&ldquo;", "“"},  {"&rdquo;", "”"},   {"&bdquo;", "„"},       {"&dagger;", "†"}, {"&Dagger;", "‡"},
     {"&bull;", "•"},   {"&hellip;", "…"},  {"&permil;", "‰"},      {"&prime;", "′"},  {"&Prime;", "″"},
@@ -65,109 +61,6 @@ static const EntityPair ENTITY_LOOKUP[] = {
     {"&loz;", "◊"},    {"&spades;", "♠"},  {"&clubs;", "♣"},       {"&hearts;", "♥"}, {"&diams;", "♦"}};
 
 static const size_t ENTITY_LOOKUP_COUNT = sizeof(ENTITY_LOOKUP) / sizeof(ENTITY_LOOKUP[0]);
-
-// converts from a unicode code point to the utf8 equivalent
-void convert_to_utf8(const int code, std::string& res) {
-  // convert to a utf8 sequence
-  if (code < 0x80) {
-    res += static_cast<char>(code);
-  } else if (code < 0x800) {
-    res += static_cast<char>(0xc0 | (code >> 6));
-    res += static_cast<char>(0x80 | (code & 0x3f));
-  } else if (code < 0x10000) {
-    res += static_cast<char>(0xe0 | (code >> 12));
-    res += static_cast<char>(0x80 | ((code >> 6) & 0x3f));
-    res += static_cast<char>(0x80 | (code & 0x3f));
-  } else if (code < 0x200000) {
-    res += static_cast<char>(0xf0 | (code >> 18));
-    res += static_cast<char>(0x80 | ((code >> 12) & 0x3f));
-    res += static_cast<char>(0x80 | ((code >> 6) & 0x3f));
-    res += static_cast<char>(0x80 | (code & 0x3f));
-  } else if (code < 0x4000000) {
-    res += static_cast<char>(0xf8 | (code >> 24));
-    res += static_cast<char>(0x80 | ((code >> 18) & 0x3f));
-    res += static_cast<char>(0x80 | ((code >> 12) & 0x3f));
-    res += static_cast<char>(0x80 | ((code >> 6) & 0x3f));
-    res += static_cast<char>(0x80 | (code & 0x3f));
-  } else if (code < 0x80000000) {
-    res += static_cast<char>(0xfc | (code >> 30));
-    res += static_cast<char>(0x80 | ((code >> 24) & 0x3f));
-    res += static_cast<char>(0x80 | ((code >> 18) & 0x3f));
-    res += static_cast<char>(0x80 | ((code >> 12) & 0x3f));
-    res += static_cast<char>(0x80 | ((code >> 6) & 0x3f));
-  }
-}
-
-// handles numeric entities - e.g. &#1234; or &#x1234;
-bool process_numeric_entity(const std::string& entity, std::string& res) {
-  int code = 0;
-  // is it hex?
-  if (entity[2] == 'x' || entity[2] == 'X') {
-    // parse the hex code
-    code = strtol(entity.substr(3, entity.size() - 3).c_str(), nullptr, 16);
-  } else {
-    code = strtol(entity.substr(2, entity.size() - 3).c_str(), nullptr, 10);
-  }
-  if (code != 0) {
-    // special handling for nbsp
-    if (code == 0xA0) {
-      res += " ";
-    } else {
-      convert_to_utf8(code, res);
-    }
-    return true;
-  }
-  return false;
-}
-
-// handles named entities - e.g. &amp;
-bool process_string_entity(const std::string& entity, std::string& res) {
-  // it's a named entity - find it in the lookup table
-  // find it in the map
-  for (size_t i = 0; i < ENTITY_LOOKUP_COUNT; i++) {
-    if (strcmp(entity.c_str(), ENTITY_LOOKUP[i].key) == 0) {
-      res += ENTITY_LOOKUP[i].value;
-      return true;
-    }
-  }
-  return false;
-}
-
-// replace all the entities in the string
-std::string replaceHtmlEntities(const char* text) {
-  std::string res;
-  res.reserve(strlen(text));
-  for (int i = 0; i < strlen(text); ++i) {
-    bool flag = false;
-    // do we have a potential entity?
-    if (text[i] == '&') {
-      // find the end of the entity
-      int j = i + 1;
-      while (j < strlen(text) && text[j] != ';' && j - i < MAX_ENTITY_LENGTH) {
-        j++;
-      }
-      if (j - i > 2) {
-        char entity[j - i + 1];
-        strncpy(entity, text + i, j - i);
-        entity[j - i] = '\0';
-        // is it a numeric code?
-        if (entity[1] == '#') {
-          flag = process_numeric_entity(entity, res);
-        } else {
-          flag = process_string_entity(entity, res);
-        }
-        // skip past the entity if we successfully decoded it
-        if (flag) {
-          i = j;
-        }
-      }
-    }
-    if (!flag) {
-      res += text[i];
-    }
-  }
-  return res;
-}
 
 // Lookup a single HTML entity and return its UTF-8 value
 const char* lookupHtmlEntity(const char* entity, int len) {
