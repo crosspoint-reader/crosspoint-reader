@@ -34,7 +34,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
                  {MenuAction::GO_TO_PERCENT, "Go to %"}};
     if (hasDictionary) {
       menuItems.push_back({MenuAction::LOOKUP, "Lookup"});
-      menuItems.push_back({MenuAction::LOOKED_UP_WORDS, "Looked Up Words"});
+      menuItems.push_back({MenuAction::LOOKED_UP_WORDS, "Lookup History"});
     }
     menuItems.push_back({MenuAction::GO_HOME, "Go Home"});
     menuItems.push_back({MenuAction::SYNC, "Sync Progress"});

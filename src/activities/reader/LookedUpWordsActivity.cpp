@@ -125,8 +125,8 @@ void LookedUpWordsActivity::renderScreen() {
 
   // Title
   const int titleX =
-      (renderer.getScreenWidth() - renderer.getTextWidth(UI_12_FONT_ID, "Looked Up Words", EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, titleY, "Looked Up Words", true, EpdFontFamily::BOLD);
+      (renderer.getScreenWidth() - renderer.getTextWidth(UI_12_FONT_ID, "Lookup History", EpdFontFamily::BOLD)) / 2;
+  renderer.drawText(UI_12_FONT_ID, titleX, titleY, "Lookup History", true, EpdFontFamily::BOLD);
 
   if (words.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, 300, "No words looked up yet");

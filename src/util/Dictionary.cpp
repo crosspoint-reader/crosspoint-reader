@@ -6,12 +6,15 @@
 #include <cctype>
 
 namespace {
-constexpr const char* DICT_PATH = "/dictionary.json";
-constexpr size_t READ_BUF_SIZE = 256;
-constexpr size_t NPOS = SIZE_MAX;
+constexpr const char* IDX_PATH = "/dictionary.idx";
+constexpr const char* DICT_PATH = "/dictionary.dict";
 }  // namespace
 
-bool Dictionary::exists() { return Storage.exists(DICT_PATH); }
+std::vector<uint32_t> Dictionary::sparseOffsets;
+uint32_t Dictionary::totalWords = 0;
+bool Dictionary::indexLoaded = false;
+
+bool Dictionary::exists() { return Storage.exists(IDX_PATH); }
 
 std::string Dictionary::cleanWord(const std::string& word) {
   if (word.empty()) return "";
@@ -37,205 +40,164 @@ std::string Dictionary::cleanWord(const std::string& word) {
   return result;
 }
 
-// Scan forward from `pos` to find the opening `"` of the next JSON key.
-// A key follows `{` or `,` (with optional whitespace). Returns NPOS if not found before fileSize.
-size_t Dictionary::seekToNearestKey(FsFile& file, size_t pos, size_t fileSize) {
-  if (pos >= fileSize) return NPOS;
-  file.seekSet(pos);
+// Scan the .idx file to build a sparse offset table for fast lookups.
+// Records the file offset of every SPARSE_INTERVAL-th entry.
+bool Dictionary::loadIndex(const std::function<void(int percent)>& onProgress,
+                           const std::function<bool()>& shouldCancel) {
+  FsFile idx;
+  if (!Storage.openFileForRead("DICT", IDX_PATH, idx)) return false;
 
-  uint8_t buf[READ_BUF_SIZE];
-  size_t currentPos = pos;
-  bool afterSep = false;
+  const uint32_t fileSize = static_cast<uint32_t>(idx.fileSize());
 
-  while (currentPos < fileSize) {
-    size_t toRead = std::min(static_cast<size_t>(READ_BUF_SIZE), fileSize - currentPos);
-    int bytesRead = file.read(buf, toRead);
-    if (bytesRead <= 0) break;
+  sparseOffsets.clear();
+  totalWords = 0;
 
-    for (int i = 0; i < bytesRead; i++) {
-      char c = static_cast<char>(buf[i]);
-      if (!afterSep) {
-        if (c == ',' || c == '{') afterSep = true;
-      } else {
-        if (c == '"') return currentPos + i;
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') afterSep = false;
+  uint32_t pos = 0;
+  int lastReportedPercent = -1;
+
+  while (pos < fileSize) {
+    if (shouldCancel && (totalWords % 100 == 0) && shouldCancel()) {
+      idx.close();
+      sparseOffsets.clear();
+      totalWords = 0;
+      return false;
+    }
+
+    if (totalWords % SPARSE_INTERVAL == 0) {
+      sparseOffsets.push_back(pos);
+    }
+
+    // Skip word (read until null terminator)
+    int ch;
+    do {
+      ch = idx.read();
+      if (ch < 0) {
+        pos = fileSize;
+        break;
+      }
+      pos++;
+    } while (ch != 0);
+
+    if (pos >= fileSize) break;
+
+    // Skip 8 bytes (4-byte offset + 4-byte size)
+    uint8_t skip[8];
+    if (idx.read(skip, 8) != 8) break;
+    pos += 8;
+
+    totalWords++;
+
+    if (onProgress && fileSize > 0) {
+      int percent = static_cast<int>(static_cast<uint64_t>(pos) * 90 / fileSize);
+      if (percent > lastReportedPercent + 4) {
+        lastReportedPercent = percent;
+        onProgress(percent);
       }
     }
-    currentPos += bytesRead;
   }
-  return NPOS;
+
+  idx.close();
+  indexLoaded = true;
+  return totalWords > 0;
 }
 
-// Read the JSON key string starting at `pos` (the opening `"`).
-// Leaves the file positioned right after the closing `"`.
-std::string Dictionary::readKeyAt(FsFile& file, size_t pos) {
-  file.seekSet(pos);
-  if (file.read() != '"') return "";
-
-  std::string key;
-  key.reserve(32);
+// Read a null-terminated word string from the current file position.
+std::string Dictionary::readWord(FsFile& file) {
+  std::string word;
   while (true) {
     int ch = file.read();
-    if (ch < 0 || ch == '"') break;
-    if (ch == '\\') {
-      ch = file.read();
-      if (ch < 0) break;
-    }
-    key += static_cast<char>(ch);
+    if (ch <= 0) break;  // null terminator (0) or error (-1)
+    word += static_cast<char>(ch);
   }
-  return key;
+  return word;
 }
 
-// Read the JSON string value after a key. Expects the file positioned right after the
-// key's closing `"`. Skips whitespace, colon, whitespace, then reads the quoted value.
-std::string Dictionary::extractDefinition(FsFile& file) {
-  int ch;
-  do {
-    ch = file.read();
-  } while (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r');
-  if (ch != ':') return "";
+// Read a definition from the .dict file at the given offset and size.
+std::string Dictionary::readDefinition(uint32_t offset, uint32_t size) {
+  FsFile dict;
+  if (!Storage.openFileForRead("DICT", DICT_PATH, dict)) return "";
 
-  do {
-    ch = file.read();
-  } while (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r');
-  if (ch != '"') return "";
+  dict.seekSet(offset);
 
-  std::string def;
-  bool escaped = false;
-  while (true) {
-    ch = file.read();
-    if (ch < 0) break;
-    if (escaped) {
-      switch (ch) {
-        case 'n':
-          def += '\n';
-          break;
-        case '"':
-          def += '"';
-          break;
-        case '\\':
-          def += '\\';
-          break;
-        case 't':
-          def += '\t';
-          break;
-        default:
-          def += static_cast<char>(ch);
-          break;
-      }
-      escaped = false;
-    } else if (ch == '\\') {
-      escaped = true;
-    } else if (ch == '"') {
-      break;
-    } else {
-      def += static_cast<char>(ch);
-    }
-  }
+  std::string def(size, '\0');
+  int bytesRead = dict.read(reinterpret_cast<uint8_t*>(&def[0]), size);
+  dict.close();
+
+  if (bytesRead < 0) return "";
+  if (static_cast<uint32_t>(bytesRead) < size) def.resize(bytesRead);
   return def;
 }
 
 std::string Dictionary::lookup(const std::string& word, const std::function<void(int percent)>& onProgress,
                                const std::function<bool()>& shouldCancel) {
-  FsFile file;
-  if (!Storage.openFileForRead("DICT", DICT_PATH, file)) return "";
-
-  const size_t fileSize = static_cast<size_t>(file.fileSize());
-  if (fileSize == 0) {
-    file.close();
-    return "";
+  if (!indexLoaded) {
+    if (!loadIndex(onProgress, shouldCancel)) return "";
   }
 
-  size_t lo = 0, hi = fileSize;
-  constexpr int MAX_ITER = 50;
+  if (sparseOffsets.empty()) return "";
 
-  // Binary search: seek to midpoint, find nearest key, compare
-  for (int iter = 0; lo < hi && iter < MAX_ITER; iter++) {
+  FsFile idx;
+  if (!Storage.openFileForRead("DICT", IDX_PATH, idx)) return "";
+
+  // Binary search the sparse offset table to find the right segment.
+  // Find the rightmost segment whose first word is <= the search word.
+  int lo = 0, hi = static_cast<int>(sparseOffsets.size()) - 1;
+
+  while (lo < hi) {
     if (shouldCancel && shouldCancel()) {
-      file.close();
+      idx.close();
       return "";
     }
 
-    if (onProgress) onProgress(std::min(90, iter * 90 / 20));
+    int mid = lo + (hi - lo + 1) / 2;
+    idx.seekSet(sparseOffsets[mid]);
+    std::string key = readWord(idx);
 
-    size_t mid = lo + (hi - lo) / 2;
-    size_t keyPos = seekToNearestKey(file, mid, fileSize);
-
-    if (keyPos == NPOS || keyPos >= hi) {
-      hi = mid;
-      continue;
-    }
-
-    std::string key = readKeyAt(file, keyPos);
-    if (key.empty()) {
-      hi = mid;
-      continue;
-    }
-
-    // Verify this is a real key (followed by ':' after optional whitespace)
-    size_t afterKey = static_cast<size_t>(file.curPosition());
-    int ch;
-    do {
-      ch = file.read();
-    } while (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r');
-
-    if (ch != ':') {
-      // Not a real key — likely inside a value string. Advance past it.
-      lo = mid + 1;
-      continue;
-    }
-
-    int cmp = key.compare(word);
-    if (cmp == 0) {
-      // Found the word. Seek back to after the key's closing quote and extract definition.
-      file.seekSet(afterKey);
-      std::string def = extractDefinition(file);
-      file.close();
-      if (onProgress) onProgress(100);
-      return def;
-    } else if (cmp < 0) {
-      lo = mid + 1;
+    if (key <= word) {
+      lo = mid;
     } else {
-      hi = mid;
+      hi = mid - 1;
     }
   }
 
-  // Linear fallback: scan a region around the convergence point
-  size_t scanStart = (lo > 2048) ? lo - 2048 : 0;
-  size_t scanEnd = std::min(lo + 8192, fileSize);
-  size_t pos = seekToNearestKey(file, scanStart, fileSize);
+  if (onProgress) onProgress(95);
 
-  while (pos != NPOS && pos < scanEnd) {
+  // Linear scan within the segment starting at sparseOffsets[lo].
+  idx.seekSet(sparseOffsets[lo]);
+
+  int maxEntries = SPARSE_INTERVAL;
+  if (lo == static_cast<int>(sparseOffsets.size()) - 1) {
+    maxEntries = static_cast<int>(totalWords - static_cast<uint32_t>(lo) * SPARSE_INTERVAL);
+  }
+
+  for (int i = 0; i < maxEntries; i++) {
     if (shouldCancel && shouldCancel()) {
-      file.close();
+      idx.close();
       return "";
     }
 
-    std::string key = readKeyAt(file, pos);
+    std::string key = readWord(idx);
     if (key.empty()) break;
 
-    // Verify real key
-    size_t afterKey = static_cast<size_t>(file.curPosition());
-    int ch;
-    do {
-      ch = file.read();
-    } while (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r');
+    // Read offset and size (4 bytes each, big-endian)
+    uint8_t buf[8];
+    if (idx.read(buf, 8) != 8) break;
 
-    if (ch == ':') {
-      if (key == word) {
-        file.seekSet(afterKey);
-        std::string def = extractDefinition(file);
-        file.close();
-        if (onProgress) onProgress(100);
-        return def;
-      }
-      if (key > word) break;
+    uint32_t dictOffset = (static_cast<uint32_t>(buf[0]) << 24) | (static_cast<uint32_t>(buf[1]) << 16) |
+                          (static_cast<uint32_t>(buf[2]) << 8) | static_cast<uint32_t>(buf[3]);
+    uint32_t dictSize = (static_cast<uint32_t>(buf[4]) << 24) | (static_cast<uint32_t>(buf[5]) << 16) |
+                        (static_cast<uint32_t>(buf[6]) << 8) | static_cast<uint32_t>(buf[7]);
+
+    if (key == word) {
+      idx.close();
+      if (onProgress) onProgress(100);
+      return readDefinition(dictOffset, dictSize);
     }
 
-    pos = seekToNearestKey(file, static_cast<size_t>(file.curPosition()), fileSize);
+    if (key > word) break;  // Past the word alphabetically
   }
 
-  file.close();
+  idx.close();
   if (onProgress) onProgress(100);
   return "";
 }

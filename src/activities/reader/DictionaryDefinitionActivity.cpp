@@ -43,23 +43,16 @@ void DictionaryDefinitionActivity::onExit() {
   renderingMutex = nullptr;
 }
 
-bool DictionaryDefinitionActivity::isLandscape() const {
-  return orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW ||
-         orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW;
-}
-
-bool DictionaryDefinitionActivity::isInverted() const {
-  return orientation == CrossPointSettings::ORIENTATION::INVERTED;
-}
-
 void DictionaryDefinitionActivity::wrapText() {
   wrappedLines.clear();
 
+  const bool landscape = orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW ||
+                         orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW;
   const int screenWidth = renderer.getScreenWidth();
   const int lineHeight = renderer.getLineHeight(readerFontId);
-  constexpr int sidePadding = 20;
+  const int sidePadding = landscape ? 50 : 20;
   constexpr int topArea = 50;    // Space for title
-  constexpr int bottomArea = 40;  // Space for button hints + page indicator
+  constexpr int bottomArea = 50;  // Space for button hints + page indicator
   const int maxWidth = screenWidth - 2 * sidePadding;
 
   linesPerPage = (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight;
@@ -116,32 +109,11 @@ void DictionaryDefinitionActivity::wrapText() {
 }
 
 void DictionaryDefinitionActivity::loop() {
-  const bool landscape = isLandscape();
-  const bool inverted = isInverted();
-
-  // Page navigation with orientation-aware button mapping
-  bool prevPage, nextPage;
-  if (landscape) {
-    // Face buttons for page nav (swapped to match physical position) + side buttons
-    prevPage = mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-               mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Up);
-    nextPage = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-               mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Down);
-  } else if (inverted) {
-    // Side buttons swapped (physical up/down are reversed)
-    prevPage = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Down);
-    nextPage = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Up);
-  } else {
-    // Portrait (default)
-    prevPage = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Up);
-    nextPage = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Down);
-  }
+  // Use the same page-turn buttons as the reader (mapped per settings)
+  const bool prevPage = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                        mappedInput.wasReleased(MappedInputManager::Button::Left);
+  const bool nextPage = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                        mappedInput.wasReleased(MappedInputManager::Button::Right);
 
   if (prevPage && currentPage > 0) {
     currentPage--;
@@ -163,7 +135,9 @@ void DictionaryDefinitionActivity::loop() {
 void DictionaryDefinitionActivity::renderScreen() {
   renderer.clearScreen();
 
-  constexpr int sidePadding = 20;
+  const bool landscape = orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW ||
+                         orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW;
+  const int sidePadding = landscape ? 50 : 20;
   constexpr int titleY = 10;
   const int lineHeight = renderer.getLineHeight(readerFontId);
   constexpr int bodyStartY = 50;
@@ -190,34 +164,8 @@ void DictionaryDefinitionActivity::renderScreen() {
   }
 
   // Button hints
-  const bool landscape = isLandscape();
-  const bool inverted = isInverted();
-  const int screenW = renderer.getScreenWidth();
-  const int screenH = renderer.getScreenHeight();
-
-  if (landscape) {
-    // In landscape, drawButtonHints renders text sideways. Draw readable hint line instead.
-    std::string hint = "\xC2\xAB Back";
-    if (totalPages > 1) {
-      hint += "  |  ^ v  |  < >";
-    }
-    const int hintW = renderer.getTextWidth(SMALL_FONT_ID, hint.c_str());
-    renderer.fillRect(0, screenH - 22, screenW, 22, false);
-    renderer.drawText(SMALL_FONT_ID, (screenW - hintW) / 2, screenH - 20, hint.c_str());
-  } else {
-    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-    if (totalPages > 1) {
-      // Side button hints for page navigation (portrait = right edge, inverted = left edge)
-      const auto orig = renderer.getOrientation();
-      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-      // Symbols are the same for portrait and inverted: drawSideButtonHints always
-      // draws in portrait coords, and button positions + actions both flip, canceling out.
-      GUI.drawSideButtonHints(renderer, "^", "v");
-      renderer.setOrientation(orig);
-    }
-  }
+  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "<", ">");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }

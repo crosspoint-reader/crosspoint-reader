@@ -41,8 +41,9 @@ class DictionaryWordSelectActivity final : public Activity {
     int16_t width;
     int16_t row;
     int continuationIndex;
+    int continuationOf;
     WordInfo(const std::string& t, int16_t x, int16_t y, int16_t w, int16_t r)
-        : text(t), lookupText(t), screenX(x), screenY(y), width(w), row(r), continuationIndex(-1) {}
+        : text(t), lookupText(t), screenX(x), screenY(y), width(w), row(r), continuationIndex(-1), continuationOf(-1) {}
   };
 
   struct Row {

@@ -33,6 +33,10 @@ void DictionaryWordSelectActivity::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
   extractWords();
   mergeHyphenatedWords();
+  if (!rows.empty()) {
+    currentRow = static_cast<int>(rows.size()) / 3;
+    currentWordInRow = 0;
+  }
   updateRequired = true;
   xTaskCreate(&DictionaryWordSelectActivity::taskTrampoline, "DictWordSelTask", 4096, this, 1, &displayTaskHandle);
 }
@@ -123,10 +127,11 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords() {
 
     int nextWordIdx = rows[r + 1].wordIndices.front();
 
-    // Set continuation link for highlighting both parts
+    // Set bidirectional continuation links for highlighting both parts
     words[lastWordIdx].continuationIndex = nextWordIdx;
+    words[nextWordIdx].continuationOf = lastWordIdx;
 
-    // Build lookup text: remove trailing hyphen and combine with continuation
+    // Build merged lookup text: remove trailing hyphen and combine
     std::string firstPart = lastWord;
     if (firstPart.back() == '-') {
       firstPart.pop_back();
@@ -134,10 +139,10 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords() {
                static_cast<uint8_t>(firstPart[firstPart.size() - 1]) == 0xAD) {
       firstPart.erase(firstPart.size() - 2);
     }
-    words[lastWordIdx].lookupText = firstPart + words[nextWordIdx].text;
-
-    // Remove the continuation word from the next row so it's not independently selectable
-    rows[r + 1].wordIndices.erase(rows[r + 1].wordIndices.begin());
+    std::string merged = firstPart + words[nextWordIdx].text;
+    words[lastWordIdx].lookupText = merged;
+    words[nextWordIdx].lookupText = merged;
+    words[nextWordIdx].continuationIndex = nextWordIdx;  // self-ref so highlight logic finds the second part
   }
 
   // Remove empty rows that may result from merging (e.g., a row whose only word was a continuation)
@@ -163,7 +168,14 @@ void DictionaryWordSelectActivity::loop() {
   // - Landscape: face Left/Right = row nav (swapped), side Up/Down = word nav
   bool rowPrevPressed, rowNextPressed, wordPrevPressed, wordNextPressed;
 
-  if (landscape) {
+  if (landscape && orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW) {
+    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
+    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
+    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                      mappedInput.wasReleased(MappedInputManager::Button::Down);
+    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                      mappedInput.wasReleased(MappedInputManager::Button::Up);
+  } else if (landscape) {
     rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
     rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
     wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
@@ -187,17 +199,16 @@ void DictionaryWordSelectActivity::loop() {
     wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
   }
 
-  // Move to previous row (position-based: find word closest to current word's X position)
-  if (rowPrevPressed && currentRow > 0) {
+  const int rowCount = static_cast<int>(rows.size());
+
+  // Helper: find closest word by X position in a target row
+  auto findClosestWord = [&](int targetRow) {
     int wordIdx = rows[currentRow].wordIndices[currentWordInRow];
     int currentCenterX = words[wordIdx].screenX + words[wordIdx].width / 2;
-
-    currentRow--;
-
     int bestMatch = 0;
     int bestDist = INT_MAX;
-    for (int i = 0; i < static_cast<int>(rows[currentRow].wordIndices.size()); i++) {
-      int idx = rows[currentRow].wordIndices[i];
+    for (int i = 0; i < static_cast<int>(rows[targetRow].wordIndices.size()); i++) {
+      int idx = rows[targetRow].wordIndices[i];
       int centerX = words[idx].screenX + words[idx].width / 2;
       int dist = std::abs(centerX - currentCenterX);
       if (dist < bestDist) {
@@ -205,41 +216,44 @@ void DictionaryWordSelectActivity::loop() {
         bestMatch = i;
       }
     }
-    currentWordInRow = bestMatch;
+    return bestMatch;
+  };
+
+  // Move to previous row (wrap to bottom)
+  if (rowPrevPressed) {
+    int targetRow = (currentRow > 0) ? currentRow - 1 : rowCount - 1;
+    currentWordInRow = findClosestWord(targetRow);
+    currentRow = targetRow;
     changed = true;
   }
 
-  // Move to next row (position-based)
-  if (rowNextPressed && currentRow < static_cast<int>(rows.size()) - 1) {
-    int wordIdx = rows[currentRow].wordIndices[currentWordInRow];
-    int currentCenterX = words[wordIdx].screenX + words[wordIdx].width / 2;
+  // Move to next row (wrap to top)
+  if (rowNextPressed) {
+    int targetRow = (currentRow < rowCount - 1) ? currentRow + 1 : 0;
+    currentWordInRow = findClosestWord(targetRow);
+    currentRow = targetRow;
+    changed = true;
+  }
 
-    currentRow++;
-
-    int bestMatch = 0;
-    int bestDist = INT_MAX;
-    for (int i = 0; i < static_cast<int>(rows[currentRow].wordIndices.size()); i++) {
-      int idx = rows[currentRow].wordIndices[i];
-      int centerX = words[idx].screenX + words[idx].width / 2;
-      int dist = std::abs(centerX - currentCenterX);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestMatch = i;
-      }
+  // Move to previous word (wrap to end of previous row)
+  if (wordPrevPressed) {
+    if (currentWordInRow > 0) {
+      currentWordInRow--;
+    } else if (rowCount > 1) {
+      currentRow = (currentRow > 0) ? currentRow - 1 : rowCount - 1;
+      currentWordInRow = static_cast<int>(rows[currentRow].wordIndices.size()) - 1;
     }
-    currentWordInRow = bestMatch;
     changed = true;
   }
 
-  // Move to previous word in row
-  if (wordPrevPressed && currentWordInRow > 0) {
-    currentWordInRow--;
-    changed = true;
-  }
-
-  // Move to next word in row
-  if (wordNextPressed && currentWordInRow < static_cast<int>(rows[currentRow].wordIndices.size()) - 1) {
-    currentWordInRow++;
+  // Move to next word (wrap to start of next row)
+  if (wordNextPressed) {
+    if (currentWordInRow < static_cast<int>(rows[currentRow].wordIndices.size()) - 1) {
+      currentWordInRow++;
+    } else if (rowCount > 1) {
+      currentRow = (currentRow < rowCount - 1) ? currentRow + 1 : 0;
+      currentWordInRow = 0;
+    }
     changed = true;
   }
 
@@ -321,11 +335,15 @@ void DictionaryWordSelectActivity::renderScreen() {
     renderer.fillRect(w.screenX - 1, w.screenY - 1, w.width + 2, lineHeight + 2, true);
     renderer.drawText(fontId, w.screenX, w.screenY, w.text.c_str(), false);
 
-    // Also highlight continuation part if this is a hyphenated word
-    if (w.continuationIndex >= 0) {
-      const auto& cont = words[w.continuationIndex];
-      renderer.fillRect(cont.screenX - 1, cont.screenY - 1, cont.width + 2, lineHeight + 2, true);
-      renderer.drawText(fontId, cont.screenX, cont.screenY, cont.text.c_str(), false);
+    // Highlight the other half of a hyphenated word (whether selecting first or second part)
+    int otherIdx = (w.continuationOf >= 0) ? w.continuationOf : -1;
+    if (otherIdx < 0 && w.continuationIndex >= 0 && w.continuationIndex != wordIdx) {
+      otherIdx = w.continuationIndex;
+    }
+    if (otherIdx >= 0) {
+      const auto& other = words[otherIdx];
+      renderer.fillRect(other.screenX - 1, other.screenY - 1, other.width + 2, lineHeight + 2, true);
+      renderer.drawText(fontId, other.screenX, other.screenY, other.text.c_str(), false);
     }
   }
 
