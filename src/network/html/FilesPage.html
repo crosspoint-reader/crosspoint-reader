@@ -626,36 +626,36 @@
 </head>
 <body>
 <div class="nav-links">
-  <a href="/">Home</a>
-  <a href="/files">File Manager</a>
-  <a href="/settings">Settings</a>
+  <a href="/" data-i18n="Home">Home</a>
+  <a href="/files" data-i18n="File Manager">File Manager</a>
+  <a href="/settings" data-i18n="Settings">Settings</a>
 </div>
 
 <div class="page-header">
   <div class="page-header-left">
-    <h1>📁 File Manager</h1>
+    <h1>📁 <span data-i18n="File Manager">File Manager</span></h1>
     <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
   </div>
 
   <div class="action-buttons">
-    <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
-    <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
+    <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 <span data-i18n="Upload">Upload</span></button>
+    <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 <span data-i18n="New Folder">New Folder</span></button>
   </div>
 </div>
 
 <!-- Failed Uploads Banner -->
 <div class="failed-uploads-banner" id="failedUploadsBanner">
   <div class="failed-uploads-header">
-    <h3 class="failed-uploads-title">⚠️ Some files failed to upload</h3>
+    <h3 class="failed-uploads-title">⚠️ <span data-i18n="Some files failed to upload">Some files failed to upload</span></h3>
     <button class="dismiss-btn" onclick="dismissFailedUploads()" title="Dismiss">&times;</button>
   </div>
   <div id="failedFilesList"></div>
-  <button class="retry-all-btn" onclick="retryAllFailedUploads()">Retry All Failed Uploads</button>
+  <button class="retry-all-btn" onclick="retryAllFailedUploads()" data-i18n="Retry All Failed Uploads">Retry All Failed Uploads</button>
 </div>
 
 <div class="card">
   <div class="contents-header">
-    <h2 class="contents-title">Contents</h2>
+    <h2 class="contents-title" data-i18n="Contents">Contents</h2>
     <span class="summary-inline" id="folder-summary"></span>
   </div>
 
@@ -676,11 +676,11 @@
 <div class="modal-overlay" id="uploadModal">
   <div class="modal">
     <button class="modal-close" onclick="closeUploadModal()">&times;</button>
-    <h3>📤 Upload file</h3>
+    <h3>📤 <span data-i18n="Upload file">Upload file</span></h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <input type="file" id="fileInput" onchange="validateFile()" multiple>
-      <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
+      <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled data-i18n="Upload">Upload</button>
       <div id="progress-container">
         <div id="progress-bar"><div id="progress-fill"></div></div>
         <div id="progress-text"></div>
@@ -693,11 +693,11 @@
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
     <button class="modal-close" onclick="closeFolderModal()">&times;</button>
-    <h3>📁 New Folder</h3>
+    <h3>📁 <span data-i18n="New Folder">New Folder</span></h3>
     <div class="folder-form">
       <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
       <input type="text" id="folderName" class="folder-input" placeholder="Folder name...">
-      <button class="folder-btn" onclick="createFolder()">Create Folder</button>
+      <button class="folder-btn" onclick="createFolder()" data-i18n="Create Folder">Create Folder</button>
     </div>
   </div>
 </div>
@@ -706,15 +706,15 @@
 <div class="modal-overlay" id="deleteModal">
   <div class="modal">
     <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
-    <h3>🗑️ Delete Item</h3>
+    <h3>🗑️ <span data-i18n="Delete Item">Delete Item</span></h3>
     <div class="folder-form">
-      <p class="delete-warning">⚠️ This action cannot be undone!</p>
-      <p class="file-info">Are you sure you want to delete:</p>
+      <p class="delete-warning">⚠️ <span data-i18n="This action cannot be undone!">This action cannot be undone!</span></p>
+      <p class="file-info" data-i18n="Are you sure you want to delete:">Are you sure you want to delete:</p>
       <p class="delete-item-name" id="deleteItemName"></p>
       <input type="hidden" id="deleteItemPath">
       <input type="hidden" id="deleteItemType">
-      <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
-      <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+      <button class="delete-btn-confirm" onclick="confirmDelete()" data-i18n="Delete">Delete</button>
+      <button class="delete-btn-cancel" onclick="closeDeleteModal()" data-i18n="Cancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -723,13 +723,13 @@
 <div class="modal-overlay" id="renameModal">
   <div class="modal">
     <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3>✏️ Rename File</h3>
+    <h3>✏️ <span data-i18n="Rename File">Rename File</span></h3>
     <div class="folder-form">
       <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
       <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
       <input type="hidden" id="renameItemPath">
-      <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
-      <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
+      <button class="rename-btn-confirm" onclick="confirmRename()" data-i18n="Rename">Rename</button>
+      <button class="delete-btn-cancel" onclick="closeRenameModal()" data-i18n="Cancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -738,19 +738,20 @@
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
     <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3>📂 Move File</h3>
+    <h3>📂 <span data-i18n="Move File">Move File</span></h3>
     <div class="folder-form">
       <p class="file-info">Moving <strong id="moveItemName"></strong></p>
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
       <datalist id="moveFolderOptions"></datalist>
       <input type="hidden" id="moveItemPath">
-      <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
-      <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
+      <button class="move-btn-confirm" onclick="confirmMove()" data-i18n="Move">Move</button>
+      <button class="delete-btn-cancel" onclick="closeMoveModal()" data-i18n="Cancel">Cancel</button>
     </div>
   </div>
 </div>
 
 <script>
+  function t(k){return window._T&&window._T[k]||k;}
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
 
@@ -807,7 +808,7 @@
       files = await response.json();
     } catch (e) {
       console.error(e);
-      fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
+      fileTable.innerHTML = '<div class="no-files">' + t('An error occurred while loading the files') + '</div>';
       return;
     }
 
@@ -818,13 +819,13 @@
       totalSize += file.size;
     });
 
-    document.getElementById('folder-summary').innerHTML = `${folderCount} folders, ${files.length - folderCount} files, ${formatFileSize(totalSize)}`;
+    document.getElementById('folder-summary').innerHTML = `${folderCount} ${t('folders')}, ${files.length - folderCount} ${t('files')}, ${formatFileSize(totalSize)}`;
 
     if (files.length === 0) {
-      fileTable.innerHTML = '<div class="no-files">This folder is empty</div>';
+      fileTable.innerHTML = '<div class="no-files">' + t('This folder is empty') + '</div>';
     } else {
       let fileTableContent = '<table class="file-table">';
-      fileTableContent += '<tr><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
+      fileTableContent += '<tr><th>' + t('Name') + '</th><th>' + t('Type') + '</th><th>' + t('Size') + '</th><th class="actions-col">' + t('Actions') + '</th></tr>';
 
       const sortedFiles = files.sort((a, b) => {
         // Directories first, then epub files, then other files, alphabetically within each group
@@ -843,7 +844,7 @@
 
           fileTableContent += '<tr class="folder-row">';
           fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a><span class="folder-badge">FOLDER</span></td>`;
-          fileTableContent += '<td>Folder</td>';
+          fileTableContent += '<td>' + t('Folder') + '</td>';
           fileTableContent += '<td>-</td>';
           fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
           fileTableContent += '</tr>';
@@ -1077,7 +1078,7 @@ function uploadFile() {
       // All files processed - show summary
       if (failedFiles.length === 0) {
         progressFill.style.backgroundColor = '#4caf50';
-        progressText.textContent = 'All uploads complete!';
+        progressText.textContent = t('All uploads complete!');
         setTimeout(() => {
           closeUploadModal();
           hydrate();
@@ -1468,7 +1469,11 @@ function retryAllFailedUploads() {
     xhr.send(formData);
   }
 
-  hydrate();
+  // i18n + init
+  fetch('/api/i18n').then(function(r){return r.json();}).then(function(d){window._T=d;}).catch(function(){}).finally(function(){
+    if(window._T){document.querySelectorAll('[data-i18n]').forEach(function(el){var v=window._T[el.getAttribute('data-i18n')];if(v)el.textContent=v;});}
+    hydrate();
+  });
 </script>
 </body>
 </html>

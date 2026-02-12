@@ -105,4 +105,7 @@ class CrossPointWebServer {
   void handleSettingsPage() const;
   void handleGetSettings() const;
   void handlePostSettings();
+
+  // i18n: serve translation JSON for web UI
+  void handleI18n() const;
 };

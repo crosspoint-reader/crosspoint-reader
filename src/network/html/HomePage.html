@@ -75,27 +75,27 @@
     <h1>📚 CrossPoint Reader</h1>
 
     <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/files">File Manager</a>
-      <a href="/settings">Settings</a>
+      <a href="/" data-i18n="Home">Home</a>
+      <a href="/files" data-i18n="File Manager">File Manager</a>
+      <a href="/settings" data-i18n="Settings">Settings</a>
     </div>
 
     <div class="card">
-      <h2>Device Status</h2>
+      <h2 data-i18n="Device Status">Device Status</h2>
       <div class="info-row">
-        <span class="label">Version</span>
+        <span class="label" data-i18n="Version">Version</span>
         <span class="value" id="version"></span>
       </div>
       <div class="info-row">
-        <span class="label">WiFi Status</span>
-        <span class="status">Connected</span>
+        <span class="label" data-i18n="WiFi Status">WiFi Status</span>
+        <span class="status" data-i18n="Connected">Connected</span>
       </div>
       <div class="info-row">
-        <span class="label">IP Address</span>
+        <span class="label" data-i18n="IP Address">IP Address</span>
         <span class="value" id="ip-address"></span>
       </div>
       <div class="info-row">
-        <span class="label">Free Memory</span>
+        <span class="label" data-i18n="Free Memory">Free Memory</span>
         <span class="value" id="free-heap"></span>
       </div>
     </div>
@@ -123,8 +123,11 @@
       }
     }
 
-    // Fetch status on page load
-    window.onload = fetchStatus;
+    // i18n + init
+    fetch('/api/i18n').then(function(r){return r.json();}).then(function(d){window._T=d;}).catch(function(){}).finally(function(){
+      if(window._T){document.querySelectorAll('[data-i18n]').forEach(function(el){var v=window._T[el.getAttribute('data-i18n')];if(v)el.textContent=v;});}
+      fetchStatus();
+    });
   </script>
   </body>
 </html>

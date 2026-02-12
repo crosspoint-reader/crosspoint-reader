@@ -15,6 +15,7 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "i18n/TranslationManager.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -155,6 +156,7 @@ void CrossPointWebServer::begin() {
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
+  server->on("/api/i18n", HTTP_GET, [this] { handleI18n(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -291,6 +293,75 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
   status.lastCompleteSize = wsLastCompleteSize;
   status.lastCompleteAt = wsLastCompleteAt;
   return status;
+}
+
+void CrossPointWebServer::handleI18n() const {
+  auto& tm = TranslationManager::getInstance();
+  if (strcmp(tm.getCurrentLanguage(), "en") == 0) {
+    server->send(200, "application/json", "{}");
+    return;
+  }
+
+  static const char* keys[] = {
+      "Home",
+      "File Manager",
+      "Settings",
+      "Device Status",
+      "Version",
+      "WiFi Status",
+      "Connected",
+      "IP Address",
+      "Free Memory",
+      "Upload",
+      "New Folder",
+      "Contents",
+      "Name",
+      "Type",
+      "Size",
+      "Actions",
+      "Folder",
+      "Delete",
+      "Rename",
+      "Move",
+      "Cancel",
+      "Upload file",
+      "Create Folder",
+      "Delete Item",
+      "Rename File",
+      "Move File",
+      "This action cannot be undone!",
+      "Are you sure you want to delete:",
+      "This folder is empty",
+      "All uploads complete!",
+      "Some files failed to upload",
+      "Retry All Failed Uploads",
+      "An error occurred while loading the files",
+      "folders",
+      "files",
+      "Save Settings",
+      "Saving...",
+      "No changes to save.",
+      "Settings saved successfully!",
+      "Failed to load settings",
+      "Error",
+  };
+
+  String json = "{";
+  bool first = true;
+  for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+    const char* val = tm.getString(keys[i]);
+    if (val != keys[i]) {
+      if (!first) json += ',';
+      first = false;
+      json += "\"";
+      json += keys[i];
+      json += "\":\"";
+      json += val;
+      json += "\"";
+    }
+  }
+  json += "}";
+  server->send(200, "application/json", json);
 }
 
 void CrossPointWebServer::handleRoot() const {

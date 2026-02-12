@@ -211,12 +211,12 @@
   </style>
 </head>
 <body>
-  <h1>⚙️ Settings</h1>
+  <h1>⚙️ <span data-i18n="Settings">Settings</span></h1>
 
   <div class="nav-links">
-    <a href="/">Home</a>
-    <a href="/files">File Manager</a>
-    <a href="/settings">Settings</a>
+    <a href="/" data-i18n="Home">Home</a>
+    <a href="/files" data-i18n="File Manager">File Manager</a>
+    <a href="/settings" data-i18n="Settings">Settings</a>
   </div>
 
   <div id="message" class="message"></div>
@@ -228,7 +228,7 @@
   </div>
 
   <div class="save-container" id="save-container" style="display:none;">
-    <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
+    <button class="save-btn" id="saveBtn" onclick="saveSettings()" data-i18n="Save Settings">Save Settings</button>
   </div>
 
   <div class="card">
@@ -238,6 +238,7 @@
   </div>
 
 <script>
+  function t(k){return window._T&&window._T[k]||k;}
   let allSettings = [];
   let originalValues = {};
 
@@ -358,14 +359,14 @@
     } catch (e) {
       console.error(e);
       document.getElementById('settings-container').innerHTML =
-        '<div class="card"><p style="text-align:center;color:#e74c3c;">Failed to load settings</p></div>';
+        '<div class="card"><p style="text-align:center;color:#e74c3c;">' + t('Failed to load settings') + '</p></div>';
     }
   }
 
   async function saveSettings() {
     const btn = document.getElementById('saveBtn');
     btn.disabled = true;
-    btn.textContent = 'Saving...';
+    btn.textContent = t('Saving...');
 
     // Collect only changed values
     const changes = {};
@@ -377,8 +378,8 @@
     });
 
     if (Object.keys(changes).length === 0) {
-      showMessage('No changes to save.', false);
-      btn.textContent = 'Save Settings';
+      showMessage(t('No changes to save.'), false);
+      btn.textContent = t('Save Settings');
       return;
     }
 
@@ -399,16 +400,20 @@
         originalValues[key] = changes[key];
       }
 
-      showMessage('Settings saved successfully!', false);
+      showMessage(t('Settings saved successfully!'), false);
     } catch (e) {
       console.error(e);
-      showMessage('Error: ' + e.message, true);
+      showMessage(t('Error') + ': ' + e.message, true);
     }
 
-    btn.textContent = 'Save Settings';
+    btn.textContent = t('Save Settings');
   }
 
-  loadSettings();
+  // i18n + init
+  fetch('/api/i18n').then(function(r){return r.json();}).then(function(d){window._T=d;}).catch(function(){}).finally(function(){
+    if(window._T){document.querySelectorAll('[data-i18n]').forEach(function(el){var v=window._T[el.getAttribute('data-i18n')];if(v)el.textContent=v;});}
+    loadSettings();
+  });
 </script>
 </body>
 </html>
