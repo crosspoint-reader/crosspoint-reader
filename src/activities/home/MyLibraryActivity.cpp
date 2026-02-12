@@ -154,6 +154,27 @@ void MyLibraryActivity::loop() {
     return;
   }
 
+  // Delete menu state (side button overlay)
+  if (state == State::DELETE_MENU) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+      // Volume up = Delete → go to delete confirmation
+      state = State::DELETE_CONFIRM;
+      deleteError.clear();
+      updateRequired = true;
+      return;
+    }
+    // Any other press cancels the menu
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      state = State::BROWSING;
+      skipNextConfirmRelease = true;
+      updateRequired = true;
+      return;
+    }
+    return;
+  }
+
   // Long press BACK (1s+) goes to root folder
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
       basepath != "/") {
@@ -166,11 +187,10 @@ void MyLibraryActivity::loop() {
 
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
-  // Long press CONFIRM (1s+) enters delete confirmation (triggers while held, like Back/Power)
+  // Long press CONFIRM (1s+) opens the delete menu with side button options
   if (!files.empty() && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() >= DELETE_CONFIRM_MS) {
-    state = State::DELETE_CONFIRM;
-    deleteError.clear();
+    state = State::DELETE_MENU;
     updateRequired = true;
     return;
   }
@@ -346,6 +366,11 @@ void MyLibraryActivity::render() const {
   // Help text
   const auto labels = mappedInput.mapLabels("« Home", "Open", "Up", "Down");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  // Draw side button menu overlay when in DELETE_MENU state
+  if (state == State::DELETE_MENU) {
+    GUI.drawSideButtonHints(renderer, "Delete", "");
+  }
 
   renderer.displayBuffer();
 }

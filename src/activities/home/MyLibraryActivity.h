@@ -13,7 +13,7 @@
 
 class MyLibraryActivity final : public Activity {
  private:
-  enum class State { BROWSING, DELETE_CONFIRM };
+  enum class State { BROWSING, DELETE_MENU, DELETE_CONFIRM };
 
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
