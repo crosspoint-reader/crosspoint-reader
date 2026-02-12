@@ -12,10 +12,6 @@ namespace {
 // Buffer size for reading CSS files
 constexpr size_t READ_BUFFER_SIZE = 512;
 
-// Maximum CSS file size we'll process (prevent memory issues)
-// 256KB accommodates most real-world EPUB stylesheets while preventing OOM
-constexpr size_t MAX_CSS_SIZE = 256 * 1024;
-
 // Maximum number of CSS rules to store in the selector map
 // Prevents unbounded memory growth from pathological CSS files
 constexpr size_t MAX_RULES = 1500;
@@ -447,13 +443,9 @@ bool CssParser::loadFromStream(FsFile& source) {
   };
 
   char buffer[READ_BUFFER_SIZE];
-  while (source.available() && totalRead < MAX_CSS_SIZE) {
+  while (source.available()) {
     int bytesRead = source.read(buffer, sizeof(buffer));
     if (bytesRead <= 0) break;
-
-    if (totalRead + static_cast<size_t>(bytesRead) > MAX_CSS_SIZE) {
-      bytesRead = static_cast<int>(MAX_CSS_SIZE - totalRead);
-    }
 
     totalRead += static_cast<size_t>(bytesRead);
 
@@ -495,12 +487,7 @@ bool CssParser::loadFromStream(FsFile& source) {
     handleChar('/');
   }
 
-  if (totalRead >= MAX_CSS_SIZE) {
-    Serial.printf("[%lu] [CSS] WARNING: CSS file truncated at %zu bytes (limit: %zu)\n", millis(), totalRead,
-                  MAX_CSS_SIZE);
-  }
-
-  Serial.printf("[%lu] [CSS] Parsed %zu rules\n", millis(), rulesBySelector_.size());
+  Serial.printf("[%lu] [CSS] Parsed %zu rules from %zu bytes\n", millis(), rulesBySelector_.size(), totalRead);
   return true;
 }
 
