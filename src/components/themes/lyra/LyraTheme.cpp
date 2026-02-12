@@ -62,11 +62,10 @@ void LyraTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   const uint16_t percentage = battery.readPercentage();
   const int y = rect.y + 6;
   const int battWidth = LyraMetrics::values.batteryWidth;
-  int textWidth = 0;
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
     // Clear the area where we're going to draw the text to prevent ghosting
     const auto textHeight = renderer.getTextHeight(SMALL_FONT_ID);
     renderer.fillRect(rect.x - textWidth - batteryPercentSpacing, rect.y, textWidth, textHeight, false);
