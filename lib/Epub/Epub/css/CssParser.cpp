@@ -6,8 +6,33 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <string_view>
 
 namespace {
+
+// Stack-allocated string buffer to avoid heap reallocations during parsing
+// Provides string-like interface with fixed capacity
+struct StackBuffer {
+  static constexpr size_t CAPACITY = 1024;
+  char data[CAPACITY];
+  size_t len = 0;
+
+  void push_back(char c) {
+    if (len < CAPACITY - 1) {
+      data[len++] = c;
+    }
+  }
+
+  void clear() { len = 0; }
+  bool empty() const { return len == 0; }
+  size_t size() const { return len; }
+
+  // Get string view of current content (zero-copy)
+  std::string_view view() const { return std::string_view(data, len); }
+
+  // Convert to string for passing to functions (single allocation)
+  std::string str() const { return std::string(data, len); }
+};
 
 // Buffer size for reading CSS files
 constexpr size_t READ_BUFFER_SIZE = 512;
@@ -353,12 +378,12 @@ bool CssParser::loadFromStream(FsFile& source) {
 
   size_t totalRead = 0;
 
-  std::string selector;
-  std::string declBuffer;
+  // Use stack-allocated buffers for parsing to avoid heap reallocations
+  StackBuffer selector;
+  StackBuffer declBuffer;
+  // Keep these as std::string since they're passed by reference to parseDeclarationIntoStyle
   std::string propNameBuf;
   std::string propValueBuf;
-  selector.reserve(64);
-  declBuffer.reserve(64);
 
   bool inComment = false;
   bool maybeSlash = false;
@@ -415,10 +440,10 @@ bool CssParser::loadFromStream(FsFile& source) {
       --bodyDepth;
       if (bodyDepth == 0) {
         if (!skippingRule && !declBuffer.empty()) {
-          parseDeclarationIntoStyle(declBuffer, currentStyle, propNameBuf, propValueBuf);
+          parseDeclarationIntoStyle(declBuffer.str(), currentStyle, propNameBuf, propValueBuf);
         }
         if (!skippingRule) {
-          processRuleBlockWithStyle(selector, currentStyle);
+          processRuleBlockWithStyle(selector.str(), currentStyle);
         }
         selector.clear();
         declBuffer.clear();
@@ -433,7 +458,7 @@ bool CssParser::loadFromStream(FsFile& source) {
     if (!skippingRule) {
       if (c == ';') {
         if (!declBuffer.empty()) {
-          parseDeclarationIntoStyle(declBuffer, currentStyle, propNameBuf, propValueBuf);
+          parseDeclarationIntoStyle(declBuffer.str(), currentStyle, propNameBuf, propValueBuf);
           declBuffer.clear();
         }
       } else {
