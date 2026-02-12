@@ -247,7 +247,8 @@ void MyLibraryActivity::render() const {
   }
 
   // Help text
-  const auto labels = mappedInput.mapLabels(basepath == "/" ? T("\xC2\xAB Home") : T("\xC2\xAB Back"), T("Open"), T("Up"), T("Down"));
+  const auto labels =
+      mappedInput.mapLabels(basepath == "/" ? T("\xC2\xAB Home") : T("\xC2\xAB Back"), T("Open"), T("Up"), T("Down"));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
