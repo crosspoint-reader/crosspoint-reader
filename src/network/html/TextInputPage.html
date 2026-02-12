@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CrossPoint - Text Input</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5; color: #333;
+      display: flex; flex-direction: column; align-items: center;
+      min-height: 100vh; padding: 20px;
+    }
+    .container {
+      width: 100%; max-width: 500px;
+      background: white; border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      padding: 24px; margin-top: 20px;
+    }
+    h1 {
+      text-align: center; font-size: 22px;
+      margin-bottom: 8px; color: #222;
+    }
+    .subtitle {
+      text-align: center; color: #666;
+      font-size: 14px; margin-bottom: 20px;
+    }
+    textarea {
+      width: 100%; height: 120px;
+      font-size: 18px; padding: 12px;
+      border: 2px solid #ddd; border-radius: 8px;
+      resize: vertical; outline: none;
+      transition: border-color 0.2s;
+    }
+    textarea:focus { border-color: #007bff; }
+    .btn {
+      width: 100%; padding: 16px;
+      font-size: 18px; font-weight: 600;
+      color: white; border: none; border-radius: 8px;
+      cursor: pointer; margin-top: 12px;
+      transition: opacity 0.2s;
+    }
+    .btn:active { opacity: 0.8; }
+    .btn-send { background: #007bff; }
+    .btn-send:disabled { background: #aaa; cursor: not-allowed; }
+    .status {
+      text-align: center; margin-top: 16px;
+      font-size: 16px; min-height: 24px;
+    }
+    .status.success { color: #28a745; }
+    .status.error { color: #dc3545; }
+    .status.sending { color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>&#9000; CrossPoint Text Input</h1>
+    <p class="subtitle">Type your text and send it to the device</p>
+    <textarea id="textInput" autofocus placeholder="Type your text here..."></textarea>
+    <button class="btn btn-send" id="sendBtn" onclick="sendText()">Send to Device</button>
+    <div class="status" id="status"></div>
+  </div>
+  <script>
+    const textInput = document.getElementById('textInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const statusEl = document.getElementById('status');
+
+    async function sendText() {
+      const text = textInput.value;
+      if (!text) {
+        statusEl.className = 'status error';
+        statusEl.textContent = 'Please enter some text';
+        return;
+      }
+      sendBtn.disabled = true;
+      statusEl.className = 'status sending';
+      statusEl.textContent = 'Sending...';
+      try {
+        const resp = await fetch('/api/keyboard-input', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'text=' + encodeURIComponent(text)
+        });
+        if (resp.ok) {
+          statusEl.className = 'status success';
+          statusEl.textContent = '✓ Text sent successfully!';
+          textInput.value = '';
+        } else {
+          throw new Error('Server error');
+        }
+      } catch (e) {
+        statusEl.className = 'status error';
+        statusEl.textContent = '✗ Failed to send. Try again.';
+      }
+      sendBtn.disabled = false;
+    }
+
+    // Allow Ctrl+Enter to send
+    textInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        sendText();
+      }
+    });
+  </script>
+</body>
+</html>
