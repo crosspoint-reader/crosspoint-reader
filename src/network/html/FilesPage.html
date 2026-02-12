@@ -210,6 +210,9 @@
     .modal h3 {
       margin: 0 0 15px 0;
       color: var(--title-color);
+      display: flex;
+      gap: 10px;
+      align-items: center;
     }
     .modal-close {
       float: right;
@@ -222,6 +225,12 @@
     }
     .modal-close:hover {
       color: #7f8c8d;
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
     }
     .file-table {
       width: 100%;
@@ -457,55 +466,34 @@
     .delete-btn-confirm {
       background-color: #e74c3c;
       color: white;
-      padding: 10px 20px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      width: 100%;
     }
     .delete-btn-confirm:hover {
       background-color: #c0392b;
     }
     .delete-btn-cancel {
-      background-color: #95a5a6;
+      background-color: #7f8c8d;
       color: white;
-      padding: 10px 20px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-      margin-top: 10px;
     }
     .delete-btn-cancel:hover {
       background-color: #7f8c8d;
     }
     .rename-btn-confirm {
-      background-color: #3498db;
       color: white;
-      padding: 10px 20px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .rename-btn-confirm:hover {
-      background-color: #2e86c1;
     }
     .move-btn-confirm {
-      background-color: #16a085;
       color: white;
-      padding: 10px 20px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .move-btn-confirm:hover {
-      background-color: #138d75;
     }
     .loader-container {
       display: flex;
@@ -698,12 +686,16 @@
     <h3>Upload file</h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
-      <input type="file" id="fileInput" onchange="validateFile()" multiple>
-      <button id="uploadBtn" class="btn btn-primary upload-btn" onclick="uploadFile()" disabled>Upload</button>
+      <form id="uploadForm" onsubmit="uploadFile(event)">
+      <input type="file" id="fileInput" onchange="validateFile()" multiple required>
       <div id="progress-container">
         <div id="progress-bar"><div id="progress-fill"></div></div>
         <div id="progress-text"></div>
       </div>
+      <div class="modal-footer">
+        <button id="uploadBtn" class="btn btn-primary upload-btn" type="submit">Upload</button>
+      </div>
+    </form>
     </div>
   </div>
 </div>
@@ -717,7 +709,9 @@
       <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
       <form onsubmit="createFolder(event)">
         <input type="text" id="folderName" class="folder-input" placeholder="Folder name..." required/>
-        <button class="btn btn-primary folder-btn" type="submit">Create Folder</button>
+        <div class="modal-footer">
+          <button class="btn btn-primary folder-btn" type="submit">Create Folder</button>
+        </div>
       </form>
     </div>
   </div>
@@ -734,8 +728,10 @@
       <p class="delete-item-name" id="deleteItemName"></p>
       <input type="hidden" id="deleteItemPath">
       <input type="hidden" id="deleteItemType">
-      <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
-      <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+        <button class="btn btn-danger delete-btn-confirm" onclick="confirmDelete()">Delete</button>
+      </div>
     </div>
   </div>
 </div>
@@ -749,8 +745,10 @@
       <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
       <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
       <input type="hidden" id="renameItemPath">
-      <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
-      <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
+        <button class="btn btn-primary rename-btn-confirm" onclick="confirmRename()">Rename</button>
+      </div>
     </div>
   </div>
 </div>
@@ -765,8 +763,10 @@
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
       <datalist id="moveFolderOptions"></datalist>
       <input type="hidden" id="moveItemPath">
-      <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
-      <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
+        <button class="btn btn-primary move-btn-confirm" onclick="confirmMove()">Move</button>
+      </div>
     </div>
   </div>
 </div>
@@ -809,6 +809,7 @@
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  const FILE_EXTENSION_REGEX = /\.([0-9a-z]+)(?:[\?#]|$)/i;
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -940,7 +941,7 @@
           fileTableContent += '<td><span class="file-icon"><svg class="icon icon-folder" aria-hidden="true"><use href="#icon-folder"></use></svg></span></td>';
           fileTableContent += `<td><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
           fileTableContent += '<td>Folder</td>';
-          fileTableContent += '<td></td>';
+          fileTableContent += '<td class="text-nowrap text-end">&ndash;</td>';
           fileTableContent += `<td class="text-end"><div class="action-icon-group"><button class="btn btn-icon btn-danger delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder"><svg class="icon icon-trash" aria-hidden="true"><use href="#icon-trash"></use></svg></button></div></td>`;
           fileTableContent += '</tr>';
         } else {
@@ -948,11 +949,14 @@
           if (!filePath.endsWith("/")) filePath += "/";
           filePath += file.name;
 
+          const match = file.name.match(FILE_EXTENSION_REGEX);
+          const fileExtension = match ? match[1].toUpperCase() : '';
+
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
           fileTableContent += `<td><span class="file-icon">${file.isEpub ? '<svg class="icon icon-epub" aria-hidden="true"><use href="#icon-epub"></use></svg>' : '<svg class="icon icon-file" aria-hidden="true"><use href="#icon-file"></use></svg>'}</span></td>`;
           fileTableContent += `<td>${escapeHtml(file.name)}`;
           fileTableContent += '</td>';
-          fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
+          fileTableContent += `<td>${fileExtension}</td>`;
           fileTableContent += `<td class="text-nowrap text-end"><code>${formatFileSize(file.size)}</code></td>`;
           fileTableContent += `<td class="text-end"><div class="action-icon-group">`;
           fileTableContent += `<button class="btn btn-icon move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file"><svg class="icon icon-move-file" aria-hidden="true"><use href="#icon-move-file"></use></svg></button>`;
@@ -1149,7 +1153,8 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
   });
 }
 
-function uploadFile() {
+function uploadFile(event) {
+  event.preventDefault();
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
 
