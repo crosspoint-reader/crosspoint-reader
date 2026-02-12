@@ -4,10 +4,8 @@
 
 #include <algorithm>
 
-bool EpdFont::ligaturesEnabled = true;
-
 void EpdFont::getTextBounds(const char* string, const int startX, const int startY, int* minX, int* minY, int* maxX,
-                            int* maxY) const {
+                            int* maxY, const bool kerningEnabled) const {
   *minX = startX;
   *minY = startY;
   *maxX = startX;
@@ -23,7 +21,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
     // Ligature chaining: substitute while pairs match
-    while (true) {
+    while (kerningEnabled) {
       const auto saved = reinterpret_cast<const uint8_t*>(string);
       const uint32_t nextCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string));
       if (nextCp == 0) break;
@@ -43,7 +41,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       continue;
     }
 
-    if (prevCp != 0) {
+    if (kerningEnabled && prevCp != 0) {
       cursorX += getKerning(prevCp, cp);
     }
 
@@ -56,19 +54,19 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   }
 }
 
-void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
+void EpdFont::getTextDimensions(const char* string, int* w, int* h, const bool kerningEnabled) const {
   int minX = 0, minY = 0, maxX = 0, maxY = 0;
 
-  getTextBounds(string, 0, 0, &minX, &minY, &maxX, &maxY);
+  getTextBounds(string, 0, 0, &minX, &minY, &maxX, &maxY, kerningEnabled);
 
   *w = maxX - minX;
   *h = maxY - minY;
 }
 
-bool EpdFont::hasPrintableChars(const char* string) const {
+bool EpdFont::hasPrintableChars(const char* string, const bool kerningEnabled) const {
   int w = 0, h = 0;
 
-  getTextDimensions(string, &w, &h);
+  getTextDimensions(string, &w, &h, kerningEnabled);
 
   return w > 0 || h > 0;
 }
@@ -99,7 +97,6 @@ int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const 
 }
 
 uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) const {
-  if (!ligaturesEnabled) return 0;
   if (!data->ligaturePairs || data->ligaturePairCount == 0) {
     return 0;
   }
