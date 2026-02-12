@@ -21,7 +21,7 @@ class DictionaryWordSelectActivity final : public Activity {
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         fontId(fontId),
-        marginLeft(marginLeft - RENDER_SHIFT),
+        marginLeft(marginLeft),
         marginTop(marginTop),
         cachePath(cachePath),
         orientation(orientation),
@@ -50,7 +50,7 @@ class DictionaryWordSelectActivity final : public Activity {
     std::vector<int> wordIndices;
   };
 
-  static constexpr int RENDER_SHIFT = 16;
+  static constexpr int SIDE_HINT_WIDTH = 14;
 
   std::unique_ptr<Page> page;
   int fontId;
@@ -71,6 +71,7 @@ class DictionaryWordSelectActivity final : public Activity {
   SemaphoreHandle_t renderingMutex = nullptr;
 
   bool isLandscape() const;
+  bool isInverted() const;
   void extractWords();
   void mergeHyphenatedWords();
   void renderScreen();

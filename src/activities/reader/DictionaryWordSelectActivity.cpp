@@ -54,6 +54,10 @@ bool DictionaryWordSelectActivity::isLandscape() const {
          orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW;
 }
 
+bool DictionaryWordSelectActivity::isInverted() const {
+  return orientation == CrossPointSettings::ORIENTATION::INVERTED;
+}
+
 void DictionaryWordSelectActivity::extractWords() {
   words.clear();
   rows.clear();
@@ -152,25 +156,37 @@ void DictionaryWordSelectActivity::loop() {
 
   bool changed = false;
   const bool landscape = isLandscape();
+  const bool inverted = isInverted();
 
-  // In landscape, swap axes: face Left/Right → row navigation, side Up/Down → word-within-row
-  // In portrait: side Up/Down → row navigation, face Left/Right → word-within-row
-  const bool rowPrevPressed =
-      landscape ? mappedInput.wasReleased(MappedInputManager::Button::Left)
-                : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                   mappedInput.wasReleased(MappedInputManager::Button::Up));
-  const bool rowNextPressed =
-      landscape ? mappedInput.wasReleased(MappedInputManager::Button::Right)
-                : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                   mappedInput.wasReleased(MappedInputManager::Button::Down));
-  const bool wordPrevPressed =
-      landscape ? (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                   mappedInput.wasReleased(MappedInputManager::Button::Up))
-                : mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool wordNextPressed =
-      landscape ? (mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                   mappedInput.wasReleased(MappedInputManager::Button::Down))
-                : mappedInput.wasReleased(MappedInputManager::Button::Right);
+  // Button mapping depends on physical orientation:
+  // - Portrait: side Up/Down = row nav, face Left/Right = word nav
+  // - Inverted: same axes but reversed directions (device is flipped 180)
+  // - Landscape: face Left/Right = row nav (swapped), side Up/Down = word nav
+  bool rowPrevPressed, rowNextPressed, wordPrevPressed, wordNextPressed;
+
+  if (landscape) {
+    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
+    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
+    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                      mappedInput.wasReleased(MappedInputManager::Button::Up);
+    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                      mappedInput.wasReleased(MappedInputManager::Button::Down);
+  } else if (inverted) {
+    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                     mappedInput.wasReleased(MappedInputManager::Button::Down);
+    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                     mappedInput.wasReleased(MappedInputManager::Button::Up);
+    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
+    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
+  } else {
+    // Portrait (default)
+    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                     mappedInput.wasReleased(MappedInputManager::Button::Up);
+    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                     mappedInput.wasReleased(MappedInputManager::Button::Down);
+    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
+    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
+  }
 
   // Move to previous row (position-based: find word closest to current word's X position)
   if (rowPrevPressed && currentRow > 0) {
@@ -296,33 +312,45 @@ void DictionaryWordSelectActivity::renderScreen() {
     }
   }
 
-  // Draw compact side button indicators at right edge (same coordinate system as page text)
-  {
-    const int screenW = renderer.getScreenWidth();
-    const int screenH = renderer.getScreenHeight();
-    const int hintStripX = screenW - RENDER_SHIFT;
+  const int screenW = renderer.getScreenWidth();
+  const int screenH = renderer.getScreenHeight();
+  const bool landscape = isLandscape();
+  const bool inverted = isInverted();
 
-    // White background strip to ensure no text overlap
-    renderer.fillRect(hintStripX, 0, RENDER_SHIFT, screenH, false);
+  if (landscape) {
+    // In landscape, drawButtonHints renders text sideways (it forces portrait orientation).
+    // Draw a simple readable hint line at the bottom of the landscape view instead.
+    const char* hint = "\xC2\xAB Back  |  Lookup  |  ^ v  |  < >";
+    const int hintW = renderer.getTextWidth(SMALL_FONT_ID, hint);
+    renderer.fillRect(0, screenH - 22, screenW, 22, false);
+    renderer.drawText(SMALL_FONT_ID, (screenW - hintW) / 2, screenH - 20, hint);
+  } else {
+    // Portrait / Inverted: draw side button indicators and use drawButtonHints
 
-    // Choose symbols based on what the side buttons do in this orientation
-    const char* topSym = isLandscape() ? "<" : "^";
-    const char* botSym = isLandscape() ? ">" : "v";
+    // Side indicators on the edge where the physical side buttons are:
+    // Portrait = right edge, Inverted = left edge
+    const int hintStripX = inverted ? 0 : (screenW - SIDE_HINT_WIDTH);
+
+    renderer.fillRect(hintStripX, 0, SIDE_HINT_WIDTH, screenH, false);
+
+    // Symbols are the same for portrait and inverted: the physical button positions
+    // and their actions both flip in inverted, so the net symbols stay the same.
+    const char* topSym = "^";
+    const char* botSym = "v";
 
     const int symW1 = renderer.getTextWidth(SMALL_FONT_ID, topSym);
     const int symW2 = renderer.getTextWidth(SMALL_FONT_ID, botSym);
     const int centerY = screenH / 2;
     constexpr int gap = 30;
 
-    renderer.drawText(SMALL_FONT_ID, hintStripX + (RENDER_SHIFT - symW1) / 2, centerY - gap, topSym);
-    renderer.drawText(SMALL_FONT_ID, hintStripX + (RENDER_SHIFT - symW2) / 2, centerY + gap, botSym);
-  }
+    renderer.drawText(SMALL_FONT_ID, hintStripX + (SIDE_HINT_WIDTH - symW1) / 2, centerY - gap, topSym);
+    renderer.drawText(SMALL_FONT_ID, hintStripX + (SIDE_HINT_WIDTH - symW2) / 2, centerY + gap, botSym);
 
-  // Button hints using symbols
-  const bool landscape = isLandscape();
-  const auto labels = landscape ? mappedInput.mapLabels("\xC2\xAB Back", "Lookup", "^", "v")
-                                : mappedInput.mapLabels("\xC2\xAB Back", "Lookup", "<", ">");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    // Front button hints: labels match the swapped actions for inverted
+    const auto labels = inverted ? mappedInput.mapLabels("\xC2\xAB Back", "Lookup", ">", "<")
+                                 : mappedInput.mapLabels("\xC2\xAB Back", "Lookup", "<", ">");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }

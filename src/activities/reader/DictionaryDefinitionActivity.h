@@ -43,6 +43,7 @@ class DictionaryDefinitionActivity final : public Activity {
   SemaphoreHandle_t renderingMutex = nullptr;
 
   bool isLandscape() const;
+  bool isInverted() const;
   void wrapText();
   void renderScreen();
   static void taskTrampoline(void* param);
