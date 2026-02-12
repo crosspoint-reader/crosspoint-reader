@@ -1,5 +1,6 @@
 #include "SettingsActivity.h"
 
+#include <Esp.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 
@@ -25,6 +26,7 @@ void SettingsActivity::taskTrampoline(void* param) {
 
 void SettingsActivity::onEnter() {
   Activity::onEnter();
+  Serial.printf("[SETTINGS] onEnter, free heap: %u\n", static_cast<unsigned>(ESP.getFreeHeap()));
   renderingMutex = xSemaphoreCreateMutex();
 
   // Build per-category vectors from the shared settings list
@@ -33,6 +35,7 @@ void SettingsActivity::onEnter() {
   controlsSettings.clear();
   systemSettings.clear();
 
+  Serial.println("[SETTINGS] Building settings list...");
   for (auto& setting : getSettingsList()) {
     if (!setting.category) continue;
     if (strcmp(setting.category, "Display") == 0) {
@@ -63,6 +66,8 @@ void SettingsActivity::onEnter() {
   // Initialize with first category (Display)
   currentSettings = &displaySettings;
   settingsCount = static_cast<int>(displaySettings.size());
+
+  Serial.printf("[SETTINGS] Settings built, free heap: %u\n", static_cast<unsigned>(ESP.getFreeHeap()));
 
   // Trigger first update
   updateRequired = true;
