@@ -83,7 +83,7 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
     lastBookFileName = path.substr(lastSlash + 1);
   }
 
-  Serial.printf("Loading recent book: %s\n", path.c_str());
+  Serial.printf("[%lu] [RBS] Loading recent book: %s\n", millis(), path.c_str());
 
   // If epub, try to load the metadata for title/author and cover
   if (StringUtils::checkFileExtension(lastBookFileName, ".epub")) {
