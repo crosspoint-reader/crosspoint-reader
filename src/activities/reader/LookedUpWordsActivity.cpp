@@ -164,7 +164,7 @@ void LookedUpWordsActivity::renderScreen() {
     const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, msg.c_str(), EpdFontFamily::BOLD);
     const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
     const int w = textWidth + margin * 2;
-    const int h = textHeight + margin * 2 + 25;
+    const int h = textHeight + margin * 2;
     const int x = (renderer.getScreenWidth() - w) / 2;
 
     renderer.fillRect(x - 2, popupY - 2, w + 4, h + 4, true);
@@ -174,16 +174,20 @@ void LookedUpWordsActivity::renderScreen() {
     const int textY = popupY + margin - 2;
     renderer.drawText(UI_12_FONT_ID, textX, textY, msg.c_str(), true, EpdFontFamily::BOLD);
 
-    const char* hint = "Select = Delete | Back = Cancel";
-    int hintWidth = renderer.getTextWidth(SMALL_FONT_ID, hint);
-    renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - hintWidth) / 2, popupY + h - 18, hint);
-
     // Button hints for delete mode
     const auto labels = mappedInput.mapLabels("Cancel", "Delete", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
+    // "Hold select to delete" hint above button hints
+    if (!words.empty()) {
+      const char* deleteHint = "Hold select to delete";
+      const int hintWidth = renderer.getTextWidth(SMALL_FONT_ID, deleteHint);
+      renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - hintWidth) / 2,
+                        renderer.getScreenHeight() - 55, deleteHint);
+    }
+
     // Normal button hints
-    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "Up", "Down");
+    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "^", "v");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 

@@ -296,28 +296,32 @@ void DictionaryWordSelectActivity::renderScreen() {
     }
   }
 
-  // Draw side button hints in portrait coordinates to match physical button positions
+  // Draw compact side button indicators at right edge (same coordinate system as page text)
   {
-    const auto orig = renderer.getOrientation();
-    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    const int screenW = renderer.getScreenWidth();
+    const int screenH = renderer.getScreenHeight();
+    const int hintStripX = screenW - RENDER_SHIFT;
 
-    // Clear area behind side button hints to prevent text overlap
-    const int sideHintX = renderer.getScreenWidth() - 4 - 30;  // matches drawSideButtonHints positioning
-    renderer.fillRect(sideHintX - 2, 340, 36, 170, false);
+    // White background strip to ensure no text overlap
+    renderer.fillRect(hintStripX, 0, RENDER_SHIFT, screenH, false);
 
-    if (isLandscape()) {
-      GUI.drawSideButtonHints(renderer, "left", "right");
-    } else {
-      GUI.drawSideButtonHints(renderer, "Up", "Down");
-    }
+    // Choose symbols based on what the side buttons do in this orientation
+    const char* topSym = isLandscape() ? "<" : "^";
+    const char* botSym = isLandscape() ? ">" : "v";
 
-    renderer.setOrientation(orig);
+    const int symW1 = renderer.getTextWidth(SMALL_FONT_ID, topSym);
+    const int symW2 = renderer.getTextWidth(SMALL_FONT_ID, botSym);
+    const int centerY = screenH / 2;
+    constexpr int gap = 30;
+
+    renderer.drawText(SMALL_FONT_ID, hintStripX + (RENDER_SHIFT - symW1) / 2, centerY - gap, topSym);
+    renderer.drawText(SMALL_FONT_ID, hintStripX + (RENDER_SHIFT - symW2) / 2, centerY + gap, botSym);
   }
 
-  // Button hints (use plain text "left"/"right" instead of Unicode symbols that don't render)
+  // Button hints using symbols
   const bool landscape = isLandscape();
-  const auto labels = landscape ? mappedInput.mapLabels("\xC2\xAB Back", "Lookup", "up", "down")
-                                : mappedInput.mapLabels("\xC2\xAB Back", "Lookup", "left", "right");
+  const auto labels = landscape ? mappedInput.mapLabels("\xC2\xAB Back", "Lookup", "^", "v")
+                                : mappedInput.mapLabels("\xC2\xAB Back", "Lookup", "<", ">");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);

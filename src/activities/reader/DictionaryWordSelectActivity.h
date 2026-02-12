@@ -21,7 +21,7 @@ class DictionaryWordSelectActivity final : public Activity {
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         fontId(fontId),
-        marginLeft(marginLeft),
+        marginLeft(marginLeft - RENDER_SHIFT),
         marginTop(marginTop),
         cachePath(cachePath),
         orientation(orientation),
@@ -49,6 +49,8 @@ class DictionaryWordSelectActivity final : public Activity {
     int16_t yPos;
     std::vector<int> wordIndices;
   };
+
+  static constexpr int RENDER_SHIFT = 16;
 
   std::unique_ptr<Page> page;
   int fontId;

@@ -173,18 +173,21 @@ void DictionaryDefinitionActivity::renderScreen() {
   // Button hints
   const bool landscape = isLandscape();
   if (landscape) {
-    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "Prev", "Next");
+    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "<", ">");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
-    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-    // Side button hints for page navigation in portrait
     if (totalPages > 1) {
+      const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+      // Side button hints for page navigation in portrait
       const auto orig = renderer.getOrientation();
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-      GUI.drawSideButtonHints(renderer, "Prev", "Next");
+      GUI.drawSideButtonHints(renderer, "^", "v");
       renderer.setOrientation(orig);
+    } else {
+      const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   }
 
