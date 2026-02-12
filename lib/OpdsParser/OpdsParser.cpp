@@ -54,7 +54,7 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), 0) == XML_STATUS_ERROR) {
       errorOccured = true;
       LOG_DBG("OPDS", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
-          XML_ErrorString(XML_GetErrorCode(parser)));
+              XML_ErrorString(XML_GetErrorCode(parser)));
       XML_ParserFree(parser);
       parser = nullptr;
       return length;

@@ -369,7 +369,7 @@ bool Xtc::generateThumbBmp(int height) const {
   uint16_t thumbHeight = static_cast<uint16_t>(pageInfo.height * scale);
 
   LOG_DBG("XTC", "Generating thumb BMP: %dx%d -> %dx%d (scale: %.3f)", pageInfo.width, pageInfo.height, thumbWidth,
-      thumbHeight, scale);
+          thumbHeight, scale);
 
   // Allocate buffer for page data
   size_t bitmapSize;

@@ -128,8 +128,8 @@ XtcError XtcParser::readHeader() {
   }
 
   LOG_DBG("XTC", "Header: magic=0x%08X (%s), ver=%u.%u, pages=%u, bitDepth=%u", m_header.magic,
-      (m_header.magic == XTCH_MAGIC) ? "XTCH" : "XTC", m_header.versionMajor, m_header.versionMinor, m_header.pageCount,
-      m_bitDepth);
+          (m_header.magic == XTCH_MAGIC) ? "XTCH" : "XTC", m_header.versionMajor, m_header.versionMinor,
+          m_header.pageCount, m_bitDepth);
 
   return XtcError::OK;
 }
@@ -349,7 +349,8 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
   // Verify page magic (XTG for 1-bit, XTH for 2-bit)
   const uint32_t expectedMagic = (m_bitDepth == 2) ? XTH_MAGIC : XTG_MAGIC;
   if (pageHeader.magic != expectedMagic) {
-    LOG_DBG("XTC", "Invalid page magic for page %u: 0x%08X (expected 0x%08X)", pageIndex, pageHeader.magic, expectedMagic);
+    LOG_DBG("XTC", "Invalid page magic for page %u: 0x%08X (expected 0x%08X)", pageIndex, pageHeader.magic,
+            expectedMagic);
     m_lastError = XtcError::INVALID_MAGIC;
     return 0;
   }

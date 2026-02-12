@@ -215,7 +215,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   }
 
   LOG_DBG("JPG", "JPEG dimensions: %dx%d, components: %d, MCUs: %dx%d", imageInfo.m_width, imageInfo.m_height,
-      imageInfo.m_comps, imageInfo.m_MCUSPerRow, imageInfo.m_MCUSPerCol);
+          imageInfo.m_comps, imageInfo.m_MCUSPerRow, imageInfo.m_MCUSPerCol);
 
   // Safety limits to prevent memory issues on ESP32
   constexpr int MAX_IMAGE_WIDTH = 2048;
@@ -223,8 +223,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   constexpr int MAX_MCU_ROW_BYTES = 65536;
 
   if (imageInfo.m_width > MAX_IMAGE_WIDTH || imageInfo.m_height > MAX_IMAGE_HEIGHT) {
-    LOG_DBG("JPG", "Image too large (%dx%d), max supported: %dx%d", imageInfo.m_width, imageInfo.m_height, MAX_IMAGE_WIDTH,
-        MAX_IMAGE_HEIGHT);
+    LOG_DBG("JPG", "Image too large (%dx%d), max supported: %dx%d", imageInfo.m_width, imageInfo.m_height,
+            MAX_IMAGE_WIDTH, MAX_IMAGE_HEIGHT);
     return false;
   }
 
@@ -261,8 +261,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     scaleY_fp = (static_cast<uint32_t>(imageInfo.m_height) << 16) / outHeight;
     needsScaling = true;
 
-    LOG_DBG("JPG", "Pre-scaling %dx%d -> %dx%d (fit to %dx%d)", imageInfo.m_width, imageInfo.m_height, outWidth, outHeight,
-        targetWidth, targetHeight);
+    LOG_DBG("JPG", "Pre-scaling %dx%d -> %dx%d (fit to %dx%d)", imageInfo.m_width, imageInfo.m_height, outWidth,
+            outHeight, targetWidth, targetHeight);
   }
 
   // Write BMP header with output dimensions

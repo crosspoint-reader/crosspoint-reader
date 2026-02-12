@@ -8,7 +8,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   // Validate iterator bounds before rendering
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
     LOG_ERR("TXB", "Render skipped: size mismatch (words=%u, xpos=%u, styles=%u)\n", (uint32_t)words.size(),
-        (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size());
+            (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size());
     return;
   }
 
@@ -50,8 +50,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
 bool TextBlock::serialize(FsFile& file) const {
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
-    LOG_ERR("TXB", "Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", words.size(), wordXpos.size(),
-        wordStyles.size());
+    LOG_ERR("TXB", "Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", words.size(),
+            wordXpos.size(), wordStyles.size());
     return false;
   }
 
