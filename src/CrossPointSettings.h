@@ -52,8 +52,6 @@ class CrossPointSettings {
   };
 
   // Front button layout options (legacy)
-  // Default: Back, Confirm, Left, Right
-  // Swapped: Left, Right, Back, Confirm
   enum FRONT_BUTTON_LAYOUT {
     BACK_CONFIRM_LEFT_RIGHT = 0,
     LEFT_RIGHT_BACK_CONFIRM = 1,
@@ -72,9 +70,10 @@ class CrossPointSettings {
   };
 
   // Side button layout options
-  // Default: Previous, Next
-  // Swapped: Next, Previous
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTON_LAYOUT_COUNT };
+
+  // Button Mod Modes
+  enum BUTTON_MOD_MODE { MOD_OFF = 0, MOD_SIMPLE = 1, MOD_FULL = 2, BUTTON_MOD_MODE_COUNT };
 
   // Font family options
   enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
@@ -133,13 +132,11 @@ class CrossPointSettings {
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // EPUB reading orientation settings
-  // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
   // Button layouts (front layout retained for migration only)
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
   uint8_t sideButtonLayout = PREV_NEXT;
   // Front button remap (logical -> hardware)
-  // Used by MappedInputManager to translate logical buttons into physical front buttons.
   uint8_t frontButtonBack = FRONT_HW_BACK;
   uint8_t frontButtonConfirm = FRONT_HW_CONFIRM;
   uint8_t frontButtonLeft = FRONT_HW_LEFT;
@@ -169,8 +166,10 @@ class CrossPointSettings {
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
-  // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
+  // Use book's embedded CSS styles for EPUB rendering
   uint8_t embeddedStyle = 1;
+  // Button Mod Mode (Off / Simple / Full)
+  uint8_t buttonModMode = MOD_FULL;
 
   ~CrossPointSettings() = default;
 
