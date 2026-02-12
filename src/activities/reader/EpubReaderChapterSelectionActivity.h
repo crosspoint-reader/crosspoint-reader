@@ -5,6 +5,7 @@
 #include <freertos/task.h>
 
 #include <memory>
+#include <vector>
 
 #include "../ActivityWithSubactivity.h"
 #include "util/ButtonNavigator.h"
@@ -28,12 +29,16 @@ class EpubReaderChapterSelectionActivity final : public ActivityWithSubactivity 
   // This adapts automatically when switching between portrait and landscape.
   int getPageItems() const;
 
+  // Filtered list of spine indices (excluding footnote pages)
+  std::vector<int> filteredSpineIndices;
+
   // Total TOC items count
   int getTotalItems() const;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void renderScreen();
+  void buildFilteredChapterList();
 
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

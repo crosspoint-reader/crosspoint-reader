@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "Epub/BookMetadataCache.h"
@@ -30,6 +31,10 @@ class Epub {
   // CSS files
   std::vector<std::string> cssFiles;
 
+  // Use pointers, allocate only if needed
+  std::unordered_set<std::string>* footnotePages;
+  std::vector<std::string>* virtualSpineItems;
+
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata);
   bool parseTocNcxFile() const;
@@ -39,11 +44,17 @@ class Epub {
   bool loadCssRulesFromCache() const;
 
  public:
-  explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
+  explicit Epub(std::string filepath, const std::string& cacheDir)
+      : filepath(std::move(filepath)), footnotePages(nullptr), virtualSpineItems(nullptr) {
     // create a cache key based on the filepath
     cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
   }
-  ~Epub() = default;
+
+  ~Epub() {
+    delete footnotePages;
+    delete virtualSpineItems;
+  }
+
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool clearCache() const;
@@ -70,6 +81,13 @@ class Epub {
   int getTocIndexForSpineIndex(int spineIndex) const;
   size_t getCumulativeSpineItemSize(int spineIndex) const;
   int getSpineIndexForTextReference() const;
+
+  void markAsFootnotePage(const std::string& href);
+  bool isFootnotePage(const std::string& filename) const;
+  bool shouldHideFromToc(int spineIndex) const;
+  int addVirtualSpineItem(const std::string& path);
+  bool isVirtualSpineItem(int spineIndex) const;
+  int findVirtualSpineIndex(const std::string& filename) const;
 
   size_t getBookSize() const;
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
