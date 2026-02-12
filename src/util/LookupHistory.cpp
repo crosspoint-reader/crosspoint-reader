@@ -2,6 +2,8 @@
 
 #include <HalStorage.h>
 
+#include <algorithm>
+
 std::string LookupHistory::filePath(const std::string& cachePath) { return cachePath + "/lookups.txt"; }
 
 bool LookupHistory::hasHistory(const std::string& cachePath) {
@@ -65,9 +67,7 @@ void LookupHistory::addWord(const std::string& cachePath, const std::string& wor
 
   // Check if already present
   auto existing = load(cachePath);
-  for (const auto& w : existing) {
-    if (w == word) return;
-  }
+  if (std::any_of(existing.begin(), existing.end(), [&word](const std::string& w) { return w == word; })) return;
 
   // Cap at max entries
   if (static_cast<int>(existing.size()) >= MAX_ENTRIES) return;

@@ -31,24 +31,14 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
                                   const std::function<void(uint8_t)>& onBack,
                                   const std::function<void(MenuAction)>& onAction)
       : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
+        menuItems(buildMenuItems(hasDictionary)),
         title(title),
         pendingOrientation(currentOrientation),
         currentPage(currentPage),
         totalPages(totalPages),
         bookProgressPercent(bookProgressPercent),
         onBack(onBack),
-        onAction(onAction) {
-    menuItems = {{MenuAction::SELECT_CHAPTER, "Go to Chapter"},
-                 {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
-                 {MenuAction::GO_TO_PERCENT, "Go to %"}};
-    if (hasDictionary) {
-      menuItems.push_back({MenuAction::LOOKUP, "Lookup"});
-      menuItems.push_back({MenuAction::LOOKED_UP_WORDS, "Lookup History"});
-    }
-    menuItems.push_back({MenuAction::GO_HOME, "Go Home"});
-    menuItems.push_back({MenuAction::SYNC, "Sync Progress"});
-    menuItems.push_back({MenuAction::DELETE_CACHE, "Delete Book Cache"});
-  }
+        onAction(onAction) {}
 
   void onEnter() override;
   void onExit() override;
@@ -76,6 +66,20 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
 
   const std::function<void(uint8_t)> onBack;
   const std::function<void(MenuAction)> onAction;
+
+  static std::vector<MenuItem> buildMenuItems(bool hasDictionary) {
+    std::vector<MenuItem> items = {{MenuAction::SELECT_CHAPTER, "Go to Chapter"},
+                                   {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
+                                   {MenuAction::GO_TO_PERCENT, "Go to %"}};
+    if (hasDictionary) {
+      items.push_back({MenuAction::LOOKUP, "Lookup"});
+      items.push_back({MenuAction::LOOKED_UP_WORDS, "Lookup History"});
+    }
+    items.push_back({MenuAction::GO_HOME, "Go Home"});
+    items.push_back({MenuAction::SYNC, "Sync Progress"});
+    items.push_back({MenuAction::DELETE_CACHE, "Delete Book Cache"});
+    return items;
+  }
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();

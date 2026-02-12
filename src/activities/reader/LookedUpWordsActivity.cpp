@@ -155,7 +155,8 @@ void LookedUpWordsActivity::renderScreen() {
     const std::string& word = words[pendingDeleteIndex];
     std::string displayWord = word;
     if (displayWord.size() > 20) {
-      displayWord = displayWord.substr(0, 17) + "...";
+      displayWord.erase(17);
+      displayWord += "...";
     }
     std::string msg = "Delete '" + displayWord + "'?";
 

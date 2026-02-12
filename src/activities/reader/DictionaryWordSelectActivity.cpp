@@ -67,7 +67,7 @@ void DictionaryWordSelectActivity::extractWords() {
 
   for (const auto& element : page->elements) {
     // PageLine is the only concrete PageElement type, identified by tag
-    auto* line = static_cast<PageLine*>(element.get());
+    const auto* line = static_cast<const PageLine*>(element.get());
 
     const auto& block = line->getBlock();
     if (!block) continue;
