@@ -4,6 +4,8 @@
 
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "Fb2.h"
+#include "Fb2ReaderActivity.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
@@ -18,6 +20,8 @@ std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
   }
   return filePath.substr(0, lastSlash);
 }
+
+bool ReaderActivity::isFb2File(const std::string& path) { return StringUtils::checkFileExtension(path, ".fb2"); }
 
 bool ReaderActivity::isXtcFile(const std::string& path) {
   return StringUtils::checkFileExtension(path, ".xtc") || StringUtils::checkFileExtension(path, ".xtch");
@@ -73,6 +77,21 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
   return nullptr;
 }
 
+std::unique_ptr<Fb2> ReaderActivity::loadFb2(const std::string& path) {
+  if (!Storage.exists(path.c_str())) {
+    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+    return nullptr;
+  }
+
+  auto fb2 = std::unique_ptr<Fb2>(new Fb2(path, "/.crosspoint"));
+  if (fb2->load()) {
+    return fb2;
+  }
+
+  Serial.printf("[%lu] [   ] Failed to load FB2\n", millis());
+  return nullptr;
+}
+
 void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   // If coming from a book, start in that book's folder; otherwise start from root
   const auto initialPath = fromBookPath.empty() ? "/" : extractFolderPath(fromBookPath);
@@ -85,6 +104,14 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   exitActivity();
   enterNewActivity(new EpubReaderActivity(
       renderer, mappedInput, std::move(epub), [this, epubPath] { goToLibrary(epubPath); }, [this] { onGoBack(); }));
+}
+
+void ReaderActivity::onGoToFb2Reader(std::unique_ptr<Fb2> fb2) {
+  const auto fb2Path = fb2->getPath();
+  currentBookPath = fb2Path;
+  exitActivity();
+  enterNewActivity(new Fb2ReaderActivity(
+      renderer, mappedInput, std::move(fb2), [this, fb2Path] { goToLibrary(fb2Path); }, [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
@@ -120,6 +147,13 @@ void ReaderActivity::onEnter() {
       return;
     }
     onGoToXtcReader(std::move(xtc));
+  } else if (isFb2File(initialBookPath)) {
+    auto fb2 = loadFb2(initialBookPath);
+    if (!fb2) {
+      onGoBack();
+      return;
+    }
+    onGoToFb2Reader(std::move(fb2));
   } else if (isTxtFile(initialBookPath)) {
     auto txt = loadTxt(initialBookPath);
     if (!txt) {

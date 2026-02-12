@@ -1,6 +1,7 @@
 #include "SleepActivity.h"
 
 #include <Epub.h>
+#include <Fb2.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Txt.h>
@@ -228,6 +229,19 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
+  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".fb2")) {
+    Fb2 lastFb2(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!lastFb2.load(true)) {
+      Serial.println("[SLP] Failed to load last FB2");
+      return (this->*renderNoCoverSleepScreen)();
+    }
+
+    if (!lastFb2.generateCoverBmp()) {
+      Serial.println("[SLP] Failed to generate FB2 cover bmp");
+      return (this->*renderNoCoverSleepScreen)();
+    }
+
+    coverBmpPath = lastFb2.getCoverBmpPath();
   } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".txt")) {
     // Handle TXT file - looks for cover image in the same folder
     Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");

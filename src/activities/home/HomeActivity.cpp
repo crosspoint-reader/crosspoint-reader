@@ -2,6 +2,7 @@
 
 #include <Bitmap.h>
 #include <Epub.h>
+#include <Fb2.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Utf8.h>
@@ -84,6 +85,22 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           }
           coverRendered = false;
           updateRequired = true;
+        } else if (StringUtils::checkFileExtension(book.path, ".fb2")) {
+          Fb2 fb2(book.path, "/.crosspoint");
+          if (fb2.load(false)) {
+            if (!showingLoading) {
+              showingLoading = true;
+              popupRect = GUI.drawPopup(renderer, "Loading...");
+            }
+            GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
+            bool success = fb2.generateThumbBmp(coverHeight);
+            if (!success) {
+              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+              book.coverBmpPath = "";
+            }
+            coverRendered = false;
+            updateRequired = true;
+          }
         } else if (StringUtils::checkFileExtension(book.path, ".xtch") ||
                    StringUtils::checkFileExtension(book.path, ".xtc")) {
           // Handle XTC file
