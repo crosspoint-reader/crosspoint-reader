@@ -4,7 +4,7 @@
 // This logPrintf prepend the timestamp, level and origin to the user-provided message, so that the user only needs to
 // provide the format string for the message itself.
 void logPrintf(const char* level, const char* origin, const char* format, ...) {
-  if (!Serial) {
+  if (!logSerial) {
     return;  // Serial not initialized, skip logging
   }
   va_list args;
