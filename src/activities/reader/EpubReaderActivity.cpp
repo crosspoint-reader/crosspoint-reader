@@ -7,6 +7,8 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "util/Dictionary.h"
+#include "util/LookupHistory.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -196,10 +198,12 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+    const bool hasDictionary = Dictionary::exists();
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
         this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-        SETTINGS.orientation, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
+        SETTINGS.orientation, hasDictionary,
+        [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
@@ -478,6 +482,94 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             }));
         xSemaphoreGive(renderingMutex);
       }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+
+      // Compute margins (same logic as renderScreen)
+      int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+      renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                       &orientedMarginLeft);
+      orientedMarginTop += SETTINGS.screenMargin;
+      orientedMarginLeft += SETTINGS.screenMargin;
+      orientedMarginRight += SETTINGS.screenMargin;
+      orientedMarginBottom += SETTINGS.screenMargin;
+
+      if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
+        auto metrics = UITheme::getInstance().getMetrics();
+        const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
+                                     SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR ||
+                                     SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
+        orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
+                                (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
+      }
+
+      // Load the current page
+      auto pageForLookup = section ? section->loadPageFromSectionFile() : nullptr;
+      const int readerFontId = SETTINGS.getReaderFontId();
+      const std::string bookCachePath = epub->getCachePath();
+      const uint8_t currentOrientation = SETTINGS.orientation;
+
+      exitActivity();
+
+      if (pageForLookup) {
+        enterNewActivity(new DictionaryWordSelectActivity(
+            renderer, mappedInput, std::move(pageForLookup), readerFontId, orientedMarginLeft, orientedMarginTop,
+            bookCachePath, currentOrientation,
+            [this]() {
+              // On back from word select
+              pendingSubactivityExit = true;
+            },
+            [this, bookCachePath, readerFontId, currentOrientation](const std::string& headword,
+                                                                     const std::string& definition) {
+              // On successful lookup - show definition
+              exitActivity();
+              enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, headword, definition,
+                                                                readerFontId, currentOrientation, [this]() {
+                                                                  pendingSubactivityExit = true;
+                                                                }));
+            }));
+      }
+
+      xSemaphoreGive(renderingMutex);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKED_UP_WORDS: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      const std::string bookCachePath = epub->getCachePath();
+      const int readerFontId = SETTINGS.getReaderFontId();
+      const uint8_t currentOrientation = SETTINGS.orientation;
+
+      exitActivity();
+      enterNewActivity(new LookedUpWordsActivity(
+          renderer, mappedInput, bookCachePath,
+          [this]() {
+            // On back from looked up words
+            pendingSubactivityExit = true;
+          },
+          [this, bookCachePath, readerFontId, currentOrientation](const std::string& headword) {
+            // Look up the word and show definition with progress bar
+            Rect popupLayout = GUI.drawPopup(renderer, "Looking up...");
+
+            std::string definition = Dictionary::lookup(headword, [this, &popupLayout](int percent) {
+              GUI.fillPopupProgress(renderer, popupLayout, percent);
+            });
+
+            if (definition.empty()) {
+              GUI.drawPopup(renderer, "Not found");
+              renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+              vTaskDelay(1500 / portTICK_PERIOD_MS);
+              return;
+            }
+
+            exitActivity();
+            enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, headword, definition,
+                                                              readerFontId, currentOrientation, [this]() {
+                                                                pendingSubactivityExit = true;
+                                                              }));
+          }));
+      xSemaphoreGive(renderingMutex);
       break;
     }
   }
