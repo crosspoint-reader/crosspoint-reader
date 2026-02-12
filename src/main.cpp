@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
@@ -31,6 +32,7 @@
 
 HalDisplay display;
 HalGPIO gpio;
+HalPowerManager powerManager;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 Activity* currentActivity;
@@ -181,7 +183,7 @@ void verifyPowerButtonDuration() {
   if (abort) {
     // Button released too early. Returning to sleep.
     // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    gpio.startDeepSleep();
+    powerManager.startDeepSleep(gpio);
   }
 }
 
@@ -204,7 +206,7 @@ void enterDeepSleep() {
   Serial.printf("[%lu] [   ] Power button press calibration value: %lu ms\n", millis(), t2 - t1);
   Serial.printf("[%lu] [   ] Entering deep sleep.\n", millis());
 
-  gpio.startDeepSleep();
+  powerManager.startDeepSleep(gpio);
 }
 
 void onGoHome();
@@ -277,41 +279,11 @@ void setupDisplayAndFonts() {
   Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 
-// FOR TESTING ONLY
-static bool isLowerFreq = false;
-static int normalFreq = 160;  // MHz
-class HalPowerManager {
- public:
-  static void setCpuFrequency(bool lower) {
-    bool changed = false;
-    if (lower && !isLowerFreq) {
-      bool success = setCpuFrequencyMhz(10);
-      if (!success) {
-        Serial.printf("[%lu] [PWR] Failed to set CPU frequency to 10 MHz\n", millis());
-        return;
-      }
-      isLowerFreq = true;
-      changed = true;
-    } else if (!lower && isLowerFreq) {
-      bool success = setCpuFrequencyMhz(normalFreq);
-      if (!success) {
-        Serial.printf("[%lu] [PWR] Failed to set CPU frequency to %d MHz\n", millis(), normalFreq);
-        return;
-      }
-      isLowerFreq = false;
-      changed = true;
-    }
-
-    if (changed) {
-      Serial.printf("[%lu] [PWR] CPU frequency set to %u MHz\n", millis(), getCpuFrequencyMhz());
-    }
-  }
-};
-
 void setup() {
   t1 = millis();
 
   gpio.begin();
+  powerManager.begin();
 
   // Only start serial if USB connected
   if (gpio.isUsbConnected()) {
@@ -333,8 +305,6 @@ void setup() {
     return;
   }
 
-  normalFreq = getCpuFrequencyMhz();
-
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
@@ -349,7 +319,7 @@ void setup() {
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
       Serial.printf("[%lu] [   ] Wakeup reason: After USB Power\n", millis());
-      gpio.startDeepSleep();
+      powerManager.startDeepSleep(gpio);
       break;
     case HalGPIO::WakeupReason::AfterFlash:
       // After flashing, just proceed to boot
@@ -405,8 +375,8 @@ void loop() {
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || (currentActivity && currentActivity->preventAutoSleep())) {
-    lastActivityTime = millis();  // Reset inactivity timer
-    HalPowerManager::setCpuFrequency(false);  // Set normal CPU frequency on user activity
+    lastActivityTime = millis();         // Reset inactivity timer
+    powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
@@ -447,7 +417,7 @@ void loop() {
     static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // 3 seconds
     if (millis() - lastActivityTime >= IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
-      HalPowerManager::setCpuFrequency(true);  // Lower CPU frequency after extended inactivity
+      powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
       delay(50);
     } else {
       // Short delay to prevent tight loop while still being responsive
