@@ -35,8 +35,7 @@ std::string Dictionary::cleanWord(const std::string& word) {
 
   std::string result = word.substr(start, end - start);
   // Lowercase
-  std::transform(result.begin(), result.end(), result.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
+  std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
   return result;
 }
 

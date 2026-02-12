@@ -7,8 +7,6 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "util/Dictionary.h"
-#include "util/LookupHistory.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -17,6 +15,8 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Dictionary.h"
+#include "util/LookupHistory.h"
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
@@ -202,8 +202,7 @@ void EpubReaderActivity::loop() {
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
         this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-        SETTINGS.orientation, hasDictionary,
-        [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
+        SETTINGS.orientation, hasDictionary, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
@@ -498,9 +497,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
       if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
         auto metrics = UITheme::getInstance().getMetrics();
-        const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
-                                     SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR ||
-                                     SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
+        const bool showProgressBar =
+            SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
+            SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR ||
+            SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
         orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
                                 (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
       }
@@ -522,13 +522,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               pendingSubactivityExit = true;
             },
             [this, bookCachePath, readerFontId, currentOrientation](const std::string& headword,
-                                                                     const std::string& definition) {
+                                                                    const std::string& definition) {
               // On successful lookup - show definition
               exitActivity();
               enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, headword, definition,
-                                                                readerFontId, currentOrientation, [this]() {
-                                                                  pendingSubactivityExit = true;
-                                                                }));
+                                                                readerFontId, currentOrientation,
+                                                                [this]() { pendingSubactivityExit = true; }));
             }));
       }
 
@@ -552,9 +551,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             // Look up the word and show definition with progress bar
             Rect popupLayout = GUI.drawPopup(renderer, "Looking up...");
 
-            std::string definition = Dictionary::lookup(headword, [this, &popupLayout](int percent) {
-              GUI.fillPopupProgress(renderer, popupLayout, percent);
-            });
+            std::string definition = Dictionary::lookup(
+                headword, [this, &popupLayout](int percent) { GUI.fillPopupProgress(renderer, popupLayout, percent); });
 
             if (definition.empty()) {
               GUI.drawPopup(renderer, "Not found");
@@ -564,10 +562,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             }
 
             exitActivity();
-            enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, headword, definition,
-                                                              readerFontId, currentOrientation, [this]() {
-                                                                pendingSubactivityExit = true;
-                                                              }));
+            enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, headword, definition, readerFontId,
+                                                              currentOrientation,
+                                                              [this]() { pendingSubactivityExit = true; }));
           }));
       xSemaphoreGive(renderingMutex);
       break;

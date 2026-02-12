@@ -51,7 +51,7 @@ void DictionaryDefinitionActivity::wrapText() {
   const int screenWidth = renderer.getScreenWidth();
   const int lineHeight = renderer.getLineHeight(readerFontId);
   const int sidePadding = landscape ? 50 : 20;
-  constexpr int topArea = 50;    // Space for title
+  constexpr int topArea = 50;     // Space for title
   constexpr int bottomArea = 50;  // Space for button hints + page indicator
   const int maxWidth = screenWidth - 2 * sidePadding;
 

@@ -12,9 +12,8 @@
 class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        const std::string& headword, const std::string& definition,
-                                        int readerFontId, uint8_t orientation,
-                                        const std::function<void()>& onBack)
+                                        const std::string& headword, const std::string& definition, int readerFontId,
+                                        uint8_t orientation, const std::function<void()>& onBack)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         definition(definition),

@@ -146,8 +146,7 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords() {
   }
 
   // Remove empty rows that may result from merging (e.g., a row whose only word was a continuation)
-  rows.erase(std::remove_if(rows.begin(), rows.end(), [](const Row& r) { return r.wordIndices.empty(); }),
-             rows.end());
+  rows.erase(std::remove_if(rows.begin(), rows.end(), [](const Row& r) { return r.wordIndices.empty(); }), rows.end());
 }
 
 void DictionaryWordSelectActivity::loop() {

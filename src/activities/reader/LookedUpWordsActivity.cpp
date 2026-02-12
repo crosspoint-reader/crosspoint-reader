@@ -182,8 +182,8 @@ void LookedUpWordsActivity::renderScreen() {
     if (!words.empty()) {
       const char* deleteHint = "Hold select to delete";
       const int hintWidth = renderer.getTextWidth(SMALL_FONT_ID, deleteHint);
-      renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - hintWidth) / 2,
-                        renderer.getScreenHeight() - 70, deleteHint);
+      renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - hintWidth) / 2, renderer.getScreenHeight() - 70,
+                        deleteHint);
     }
 
     // Normal button hints
