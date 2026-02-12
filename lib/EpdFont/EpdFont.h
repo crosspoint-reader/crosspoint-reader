@@ -2,16 +2,15 @@
 #include "EpdFontData.h"
 
 class EpdFont {
-  void getTextBounds(const char* string, int startX, int startY, int* minX, int* minY, int* maxX, int* maxY) const;
+  void getTextBounds(const char* string, int startX, int startY, int* minX, int* minY, int* maxX, int* maxY,
+                     bool kerningEnabled) const;
 
  public:
-  static bool ligaturesEnabled;
-
   const EpdFontData* data;
   explicit EpdFont(const EpdFontData* data) : data(data) {}
   ~EpdFont() = default;
-  void getTextDimensions(const char* string, int* w, int* h) const;
-  bool hasPrintableChars(const char* string) const;
+  void getTextDimensions(const char* string, int* w, int* h, bool kerningEnabled) const;
+  bool hasPrintableChars(const char* string, bool kerningEnabled) const;
 
   const EpdGlyph* getGlyph(uint32_t cp) const;
 

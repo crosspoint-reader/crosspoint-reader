@@ -41,6 +41,7 @@ inline std::vector<SettingInfo> getSettingsList() {
                         {"Justify", "Left", "Center", "Right", "Book's Style"}, "paragraphAlignment", "Reader"),
       SettingInfo::Toggle("Book's Embedded Style", &CrossPointSettings::embeddedStyle, "embeddedStyle", "Reader"),
       SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled, "hyphenationEnabled", "Reader"),
+      SettingInfo::Toggle("Kerning & Ligatures", &CrossPointSettings::kerningEnabled, "kerningEnabled", "Reader"),
       SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
                         {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}, "orientation", "Reader"),
       SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing,
