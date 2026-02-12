@@ -284,7 +284,7 @@ void DictionaryWordSelectActivity::loop() {
           xSemaphoreGive(renderingMutex);
         },
         [this, &cancelled]() -> bool {
-          mappedInput.updateInput();
+          mappedInput.update();
           if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
             cancelled = true;
             return true;
