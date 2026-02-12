@@ -225,6 +225,9 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
+  // Sync renderer state immediately so the next render uses the new values
+  renderer.setInverseDisplay(SETTINGS.inverseDisplay);
+
   SETTINGS.saveToFile();
 }
 

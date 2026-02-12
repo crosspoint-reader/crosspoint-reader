@@ -33,6 +33,8 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
+  bool inverseDisplay;
+  mutable bool fullRefreshPending = false;
   uint8_t* frameBuffer = nullptr;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
@@ -46,7 +48,7 @@ class GfxRenderer {
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
-      : display(halDisplay), renderMode(BW), orientation(Portrait), fadingFix(false) {}
+      : display(halDisplay), renderMode(BW), orientation(Portrait), fadingFix(false), inverseDisplay(false) {}
   ~GfxRenderer() { freeBwBufferChunks(); }
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
@@ -64,6 +66,14 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
+
+  // Inverse display: auto-inverts drawPixel and clearScreen in BW render mode
+  void setInverseDisplay(const bool enabled) {
+    if (inverseDisplay != enabled) {
+      fullRefreshPending = true;
+    }
+    inverseDisplay = enabled;
+  }
 
   // Screen ops
   int getScreenWidth() const;
