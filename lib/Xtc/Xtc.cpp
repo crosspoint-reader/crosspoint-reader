@@ -119,12 +119,12 @@ bool Xtc::generateCoverBmp() const {
   }
 
   if (!loaded || !parser) {
-    LOG_DBG("XTC", "Cannot generate cover BMP, file not loaded");
+    LOG_ERR("XTC", "Cannot generate cover BMP, file not loaded");
     return false;
   }
 
   if (parser->getPageCount() == 0) {
-    LOG_DBG("XTC", "No pages in XTC file");
+    LOG_ERR("XTC", "No pages in XTC file");
     return false;
   }
 
@@ -311,12 +311,12 @@ bool Xtc::generateThumbBmp(int height) const {
   }
 
   if (!loaded || !parser) {
-    LOG_DBG("XTC", "Cannot generate thumb BMP, file not loaded");
+    LOG_ERR("XTC", "Cannot generate thumb BMP, file not loaded");
     return false;
   }
 
   if (parser->getPageCount() == 0) {
-    LOG_DBG("XTC", "No pages in XTC file");
+    LOG_ERR("XTC", "No pages in XTC file");
     return false;
   }
 

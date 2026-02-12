@@ -240,13 +240,13 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
       if (itemSize == 0) {
         const std::string path = FsHelpers::normalisePath(spineEntry.href);
         if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
-          LOG_DBG("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
+          LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
         }
       }
     } else {
       const std::string path = FsHelpers::normalisePath(spineEntry.href);
       if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
-        LOG_DBG("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
+        LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
       }
     }
 
@@ -393,12 +393,12 @@ bool BookMetadataCache::load() {
 
 BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) {
   if (!loaded) {
-    LOG_DBG("BMC", "getSpineEntry called but cache not loaded");
+    LOG_ERR("BMC", "getSpineEntry called but cache not loaded");
     return {};
   }
 
   if (index < 0 || index >= static_cast<int>(spineCount)) {
-    LOG_DBG("BMC", "getSpineEntry index %d out of range", index);
+    LOG_ERR("BMC", "getSpineEntry index %d out of range", index);
     return {};
   }
 
@@ -412,12 +412,12 @@ BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) 
 
 BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
   if (!loaded) {
-    LOG_DBG("BMC", "getTocEntry called but cache not loaded");
+    LOG_ERR("BMC", "getTocEntry called but cache not loaded");
     return {};
   }
 
   if (index < 0 || index >= static_cast<int>(tocCount)) {
-    LOG_DBG("BMC", "getTocEntry index %d out of range", index);
+    LOG_ERR("BMC", "getTocEntry index %d out of range", index);
     return {};
   }
 

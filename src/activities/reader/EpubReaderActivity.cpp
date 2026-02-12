@@ -640,7 +640,7 @@ void EpubReaderActivity::renderScreen() {
   {
     auto p = section->loadPageFromSectionFile();
     if (!p) {
-      LOG_DBG("ERS", "Failed to load page from SD - clearing section cache");
+      LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
       section->clearCache();
       section.reset();
       return renderScreen();
@@ -666,7 +666,7 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     f.close();
     LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d", spineIndex, currentPage);
   } else {
-    LOG_DBG("ERS", "Could not save progress!");
+    LOG_ERR("ERS", "Could not save progress!");
   }
 }
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,

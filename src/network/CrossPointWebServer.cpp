@@ -123,7 +123,7 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after WebServer allocation: %d bytes", ESP.getFreeHeap());
 
   if (!server) {
-    LOG_DBG("WEB", "Failed to create WebServer!");
+    LOG_ERR("WEB", "Failed to create WebServer!");
     return;
   }
 
@@ -808,7 +808,7 @@ void CrossPointWebServer::handleRename() const {
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
-    LOG_DBG("WEB", "Failed to rename file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    LOG_ERR("WEB", "Failed to rename file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(500, "text/plain", "Failed to rename file");
   }
 }
@@ -901,7 +901,7 @@ void CrossPointWebServer::handleMove() const {
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");
   } else {
-    LOG_DBG("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    LOG_ERR("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(500, "text/plain", "Failed to move file");
   }
 }
@@ -983,7 +983,7 @@ void CrossPointWebServer::handleDelete() const {
     LOG_DBG("WEB", "Successfully deleted: %s", itemPath.c_str());
     server->send(200, "text/plain", "Deleted successfully");
   } else {
-    LOG_DBG("WEB", "Failed to delete: %s", itemPath.c_str());
+    LOG_ERR("WEB", "Failed to delete: %s", itemPath.c_str());
     server->send(500, "text/plain", "Failed to delete item");
   }
 }
