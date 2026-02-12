@@ -130,7 +130,8 @@ class BaseTheme {
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
-  virtual void drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const;
+  virtual void drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress,
+                                      const int additionalYPadding = 0) const;
   virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const;
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const;
