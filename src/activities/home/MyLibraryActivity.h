@@ -7,11 +7,11 @@
 #include <string>
 #include <vector>
 
-#include "../Activity.h"
+#include "../ActivityWithSubactivity.h"
 #include "RecentBooksStore.h"
 #include "util/ButtonNavigator.h"
 
-class MyLibraryActivity final : public Activity {
+class MyLibraryActivity final : public ActivityWithSubactivity {
  private:
   enum class State { BROWSING, DELETE_MENU, DELETE_CONFIRM };
 
@@ -44,12 +44,15 @@ class MyLibraryActivity final : public Activity {
   // Delete
   void deleteSelectedItem();
 
+  // Rename
+  void startRename();
+
  public:
   explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                              const std::function<void()>& onGoHome,
                              const std::function<void(const std::string& path)>& onSelectBook,
                              std::string initialPath = "/")
-      : Activity("MyLibrary", renderer, mappedInput),
+      : ActivityWithSubactivity("MyLibrary", renderer, mappedInput),
         basepath(initialPath.empty() ? "/" : std::move(initialPath)),
         onSelectBook(onSelectBook),
         onGoHome(onGoHome) {}

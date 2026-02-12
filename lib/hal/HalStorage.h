@@ -29,6 +29,7 @@ class HalStorage {
   bool exists(const char* path);
   bool remove(const char* path);
   bool rmdir(const char* path);
+  bool rename(const char* oldPath, const char* newPath);
 
   bool openFileForRead(const char* moduleName, const char* path, FsFile& file);
   bool openFileForRead(const char* moduleName, const std::string& path, FsFile& file);

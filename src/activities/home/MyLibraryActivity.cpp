@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
@@ -126,7 +127,7 @@ void MyLibraryActivity::onEnter() {
 }
 
 void MyLibraryActivity::onExit() {
-  Activity::onExit();
+  ActivityWithSubactivity::onExit();
 
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -141,6 +142,12 @@ void MyLibraryActivity::onExit() {
 }
 
 void MyLibraryActivity::loop() {
+  // Delegate to subactivity (e.g. keyboard for rename)
+  if (subActivity) {
+    subActivity->loop();
+    return;
+  }
+
   // Delete confirmation state
   if (state == State::DELETE_CONFIRM) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
@@ -163,9 +170,13 @@ void MyLibraryActivity::loop() {
       updateRequired = true;
       return;
     }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+      // Volume down = Rename → open keyboard
+      startRename();
+      return;
+    }
     // Any other press cancels the menu
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Down) ||
         mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       state = State::BROWSING;
       skipNextConfirmRelease = true;
@@ -305,6 +316,74 @@ void MyLibraryActivity::deleteSelectedItem() {
   updateRequired = true;
 }
 
+void MyLibraryActivity::startRename() {
+  if (selectorIndex >= files.size()) return;
+
+  std::string itemName = files[selectorIndex];
+  const bool isDir = !itemName.empty() && itemName.back() == '/';
+  if (isDir) itemName = itemName.substr(0, itemName.length() - 1);
+
+  // For files, strip the extension so the user only edits the name
+  std::string extension;
+  if (!isDir) {
+    const auto dotPos = itemName.rfind('.');
+    if (dotPos != std::string::npos) {
+      extension = itemName.substr(dotPos);
+      itemName = itemName.substr(0, dotPos);
+    }
+  }
+
+  state = State::BROWSING;
+
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  exitActivity();
+  enterNewActivity(new KeyboardEntryActivity(
+      renderer, mappedInput, "Rename", itemName, 10,
+      0,      // unlimited length
+      false,  // not password
+      [this, isDir, extension](const std::string& newName) {
+        if (!newName.empty() && selectorIndex < files.size()) {
+          std::string dir = basepath;
+          if (dir.back() != '/') dir += "/";
+
+          std::string oldItemName = files[selectorIndex];
+          if (isDir) oldItemName = oldItemName.substr(0, oldItemName.length() - 1);
+
+          const std::string oldPath = dir + oldItemName;
+          const std::string newFileName = newName + extension;
+          const std::string newPath = dir + (isDir ? newName : newFileName);
+
+          Serial.printf("[%lu] [MY_LIBRARY] Renaming: %s -> %s\n", millis(), oldPath.c_str(), newPath.c_str());
+
+          if (Storage.rename(oldPath.c_str(), newPath.c_str())) {
+            Serial.printf("[%lu] [MY_LIBRARY] Renamed successfully\n", millis());
+
+            if (!isDir) {
+              // Update recent books store if this book was tracked
+              const auto bookData = RECENT_BOOKS.getDataFromBook(oldPath);
+              if (!bookData.path.empty()) {
+                RECENT_BOOKS.removeBook(oldPath);
+                RECENT_BOOKS.addBook(newPath, bookData.title, bookData.author, bookData.coverBmpPath);
+              }
+            }
+
+            loadFiles();
+            // Select the renamed item
+            selectorIndex = findEntry(isDir ? newName + "/" : newFileName);
+          } else {
+            Serial.printf("[%lu] [MY_LIBRARY] Failed to rename\n", millis());
+          }
+        }
+        exitActivity();
+        updateRequired = true;
+      },
+      [this]() {
+        exitActivity();
+        updateRequired = true;
+      }));
+  xSemaphoreGive(renderingMutex);
+}
+
 void MyLibraryActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
@@ -369,7 +448,7 @@ void MyLibraryActivity::render() const {
 
   // Draw side button menu overlay when in DELETE_MENU state
   if (state == State::DELETE_MENU) {
-    GUI.drawSideButtonHints(renderer, "Delete", "");
+    GUI.drawSideButtonHints(renderer, "Delete", "Rename");
   }
 
   renderer.displayBuffer();

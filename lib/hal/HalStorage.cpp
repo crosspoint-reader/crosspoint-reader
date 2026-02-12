@@ -38,6 +38,14 @@ bool HalStorage::remove(const char* path) { return SDCard.remove(path); }
 
 bool HalStorage::rmdir(const char* path) { return SDCard.rmdir(path); }
 
+bool HalStorage::rename(const char* oldPath, const char* newPath) {
+  FsFile file = open(oldPath, O_RDWR);
+  if (!file) return false;
+  bool success = file.rename(newPath);
+  file.close();
+  return success;
+}
+
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, FsFile& file) {
   return SDCard.openFileForRead(moduleName, path, file);
 }
