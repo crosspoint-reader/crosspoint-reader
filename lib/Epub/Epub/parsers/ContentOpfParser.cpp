@@ -303,23 +303,22 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   // parse the guide
   if (self->state == IN_GUIDE && (strcmp(name, "reference") == 0 || strcmp(name, "opf:reference") == 0)) {
     std::string type;
-    std::string textHref;
+    std::string guideHref;
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "type") == 0) {
         type = atts[i + 1];
-        if (type == "text" || type == "start") {
-          continue;
-        } else {
-          Serial.printf("[%lu] [COF] Skipping non-text reference in guide: %s\n", millis(), type.c_str());
-          break;
-        }
       } else if (strcmp(atts[i], "href") == 0) {
-        textHref = FsHelpers::normalisePath(self->baseContentPath + atts[i + 1]);
+        guideHref = FsHelpers::normalisePath(self->baseContentPath + atts[i + 1]);
       }
     }
-    if ((type == "text" || (type == "start" && !self->textReferenceHref.empty())) && (textHref.length() > 0)) {
-      Serial.printf("[%lu] [COF] Found %s reference in guide: %s.\n", millis(), type.c_str(), textHref.c_str());
-      self->textReferenceHref = textHref;
+    if (!guideHref.empty()) {
+      if (type == "text" || (type == "start" && !self->textReferenceHref.empty())) {
+        Serial.printf("[%lu] [COF] Found %s reference in guide: %s.\n", millis(), type.c_str(), guideHref.c_str());
+        self->textReferenceHref = guideHref;
+      } else if ((type == "cover" || type == "cover-page") && self->guideCoverPageHref.empty()) {
+        Serial.printf("[%lu] [COF] Found cover reference in guide: %s\n", millis(), guideHref.c_str());
+        self->guideCoverPageHref = guideHref;
+      }
     }
     return;
   }
