@@ -50,8 +50,6 @@ class DictionaryWordSelectActivity final : public Activity {
     std::vector<int> wordIndices;
   };
 
-  static constexpr int SIDE_HINT_WIDTH = 14;
-
   std::unique_ptr<Page> page;
   int fontId;
   int marginLeft;

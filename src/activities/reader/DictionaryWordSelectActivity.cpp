@@ -8,7 +8,6 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
 #include "util/Dictionary.h"
 #include "util/LookupHistory.h"
 
@@ -257,14 +256,32 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
 
-    // Show looking up popup with progress bar
+    // Show looking up popup, then release mutex so display task can run
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     Rect popupLayout = GUI.drawPopup(renderer, "Looking up...");
-
-    std::string definition = Dictionary::lookup(cleaned, [this, &popupLayout](int percent) {
-      GUI.fillPopupProgress(renderer, popupLayout, percent);
-    });
     xSemaphoreGive(renderingMutex);
+
+    bool cancelled = false;
+    std::string definition = Dictionary::lookup(
+        cleaned,
+        [this, &popupLayout](int percent) {
+          xSemaphoreTake(renderingMutex, portMAX_DELAY);
+          GUI.fillPopupProgress(renderer, popupLayout, percent);
+          xSemaphoreGive(renderingMutex);
+        },
+        [this, &cancelled]() -> bool {
+          mappedInput.updateInput();
+          if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+            cancelled = true;
+            return true;
+          }
+          return false;
+        });
+
+    if (cancelled) {
+      updateRequired = true;
+      return;
+    }
 
     if (definition.empty()) {
       GUI.drawPopup(renderer, "Not found");
@@ -310,46 +327,6 @@ void DictionaryWordSelectActivity::renderScreen() {
       renderer.fillRect(cont.screenX - 1, cont.screenY - 1, cont.width + 2, lineHeight + 2, true);
       renderer.drawText(fontId, cont.screenX, cont.screenY, cont.text.c_str(), false);
     }
-  }
-
-  const int screenW = renderer.getScreenWidth();
-  const int screenH = renderer.getScreenHeight();
-  const bool landscape = isLandscape();
-  const bool inverted = isInverted();
-
-  if (landscape) {
-    // In landscape, drawButtonHints renders text sideways (it forces portrait orientation).
-    // Draw a simple readable hint line at the bottom of the landscape view instead.
-    const char* hint = "\xC2\xAB Back  |  Lookup  |  ^ v  |  < >";
-    const int hintW = renderer.getTextWidth(SMALL_FONT_ID, hint);
-    renderer.fillRect(0, screenH - 22, screenW, 22, false);
-    renderer.drawText(SMALL_FONT_ID, (screenW - hintW) / 2, screenH - 20, hint);
-  } else {
-    // Portrait / Inverted: draw side button indicators and use drawButtonHints
-
-    // Side indicators on the edge where the physical side buttons are:
-    // Portrait = right edge, Inverted = left edge
-    const int hintStripX = inverted ? 0 : (screenW - SIDE_HINT_WIDTH);
-
-    renderer.fillRect(hintStripX, 0, SIDE_HINT_WIDTH, screenH, false);
-
-    // Symbols are the same for portrait and inverted: the physical button positions
-    // and their actions both flip in inverted, so the net symbols stay the same.
-    const char* topSym = "^";
-    const char* botSym = "v";
-
-    const int symW1 = renderer.getTextWidth(SMALL_FONT_ID, topSym);
-    const int symW2 = renderer.getTextWidth(SMALL_FONT_ID, botSym);
-    const int centerY = screenH / 2;
-    constexpr int gap = 30;
-
-    renderer.drawText(SMALL_FONT_ID, hintStripX + (SIDE_HINT_WIDTH - symW1) / 2, centerY - gap, topSym);
-    renderer.drawText(SMALL_FONT_ID, hintStripX + (SIDE_HINT_WIDTH - symW2) / 2, centerY + gap, botSym);
-
-    // Front button hints: labels match the swapped actions for inverted
-    const auto labels = inverted ? mappedInput.mapLabels("\xC2\xAB Back", "Lookup", ">", "<")
-                                 : mappedInput.mapLabels("\xC2\xAB Back", "Lookup", "<", ">");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
