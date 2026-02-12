@@ -21,3 +21,4 @@ process fr
 process de
 process es
 process ru
+process it
