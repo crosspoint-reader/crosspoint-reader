@@ -17,16 +17,15 @@
 #include "fontIds.h"
 
 namespace {
-// AP Mode configuration
-constexpr const char* AP_SSID = "CrossPoint-Reader";
-constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
-constexpr const char* AP_HOSTNAME = "crosspoint";
-constexpr uint8_t AP_CHANNEL = 1;
-constexpr uint8_t AP_MAX_CONNECTIONS = 4;
+  // AP Mode configuration
+  constexpr const char* AP_SSID = "CrossPoint-Reader";
+  constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
+  constexpr uint8_t AP_CHANNEL = 1;
+  constexpr uint8_t AP_MAX_CONNECTIONS = 4;
 
-// DNS server for captive portal (redirects all DNS queries to our IP)
-DNSServer* dnsServer = nullptr;
-constexpr uint16_t DNS_PORT = 53;
+  // DNS server for captive portal (redirects all DNS queries to our IP)
+  DNSServer* dnsServer = nullptr;
+  constexpr uint16_t DNS_PORT = 53;
 }  // namespace
 
 void CrossPointWebServerActivity::taskTrampoline(void* param) {
@@ -49,6 +48,13 @@ void CrossPointWebServerActivity::onEnter() {
   connectedSSID.clear();
   lastHandleClientTime = 0;
   updateRequired = true;
+
+  // Cache hostname for display
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macStr[16];
+  snprintf(macStr, sizeof(macStr), "XTeinkX4-%02x%02x%02x", mac[3], mac[4], mac[5]);
+  hostname = std::string(macStr);
 
   xTaskCreate(&CrossPointWebServerActivity::taskTrampoline, "WebServerActivityTask",
               2048,               // Stack size
@@ -182,8 +188,8 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     exitActivity();
 
     // Start mDNS for hostname resolution
-    if (MDNS.begin(AP_HOSTNAME)) {
-      Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), AP_HOSTNAME);
+    if (MDNS.begin(hostname.c_str())) {
+      Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), hostname);
     }
 
     // Start the web server
@@ -235,8 +241,8 @@ void CrossPointWebServerActivity::startAccessPoint() {
   Serial.printf("[%lu] [WEBACT] IP: %s\n", millis(), connectedIP.c_str());
 
   // Start mDNS for hostname resolution
-  if (MDNS.begin(AP_HOSTNAME)) {
-    Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), AP_HOSTNAME);
+  if (MDNS.begin(hostname.c_str())) {
+    Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), hostname);
   } else {
     Serial.printf("[%lu] [WEBACT] WARNING: mDNS failed to start\n", millis());
   }
@@ -443,7 +449,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     startY += 6 * 29 + 3 * LINE_SPACING;
     // Show primary URL (hostname)
-    std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
+    std::string hostnameUrl = std::string("http://") + hostname + ".local/";
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str(), true, EpdFontFamily::BOLD);
 
     // Show IP address as fallback
@@ -472,7 +478,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 2, webInfo.c_str(), true, EpdFontFamily::BOLD);
 
     // Also show hostname URL
-    std::string hostnameUrl = std::string("or http://") + AP_HOSTNAME + ".local/";
+    std::string hostnameUrl = std::string("or http://") + hostname + ".local/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str());
 
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, "Open this URL in your browser");

@@ -43,6 +43,9 @@ class CalibreConnectActivity final : public ActivityWithSubactivity {
   void startWebServer();
   void stopWebServer();
 
+  // Cached MAC address string for display
+  std::string hostname;
+
  public:
   explicit CalibreConnectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                   const std::function<void()>& onComplete)

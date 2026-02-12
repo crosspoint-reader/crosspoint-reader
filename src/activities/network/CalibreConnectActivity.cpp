@@ -10,10 +10,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-constexpr const char* HOSTNAME = "crosspoint";
-}  // namespace
-
 void CalibreConnectActivity::taskTrampoline(void* param) {
   auto* self = static_cast<CalibreConnectActivity*>(param);
   self->displayTaskLoop();
@@ -34,6 +30,13 @@ void CalibreConnectActivity::onEnter() {
   lastCompleteName.clear();
   lastCompleteAt = 0;
   exitRequested = false;
+
+  // Cache hostname for display
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macStr[16];
+  snprintf(macStr, sizeof(macStr), "XTeinkX4-%02x%02x%02x", mac[3], mac[4], mac[5]);
+  hostname = std::string(macStr);
 
   xTaskCreate(&CalibreConnectActivity::taskTrampoline, "CalibreConnectTask",
               2048,               // Stack size
@@ -94,9 +97,9 @@ void CalibreConnectActivity::startWebServer() {
   state = CalibreConnectState::SERVER_STARTING;
   updateRequired = true;
 
-  if (MDNS.begin(HOSTNAME)) {
+  if (MDNS.begin(hostname.c_str())) {
     // mDNS is optional for the Calibre plugin but still helpful for users.
-    Serial.printf("[%lu] [CAL] mDNS started: http://%s.local/\n", millis(), HOSTNAME);
+    Serial.printf("[%lu] [CAL] mDNS started: http://%s.local/\n", millis(), hostname);
   }
 
   webServer.reset(new CrossPointWebServer());
