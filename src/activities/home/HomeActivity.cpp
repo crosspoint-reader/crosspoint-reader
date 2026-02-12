@@ -64,12 +64,15 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   for (RecentBook& book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      if (!Epub::isValidThumbnailBmp(coverPath)) {
         // If epub, try to load the metadata for title/author and cover
         if (StringUtils::checkFileExtension(book.path, ".epub")) {
           Epub epub(book.path, "/.crosspoint");
-          // Skip loading css since we only need metadata here
-          epub.load(false, true);
+          // Try fast cache-only load first; only build cache if missing
+          if (!epub.load(false, true)) {
+            // Cache missing — build it (may take longer)
+            epub.load(true, true);
+          }
 
           // Try to generate thumbnail image for Continue Reading card
           if (!showingLoading) {
@@ -81,6 +84,10 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           if (!success) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
+          } else {
+            const std::string thumbPath = epub.getThumbBmpPath(coverHeight);
+            RECENT_BOOKS.updateBook(book.path, book.title, book.author, thumbPath);
+            book.coverBmpPath = thumbPath;
           }
           coverRendered = false;
           updateRequired = true;
@@ -99,10 +106,20 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
+            } else {
+              const std::string thumbPath = xtc.getThumbBmpPath(coverHeight);
+              RECENT_BOOKS.updateBook(book.path, book.title, book.author, thumbPath);
+              book.coverBmpPath = thumbPath;
             }
             coverRendered = false;
             updateRequired = true;
           }
+        } else {
+          // For other formats, if thumbnail is invalid, clear it
+          RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+          book.coverBmpPath = "";
+          coverRendered = false;
+          updateRequired = true;
         }
       }
     }
