@@ -273,7 +273,7 @@
       let html = '<select id="' + id + '" onchange="markChanged()">';
       setting.options.forEach(function(opt, idx) {
         const selected = idx === setting.value ? ' selected' : '';
-        html += '<option value="' + idx + '"' + selected + '>' + escapeHtml(opt) + '</option>';
+        html += '<option value="' + idx + '"' + selected + '>' + escapeHtml(t(opt)) + '</option>';
       });
       html += '</select>';
       return html;
@@ -343,10 +343,10 @@
       let html = '';
 
       for (const category in groups) {
-        html += '<div class="card"><h2>' + escapeHtml(category) + '</h2>';
+        html += '<div class="card"><h2>' + escapeHtml(t(category)) + '</h2>';
         groups[category].forEach(function(s) {
           html += '<div class="setting-row">' +
-            '<span class="setting-name">' + escapeHtml(s.name) + '</span>' +
+            '<span class="setting-name">' + escapeHtml(t(s.name)) + '</span>' +
             '<span class="setting-control">' + renderControl(s) + '</span>' +
             '</div>';
         });

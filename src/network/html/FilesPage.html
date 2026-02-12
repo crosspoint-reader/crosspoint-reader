@@ -678,7 +678,7 @@
     <button class="modal-close" onclick="closeUploadModal()">&times;</button>
     <h3>📤 <span data-i18n="Upload file">Upload file</span></h3>
     <div class="upload-form">
-      <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
+      <p class="file-info"><span data-i18n="Select a file to upload to">Select a file to upload to</span> <strong id="uploadPathDisplay"></strong></p>
       <input type="file" id="fileInput" onchange="validateFile()" multiple>
       <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled data-i18n="Upload">Upload</button>
       <div id="progress-container">
@@ -695,7 +695,7 @@
     <button class="modal-close" onclick="closeFolderModal()">&times;</button>
     <h3>📁 <span data-i18n="New Folder">New Folder</span></h3>
     <div class="folder-form">
-      <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
+      <p class="file-info"><span data-i18n="Create a new folder in">Create a new folder in</span> <strong id="folderPathDisplay"></strong></p>
       <input type="text" id="folderName" class="folder-input" placeholder="Folder name...">
       <button class="folder-btn" onclick="createFolder()" data-i18n="Create Folder">Create Folder</button>
     </div>
@@ -725,7 +725,7 @@
     <button class="modal-close" onclick="closeRenameModal()">&times;</button>
     <h3>✏️ <span data-i18n="Rename File">Rename File</span></h3>
     <div class="folder-form">
-      <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
+      <p class="file-info"><span data-i18n="Renaming">Renaming</span> <strong id="renameItemName"></strong></p>
       <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
       <input type="hidden" id="renameItemPath">
       <button class="rename-btn-confirm" onclick="confirmRename()" data-i18n="Rename">Rename</button>
@@ -740,7 +740,7 @@
     <button class="modal-close" onclick="closeMoveModal()">&times;</button>
     <h3>📂 <span data-i18n="Move File">Move File</span></h3>
     <div class="folder-form">
-      <p class="file-info">Moving <strong id="moveItemName"></strong></p>
+      <p class="file-info"><span data-i18n="Moving">Moving</span> <strong id="moveItemName"></strong></p>
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
       <datalist id="moveFolderOptions"></datalist>
       <input type="hidden" id="moveItemPath">
@@ -1471,7 +1471,11 @@ function retryAllFailedUploads() {
 
   // i18n + init
   fetch('/api/i18n').then(function(r){return r.json();}).then(function(d){window._T=d;}).catch(function(){}).finally(function(){
-    if(window._T){document.querySelectorAll('[data-i18n]').forEach(function(el){var v=window._T[el.getAttribute('data-i18n')];if(v)el.textContent=v;});}
+    if(window._T){
+      document.querySelectorAll('[data-i18n]').forEach(function(el){var v=window._T[el.getAttribute('data-i18n')];if(v)el.textContent=v;});
+      var fn=document.getElementById('folderName');if(fn)fn.placeholder=t('Folder name...');
+      var rn=document.getElementById('renameNewName');if(rn)rn.placeholder=t('New file name...');
+    }
     hydrate();
   });
 </script>
