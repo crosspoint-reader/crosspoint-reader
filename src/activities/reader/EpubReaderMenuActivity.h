@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "../ActivityWithSubactivity.h"
-#include "util/ButtonNavigator.h"
 
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  public:
@@ -49,7 +48,6 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
-  ButtonNavigator buttonNavigator;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
   const std::vector<const char*> orientationLabels = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"};

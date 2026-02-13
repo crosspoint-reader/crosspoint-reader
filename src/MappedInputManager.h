@@ -15,7 +15,6 @@ class MappedInputManager {
 
   explicit MappedInputManager(HalGPIO& gpio) : gpio(gpio) {}
 
-  void update() const { gpio.update(); }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;

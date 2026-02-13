@@ -18,6 +18,8 @@ inline std::vector<SettingInfo> getSettingsList() {
                         "sleepScreenCoverMode", "Display"),
       SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
                         {"None", "Contrast", "Inverted"}, "sleepScreenCoverFilter", "Display"),
+      SettingInfo::Toggle("Sleep Screen Overlay", &CrossPointSettings::sleepScreenOverlay, "sleepScreenOverlay",
+                          "Display"),
       SettingInfo::Enum(
           "Status Bar", &CrossPointSettings::statusBar,
           {"None", "No Progress", "Full w/ Percentage", "Full w/ Book Bar", "Book Bar Only", "Full w/ Chapter Bar"},
