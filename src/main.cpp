@@ -148,29 +148,24 @@ void enterNewActivity(Activity* activity) {
 void verifyPowerButtonDuration() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
     // Fast path for short press
-    // Needed because inputManager.isPressed() may take up to ~500ms to return
-    // the correct state
+    // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
     return;
   }
 
-  // Give the user up to 1000ms to start holding the power button, and must hold
-  // for SETTINGS.getPowerButtonDuration()
+  // Give the user up to 1000ms to start holding the power button, and must hold for SETTINGS.getPowerButtonDuration()
   const auto start = millis();
   bool abort = false;
-  // Subtract the current time, because inputManager only starts counting the
-  // HeldTime from the first update() This way, we remove the time we already
-  // took to reach here from the duration, assuming the button was held until
-  // now from millis()==0 (i.e. device start time).
+  // Subtract the current time, because inputManager only starts counting the HeldTime from the first update()
+  // This way, we remove the time we already took to reach here from the duration,
+  // assuming the button was held until now from millis()==0 (i.e. device start time).
   const uint16_t calibration = start;
   const uint16_t calibratedPressDuration =
       (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
 
   gpio.update();
-  // Needed because inputManager.isPressed() may take up to ~500ms to return the
-  // correct state
+  // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
   while (!gpio.isPressed(HalGPIO::BTN_POWER) && millis() - start < 1000) {
-    delay(10);  // only wait 10ms each iteration to not delay too much in case of
-                // short configured duration.
+    delay(10);  // only wait 10ms each iteration to not delay too much in case of short configured duration.
     gpio.update();
   }
 
@@ -359,15 +354,13 @@ void setup() {
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
-  // Boot to home screen if no book is open, last sleep was not from reader,
-  // back button is held, or reader activity crashed (indicated by
-  // readerActivityLoadCount > 0)
+  // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
+  // crashed (indicated by readerActivityLoadCount > 0)
   if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
       mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     onGoHome();
   } else {
-    // Clear app state to avoid getting into a boot loop if the epub doesn't
-    // load
+    // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
     APP_STATE.openEpubPath = "";
     APP_STATE.readerActivityLoadCount++;
@@ -394,8 +387,7 @@ void loop() {
     lastMemPrint = millis();
   }
 
-  // Handle incoming serial commands,
-  // nb: we use logSerial from logging to avoid deprecation warnings
+  // Handle incoming serial commands, nb: we use logSerial from logging to avoid deprecation warnings
   if (logSerial.available() > 0) {
     String line = logSerial.readStringUntil('\n');
     if (line.startsWith("CMD:")) {
@@ -462,8 +454,8 @@ void loop() {
   }
 
   // Add delay at the end of the loop to prevent tight spinning
-  // When an activity requests skip loop delay (e.g., webserver running), use
-  // yield() for faster response Otherwise, use longer delay to save power
+  // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
+  // Otherwise, use longer delay to save power
   if (currentActivity && currentActivity->skipLoopDelay()) {
     yield();  // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
