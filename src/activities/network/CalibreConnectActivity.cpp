@@ -234,7 +234,7 @@ void CalibreConnectActivity::renderServerRunning() const {
     ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
   renderer.drawCenteredText(UI_10_FONT_ID, y, ssidInfo.c_str());
-  renderer.drawCenteredText(UI_10_FONT_ID, y + LINE_SPACING, ("IP: " + connectedIP).c_str());
+  renderer.drawCenteredText(UI_10_FONT_ID, y + LINE_SPACING, (std::string(T("IP Address: ")) + connectedIP).c_str());
 
   y += LINE_SPACING * 2 + SECTION_SPACING;
   renderer.drawCenteredText(UI_10_FONT_ID, y, T("Setup"), true, EpdFontFamily::BOLD);

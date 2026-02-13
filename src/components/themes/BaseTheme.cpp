@@ -572,8 +572,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     // No book to continue reading
     const int y =
         bookY + (bookHeight - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, "No open book");
-    renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), "Start reading below");
+    renderer.drawCenteredText(UI_12_FONT_ID, y, T("No open book"));
+    renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), T("Start reading below"));
   }
 }
 

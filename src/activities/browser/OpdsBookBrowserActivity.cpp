@@ -260,7 +260,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   const char* serverUrl = SETTINGS.opdsServerUrl;
   if (strlen(serverUrl) == 0) {
     state = BrowserState::ERROR;
-    errorMessage = "No server URL configured";
+    errorMessage = T("No server URL configured");
     updateRequired = true;
     return;
   }
@@ -274,7 +274,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     OpdsParserStream stream{parser};
     if (!HttpDownloader::fetchUrl(url, stream)) {
       state = BrowserState::ERROR;
-      errorMessage = "Failed to fetch feed";
+      errorMessage = T("Failed to fetch feed");
       updateRequired = true;
       return;
     }
@@ -282,7 +282,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
   if (!parser) {
     state = BrowserState::ERROR;
-    errorMessage = "Failed to parse feed";
+    errorMessage = T("Failed to parse feed");
     updateRequired = true;
     return;
   }
@@ -293,7 +293,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
   if (entries.empty()) {
     state = BrowserState::ERROR;
-    errorMessage = "No entries found";
+    errorMessage = T("No entries found");
     updateRequired = true;
     return;
   }
@@ -373,7 +373,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     updateRequired = true;
   } else {
     state = BrowserState::ERROR;
-    errorMessage = "Download failed";
+    errorMessage = T("Download failed");
     updateRequired = true;
   }
 }
@@ -416,7 +416,7 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
     state = BrowserState::ERROR;
-    errorMessage = "WiFi connection failed";
+    errorMessage = T("WiFi connection failed");
     updateRequired = true;
   }
 }

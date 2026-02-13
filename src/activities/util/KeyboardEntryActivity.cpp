@@ -3,6 +3,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 // Keyboard layouts - lowercase
 const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
@@ -331,11 +332,11 @@ void KeyboardEntryActivity::render() const {
   }
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "Left", "Right");
+  const auto labels = mappedInput.mapLabels(T("« Back"), T("Select"), T("Left"), T("Right"));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Draw side button hints for Up/Down navigation
-  GUI.drawSideButtonHints(renderer, "Up", "Down");
+  GUI.drawSideButtonHints(renderer, T("Up"), T("Down"));
 
   renderer.displayBuffer();
 }

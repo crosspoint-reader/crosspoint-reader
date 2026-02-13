@@ -160,6 +160,8 @@ Book: =Buch:
  pages  |  = Seiten  |
 Out of bounds=Ausserhalb des Bereichs
 End of book=Ende des Buches
+Memory error=Speicherfehler
+Page load error=Seitenladefehler
 Empty chapter=Leeres Kapitel
 Empty file=Leere Datei
 No chapters=Keine Kapitel
@@ -182,6 +184,7 @@ Press Connect to scan again=Druecken Sie Verbinden zum erneuten Suchen
 networks found=Netzwerke gefunden
 Scanning...=Suche...
 Connecting...=Verbinde...
+to =mit
 Connected!=Verbunden!
 Network: =Netzwerk:
 IP Address: =IP-Adresse:
@@ -288,6 +291,7 @@ No remote progress found=Kein entfernter Fortschritt
 Upload current position?=Aktuelle Position hochladen?
 Progress uploaded!=Fortschritt hochgeladen!
 Sync failed=Sync fehlgeschlagen
+Section =Abschnitt
 
 # === OPDS ===
 OPDS Server URL=OPDS-Server-URL
@@ -298,6 +302,10 @@ Error:=Fehler:
 No entries found=Keine Eintraege gefunden
 Download=Herunterladen
 Download failed=Download fehlgeschlagen
+No server URL configured=Keine Server-URL konfiguriert
+Failed to fetch feed=Feed konnte nicht abgerufen werden
+Failed to parse feed=Feed konnte nicht verarbeitet werden
+WiFi connection failed=WLAN-Verbindung fehlgeschlagen
 
 # === STATUS ===
 [Not Set]=[Nicht gesetzt]

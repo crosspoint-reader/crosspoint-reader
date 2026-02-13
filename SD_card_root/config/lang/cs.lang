@@ -160,6 +160,8 @@ Book: =Kniha:
  pages  |  = stránek  |
 Out of bounds=Mimo rozsah
 End of book=Konec knihy
+Memory error=Chyba paměti
+Page load error=Chyba načtení stránky
 Empty chapter=Prázdná kapitola
 Empty file=Prázdný soubor
 No chapters=Žádné kapitoly
@@ -182,6 +184,7 @@ Press Connect to scan again=Stiskněte Připojit pro nové hledání
 networks found=nalezených sítí
 Scanning...=Hledání...
 Connecting...=Připojování...
+to =k
 Connected!=Připojeno!
 Network: =Síť:
 IP Address: =IP adresa:
@@ -288,6 +291,7 @@ No remote progress found=Vzdálený postup nenalezen
 Upload current position?=Nahrát aktuální pozici?
 Progress uploaded!=Postup nahrán!
 Sync failed=Synchronizace selhala
+Section =Sekce
 
 # === OPDS ===
 OPDS Server URL=URL OPDS serveru
@@ -298,6 +302,10 @@ Error:=Chyba:
 No entries found=Nenalezeny žádné položky
 Download=Stáhnout
 Download failed=Stahování selhalo
+No server URL configured=URL serveru nenastavena
+Failed to fetch feed=Nepodařilo se načíst zdroj
+Failed to parse feed=Nepodařilo se zpracovat zdroj
+WiFi connection failed=Připojení WiFi selhalo
 
 # === STATUS ===
 [Not Set]=[Nenastaveno]

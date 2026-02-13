@@ -284,7 +284,7 @@ void SettingsActivity::render() const {
         } else if (settings[i].type == SettingType::ENUM && settings[i].valueGetter) {
           // DynamicEnum: use getter for current value
           const uint8_t value = settings[i].valueGetter();
-          valueText = settings[i].enumValues[value];
+          valueText = T(settings[i].enumValues[value].c_str());
         } else if (settings[i].type == SettingType::ENUM && settings[i].valuePtr != nullptr) {
           const uint8_t value = SETTINGS.*(settings[i].valuePtr);
           valueText = T(settings[i].enumValues[value].c_str());

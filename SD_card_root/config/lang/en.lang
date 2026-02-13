@@ -163,6 +163,8 @@ Book: =Book:
  pages  |  = pages  |
 Out of bounds=Out of bounds
 End of book=End of book
+Memory error=Memory error
+Page load error=Page load error
 Empty chapter=Empty chapter
 Empty file=Empty file
 No chapters=No chapters
@@ -185,6 +187,7 @@ Press Connect to scan again=Press Connect to scan again
 networks found=networks found
 Scanning...=Scanning...
 Connecting...=Connecting...
+to =to
 Connected!=Connected!
 Network: =Network:
 IP Address: =IP Address:
@@ -291,6 +294,7 @@ No remote progress found=No remote progress found
 Upload current position?=Upload current position?
 Progress uploaded!=Progress uploaded!
 Sync failed=Sync failed
+Section =Section
 
 # === OPDS ===
 OPDS Server URL=OPDS Server URL
@@ -301,6 +305,10 @@ Error:=Error:
 No entries found=No entries found
 Download=Download
 Download failed=Download failed
+No server URL configured=No server URL configured
+Failed to fetch feed=Failed to fetch feed
+Failed to parse feed=Failed to parse feed
+WiFi connection failed=WiFi connection failed
 
 # === STATUS ===
 [Not Set]=[Not Set]

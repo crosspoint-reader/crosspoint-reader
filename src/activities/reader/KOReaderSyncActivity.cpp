@@ -287,11 +287,12 @@ void KOReaderSyncActivity::render() {
     // Get chapter names from TOC
     const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
     const int localTocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-    const std::string remoteChapter = (remoteTocIndex >= 0)
-                                          ? epub->getTocItem(remoteTocIndex).title
-                                          : ("Section " + std::to_string(remotePosition.spineIndex + 1));
-    const std::string localChapter = (localTocIndex >= 0) ? epub->getTocItem(localTocIndex).title
-                                                          : ("Section " + std::to_string(currentSpineIndex + 1));
+    const std::string remoteChapter =
+        (remoteTocIndex >= 0) ? epub->getTocItem(remoteTocIndex).title
+                              : (std::string(T("Section ")) + std::to_string(remotePosition.spineIndex + 1));
+    const std::string localChapter = (localTocIndex >= 0)
+                                         ? epub->getTocItem(localTocIndex).title
+                                         : (std::string(T("Section ")) + std::to_string(currentSpineIndex + 1));
 
     // Remote progress - chapter and page
     renderer.drawText(UI_10_FONT_ID, 20, 160, T("Remote:"), true);

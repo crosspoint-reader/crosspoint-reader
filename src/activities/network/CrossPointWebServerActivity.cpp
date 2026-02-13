@@ -464,7 +464,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     }
     renderer.drawCenteredText(UI_10_FONT_ID, startY, ssidInfo.c_str());
 
-    std::string ipInfo = "IP Address: " + connectedIP;
+    std::string ipInfo = std::string(T("IP Address: ")) + connectedIP;
     renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ipInfo.c_str());
 
     // Show web server URL prominently

@@ -654,7 +654,7 @@ void WifiSelectionActivity::renderConnecting() const {
   } else {
     renderer.drawCenteredText(UI_12_FONT_ID, top - 40, T("Connecting..."), true, EpdFontFamily::BOLD);
 
-    std::string ssidInfo = "to " + selectedSSID;
+    std::string ssidInfo = std::string(T("to ")) + selectedSSID;
     if (ssidInfo.length() > 25) {
       ssidInfo.replace(22, ssidInfo.length() - 22, "...");
     }
