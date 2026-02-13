@@ -33,7 +33,7 @@ void NetworkModeSelectionActivity::onEnter() {
   updateRequired = true;
 
   xTaskCreate(&NetworkModeSelectionActivity::taskTrampoline, "NetworkModeTask",
-              2048,               // Stack size
+              4096,               // Stack size
               this,               // Parameters
               1,                  // Priority
               &displayTaskHandle  // Task handle
@@ -97,38 +97,26 @@ void NetworkModeSelectionActivity::displayTaskLoop() {
 }
 
 void NetworkModeSelectionActivity::render() const {
-  renderer.clearScreen();
-
+  auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+  renderer.clearScreen();
 
-  // Draw subtitle
-  renderer.drawCenteredText(UI_10_FONT_ID, 50, "How would you like to connect?");
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "File Transfer");
 
-  // Draw menu items centered on screen
-  constexpr int itemHeight = 50;  // Height for each menu item (including description)
-  const int startY = (pageHeight - (MENU_ITEM_COUNT * itemHeight)) / 2 + 10;
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  GUI.drawList(
+      renderer,
+      Rect{0, contentTop, pageWidth, contentHeight},
+      static_cast<int>(MENU_ITEM_COUNT), selectedIndex,
+      [this](int index) { return MENU_ITEMS[index]; }, 
+      [this](int index) { return MENU_DESCRIPTIONS[index]; }, nullptr, nullptr);
 
-  for (int i = 0; i < MENU_ITEM_COUNT; i++) {
-    const int itemY = startY + i * itemHeight;
-    const bool isSelected = (i == selectedIndex);
-
-    // Draw selection highlight (black fill) for selected item
-    if (isSelected) {
-      renderer.fillRect(20, itemY - 2, pageWidth - 40, itemHeight - 6);
-    }
-
-    // Draw text: black=false (white text) when selected (on black background)
-    //            black=true (black text) when not selected (on white background)
-    renderer.drawText(UI_10_FONT_ID, 30, itemY, MENU_ITEMS[i], /*black=*/!isSelected);
-    renderer.drawText(SMALL_FONT_ID, 30, itemY + 22, MENU_DESCRIPTIONS[i], /*black=*/!isSelected);
-  }
 
   // Draw help text at bottom
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
+  const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
