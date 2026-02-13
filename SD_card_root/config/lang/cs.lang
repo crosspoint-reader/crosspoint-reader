@@ -1,0 +1,370 @@
+# CrossPoint Reader - Czech / Čeština
+language.name=Čeština
+
+# === MAIN MENU ===
+Browse Files=Procházet soubory
+Recents=Nedávné
+File Transfer=Přenos souborů
+Settings=Nastavení
+OPDS Browser=OPDS prohlížeč
+
+# === SETTINGS CATEGORIES ===
+Display=Displej
+Reader=Čtení
+Controls=Ovládání
+System=Systém
+
+# === SETTINGS - DISPLAY ===
+Sleep Screen=Uspaná obrazovka
+Sleep Screen Cover Mode=Obrázek uspané obrazovky
+Sleep Screen Cover Filter=Filtr uspané obrazovky
+Status Bar=Stavový řádek
+Hide Battery %=Skrýt baterii %
+Refresh Frequency=Frekvence obnovení
+UI Theme=Vzhled
+Sunlight Fading Fix=Oprava vyblednutí
+
+# === SETTINGS - READER ===
+Font Family=Rodina písma
+Font Size=Velikost písma
+Line Spacing=Řádkování
+Screen Margin=Okraje
+Paragraph Alignment=Zarovnání odstavců
+Book's Embedded Style=Vestavěný styl
+Hyphenation=Dělení slov
+Reading Orientation=Orientace čtení
+Extra Paragraph Spacing=Zvětšené mezery odstavců
+Text Anti-Aliasing=Vyhlazování textu
+
+# === SETTINGS - CONTROLS ===
+Remap Front Buttons=Přemapovat tlačítka
+Side Button Layout (reader)=Rozložení bočních tl.
+Long-press Chapter Skip=Dlouhý stisk: kapitola
+Short Power Button Click=Krátký stisk vypínače
+
+# === SETTINGS - SYSTEM ===
+Language=Jazyk
+Time to Sleep=Čas do uspání
+KOReader Sync=KOReader Sync
+Clear Cache=Vymazat mezipaměť
+Check for updates=Zkontrolovat aktualizace
+
+# === SETTINGS VALUES ===
+ON=ZAP
+OFF=VYP
+Dark=Tmavá
+Light=Světlá
+Custom=Vlastní
+Cover=Obálka
+None=Žádné
+Cover + Custom=Obálka + Vlastní
+Fit=Přizpůsobit
+Crop=Oříznout
+Contrast=Kontrast
+Inverted=Invertovaný
+No Progress=Bez průběhu
+Full w/ Percentage=Plný s procenty
+Full w/ Book Bar=Plný s pruhem knihy
+Book Bar Only=Pouze pruh knihy
+Full w/ Chapter Bar=Plný s pruhem kapitoly
+Never=Nikdy
+In Reader=Ve čtečce
+Always=Vždy
+1 page=1 stránka
+5 pages=5 stránek
+10 pages=10 stránek
+15 pages=15 stránek
+30 pages=30 stránek
+Classic=Klasický
+Lyra=Lyra
+Bookerly=Bookerly
+Noto Sans=Noto Sans
+Open Dyslexic=Open Dyslexic
+Small=Malé
+Medium=Střední
+Large=Velké
+X Large=Extra velké
+Tight=Těsné
+Normal=Normální
+Wide=Široké
+Justify=Do bloku
+Left=Vlevo
+Center=Na střed
+Right=Vpravo
+Book's Style=Styl knihy
+Portrait=Na výšku
+Landscape CW=Na šířku CW
+Landscape CCW=Na šířku CCW
+Prev, Next=Předch., Další
+Next, Prev=Další, Předch.
+Ignore=Ignorovat
+Sleep=Uspat
+Page Turn=Otočit stránku
+1 min=1 min
+5 min=5 min
+10 min=10 min
+15 min=15 min
+30 min=30 min
+
+# === BUTTON HINTS ===
+« Back=« Zpět
+Toggle=Přepnout
+Up=Nahoru
+Down=Dolů
+Select=Vybrat
+Open=Otevřít
+« Home=« Domů
+« Cancel=« Zrušit
+« Exit=« Konec
+« Skip=« Přeskočit
+Connect=Připojit
+Continue=Pokračovat
+Retry=Opakovat
+Update=Aktualizovat
+Clear=Vymazat
+Done=Hotovo
+Upload=Nahrát
+Back=Zpět
+Cancel=Zrušit
+-=-
++=+
+
+# === HOME SCREEN ===
+Continue Reading=Pokračovat ve čtení
+No open book=Žádná otevřená kniha
+Start reading below=Začněte číst níže
+Loading...=Načítání...
+Entering Sleep...=Uspávání...
+BOOTING=SPOUŠTĚNÍ
+SLEEPING=SPÁNEK
+
+# === LIBRARY ===
+SD card=SD karta
+No books found=Žádné knihy nenalezeny
+
+# === RECENT BOOKS ===
+Recent Books=Nedávné knihy
+No recent books=Žádné nedávné knihy
+
+# === READER MENU ===
+Go to Chapter=Jít na kapitolu
+Go to %=Jít na %
+Go to Position=Jít na pozici
+Go Home=Domů
+Sync Progress=Synchronizovat
+Delete Book Cache=Smazat mezipaměť knihy
+Select Chapter=Vybrat kapitolu
+Chapter: =Kapitola:
+Book: =Kniha:
+ pages= stránek
+ pages  |  = stránek  |
+Out of bounds=Mimo rozsah
+End of book=Konec knihy
+Memory error=Chyba paměti
+Page load error=Chyba načtení stránky
+Empty chapter=Prázdná kapitola
+Empty file=Prázdný soubor
+No chapters=Žádné kapitoly
+Left/Right: 1%  Up/Down: 10%=Vlevo/Vpravo: 1%  Nahoru/Dolů: 10%
+
+# === NETWORK ===
+Join a Network=Připojit k síti
+Connect to Calibre=Připojit k Calibre
+Create Hotspot=Vytvořit hotspot
+Connect to an existing WiFi network=Připojit k existující WiFi síti
+Use Calibre wireless device transfers=Bezdrátový přenos z Calibre
+Create a WiFi network others can join=Vytvořit WiFi síť pro připojení
+How would you like to connect?=Jak se chcete připojit?
+
+# === WIFI ===
+WiFi Networks=WiFi sítě
+No networks found=Nenalezeny žádné sítě
+Press Connect to scan again=Stiskněte Připojit pro nové hledání
+* Encrypted | + Saved=* Šifrovaná | + Uložená
+networks found=nalezených sítí
+Scanning...=Hledání...
+Connecting...=Připojování...
+to =k
+Connected!=Připojeno!
+Network: =Síť:
+IP Address: =IP adresa:
+Save password for next time?=Uložit heslo pro příště?
+Yes=Ano
+No=Ne
+Connection Failed=Připojení selhalo
+Error: General failure=Chyba: Obecná chyba
+Error: Network not found=Chyba: Síť nenalezena
+Error: Connection timeout=Chyba: Vypršel časový limit
+Forget=Zapomenout
+Forget Network=Zapomenout síť
+Forget network and remove saved password?=Zapomenout síť a smazat uložené heslo?
+Forget network=Zapomenout síť
+Refresh=Obnovit
+Enter WiFi Password=Zadejte heslo WiFi
+
+# === HOTSPOT / FILE TRANSFER ===
+Starting Hotspot...=Spouštění hotspotu...
+Hotspot Mode=Režim hotspotu
+Connect your device to this WiFi network=Připojte zařízení k této WiFi síti
+or scan QR code with your phone to connect to Wifi.=nebo naskenujte QR kód pro připojení k WiFi.
+Open this URL in your browser=Otevřte tuto URL v prohlížeči
+or scan QR code with your phone:=nebo naskenujte QR kód:
+
+# === CALIBRE ===
+Starting Calibre...=Spouštění Calibre...
+Calibre setup failed=Nastavení Calibre selhalo
+Network=Síť
+Setup=Nastavení
+1) Install CrossPoint Reader plugin=1) Nainstalujte CrossPoint Reader plugin
+2) Be on the same WiFi network=2) Buďte na stejné WiFi síti
+3) In Calibre: "Send to device"=3) V Calibre: "Send to device"
+Keep this screen open while sending=Nechte tuto obrazovku otevřenou
+Status=Stav
+Receiving=Přijímání
+Received: =Přijato:
+
+# === BUTTON REMAP ===
+Press a front button for each role=Stiskněte přední tlačítko pro každou roli
+Unassigned=Nepřiřazeno
+Already assigned=Již přiřazeno
+Confirm=Potvrdit
+Back (1st button)=Zpět (1. tlačítko)
+Confirm (2nd button)=Potvrdit (2. tlačítko)
+Left (3rd button)=Vlevo (3. tlačítko)
+Right (4th button)=Vpravo (4. tlačítko)
+Unknown=Neznámé
+Side button Up: Reset to default layout=Boční tl. nahoru: Obnovit výchozí
+Side button Down: Cancel remapping=Boční tl. dolů: Zrušit
+
+# === CLEAR CACHE ===
+This will clear all cached book data.=Toto smaže všechna data knih z mezipaměti.
+All reading progress will be lost!=Veškerý postup čtení bude ztracen!
+Books will need to be re-indexed=Knihy bude nutné znovu indexovat
+when opened again.=při dalším otevření.
+Clearing cache...=Mazání mezipaměti...
+Cache Cleared=Mezipaměť vymazána
+ items removed= položek odstraněno
+ failed= selhalo
+Failed to clear cache=Nepodařilo se vymazat mezipaměť
+Check serial output for details=Podrobnosti v sériovém výstupu
+
+# === OTA UPDATE ===
+Checking for update...=Kontrola aktualizací...
+New update available!=Nová aktualizace k dispozici!
+Current Version: =Aktuální verze:
+New Version: =Nová verze:
+Updating...=Aktualizace...
+No update available=Žádná aktualizace
+Update failed=Aktualizace selhala
+Update complete=Aktualizace dokončena
+Press and hold power button to turn back on=Podržte vypínač pro zapnutí
+
+# === KOREADER ===
+Username=Uživatelské jméno
+Password=Heslo
+Sync Server URL=URL sync serveru
+Document Matching=Párování dokumentů
+Authenticate=Ověřit
+KOReader Username=KOReader uživatel
+KOReader Password=KOReader heslo
+KOReader Auth=KOReader ověření
+Authenticating...=Ověřování...
+Success!=Úspěch!
+KOReader sync is ready to use=KOReader sync je připraven k použití
+Authentication Failed=Ověření selhalo
+
+# === KOREADER SYNC ===
+No credentials configured=Přihlašovací údaje nenastaveny
+Set up KOReader account in Settings=Nastavte KOReader účet v Nastavení
+Syncing time...=Synchronizace času...
+Calculating document hash...=Výpočet hash dokumentu...
+Fetching remote progress...=Načítání vzdáleného postupu...
+Uploading progress...=Nahrávání postupu...
+Failed to calculate document hash=Nepodařilo se vypočítat hash dokumentu
+Progress found!=Postup nalezen!
+Remote:=Vzdálený:
+Local:=Místní:
+From: =Ze zařízení:
+Apply remote progress=Použít vzdálený postup
+Upload local progress=Nahrát místní postup
+No remote progress found=Vzdálený postup nenalezen
+Upload current position?=Nahrát aktuální pozici?
+Progress uploaded!=Postup nahrán!
+Sync failed=Synchronizace selhala
+Section =Sekce
+
+# === OPDS ===
+OPDS Server URL=URL OPDS serveru
+For Calibre, add /opds to your URL=Pro Calibre přidejte /opds k URL
+Checking WiFi...=Kontrola WiFi...
+Downloading...=Stahování...
+Error:=Chyba:
+No entries found=Nenalezeny žádné položky
+Download=Stáhnout
+Download failed=Stahování selhalo
+No server URL configured=URL serveru nenastavena
+Failed to fetch feed=Nepodařilo se načíst zdroj
+Failed to parse feed=Nepodařilo se zpracovat zdroj
+WiFi connection failed=Připojení WiFi selhalo
+
+# === STATUS ===
+[Not Set]=[Nenastaveno]
+[Set]=[Nastaveno]
+[Default]=[Výchozí]
+[Custom]=[Vlastní]
+[Filename]=[Název souboru]
+[Binary]=[Binární]
+[Set credentials first]=[Nejprve nastavte přihlášení]
+
+# === DIALOGS ===
+Filename=Název souboru
+Binary=Binární
+
+# === WEB UI ===
+Home=Domů
+File Manager=Správce souborů
+Device Status=Stav zařízení
+Version=Verze
+WiFi Status=Stav WiFi
+Connected=Připojeno
+IP Address=IP adresa
+Free Memory=Volná paměť
+Upload=Nahrát
+New Folder=Nová složka
+Contents=Obsah
+Name=Název
+Type=Typ
+Size=Velikost
+Actions=Akce
+Folder=Složka
+Upload file=Nahrát soubor
+Create Folder=Vytvořit složku
+Delete Item=Smazat položku
+Rename File=Přejmenovat soubor
+Move File=Přesunout soubor
+This action cannot be undone!=Tuto akci nelze vrátit zpět!
+Are you sure you want to delete:=Opravdu chcete smazat:
+This folder is empty=Tato složka je prázdná
+All uploads complete!=Vše nahráno!
+Some files failed to upload=Některé soubory se nepodařilo nahrát
+Retry All Failed Uploads=Opakovat neúspěšné nahrávání
+An error occurred while loading the files=Při načítání souborů došlo k chybě
+folders=složek
+files=souborů
+Save Settings=Uložit nastavení
+Saving...=Ukládání...
+No changes to save.=Žádné změny k uložení.
+Settings saved successfully!=Nastavení úspěšně uloženo!
+Failed to load settings=Nepodařilo se načíst nastavení
+Delete=Smazat
+Rename=Přejmenovat
+Move=Přesunout
+Error=Chyba
+Select a file to upload to=Vyberte soubor pro nahrání do
+Create a new folder in=Vytvořit novou složku v
+Renaming=Přejmenování
+Moving=Přesouvání
+Folder name...=Název složky...
+New file name...=Nový název souboru...
+OPDS Username=OPDS uživatel
+OPDS Password=OPDS heslo

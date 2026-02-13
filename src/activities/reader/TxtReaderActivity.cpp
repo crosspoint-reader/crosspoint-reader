@@ -11,6 +11,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 namespace {
 constexpr unsigned long goHomeMs = 1000;
@@ -384,7 +385,7 @@ void TxtReaderActivity::renderScreen() {
 
   if (pageOffsets.empty()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty file", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, T("Empty file"), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }

@@ -5,6 +5,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 namespace {
 // Fine/coarse slider step sizes for percent adjustments.
@@ -90,7 +91,7 @@ void EpubReaderPercentSelectionActivity::renderScreen() {
   renderer.clearScreen();
 
   // Title and numeric percent value.
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Go to Position", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, T("Go to Position"), true, EpdFontFamily::BOLD);
 
   const std::string percentText = std::to_string(percent) + "%";
   renderer.drawCenteredText(UI_12_FONT_ID, 90, percentText.c_str(), true, EpdFontFamily::BOLD);
@@ -115,10 +116,10 @@ void EpubReaderPercentSelectionActivity::renderScreen() {
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
   // Hint text for step sizes.
-  renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, "Left/Right: 1%  Up/Down: 10%", true);
+  renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, T("Left/Right: 1%  Up/Down: 10%"), true);
 
   // Button hints follow the current front button layout.
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "-", "+");
+  const auto labels = mappedInput.mapLabels(T("\xC2\xAB Back"), T("Select"), "-", "+");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

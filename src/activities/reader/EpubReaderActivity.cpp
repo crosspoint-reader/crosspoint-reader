@@ -16,6 +16,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
@@ -539,7 +540,7 @@ void EpubReaderActivity::renderScreen() {
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "End of book", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, T("End of book"), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
@@ -623,7 +624,7 @@ void EpubReaderActivity::renderScreen() {
 
   if (section->pageCount == 0) {
     LOG_DBG("ERS", "No pages to render");
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty chapter", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, T("Empty chapter"), true, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
     return;
@@ -631,7 +632,7 @@ void EpubReaderActivity::renderScreen() {
 
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Out of bounds", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, T("Out of bounds"), true, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
     return;

@@ -15,6 +15,7 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "i18n/TranslationManager.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -155,6 +156,7 @@ void CrossPointWebServer::begin() {
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
+  server->on("/api/i18n", HTTP_GET, [this] { handleI18n(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -291,6 +293,184 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
   status.lastCompleteSize = wsLastCompleteSize;
   status.lastCompleteAt = wsLastCompleteAt;
   return status;
+}
+
+void CrossPointWebServer::handleI18n() const {
+  auto& tm = TranslationManager::getInstance();
+  if (strcmp(tm.getCurrentLanguage(), "en") == 0) {
+    server->send(200, "application/json", "{}");
+    return;
+  }
+
+  // All translatable web UI keys: navigation, pages, settings names, and enum values.
+  // Keys are looked up in the loaded .lang file; untranslated keys are omitted from response.
+  static const char* keys[] = {
+      // Navigation
+      "Home",
+      "File Manager",
+      "Settings",
+      // Home page
+      "Device Status",
+      "Version",
+      "WiFi Status",
+      "Connected",
+      "IP Address",
+      "Free Memory",
+      // Files page
+      "Upload",
+      "New Folder",
+      "Contents",
+      "Name",
+      "Type",
+      "Size",
+      "Actions",
+      "Folder",
+      "Delete",
+      "Rename",
+      "Move",
+      "Cancel",
+      "Upload file",
+      "Create Folder",
+      "Delete Item",
+      "Rename File",
+      "Move File",
+      "This action cannot be undone!",
+      "Are you sure you want to delete:",
+      "Select a file to upload to",
+      "Create a new folder in",
+      "Renaming",
+      "Moving",
+      "Folder name...",
+      "New file name...",
+      "This folder is empty",
+      "All uploads complete!",
+      "Some files failed to upload",
+      "Retry All Failed Uploads",
+      "An error occurred while loading the files",
+      "folders",
+      "files",
+      // Settings page
+      "Save Settings",
+      "Saving...",
+      "No changes to save.",
+      "Settings saved successfully!",
+      "Failed to load settings",
+      "Error",
+      // Settings categories
+      "Display",
+      "Reader",
+      "Controls",
+      "System",
+      "KOReader Sync",
+      "OPDS Browser",
+      // Settings names
+      "Sleep Screen",
+      "Sleep Screen Cover Mode",
+      "Sleep Screen Cover Filter",
+      "Status Bar",
+      "Hide Battery %",
+      "Refresh Frequency",
+      "UI Theme",
+      "Sunlight Fading Fix",
+      "Font Family",
+      "Font Size",
+      "Line Spacing",
+      "Screen Margin",
+      "Paragraph Alignment",
+      "Book's Embedded Style",
+      "Hyphenation",
+      "Reading Orientation",
+      "Extra Paragraph Spacing",
+      "Text Anti-Aliasing",
+      "Side Button Layout (reader)",
+      "Long-press Chapter Skip",
+      "Short Power Button Click",
+      "Language",
+      "Time to Sleep",
+      "KOReader Username",
+      "KOReader Password",
+      "Sync Server URL",
+      "Document Matching",
+      "OPDS Server URL",
+      "OPDS Username",
+      "OPDS Password",
+      // Settings enum values
+      "Dark",
+      "Light",
+      "Custom",
+      "Cover",
+      "None",
+      "Cover + Custom",
+      "Fit",
+      "Crop",
+      "Contrast",
+      "Inverted",
+      "No Progress",
+      "Full w/ Percentage",
+      "Full w/ Book Bar",
+      "Book Bar Only",
+      "Full w/ Chapter Bar",
+      "Never",
+      "In Reader",
+      "Always",
+      "1 page",
+      "5 pages",
+      "10 pages",
+      "15 pages",
+      "30 pages",
+      "Classic",
+      "Lyra",
+      "Bookerly",
+      "Noto Sans",
+      "Open Dyslexic",
+      "Small",
+      "Medium",
+      "Large",
+      "X Large",
+      "Tight",
+      "Normal",
+      "Wide",
+      "Justify",
+      "Left",
+      "Center",
+      "Right",
+      "Book's Style",
+      "Portrait",
+      "Landscape CW",
+      "Landscape CCW",
+      "Prev, Next",
+      "Next, Prev",
+      "Ignore",
+      "Sleep",
+      "Page Turn",
+      "1 min",
+      "5 min",
+      "10 min",
+      "15 min",
+      "30 min",
+      "Filename",
+      "Binary",
+  };
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("{");
+  bool first = true;
+  for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+    const char* val = tm.getString(keys[i]);
+    if (val != keys[i]) {
+      if (!first) server->sendContent(",");
+      first = false;
+      String entry = "\"";
+      entry += keys[i];
+      entry += "\":\"";
+      entry += val;
+      entry += "\"";
+      server->sendContent(entry);
+    }
+  }
+  server->sendContent("}");
+  server->sendContent("");
 }
 
 void CrossPointWebServer::handleRoot() const {
@@ -971,6 +1151,8 @@ void CrossPointWebServer::handleDelete() const {
         server->send(400, "text/plain", "Folder is not empty. Delete contents first.");
         return;
       }
+      dir.close();
+    } else if (dir) {
       dir.close();
     }
     success = Storage.rmdir(itemPath.c_str());

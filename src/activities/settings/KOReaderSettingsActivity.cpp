@@ -10,10 +10,11 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 namespace {
 constexpr int MENU_ITEMS = 5;
-const char* menuNames[MENU_ITEMS] = {"Username", "Password", "Sync Server URL", "Document Matching", "Authenticate"};
+const char* menuKeys[MENU_ITEMS] = {"Username", "Password", "Sync Server URL", "Document Matching", "Authenticate"};
 }  // namespace
 
 void KOReaderSettingsActivity::taskTrampoline(void* param) {
@@ -83,7 +84,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "KOReader Username", KOREADER_STORE.getUsername(), 10,
+        renderer, mappedInput, T("KOReader Username"), KOREADER_STORE.getUsername(), 10,
         64,     // maxLength
         false,  // not password
         [this](const std::string& username) {
@@ -100,7 +101,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "KOReader Password", KOREADER_STORE.getPassword(), 10,
+        renderer, mappedInput, T("KOReader Password"), KOREADER_STORE.getPassword(), 10,
         64,     // maxLength
         false,  // show characters
         [this](const std::string& password) {
@@ -119,7 +120,7 @@ void KOReaderSettingsActivity::handleSelection() {
     const std::string prefillUrl = currentUrl.empty() ? "https://" : currentUrl;
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Sync Server URL", prefillUrl, 10,
+        renderer, mappedInput, T("Sync Server URL"), prefillUrl, 10,
         128,    // maxLength - URLs can be long
         false,  // not password
         [this](const std::string& url) {
@@ -177,7 +178,7 @@ void KOReaderSettingsActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Sync", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, T("KOReader Sync"), true, EpdFontFamily::BOLD);
 
   // Draw selection highlight
   renderer.fillRect(0, 60 + selectedIndex * 30 - 2, pageWidth - 1, 30);
@@ -187,20 +188,20 @@ void KOReaderSettingsActivity::render() {
     const int settingY = 60 + i * 30;
     const bool isSelected = (i == selectedIndex);
 
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, menuNames[i], !isSelected);
+    renderer.drawText(UI_10_FONT_ID, 20, settingY, T(menuKeys[i]), !isSelected);
 
     // Draw status for each item
     const char* status = "";
     if (i == 0) {
-      status = KOREADER_STORE.getUsername().empty() ? "[Not Set]" : "[Set]";
+      status = KOREADER_STORE.getUsername().empty() ? T("[Not Set]") : T("[Set]");
     } else if (i == 1) {
-      status = KOREADER_STORE.getPassword().empty() ? "[Not Set]" : "[Set]";
+      status = KOREADER_STORE.getPassword().empty() ? T("[Not Set]") : T("[Set]");
     } else if (i == 2) {
-      status = KOREADER_STORE.getServerUrl().empty() ? "[Default]" : "[Custom]";
+      status = KOREADER_STORE.getServerUrl().empty() ? T("[Default]") : T("[Custom]");
     } else if (i == 3) {
-      status = KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? "[Filename]" : "[Binary]";
+      status = KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? T("[Filename]") : T("[Binary]");
     } else if (i == 4) {
-      status = KOREADER_STORE.hasCredentials() ? "" : "[Set credentials first]";
+      status = KOREADER_STORE.hasCredentials() ? "" : T("[Set credentials first]");
     }
 
     const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
@@ -208,7 +209,7 @@ void KOReaderSettingsActivity::render() {
   }
 
   // Draw button hints
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
+  const auto labels = mappedInput.mapLabels(T("\xC2\xAB Back"), T("Select"), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

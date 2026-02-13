@@ -18,6 +18,7 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "i18n/TranslationManager.h"
 
 namespace {
 constexpr unsigned long skipPageMs = 700;
@@ -179,7 +180,7 @@ void XtcReaderActivity::renderScreen() {
   if (currentPage >= xtc->getPageCount()) {
     // Show end of book screen
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "End of book", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, T("End of book"), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
@@ -208,7 +209,7 @@ void XtcReaderActivity::renderPage() {
   if (!pageBuffer) {
     LOG_ERR("XTR", "Failed to allocate page buffer (%lu bytes)", pageBufferSize);
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Memory error", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, T("Memory error"), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
@@ -219,7 +220,7 @@ void XtcReaderActivity::renderPage() {
     LOG_ERR("XTR", "Failed to load page %lu", currentPage);
     free(pageBuffer);
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Page load error", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, T("Page load error"), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
