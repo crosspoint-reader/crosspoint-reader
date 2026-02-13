@@ -2,7 +2,7 @@
 
 #include <Esp.h>
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -31,7 +31,7 @@ TranslationManager::~TranslationManager() { freeAll(); }
 // ──────────────────────────────────────────────
 
 bool TranslationManager::init(const char* lang) {
-  Serial.println("[i18n] Initializing");
+  LOG_DBG("I18N", "Initializing");
 
   freeAll();
 
@@ -41,10 +41,10 @@ bool TranslationManager::init(const char* lang) {
     if (isValidLangCode(lang)) {
       sdLoaded = loadFromSD(lang);
       if (!sdLoaded) {
-        Serial.printf("[i18n] WARNING: Failed to load '%s', using English\n", lang);
+        LOG_ERR("I18N", "Failed to load '%s', using English", lang);
       }
     } else {
-      Serial.printf("[i18n] WARNING: Invalid language code '%s'\n", lang);
+      LOG_ERR("I18N", "Invalid language code '%s'", lang);
       sdLoaded = false;
     }
   }
@@ -52,8 +52,7 @@ bool TranslationManager::init(const char* lang) {
   strncpy(currentLang, sdLoaded ? lang : "en", sizeof(currentLang) - 1);
   currentLang[sizeof(currentLang) - 1] = '\0';
 
-  Serial.printf("[i18n] Active: %s (%u strings, %u bytes pool)\n", currentLang, loadedCount,
-                static_cast<unsigned>(poolUsed));
+  LOG_INF("I18N", "Active: %s (%u strings, %u bytes pool)", currentLang, loadedCount, static_cast<unsigned>(poolUsed));
   return sdLoaded;
 }
 
@@ -99,7 +98,7 @@ const std::vector<TranslationManager::LangInfo>& TranslationManager::getAvailabl
   }
 
   const unsigned long scanStart = millis();
-  Serial.printf("[i18n] Scanning languages, free heap: %u\n", static_cast<unsigned>(ESP.getFreeHeap()));
+  LOG_DBG("I18N", "Scanning languages, free heap: %u", static_cast<unsigned>(ESP.getFreeHeap()));
 
   availableLanguages.clear();
 
@@ -112,9 +111,9 @@ const std::vector<TranslationManager::LangInfo>& TranslationManager::getAvailabl
   // Scan /config/lang/ directory on SD card.
   FsFile dir = Storage.open("/config/lang");
   if (!dir) {
-    Serial.println("[i18n] WARNING: Cannot open /config/lang directory");
+    LOG_ERR("I18N", "Cannot open /config/lang directory");
   } else if (!dir.isDirectory()) {
-    Serial.println("[i18n] WARNING: /config/lang is not a directory");
+    LOG_ERR("I18N", "/config/lang is not a directory");
     dir.close();
   } else {
     int filesScanned = 0;
@@ -152,7 +151,7 @@ const std::vector<TranslationManager::LangInfo>& TranslationManager::getAvailabl
       }
 
       if (!isValidLangCode(code)) {
-        Serial.printf("[i18n] Skipping invalid lang code: %s\n", filename);
+        LOG_DBG("I18N", "Skipping invalid lang code: %s", filename);
         file.close();
         continue;
       }
@@ -188,7 +187,7 @@ const std::vector<TranslationManager::LangInfo>& TranslationManager::getAvailabl
         strncpy(displayName, code, sizeof(displayName) - 1);
       }
 
-      Serial.printf("[i18n] Found language: %s (%s)\n", displayName, code);
+      LOG_DBG("I18N", "Found language: %s (%s)", displayName, code);
 
       LangInfo info{};
       strncpy(info.code, code, sizeof(info.code));
@@ -196,7 +195,7 @@ const std::vector<TranslationManager::LangInfo>& TranslationManager::getAvailabl
       availableLanguages.push_back(info);
     }
     dir.close();
-    Serial.printf("[i18n] Scanned %d files in /config/lang\n", filesScanned);
+    LOG_DBG("I18N", "Scanned %d files in /config/lang", filesScanned);
   }
 
   // Sort non-English entries alphabetically by display name.
@@ -206,9 +205,8 @@ const std::vector<TranslationManager::LangInfo>& TranslationManager::getAvailabl
   }
 
   languagesScanned = true;
-  Serial.printf("[i18n] Found %u languages in %lu ms, free heap: %u\n",
-                static_cast<unsigned>(availableLanguages.size()), millis() - scanStart,
-                static_cast<unsigned>(ESP.getFreeHeap()));
+  LOG_INF("I18N", "Found %u languages in %lu ms, free heap: %u", static_cast<unsigned>(availableLanguages.size()),
+          millis() - scanStart, static_cast<unsigned>(ESP.getFreeHeap()));
   return availableLanguages;
 }
 
@@ -256,23 +254,23 @@ bool TranslationManager::loadFromSD(const char* lang) {
   snprintf(path, sizeof(path), "/config/lang/%s.lang", lang);
 
   const unsigned long loadStart = millis();
-  Serial.printf("[i18n] Loading: %s, free heap: %u\n", path, static_cast<unsigned>(ESP.getFreeHeap()));
+  LOG_DBG("I18N", "Loading: %s, free heap: %u", path, static_cast<unsigned>(ESP.getFreeHeap()));
 
   if (!Storage.exists(path)) {
-    Serial.println("[i18n] File not found");
+    LOG_ERR("I18N", "File not found");
     return false;
   }
 
   FsFile file;
   if (!Storage.openFileForRead("I18N", path, file)) {
-    Serial.println("[i18n] Failed to open file");
+    LOG_ERR("I18N", "Failed to open file");
     return false;
   }
 
   // Allocate valueOffsets array, initialized to 0xFFFF (no translation).
   valueOffsets = static_cast<uint16_t*>(malloc(LANG_KEY_COUNT * sizeof(uint16_t)));
   if (!valueOffsets) {
-    Serial.println("[i18n] ERROR: Failed to allocate valueOffsets");
+    LOG_ERR("I18N", "Failed to allocate valueOffsets");
     file.close();
     return false;
   }
@@ -281,7 +279,7 @@ bool TranslationManager::loadFromSD(const char* lang) {
   // Allocate initial string pool.
   pool = static_cast<char*>(malloc(INITIAL_POOL_SIZE));
   if (!pool) {
-    Serial.println("[i18n] ERROR: Failed to allocate pool");
+    LOG_ERR("I18N", "Failed to allocate pool");
     free(valueOffsets);
     valueOffsets = nullptr;
     file.close();
@@ -345,7 +343,7 @@ bool TranslationManager::loadFromSD(const char* lang) {
       }
       char* newPool = static_cast<char*>(realloc(pool, newSize));
       if (!newPool) {
-        Serial.printf("[i18n] ERROR: Pool realloc failed at line %d\n", lineNum);
+        LOG_ERR("I18N", "Pool realloc failed at line %d", lineNum);
         break;
       }
       pool = newPool;
@@ -370,9 +368,8 @@ bool TranslationManager::loadFromSD(const char* lang) {
     }
   }
 
-  Serial.printf("[i18n] Loaded %u/%u translations in %lu ms, pool %u bytes, free heap: %u\n", loadedCount,
-                LANG_KEY_COUNT, millis() - loadStart, static_cast<unsigned>(poolUsed),
-                static_cast<unsigned>(ESP.getFreeHeap()));
+  LOG_INF("I18N", "Loaded %u/%u translations in %lu ms, pool %u bytes, free heap: %u", loadedCount, LANG_KEY_COUNT,
+          millis() - loadStart, static_cast<unsigned>(poolUsed), static_cast<unsigned>(ESP.getFreeHeap()));
   return loadedCount > 0;
 }
 

@@ -26,7 +26,7 @@ void SettingsActivity::taskTrampoline(void* param) {
 
 void SettingsActivity::onEnter() {
   Activity::onEnter();
-  Serial.printf("[SETTINGS] onEnter, free heap: %u\n", static_cast<unsigned>(ESP.getFreeHeap()));
+  LOG_DBG("SET", "onEnter, free heap: %u", static_cast<unsigned>(ESP.getFreeHeap()));
   renderingMutex = xSemaphoreCreateMutex();
 
   // Build per-category vectors from the shared settings list
@@ -35,7 +35,7 @@ void SettingsActivity::onEnter() {
   controlsSettings.clear();
   systemSettings.clear();
 
-  Serial.println("[SETTINGS] Building settings list...");
+  LOG_DBG("SET", "Building settings list...");
   for (auto& setting : getSettingsList()) {
     if (!setting.category) continue;
     if (strcmp(setting.category, "Display") == 0) {
@@ -67,7 +67,7 @@ void SettingsActivity::onEnter() {
   currentSettings = &displaySettings;
   settingsCount = static_cast<int>(displaySettings.size());
 
-  Serial.printf("[SETTINGS] Settings built, free heap: %u\n", static_cast<unsigned>(ESP.getFreeHeap()));
+  LOG_DBG("SET", "Settings built, free heap: %u", static_cast<unsigned>(ESP.getFreeHeap()));
 
   // Trigger first update
   updateRequired = true;
