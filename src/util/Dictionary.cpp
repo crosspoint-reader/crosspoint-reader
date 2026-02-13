@@ -8,6 +8,8 @@
 namespace {
 constexpr const char* IDX_PATH = "/dictionary.idx";
 constexpr const char* DICT_PATH = "/dictionary.dict";
+constexpr const char* CACHE_PATH = "/dictionary.cache";
+constexpr uint32_t CACHE_MAGIC = 0x44494354;  // "DICT"
 }  // namespace
 
 std::vector<uint32_t> Dictionary::sparseOffsets;
@@ -37,6 +39,97 @@ std::string Dictionary::cleanWord(const std::string& word) {
   // Lowercase
   std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
   return result;
+}
+
+bool Dictionary::loadCachedIndex() {
+  FsFile cache;
+  if (!Storage.openFileForRead("DICT", CACHE_PATH, cache)) return false;
+
+  // Read and validate header
+  uint8_t header[16];
+  if (cache.read(header, 16) != 16) {
+    cache.close();
+    return false;
+  }
+
+  uint32_t magic = (static_cast<uint32_t>(header[0]) << 24) | (static_cast<uint32_t>(header[1]) << 16) |
+                   (static_cast<uint32_t>(header[2]) << 8) | static_cast<uint32_t>(header[3]);
+  uint32_t expectedIdxSize = (static_cast<uint32_t>(header[4]) << 24) | (static_cast<uint32_t>(header[5]) << 16) |
+                             (static_cast<uint32_t>(header[6]) << 8) | static_cast<uint32_t>(header[7]);
+  uint32_t cachedTotalWords = (static_cast<uint32_t>(header[8]) << 24) | (static_cast<uint32_t>(header[9]) << 16) |
+                              (static_cast<uint32_t>(header[10]) << 8) | static_cast<uint32_t>(header[11]);
+  uint32_t offsetCount = (static_cast<uint32_t>(header[12]) << 24) | (static_cast<uint32_t>(header[13]) << 16) |
+                         (static_cast<uint32_t>(header[14]) << 8) | static_cast<uint32_t>(header[15]);
+
+  if (magic != CACHE_MAGIC) {
+    cache.close();
+    return false;
+  }
+
+  // Validate against actual .idx file size
+  FsFile idx;
+  if (!Storage.openFileForRead("DICT", IDX_PATH, idx)) {
+    cache.close();
+    return false;
+  }
+  uint32_t actualIdxSize = static_cast<uint32_t>(idx.fileSize());
+  idx.close();
+
+  if (expectedIdxSize != actualIdxSize || offsetCount == 0) {
+    cache.close();
+    return false;
+  }
+
+  // Read sparse offsets
+  sparseOffsets.resize(offsetCount);
+  int bytesNeeded = static_cast<int>(offsetCount * 4);
+  int bytesRead = cache.read(reinterpret_cast<uint8_t*>(sparseOffsets.data()), bytesNeeded);
+  cache.close();
+
+  if (bytesRead != bytesNeeded) {
+    sparseOffsets.clear();
+    return false;
+  }
+
+  totalWords = cachedTotalWords;
+  indexLoaded = true;
+  return true;
+}
+
+void Dictionary::saveCachedIndex() {
+  FsFile idx;
+  if (!Storage.openFileForRead("DICT", IDX_PATH, idx)) return;
+  uint32_t idxSize = static_cast<uint32_t>(idx.fileSize());
+  idx.close();
+
+  FsFile cache;
+  if (!Storage.openFileForWrite("DICT", CACHE_PATH, cache)) return;
+
+  uint32_t offsetCount = static_cast<uint32_t>(sparseOffsets.size());
+
+  // Write header: magic, idx file size, totalWords, offset count (all big-endian)
+  uint8_t header[16];
+  header[0] = (CACHE_MAGIC >> 24) & 0xFF;
+  header[1] = (CACHE_MAGIC >> 16) & 0xFF;
+  header[2] = (CACHE_MAGIC >> 8) & 0xFF;
+  header[3] = CACHE_MAGIC & 0xFF;
+  header[4] = (idxSize >> 24) & 0xFF;
+  header[5] = (idxSize >> 16) & 0xFF;
+  header[6] = (idxSize >> 8) & 0xFF;
+  header[7] = idxSize & 0xFF;
+  header[8] = (totalWords >> 24) & 0xFF;
+  header[9] = (totalWords >> 16) & 0xFF;
+  header[10] = (totalWords >> 8) & 0xFF;
+  header[11] = totalWords & 0xFF;
+  header[12] = (offsetCount >> 24) & 0xFF;
+  header[13] = (offsetCount >> 16) & 0xFF;
+  header[14] = (offsetCount >> 8) & 0xFF;
+  header[15] = offsetCount & 0xFF;
+  cache.write(header, 16);
+
+  // Write sparse offsets (native endian — same device always reads back)
+  cache.write(reinterpret_cast<const uint8_t*>(sparseOffsets.data()), offsetCount * 4);
+  cache.close();
 }
 
 // Scan the .idx file to build a sparse offset table for fast lookups.
@@ -97,6 +190,9 @@ bool Dictionary::loadIndex(const std::function<void(int percent)>& onProgress,
 
   idx.close();
   indexLoaded = true;
+  if (totalWords > 0) {
+    saveCachedIndex();
+  }
   return totalWords > 0;
 }
 
@@ -130,7 +226,9 @@ std::string Dictionary::readDefinition(uint32_t offset, uint32_t size) {
 std::string Dictionary::lookup(const std::string& word, const std::function<void(int percent)>& onProgress,
                                const std::function<bool()>& shouldCancel) {
   if (!indexLoaded) {
-    if (!loadIndex(onProgress, shouldCancel)) return "";
+    if (!loadCachedIndex()) {
+      if (!loadIndex(onProgress, shouldCancel)) return "";
+    }
   }
 
   if (sparseOffsets.empty()) return "";

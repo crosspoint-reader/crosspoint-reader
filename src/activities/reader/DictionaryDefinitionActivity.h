@@ -13,13 +13,15 @@ class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         const std::string& headword, const std::string& definition, int readerFontId,
-                                        uint8_t orientation, const std::function<void()>& onBack)
+                                        uint8_t orientation, const std::function<void()>& onBack,
+                                        const std::function<void()>& onDone = nullptr)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         definition(definition),
         readerFontId(readerFontId),
         orientation(orientation),
-        onBack(onBack) {}
+        onBack(onBack),
+        onDone(onDone) {}
 
   void onEnter() override;
   void onExit() override;
@@ -31,6 +33,7 @@ class DictionaryDefinitionActivity final : public Activity {
   int readerFontId;
   uint8_t orientation;
   const std::function<void()> onBack;
+  const std::function<void()> onDone;
 
   std::vector<std::string> wrappedLines;
   int currentPage = 0;

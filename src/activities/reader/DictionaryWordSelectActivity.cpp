@@ -6,6 +6,7 @@
 #include <climits>
 
 #include "CrossPointSettings.h"
+#include "DictionaryDefinitionActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "util/Dictionary.h"
@@ -18,7 +19,7 @@ void DictionaryWordSelectActivity::taskTrampoline(void* param) {
 
 void DictionaryWordSelectActivity::displayTaskLoop() {
   while (true) {
-    if (updateRequired) {
+    if (updateRequired && !subActivity) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       renderScreen();
@@ -29,7 +30,7 @@ void DictionaryWordSelectActivity::displayTaskLoop() {
 }
 
 void DictionaryWordSelectActivity::onEnter() {
-  Activity::onEnter();
+  ActivityWithSubactivity::onEnter();
   renderingMutex = xSemaphoreCreateMutex();
   extractWords();
   mergeHyphenatedWords();
@@ -42,7 +43,7 @@ void DictionaryWordSelectActivity::onEnter() {
 }
 
 void DictionaryWordSelectActivity::onExit() {
-  Activity::onExit();
+  ActivityWithSubactivity::onExit();
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   if (displayTaskHandle) {
     vTaskDelete(displayTaskHandle);
@@ -150,6 +151,22 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords() {
 }
 
 void DictionaryWordSelectActivity::loop() {
+  // Delegate to subactivity (definition screen) if active
+  if (subActivity) {
+    subActivity->loop();
+    if (pendingBackFromDef) {
+      pendingBackFromDef = false;
+      exitActivity();
+      updateRequired = true;
+    }
+    if (pendingExitToReader) {
+      pendingExitToReader = false;
+      exitActivity();
+      onBack();
+    }
+    return;
+  }
+
   if (words.empty()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       onBack();
@@ -305,7 +322,9 @@ void DictionaryWordSelectActivity::loop() {
     }
 
     LookupHistory::addWord(cachePath, cleaned);
-    onLookup(cleaned, definition);
+    enterNewActivity(new DictionaryDefinitionActivity(
+        renderer, mappedInput, cleaned, definition, fontId, orientation, [this]() { pendingBackFromDef = true; },
+        [this]() { pendingExitToReader = true; }));
     return;
   }
 

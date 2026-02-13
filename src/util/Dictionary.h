@@ -21,6 +21,8 @@ class Dictionary {
   static bool indexLoaded;
 
   static bool loadIndex(const std::function<void(int percent)>& onProgress, const std::function<bool()>& shouldCancel);
+  static bool loadCachedIndex();
+  static void saveCachedIndex();
   static std::string readWord(FsFile& file);
   static std::string readDefinition(uint32_t offset, uint32_t size);
 };

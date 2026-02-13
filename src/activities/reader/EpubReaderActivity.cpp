@@ -516,19 +516,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (pageForLookup) {
         enterNewActivity(new DictionaryWordSelectActivity(
             renderer, mappedInput, std::move(pageForLookup), readerFontId, orientedMarginLeft, orientedMarginTop,
-            bookCachePath, currentOrientation,
-            [this]() {
-              // On back from word select
-              pendingSubactivityExit = true;
-            },
-            [this, bookCachePath, readerFontId, currentOrientation](const std::string& headword,
-                                                                    const std::string& definition) {
-              // On successful lookup - show definition
-              exitActivity();
-              enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, headword, definition,
-                                                                readerFontId, currentOrientation,
-                                                                [this]() { pendingSubactivityExit = true; }));
-            }));
+            bookCachePath, currentOrientation, [this]() { pendingSubactivityExit = true; }));
       }
 
       xSemaphoreGive(renderingMutex);

@@ -9,24 +9,22 @@
 #include <string>
 #include <vector>
 
-#include "../Activity.h"
+#include "../ActivityWithSubactivity.h"
 
-class DictionaryWordSelectActivity final : public Activity {
+class DictionaryWordSelectActivity final : public ActivityWithSubactivity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, int fontId, int marginLeft, int marginTop,
                                         const std::string& cachePath, uint8_t orientation,
-                                        const std::function<void()>& onBack,
-                                        const std::function<void(const std::string&, const std::string&)>& onLookup)
-      : Activity("DictionaryWordSelect", renderer, mappedInput),
+                                        const std::function<void()>& onBack)
+      : ActivityWithSubactivity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         fontId(fontId),
         marginLeft(marginLeft),
         marginTop(marginTop),
         cachePath(cachePath),
         orientation(orientation),
-        onBack(onBack),
-        onLookup(onLookup) {}
+        onBack(onBack) {}
 
   void onEnter() override;
   void onExit() override;
@@ -58,13 +56,14 @@ class DictionaryWordSelectActivity final : public Activity {
   std::string cachePath;
   uint8_t orientation;
   const std::function<void()> onBack;
-  const std::function<void(const std::string&, const std::string&)> onLookup;
 
   std::vector<WordInfo> words;
   std::vector<Row> rows;
   int currentRow = 0;
   int currentWordInRow = 0;
   bool updateRequired = false;
+  bool pendingBackFromDef = false;
+  bool pendingExitToReader = false;
 
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;

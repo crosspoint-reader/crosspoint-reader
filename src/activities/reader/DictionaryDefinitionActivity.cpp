@@ -125,8 +125,16 @@ void DictionaryDefinitionActivity::loop() {
     updateRequired = true;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (onDone) {
+      onDone();
+    } else {
+      onBack();
+    }
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onBack();
     return;
   }
@@ -164,7 +172,7 @@ void DictionaryDefinitionActivity::renderScreen() {
   }
 
   // Button hints
-  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "<", ">");
+  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", onDone ? "Done" : "", "<", ">");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
