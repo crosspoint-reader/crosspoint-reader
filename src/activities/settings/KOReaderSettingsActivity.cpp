@@ -64,16 +64,15 @@ void KOReaderSettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
-    updateRequired = true;
-  });
-
-  buttonNavigator.onPrevious([this] {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
     updateRequired = true;
-  });
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
+    updateRequired = true;
+  }
 }
 
 void KOReaderSettingsActivity::handleSelection() {

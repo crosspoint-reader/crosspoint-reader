@@ -142,24 +142,37 @@ void KeyboardEntryActivity::handleKeyPress() {
 }
 
 void KeyboardEntryActivity::loop() {
-  // Handle navigation
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] {
-    selectedRow = ButtonNavigator::previousIndex(selectedRow, NUM_ROWS);
-
-    const int maxCol = getRowLength(selectedRow) - 1;
-    if (selectedCol > maxCol) selectedCol = maxCol;
+  // Navigation
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+    if (selectedRow > 0) {
+      selectedRow--;
+      // Clamp column to valid range for new row
+      const int maxCol = getRowLength(selectedRow) - 1;
+      if (selectedCol > maxCol) selectedCol = maxCol;
+    } else {
+      // Wrap to bottom row
+      selectedRow = NUM_ROWS - 1;
+      const int maxCol = getRowLength(selectedRow) - 1;
+      if (selectedCol > maxCol) selectedCol = maxCol;
+    }
     updateRequired = true;
-  });
+  }
 
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] {
-    selectedRow = ButtonNavigator::nextIndex(selectedRow, NUM_ROWS);
-
-    const int maxCol = getRowLength(selectedRow) - 1;
-    if (selectedCol > maxCol) selectedCol = maxCol;
+  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+    if (selectedRow < NUM_ROWS - 1) {
+      selectedRow++;
+      const int maxCol = getRowLength(selectedRow) - 1;
+      if (selectedCol > maxCol) selectedCol = maxCol;
+    } else {
+      // Wrap to top row
+      selectedRow = 0;
+      const int maxCol = getRowLength(selectedRow) - 1;
+      if (selectedCol > maxCol) selectedCol = maxCol;
+    }
     updateRequired = true;
-  });
+  }
 
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     const int maxCol = getRowLength(selectedRow) - 1;
 
     // Special bottom row case
@@ -178,14 +191,20 @@ void KeyboardEntryActivity::loop() {
         // At done button, move to backspace
         selectedCol = BACKSPACE_COL;
       }
-    } else {
-      selectedCol = ButtonNavigator::previousIndex(selectedCol, maxCol + 1);
+      updateRequired = true;
+      return;
     }
 
+    if (selectedCol > 0) {
+      selectedCol--;
+    } else {
+      // Wrap to end of current row
+      selectedCol = maxCol;
+    }
     updateRequired = true;
-  });
+  }
 
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     const int maxCol = getRowLength(selectedRow) - 1;
 
     // Special bottom row case
@@ -204,11 +223,18 @@ void KeyboardEntryActivity::loop() {
         // At done button, wrap to beginning of row
         selectedCol = SHIFT_COL;
       }
+      updateRequired = true;
+      return;
+    }
+
+    if (selectedCol < maxCol) {
+      selectedCol++;
     } else {
-      selectedCol = ButtonNavigator::nextIndex(selectedCol, maxCol + 1);
+      // Wrap to beginning of current row
+      selectedCol = 0;
     }
     updateRequired = true;
-  });
+  }
 
   // Selection
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {

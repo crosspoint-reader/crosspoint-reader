@@ -6,7 +6,6 @@
 #include <functional>
 
 #include "activities/ActivityWithSubactivity.h"
-#include "util/ButtonNavigator.h"
 
 /**
  * Submenu for KOReader Sync settings.
@@ -25,7 +24,6 @@ class KOReaderSettingsActivity final : public ActivityWithSubactivity {
  private:
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
-  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
 
   int selectedIndex = 0;

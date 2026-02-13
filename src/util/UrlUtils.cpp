@@ -25,10 +25,6 @@ std::string extractHost(const std::string& url) {
 }
 
 std::string buildUrl(const std::string& serverUrl, const std::string& path) {
-  // If path is already an absolute URL (has protocol), use it directly
-  if (path.find("://") != std::string::npos) {
-    return path;
-  }
   const std::string urlWithProtocol = ensureProtocol(serverUrl);
   if (path.empty()) {
     return urlWithProtocol;

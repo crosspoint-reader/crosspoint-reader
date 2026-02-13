@@ -7,7 +7,6 @@
 
 #include "MappedInputManager.h"
 #include "activities/ActivityWithSubactivity.h"
-#include "util/ButtonNavigator.h"
 
 class EpubReaderPercentSelectionActivity final : public ActivityWithSubactivity {
  public:
@@ -32,7 +31,6 @@ class EpubReaderPercentSelectionActivity final : public ActivityWithSubactivity 
   // FreeRTOS task and mutex for rendering.
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
-  ButtonNavigator buttonNavigator;
 
   // Callback invoked when the user confirms a percent.
   const std::function<void(int)> onSelect;
