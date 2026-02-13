@@ -33,6 +33,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
+#include "util/ScreenshotUtil.h"
 
 HalDisplay display;
 HalGPIO gpio;
@@ -288,22 +289,6 @@ void setupDisplayAndFonts() {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
-void takeScreenshot() {
-  const uint8_t* fb = display.getFrameBuffer();
-  if (!fb) {
-    Serial.println("[SCR] Framebuffer not available");
-    return;
-  }
-
-  String filename_str = "/screenshots/screenshot-" + String(millis()) + ".bmp";
-  if (FsHelpers::saveFramebufferAsBmp(filename_str.c_str(), fb, HalDisplay::DISPLAY_WIDTH,
-                                      HalDisplay::DISPLAY_HEIGHT)) {
-    Serial.println("[SCR] Screenshot saved to " + filename_str);
-  } else {
-    Serial.println("[SCR] Failed to save screenshot");
-  }
-}
-
 void setup() {
   t1 = millis();
 
@@ -425,14 +410,7 @@ void loop() {
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
-      takeScreenshot();
-      if (renderer.storeBwBuffer()) {
-        renderer.drawRect(6, 6, HalDisplay::DISPLAY_HEIGHT - 12, HalDisplay::DISPLAY_WIDTH - 12, 2, true);
-        renderer.displayBuffer();
-        delay(1000);
-        renderer.restoreBwBuffer();
-        renderer.displayBuffer(HalDisplay::RefreshMode::HALF_REFRESH);
-      }
+      ScreenshotUtil::takeScreenshot(renderer);
     }
     return;
   } else {
@@ -447,6 +425,10 @@ void loop() {
   }
 
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
+    // If the screenshot combination is potentially being pressed, don't sleep
+    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
+      return;
+    }
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;

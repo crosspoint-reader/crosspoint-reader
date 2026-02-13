@@ -17,6 +17,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ScreenshotUtil.h"
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
@@ -431,6 +432,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       pendingGoHome = true;
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::SCREENSHOT:
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      pendingScreenshot = true;
+      exitActivity();
+      updateRequired = true;
+      xSemaphoreGive(renderingMutex);
+      break;
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : 0;
@@ -616,6 +624,11 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
     renderer.clearFontCache();
   }
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+
+  if (pendingScreenshot) {
+    pendingScreenshot = false;
+    ScreenshotUtil::takeScreenshot(renderer);
+  }
 }
 
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {

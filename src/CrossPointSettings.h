@@ -181,7 +181,7 @@ class CrossPointSettings {
   static CrossPointSettings& getInstance() { return instance; }
 
   uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
+    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 100 : 400;
   }
   int getReaderFontId() const;
 
