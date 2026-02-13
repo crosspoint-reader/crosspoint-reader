@@ -33,9 +33,13 @@ void FontDecompressor::clearCache() {
 }
 
 uint16_t FontDecompressor::getGroupIndex(const EpdFontData* fontData, uint16_t glyphIndex) {
-  uint16_t baseSize = fontData->groups[0].glyphCount;
-  if (glyphIndex < baseSize) return 0;
-  return 1 + (glyphIndex - baseSize) / 8;
+  for (uint16_t i = 0; i < fontData->groupCount; i++) {
+    uint16_t first = fontData->groups[i].firstGlyphIndex;
+    if (glyphIndex >= first && glyphIndex < first + fontData->groups[i].glyphCount) {
+      return i;
+    }
+  }
+  return 0;
 }
 
 FontDecompressor::CacheEntry* FontDecompressor::findInCache(const EpdFontData* fontData, uint16_t groupIndex) {

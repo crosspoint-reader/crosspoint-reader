@@ -275,29 +275,48 @@ compress = args.compress
 
 # Build groups for compression
 if compress:
-    # Group 0: base group containing ASCII printable range (0x20-0x7E) glyphs
-    # plus any control character glyphs (zero-length bitmaps) at the start.
-    # Find the glyph index range for ASCII printable (0x20-0x7E).
-    # These are typically at the beginning of the glyph array since intervals
-    # start at 0x0000. We include all glyphs whose code point is <= 0x7E in
-    # the base group.
-    base_group_end = 0
-    for i, (props, packed) in enumerate(all_glyphs):
-        if props.code_point <= 0x7E:
-            base_group_end = i + 1
-        else:
-            break
+    # Script-based grouping: glyphs that co-occur in typical text rendering
+    # are grouped together for efficient LRU caching on the embedded target.
+    # Since glyphs are in codepoint order, glyphs in the same Unicode block
+    # are contiguous in the array and form natural groups.
+    SCRIPT_GROUP_RANGES = [
+        (0x0000, 0x007F),   # ASCII
+        (0x0080, 0x00FF),   # Latin-1 Supplement
+        (0x0100, 0x017F),   # Latin Extended-A
+        (0x0300, 0x036F),   # Combining Diacritical Marks
+        (0x0400, 0x04FF),   # Cyrillic
+        (0x2000, 0x206F),   # General Punctuation
+        (0x2070, 0x209F),   # Superscripts & Subscripts
+        (0x20A0, 0x20CF),   # Currency Symbols
+        (0x2190, 0x21FF),   # Arrows
+        (0x2200, 0x22FF),   # Math Operators
+        (0xFFFD, 0xFFFD),   # Replacement Character
+    ]
+
+    def get_script_group(code_point):
+        for i, (start, end) in enumerate(SCRIPT_GROUP_RANGES):
+            if start <= code_point <= end:
+                return i
+        return -1
 
     groups = []  # list of (first_glyph_index, glyph_count)
-    groups.append((0, base_group_end))
+    current_group_id = None
+    group_start = 0
+    group_count = 0
 
-    # Remaining glyphs in groups of 8
-    remaining_start = base_group_end
-    total_glyphs = len(all_glyphs)
-    while remaining_start < total_glyphs:
-        group_size = min(8, total_glyphs - remaining_start)
-        groups.append((remaining_start, group_size))
-        remaining_start += group_size
+    for i, (props, packed) in enumerate(all_glyphs):
+        sg = get_script_group(props.code_point)
+        if sg != current_group_id:
+            if group_count > 0:
+                groups.append((group_start, group_count))
+            current_group_id = sg
+            group_start = i
+            group_count = 1
+        else:
+            group_count += 1
+
+    if group_count > 0:
+        groups.append((group_start, group_count))
 
     # Compress each group
     compressed_groups = []  # list of (compressed_bytes, uncompressed_size, glyph_count, first_glyph_index)
