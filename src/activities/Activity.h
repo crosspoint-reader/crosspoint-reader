@@ -1,5 +1,6 @@
 #pragma once
 #include <HardwareSerial.h>
+#include <Logging.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>

@@ -1,7 +1,7 @@
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"

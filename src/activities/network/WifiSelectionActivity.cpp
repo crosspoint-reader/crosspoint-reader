@@ -1,6 +1,7 @@
 #include "WifiSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <WiFi.h>
 
 #include <map>
@@ -51,7 +52,7 @@ void WifiSelectionActivity::onEnter() {
     if (!lastSsid.empty()) {
       const auto* cred = WIFI_STORE.findCredential(lastSsid);
       if (cred) {
-        Serial.printf("[%lu] [WIFI] Attempting to auto-connect to %s\n", millis(), lastSsid.c_str());
+        LOG_DBG("WIFI", "Attempting to auto-connect to %s", lastSsid.c_str());
         selectedSSID = cred->ssid;
         enteredPassword = cred->password;
         selectedRequiresPassword = !cred->password.empty();
@@ -71,18 +72,18 @@ void WifiSelectionActivity::onEnter() {
 void WifiSelectionActivity::onExit() {
   Activity::onExit();
 
-  Serial.printf("[%lu] [WIFI] [MEM] Free heap at onExit start: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WIFI", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   // Stop any ongoing WiFi scan
-  Serial.printf("[%lu] [WIFI] Deleting WiFi scan...\n", millis());
+  LOG_DBG("WIFI", "Deleting WiFi scan...");
   WiFi.scanDelete();
-  Serial.printf("[%lu] [WIFI] [MEM] Free heap after scanDelete: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WIFI", "Free heap after scanDelete: %d bytes", ESP.getFreeHeap());
 
   // Note: We do NOT disconnect WiFi here - the parent activity
   // (CrossPointWebServerActivity) manages WiFi connection state. We just clean
   // up the scan and task.
 
-  Serial.printf("[%lu] [WIFI] [MEM] Free heap at onExit end: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WIFI", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
 
 void WifiSelectionActivity::startWifiScan() {
@@ -180,8 +181,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     // Use saved password - connect directly
     enteredPassword = savedCred->password;
     usedSavedPassword = true;
-    Serial.printf("[%lu] [WiFi] Using saved password for %s, length: %zu\n", millis(), selectedSSID.c_str(),
-                  enteredPassword.size());
+    LOG_DBG("WiFi", "Using saved password for %s, length: %zu", selectedSSID.c_str(), enteredPassword.size());
     attemptConnection();
     return;
   }
@@ -256,10 +256,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
       requestUpdate();
     } else {
       // Using saved password or open network - complete immediately
-      Serial.printf(
-          "[%lu] [WIFI] Connected with saved/open credentials, "
-          "completing immediately\n",
-          millis());
+      LOG_DBG("WIFI",
+              "Connected with saved/open credentials, "
+              "completing immediately");
       onComplete(true);
     }
     return;

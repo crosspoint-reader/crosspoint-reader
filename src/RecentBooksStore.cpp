@@ -2,7 +2,7 @@
 
 #include <Epub.h>
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
 #include <Xtc.h>
 
@@ -72,7 +72,7 @@ bool RecentBooksStore::saveToFile() const {
   }
 
   outputFile.close();
-  Serial.printf("[%lu] [RBS] Recent books saved to file (%d entries)\n", millis(), count);
+  LOG_DBG("RBS", "Recent books saved to file (%d entries)", count);
   return true;
 }
 
@@ -83,7 +83,7 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
     lastBookFileName = path.substr(lastSlash + 1);
   }
 
-  Serial.printf("[%lu] [RBS] Loading recent book: %s\n", millis(), path.c_str());
+  LOG_DBG("RBS", "Loading recent book: %s", path.c_str());
 
   // If epub, try to load the metadata for title/author and cover
   if (StringUtils::checkFileExtension(lastBookFileName, ".epub")) {
@@ -136,7 +136,7 @@ bool RecentBooksStore::loadFromFile() {
         }
       }
     } else {
-      Serial.printf("[%lu] [RBS] Deserialization failed: Unknown version %u\n", millis(), version);
+      LOG_ERR("RBS", "Deserialization failed: Unknown version %u", version);
       inputFile.close();
       return false;
     }
@@ -158,6 +158,6 @@ bool RecentBooksStore::loadFromFile() {
   }
 
   inputFile.close();
-  Serial.printf("[%lu] [RBS] Recent books loaded from file (%d entries)\n", millis(), recentBooks.size());
+  LOG_DBG("RBS", "Recent books loaded from file (%d entries)", recentBooks.size());
   return true;
 }
