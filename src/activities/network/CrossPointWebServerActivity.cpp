@@ -385,14 +385,24 @@ void CrossPointWebServerActivity::displayTaskLoop() {
 void CrossPointWebServerActivity::render() const {
   // Only render our own UI when server is running
   // Subactivities handle their own rendering
-  if (state == WebServerActivityState::SERVER_RUNNING) {
+  if (state == WebServerActivityState::SERVER_RUNNING || state == WebServerActivityState::AP_STARTING) {
     renderer.clearScreen();
-    renderServerRunning();
-    renderer.displayBuffer();
-  } else if (state == WebServerActivityState::AP_STARTING) {
-    renderer.clearScreen();
+    auto metrics = UITheme::getInstance().getMetrics();
+    const auto pageWidth = renderer.getScreenWidth();
     const auto pageHeight = renderer.getScreenHeight();
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, "Starting Hotspot...", true, EpdFontFamily::BOLD);
+
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                   isApMode ? "Hotspot Mode" : "Network Transfer", nullptr);
+
+    if (state == WebServerActivityState::SERVER_RUNNING) {
+      GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                        connectedSSID.c_str());
+      renderServerRunning();
+    } else {
+      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const auto top = (pageHeight - height) / 2;
+      renderer.drawCenteredText(UI_10_FONT_ID, top, "Starting Hotspot...");
+    }
     renderer.displayBuffer();
   }
 }
