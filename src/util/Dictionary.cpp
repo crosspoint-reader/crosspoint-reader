@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 
 namespace {
 constexpr const char* IDX_PATH = "/dictionary.idx";
@@ -297,4 +298,203 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
   idx.close();
   if (onProgress) onProgress(100);
   return "";
+}
+
+std::vector<std::string> Dictionary::getStemVariants(const std::string& word) {
+  std::vector<std::string> variants;
+  size_t len = word.size();
+  if (len < 3) return variants;
+
+  auto endsWith = [&word, len](const char* suffix) {
+    size_t slen = strlen(suffix);
+    return len >= slen && word.compare(len - slen, slen, suffix) == 0;
+  };
+
+  auto add = [&variants](const std::string& s) {
+    if (s.size() >= 2) variants.push_back(s);
+  };
+
+  // Plurals (longer suffixes first to avoid partial matches)
+  if (endsWith("sses")) add(word.substr(0, len - 2));
+  if (endsWith("ies")) {
+    add(word.substr(0, len - 3) + "y");
+    if (len == 4) add(word.substr(0, len - 1));
+  }
+  if (endsWith("ves")) {
+    add(word.substr(0, len - 3) + "f");
+    add(word.substr(0, len - 3) + "fe");
+  }
+  if (endsWith("es") && !endsWith("sses") && !endsWith("ies") && !endsWith("ves")) {
+    add(word.substr(0, len - 2));
+    add(word.substr(0, len - 1));
+  }
+  if (endsWith("s") && !endsWith("ss") && !endsWith("us") && !endsWith("es")) {
+    add(word.substr(0, len - 1));
+  }
+
+  // Past tense
+  if (endsWith("ied")) {
+    add(word.substr(0, len - 3) + "y");
+    add(word.substr(0, len - 1));
+  }
+  if (endsWith("ed") && !endsWith("ied")) {
+    add(word.substr(0, len - 2));
+    add(word.substr(0, len - 1));
+    if (len > 4 && word[len - 3] == word[len - 4]) {
+      add(word.substr(0, len - 3));
+    }
+  }
+
+  // Progressive
+  if (endsWith("ying")) {
+    add(word.substr(0, len - 4) + "ie");
+  }
+  if (endsWith("ing") && !endsWith("ying")) {
+    add(word.substr(0, len - 3));
+    add(word.substr(0, len - 3) + "e");
+    if (len > 5 && word[len - 4] == word[len - 5]) {
+      add(word.substr(0, len - 4));
+    }
+  }
+
+  // Adverb
+  if (endsWith("ily")) {
+    add(word.substr(0, len - 3) + "y");
+  }
+  if (endsWith("ly") && !endsWith("ily")) {
+    add(word.substr(0, len - 2));
+  }
+
+  // Comparative / superlative
+  if (endsWith("ier")) {
+    add(word.substr(0, len - 3) + "y");
+  }
+  if (endsWith("er") && !endsWith("ier")) {
+    add(word.substr(0, len - 2));
+    add(word.substr(0, len - 1));
+    if (len > 4 && word[len - 3] == word[len - 4]) {
+      add(word.substr(0, len - 3));
+    }
+  }
+  if (endsWith("iest")) {
+    add(word.substr(0, len - 4) + "y");
+  }
+  if (endsWith("est") && !endsWith("iest")) {
+    add(word.substr(0, len - 3));
+    add(word.substr(0, len - 2));
+    if (len > 5 && word[len - 4] == word[len - 5]) {
+      add(word.substr(0, len - 4));
+    }
+  }
+
+  // Derivational suffixes
+  if (endsWith("ness")) add(word.substr(0, len - 4));
+  if (endsWith("ment")) add(word.substr(0, len - 4));
+  if (endsWith("ful")) add(word.substr(0, len - 3));
+  if (endsWith("less")) add(word.substr(0, len - 4));
+  if (endsWith("able")) {
+    add(word.substr(0, len - 4));
+    add(word.substr(0, len - 4) + "e");
+  }
+  if (endsWith("tion")) add(word.substr(0, len - 4) + "te");
+  if (endsWith("ation")) add(word.substr(0, len - 5) + "e");
+
+  // Prefix removal
+  if (len > 5 && word.compare(0, 2, "un") == 0) add(word.substr(2));
+  if (len > 6 && word.compare(0, 3, "dis") == 0) add(word.substr(3));
+  if (len > 5 && word.compare(0, 2, "re") == 0) add(word.substr(2));
+
+  // Deduplicate
+  std::sort(variants.begin(), variants.end());
+  variants.erase(std::unique(variants.begin(), variants.end()), variants.end());
+  return variants;
+}
+
+int Dictionary::editDistance(const std::string& a, const std::string& b, int maxDist) {
+  int m = static_cast<int>(a.size());
+  int n = static_cast<int>(b.size());
+  if (std::abs(m - n) > maxDist) return maxDist + 1;
+
+  std::vector<int> dp(n + 1);
+  for (int j = 0; j <= n; j++) dp[j] = j;
+
+  for (int i = 1; i <= m; i++) {
+    int prev = dp[0];
+    dp[0] = i;
+    int rowMin = dp[0];
+    for (int j = 1; j <= n; j++) {
+      int temp = dp[j];
+      if (a[i - 1] == b[j - 1]) {
+        dp[j] = prev;
+      } else {
+        dp[j] = 1 + std::min({prev, dp[j], dp[j - 1]});
+      }
+      prev = temp;
+      if (dp[j] < rowMin) rowMin = dp[j];
+    }
+    if (rowMin > maxDist) return maxDist + 1;
+  }
+  return dp[n];
+}
+
+std::vector<std::string> Dictionary::findSimilar(const std::string& word, int maxResults) {
+  if (!indexLoaded || sparseOffsets.empty()) return {};
+
+  FsFile idx;
+  if (!Storage.openFileForRead("DICT", IDX_PATH, idx)) return {};
+
+  // Binary search to find the segment containing or nearest to the word
+  int lo = 0, hi = static_cast<int>(sparseOffsets.size()) - 1;
+  while (lo < hi) {
+    int mid = lo + (hi - lo + 1) / 2;
+    idx.seekSet(sparseOffsets[mid]);
+    std::string key = readWord(idx);
+    if (key <= word) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  // Scan entries from the segment before through the segment after the target
+  int startSeg = std::max(0, lo - 1);
+  int endSeg = std::min(static_cast<int>(sparseOffsets.size()) - 1, lo + 1);
+  idx.seekSet(sparseOffsets[startSeg]);
+
+  int totalToScan = (endSeg - startSeg + 1) * SPARSE_INTERVAL;
+  int remaining = static_cast<int>(totalWords) - startSeg * SPARSE_INTERVAL;
+  if (totalToScan > remaining) totalToScan = remaining;
+
+  int maxDist = std::max(2, static_cast<int>(word.size()) / 3 + 1);
+
+  struct Candidate {
+    std::string text;
+    int distance;
+  };
+  std::vector<Candidate> candidates;
+
+  for (int i = 0; i < totalToScan; i++) {
+    std::string key = readWord(idx);
+    if (key.empty()) break;
+
+    uint8_t skip[8];
+    if (idx.read(skip, 8) != 8) break;
+
+    if (key == word) continue;
+    int dist = editDistance(key, word, maxDist);
+    if (dist <= maxDist) {
+      candidates.push_back({key, dist});
+    }
+  }
+
+  idx.close();
+
+  std::sort(candidates.begin(), candidates.end(),
+            [](const Candidate& a, const Candidate& b) { return a.distance < b.distance; });
+
+  std::vector<std::string> results;
+  for (size_t i = 0; i < candidates.size() && static_cast<int>(results.size()) < maxResults; i++) {
+    results.push_back(candidates[i].text);
+  }
+  return results;
 }

@@ -7,6 +7,7 @@
 
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
+#include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "util/Dictionary.h"
@@ -313,18 +314,40 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
 
-    if (definition.empty()) {
-      GUI.drawPopup(renderer, "Not found");
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-      vTaskDelay(1500 / portTICK_PERIOD_MS);
-      updateRequired = true;
+    if (!definition.empty()) {
+      LookupHistory::addWord(cachePath, cleaned);
+      enterNewActivity(new DictionaryDefinitionActivity(
+          renderer, mappedInput, cleaned, definition, fontId, orientation, [this]() { pendingBackFromDef = true; },
+          [this]() { pendingExitToReader = true; }));
       return;
     }
 
-    LookupHistory::addWord(cachePath, cleaned);
-    enterNewActivity(new DictionaryDefinitionActivity(
-        renderer, mappedInput, cleaned, definition, fontId, orientation, [this]() { pendingBackFromDef = true; },
-        [this]() { pendingExitToReader = true; }));
+    // Try stem variants (e.g., "jumped" → "jump")
+    auto stems = Dictionary::getStemVariants(cleaned);
+    for (const auto& stem : stems) {
+      std::string stemDef = Dictionary::lookup(stem);
+      if (!stemDef.empty()) {
+        LookupHistory::addWord(cachePath, stem);
+        enterNewActivity(new DictionaryDefinitionActivity(
+            renderer, mappedInput, stem, stemDef, fontId, orientation, [this]() { pendingBackFromDef = true; },
+            [this]() { pendingExitToReader = true; }));
+        return;
+      }
+    }
+
+    // Find similar words for suggestions
+    auto similar = Dictionary::findSimilar(cleaned, 6);
+    if (!similar.empty()) {
+      enterNewActivity(new DictionarySuggestionsActivity(
+          renderer, mappedInput, cleaned, similar, fontId, cachePath, orientation,
+          [this]() { pendingBackFromDef = true; }, [this]() { pendingExitToReader = true; }));
+      return;
+    }
+
+    GUI.drawPopup(renderer, "Not found");
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    vTaskDelay(1500 / portTICK_PERIOD_MS);
+    updateRequired = true;
     return;
   }
 

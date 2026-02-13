@@ -12,6 +12,8 @@ class Dictionary {
   static std::string lookup(const std::string& word, const std::function<void(int percent)>& onProgress = nullptr,
                             const std::function<bool()>& shouldCancel = nullptr);
   static std::string cleanWord(const std::string& word);
+  static std::vector<std::string> getStemVariants(const std::string& word);
+  static std::vector<std::string> findSimilar(const std::string& word, int maxResults);
 
  private:
   static constexpr int SPARSE_INTERVAL = 512;
@@ -25,4 +27,5 @@ class Dictionary {
   static void saveCachedIndex();
   static std::string readWord(FsFile& file);
   static std::string readDefinition(uint32_t offset, uint32_t size);
+  static int editDistance(const std::string& a, const std::string& b, int maxDist);
 };
