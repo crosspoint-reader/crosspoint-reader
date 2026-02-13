@@ -73,12 +73,11 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
               Rect{batteryX, rect.y + 10, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
               showBatteryPercentage);
 
-  int maxTitleWidth = rect.width - LyraMetrics::values.contentSidePadding * 2 
-    - (subtitle != nullptr ? maxSubtitleWidth : 0);
-    
+  int maxTitleWidth =
+      rect.width - LyraMetrics::values.contentSidePadding * 2 - (subtitle != nullptr ? maxSubtitleWidth : 0);
+
   if (title) {
-    auto truncatedTitle = renderer.truncatedText(
-        UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
+    auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
     renderer.drawText(UI_12_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding,
                       rect.y + LyraMetrics::values.batteryBarHeight + 3, truncatedTitle.c_str(), true,
                       EpdFontFamily::BOLD);
@@ -86,12 +85,11 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   }
 
   if (subtitle) {
-    auto truncatedSubtitle = renderer.truncatedText(
-        SMALL_FONT_ID, subtitle, maxSubtitleWidth, EpdFontFamily::REGULAR);
+    auto truncatedSubtitle = renderer.truncatedText(SMALL_FONT_ID, subtitle, maxSubtitleWidth, EpdFontFamily::REGULAR);
     int truncatedSubtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedSubtitle.c_str());
-    renderer.drawText(SMALL_FONT_ID, 
-                    rect.x + rect.width - LyraMetrics::values.contentSidePadding - truncatedSubtitleWidth,
-                    rect.y + 50, truncatedSubtitle.c_str(), true);
+    renderer.drawText(SMALL_FONT_ID,
+                      rect.x + rect.width - LyraMetrics::values.contentSidePadding - truncatedSubtitleWidth,
+                      rect.y + 50, truncatedSubtitle.c_str(), true);
   }
 }
 
@@ -100,9 +98,8 @@ void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
 
   auto truncatedLabel = renderer.truncatedText(
       UI_10_FONT_ID, label, rect.width - LyraMetrics::values.contentSidePadding * 2, EpdFontFamily::REGULAR);
-  renderer.drawText(UI_10_FONT_ID, currentX, rect.y + 6, truncatedLabel.c_str(), true,
-        EpdFontFamily::REGULAR);
-        
+  renderer.drawText(UI_10_FONT_ID, currentX, rect.y + 6, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
+
   renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width, rect.y + rect.height - 1, true);
 }
 

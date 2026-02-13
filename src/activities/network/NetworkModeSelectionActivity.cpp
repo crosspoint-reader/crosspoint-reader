@@ -108,12 +108,9 @@ void NetworkModeSelectionActivity::render() const {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
   GUI.drawList(
-      renderer,
-      Rect{0, contentTop, pageWidth, contentHeight},
-      static_cast<int>(MENU_ITEM_COUNT), selectedIndex,
-      [this](int index) { return MENU_ITEMS[index]; }, 
-      [this](int index) { return MENU_DESCRIPTIONS[index]; }, nullptr, nullptr);
-
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEM_COUNT), selectedIndex,
+      [this](int index) { return MENU_ITEMS[index]; }, [this](int index) { return MENU_DESCRIPTIONS[index]; }, nullptr,
+      nullptr);
 
   // Draw help text at bottom
   const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
