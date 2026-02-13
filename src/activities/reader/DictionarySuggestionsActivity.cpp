@@ -97,8 +97,8 @@ void DictionarySuggestionsActivity::loop() {
 
     LookupHistory::addWord(cachePath, selected);
     enterNewActivity(new DictionaryDefinitionActivity(
-        renderer, mappedInput, selected, definition, readerFontId, orientation,
-        [this]() { pendingBackFromDef = true; }, [this]() { pendingExitToReader = true; }));
+        renderer, mappedInput, selected, definition, readerFontId, orientation, [this]() { pendingBackFromDef = true; },
+        [this]() { pendingExitToReader = true; }));
     return;
   }
 

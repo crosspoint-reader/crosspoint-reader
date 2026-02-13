@@ -12,11 +12,9 @@
 class DictionarySuggestionsActivity final : public ActivityWithSubactivity {
  public:
   explicit DictionarySuggestionsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                         const std::string& originalWord,
-                                         const std::vector<std::string>& suggestions, int readerFontId,
-                                         const std::string& cachePath, uint8_t orientation,
-                                         const std::function<void()>& onBack,
-                                         const std::function<void()>& onDone)
+                                         const std::string& originalWord, const std::vector<std::string>& suggestions,
+                                         int readerFontId, const std::string& cachePath, uint8_t orientation,
+                                         const std::function<void()>& onBack, const std::function<void()>& onDone)
       : ActivityWithSubactivity("DictionarySuggestions", renderer, mappedInput),
         originalWord(originalWord),
         suggestions(suggestions),

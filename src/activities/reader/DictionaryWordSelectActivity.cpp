@@ -83,9 +83,55 @@ void DictionaryWordSelectActivity::extractWords() {
     while (wordIt != wordList.end() && xIt != xPosList.end()) {
       int16_t screenX = line->xPos + static_cast<int16_t>(*xIt) + marginLeft;
       int16_t screenY = line->yPos + marginTop;
-      int16_t wordWidth = renderer.getTextWidth(fontId, wordIt->c_str());
+      const std::string& wordText = *wordIt;
 
-      words.push_back({*wordIt, screenX, screenY, wordWidth, 0});
+      // Split on en-dash (U+2013: E2 80 93) and em-dash (U+2014: E2 80 94)
+      std::vector<size_t> splitStarts;
+      size_t partStart = 0;
+      for (size_t i = 0; i < wordText.size();) {
+        if (i + 2 < wordText.size() && static_cast<uint8_t>(wordText[i]) == 0xE2 &&
+            static_cast<uint8_t>(wordText[i + 1]) == 0x80 &&
+            (static_cast<uint8_t>(wordText[i + 2]) == 0x93 || static_cast<uint8_t>(wordText[i + 2]) == 0x94)) {
+          if (i > partStart) splitStarts.push_back(partStart);
+          i += 3;
+          partStart = i;
+        } else {
+          i++;
+        }
+      }
+      if (partStart < wordText.size()) splitStarts.push_back(partStart);
+
+      if (splitStarts.size() <= 1 && partStart == 0) {
+        // No dashes found — add as a single word
+        int16_t wordWidth = renderer.getTextWidth(fontId, wordText.c_str());
+        words.push_back({wordText, screenX, screenY, wordWidth, 0});
+      } else {
+        // Add each part as a separate selectable word
+        for (size_t si = 0; si < splitStarts.size(); si++) {
+          size_t start = splitStarts[si];
+          size_t end = (si + 1 < splitStarts.size()) ? splitStarts[si + 1] : wordText.size();
+          // Find actual end by trimming any trailing dash bytes
+          size_t textEnd = end;
+          while (textEnd > start && textEnd <= wordText.size()) {
+            if (textEnd >= 3 && static_cast<uint8_t>(wordText[textEnd - 3]) == 0xE2 &&
+                static_cast<uint8_t>(wordText[textEnd - 2]) == 0x80 &&
+                (static_cast<uint8_t>(wordText[textEnd - 1]) == 0x93 ||
+                 static_cast<uint8_t>(wordText[textEnd - 1]) == 0x94)) {
+              textEnd -= 3;
+            } else {
+              break;
+            }
+          }
+          std::string part = wordText.substr(start, textEnd - start);
+          if (part.empty()) continue;
+
+          std::string prefix = wordText.substr(0, start);
+          int16_t offsetX = prefix.empty() ? 0 : renderer.getTextWidth(fontId, prefix.c_str());
+          int16_t partWidth = renderer.getTextWidth(fontId, part.c_str());
+          words.push_back({part, static_cast<int16_t>(screenX + offsetX), screenY, partWidth, 0});
+        }
+      }
+
       ++wordIt;
       ++xIt;
     }
