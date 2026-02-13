@@ -37,7 +37,7 @@ class Page {
  public:
   // the list of block index and line numbers on this page
   std::vector<std::shared_ptr<PageElement>> elements;
-  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset, bool kerningEnabled = true) const;
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset, bool kerningEnabled) const;
   bool serialize(FsFile& file) const;
   static std::unique_ptr<Page> deserialize(FsFile& file);
 };

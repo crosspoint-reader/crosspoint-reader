@@ -3,14 +3,14 @@
 
 class EpdFont {
   void getTextBounds(const char* string, int startX, int startY, int* minX, int* minY, int* maxX, int* maxY,
-                     bool kerningEnabled = true) const;
+                     bool kerningEnabled) const;
 
  public:
   const EpdFontData* data;
   explicit EpdFont(const EpdFontData* data) : data(data) {}
   ~EpdFont() = default;
-  void getTextDimensions(const char* string, int* w, int* h, bool kerningEnabled = true) const;
-  bool hasPrintableChars(const char* string, bool kerningEnabled = true) const;
+  void getTextDimensions(const char* string, int* w, int* h, bool kerningEnabled) const;
+  bool hasPrintableChars(const char* string, bool kerningEnabled) const;
 
   const EpdGlyph* getGlyph(uint32_t cp) const;
 

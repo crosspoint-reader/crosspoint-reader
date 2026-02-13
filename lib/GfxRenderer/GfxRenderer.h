@@ -37,7 +37,7 @@ class GfxRenderer {
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
-                  EpdFontFamily::Style style, uint32_t prevCp = 0, bool kerningEnabled = true) const;
+                  EpdFontFamily::Style style, uint32_t prevCp, bool kerningEnabled) const;
   void freeBwBufferChunks();
   template <Color color>
   void drawPixelDither(int x, int y) const;
@@ -110,7 +110,7 @@ class GfxRenderer {
   int getSpaceKernAdjust(int fontId, uint32_t leftCp, uint32_t rightCp) const;
   /// Returns the kerning adjustment between two adjacent codepoints.
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp) const;
-  int getTextAdvanceX(int fontId, const char* text, bool kerningEnabled = true) const;
+  int getTextAdvanceX(int fontId, const char* text, bool kerningEnabled) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
