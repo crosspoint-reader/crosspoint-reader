@@ -20,7 +20,7 @@ inline std::vector<SettingInfo> getSettingsList() {
                         {"None", "Contrast", "Inverted"}, "sleepScreenCoverFilter", "Display"),
       SettingInfo::Enum(
           "Status Bar", &CrossPointSettings::statusBar,
-          {"None", "No Progress", "Full w/ Percentage", "Full w/ Book Bar", "Book Bar Only", "Full w/ Chapter Bar"},
+          {"None", "No Progress", "Full w/ Percentage", "Full w/ Book Bar", "Book Bar Only", "Full w/ Chapter Bar", "Chapter Bar Only"},
           "statusBar", "Display"),
       SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"},
                         "hideBatteryPercentage", "Display"),
