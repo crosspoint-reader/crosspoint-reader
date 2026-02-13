@@ -121,7 +121,10 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       const uint32_t nextCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text));
       if (nextCp == 0) break;
       const uint32_t lig = font.getLigature(cp, nextCp, style);
-      if (lig == 0) { text = reinterpret_cast<const char*>(saved); break; }
+      if (lig == 0) {
+        text = reinterpret_cast<const char*>(saved);
+        break;
+      }
       cp = lig;
     }
     renderChar(font, cp, &xpos, &yPos, black, style, prevCp, kerningEnabled);
@@ -757,7 +760,10 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const bool 
       const uint32_t nextCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text));
       if (nextCp == 0) break;
       const uint32_t lig = family.getLigature(cp, nextCp);
-      if (lig == 0) { text = reinterpret_cast<const char*>(saved); break; }
+      if (lig == 0) {
+        text = reinterpret_cast<const char*>(saved);
+        break;
+      }
       cp = lig;
     }
     if (kerningEnabled && prevCp != 0) {
@@ -828,7 +834,10 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       const uint32_t nextCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text));
       if (nextCp == 0) break;
       const uint32_t lig = font.getLigature(cp, nextCp, style);
-      if (lig == 0) { text = reinterpret_cast<const char*>(saved); break; }
+      if (lig == 0) {
+        text = reinterpret_cast<const char*>(saved);
+        break;
+      }
       cp = lig;
     }
 
@@ -999,8 +1008,8 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
 }
 
 void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
-                             const bool pixelState, const EpdFontFamily::Style style,
-                             const uint32_t prevCp, const bool kerningEnabled) const {
+                             const bool pixelState, const EpdFontFamily::Style style, const uint32_t prevCp,
+                             const bool kerningEnabled) const {
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
     glyph = fontFamily.getGlyph(REPLACEMENT_GLYPH, style);

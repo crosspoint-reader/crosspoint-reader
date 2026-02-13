@@ -52,8 +52,7 @@ void stripSoftHyphensInPlace(std::string& word) {
 
 // Returns the rendered width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
 uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const bool kerningEnabled,
-                          const std::string& word, const EpdFontFamily::Style style,
-                          const bool appendHyphen = false) {
+                          const std::string& word, const EpdFontFamily::Style style, const bool appendHyphen = false) {
   if (word.size() == 1 && word[0] == ' ' && !appendHyphen) {
     return renderer.getSpaceWidth(fontId);
   }
@@ -296,8 +295,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
         }
       } else if (!isFirstWord && continuesVec[currentIndex] && kerningEnabled) {
         // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
-        spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
-                                      firstCodepoint(words[currentIndex]));
+        spacing =
+            renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]), firstCodepoint(words[currentIndex]));
       }
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
@@ -372,8 +371,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
-    const int prefixWidth = measureWordWidth(renderer, fontId, kerningEnabled, word.substr(0, offset), style,
-                                             needsHyphen);
+    const int prefixWidth =
+        measureWordWidth(renderer, fontId, kerningEnabled, word.substr(0, offset), style, needsHyphen);
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
       continue;  // Skip if too wide or not an improvement
     }
@@ -459,10 +458,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   // For justified text, compute per-gap extra to distribute remaining space evenly
   const int spareSpace = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
-  const int justifyExtra =
-      (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1)
-          ? spareSpace / static_cast<int>(actualGapCount)
-          : 0;
+  const int justifyExtra = (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1)
+                               ? spareSpace / static_cast<int>(actualGapCount)
+                               : 0;
 
   // Calculate initial x position (first line starts at indent for left/justified text)
   auto xpos = static_cast<uint16_t>(firstLineIndent);

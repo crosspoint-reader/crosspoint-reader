@@ -46,8 +46,8 @@ typedef struct {
   int ascender;                         ///< Maximal height of a glyph above the base line
   int descender;                        ///< Maximal height of a glyph below the base line
   bool is2Bit;
-  const EpdKernPair* kernPairs;              ///< Sorted kern pair table (nullptr if none)
-  uint32_t kernPairCount;                    ///< Number of entries in kernPairs
-  const EpdLigaturePair* ligaturePairs;      ///< Sorted ligature pair table (nullptr if none)
-  uint32_t ligaturePairCount;                ///< Number of entries in ligaturePairs
+  const EpdKernPair* kernPairs;          ///< Sorted kern pair table (nullptr if none)
+  uint32_t kernPairCount;                ///< Number of entries in kernPairs
+  const EpdLigaturePair* ligaturePairs;  ///< Sorted ligature pair table (nullptr if none)
+  uint32_t ligaturePairCount;            ///< Number of entries in ligaturePairs
 } EpdFontData;

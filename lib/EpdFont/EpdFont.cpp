@@ -26,7 +26,10 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       const uint32_t nextCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string));
       if (nextCp == 0) break;
       const uint32_t lig = getLigature(cp, nextCp);
-      if (lig == 0) { string = reinterpret_cast<const char*>(saved); break; }
+      if (lig == 0) {
+        string = reinterpret_cast<const char*>(saved);
+        break;
+      }
       cp = lig;
     }
 
