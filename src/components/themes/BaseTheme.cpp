@@ -21,17 +21,22 @@ constexpr int homeMarginTop = 30;
 constexpr int subtitleY = 738;
 }  // namespace
 
-void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
-  // Left aligned battery icon and percentage
-  // TODO refactor this so the percentage doesnt change after we position it
+void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage,
+                            const bool alignRight) const {
   const uint16_t percentage = battery.readPercentage();
+  int x = alignRight ? rect.x + rect.width - BaseMetrics::values.contentSidePadding - BaseMetrics::values.batteryWidth
+                     : rect.x;
+
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + BaseMetrics::values.batteryWidth, rect.y,
+    if (alignRight) {
+      x -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+    }
+    renderer.drawText(SMALL_FONT_ID, x + batteryPercentSpacing + BaseMetrics::values.batteryWidth, rect.y,
                       percentageText.c_str());
   }
+
   // 1 column on left, 2 columns on right, 5 columns of battery body
-  const int x = rect.x;
   const int y = rect.y + 6;
   const int battWidth = BaseMetrics::values.batteryWidth;
 
@@ -48,9 +53,9 @@ void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool s
   renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rect.height - 5);
 
   // The +1 is to round up, so that we always fill at least one pixel
-  int filledWidth = percentage * (rect.width - 5) / 100 + 1;
-  if (filledWidth > rect.width - 5) {
-    filledWidth = rect.width - 5;  // Ensure we don't overflow
+  int filledWidth = percentage * (battWidth - 5) / 100 + 1;
+  if (filledWidth > battWidth - 5) {
+    filledWidth = battWidth - 5;  // Ensure we don't overflow
   }
 
   renderer.fillRect(x + 2, y + 2, filledWidth, rect.height - 4);
@@ -231,22 +236,20 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+  // Hide last battery draw
+  constexpr int maxBatteryWidth = 80;
+  renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
+                    BaseMetrics::values.batteryHeight + 10, false);
+
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  int batteryX = rect.x + rect.width - BaseMetrics::values.contentSidePadding - BaseMetrics::values.batteryWidth;
-  if (showBatteryPercentage) {
-    const uint16_t percentage = battery.readPercentage();
-    const auto percentageText = std::to_string(percentage) + "%";
-    batteryX -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-  }
-  drawBattery(renderer, Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
-              showBatteryPercentage);
+  drawBattery(renderer, Rect{rect.x, rect.y + 10, rect.width, BaseMetrics::values.batteryHeight}, showBatteryPercentage,
+              true);
 
   if (title) {
-    int padding = rect.width - batteryX;
-    auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
-                                                 rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
-                                                 EpdFontFamily::BOLD);
+    auto truncatedTitle = renderer.truncatedText(
+        UI_12_FONT_ID, title, rect.width - maxBatteryWidth * 2 - BaseMetrics::values.contentSidePadding * 2,
+        EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
   }
 

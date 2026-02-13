@@ -23,8 +23,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .scrollBarRightOffset = 5,
                                  .homeTopPadding = 56,
                                  .homeCoverHeight = 226,
-                                 .homeCoverTileHeight = 287,
-                                 .homeRecentBooksCount = 3,
+                                 .homeCoverTileHeight = 242,
+                                 .homeRecentBooksCount = 1,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
@@ -34,7 +34,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
 class LyraTheme : public BaseTheme {
  public:
   // Component drawing methods
-  void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const override;
+  void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
+                   bool alignRight = false) const override;
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const override;
   void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                      const char* rightLabel = nullptr) const override;

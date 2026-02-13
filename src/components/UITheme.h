@@ -23,8 +23,6 @@ class UITheme {
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
-  void handleListScrolling(const GfxRenderer& renderer, int listSize, int pageItems, size_t& selectorIndex,
-                           const MappedInputManager& mappedInput, bool& updateRequired);
 
  private:
   const ThemeMetrics* currentMetrics;
