@@ -18,6 +18,7 @@ constexpr int batteryPercentSpacing = 4;
 constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
+constexpr int maxSubtitleWidth = 100;
 }  // namespace
 
 void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
@@ -57,7 +58,7 @@ void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool s
   }
 }
 
-void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const {
+void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 
   const bool showBatteryPercentage =
@@ -72,14 +73,37 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
               Rect{batteryX, rect.y + 10, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
               showBatteryPercentage);
 
+  int maxTitleWidth = rect.width - LyraMetrics::values.contentSidePadding * 2 
+    - (subtitle != nullptr ? maxSubtitleWidth : 0);
+    
   if (title) {
     auto truncatedTitle = renderer.truncatedText(
-        UI_12_FONT_ID, title, rect.width - LyraMetrics::values.contentSidePadding * 2, EpdFontFamily::BOLD);
+        UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
     renderer.drawText(UI_12_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding,
                       rect.y + LyraMetrics::values.batteryBarHeight + 3, truncatedTitle.c_str(), true,
                       EpdFontFamily::BOLD);
     renderer.drawLine(rect.x, rect.y + rect.height - 3, rect.x + rect.width, rect.y + rect.height - 3, 3, true);
   }
+
+  if (subtitle) {
+    auto truncatedSubtitle = renderer.truncatedText(
+        SMALL_FONT_ID, subtitle, maxSubtitleWidth, EpdFontFamily::REGULAR);
+    int truncatedSubtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedSubtitle.c_str());
+    renderer.drawText(SMALL_FONT_ID, 
+                    rect.x + rect.width - LyraMetrics::values.contentSidePadding - truncatedSubtitleWidth,
+                    rect.y + 50, truncatedSubtitle.c_str(), true);
+  }
+}
+
+void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label) const {
+  int currentX = rect.x + LyraMetrics::values.contentSidePadding;
+
+  auto truncatedLabel = renderer.truncatedText(
+      UI_10_FONT_ID, label, rect.width - LyraMetrics::values.contentSidePadding * 2, EpdFontFamily::REGULAR);
+  renderer.drawText(UI_10_FONT_ID, currentX, rect.y + 6, truncatedLabel.c_str(), true,
+        EpdFontFamily::REGULAR);
+        
+  renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width, rect.y + rect.height - 1, true);
 }
 
 void LyraTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,

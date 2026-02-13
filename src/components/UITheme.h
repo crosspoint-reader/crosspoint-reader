@@ -6,6 +6,8 @@
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
 
+class MappedInputManager;
+
 class UITheme {
   // Static instance
   static UITheme instance;
@@ -21,7 +23,8 @@ class UITheme {
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
-
+  void handleListScrolling(const GfxRenderer& renderer, int listSize, int pageItems, size_t& selectorIndex,
+                                  const MappedInputManager& mappedInput, bool& updateRequired);
  private:
   const ThemeMetrics* currentMetrics;
   const BaseTheme* currentTheme;
