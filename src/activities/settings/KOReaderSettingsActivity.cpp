@@ -83,7 +83,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "KOReader Username", KOREADER_STORE.getUsername(), 10,
+        renderer, mappedInput, "KOReader Username", KOREADER_STORE.getUsername(),
         64,     // maxLength
         false,  // not password
         [this](const std::string& username) {
@@ -100,7 +100,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "KOReader Password", KOREADER_STORE.getPassword(), 10,
+        renderer, mappedInput, "KOReader Password", KOREADER_STORE.getPassword(),
         64,     // maxLength
         false,  // show characters
         [this](const std::string& password) {
@@ -119,7 +119,7 @@ void KOReaderSettingsActivity::handleSelection() {
     const std::string prefillUrl = currentUrl.empty() ? "https://" : currentUrl;
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Sync Server URL", prefillUrl, 10,
+        renderer, mappedInput, "Sync Server URL", prefillUrl,
         128,    // maxLength - URLs can be long
         false,  // not password
         [this](const std::string& url) {

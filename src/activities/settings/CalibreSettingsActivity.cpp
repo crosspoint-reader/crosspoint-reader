@@ -82,7 +82,7 @@ void CalibreSettingsActivity::handleSelection() {
     // OPDS Server URL
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "OPDS Server URL", SETTINGS.opdsServerUrl, 10,
+        renderer, mappedInput, "OPDS Server URL", SETTINGS.opdsServerUrl,
         127,    // maxLength
         false,  // not password
         [this](const std::string& url) {
@@ -100,7 +100,7 @@ void CalibreSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Username", SETTINGS.opdsUsername, 10,
+        renderer, mappedInput, "Username", SETTINGS.opdsUsername,
         63,     // maxLength
         false,  // not password
         [this](const std::string& username) {
@@ -118,7 +118,7 @@ void CalibreSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, "Password", SETTINGS.opdsPassword, 10,
+        renderer, mappedInput, "Password", SETTINGS.opdsPassword,
         63,     // maxLength
         false,  // not password mode
         [this](const std::string& password) {

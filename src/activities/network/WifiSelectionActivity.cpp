@@ -224,7 +224,6 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     enterNewActivity(new KeyboardEntryActivity(
         renderer, mappedInput, "Enter WiFi Password",
         "",     // No initial text
-        50,     // Y position
         64,     // Max password length
         false,  // Show password by default (hard keyboard to use)
         [this](const std::string& text) {
