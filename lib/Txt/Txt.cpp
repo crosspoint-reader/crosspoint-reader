@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <JpegToBmpConverter.h>
+#include <Logging.h>
 
 Txt::Txt(std::string path, std::string cacheBasePath)
     : filepath(std::move(path)), cacheBasePath(std::move(cacheBasePath)) {
@@ -16,13 +17,13 @@ bool Txt::load() {
   }
 
   if (!Storage.exists(filepath.c_str())) {
-    Serial.printf("[%lu] [TXT] File does not exist: %s\n", millis(), filepath.c_str());
+    LOG_ERR("TXT", "File does not exist: %s", filepath.c_str());
     return false;
   }
 
   FsFile file;
   if (!Storage.openFileForRead("TXT", filepath, file)) {
-    Serial.printf("[%lu] [TXT] Failed to open file: %s\n", millis(), filepath.c_str());
+    LOG_ERR("TXT", "Failed to open file: %s", filepath.c_str());
     return false;
   }
 
@@ -30,7 +31,7 @@ bool Txt::load() {
   file.close();
 
   loaded = true;
-  Serial.printf("[%lu] [TXT] Loaded TXT file: %s (%zu bytes)\n", millis(), filepath.c_str(), fileSize);
+  LOG_DBG("TXT", "Loaded TXT file: %s (%zu bytes)", filepath.c_str(), fileSize);
   return true;
 }
 
@@ -74,7 +75,7 @@ std::string Txt::findCoverImage() const {
   for (const auto& ext : extensions) {
     std::string coverPath = folder + "/" + baseName + ext;
     if (Storage.exists(coverPath.c_str())) {
-      Serial.printf("[%lu] [TXT] Found matching cover image: %s\n", millis(), coverPath.c_str());
+      LOG_DBG("TXT", "Found matching cover image: %s", coverPath.c_str());
       return coverPath;
     }
   }
@@ -85,7 +86,7 @@ std::string Txt::findCoverImage() const {
     for (const auto& ext : extensions) {
       std::string coverPath = folder + "/" + std::string(name) + ext;
       if (Storage.exists(coverPath.c_str())) {
-        Serial.printf("[%lu] [TXT] Found fallback cover image: %s\n", millis(), coverPath.c_str());
+        LOG_DBG("TXT", "Found fallback cover image: %s", coverPath.c_str());
         return coverPath;
       }
     }
@@ -104,7 +105,7 @@ bool Txt::generateCoverBmp() const {
 
   std::string coverImagePath = findCoverImage();
   if (coverImagePath.empty()) {
-    Serial.printf("[%lu] [TXT] No cover image found for TXT file\n", millis());
+    LOG_DBG("TXT", "No cover image found for TXT file");
     return false;
   }
 
@@ -120,7 +121,7 @@ bool Txt::generateCoverBmp() const {
 
   if (isBmp) {
     // Copy BMP file to cache
-    Serial.printf("[%lu] [TXT] Copying BMP cover image to cache\n", millis());
+    LOG_DBG("TXT", "Copying BMP cover image to cache");
     FsFile src, dst;
     if (!Storage.openFileForRead("TXT", coverImagePath, src)) {
       return false;
@@ -136,13 +137,13 @@ bool Txt::generateCoverBmp() const {
     }
     src.close();
     dst.close();
-    Serial.printf("[%lu] [TXT] Copied BMP cover to cache\n", millis());
+    LOG_DBG("TXT", "Copied BMP cover to cache");
     return true;
   }
 
   if (isJpg) {
     // Convert JPG/JPEG to BMP (same approach as Epub)
-    Serial.printf("[%lu] [TXT] Generating BMP from JPG cover image\n", millis());
+    LOG_DBG("TXT", "Generating BMP from JPG cover image");
     FsFile coverJpg, coverBmp;
     if (!Storage.openFileForRead("TXT", coverImagePath, coverJpg)) {
       return false;
@@ -156,16 +157,16 @@ bool Txt::generateCoverBmp() const {
     coverBmp.close();
 
     if (!success) {
-      Serial.printf("[%lu] [TXT] Failed to generate BMP from JPG cover image\n", millis());
+      LOG_ERR("TXT", "Failed to generate BMP from JPG cover image");
       Storage.remove(getCoverBmpPath().c_str());
     } else {
-      Serial.printf("[%lu] [TXT] Generated BMP from JPG cover image\n", millis());
+      LOG_DBG("TXT", "Generated BMP from JPG cover image");
     }
     return success;
   }
 
   // PNG files are not supported (would need a PNG decoder)
-  Serial.printf("[%lu] [TXT] Cover image format not supported (only BMP/JPG/JPEG)\n", millis());
+  LOG_ERR("TXT", "Cover image format not supported (only BMP/JPG/JPEG)");
   return false;
 }
 
