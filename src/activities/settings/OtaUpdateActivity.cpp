@@ -114,6 +114,16 @@ void OtaUpdateActivity::render() {
     return;
   }
 
+  auto metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  renderer.clearScreen();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Update");
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height) / 2;
+
   float updaterProgress = 0;
   if (state == UPDATE_IN_PROGRESS) {
     LOG_DBG("OTA", "Update progress: %d / %d", updater.getProcessedSize(), updater.getTotalSize());
@@ -125,60 +135,38 @@ void OtaUpdateActivity::render() {
     lastUpdaterPercentage = static_cast<int>(updaterProgress * 100);
   }
 
-  const auto pageWidth = renderer.getScreenWidth();
-
-  renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Update", true, EpdFontFamily::BOLD);
-
   if (state == CHECKING_FOR_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Checking for update...", true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == WAITING_CONFIRMATION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 200, "New update available!", true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, 20, 250, "Current Version: " CROSSPOINT_VERSION);
-    renderer.drawText(UI_10_FONT_ID, 20, 270, ("New Version: " + updater.getLatestVersion()).c_str());
+    renderer.drawCenteredText(UI_10_FONT_ID, top, "Checking for update...");
+  } else if (state == WAITING_CONFIRMATION) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, "New update available!", true, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height + 10,
+                      "Current Version: " CROSSPOINT_VERSION);
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height + 30,
+                      ("New Version: " + updater.getLatestVersion()).c_str());
 
     const auto labels = mappedInput.mapLabels("Cancel", "Update", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == UPDATE_IN_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 310, "Updating...", true, EpdFontFamily::BOLD);
-    renderer.drawRect(20, 350, pageWidth - 40, 50);
-    renderer.fillRect(24, 354, static_cast<int>(updaterProgress * static_cast<float>(pageWidth - 44)), 42);
-    renderer.drawCenteredText(UI_10_FONT_ID, 420,
+  } else if (state == UPDATE_IN_PROGRESS) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, "Updating...");
+    renderer.drawRect(metrics.contentSidePadding, top + height + 10, pageWidth - metrics.contentSidePadding * 2, 50);
+    renderer.fillRect(
+        metrics.contentSidePadding + 4, top + height + 14,
+        static_cast<int>(updaterProgress * static_cast<float>(pageWidth - metrics.contentSidePadding * 2 - 8)), 42);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 70,
                               (std::to_string(static_cast<int>(updaterProgress * 100)) + "%").c_str());
     renderer.drawCenteredText(
-        UI_10_FONT_ID, 440,
+        UI_10_FONT_ID, top + height * 2 + 80,
         (std::to_string(updater.getProcessedSize()) + " / " + std::to_string(updater.getTotalSize())).c_str());
-    renderer.displayBuffer();
-    return;
+  } else if (state == NO_UPDATE) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, "No update available", true, EpdFontFamily::BOLD);
+  } else if (state == FAILED) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, "Update failed", true, EpdFontFamily::BOLD);
+  } else if (state == FINISHED) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, "Update complete", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, "Press and hold power button to turn back on");
   }
 
-  if (state == NO_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "No update available", true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Update failed", true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == FINISHED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Update complete", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 350, "Press and hold power button to turn back on");
-    renderer.displayBuffer();
-    state = SHUTTING_DOWN;
-    return;
-  }
+  renderer.displayBuffer();
 }
 
 void OtaUpdateActivity::loop() {
