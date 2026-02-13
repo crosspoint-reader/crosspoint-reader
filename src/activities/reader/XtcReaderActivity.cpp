@@ -206,7 +206,7 @@ void XtcReaderActivity::renderPage() {
   // Allocate page buffer
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
   if (!pageBuffer) {
-    Serial.printf("[%lu] [XTR] Failed to allocate page buffer (%lu bytes)\n", millis(), pageBufferSize);
+    LOG_ERR("XTR", "Failed to allocate page buffer (%lu bytes)", pageBufferSize);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, "Memory error", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
@@ -216,7 +216,7 @@ void XtcReaderActivity::renderPage() {
   // Load page data
   size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
   if (bytesRead == 0) {
-    Serial.printf("[%lu] [XTR] Failed to load page %lu\n", millis(), currentPage);
+    LOG_ERR("XTR", "Failed to load page %lu", currentPage);
     free(pageBuffer);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, "Page load error", true, EpdFontFamily::BOLD);
@@ -265,8 +265,8 @@ void XtcReaderActivity::renderPage() {
         pixelCounts[getPixelValue(x, y)]++;
       }
     }
-    Serial.printf("[%lu] [XTR] Pixel distribution: White=%lu, DarkGrey=%lu, LightGrey=%lu, Black=%lu\n", millis(),
-                  pixelCounts[0], pixelCounts[1], pixelCounts[2], pixelCounts[3]);
+    LOG_DBG("XTR", "Pixel distribution: White=%lu, DarkGrey=%lu, LightGrey=%lu, Black=%lu", pixelCounts[0],
+            pixelCounts[1], pixelCounts[2], pixelCounts[3]);
 
     // Pass 1: BW buffer - draw all non-white pixels as black
     for (uint16_t y = 0; y < pageHeight; y++) {
@@ -329,8 +329,7 @@ void XtcReaderActivity::renderPage() {
 
     free(pageBuffer);
 
-    Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (2-bit grayscale)\n", millis(), currentPage + 1,
-                  xtc->getPageCount());
+    LOG_DBG("XTR", "Rendered page %lu/%lu (2-bit grayscale)", currentPage + 1, xtc->getPageCount());
     return;
   } else {
     // 1-bit mode: 8 pixels per byte, MSB first
@@ -366,8 +365,7 @@ void XtcReaderActivity::renderPage() {
     pagesUntilFullRefresh--;
   }
 
-  Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (%u-bit)\n", millis(), currentPage + 1, xtc->getPageCount(),
-                bitDepth);
+  LOG_DBG("XTR", "Rendered page %lu/%lu (%u-bit)", currentPage + 1, xtc->getPageCount(), bitDepth);
 }
 
 void XtcReaderActivity::saveProgress() const {
@@ -389,7 +387,7 @@ void XtcReaderActivity::loadProgress() {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
       currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
-      Serial.printf("[%lu] [XTR] Loaded progress: page %lu\n", millis(), currentPage);
+      LOG_DBG("XTR", "Loaded progress: page %lu", currentPage);
 
       // Validate page number
       if (currentPage >= xtc->getPageCount()) {
