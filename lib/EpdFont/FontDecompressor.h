@@ -15,6 +15,9 @@ class FontDecompressor {
   // Valid until LRU eviction (safe for the duration of one glyph render).
   const uint8_t* getBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint16_t glyphIndex);
 
+  // Evict all cached decompressed groups (call between pages for within-page-only caching).
+  void clearCache();
+
  private:
   static constexpr uint8_t CACHE_SLOTS = 4;
 

@@ -61,6 +61,9 @@ class GfxRenderer {
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
   void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
+  void clearFontCache() {
+    if (fontDecompressor) fontDecompressor->clearCache();
+  }
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }

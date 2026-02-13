@@ -21,6 +21,17 @@ void FontDecompressor::deinit() {
   }
 }
 
+void FontDecompressor::clearCache() {
+  for (auto& entry : cache) {
+    if (entry.data) {
+      free(entry.data);
+      entry.data = nullptr;
+    }
+    entry.valid = false;
+  }
+  accessCounter = 0;
+}
+
 uint16_t FontDecompressor::getGroupIndex(const EpdFontData* fontData, uint16_t glyphIndex) {
   uint16_t baseSize = fontData->groups[0].glyphCount;
   if (glyphIndex < baseSize) return 0;
@@ -83,7 +94,7 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
 
   int res = uzlib_uncompress(&decomp);
 
-  if (res != TINF_DONE) {
+  if (res < 0) {
     Serial.printf("[%lu] [FDC] Decompression failed for group %u (status %d)\n", millis(), groupIndex, res);
     free(outBuf);
     return false;

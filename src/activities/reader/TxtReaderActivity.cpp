@@ -401,6 +401,7 @@ void TxtReaderActivity::renderScreen() {
   loadPageAtOffset(offset, currentPageLines, nextOffset);
 
   renderer.clearScreen();
+  renderer.clearFontCache();
   renderPage();
 
   // Save progress
