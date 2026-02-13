@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """
-Generate I18n C++ files from translations.csv
+Generate I18n C++ files from per-language YAML translations.
 
-This script reads translations.csv and generates:
-- I18nKeys.h: Language enum, LANGUAGE_NAMES array, StrId enum
-- I18nStrings.h: String array declarations
+Reads YAML files from a translations directory (one file per language) and generates:
+- I18nKeys.h:     Language enum, StrId enum, helper functions
+- I18nStrings.h:  String array declarations
 - I18nStrings.cpp: String array definitions with all translations
 
+Each YAML file must contain:
+  _language_name: "Native Name"     (e.g. "Español")
+  _language_code: "ENUM_NAME"       (e.g. "SPANISH")
+  STR_KEY: "translation text"
+
+The English file is the reference. Missing keys in other languages are
+automatically filled from English, with a warning.
+
 Usage:
-    python gen_i18n.py <path_to_translations.csv> <output_directory>
-    
+    python gen_i18n.py <translations_dir> <output_dir>
+
 Example:
-    python gen_i18n.py lib/I18n/translations.csv lib/I18n/
+    python gen_i18n.py lib/I18n/translations lib/I18n/
 """
 
-import csv
 import sys
 import os
 import re
@@ -22,293 +29,309 @@ from pathlib import Path
 from typing import List, Dict, Tuple
 
 
-def escape_cpp_string(s: str) -> str:
-    r"""
-    Convert a string to a proper C++ string literal.
-    Handles:
-    - Existing \xNN escape sequences
-    - Quote escaping
-    - Newline handling
-    - Forces non-ASCII characters to \xNN hex sequences (UTF-8 bytes)
-    - Breaks string literals after hex sequences to prevent "out of range" errors
+# ---------------------------------------------------------------------------
+# YAML file reading (simple key: "value" format, no PyYAML dependency)
+# ---------------------------------------------------------------------------
+
+def _unescape_yaml_value(raw: str, filepath: str = "", line_num: int = 0) -> str:
     """
-    if not s:
-        return '""'
-    
-    s = s.replace('\n', '\\n')
-    
-    # Build the escaped string
-    result = []
+    Process escape sequences in a YAML value string.
+
+    Recognized escapes:  \\\\  →  \\       \\"  →  "       \\n  →  newline
+    """
+    result: List[str] = []
     i = 0
-    while i < len(s):
-        char = s[i]
-        
-        # Check for existing backslash escape sequences
-        if char == '\\' and i + 1 < len(s):
-            next_char = s[i+1]
-            if next_char in ['n', 't', 'r', '"', '\\']:
-                result.append(char)
-                result.append(next_char)
-                i += 2
-            elif next_char == 'x' and i + 3 < len(s):
-                # Valid existing hex escape
-                result.append(s[i:i+4])
-                # Add string break "" to prevent hex overflow
-                result.append('""') 
-                i += 4
+    while i < len(raw):
+        if raw[i] == "\\" and i + 1 < len(raw):
+            nxt = raw[i + 1]
+            if nxt == "\\":
+                result.append("\\")
+            elif nxt == '"':
+                result.append('"')
+            elif nxt == "n":
+                result.append("\n")
             else:
-                result.append('\\\\')
-                i += 1
-        # Escape quotes
-        elif char == '"':
-            result.append('\\"')
-            i += 1
+                raise ValueError(
+                    f"{filepath}:{line_num}: unknown escape '\\{nxt}'"
+                )
+            i += 2
         else:
-            # Check if character is ASCII (0-127)
-            if ord(char) < 128:
-                result.append(char)
-                i += 1
-            else:
-                # Non-ASCII: Encode to UTF-8 bytes
-                utf8_bytes = char.encode('utf-8')
-                for b in utf8_bytes:
-                    # Append hex code AND an empty string break ""
-                    # Example: "Fran\xC3""\xA7""ais"
-                    result.append(f'\\x{b:02X}""')
-                i += 1
-    
-    return '"' + ''.join(result) + '"'
+            result.append(raw[i])
+            i += 1
+    return "".join(result)
 
-def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -> str:
+
+def parse_yaml_file(filepath: str) -> Dict[str, str]:
     """
-    Compute the sorted set of unique Unicode characters used in a language's translations.
-    
-    Args:
-        translations: Dictionary mapping keys to list of translations
-        lang_index: Index of the language to compute character set for
-    
-    Returns:
-        UTF-8 encoded string containing all unique characters, sorted by codepoint
+    Parse a simple YAML file of the form:
+        key: "value"
+
+    Only supports flat key-value pairs with quoted string values.
+    Aborts on formatting errors.
     """
-    unique_chars = set()
-    
-    for key, trans_list in translations.items():
-        text = trans_list[lang_index]
-        if not text:
+    result = {}
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line_num, raw_line in enumerate(f, start=1):
+            line = raw_line.rstrip("\n\r")
+
+            if not line.strip():
+                continue
+
+            match = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*"(.*)"$', line)
+            if not match:
+                raise ValueError(
+                    f"{filepath}:{line_num}: bad format: {line!r}\n"
+                    f'  Expected:  KEY: "value"'
+                )
+
+            key = match.group(1)
+            raw_value = match.group(2)
+
+            # Un-escape: process character by character to handle
+            # \\, \", and \n sequences correctly
+            value = _unescape_yaml_value(raw_value, filepath, line_num)
+
+            if key in result:
+                raise ValueError(f"{filepath}:{line_num}: duplicate key '{key}'")
+
+            result[key] = value
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Load all languages from a directory of YAML files
+# ---------------------------------------------------------------------------
+
+def load_translations(
+    translations_dir: str,
+) -> Tuple[List[str], List[str], List[str], Dict[str, List[str]]]:
+    """
+    Read every YAML file in *translations_dir* and return:
+        language_codes   e.g. ["ENGLISH", "SPANISH", ...]
+        language_names   e.g. ["English", "Español", ...]
+        string_keys      ordered list of STR_* keys (from English)
+        translations     {key: [translation_per_language]}
+
+    English is always first;
+    """
+    yaml_dir = Path(translations_dir)
+    if not yaml_dir.is_dir():
+        raise FileNotFoundError(f"Translations directory not found: {translations_dir}")
+
+    yaml_files = sorted(yaml_dir.glob("*.yaml"))
+    if not yaml_files:
+        raise FileNotFoundError(f"No .yaml files found in {translations_dir}")
+
+    # Parse every file
+    parsed: Dict[str, Dict[str, str]] = {}
+    for yf in yaml_files:
+        parsed[yf.name] = parse_yaml_file(str(yf))
+
+    # Identify the English file (must exist)
+    english_file = None
+    for name, data in parsed.items():
+        if data.get("_language_code", "").upper() == "ENGLISH":
+            english_file = name
+            break
+
+    if english_file is None:
+        raise ValueError("No YAML file with _language_code: ENGLISH found")
+
+    # Order: English first, then by _order metadata (falls back to filename)
+    def sort_key(fname: str) -> Tuple[int, int, str]:
+        """English always first (0), then by _order, then by filename."""
+        if fname == english_file:
+            return (0, 0, fname)
+        order = parsed[fname].get("_order", "999")
+        try:
+            order_int = int(order)
+        except ValueError:
+            order_int = 999
+        return (1, order_int, fname)
+
+    ordered_files = sorted(parsed, key=sort_key)
+
+    # Extract metadata
+    language_codes: List[str] = []
+    language_names: List[str] = []
+    for fname in ordered_files:
+        data = parsed[fname]
+        code = data.get("_language_code")
+        name = data.get("_language_name")
+        if not code or not name:
+            raise ValueError(f"{fname}: missing _language_code or _language_name")
+        language_codes.append(code)
+        language_names.append(name)
+
+    # String keys come from English (order matters)
+    english_data = parsed[english_file]
+    string_keys = [k for k in english_data if not k.startswith("_")]
+
+    # Validate all keys are valid C++ identifiers
+    for key in string_keys:
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", key):
+            raise ValueError(f"Invalid C++ identifier in English file: '{key}'")
+
+    # Build translations dict, filling missing keys from English
+    translations: Dict[str, List[str]] = {}
+    for key in string_keys:
+        row: List[str] = []
+        for fname in ordered_files:
+            data = parsed[fname]
+            value = data.get(key, "")
+            if not value.strip() and fname != english_file:
+                value = english_data[key]
+                lang_code = parsed[fname].get("_language_code", fname)
+                print(f"  INFO: '{key}' missing in {lang_code}, using English fallback")
+            row.append(value)
+        translations[key] = row
+
+    # Warn about extra keys in non-English files
+    for fname in ordered_files:
+        if fname == english_file:
             continue
-        
-        for char in text:
-            unique_chars.add(ord(char))
-    
-    sorted_chars = sorted(unique_chars)
-    charset = ''.join(chr(cp) for cp in sorted_chars)
-    
-    return charset
+        data = parsed[fname]
+        extra = [k for k in data if not k.startswith("_") and k not in english_data]
+        if extra:
+            lang_code = data.get("_language_code", fname)
+            print(f"  WARNING: {lang_code} has keys not in English: {', '.join(extra)}")
+
+    print(f"Loaded {len(language_codes)} languages, {len(string_keys)} string keys")
+    return language_codes, language_names, string_keys, translations
 
 
-def is_valid_identifier(name: str) -> bool:
-    """Check if a string is a valid C++ identifier."""
-    if not name:
-        return False
-    return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name))
+# ---------------------------------------------------------------------------
+# C++ string escaping
+# ---------------------------------------------------------------------------
+
+LANG_ABBREVIATIONS = {
+    "english": "EN",
+    "español": "ES", "espanol": "ES",
+    "italiano": "IT",
+    "svenska": "SV",
+    "français": "FR", "francais": "FR",
+    "deutsch": "DE", "german": "DE",
+    "português": "PT", "portugues": "PT", "português (brasil)": "PO",
+    "中文": "ZH", "chinese": "ZH",
+    "日本語": "JA", "japanese": "JA",
+    "한국어": "KO", "korean": "KO",
+    "русский": "RU", "russian": "RU",
+    "العربية": "AR", "arabic": "AR",
+    "עברית": "HE", "hebrew": "HE",
+    "فارسی": "FA", "persian": "FA",
+    "čeština": "CZ",
+}
 
 
 def get_lang_abbreviation(lang_code: str, lang_name: str) -> str:
-    """Convert language to 2-letter abbreviation.
-    
-    Tries to derive ISO 639-1 code from the native language name.
-    Falls back to first 2 chars of language code if needed.
-    
-    Args:
-        lang_code: Language code from CSV header (e.g., "ENGLISH", "SPANISH")
-        lang_name: Native language name from row 2 (e.g., "English", "Español")
-    
-    Returns:
-        2-letter abbreviation (e.g., "EN", "ES")
-    """
-    # Map of language names (lowercase) to ISO 639-1 codes
-    name_to_code = {
-        'english': 'EN',
-        'español': 'ES',
-        'espanol': 'ES',
-        'italiano': 'IT',
-        'svenska': 'SV',
-        'français': 'FR',
-        'francais': 'FR',
-        'deutsch': 'DE',
-        'german': 'DE',
-        'português': 'PT',
-        'portugues': 'PT',
-        '中文': 'ZH',
-        'chinese': 'ZH',
-        '日本語': 'JA',
-        'japanese': 'JA',
-        '한국어': 'KO',
-        'korean': 'KO',
-        'русский': 'RU',
-        'russian': 'RU',
-        'العربية': 'AR',
-        'arabic': 'AR',
-        'עברית': 'HE',
-        'hebrew': 'HE',
-        'فارسی': 'FA',
-        'persian': 'FA',
-    }
-    
-    # Try to map from language name first
-    lang_name_lower = lang_name.lower()
-    if lang_name_lower in name_to_code:
-        return name_to_code[lang_name_lower]
-    
-    # Fallback: use first 2 chars of language code
+    """Return a 2-letter abbreviation for a language."""
+    lower = lang_name.lower()
+    if lower in LANG_ABBREVIATIONS:
+        return LANG_ABBREVIATIONS[lower]
     return lang_code[:2].upper()
 
 
-def is_valid_identifier(name: str) -> bool:
-    """Check if a string is a valid C++ identifier."""
-    if not name:
-        return False
-    return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name))
+def escape_cpp_string(s: str) -> List[str]:
+    r"""
+    Convert *s* into one or more C++ string literal segments.
 
+    Non-ASCII characters are emitted as \xNN hex sequences. After each
+    hex escape a new segment is started so the compiler doesn't merge
+    subsequent hex digits into the escape.
 
-def read_csv(csv_path: str) -> Tuple[List[str], List[str], Dict[str, List[str]]]:
+    Returns a list of string segments (without quotes). For simple ASCII
+    strings this is a single-element list.
     """
-    Read translations CSV and extract:
-    - languages: List of language codes from header
-    - language_names: List of language display names
-    - translations: Dict mapping string key to list of translations
-    
-    Returns: (languages, language_names, translations)
+    if not s:
+        return [""]
+
+    s = s.replace("\n", "\\n")
+
+    # Build a flat list of "tokens", where each token is either a regular
+    # character sequence or a hex escape.  A segment break happens after
+    # every hex escape.
+    segments: List[str] = []
+    current: List[str] = []
+    i = 0
+
+    def _flush() -> None:
+        segments.append("".join(current))
+        current.clear()
+
+    while i < len(s):
+        ch = s[i]
+
+        if ch == "\\" and i + 1 < len(s):
+            nxt = s[i + 1]
+            if nxt in "ntr\"\\":
+                current.append(ch + nxt)
+                i += 2
+            elif nxt == "x" and i + 3 < len(s):
+                current.append(s[i : i + 4])
+                _flush()                       # segment break after hex
+                i += 4
+            else:
+                current.append("\\\\")
+                i += 1
+        elif ch == '"':
+            current.append('\\"')
+            i += 1
+        elif ord(ch) < 128:
+            current.append(ch)
+            i += 1
+        else:
+            for byte in ch.encode("utf-8"):
+                current.append(f"\\x{byte:02X}")
+                _flush()                       # segment break after hex
+            i += 1
+
+    # Flush remaining content
+    _flush()
+
+    return segments
+
+
+def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List[str]:
     """
-    # Try different encodings
-    encodings_to_try = [
-        'utf-8',           # Universal, handles all languages including RTL
-        'utf-8-sig',       # UTF-8 with BOM (common from Excel saves)
-        'latin-1',         # Western European
-        'iso-8859-1',      # Western European (alias)
-        'cp1252',          # Windows Western European
-        'iso-8859-8',      # Hebrew
-        'cp1255',          # Windows Hebrew
-        'iso-8859-6',      # Arabic
-        'cp1256',          # Windows Arabic
-    ]
-    
-    detected_encoding = None
-    for encoding in encodings_to_try:
-        try:
-            with open(csv_path, 'r', encoding=encoding) as f:
-                content = f.read()
-                # Verify we can actually parse it as CSV
-                import io
-                csv.reader(io.StringIO(content))
-            detected_encoding = encoding
-            print(f"Successfully read CSV with {encoding} encoding")
-            break
-        except (UnicodeDecodeError, csv.Error):
-            continue
-    
-    if not detected_encoding:
-        raise ValueError(f"Could not decode CSV file with any supported encoding. Tried: {', '.join(encodings_to_try)}")
-    
-    # Now parse with detected encoding
-    with open(csv_path, 'r', encoding=detected_encoding) as f:
-        reader = csv.reader(f)
-        
-        # Read header row
-        header = next(reader)
-        if header[0] != 'KEYS':
-            raise ValueError(f"Expected 'KEYS' in first column, got '{header[0]}'")
-        
-        languages = [lang.upper() for lang in header[1:]]
-        if not languages:
-            raise ValueError("No languages found in CSV header")
-        
-        print(f"Found languages: {', '.join(languages)}")
-        
-        # Read language names row (row 2)
-        lang_names_row = next(reader)
-        if lang_names_row[0] != '':
-            raise ValueError(f"Expected empty key in row 2, got '{lang_names_row[0]}'")
-        
-        language_names = lang_names_row[1:len(languages)+1]
-        if len(language_names) != len(languages):
-            raise ValueError(f"Language names count ({len(language_names)}) doesn't match languages count ({len(languages)})")
-        
-        # Validate language names
-        if not all(name.strip() for name in language_names):
-            raise ValueError("All language names must be non-empty")
-        
-        # Check for duplicate language names
-        if len(language_names) != len(set(language_names)):
-            duplicates = [name for name in language_names if language_names.count(name) > 1]
-            raise ValueError(f"Duplicate language names found: {', '.join(set(duplicates))}")
-        
-        # Check if row 2 has extra columns
-        if len(lang_names_row) > len(languages) + 1:
-            extra_cols = len(lang_names_row) - len(languages) - 1
-            print(f"WARNING: Row 2 has {extra_cols} extra column(s) beyond defined languages - these will be ignored")
-        
-        print(f"Language names: {', '.join(language_names)}")
-        
-        # Read all translation rows
-        translations = {}
-        row_num = 3  # Starting from row 3 (after header and language names)
-        missing_translations = []
-        
-        for row in reader:
-            if not row or not row[0]:  # Skip empty rows
-                row_num += 1
-                continue
-            
-            key = row[0].strip()
-            if not key:
-                row_num += 1
-                continue
-            
-            # Validate key is a valid C++ identifier
-            if not is_valid_identifier(key):
-                raise ValueError(f"Invalid identifier at row {row_num}: '{key}'")
-            
-            # Check for duplicates
-            if key in translations:
-                raise ValueError(f"Duplicate key at row {row_num}: '{key}'")
-            
-            # Get translations for this key
-            trans = row[1:len(languages)+1]
-            if len(trans) < len(languages):
-                # Pad with empty strings if row is short
-                trans.extend([''] * (len(languages) - len(trans)))
-            
-            # Warn if row has extra columns beyond defined languages
-            if len(row) > len(languages) + 1:
-                extra_cols = len(row) - len(languages) - 1
-                print(f"WARNING: Row {row_num} (key '{key}') has {extra_cols} extra column(s) - these will be ignored")
-            
-            # Check for missing translations
-            for i, t in enumerate(trans):
-                if not t.strip():
-                    missing_translations.append(f"Row {row_num}, {key}, {languages[i]}")
-            
-            translations[key] = trans
-            row_num += 1
-        
-        print(f"Loaded {len(translations)} translation keys")
-        
-        if missing_translations:
-            print(f"\nWARNING: Found {len(missing_translations)} missing translations:")
-            for msg in missing_translations[:10]:  # Show first 10
-                print(f"  - {msg}")
-            if len(missing_translations) > 10:
-                print(f"  ... and {len(missing_translations) - 10} more")
-        
-        return languages, language_names, translations
+    Format string segments (from escape_cpp_string) as indented C++ string
+    literal lines, each wrapped in quotes.
+
+    Example:
+        ['Fran\\xC3', '\\xA7', 'ais']
+      becomes:
+        ['    "Fran\\xC3" "\\xA7" "ais"']
+    """
+    # Join all segments with quotes, separated by space (valid C++ string concat)
+    joined = ' '.join(f'"{seg}"' for seg in segments)
+    return [f"{indent}{joined}"]
 
 
-def generate_keys_header(languages: List[str], language_names: List[str], 
-                         string_keys: List[str], output_path: str):
-    """Generate I18nKeys.h file."""
-    
-    lines = [
+# ---------------------------------------------------------------------------
+# Character-set computation
+# ---------------------------------------------------------------------------
+
+def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -> str:
+    """Return a sorted string of every unique character used in a language."""
+    chars = set()
+    for values in translations.values():
+        for ch in values[lang_index]:
+            chars.add(ord(ch))
+    return "".join(chr(cp) for cp in sorted(chars))
+
+
+# ---------------------------------------------------------------------------
+# Code generators
+# ---------------------------------------------------------------------------
+
+def generate_keys_header(
+    languages: List[str],
+    language_names: List[str],
+    string_keys: List[str],
+    output_path: str,
+) -> None:
+    """Generate I18nKeys.h."""
+    lines: List[str] = [
         "#pragma once",
         "#include <cstdint>",
         "",
@@ -317,16 +340,15 @@ def generate_keys_header(languages: List[str], language_names: List[str],
         "// Forward declaration for string arrays",
         "namespace i18n_strings {",
     ]
-    
-    # Forward declare all string arrays
-    for i, lang in enumerate(languages):
-        abbrev = get_lang_abbreviation(lang, language_names[i])
-        lines.append(f"  extern const char* const STRINGS_{abbrev}[];")
-    
-    lines.append("}")
+
+    for code, name in zip(languages, language_names):
+        abbrev = get_lang_abbreviation(code, name)
+        lines.append(f"extern const char* const STRINGS_{abbrev}[];")
+
+    lines.append("}  // namespace i18n_strings")
     lines.append("")
-    
-    # Generate Language enum
+
+    # Language enum
     lines.append("// Language enum")
     lines.append("enum class Language : uint8_t {")
     for i, lang in enumerate(languages):
@@ -334,18 +356,16 @@ def generate_keys_header(languages: List[str], language_names: List[str],
     lines.append("  _COUNT")
     lines.append("};")
     lines.append("")
-    
-    # Generate LANGUAGE_NAMES extern declaration (definition will be in .cpp)
+
+    # Extern declarations
     lines.append("// Language display names (defined in I18nStrings.cpp)")
     lines.append("extern const char* const LANGUAGE_NAMES[];")
     lines.append("")
-    
-    # Generate CHARACTER_SETS extern declaration (definition will be in .cpp)
     lines.append("// Character sets for each language (defined in I18nStrings.cpp)")
     lines.append("extern const char* const CHARACTER_SETS[];")
     lines.append("")
-    
-    # Generate StrId enum (forward declaration needed for getStringArray)
+
+    # StrId enum
     lines.append("// String IDs")
     lines.append("enum class StrId : uint16_t {")
     for key in string_keys:
@@ -354,43 +374,42 @@ def generate_keys_header(languages: List[str], language_names: List[str],
     lines.append("  _COUNT")
     lines.append("};")
     lines.append("")
-    
-    # Generate helper function to get string array by language
+
+    # getStringArray helper
     lines.append("// Helper function to get string array for a language")
     lines.append("inline const char* const* getStringArray(Language lang) {")
     lines.append("  switch (lang) {")
-    for i, lang in enumerate(languages):
-        abbrev = get_lang_abbreviation(lang, language_names[i])
-        lines.append(f"    case Language::{lang}:")
+    for code, name in zip(languages, language_names):
+        abbrev = get_lang_abbreviation(code, name)
+        lines.append(f"    case Language::{code}:")
         lines.append(f"      return i18n_strings::STRINGS_{abbrev};")
-    lines.append("    default:")
-    # Default to first language (typically English)
     first_abbrev = get_lang_abbreviation(languages[0], language_names[0])
+    lines.append("    default:")
     lines.append(f"      return i18n_strings::STRINGS_{first_abbrev};")
     lines.append("  }")
     lines.append("}")
     lines.append("")
-    
-    # Add helper function for language count
+
+    # getLanguageCount helper (single line to match checked-in format)
     lines.append("// Helper function to get language count")
-    lines.append("constexpr uint8_t getLanguageCount() {")
-    lines.append("  return static_cast<uint8_t>(Language::_COUNT);")
-    lines.append("}")
-    
-    # Write file
-    with open(output_path, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('\n'.join(lines))
-        f.write('\n')
-    
-    print(f"Generated: {output_path}")
+    lines.append(
+        "constexpr uint8_t getLanguageCount() "
+        "{ return static_cast<uint8_t>(Language::_COUNT); }"
+    )
+
+    _write_file(output_path, lines)
 
 
-def generate_strings_header(languages: List[str], language_names: List[str], output_path: str):
-    """Generate I18nStrings.h file."""
-    
-    lines = [
+def generate_strings_header(
+    languages: List[str],
+    language_names: List[str],
+    output_path: str,
+) -> None:
+    """Generate I18nStrings.h."""
+    lines: List[str] = [
         "#pragma once",
-        "#include <string>",
+        '#include <string>',
+        "",
         '#include "I18nKeys.h"',
         "",
         "// THIS FILE IS AUTO-GENERATED BY gen_i18n.py. DO NOT EDIT.",
@@ -398,148 +417,147 @@ def generate_strings_header(languages: List[str], language_names: List[str], out
         "namespace i18n_strings {",
         "",
     ]
-    
-    # Declare arrays for each language
-    for i, lang in enumerate(languages):
-        abbrev = get_lang_abbreviation(lang, language_names[i])
+
+    for code, name in zip(languages, language_names):
+        abbrev = get_lang_abbreviation(code, name)
         lines.append(f"extern const char* const STRINGS_{abbrev}[];")
-    
+
     lines.append("")
     lines.append("}  // namespace i18n_strings")
-    
-    # Write file
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines))
-        f.write('\n')
-    
-    print(f"Generated: {output_path}")
+
+    _write_file(output_path, lines)
 
 
-def generate_strings_cpp(languages: List[str], language_names: List[str],
-                         string_keys: List[str], translations: Dict[str, List[str]], 
-                         output_path: str):
-    """Generate I18nStrings.cpp file."""
-    
-    lines = [
+def generate_strings_cpp(
+    languages: List[str],
+    language_names: List[str],
+    string_keys: List[str],
+    translations: Dict[str, List[str]],
+    output_path: str,
+) -> None:
+    """Generate I18nStrings.cpp."""
+    lines: List[str] = [
         '#include "I18nStrings.h"',
         "",
         "// THIS FILE IS AUTO-GENERATED BY gen_i18n.py. DO NOT EDIT.",
         "",
     ]
-    
-    # Generate LANGUAGE_NAMES array definition (declared extern in I18nKeys.h)
+
+    # LANGUAGE_NAMES array
     lines.append("// Language display names")
     lines.append("const char* const LANGUAGE_NAMES[] = {")
     for name in language_names:
-        lines.append(f"  {escape_cpp_string(name)},")
+        _append_string_entry(lines, name)
     lines.append("};")
     lines.append("")
-    
-    # Compute and generate CHARACTER_SETS array
+
+    # CHARACTER_SETS array
     lines.append("// Character sets for each language")
     lines.append("const char* const CHARACTER_SETS[] = {")
-    for lang_idx in range(len(languages)):
+    for lang_idx, name in enumerate(language_names):
         charset = compute_character_set(translations, lang_idx)
-        lines.append(f"  {escape_cpp_string(charset)},  // {language_names[lang_idx]}")
+        _append_string_entry(lines, charset, comment=name)
     lines.append("};")
     lines.append("")
-    # -------------------------------
 
+    # Per-language string arrays
     lines.append("namespace i18n_strings {")
     lines.append("")
-    
-    # Generate array for each language
-    for lang_idx, lang in enumerate(languages):
-        abbrev = get_lang_abbreviation(lang, language_names[lang_idx])
+
+    for lang_idx, (code, name) in enumerate(zip(languages, language_names)):
+        abbrev = get_lang_abbreviation(code, name)
         lines.append(f"const char* const STRINGS_{abbrev}[] = {{")
-        
+
         for key in string_keys:
-            trans = translations[key][lang_idx]
-            # Use English as fallback if translation is missing
-            if not trans.strip():
-                trans = translations[key][0]  # Fallback to English (first language)
-            lines.append(f"  {escape_cpp_string(trans)},")
-        
+            text = translations[key][lang_idx]
+            _append_string_entry(lines, text)
+
         lines.append("};")
         lines.append("")
-    
+
     lines.append("}  // namespace i18n_strings")
     lines.append("")
-    
-    # Generate compile-time checks
-    lines.append("// Compile-time validation of array sizes")
-    for lang_idx, lang in enumerate(languages):
-        abbrev = get_lang_abbreviation(lang, language_names[lang_idx])
-        lines.append(f"static_assert(sizeof(i18n_strings::STRINGS_{abbrev}) / sizeof(i18n_strings::STRINGS_{abbrev}[0]) ==")
-        lines.append(f"                  static_cast<size_t>(StrId::_COUNT),")
-        lines.append(f'              "STRINGS_{abbrev} size mismatch");')
-    
-    # Write file
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines))
-        f.write('\n')
-    
-    print(f"Generated: {output_path}")
 
-def main():
+    # Compile-time size checks
+    lines.append("// Compile-time validation of array sizes")
+    for code, name in zip(languages, language_names):
+        abbrev = get_lang_abbreviation(code, name)
+        lines.append(
+            f"static_assert(sizeof(i18n_strings::STRINGS_{abbrev}) "
+            f"/ sizeof(i18n_strings::STRINGS_{abbrev}[0]) =="
+        )
+        lines.append("                  static_cast<size_t>(StrId::_COUNT),")
+        lines.append(f'              "STRINGS_{abbrev} size mismatch");')
+
+    _write_file(output_path, lines)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _append_string_entry(
+    lines: List[str], text: str, comment: str = ""
+) -> None:
+    """Escape *text*, format as indented C++ lines, append comma (and optional comment)."""
+    segments = escape_cpp_string(text)
+    formatted = format_cpp_string_literal(segments)
+    suffix = f",  // {comment}" if comment else ","
+    formatted[-1] += suffix
+    lines.extend(formatted)
+
+
+def _write_file(path: str, lines: List[str]) -> None:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines))
+        f.write("\n")
+    print(f"Generated: {path}")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
     if len(sys.argv) != 3:
-        print("Usage: python gen_i18n.py <translations.csv> <output_directory>")
-        print("Example: python gen_i18n.py lib/I18n/translations.csv lib/I18n/")
+        print("Usage: python gen_i18n.py <translations_dir> <output_dir>")
+        print("Example: python gen_i18n.py lib/I18n/translations lib/I18n/")
         sys.exit(1)
-    
-    csv_path = sys.argv[1]
+
+    translations_dir = sys.argv[1]
     output_dir = sys.argv[2]
-    
-    # Validate inputs
-    if not os.path.exists(csv_path):
-        print(f"Error: CSV file not found: {csv_path}")
+
+    if not os.path.isdir(translations_dir):
+        print(f"Error: Translations directory not found: {translations_dir}")
         sys.exit(1)
-    
+
     if not os.path.isdir(output_dir):
         print(f"Error: Output directory not found: {output_dir}")
         sys.exit(1)
-    
-    print(f"Reading translations from: {csv_path}")
+
+    print(f"Reading translations from: {translations_dir}")
     print(f"Output directory: {output_dir}")
     print()
-    
+
     try:
-        languages, language_names, translations = read_csv(csv_path)
-        
-        # Get ordered list of keys
-        string_keys = list(translations.keys())
-        
-        # Generate output files
-        output_dir = Path(output_dir)
-        
-        generate_keys_header(
-            languages, 
-            language_names,
-            string_keys,
-            str(output_dir / "I18nKeys.h")
+        languages, language_names, string_keys, translations = load_translations(
+            translations_dir
         )
-        
-        generate_strings_header(
-            languages,
-            language_names,
-            str(output_dir / "I18nStrings.h")
-        )
-        
+
+        out = Path(output_dir)
+        generate_keys_header(languages, language_names, string_keys, str(out / "I18nKeys.h"))
+        generate_strings_header(languages, language_names, str(out / "I18nStrings.h"))
         generate_strings_cpp(
-            languages,
-            language_names,
-            string_keys,
-            translations,
-            str(output_dir / "I18nStrings.cpp")
+            languages, language_names, string_keys, translations, str(out / "I18nStrings.cpp")
         )
-        
+
         print()
         print("✓ Code generation complete!")
         print(f"  Languages: {len(languages)}")
         print(f"  String keys: {len(string_keys)}")
-        
+
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"\nError: {e}")
         sys.exit(1)
 
 
