@@ -322,15 +322,6 @@ CssStyle CssParser::parseDeclarations(const std::string& declBlock) {
 
 // Rule processing
 
-void CssParser::processRuleBlock(const std::string& selectorGroup, const std::string& declarations) {
-  const CssStyle style = parseDeclarations(declarations);
-
-  // Only store if any properties were set
-  if (!style.defined.anySet()) return;
-
-  processRuleBlockWithStyle(selectorGroup, style);
-}
-
 void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, const CssStyle& style) {
   // Check if we've reached the rule limit before processing
   if (rulesBySelector_.size() >= MAX_RULES) {
@@ -567,73 +558,56 @@ CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return par
 
 // Cache format version - increment when format changes
 constexpr uint8_t CSS_CACHE_VERSION = 2;
+constexpr char rulesCache[] = "/css_rules.cache";
 
-bool CssParser::saveToCache(FsFile& file) const {
-  if (!file) {
+bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
+
+bool CssParser::saveToCache() const {
+  if (cachePath.empty()) {
     return false;
   }
 
-  auto bufferedWrite = [](FsFile& out, std::array<uint8_t, 512>& buf, size_t& len, const void* data,
-                          const size_t dataLen) {
-    auto bytes = static_cast<const uint8_t*>(data);
-    size_t remaining = dataLen;
-    while (remaining > 0) {
-      const size_t space = buf.size() - len;
-      const size_t toCopy = remaining < space ? remaining : space;
-      memcpy(buf.data() + len, bytes, toCopy);
-      len += toCopy;
-      bytes += toCopy;
-      remaining -= toCopy;
-      if (len == buf.size()) {
-        out.write(buf.data(), len);
-        len = 0;
-      }
-    }
-  };
+  FsFile file;
+  if (!Storage.openFileForWrite("CSS", cachePath + rulesCache, file)) {
+    return false;
+  }
 
-  std::array<uint8_t, 512> cacheBuf{};
-  size_t cacheLen = 0;
+  // Write version
+  file.write(CSS_CACHE_VERSION);
 
-  const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
-
-  // Write cache header
-  bufferedWrite(file, cacheBuf, cacheLen, &CSS_CACHE_VERSION, sizeof(CSS_CACHE_VERSION));
   // Write rule count
-  bufferedWrite(file, cacheBuf, cacheLen, &ruleCount, sizeof(ruleCount));
+  const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
+  file.write(reinterpret_cast<const uint8_t*>(&ruleCount), sizeof(ruleCount));
 
   // Write each rule: selector string + CssStyle fields
   for (const auto& pair : rulesBySelector_) {
     // Write selector string (length-prefixed)
     const auto selectorLen = static_cast<uint16_t>(pair.first.size());
-    bufferedWrite(file, cacheBuf, cacheLen, &selectorLen, sizeof(selectorLen));
-    bufferedWrite(file, cacheBuf, cacheLen, pair.first.data(), selectorLen);
+    file.write(reinterpret_cast<const uint8_t*>(&selectorLen), sizeof(selectorLen));
+    file.write(reinterpret_cast<const uint8_t*>(pair.first.data()), selectorLen);
 
     // Write CssStyle fields (all are POD types)
     const CssStyle& style = pair.second;
-    const auto textAlign = static_cast<uint8_t>(style.textAlign);
-    const auto fontStyle = static_cast<uint8_t>(style.fontStyle);
-    const auto fontWeight = static_cast<uint8_t>(style.fontWeight);
-    const auto textDecoration = static_cast<uint8_t>(style.textDecoration);
-    bufferedWrite(file, cacheBuf, cacheLen, &textAlign, sizeof(textAlign));
-    bufferedWrite(file, cacheBuf, cacheLen, &fontStyle, sizeof(fontStyle));
-    bufferedWrite(file, cacheBuf, cacheLen, &fontWeight, sizeof(fontWeight));
-    bufferedWrite(file, cacheBuf, cacheLen, &textDecoration, sizeof(textDecoration));
+    file.write(static_cast<uint8_t>(style.textAlign));
+    file.write(static_cast<uint8_t>(style.fontStyle));
+    file.write(static_cast<uint8_t>(style.fontWeight));
+    file.write(static_cast<uint8_t>(style.textDecoration));
 
-    auto writeLengthBuffered = [&bufferedWrite, &file, &cacheBuf, &cacheLen](const CssLength& len) {
-      bufferedWrite(file, cacheBuf, cacheLen, &len.value, sizeof(len.value));
-      const auto unit = static_cast<uint8_t>(len.unit);
-      bufferedWrite(file, cacheBuf, cacheLen, &unit, sizeof(unit));
+    // Write CssLength fields (value + unit)
+    auto writeLength = [&file](const CssLength& len) {
+      file.write(reinterpret_cast<const uint8_t*>(&len.value), sizeof(len.value));
+      file.write(static_cast<uint8_t>(len.unit));
     };
 
-    writeLengthBuffered(style.textIndent);
-    writeLengthBuffered(style.marginTop);
-    writeLengthBuffered(style.marginBottom);
-    writeLengthBuffered(style.marginLeft);
-    writeLengthBuffered(style.marginRight);
-    writeLengthBuffered(style.paddingTop);
-    writeLengthBuffered(style.paddingBottom);
-    writeLengthBuffered(style.paddingLeft);
-    writeLengthBuffered(style.paddingRight);
+    writeLength(style.textIndent);
+    writeLength(style.marginTop);
+    writeLength(style.marginBottom);
+    writeLength(style.marginLeft);
+    writeLength(style.marginRight);
+    writeLength(style.paddingTop);
+    writeLength(style.paddingBottom);
+    writeLength(style.paddingLeft);
+    writeLength(style.paddingRight);
 
     // Write defined flags as uint16_t
     uint16_t definedBits = 0;
@@ -650,19 +624,21 @@ bool CssParser::saveToCache(FsFile& file) const {
     if (style.defined.paddingBottom) definedBits |= 1 << 10;
     if (style.defined.paddingLeft) definedBits |= 1 << 11;
     if (style.defined.paddingRight) definedBits |= 1 << 12;
-    bufferedWrite(file, cacheBuf, cacheLen, &definedBits, sizeof(definedBits));
-  }
-
-  if (cacheLen > 0) {
-    file.write(cacheBuf.data(), cacheLen);
+    file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
   Serial.printf("[%lu] [CSS] Saved %u rules to cache\n", millis(), ruleCount);
+  file.close();
   return true;
 }
 
-bool CssParser::loadFromCache(FsFile& file) {
-  if (!file) {
+bool CssParser::loadFromCache() {
+  if (cachePath.empty()) {
+    return false;
+  }
+
+  FsFile file;
+  if (!Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
     return false;
   }
 
@@ -673,12 +649,14 @@ bool CssParser::loadFromCache(FsFile& file) {
   uint8_t version = 0;
   if (file.read(&version, 1) != 1 || version != CSS_CACHE_VERSION) {
     Serial.printf("[%lu] [CSS] Cache version mismatch (got %u, expected %u)\n", millis(), version, CSS_CACHE_VERSION);
+    file.close();
     return false;
   }
 
   // Read rule count
   uint16_t ruleCount = 0;
   if (file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount)) {
+    file.close();
     return false;
   }
 
@@ -688,6 +666,7 @@ bool CssParser::loadFromCache(FsFile& file) {
     uint16_t selectorLen = 0;
     if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen)) {
       rulesBySelector_.clear();
+      file.close();
       return false;
     }
 
@@ -695,6 +674,7 @@ bool CssParser::loadFromCache(FsFile& file) {
     selector.resize(selectorLen);
     if (file.read(&selector[0], selectorLen) != selectorLen) {
       rulesBySelector_.clear();
+      file.close();
       return false;
     }
 
@@ -704,24 +684,28 @@ bool CssParser::loadFromCache(FsFile& file) {
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
+      file.close();
       return false;
     }
     style.textAlign = static_cast<CssTextAlign>(enumVal);
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
+      file.close();
       return false;
     }
     style.fontStyle = static_cast<CssFontStyle>(enumVal);
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
+      file.close();
       return false;
     }
     style.fontWeight = static_cast<CssFontWeight>(enumVal);
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
+      file.close();
       return false;
     }
     style.textDecoration = static_cast<CssTextDecoration>(enumVal);
@@ -743,6 +727,7 @@ bool CssParser::loadFromCache(FsFile& file) {
         !readLength(style.marginLeft) || !readLength(style.marginRight) || !readLength(style.paddingTop) ||
         !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight)) {
       rulesBySelector_.clear();
+      file.close();
       return false;
     }
 
@@ -750,6 +735,7 @@ bool CssParser::loadFromCache(FsFile& file) {
     uint16_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) {
       rulesBySelector_.clear();
+      file.close();
       return false;
     }
     style.defined.textAlign = (definedBits & 1 << 0) != 0;
@@ -770,6 +756,6 @@ bool CssParser::loadFromCache(FsFile& file) {
   }
 
   Serial.printf("[%lu] [CSS] Loaded %u rules from cache\n", millis(), ruleCount);
-  clear();
+  file.close();
   return true;
 }

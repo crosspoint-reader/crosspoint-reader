@@ -183,6 +183,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   CssParser* cssParser = nullptr;
   if (embeddedStyle) {
     cssParser = epub->getCssParser();
+    if (cssParser) {
+      cssParser->loadFromCache();
+    }
   }
   ChapterHtmlSlimParser visitor(
       tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,

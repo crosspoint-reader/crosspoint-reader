@@ -208,33 +208,14 @@ bool Epub::parseTocNavFile() const {
   return true;
 }
 
-std::string Epub::getCssRulesCache() const { return cachePath + "/css_rules.cache"; }
-
-bool Epub::loadCssRulesFromCache() const {
-  FsFile cssCacheFile;
-  if (Storage.openFileForRead("EBP", getCssRulesCache(), cssCacheFile)) {
-    if (cssParser->loadFromCache(cssCacheFile)) {
-      if (cssParser->ruleCount() > CssParser::SMALL_CSS_RULE_LIMIT) {
-        cssParser->clear();
-      }
-      cssCacheFile.close();
-      Serial.printf("[%lu] [EBP] Loaded CSS rules from cache\n", millis());
-      return true;
-    }
-    cssCacheFile.close();
-    Serial.printf("[%lu] [EBP] CSS cache invalid, reparsing\n", millis());
-  }
-  return false;
-}
-
 void Epub::parseCssFiles() const {
   if (cssFiles.empty()) {
     Serial.printf("[%lu] [EBP] No CSS files to parse, but CssParser created for inline styles\n", millis());
   }
 
-  // Try to load from CSS cache first
-  if (!loadCssRulesFromCache()) {
-    // Cache miss - parse CSS files
+  // See if we have a cached version of the CSS rules
+  if (!cssParser->hasCache()) {
+    // No cache yet - parse CSS files
     for (const auto& cssPath : cssFiles) {
       Serial.printf("[%lu] [EBP] Parsing CSS file: %s\n", millis(), cssPath.c_str());
 
@@ -265,14 +246,8 @@ void Epub::parseCssFiles() const {
     }
 
     // Save to cache for next time
-    FsFile cssCacheFile;
-    if (Storage.openFileForWrite("EBP", getCssRulesCache(), cssCacheFile)) {
-      cssParser->saveToCache(cssCacheFile);
-      if (cssParser->ruleCount() > CssParser::SMALL_CSS_RULE_LIMIT) {
-        cssParser->clear();
-      }
-      cssCacheFile.close();
-    }
+    cssParser->saveToCache();
+    cssParser->clear();
 
     Serial.printf("[%lu] [EBP] Loaded %zu CSS style rules from %zu files\n", millis(), cssParser->ruleCount(),
                   cssFiles.size());
@@ -286,11 +261,11 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   // Always create CssParser - needed for inline style parsing even without CSS files
-  cssParser.reset(new CssParser());
+  cssParser.reset(new CssParser(cachePath));
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
-    if (!skipLoadingCss && !loadCssRulesFromCache()) {
+    if (!skipLoadingCss && !cssParser->hasCache()) {
       Serial.printf("[%lu] [EBP] Warning: CSS rules cache not found, attempting to parse CSS files\n", millis());
       // to get CSS file list
       if (!parseContentOpf(bookMetadataCache->coreMetadata)) {

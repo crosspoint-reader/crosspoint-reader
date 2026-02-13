@@ -4,6 +4,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "CssStyle.h"
@@ -29,8 +30,7 @@
  */
 class CssParser {
  public:
-  static constexpr uint16_t SMALL_CSS_RULE_LIMIT = 200;
-  CssParser() = default;
+  explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
 
   // Non-copyable
@@ -78,26 +78,30 @@ class CssParser {
   void clear() { rulesBySelector_.clear(); }
 
   /**
+   * Check if CSS rules cache file exists
+   */
+  bool hasCache() const;
+
+  /**
    * Save parsed CSS rules to a cache file.
-   * @param file Open file handle to write to
    * @return true if cache was written successfully
    */
-  bool saveToCache(FsFile& file) const;
+  bool saveToCache() const;
 
   /**
    * Load CSS rules from a cache file.
    * Clears any existing rules before loading.
-   * @param file Open file handle to read from
    * @return true if cache was loaded successfully
    */
-  bool loadFromCache(FsFile& file);
+  bool loadFromCache();
 
  private:
   // Storage: maps normalized selector -> style properties
   std::unordered_map<std::string, CssStyle> rulesBySelector_;
 
+  std::string cachePath;
+
   // Internal parsing helpers
-  void processRuleBlock(const std::string& selectorGroup, const std::string& declarations);
   void processRuleBlockWithStyle(const std::string& selectorGroup, const CssStyle& style);
   static CssStyle parseDeclarations(const std::string& declBlock);
   static void parseDeclarationIntoStyle(const std::string& decl, CssStyle& style, std::string& propNameBuf,
