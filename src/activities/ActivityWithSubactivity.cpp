@@ -17,7 +17,7 @@ void ActivityWithSubactivity::renderTaskLoop() {
 void ActivityWithSubactivity::exitActivity() {
   // No need to lock, since onExit() already acquires its own lock
   if (subActivity) {
-    Serial.printf("[%lu] [ACT] Exiting subactivity...\n", millis());
+    LOG_DBG("ACT", "Exiting subactivity...");
     subActivity->onExit();
     subActivity.reset();
   }

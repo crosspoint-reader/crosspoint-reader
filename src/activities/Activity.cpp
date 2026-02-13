@@ -23,7 +23,7 @@ void Activity::onEnter() {
               &renderTaskHandle  // Task handle
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");
-  Serial.printf("[%lu] [ACT] Entering activity: %s\n", millis(), name.c_str());
+  LOG_DBG("ACT", "Entering activity: %s", name.c_str());
 }
 
 void Activity::onExit() {
@@ -33,7 +33,7 @@ void Activity::onExit() {
     renderTaskHandle = nullptr;
   }
 
-  Serial.printf("[%lu] [ACT] Exiting activity: %s\n", millis(), name.c_str());
+  LOG_DBG("ACT", "Exiting activity: %s", name.c_str());
 }
 
 void Activity::requestUpdate() {
