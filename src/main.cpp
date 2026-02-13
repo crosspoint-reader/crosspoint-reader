@@ -27,6 +27,7 @@
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ButtonNavigator.h"
 
 HalDisplay display;
 HalGPIO gpio;
@@ -304,6 +305,7 @@ void setup() {
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
+  ButtonNavigator::setMappedInputManager(mappedInputManager);
 
   switch (gpio.getWakeupReason()) {
     case HalGPIO::WakeupReason::PowerButton:
@@ -367,6 +369,21 @@ void loop() {
     lastMemPrint = millis();
   }
 
+  // Handle incoming serial commands
+  if (Serial.available() > 0) {
+    String line = Serial.readStringUntil('\n');
+    if (line.startsWith("CMD:")) {
+      String cmd = line.substring(4);
+      cmd.trim();
+      if (cmd == "SCREENSHOT") {
+        Serial.printf("SCREENSHOT_START:%d\n", HalDisplay::BUFFER_SIZE);
+        uint8_t* buf = display.getFrameBuffer();
+        Serial.write(buf, HalDisplay::BUFFER_SIZE);
+        Serial.printf("SCREENSHOT_END\n");
+      }
+    }
+  }
+
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || (currentActivity && currentActivity->preventAutoSleep())) {
@@ -408,6 +425,13 @@ void loop() {
   if (currentActivity && currentActivity->skipLoopDelay()) {
     yield();  // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
-    delay(10);  // Normal delay when no activity requires fast response
+    static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // 3 seconds
+    if (millis() - lastActivityTime >= IDLE_POWER_SAVING_MS) {
+      // If we've been inactive for a while, increase the delay to save power
+      delay(50);
+    } else {
+      // Short delay to prevent tight loop while still being responsive
+      delay(10);
+    }
   }
 }

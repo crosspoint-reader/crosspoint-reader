@@ -664,9 +664,9 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     data[5] = (pageCount >> 8) & 0xFF;
     f.write(data, 6);
     f.close();
-    Serial.printf("[ERS] Progress saved: Chapter %d, Page %d\n", spineIndex, currentPage);
+    Serial.printf("[%lu] [ERS] Progress saved: Chapter %d, Page %d\n", millis(), spineIndex, currentPage);
   } else {
-    Serial.printf("[ERS] Could not save progress!\n");
+    Serial.printf("[%lu] [ERS] Could not save progress!\n", millis());
   }
 }
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,

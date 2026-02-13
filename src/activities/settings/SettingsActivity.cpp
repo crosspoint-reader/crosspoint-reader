@@ -11,14 +11,11 @@
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "SettingsList.h"
+#include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
-
-namespace {
-constexpr int changeTabsMs = 700;
-}  // namespace
 
 void SettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<SettingsActivity*>(param);
@@ -50,11 +47,13 @@ void SettingsActivity::onEnter() {
   }
 
   // Append device-only ACTION items
-  controlsSettings.insert(controlsSettings.begin(), SettingInfo::Action("Remap Front Buttons"));
-  systemSettings.push_back(SettingInfo::Action("KOReader Sync"));
-  systemSettings.push_back(SettingInfo::Action("OPDS Browser"));
-  systemSettings.push_back(SettingInfo::Action("Clear Cache"));
-  systemSettings.push_back(SettingInfo::Action("Check for updates"));
+  controlsSettings.insert(controlsSettings.begin(),
+                          SettingInfo::Action("Remap Front Buttons", SettingAction::RemapFrontButtons));
+  systemSettings.push_back(SettingInfo::Action("Network", SettingAction::Network));
+  systemSettings.push_back(SettingInfo::Action("KOReader Sync", SettingAction::KOReaderSync));
+  systemSettings.push_back(SettingInfo::Action("OPDS Browser", SettingAction::OPDSBrowser));
+  systemSettings.push_back(SettingInfo::Action("Clear Cache", SettingAction::ClearCache));
+  systemSettings.push_back(SettingInfo::Action("Check for updates", SettingAction::CheckForUpdates));
 
   // Reset selection to first category
   selectedCategoryIndex = 0;
@@ -116,28 +115,28 @@ void SettingsActivity::loop() {
     return;
   }
 
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Up);
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Down);
-  const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
-  const bool changeTab = mappedInput.getHeldTime() > changeTabsMs;
-
   // Handle navigation
-  if (upReleased && changeTab) {
+  buttonNavigator.onNextRelease([this] {
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
-    selectedCategoryIndex = (selectedCategoryIndex > 0) ? (selectedCategoryIndex - 1) : (categoryCount - 1);
+    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
     updateRequired = true;
-  } else if (downReleased && changeTab) {
+  });
+
+  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
-    selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
+    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
     updateRequired = true;
-  } else if (upReleased || leftReleased) {
-    selectedSettingIndex = (selectedSettingIndex > 0) ? (selectedSettingIndex - 1) : (settingsCount);
-    updateRequired = true;
-  } else if (rightReleased || downReleased) {
-    selectedSettingIndex = (selectedSettingIndex < settingsCount) ? (selectedSettingIndex + 1) : 0;
-    updateRequired = true;
-  }
+  });
 
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
@@ -182,46 +181,45 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    if (strcmp(setting.name, "Remap Front Buttons") == 0) {
+    auto enterSubActivity = [this](Activity* activity) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
-      enterNewActivity(new ButtonRemapActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
+      enterNewActivity(activity);
       xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "KOReader Sync") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    };
+
+    auto onComplete = [this] {
       exitActivity();
-      enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "OPDS Browser") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      updateRequired = true;
+    };
+
+    auto onCompleteBool = [this](bool) {
       exitActivity();
-      enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "Clear Cache") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
-      enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      xSemaphoreGive(renderingMutex);
-    } else if (strcmp(setting.name, "Check for updates") == 0) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      exitActivity();
-      enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      xSemaphoreGive(renderingMutex);
+      updateRequired = true;
+    };
+
+    switch (setting.action) {
+      case SettingAction::RemapFrontButtons:
+        enterSubActivity(new ButtonRemapActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::KOReaderSync:
+        enterSubActivity(new KOReaderSettingsActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::OPDSBrowser:
+        enterSubActivity(new CalibreSettingsActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::Network:
+        enterSubActivity(new WifiSelectionActivity(renderer, mappedInput, onCompleteBool, false));
+        break;
+      case SettingAction::ClearCache:
+        enterSubActivity(new ClearCacheActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::CheckForUpdates:
+        enterSubActivity(new OtaUpdateActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::None:
+        // Do nothing
+        break;
     }
   } else {
     return;

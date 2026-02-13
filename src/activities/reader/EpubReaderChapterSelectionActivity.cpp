@@ -6,11 +6,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-// Time threshold for treating a long press as a page-up/page-down
-constexpr int SKIP_PAGE_MS = 700;
-}  // namespace
-
 int EpubReaderChapterSelectionActivity::getTotalItems() const { return epub->getTocItemsCount(); }
 
 int EpubReaderChapterSelectionActivity::getPageItems() const {
@@ -77,12 +72,6 @@ void EpubReaderChapterSelectionActivity::loop() {
     return;
   }
 
-  const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Right);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
@@ -95,21 +84,27 @@ void EpubReaderChapterSelectionActivity::loop() {
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();
-  } else if (prevReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + totalItems) % totalItems;
-    } else {
-      selectorIndex = (selectorIndex + totalItems - 1) % totalItems;
-    }
-    updateRequired = true;
-  } else if (nextReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % totalItems;
-    } else {
-      selectorIndex = (selectorIndex + 1) % totalItems;
-    }
-    updateRequired = true;
   }
+
+  buttonNavigator.onNextRelease([this, totalItems] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousRelease([this, totalItems] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
+    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
+    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
+    updateRequired = true;
+  });
 }
 
 void EpubReaderChapterSelectionActivity::displayTaskLoop() {

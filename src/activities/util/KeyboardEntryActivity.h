@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Reusable keyboard entry activity for text input.
@@ -65,6 +66,7 @@ class KeyboardEntryActivity : public Activity {
   bool isPassword;
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
 
   // Keyboard state
