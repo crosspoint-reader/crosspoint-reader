@@ -150,41 +150,35 @@ void CalibreSettingsActivity::displayTaskLoop() {
 }
 
 void CalibreSettingsActivity::render() {
+  auto metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
   renderer.clearScreen();
 
-  const auto pageWidth = renderer.getScreenWidth();
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "OPDS Browser");
+  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                    "For Calibre, add /opds to your URL");
 
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "OPDS Browser", true, EpdFontFamily::BOLD);
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
+      static_cast<int>(selectedIndex), [this](int index) { return menuNames[index]; }, nullptr, nullptr,
+      [this](int index) {
+        // Draw status for each setting
+        if (index == 0) {
+          return (strlen(SETTINGS.opdsServerUrl) > 0) ? SETTINGS.opdsServerUrl : "[Not Set]";
+        } else if (index == 1) {
+          return (strlen(SETTINGS.opdsUsername) > 0) ? SETTINGS.opdsUsername : "[Not Set]";
+        } else if (index == 2) {
+          return (strlen(SETTINGS.opdsPassword) > 0) ? "******" : "[Not Set]";
+        }
+        return "[Not Set]";
+      });
 
-  // Draw info text about Calibre
-  renderer.drawCenteredText(UI_10_FONT_ID, 40, "For Calibre, add /opds to your URL");
-
-  // Draw selection highlight
-  renderer.fillRect(0, 70 + selectedIndex * 30 - 2, pageWidth - 1, 30);
-
-  // Draw menu items
-  for (int i = 0; i < MENU_ITEMS; i++) {
-    const int settingY = 70 + i * 30;
-    const bool isSelected = (i == selectedIndex);
-
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, menuNames[i], !isSelected);
-
-    // Draw status for each setting
-    const char* status = "[Not Set]";
-    if (i == 0) {
-      status = (strlen(SETTINGS.opdsServerUrl) > 0) ? "[Set]" : "[Not Set]";
-    } else if (i == 1) {
-      status = (strlen(SETTINGS.opdsUsername) > 0) ? "[Set]" : "[Not Set]";
-    } else if (i == 2) {
-      status = (strlen(SETTINGS.opdsPassword) > 0) ? "[Set]" : "[Not Set]";
-    }
-    const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
-  }
-
-  // Draw button hints
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
+  // Draw help text at bottom
+  const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
