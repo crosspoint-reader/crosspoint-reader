@@ -1,18 +1,13 @@
 #include "FontDecompressor.h"
 
 #include <HardwareSerial.h>
-#include <miniz.h>
+#include <uzlib.h>
 
 #include <cstdlib>
 #include <cstring>
 
 bool FontDecompressor::init() {
-  decompressor = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
-  if (!decompressor) {
-    Serial.printf("[%lu] [FDC] Failed to allocate tinfl_decompressor\n", millis());
-    return false;
-  }
-  memset(decompressor, 0, sizeof(tinfl_decompressor));
+  memset(&decomp, 0, sizeof(decomp));
   return true;
 }
 
@@ -23,10 +18,6 @@ void FontDecompressor::deinit() {
       entry.data = nullptr;
     }
     entry.valid = false;
-  }
-  if (decompressor) {
-    free(decompressor);
-    decompressor = nullptr;
   }
 }
 
@@ -80,17 +71,20 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
     return false;
   }
 
-  // Decompress
-  tinfl_init(decompressor);
-  size_t inBytes = group.compressedSize;
-  size_t outBytes = group.uncompressedSize;
+  // Decompress using uzlib
   const uint8_t* inputBuf = &fontData->bitmap[group.compressedOffset];
 
-  tinfl_status status = tinfl_decompress(decompressor, inputBuf, &inBytes, nullptr, outBuf, &outBytes,
-                                         TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+  uzlib_uncompress_init(&decomp, NULL, 0);
+  decomp.source = inputBuf;
+  decomp.source_limit = inputBuf + group.compressedSize;
+  decomp.dest_start = outBuf;
+  decomp.dest = outBuf;
+  decomp.dest_limit = outBuf + group.uncompressedSize;
 
-  if (status != TINFL_STATUS_DONE) {
-    Serial.printf("[%lu] [FDC] Decompression failed for group %u (status %d)\n", millis(), groupIndex, status);
+  int res = uzlib_uncompress(&decomp);
+
+  if (res != TINF_DONE) {
+    Serial.printf("[%lu] [FDC] Decompression failed for group %u (status %d)\n", millis(), groupIndex, res);
     free(outBuf);
     return false;
   }

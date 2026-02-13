@@ -1,6 +1,6 @@
 #pragma once
 
-#include <miniz.h>
+#include <uzlib.h>
 
 #include <cstdint>
 
@@ -15,9 +15,6 @@ class FontDecompressor {
   // Valid until LRU eviction (safe for the duration of one glyph render).
   const uint8_t* getBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint16_t glyphIndex);
 
-  // Expose decompressor for sharing with ZipFile (they never overlap).
-  tinfl_decompressor* getDecompressor() const { return decompressor; }
-
  private:
   static constexpr uint8_t CACHE_SLOTS = 4;
 
@@ -30,7 +27,7 @@ class FontDecompressor {
     bool valid = false;
   };
 
-  tinfl_decompressor* decompressor = nullptr;
+  struct uzlib_uncomp decomp = {};
   CacheEntry cache[CACHE_SLOTS] = {};
   uint32_t accessCounter = 0;
 

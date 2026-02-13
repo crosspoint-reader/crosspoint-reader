@@ -6,7 +6,6 @@
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <SPI.h>
-#include <ZipFile.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -263,7 +262,6 @@ void setupDisplayAndFonts() {
   // Initialize font decompressor for compressed reader fonts
   fontDecompressor.init();
   renderer.setFontDecompressor(&fontDecompressor);
-  ZipFile::setSharedDecompressor(fontDecompressor.getDecompressor());
 
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
