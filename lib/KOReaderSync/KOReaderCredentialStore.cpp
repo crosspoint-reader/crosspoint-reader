@@ -1,7 +1,7 @@
 #include "KOReaderCredentialStore.h"
 
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <MD5Builder.h>
 #include <Serialization.h>
 
@@ -44,7 +44,7 @@ bool KOReaderCredentialStore::saveToFile() const {
 
   // Write username (plaintext - not particularly sensitive)
   serialization::writeString(file, username);
-  Serial.printf("[%lu] [KRS] Saving username: %s\n", millis(), username.c_str());
+  LOG_DBG("KRS", "Saving username: %s", username.c_str());
 
   // Write password (obfuscated)
   std::string obfuscatedPwd = password;
@@ -58,14 +58,14 @@ bool KOReaderCredentialStore::saveToFile() const {
   serialization::writePod(file, static_cast<uint8_t>(matchMethod));
 
   file.close();
-  Serial.printf("[%lu] [KRS] Saved KOReader credentials to file\n", millis());
+  LOG_DBG("KRS", "Saved KOReader credentials to file");
   return true;
 }
 
 bool KOReaderCredentialStore::loadFromFile() {
   FsFile file;
   if (!Storage.openFileForRead("KRS", KOREADER_FILE, file)) {
-    Serial.printf("[%lu] [KRS] No credentials file found\n", millis());
+    LOG_DBG("KRS", "No credentials file found");
     return false;
   }
 
@@ -73,7 +73,7 @@ bool KOReaderCredentialStore::loadFromFile() {
   uint8_t version;
   serialization::readPod(file, version);
   if (version != KOREADER_FILE_VERSION) {
-    Serial.printf("[%lu] [KRS] Unknown file version: %u\n", millis(), version);
+    LOG_DBG("KRS", "Unknown file version: %u", version);
     file.close();
     return false;
   }
@@ -110,14 +110,14 @@ bool KOReaderCredentialStore::loadFromFile() {
   }
 
   file.close();
-  Serial.printf("[%lu] [KRS] Loaded KOReader credentials for user: %s\n", millis(), username.c_str());
+  LOG_DBG("KRS", "Loaded KOReader credentials for user: %s", username.c_str());
   return true;
 }
 
 void KOReaderCredentialStore::setCredentials(const std::string& user, const std::string& pass) {
   username = user;
   password = pass;
-  Serial.printf("[%lu] [KRS] Set credentials for user: %s\n", millis(), user.c_str());
+  LOG_DBG("KRS", "Set credentials for user: %s", user.c_str());
 }
 
 std::string KOReaderCredentialStore::getMd5Password() const {
@@ -140,12 +140,12 @@ void KOReaderCredentialStore::clearCredentials() {
   username.clear();
   password.clear();
   saveToFile();
-  Serial.printf("[%lu] [KRS] Cleared KOReader credentials\n", millis());
+  LOG_DBG("KRS", "Cleared KOReader credentials");
 }
 
 void KOReaderCredentialStore::setServerUrl(const std::string& url) {
   serverUrl = url;
-  Serial.printf("[%lu] [KRS] Set server URL: %s\n", millis(), url.empty() ? "(default)" : url.c_str());
+  LOG_DBG("KRS", "Set server URL: %s", url.empty() ? "(default)" : url.c_str());
 }
 
 std::string KOReaderCredentialStore::getBaseUrl() const {
@@ -163,6 +163,5 @@ std::string KOReaderCredentialStore::getBaseUrl() const {
 
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
   matchMethod = method;
-  Serial.printf("[%lu] [KRS] Set match method: %s\n", millis(),
-                method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
+  LOG_DBG("KRS", "Set match method: %s", method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
 }
