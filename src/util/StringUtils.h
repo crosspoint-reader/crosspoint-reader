@@ -19,4 +19,10 @@ std::string sanitizeFilename(const std::string& name, size_t maxLength = 100);
 bool checkFileExtension(const std::string& fileName, const char* extension);
 bool checkFileExtension(const String& fileName, const char* extension);
 
+/**
+ * Decode a URL/percent-encoded string (e.g., "My%20Book" -> "My Book").
+ * Handles %XX hex sequences and '+' as space.
+ */
+std::string urlDecode(const std::string& encoded);
+
 }  // namespace StringUtils

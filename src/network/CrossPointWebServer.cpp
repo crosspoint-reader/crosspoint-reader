@@ -542,7 +542,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     // Reset watchdog - this is the critical 1% crash point
     esp_task_wdt_reset();
 
-    state.fileName = upload.filename;
+    state.fileName = StringUtils::urlDecode(std::string(upload.filename.c_str())).c_str();
     state.size = 0;
     state.success = false;
     state.error = "";

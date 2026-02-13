@@ -61,4 +61,28 @@ bool checkFileExtension(const String& fileName, const char* extension) {
   return localFile.endsWith(localExtension);
 }
 
+std::string urlDecode(const std::string& encoded) {
+  std::string decoded;
+  decoded.reserve(encoded.size());
+  for (size_t i = 0; i < encoded.size(); i++) {
+    if (encoded[i] == '%' && i + 2 < encoded.size()) {
+      auto hexVal = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return -1;
+      };
+      int hi = hexVal(encoded[i + 1]);
+      int lo = hexVal(encoded[i + 2]);
+      if (hi >= 0 && lo >= 0) {
+        decoded += static_cast<char>((hi << 4) | lo);
+        i += 2;
+        continue;
+      }
+    }
+    decoded += (encoded[i] == '+') ? ' ' : encoded[i];
+  }
+  return decoded;
+}
+
 }  // namespace StringUtils
