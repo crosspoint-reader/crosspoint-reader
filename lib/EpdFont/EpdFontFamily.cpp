@@ -1,8 +1,11 @@
 #include "EpdFontFamily.h"
 
+bool globalForceBold = false;
+
+
 const EpdFont* EpdFontFamily::getFont(const Style style) const {
   // Extract font style bits (ignore UNDERLINE bit for font selection)
-  const bool hasBold = (style & BOLD) != 0;
+  const bool hasBold = ((style & BOLD) != 0) || globalForceBold;
   const bool hasItalic = (style & ITALIC) != 0;
 
   if (hasBold && hasItalic) {
