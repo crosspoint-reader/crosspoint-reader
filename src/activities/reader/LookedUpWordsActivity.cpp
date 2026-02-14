@@ -119,13 +119,14 @@ void LookedUpWordsActivity::renderScreen() {
   renderer.clearScreen();
 
   const auto orient = renderer.getOrientation();
+  const auto metrics = UITheme::getInstance().getMetrics();
   const bool isLandscapeCw = orient == GfxRenderer::Orientation::LandscapeClockwise;
   const bool isLandscapeCcw = orient == GfxRenderer::Orientation::LandscapeCounterClockwise;
   const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
-  const int hintGutterHeight = isInverted ? 50 : 0;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.sideButtonHintsWidth : 0;
+  const int hintGutterHeight = isInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int sidePadding = 20;
+  const int sidePadding = metrics.contentSidePadding;
   const int leftPadding = contentX + sidePadding;
   const int rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
   const int contentWidth = renderer.getScreenWidth() - leftPadding - rightPadding;

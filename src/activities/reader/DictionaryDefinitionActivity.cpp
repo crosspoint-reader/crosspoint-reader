@@ -46,13 +46,14 @@ void DictionaryDefinitionActivity::wrapText() {
   wrappedLines.clear();
 
   const auto orient = renderer.getOrientation();
+  const auto metrics = UITheme::getInstance().getMetrics();
   const bool isLandscapeCw = orient == GfxRenderer::Orientation::LandscapeClockwise;
   const bool isLandscapeCcw = orient == GfxRenderer::Orientation::LandscapeCounterClockwise;
   const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
-  hintGutterHeight = isInverted ? 50 : 0;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.sideButtonHintsWidth : 0;
+  hintGutterHeight = isInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int sidePadding = 20;
+  const int sidePadding = metrics.contentSidePadding;
   leftPadding = contentX + sidePadding;
   rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
 
