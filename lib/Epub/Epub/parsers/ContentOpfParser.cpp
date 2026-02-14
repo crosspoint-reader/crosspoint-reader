@@ -327,6 +327,9 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
   }
 
   if (self->state == IN_BOOK_AUTHOR) {
+    if (!self->author.empty()) {
+      self->author.append(", ");  // Add separator for multiple authors
+    }
     self->author.append(s, len);
     return;
   }
