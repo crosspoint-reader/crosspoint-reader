@@ -11,9 +11,17 @@
       --title-color: #2c3e50;
       --card-background: white;
       --label-color: #7f8c8d;
+      --muted-color: #95a5a6;
       --status-ok: #27ae60;
       --border-color: #eee;
-      --accent-color: #6e9a82;
+      --accent-color-rgb: 110, 154, 130;
+      --accent-color: rgb(var(--accent-color-rgb));
+      --accent-color-10: rgba(var(--accent-color-rgb), .1);
+      --accent-color-25: rgba(var(--accent-color-rgb), .25);
+      --accent-color-50: rgba(var(--accent-color-rgb), .5);
+      --accent-color-75: rgba(var(--accent-color-rgb), .75);
+      --accent-color-highlight: #5a8c73;
+      --toggle-bg: #ccc;
 
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         Oxygen, Ubuntu, sans-serif;
@@ -32,6 +40,7 @@
         --card-background: #444;
         --label-color: #bdc3c7;
         --border-color: #555;
+        --toggle-bg: #333;
 
         color-scheme: dark;
       }
@@ -87,7 +96,7 @@
       border-radius: 4px;
     }
     .nav-links a.active {
-      color: var(--font-color);
+      color: #FFF;
       text-decoration: none;
       background: var(--accent-color);
     }
@@ -95,6 +104,9 @@
       color: var(--font-color);
       text-decoration: none;
       background: var(--border-color);
+    }
+    .nav-links a.active:hover {
+      background: var(--accent-color-highlight);
     }
     a {
       color: var(--accent-color);
@@ -128,12 +140,10 @@
     .setting-control input[type="text"],
     .setting-control input[type="password"] {
       padding: 6px 10px;
-      border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 0.95em;
-    }
-    .setting-control select {
-      min-width: 160px;
+      background: var(--background);
+      border: 1px solid var(--border-color);
     }
     .setting-control input[type="text"],
     .setting-control input[type="password"] {
@@ -158,7 +168,7 @@
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
-      background-color: #ccc;
+      background-color: var(--toggle-bg);
       border-radius: 26px;
       transition: 0.3s;
     }
@@ -174,7 +184,7 @@
       transition: 0.3s;
     }
     .toggle-switch input:checked + .toggle-slider {
-      background-color: #27ae60;
+      background-color: var(--accent-color);
     }
     .toggle-switch input:checked + .toggle-slider:before {
       transform: translateX(22px);
@@ -200,22 +210,31 @@
       background-color: #95a5a6;
       cursor: not-allowed;
     }
-    .message {
+    .toast {
       padding: 12px;
       border-radius: 4px;
-      margin: 15px 0;
-      text-align: center;
       display: none;
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      min-width: 200px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      z-index: 1000;
     }
-    .message.success {
+    .toast-success {
       background-color: #d4edda;
       color: #155724;
       border: 1px solid #c3e6cb;
     }
-    .message.error {
+    .toast-error {
       background-color: #f8d7da;
       color: #721c24;
       border: 1px solid #f5c6cb;
+    }
+    .toast-info {
+      background-color: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
     }
     .loader-container {
       display: flex;
@@ -233,6 +252,44 @@
       box-sizing: border-box;
       animation: rotation 1s linear infinite;
     }
+    .btn {
+      color: white;
+      padding: 8px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 16px;
+    }
+    .btn-primary {
+      background-color: var(--accent-color);
+    }
+    .btn-primary:hover {
+      background-color: var(--accent-color-highlight);
+    }
+    .btn-primary:disabled {
+      background-color: var(--accent-color-50);
+      cursor: not-allowed;
+      color: var(--muted-color)
+    }
+    .btn-secondary {
+      background-color: #6c757d;
+    }
+    .btn-secondary:hover {
+      background-color: #5a6268;
+    }
+    footer {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: .85em;
+    }
+    footer .icon {
+      height: 20px;
+      width: 20px;
+    }
     @keyframes rotation {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
@@ -241,6 +298,11 @@
       body {
         padding: 10px;
         font-size: 14px;
+      }
+      .toast {
+        left: 10px;
+        bottom: 10px;
+        right: 10px;
       }
       .card {
         padding: 12px;
@@ -257,12 +319,17 @@
       .setting-row {
         flex-wrap: wrap;
         gap: 6px;
+        padding: 4px 0;
+        border: none;
       }
       .setting-control select,
       .setting-control input[type="text"],
       .setting-control input[type="password"] {
         min-width: 0;
         width: 100%;
+      }
+      footer {
+        justify-self: center;
       }
     }
   </style>
@@ -285,7 +352,7 @@
 
   <h2>Settings</h2>
 
-  <div id="message" class="message"></div>
+  <div id="toast" class="toast toast-info"></div>
 
   <div id="settings-container">
     <div class="loader-container">
@@ -294,10 +361,13 @@
   </div>
 
   <div class="save-container" id="save-container" style="display:none;">
-    <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
+    <button class="btn btn-primary" id="saveBtn" onclick="saveSettings(event)">Save Settings</button>
   </div>
 
   <footer>
+    <svg class="icon icon-github" aria-hidden="true">
+      <use href="#icon-github"></use>
+    </svg>
     <a
       href="https://github.com/crosspoint-reader/crosspoint-reader"
       target="_blank"
@@ -305,9 +375,16 @@
     >
   </footer>
 
+  <svg xmlns="http://www.w3.org/2000/svg" style="display: none">
+    <symbol viewBox="0 0 24 24" id="icon-github">
+      <path fill="currentColor" d="M12,2A10,10,0,0,0,8.84,21.5c.5.08.66-.23.66-.5V19.31C6.73,19.91,6.14,18,6.14,18A2.69,2.69,0,0,0,5,16.5c-.91-.62.07-.6.07-.6a2.1,2.1,0,0,1,1.53,1,2.15,2.15,0,0,0,2.91.83,2.16,2.16,0,0,1,.63-1.34C8,16.17,5.62,15.31,5.62,11.5a3.87,3.87,0,0,1,1-2.71,3.58,3.58,0,0,1,.1-2.64s.84-.27,2.75,1a9.63,9.63,0,0,1,5,0c1.91-1.29,2.75-1,2.75-1a3.58,3.58,0,0,1,.1,2.64,3.87,3.87,0,0,1,1,2.71c0,3.82-2.34,4.66-4.57,4.91a2.39,2.39,0,0,1,.69,1.85V21c0,.27.16.59.67.5A10,10,0,0,0,12,2Z"></path>
+    </symbol>
+  </svg>
+
 <script>
   let allSettings = [];
   let originalValues = {};
+  const VALID_SETTING_TYPES = ['toggle', 'enum', 'value', 'string'];
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -318,12 +395,12 @@
       .replaceAll("'", "&#039;");
   }
 
-  function showMessage(text, isError) {
-    const msg = document.getElementById('message');
-    msg.textContent = text;
-    msg.className = 'message ' + (isError ? 'error' : 'success');
-    msg.style.display = 'block';
-    setTimeout(function() { msg.style.display = 'none'; }, 4000);
+  function showToast(text, type = "info") {
+    const toast = document.getElementById('toast');
+    toast.textContent = text;
+    toast.className = 'toast toast-' + type;
+    toast.style.display = 'block';
+    setTimeout(() => toast.style.display = 'none', 4000);
   }
 
   function renderControl(setting) {
@@ -358,27 +435,22 @@
       return '<input type="' + inputType + '" id="' + id + '" value="' + escapeHtml(val) + '"' +
         ' oninput="markChanged()">';
     }
-
-    return '';
   }
 
   function getValue(setting) {
     const el = document.getElementById('setting-' + setting.key);
     if (!el) return undefined;
 
-    if (setting.type === 'toggle') {
-      return el.checked ? 1 : 0;
+    switch (setting.type) {
+      case 'toggle':
+        return el.checked ? 1 : 0;
+      case 'enum': case 'value':
+        return parseInt(el.value, 10);
+      case 'string':
+        return el.value;
+      default:
+        return undefined;
     }
-    if (setting.type === 'enum') {
-      return parseInt(el.value, 10);
-    }
-    if (setting.type === 'value') {
-      return parseInt(el.value, 10);
-    }
-    if (setting.type === 'string') {
-      return el.value;
-    }
-    return undefined;
   }
 
   function markChanged() {
@@ -424,6 +496,8 @@
       for (const category in groups) {
         html += '<div class="card"><h3>' + escapeHtml(category) + '</h3>';
         groups[category].forEach(function(s) {
+          if (!VALID_SETTING_TYPES.includes(s.type)) return;
+
           html += '<div class="setting-row">' +
             '<span class="setting-name">' + escapeHtml(s.name) + '</span>' +
             '<span class="setting-control">' + renderControl(s) + '</span>' +
@@ -442,8 +516,8 @@
     }
   }
 
-  async function saveSettings() {
-    const btn = document.getElementById('saveBtn');
+  async function saveSettings(event) {
+    const btn = event.target;
     btn.disabled = true;
     btn.textContent = 'Saving...';
 
@@ -457,7 +531,7 @@
     });
 
     if (Object.keys(changes).length === 0) {
-      showMessage('No changes to save.', false);
+      showToast('No changes to save.');
       btn.textContent = 'Save Settings';
       return;
     }
@@ -479,10 +553,10 @@
         originalValues[key] = changes[key];
       }
 
-      showMessage('Settings saved successfully!', false);
+      showToast('Settings saved successfully!', "success");
     } catch (e) {
       console.error(e);
-      showMessage('Error: ' + e.message, true);
+      showToast('Error: ' + e.message, "error");
     }
 
     btn.textContent = 'Save Settings';

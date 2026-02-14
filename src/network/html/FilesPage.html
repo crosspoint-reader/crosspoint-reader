@@ -11,9 +11,16 @@
         --title-color: #2c3e50;
         --card-background: white;
         --label-color: #7f8c8d;
+        --muted-color: #95a5a6;
         --status-ok: #27ae60;
         --border-color: #eee;
-        --accent-color: #6e9a82;
+        --accent-color-rgb: 110, 154, 130;
+        --accent-color: rgb(var(--accent-color-rgb));
+        --accent-color-10: rgba(var(--accent-color-rgb), .1);
+        --accent-color-25: rgba(var(--accent-color-rgb), .25);
+        --accent-color-50: rgba(var(--accent-color-rgb), .5);
+        --accent-color-75: rgba(var(--accent-color-rgb), .75);
+        --accent-color-highlight: #5a8c73;
 
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       Oxygen, Ubuntu, sans-serif;
@@ -23,6 +30,18 @@
       background-color: var(--background);
       color: var(--font-color);
       font-size: 16px;
+    }
+    .alert-info {
+      --alert-color: #055160;
+      --alert-background: #cff4fc;
+      --alert-border-color: #9eeaf9;
+      --alert-link-color: #055160;
+    }
+    .alert-danger {
+      --alert-color: #58151c;
+      --alert-background: #f8d7da;
+      --alert-border-color: #f1aeb5;
+      --alert-link-color: #58151c;
     }
     @media (prefers-color-scheme: dark) {
       body {
@@ -35,6 +54,40 @@
 
         color-scheme: dark;
       }
+
+      .alert-info {
+        --alert-color: #6edff6;
+        --alert-background: #032830;
+        --alert-border-color: #087990;
+        --alert-link-color: #6edff6;
+      }
+      .alert-danger {
+        --alert-color: #ea868f;
+        --alert-background: #2c0b0e;
+        --alert-border-color: #842029;
+        --alert-link-color: #ea868f;
+      }
+    }
+    .alert {
+      position: relative;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      color: var(--alert-color);
+      background-color: var(--alert-background);
+      border: solid 1px var(--alert-border-color);
+      border-radius: 0.375rem;
+    }
+    .alert a {
+      color: var(--alert-link-color);
+    }
+    .alert-icon {
+      display: flex;
+      align-items: center;
+    }
+    .alert-icon .icon {
+      margin-right: 6px;
+      width: 20px;
+      height: 20px;
     }
     svg.icon {
       width: 16px;
@@ -80,7 +133,6 @@
       margin: 0;
       color: var(--title-color);
       font-size: 18px;
-      padding-bottom: 8px;
     }
     .contents-card {
       margin-top: 6px;
@@ -106,9 +158,10 @@
     .breadcrumb-inline {
       color: #7f8c8d;
       font-size: 0.85em;
+      display: flex;
     }
     .breadcrumb-inline a {
-      color: #3498db;
+      color: var(--accent-color);
       text-decoration: none;
     }
     .breadcrumb-inline a:hover {
@@ -122,7 +175,7 @@
       margin-inline-start: 0;
     }
     .breadcrumb-inline .current {
-      color: var(--accent-color);
+      color: var(--font-color);
       font-weight: 500;
     }
     .nav-links {
@@ -149,6 +202,9 @@
       text-decoration: none;
       background: var(--border-color);
     }
+    .nav-links a.active:hover {
+      background: var(--accent-color-highlight);
+    }
     a {
       color: var(--accent-color);
       text-decoration: none;
@@ -170,18 +226,27 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      font-size: 16px;
     }
     .btn-primary {
       background-color: var(--accent-color);
     }
     .btn-primary:hover {
-      background-color: #5a8c73;
+      background-color: var(--accent-color-highlight);
     }
     .btn-secondary {
       background-color: #6c757d;
     }
     .btn-secondary:hover {
       background-color: #5a6268;
+    }
+    .btn-icon:hover {
+      background: var(--accent-color);
+      color: #FFF;
+    }
+    .btn-icon.btn-danger:hover {
+      background: tomato;
+      color: #FFF;
     }
     /* Upload modal */
     .modal-overlay {
@@ -207,8 +272,15 @@
       width: 90%;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 1.5em;
+   }
     .modal h3 {
-      margin: 0 0 15px 0;
+      margin: 0;
       color: var(--title-color);
       display: flex;
       gap: 10px;
@@ -249,11 +321,18 @@
       font-weight: 600;
       color: var(--font-color);
     }
-    .file-table tr:hover {
+    .file-table tbody tr:nth-child(odd) {
+      background-color: rgba(var(--accent-color-rgb), .1);
+    }
+    .file-table tbody tr:hover {
       background-color: var(--background);
     }
     .file-table tr:last-child td {
       border-bottom: none;
+    }
+    .file-table tr td:first-child {
+      width: 1px;
+      padding-inline-end: 0;
     }
     th.size-col,
     th.actions-col {
@@ -273,11 +352,6 @@
     #uploadPathDisplay,
     #folderPathDisplay {
       display: block;
-    }
-    .file-info {
-      color: #7f8c8d;
-      font-size: 0.85em;
-      margin: 8px 0;
     }
     .no-files {
       text-align: center;
@@ -511,8 +585,19 @@
       box-sizing: border-box;
       animation: rotation 1s linear infinite;
     }
-    tr.epub-file td:first-child svg.icon {
+    tr.epub-file td:first-child svg.icon,
+    svg.icon-epub {
       color: #86b918;
+    }
+    footer {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: .85em;
+    }
+    footer .icon {
+      height: 20px;
+      width: 20px;
     }
     @keyframes rotation {
       from {
@@ -602,7 +687,7 @@
         font-size: 0.9em;
       }
       footer {
-        text-align: center;
+        justify-content: center;
       }
     }
   </style>
@@ -672,6 +757,9 @@
 </div>
 
 <footer>
+  <svg class="icon icon-github" aria-hidden="true">
+    <use href="#icon-github"></use>
+  </svg>
   <a
     href="https://github.com/crosspoint-reader/crosspoint-reader"
     target="_blank"
@@ -682,8 +770,10 @@
 <!-- Upload Modal -->
 <div class="modal-overlay" id="uploadModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeUploadModal()">&times;</button>
-    <h3>Upload file</h3>
+    <div class="modal-header">
+      <h3><svg class="icon" aria-hidden="true"><use href="#icon-upload"></use></svg> Upload file</h3>
+      <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+    </div>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <form id="uploadForm" onsubmit="uploadFile(event)">
@@ -703,8 +793,10 @@
 <!-- New Folder Modal -->
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeFolderModal()">&times;</button>
-    <h3>New Folder</h3>
+    <div class="modal-header">
+      <h3><svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg> New Folder</h3>
+      <button class="modal-close" onclick="closeFolderModal()">&times;</button>
+    </div>
     <div class="folder-form">
       <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
       <form onsubmit="createFolder(event)">
@@ -723,7 +815,7 @@
     <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
     <h3><svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg> Delete Item</h3>
     <div class="folder-form">
-      <p class="delete-warning">⚠️ This action cannot be undone!</p>
+      <div class="alert alert-danger alert-icon"><svg class="icon icon-warning" aria-hidden="true"><use href="#icon-warning"></use></svg> This action cannot be undone!</div>
       <p class="file-info">Are you sure you want to delete:</p>
       <p class="delete-item-name" id="deleteItemName"></p>
       <input type="hidden" id="deleteItemPath">
@@ -739,10 +831,12 @@
 <!-- Rename Modal -->
 <div class="modal-overlay" id="renameModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3><svg class="icon" aria-hidden="true"><use href="#icon-edit"></use></svg> Rename File</h3>
+    <div class="modal-header">
+      <h3><svg class="icon" aria-hidden="true"><use href="#icon-edit"></use></svg> Rename File</h3>
+      <button class="modal-close" onclick="closeRenameModal()">&times;</button>
+    </div>
     <div class="folder-form">
-      <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
+      <p>Renaming <span id="renameItemName" class="file-name-badge"></span></p>
       <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
       <input type="hidden" id="renameItemPath">
       <div class="modal-footer">
@@ -756,10 +850,12 @@
 <!-- Move Modal -->
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3><svg class="icon" aria-hidden="true"><use href="#icon-move-file"></use></svg> Move File</h3>
+    <div class="modal-header">
+      <h3><svg class="icon" aria-hidden="true"><use href="#icon-move-file"></use></svg> Move File</h3>
+      <button class="modal-close" onclick="closeMoveModal()">&times;</button>
+    </div>
     <div class="folder-form">
-      <p class="file-info">Moving <strong id="moveItemName"></strong></p>
+      <p>Moving <span id="moveItemName" class="file-name-badge"></span></p>
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
       <datalist id="moveFolderOptions"></datalist>
       <input type="hidden" id="moveItemPath">
@@ -804,11 +900,24 @@
   <symbol viewBox="0 0 24 24" id="icon-upload">
     <path fill="transparent" d="M17 17H17.01M15.6 14H18C18.9319 14 19.3978 14 19.7654 14.1522C20.2554 14.3552 20.6448 14.7446 20.8478 15.2346C21 15.6022 21 16.0681 21 17C21 17.9319 21 18.3978 20.8478 18.7654C20.6448 19.2554 20.2554 19.6448 19.7654 19.8478C19.3978 20 18.9319 20 18 20H6C5.06812 20 4.60218 20 4.23463 19.8478C3.74458 19.6448 3.35523 19.2554 3.15224 18.7654C3 18.3978 3 17.9319 3 17C3 16.0681 3 15.6022 3.15224 15.2346C3.35523 14.7446 3.74458 14.3552 4.23463 14.1522C4.60218 14 5.06812 14 6 14H8.4M12 15V4M12 4L15 7M12 4L9 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
   </symbol>
+
+  <symbol viewBox="0 0 64 64" id="icon-home">
+    <path fill="currentColor" d="M56.87 25.981L50.27 21.031L47.27 18.781L35.57 10.001C34.4423 9.16327 33.0748 8.71094 31.67 8.71094C30.2652 8.71094 28.8977 9.16327 27.77 10.001L21.67 14.581V14.371C21.6684 13.8411 21.4572 13.3333 21.0825 12.9586C20.7077 12.5838 20.1999 12.3726 19.67 12.371H12.47C11.9396 12.371 11.4309 12.5817 11.0558 12.9568C10.6807 13.3319 10.47 13.8406 10.47 14.371V23.161L6.44002 26.291C6.23227 26.4524 6.05838 26.6531 5.92833 26.8817C5.79827 27.1103 5.71459 27.3624 5.68208 27.6234C5.64957 27.8844 5.66888 28.1493 5.73887 28.4028C5.80887 28.6564 5.92819 28.8936 6.09001 29.101C6.276 29.3427 6.51546 29.538 6.7896 29.6716C7.06373 29.8052 7.36505 29.8734 7.67 29.871C8.11211 29.8709 8.54152 29.7231 8.89 29.451L10.47 28.231V48.281C10.4716 50.0044 11.1569 51.6568 12.3756 52.8755C13.5942 54.0941 15.2466 54.7794 16.97 54.781H25.6C25.9594 54.7808 26.3121 54.6831 26.6203 54.4981C26.9285 54.3132 27.1807 54.0481 27.35 53.731C27.5142 53.4413 27.6003 53.114 27.6 52.781C27.6017 52.7109 27.5983 52.6407 27.59 52.571V46.851C27.5916 45.7703 28.0223 44.7345 28.7874 43.9713C29.5525 43.2081 30.5893 42.7799 31.67 42.781C32.7491 42.7821 33.7837 43.2112 34.5468 43.9742C35.3098 44.7373 35.7389 45.7719 35.74 46.851V52.781C35.7397 53.114 35.8259 53.4413 35.99 53.731C36.1624 54.0477 36.4167 54.3122 36.7263 54.4969C37.0359 54.6816 37.3895 54.7797 37.75 54.781H46.37C48.0929 54.7776 49.7442 54.0917 50.9624 52.8734C52.1807 51.6552 52.8666 50.0039 52.87 48.281V27.981L54.47 29.181C54.8129 29.4398 55.2305 29.5801 55.66 29.581C55.9718 29.5802 56.2792 29.5076 56.5584 29.3689C56.8376 29.2301 57.081 29.029 57.27 28.781C57.5883 28.3567 57.7249 27.8233 57.6499 27.2982C57.5749 26.7731 57.2944 26.2993 56.87 25.981Z"></path>
+  </symbol>
+
+  <symbol viewBox="0 0 24 24" id="icon-warning">
+    <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M11 13C11 13.5523 11.4477 14 12 14C12.5523 14 13 13.5523 13 13V10C13 9.44772 12.5523 9 12 9C11.4477 9 11 9.44772 11 10V13ZM13 15.9888C13 15.4365 12.5523 14.9888 12 14.9888C11.4477 14.9888 11 15.4365 11 15.9888V16C11 16.5523 11.4477 17 12 17C12.5523 17 13 16.5523 13 16V15.9888ZM9.37735 4.66136C10.5204 2.60393 13.4793 2.60393 14.6223 4.66136L21.2233 16.5431C22.3341 18.5427 20.8882 21 18.6008 21H5.39885C3.11139 21 1.66549 18.5427 2.77637 16.5431L9.37735 4.66136Z"></path>
+  </symbol>
+
+  <symbol viewBox="0 0 24 24" id="icon-info">
+    <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12ZM12 17.75C12.4142 17.75 12.75 17.4142 12.75 17V11C12.75 10.5858 12.4142 10.25 12 10.25C11.5858 10.25 11.25 10.5858 11.25 11V17C11.25 17.4142 11.5858 17.75 12 17.75ZM12 7C12.5523 7 13 7.44772 13 8C13 8.55228 12.5523 9 12 9C11.4477 9 11 8.55228 11 8C11 7.44772 11.4477 7 12 7Z"></path>
+  </symbol>
 </svg>
 
 <script>
   // get current path from query parameter
-  const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  // const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  const currentPath = '/Classics/EPUBs/to-read';
   const FILE_EXTENSION_REGEX = /\.([0-9a-z]+)(?:[\?#]|$)/i;
 
   function escapeHtml(unsafe) {
@@ -843,9 +952,9 @@
 
     let breadcrumbContent = '<span class="sep">/</span>';
     if (currentPath === '/') {
-      breadcrumbContent += '<span class="current">🏠</span>';
+      breadcrumbContent += '<span class="current"><svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg></span>';
     } else {
-      breadcrumbContent += '<a href="/files">🏠</a>';
+      breadcrumbContent += '<a href="/files"><svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg></a>';
       const pathSegments = currentPath.split('/');
       pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
         breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
@@ -959,9 +1068,9 @@
           fileTableContent += `<td>${fileExtension}</td>`;
           fileTableContent += `<td class="text-nowrap text-end"><code>${formatFileSize(file.size)}</code></td>`;
           fileTableContent += `<td class="text-end"><div class="action-icon-group">`;
-          fileTableContent += `<button class="btn btn-icon move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file"><svg class="icon icon-move-file" aria-hidden="true"><use href="#icon-move-file"></use></svg></button>`;
-          fileTableContent += `<button class="btn btn-icon rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file"><svg class="icon icon-edit" aria-hidden="true"><use href="#icon-edit"></use></svg></button>`;
-          fileTableContent += `<button class="btn btn-icon btn-danger delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file"><svg class="icon icon-trash" aria-hidden="true"><use href="#icon-trash"></use></svg></button>`;
+          fileTableContent += `<button class="btn btn-icon move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', ${file.isEpub})" title="Move file"><svg class="icon icon-move-file" aria-hidden="true"><use href="#icon-move-file"></use></svg></button>`;
+          fileTableContent += `<button class="btn btn-icon rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', ${file.isEpub})" title="Rename file"><svg class="icon icon-edit" aria-hidden="true"><use href="#icon-edit"></use></svg></button>`;
+          fileTableContent += `<button class="btn btn-icon btn-danger delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false, ${file.isEpub})" title="Delete file"><svg class="icon icon-trash" aria-hidden="true"><use href="#icon-trash"></use></svg></button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         }
@@ -975,7 +1084,7 @@
 
   // Modal functions
   function openUploadModal() {
-    document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    document.getElementById('uploadPathDisplay').innerHTML = currentPath === '/' ? '/ <svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg>' : currentPath;
     document.getElementById('uploadModal').classList.add('open');
   }
 
@@ -1368,8 +1477,9 @@ function retryAllFailedUploads() {
   }
 
   // Rename functions
-  function openRenameModal(name, path) {
-    document.getElementById('renameItemName').innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-file"></use></svg> ' + name;
+  function openRenameModal(name, path, isEpub = false) {
+    const iconType = isEpub ? 'epub' : 'file';
+    document.getElementById('renameItemName').innerHTML = `<svg class="icon icon-${iconType}" aria-hidden="true"><use href="#icon-${iconType}"></use></svg> ${name}`;
     document.getElementById('renameItemPath').value = path;
     document.getElementById('renameNewName').value = name;
     document.getElementById('renameModal').classList.add('open');
@@ -1483,8 +1593,9 @@ function retryAllFailedUploads() {
     });
   }
 
-  function openMoveModal(name, path) {
-    document.getElementById('moveItemName').innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-file"></use></svg> ' + name;
+  function openMoveModal(name, path, isEpub = false) {
+    const iconType = isEpub ? 'epub' : 'file';
+    document.getElementById('moveItemName').innerHTML = `<svg class="icon icon-${iconType}" aria-hidden="true"><use href="#icon-${iconType}"></use></svg> ${name}`;
     document.getElementById('moveItemPath').value = path;
     document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
     document.getElementById('moveModal').classList.add('open');
@@ -1532,8 +1643,9 @@ function retryAllFailedUploads() {
   }
 
   // Delete functions
-  function openDeleteModal(name, path, isFolder) {
-    document.getElementById('deleteItemName').innerHTML = `<svg class="icon" aria-hidden="true"><use href="#icon-${isFolder ? 'folder' : 'file'}"></use></svg> ${name}`;
+  function openDeleteModal(name, path, isFolder, isEpub = false) {
+    const iconType = isFolder ? 'folder' : (isEpub ? 'epub' : 'file');
+    document.getElementById('deleteItemName').innerHTML = `<svg class="icon icon-${iconType}" aria-hidden="true"><use href="#icon-${iconType}"></use></svg> ${name}`;
     document.getElementById('deleteItemPath').value = path;
     document.getElementById('deleteItemType').value = isFolder ? 'folder' : 'file';
     document.getElementById('deleteModal').classList.add('open');
