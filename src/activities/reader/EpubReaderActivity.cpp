@@ -13,7 +13,8 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
-#include "PageExporter.h"
+#include "EpubReaderClippingsListActivity.h"
+#include "ClippingTextViewerActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -158,12 +159,14 @@ void EpubReaderActivity::captureCurrentPage() {
   const int bookPercent =
       clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
   const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
-  captureBuffer.push_back({pageText, chapterTitle, bookPercent, chapterPercent});
+  captureBuffer.push_back({pageText, chapterTitle, bookPercent, chapterPercent,
+                           static_cast<uint16_t>(currentSpineIndex),
+                           static_cast<uint16_t>(section->currentPage)});
 }
 
 void EpubReaderActivity::startCapture() {
   // Prevent capturing from books stored inside the exports directory
-  if (epub && epub->getPath().find("/clippings/") != std::string::npos) {
+  if (epub && epub->getPath().find("/.crosspoint/") != std::string::npos) {
     statusBarOverride = "Cannot capture here";
     updateRequired = true;
     return;
@@ -173,7 +176,6 @@ void EpubReaderActivity::startCapture() {
   captureCurrentPage();
   xSemaphoreGive(renderingMutex);
   captureState = CaptureState::CAPTURING;
-  statusBarMarker = true;
   statusBarOverride = "Capture started";
   updateRequired = true;
 }
@@ -183,18 +185,16 @@ void EpubReaderActivity::stopCapture() {
     cancelCapture();
     return;
   }
-  const bool ok = PageExporter::exportPassage(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
+  const bool ok = ClippingStore::saveClipping(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
   statusBarOverride = ok ? "Clipping saved" : "Save failed";
   captureBuffer.clear();
   captureState = CaptureState::IDLE;
-  statusBarMarker = false;
   updateRequired = true;
 }
 
 void EpubReaderActivity::cancelCapture() {
   captureBuffer.clear();
   captureState = CaptureState::IDLE;
-  statusBarMarker = false;
   pendingCaptureAfterRender = false;
 }
 
@@ -203,7 +203,7 @@ void EpubReaderActivity::addBookmark() {
     return;
   }
   // Prevent bookmarking from books stored inside the exports directory
-  if (epub->getPath().find("/clippings/") != std::string::npos) {
+  if (epub->getPath().find("/.crosspoint/") != std::string::npos) {
     statusBarOverride = "Cannot bookmark here";
     updateRequired = true;
     return;
@@ -261,22 +261,6 @@ void EpubReaderActivity::loop() {
     return;  // Don't access 'this' after callback
   }
 
-  // Handle pending file open (e.g. clippings viewer)
-  if (!pendingOpenFilePath.empty()) {
-    auto path = std::move(pendingOpenFilePath);
-    pendingOpenFilePath.clear();
-    if (SdMan.exists(path.c_str())) {
-      exitActivity();
-      if (onOpenFile) {
-        onOpenFile(path);
-      }
-      return;
-    } else {
-      statusBarOverride = "No clippings yet";
-      updateRequired = true;
-    }
-  }
-
   // Skip button processing after returning from subactivity
   // This prevents stale button release events from triggering actions
   // We wait until: (1) all relevant buttons are released, AND (2) wasReleased events have been cleared
@@ -301,7 +285,10 @@ void EpubReaderActivity::loop() {
 
   // Short press CONFIRM opens reader menu
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < captureHoldMs) {
-    // Don't start activity transition while rendering
+    // Auto-save capture when opening menu
+    if (captureState == CaptureState::CAPTURING) {
+      stopCapture();
+    }
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
@@ -314,7 +301,7 @@ void EpubReaderActivity::loop() {
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
         this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-        SETTINGS.orientation, captureState == CaptureState::CAPTURING,
+        SETTINGS.orientation,
         [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
@@ -545,20 +532,22 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       xSemaphoreGive(renderingMutex);
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::START_CAPTURE: {
+    case EpubReaderMenuActivity::MenuAction::CAPTURE: {
       exitActivity();
       applyOrientation(SETTINGS.orientation);
-      if (captureState == CaptureState::CAPTURING) {
-        stopCapture();
-      } else {
-        startCapture();
-      }
+      startCapture();
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::VIEW_CLIPPINGS: {
+    case EpubReaderMenuActivity::MenuAction::CLIPPINGS: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
-      applyOrientation(SETTINGS.orientation);
-      pendingOpenFilePath = PageExporter::getExportPath(epub->getPath());
+      enterNewActivity(new EpubReaderClippingsListActivity(
+          this->renderer, this->mappedInput, epub->getPath(),
+          [this]() {
+            exitActivity();
+            updateRequired = true;
+          }));
+      xSemaphoreGive(renderingMutex);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
@@ -912,17 +901,14 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     return;
   }
 
-  // Show persistent capture indicator when status bar has no chapter title
-  const bool hasChapterTitle = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NO_PROGRESS ||
-                               SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL ||
-                               SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
-                               SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
-  if (statusBarMarker && !hasChapterTitle) {
+  // Show persistent capture indicator
+  if (captureState == CaptureState::CAPTURING) {
     const auto screenHeight = renderer.getScreenHeight();
     const auto textY = screenHeight - orientedMarginBottom - 4;
-    const int markerWidth = renderer.getTextWidth(SMALL_FONT_ID, "*");
-    const int x = (renderer.getScreenWidth() - markerWidth) / 2;
-    renderer.drawText(SMALL_FONT_ID, x, textY, "*");
+    const char* capText = "Capturing...";
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, capText);
+    const int x = (renderer.getScreenWidth() - textWidth) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, textY, capText);
     return;
   }
 
@@ -1012,10 +998,6 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     } else {
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
-    }
-    // Prepend capture indicator to chapter title
-    if (statusBarMarker) {
-      title = "* " + title;
     }
     titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     if (tocIndex != -1) {

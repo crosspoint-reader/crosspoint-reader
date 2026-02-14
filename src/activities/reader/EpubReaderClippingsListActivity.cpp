@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 
+#include "ClippingTextViewerActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -101,8 +102,17 @@ void EpubReaderClippingsListActivity::loop() {
       confirmingDelete = true;
       updateRequired = true;
     } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
-      // TODO Phase 3: open text viewer subactivity for selected clipping
-      onGoBack();
+      const std::string text = ClippingStore::loadClippingText(bookPath, clippings[selectorIndex]);
+      if (!text.empty()) {
+        xSemaphoreTake(renderingMutex, portMAX_DELAY);
+        enterNewActivity(new ClippingTextViewerActivity(
+            this->renderer, this->mappedInput, text,
+            [this]() {
+              exitActivity();
+              updateRequired = true;
+            }));
+        xSemaphoreGive(renderingMutex);
+      }
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();

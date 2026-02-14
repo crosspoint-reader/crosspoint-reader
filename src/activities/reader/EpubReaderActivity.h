@@ -10,7 +10,7 @@
 
 #include "BookmarkStore.h"
 #include "EpubReaderMenuActivity.h"
-#include "PageExporter.h"
+#include "ClippingStore.h"
 #include "activities/ActivityWithSubactivity.h"
 
 class EpubReaderActivity final : public ActivityWithSubactivity {
@@ -31,19 +31,16 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   bool pendingSubactivityExit = false;  // Defer subactivity exit to avoid use-after-free
   bool pendingGoHome = false;           // Defer go home to avoid race condition with display task
-  std::string pendingOpenFilePath;      // Deferred file open (e.g. clippings viewer)
   bool skipNextButtonCheck = false;     // Skip button processing for one frame after subactivity exit
   std::string statusBarOverride;        // Temporary override text (e.g. "Passage saved"), cleared on page turn
   // Capture state machine
   enum class CaptureState { IDLE, CAPTURING };
   CaptureState captureState = CaptureState::IDLE;
   std::vector<CapturedPage> captureBuffer;
-  bool statusBarMarker = false;            // Persistent capture indicator in status bar
   bool pendingCaptureAfterRender = false;  // Capture deferred until section loads after boundary crossing
 
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
-  const std::function<void(const std::string&)> onOpenFile;
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
@@ -67,13 +64,11 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
-                              const std::function<void()>& onGoBack, const std::function<void()>& onGoHome,
-                              const std::function<void(const std::string&)>& onOpenFile = nullptr)
+                              const std::function<void()>& onGoBack, const std::function<void()>& onGoHome)
       : ActivityWithSubactivity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),
         onGoBack(onGoBack),
-        onGoHome(onGoHome),
-        onOpenFile(onOpenFile) {}
+        onGoHome(onGoHome) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

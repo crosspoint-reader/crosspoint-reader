@@ -24,8 +24,6 @@ class ReaderActivity final : public ActivityWithSubactivity {
   void onGoToEpubReader(std::unique_ptr<Epub> epub);
   void onGoToXtcReader(std::unique_ptr<Xtc> xtc);
   void onGoToTxtReader(std::unique_ptr<Txt> txt);
-  void openFile(const std::string& filePath);
-
  public:
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath,
                           const std::function<void()>& onGoBack,
