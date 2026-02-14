@@ -16,6 +16,7 @@ class HttpDownloader {
     OK = 0,
     HTTP_ERROR,
     FILE_ERROR,
+    DIR_ERROR,
     ABORTED,
   };
 

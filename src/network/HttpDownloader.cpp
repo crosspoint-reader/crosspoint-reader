@@ -13,19 +13,18 @@
 #include "CrossPointSettings.h"
 #include "util/UrlUtils.h"
 
-// Stringify macro for converting build flags to strings
-#define STRINGIFY(x) #x
-
 // Compile-time repository URL for asset downloads
 // Can be overridden by defining CROSSPOINT_ASSET_REPO_URL in build flags
-#ifndef CROSSPOINT_ASSET_REPO_URL
-#define CROSSPOINT_ASSET_REPO_URL "https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/master"
+#ifdef CROSSPOINT_ASSET_REPO_URL
+const char* ASSET_REPO_URL = CROSSPOINT_ASSET_REPO_URL;
+#else
+const char* ASSET_REPO_URL = "https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/master";
 #endif
-
-const char* ASSET_REPO_URL = STRINGIFY(CROSSPOINT_ASSET_REPO_URL);
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent,
                            const char* username, const char* password) {
+  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
+
   // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
   std::unique_ptr<WiFiClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
@@ -36,8 +35,6 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent,
     client.reset(new WiFiClient());
   }
   HTTPClient http;
-
-  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
@@ -58,10 +55,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent,
   }
 
   http.writeToStream(&outContent);
-
   http.end();
-
-  LOG_DBG("HTTP", "Fetch success");
   return true;
 }
 
@@ -91,6 +85,27 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   LOG_DBG("HTTP", "Downloading: %s", url.c_str());
   LOG_DBG("HTTP", "Destination: %s", destPath.c_str());
+  LOG_DBG("HTTP", "URL is HTTPS: %s", UrlUtils::isHttpsUrl(url) ? "yes" : "no");
+
+  // Ensure the destination directory exists
+  std::string destDir = destPath.substr(0, destPath.find_last_of('/'));
+  if (!destDir.empty() && destDir != destPath) {
+    // Create all parent directories
+    std::string currentDir = "";
+    size_t pos = 0;
+    while ((pos = destDir.find('/', pos + 1)) != std::string::npos) {
+      currentDir = destDir.substr(0, pos);
+      if (!currentDir.empty() && !Storage.ensureDirectoryExists(currentDir.c_str())) {
+        LOG_ERR("HTTP", "Failed to create parent directory: %s", currentDir.c_str());
+        return DIR_ERROR;
+      }
+    }
+    // Create the final directory
+    if (!Storage.ensureDirectoryExists(destDir.c_str())) {
+      LOG_ERR("HTTP", "Failed to create destination directory: %s", destDir.c_str());
+      return DIR_ERROR;
+    }
+  }
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
@@ -187,14 +202,17 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 }
 
 bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* const* assetNames, const char* loggerPrefix) {
+  LOG_DBG(loggerPrefix, "Starting asset check for type: %d", assetType);
+
   // Determine base paths based on asset type
   const char* sdBasePath;
   const char* assetSubPath;
-  
+
   switch (assetType) {
     case WEB_ASSETS:
-      sdBasePath = "/web/";
+      sdBasePath = "/data/web/";
       assetSubPath = "/data/web/";
+      LOG_DBG(loggerPrefix, "Asset type: WEB_ASSETS, SD path: '%s', subpath: '%s'", sdBasePath, assetSubPath);
       break;
     // Future asset types can be added here:
     // case FONT_ASSETS:
@@ -219,10 +237,9 @@ bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* cons
   for (size_t i = 0; assetNames[i] != nullptr; ++i) {
     const char* assetName = assetNames[i];
     String fullSdPath = String(sdBasePath) + assetName;
-    
+
     if (!Storage.exists(fullSdPath.c_str())) {
       allAssetsAvailable = false;
-      LOG_DBG(loggerPrefix, "Missing asset: %s", fullSdPath.c_str());
       break;
     }
   }
@@ -238,9 +255,8 @@ bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* cons
   for (size_t i = 0; assetNames[i] != nullptr; ++i) {
     const char* assetName = assetNames[i];
     String fullSdPath = String(sdBasePath) + assetName;
-    
+
     if (Storage.exists(fullSdPath.c_str())) {
-      LOG_DBG(loggerPrefix, "Asset already exists: %s", fullSdPath.c_str());
       continue;
     }
 

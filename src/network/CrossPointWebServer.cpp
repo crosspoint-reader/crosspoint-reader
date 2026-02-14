@@ -342,7 +342,7 @@ void CrossPointWebServer::serveFileFromSD(const char* path, const char* contentT
 }
 
 void CrossPointWebServer::handleRoot() const {
-  serveFileFromSD("/web/HomePage.html", "text/html");
+  serveFileFromSD("/data/web/HomePage.html", "text/html");
   LOG_DBG("WEB", "Served root page");
 }
 
@@ -434,7 +434,7 @@ bool CrossPointWebServer::isEpubFile(const String& filename) const {
 }
 
 void CrossPointWebServer::handleFileList() const { 
-  serveFileFromSD("/web/FilesPage.html", "text/html"); 
+  serveFileFromSD("/data/web/FilesPage.html", "text/html"); 
 }
 
 void CrossPointWebServer::handleFileListData() const {
@@ -1039,7 +1039,7 @@ void CrossPointWebServer::handleDelete() const {
 }
 
 void CrossPointWebServer::handleSettingsPage() const {
-  serveFileFromSD("/web/SettingsPage.html", "text/html");
+  serveFileFromSD("/data/web/SettingsPage.html", "text/html");
   LOG_DBG("WEB", "Served settings page");
 }
 
