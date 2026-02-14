@@ -13,6 +13,20 @@ constexpr int SKIP_PAGE_MS = 700;
 
 int EpubReaderClippingsListActivity::getTotalItems() const { return static_cast<int>(clippings.size()); }
 
+void EpubReaderClippingsListActivity::refreshPreviews() {
+  previewCache.clear();
+  previewCache.reserve(clippings.size());
+  for (const auto& entry : clippings) {
+    // Read enough to skip markdown headers, but truncate to visible length for fast rendering
+    std::string preview = ClippingStore::loadClippingPreview(bookPath, entry, 200);
+    if (preview.size() > 55) {
+      preview.resize(52);
+      preview += "...";
+    }
+    previewCache.push_back(std::move(preview));
+  }
+}
+
 int EpubReaderClippingsListActivity::getPageItems() const {
   constexpr int lineHeight = 30;
   const int screenHeight = renderer.getScreenHeight();
@@ -33,6 +47,7 @@ void EpubReaderClippingsListActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   clippings = ClippingStore::loadIndex(bookPath);
+  refreshPreviews();
   renderingMutex = xSemaphoreCreateMutex();
 
   if (selectorIndex >= getTotalItems()) {
@@ -77,6 +92,7 @@ void EpubReaderClippingsListActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       ClippingStore::deleteClipping(bookPath, selectorIndex);
       clippings = ClippingStore::loadIndex(bookPath);
+      refreshPreviews();
       if (selectorIndex >= getTotalItems()) {
         selectorIndex = std::max(0, getTotalItems() - 1);
       }
@@ -105,7 +121,7 @@ void EpubReaderClippingsListActivity::loop() {
       const std::string text = ClippingStore::loadClippingText(bookPath, clippings[selectorIndex]);
       if (!text.empty()) {
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
-        enterNewActivity(new ClippingTextViewerActivity(this->renderer, this->mappedInput, text, [this]() {
+        enterNewActivity(new ClippingTextViewerActivity(renderer, mappedInput, text, [this]() {
           exitActivity();
           updateRequired = true;
         }));
@@ -134,9 +150,11 @@ void EpubReaderClippingsListActivity::loop() {
 void EpubReaderClippingsListActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired && !subActivity) {
-      updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
+      if (updateRequired && !subActivity) {
+        updateRequired = false;
+        renderScreen();
+      }
       xSemaphoreGive(renderingMutex);
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -185,7 +203,7 @@ void EpubReaderClippingsListActivity::renderScreen() {
     const int displayY = 75 + contentY + i * 30;
     const bool isSelected = (itemIndex == selectorIndex);
 
-    std::string preview = ClippingStore::loadClippingPreview(bookPath, clippings[itemIndex], 40);
+    const std::string& preview = previewCache[itemIndex];
     const int textX = contentX + 20;
     renderer.drawText(UI_10_FONT_ID, textX, displayY, preview.c_str(), !isSelected);
   }

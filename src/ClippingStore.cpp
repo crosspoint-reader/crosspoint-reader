@@ -118,8 +118,10 @@ std::vector<ClippingEntry> ClippingStore::loadIndex(const std::string& bookPath)
       break;
     }
     ClippingEntry entry;
-    entry.textOffset = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
-    entry.textLength = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24);
+    entry.textOffset = static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
+                       (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24);
+    entry.textLength = static_cast<uint32_t>(data[4]) | (static_cast<uint32_t>(data[5]) << 8) |
+                       (static_cast<uint32_t>(data[6]) << 16) | (static_cast<uint32_t>(data[7]) << 24);
     entry.bookPercent = data[8];
     entry.chapterPercent = data[9];
     entry.spineIndex = data[10] | (data[11] << 8);
@@ -270,16 +272,36 @@ std::string ClippingStore::loadClippingPreview(const std::string& bookPath, cons
   }
   text.resize(bytesRead);
 
-  // Strip leading whitespace/newlines
+  // Strip leading whitespace/newlines and markdown headings (## ...)
   size_t start = 0;
-  while (start < text.size() &&
-         (text[start] == ' ' || text[start] == '\n' || text[start] == '\r' || text[start] == '\t')) {
-    start++;
+  while (start < text.size()) {
+    // Skip whitespace
+    while (start < text.size() &&
+           (text[start] == ' ' || text[start] == '\n' || text[start] == '\r' || text[start] == '\t')) {
+      start++;
+    }
+    // Skip markdown headings and separators
+    if (start < text.size() && text[start] == '#') {
+      size_t lineEnd = text.find('\n', start);
+      start = (lineEnd == std::string::npos) ? text.size() : lineEnd + 1;
+      continue;
+    }
+    if (start + 2 < text.size() && text[start] == '-' && text[start + 1] == '-' && text[start + 2] == '-') {
+      size_t lineEnd = text.find('\n', start);
+      start = (lineEnd == std::string::npos) ? text.size() : lineEnd + 1;
+      continue;
+    }
+    break;
   }
   text = text.substr(start);
 
+  // Replace newlines with spaces for single-line preview
+  for (auto& ch : text) {
+    if (ch == '\n' || ch == '\r') ch = ' ';
+  }
+
   // Append ellipsis if truncated
-  if (readLen < entry.textLength) {
+  if (readLen < entry.textLength || start > 0) {
     text += "...";
   }
 
@@ -311,22 +333,13 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
   // Remove the entry
   entries.erase(entries.begin() + index);
 
-  // Rebuild .md: first read the header (everything before first clipping's offset)
-  // We need to preserve the YAML frontmatter + title heading.
-  // The simplest approach: rewrite the file with the header from the original,
-  // then write each remaining clipping text block.
+  // Read the file header (YAML frontmatter + title) before the first clipping
   std::string header;
   if (!entries.empty()) {
-    // Read original file header (everything before the first clipping that existed)
-    // Since we have the texts, we just need the frontmatter.
-    // The first clipping's original offset tells us where the header ends.
-    // But after deletion, indices shifted. Use the original entries before erase.
-    // Actually we already erased, but we can find the header from the file.
     FsFile origFile;
     if (SdMan.openFileForRead(TAG, mdPath, origFile)) {
       // Find the minimum textOffset among remaining entries to determine header size
       uint32_t minOffset = origFile.size();
-      // We need original offsets - they're still in entries (not yet rewritten)
       for (const auto& e : entries) {
         if (e.textOffset < minOffset) {
           minOffset = e.textOffset;

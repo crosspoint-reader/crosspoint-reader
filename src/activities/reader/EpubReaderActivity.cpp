@@ -284,11 +284,14 @@ void EpubReaderActivity::loop() {
 
   // Short press CONFIRM opens reader menu
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < captureHoldMs) {
-    // Auto-save capture when opening menu
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    // Auto-save capture when opening menu (inside mutex to prevent render race)
     if (captureState == CaptureState::CAPTURING) {
       stopCapture();
+      // Show "Clipping saved" feedback before opening menu
+      renderScreen();
+      vTaskDelay(400 / portTICK_PERIOD_MS);
     }
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
@@ -540,7 +543,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(
-          new EpubReaderClippingsListActivity(this->renderer, this->mappedInput, epub->getPath(), [this]() {
+          new EpubReaderClippingsListActivity(renderer, mappedInput, epub->getPath(), [this]() {
             exitActivity();
             updateRequired = true;
           }));
@@ -682,10 +685,13 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 
 void EpubReaderActivity::displayTaskLoop() {
   while (true) {
-    if (updateRequired) {
-      updateRequired = false;
+    if (updateRequired && !subActivity) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
+      // Recheck after acquiring mutex to avoid rendering over a subactivity
+      if (updateRequired && !subActivity) {
+        updateRequired = false;
+        renderScreen();
+      }
       xSemaphoreGive(renderingMutex);
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -833,8 +839,8 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
   FsFile f;
   if (SdMan.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
-    data[0] = currentSpineIndex & 0xFF;
-    data[1] = (currentSpineIndex >> 8) & 0xFF;
+    data[0] = spineIndex & 0xFF;
+    data[1] = (spineIndex >> 8) & 0xFF;
     data[2] = currentPage & 0xFF;
     data[3] = (currentPage >> 8) & 0xFF;
     data[4] = pageCount & 0xFF;
@@ -846,6 +852,7 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     Serial.printf("[ERS] Could not save progress!\n");
   }
 }
+
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {

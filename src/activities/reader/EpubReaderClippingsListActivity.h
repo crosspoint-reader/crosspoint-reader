@@ -12,11 +12,14 @@
 class EpubReaderClippingsListActivity final : public ActivityWithSubactivity {
   std::string bookPath;
   std::vector<ClippingEntry> clippings;
+  std::vector<std::string> previewCache;  // Cached preview strings to avoid SD reads during render
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   int selectorIndex = 0;
   bool updateRequired = false;
   bool confirmingDelete = false;
+
+  void refreshPreviews();
 
   const std::function<void()> onGoBack;
 

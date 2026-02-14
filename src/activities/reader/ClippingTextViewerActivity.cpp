@@ -10,13 +10,18 @@
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
-constexpr int LINE_HEIGHT = 25;
-constexpr int MARGIN_X = 20;
+constexpr int LINE_HEIGHT = 32;
+constexpr int MARGIN_X = 10;
+constexpr int BODY_FONT_ID = BOOKERLY_14_FONT_ID;
 }  // namespace
 
 void ClippingTextViewerActivity::wrapText() {
   lines.clear();
-  const int availableWidth = renderer.getScreenWidth() - 2 * MARGIN_X;
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+  const int availableWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * MARGIN_X;
 
   // Process text paragraph by paragraph (split on newlines)
   size_t pos = 0;
@@ -31,6 +36,18 @@ void ClippingTextViewerActivity::wrapText() {
     // Empty line becomes an empty entry (blank line)
     if (paragraph.empty()) {
       lines.emplace_back("");
+      continue;
+    }
+
+    // Strip markdown heading prefix; add blank line after for visual separation
+    bool isHeading = false;
+    if (paragraph.size() >= 3 && paragraph[0] == '#' && paragraph[1] == '#' && paragraph[2] == ' ') {
+      paragraph = paragraph.substr(3);
+      isHeading = true;
+    }
+
+    // Skip markdown separators (---)
+    if (paragraph.size() >= 3 && paragraph[0] == '-' && paragraph[1] == '-' && paragraph[2] == '-') {
       continue;
     }
 
@@ -53,7 +70,7 @@ void ClippingTextViewerActivity::wrapText() {
         currentLine = word;
       } else {
         std::string candidate = currentLine + " " + word;
-        int candidateWidth = renderer.getTextWidth(UI_10_FONT_ID, candidate.c_str());
+        int candidateWidth = renderer.getTextWidth(BODY_FONT_ID, candidate.c_str());
         if (candidateWidth <= availableWidth) {
           currentLine = candidate;
         } else {
@@ -67,7 +84,10 @@ void ClippingTextViewerActivity::wrapText() {
     // Push the last line of the paragraph
     if (!currentLine.empty()) {
       lines.push_back(currentLine);
-    } else if (paragraph.empty()) {
+    }
+
+    // Add blank line after headings for visual separation
+    if (isHeading) {
       lines.emplace_back("");
     }
   }
@@ -141,9 +161,11 @@ void ClippingTextViewerActivity::loop() {
 void ClippingTextViewerActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired && !subActivity) {
-      updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
+      if (updateRequired && !subActivity) {
+        updateRequired = false;
+        renderScreen();
+      }
       xSemaphoreGive(renderingMutex);
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -169,7 +191,7 @@ void ClippingTextViewerActivity::renderScreen() {
   for (int i = scrollOffset; i < endLine; i++) {
     const int displayY = 10 + contentY + (i - scrollOffset) * LINE_HEIGHT;
     const int textX = contentX + MARGIN_X;
-    renderer.drawText(UI_10_FONT_ID, textX, displayY, lines[i].c_str(), true);
+    renderer.drawText(BODY_FONT_ID, textX, displayY, lines[i].c_str(), true);
   }
 
   // Footer: line status
