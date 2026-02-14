@@ -10,19 +10,8 @@
 
 #include <algorithm>
 
-#include "CrossPointWebServer.h"
-
-#include <ArduinoJson.h>
-#include <Epub.h>
-#include <FsHelpers.h>
-#include <HalStorage.h>
-#include <Logging.h>
-#include <WiFi.h>
-#include <esp_task_wdt.h>
-
-#include <algorithm>
-
 #include "CrossPointSettings.h"
+#include "CrossPointWebServer.h"
 #include "HttpDownloader.h"
 #include "SettingsList.h"
 #include "util/StringUtils.h"
@@ -311,12 +300,10 @@ bool CrossPointWebServer::ensureWebAssetsAvailable() {
   // List of required web assets with their expected filenames (relative to base paths)
   // This can be easily extended for other asset types (fonts, images, etc.)
   const char* requiredAssets[] = {
-    "HomePage.html",
-    "FilesPage.html", 
-    "SettingsPage.html",
-    nullptr  // Null terminator - required for the generic method
+      "HomePage.html", "FilesPage.html", "SettingsPage.html",
+      nullptr  // Null terminator - required for the generic method
   };
-  
+
   return HttpDownloader::ensureAssetsAvailable(HttpDownloader::WEB_ASSETS, requiredAssets, "WEB");
 }
 
@@ -327,17 +314,17 @@ void CrossPointWebServer::serveFileFromSD(const char* path, const char* contentT
     server->send(404, "text/plain", "File not found");
     return;
   }
-  
+
   size_t fileSize = file.size();
   server->setContentLength(fileSize);
   server->send(200, contentType, "");
-  
+
   uint8_t buffer[1024];
   size_t bytesRead;
   while ((bytesRead = file.read(buffer, sizeof(buffer))) > 0) {
     server->sendContent((const char*)buffer, bytesRead);
   }
-  
+
   file.close();
 }
 
@@ -433,8 +420,8 @@ bool CrossPointWebServer::isEpubFile(const String& filename) const {
   return lower.endsWith(".epub");
 }
 
-void CrossPointWebServer::handleFileList() const { 
-  serveFileFromSD("/.crosspoint/data/web/FilesPage.html", "text/html"); 
+void CrossPointWebServer::handleFileList() const {
+  serveFileFromSD("/.crosspoint/data/web/FilesPage.html", "text/html");
 }
 
 void CrossPointWebServer::handleFileListData() const {

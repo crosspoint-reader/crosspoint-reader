@@ -21,8 +21,7 @@ const char* ASSET_REPO_URL = CROSSPOINT_ASSET_REPO_URL;
 const char* ASSET_REPO_URL = "https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/master";
 #endif
 
-bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent,
-                           const char* username, const char* password) {
+bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const char* username, const char* password) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
 
   // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
@@ -59,8 +58,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent,
   return true;
 }
 
-bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent,
-                           const char* username, const char* password) {
+bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const char* username,
+                              const char* password) {
   StreamString stream;
   if (!fetchUrl(url, stream, username, password)) {
     return false;
@@ -70,8 +69,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent,
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
-                                                             ProgressCallback progress,
-                                                             const char* username, const char* password) {
+                                                             ProgressCallback progress, const char* username,
+                                                             const char* password) {
   // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
   std::unique_ptr<WiFiClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
@@ -190,7 +189,8 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   return OK;
 }
 
-bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* const* assetNames, const char* loggerPrefix) {
+bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* const* assetNames,
+                                           const char* loggerPrefix) {
   LOG_DBG(loggerPrefix, "Starting asset check for type: %d", assetType);
 
   // Determine base paths based on asset type

@@ -11,7 +11,7 @@
 class ClearSystemCacheActivity final : public ActivityWithSubactivity {
  public:
   explicit ClearSystemCacheActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                              const std::function<void()>& goBack)
+                                    const std::function<void()>& goBack)
       : ActivityWithSubactivity("ClearSystemCache", renderer, mappedInput), goBack(goBack) {}
 
   void onEnter() override;
