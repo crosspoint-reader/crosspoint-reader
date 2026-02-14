@@ -89,6 +89,7 @@ void DictionarySuggestionsActivity::loop() {
       return;
     }
 
+    LookupHistory::addWord(cachePath, originalWord);
     LookupHistory::addWord(cachePath, selected);
     enterNewActivity(new DictionaryDefinitionActivity(
         renderer, mappedInput, selected, definition, readerFontId, [this]() { pendingBackFromDef = true; },
