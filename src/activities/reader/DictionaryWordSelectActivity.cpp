@@ -260,30 +260,22 @@ void DictionaryWordSelectActivity::loop() {
   if (landscape && orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW) {
     rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
     rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
-    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                      mappedInput.wasReleased(MappedInputManager::Button::Down);
-    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                      mappedInput.wasReleased(MappedInputManager::Button::Up);
+    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Down);
+    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Up);
   } else if (landscape) {
     rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
     rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
-    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                      mappedInput.wasReleased(MappedInputManager::Button::Up);
-    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                      mappedInput.wasReleased(MappedInputManager::Button::Down);
+    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Up);
+    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Down);
   } else if (inverted) {
-    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                     mappedInput.wasReleased(MappedInputManager::Button::Down);
-    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                     mappedInput.wasReleased(MappedInputManager::Button::Up);
+    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Down);
+    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Up);
     wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
     wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
   } else {
     // Portrait (default)
-    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                     mappedInput.wasReleased(MappedInputManager::Button::Up);
-    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                     mappedInput.wasReleased(MappedInputManager::Button::Down);
+    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Up);
+    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Down);
     wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
     wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
   }
