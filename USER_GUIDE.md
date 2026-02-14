@@ -219,25 +219,27 @@ Bookmarks are stored internally on the SD card (one file per book).
 
 #### Clippings
 
-You can save text from pages to a file on the SD card.
+You can capture text from pages and view them later in a dedicated clippings viewer.
 
-**Quick save (single page):**
-1. Press **Confirm** → select **Capture Clipping** from the reader menu
-2. "Capture started" appears. Turn **backward** to save just the current page
+**Capturing a clipping:**
+1. Press **Confirm** to open the reader menu → select **Capture**
+2. "Capture started" appears, and "Capturing..." stays in the status bar
+3. Turn pages forward to capture more pages
+4. Open the reader menu to automatically save the captured pages
 
-**Multi-page save:**
-1. Press **Confirm** → select **Capture Clipping** from the reader menu
-2. Turn pages forward — each page is captured (indicated by **\*** in the status bar)
-3. Turn **backward** or open the reader menu and select **Stop Capture** to save all captured pages
+**Other ways to save/cancel:**
+- **Turn backward** saves the capture and goes back one page
+- **Press Back** discards the capture without saving
 
-**Stopping a capture:**
-- **Turn backward** to save and go back
-- **Press Back** to discard the capture without saving
-- **Open the reader menu** and select **Stop Capture** to save
+**Viewing clippings:** Press **Confirm** → select **Clippings** from the reader menu. This opens a list showing a text preview for each clipping.
 
-**Viewing clippings:** Press **Confirm** → select **Clippings** from the reader menu to open the book's clippings file. If no clippings have been captured yet, "No clippings yet" will be shown.
+**In the clippings list:**
+- Use **Up**/**Down** (or **Left**/**Right**) to navigate
+- Press **Confirm** to view the full clipping text (scrollable)
+- Long-press **Confirm** to delete the selected clipping (with confirmation)
+- Press **Back** to return to reading
 
-Clippings are stored in the **clippings** folder on the SD card as `.md` files (one file per book). You can browse them directly on the device or on a computer.
+Clippings are stored internally on the SD card (one file per book). A `.md` export file is also maintained for reading on a computer.
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
