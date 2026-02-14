@@ -6,6 +6,7 @@
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
+#include "ClearSystemCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
@@ -52,7 +53,8 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action("Network", SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action("KOReader Sync", SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action("OPDS Browser", SettingAction::OPDSBrowser));
-  systemSettings.push_back(SettingInfo::Action("Clear Cache", SettingAction::ClearCache));
+  systemSettings.push_back(SettingInfo::Action("Clear Ebook Cache", SettingAction::ClearCache));
+  systemSettings.push_back(SettingInfo::Action("Clear System Cache", SettingAction::ClearSystemCache));
   systemSettings.push_back(SettingInfo::Action("Check for updates", SettingAction::CheckForUpdates));
 
   // Reset selection to first category
@@ -213,6 +215,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::ClearCache:
         enterSubActivity(new ClearCacheActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::ClearSystemCache:
+        enterSubActivity(new ClearSystemCacheActivity(renderer, mappedInput, onComplete));
         break;
       case SettingAction::CheckForUpdates:
         enterSubActivity(new OtaUpdateActivity(renderer, mappedInput, onComplete));

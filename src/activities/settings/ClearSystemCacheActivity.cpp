@@ -1,4 +1,4 @@
-#include "ClearCacheActivity.h"
+#include "ClearSystemCacheActivity.h"
 
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -8,19 +8,19 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-void ClearCacheActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<ClearCacheActivity*>(param);
+void ClearSystemCacheActivity::taskTrampoline(void* param) {
+  auto* self = static_cast<ClearSystemCacheActivity*>(param);
   self->displayTaskLoop();
 }
 
-void ClearCacheActivity::onEnter() {
+void ClearSystemCacheActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   renderingMutex = xSemaphoreCreateMutex();
   state = WARNING;
   updateRequired = true;
 
-  xTaskCreate(&ClearCacheActivity::taskTrampoline, "ClearCacheActivityTask",
+  xTaskCreate(&ClearSystemCacheActivity::taskTrampoline, "ClearSystemCacheActivityTask",
               4096,               // Stack size
               this,               // Parameters
               1,                  // Priority
@@ -28,7 +28,7 @@ void ClearCacheActivity::onEnter() {
   );
 }
 
-void ClearCacheActivity::onExit() {
+void ClearSystemCacheActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
   // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
@@ -41,7 +41,7 @@ void ClearCacheActivity::onExit() {
   renderingMutex = nullptr;
 }
 
-void ClearCacheActivity::displayTaskLoop() {
+void ClearSystemCacheActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
       updateRequired = false;
@@ -53,18 +53,17 @@ void ClearCacheActivity::displayTaskLoop() {
   }
 }
 
-void ClearCacheActivity::render() {
+void ClearSystemCacheActivity::render() {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Clear Ebook Cache", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Clear System Cache", true, EpdFontFamily::BOLD);
 
   if (state == WARNING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 60, "This will clear all cached book data.", true);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 30, "All reading progress will be lost!", true,
-                              EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, "Books will need to be re-indexed", true);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, "when opened again.", true);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 60, "This will clear all system cache data.", true);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 30, "Web assets will be re-downloaded", true);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, "on next web server start.", true);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 20, "Settings and preferences are preserved.", true);
 
     const auto labels = mappedInput.mapLabels("« Cancel", "Clear", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -73,13 +72,13 @@ void ClearCacheActivity::render() {
   }
 
   if (state == CLEARING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Clearing cache...", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Clearing system cache...", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
 
   if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Ebook Cache Cleared", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "System Cache Cleared", true, EpdFontFamily::BOLD);
     String resultText = String(clearedCount) + " items removed";
     if (failedCount > 0) {
       resultText += ", " + String(failedCount) + " failed";
@@ -93,7 +92,7 @@ void ClearCacheActivity::render() {
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Failed to clear ebook cache", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Failed to clear system cache", true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, "Check serial output for details");
 
     const auto labels = mappedInput.mapLabels("« Back", "", "", "");
@@ -103,13 +102,13 @@ void ClearCacheActivity::render() {
   }
 }
 
-void ClearCacheActivity::clearCache() {
-  LOG_DBG("CLEAR_CACHE", "Clearing cache...");
+void ClearSystemCacheActivity::clearSystemCache() {
+  LOG_DBG("CLEAR_SYSTEM_CACHE", "Clearing system cache...");
 
-  // Open .crosspoint directory
-  auto root = Storage.open("/.crosspoint");
+  // Open .crosspoint/data directory
+  auto root = Storage.open("/.crosspoint/data");
   if (!root || !root.isDirectory()) {
-    LOG_DBG("CLEAR_CACHE", "Failed to open cache directory");
+    LOG_DBG("CLEAR_SYSTEM_CACHE", "Failed to open system cache directory");
     if (root) root.close();
     state = FAILED;
     updateRequired = true;
@@ -125,46 +124,51 @@ void ClearCacheActivity::clearCache() {
     file.getName(name, sizeof(name));
     String itemName(name);
 
-    // Only delete directories starting with epub_ or xtc_ or the cached data for html files etc
-    if (file.isDirectory() && (itemName.startsWith("epub_") || itemName.startsWith("xtc_"))) {
-      String fullPath = "/.crosspoint/" + itemName;
-      LOG_DBG("CLEAR_CACHE", "Removing cache: %s", fullPath.c_str());
+    // Delete all files and directories in /.crosspoint/data
+    String fullPath = "/.crosspoint/data/" + itemName;
+    LOG_DBG("CLEAR_SYSTEM_CACHE", "Removing: %s", fullPath.c_str());
 
-      file.close();  // Close before attempting to delete
+    file.close();  // Close before attempting to delete
 
+    if (file.isDirectory()) {
       if (Storage.removeDir(fullPath.c_str())) {
         clearedCount++;
       } else {
-        LOG_ERR("CLEAR_CACHE", "Failed to remove: %s", fullPath.c_str());
+        LOG_ERR("CLEAR_SYSTEM_CACHE", "Failed to remove directory: %s", fullPath.c_str());
         failedCount++;
       }
     } else {
-      file.close();
+      if (Storage.remove(fullPath.c_str())) {
+        clearedCount++;
+      } else {
+        LOG_ERR("CLEAR_SYSTEM_CACHE", "Failed to remove file: %s", fullPath.c_str());
+        failedCount++;
+      }
     }
   }
   root.close();
 
-  LOG_DBG("CLEAR_CACHE", "Cache cleared: %d removed, %d failed", clearedCount, failedCount);
+  LOG_DBG("CLEAR_SYSTEM_CACHE", "System cache cleared: %d removed, %d failed", clearedCount, failedCount);
 
   state = SUCCESS;
   updateRequired = true;
 }
 
-void ClearCacheActivity::loop() {
+void ClearSystemCacheActivity::loop() {
   if (state == WARNING) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      LOG_DBG("CLEAR_CACHE", "User confirmed, starting cache clear");
+      LOG_DBG("CLEAR_SYSTEM_CACHE", "User confirmed, starting system cache clear");
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = CLEARING;
       xSemaphoreGive(renderingMutex);
       updateRequired = true;
       vTaskDelay(10 / portTICK_PERIOD_MS);
 
-      clearCache();
+      clearSystemCache();
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      LOG_DBG("CLEAR_CACHE", "User cancelled");
+      LOG_DBG("CLEAR_SYSTEM_CACHE", "User cancelled");
       goBack();
     }
     return;

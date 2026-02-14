@@ -21,6 +21,7 @@ enum class SettingAction {
   OPDSBrowser,
   Network,
   ClearCache,
+  ClearSystemCache,
   CheckForUpdates,
 };
 

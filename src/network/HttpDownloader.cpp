@@ -90,17 +90,6 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Ensure the destination directory exists
   std::string destDir = destPath.substr(0, destPath.find_last_of('/'));
   if (!destDir.empty() && destDir != destPath) {
-    // Create all parent directories
-    std::string currentDir = "";
-    size_t pos = 0;
-    while ((pos = destDir.find('/', pos + 1)) != std::string::npos) {
-      currentDir = destDir.substr(0, pos);
-      if (!currentDir.empty() && !Storage.ensureDirectoryExists(currentDir.c_str())) {
-        LOG_ERR("HTTP", "Failed to create parent directory: %s", currentDir.c_str());
-        return DIR_ERROR;
-      }
-    }
-    // Create the final directory
     if (!Storage.ensureDirectoryExists(destDir.c_str())) {
       LOG_ERR("HTTP", "Failed to create destination directory: %s", destDir.c_str());
       return DIR_ERROR;
