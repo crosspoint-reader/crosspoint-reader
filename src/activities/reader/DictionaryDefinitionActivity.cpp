@@ -2,7 +2,6 @@
 
 #include <GfxRenderer.h>
 
-#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -46,14 +45,22 @@ void DictionaryDefinitionActivity::onExit() {
 void DictionaryDefinitionActivity::wrapText() {
   wrappedLines.clear();
 
-  const bool landscape = orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW ||
-                         orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW;
+  const auto orient = renderer.getOrientation();
+  const bool isLandscapeCw = orient == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orient == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+  hintGutterHeight = isInverted ? 50 : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int sidePadding = 20;
+  leftPadding = contentX + sidePadding;
+  rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
+
   const int screenWidth = renderer.getScreenWidth();
   const int lineHeight = renderer.getLineHeight(readerFontId);
-  const int sidePadding = landscape ? 50 : 20;
-  constexpr int topArea = 50;     // Space for title
-  constexpr int bottomArea = 50;  // Space for button hints + page indicator
-  const int maxWidth = screenWidth - 2 * sidePadding;
+  const int maxWidth = screenWidth - leftPadding - rightPadding;
+  const int topArea = 50 + hintGutterHeight;
+  constexpr int bottomArea = 50;
 
   linesPerPage = (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight;
   if (linesPerPage < 1) linesPerPage = 1;
@@ -143,36 +150,34 @@ void DictionaryDefinitionActivity::loop() {
 void DictionaryDefinitionActivity::renderScreen() {
   renderer.clearScreen();
 
-  const bool landscape = orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW ||
-                         orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW;
-  const int sidePadding = landscape ? 50 : 20;
-  constexpr int titleY = 10;
+  const int titleY = 10 + hintGutterHeight;
   const int lineHeight = renderer.getLineHeight(readerFontId);
-  constexpr int bodyStartY = 50;
+  const int separatorY = 40 + hintGutterHeight;
+  const int bodyStartY = 50 + hintGutterHeight;
 
   // Title: the word in bold (use UI font for title)
-  renderer.drawText(UI_12_FONT_ID, sidePadding, titleY, headword.c_str(), true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, leftPadding, titleY, headword.c_str(), true, EpdFontFamily::BOLD);
 
   // Separator line
-  renderer.drawLine(sidePadding, 40, renderer.getScreenWidth() - sidePadding, 40);
+  renderer.drawLine(leftPadding, separatorY, renderer.getScreenWidth() - rightPadding, separatorY);
 
   // Body: wrapped definition lines using the same reader font
   int startLine = currentPage * linesPerPage;
   for (int i = 0; i < linesPerPage && (startLine + i) < static_cast<int>(wrappedLines.size()); i++) {
     int y = bodyStartY + i * lineHeight;
-    renderer.drawText(readerFontId, sidePadding, y, wrappedLines[startLine + i].c_str());
+    renderer.drawText(readerFontId, leftPadding, y, wrappedLines[startLine + i].c_str());
   }
 
   // Pagination indicator on bottom right
   if (totalPages > 1) {
     std::string pageInfo = std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
     int textWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo.c_str());
-    renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - sidePadding - textWidth,
+    renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - rightPadding - textWidth,
                       renderer.getScreenHeight() - 50, pageInfo.c_str());
   }
 
   // Button hints
-  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", onDone ? "Done" : "", "<", ">");
+  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", onDone ? "Done" : "", "Prev", "Next");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);

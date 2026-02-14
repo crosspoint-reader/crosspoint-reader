@@ -511,12 +511,27 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const std::string bookCachePath = epub->getCachePath();
       const uint8_t currentOrientation = SETTINGS.orientation;
 
+      // Get first word of next page for cross-page hyphenation
+      std::string nextPageFirstWord;
+      if (section && section->currentPage < section->pageCount - 1) {
+        int savedPage = section->currentPage;
+        section->currentPage = savedPage + 1;
+        auto nextPage = section->loadPageFromSectionFile();
+        section->currentPage = savedPage;
+        if (nextPage && !nextPage->elements.empty()) {
+          const auto* firstLine = static_cast<const PageLine*>(nextPage->elements[0].get());
+          if (firstLine->getBlock() && !firstLine->getBlock()->getWords().empty()) {
+            nextPageFirstWord = firstLine->getBlock()->getWords().front();
+          }
+        }
+      }
+
       exitActivity();
 
       if (pageForLookup) {
         enterNewActivity(new DictionaryWordSelectActivity(
             renderer, mappedInput, std::move(pageForLookup), readerFontId, orientedMarginLeft, orientedMarginTop,
-            bookCachePath, currentOrientation, [this]() { pendingSubactivityExit = true; }));
+            bookCachePath, currentOrientation, [this]() { pendingSubactivityExit = true; }, nextPageFirstWord));
       }
 
       xSemaphoreGive(renderingMutex);
@@ -526,7 +541,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       const std::string bookCachePath = epub->getCachePath();
       const int readerFontId = SETTINGS.getReaderFontId();
-      const uint8_t currentOrientation = SETTINGS.orientation;
 
       exitActivity();
       enterNewActivity(new LookedUpWordsActivity(
@@ -535,7 +549,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             // On back from looked up words
             pendingSubactivityExit = true;
           },
-          [this, bookCachePath, readerFontId, currentOrientation](const std::string& headword) {
+          [this, bookCachePath, readerFontId](const std::string& headword) {
             // Look up the word and show definition with progress bar
             Rect popupLayout = GUI.drawPopup(renderer, "Looking up...");
 
@@ -551,7 +565,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
             exitActivity();
             enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, headword, definition, readerFontId,
-                                                              currentOrientation,
                                                               [this]() { pendingSubactivityExit = true; }));
           }));
       xSemaphoreGive(renderingMutex);

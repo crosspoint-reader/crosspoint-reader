@@ -8,19 +8,19 @@
 #include <vector>
 
 #include "../ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 class DictionarySuggestionsActivity final : public ActivityWithSubactivity {
  public:
   explicit DictionarySuggestionsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                          const std::string& originalWord, const std::vector<std::string>& suggestions,
-                                         int readerFontId, const std::string& cachePath, uint8_t orientation,
+                                         int readerFontId, const std::string& cachePath,
                                          const std::function<void()>& onBack, const std::function<void()>& onDone)
       : ActivityWithSubactivity("DictionarySuggestions", renderer, mappedInput),
         originalWord(originalWord),
         suggestions(suggestions),
         readerFontId(readerFontId),
         cachePath(cachePath),
-        orientation(orientation),
         onBack(onBack),
         onDone(onDone) {}
 
@@ -33,7 +33,6 @@ class DictionarySuggestionsActivity final : public ActivityWithSubactivity {
   std::vector<std::string> suggestions;
   int readerFontId;
   std::string cachePath;
-  uint8_t orientation;
   const std::function<void()> onBack;
   const std::function<void()> onDone;
 
@@ -41,6 +40,7 @@ class DictionarySuggestionsActivity final : public ActivityWithSubactivity {
   bool updateRequired = false;
   bool pendingBackFromDef = false;
   bool pendingExitToReader = false;
+  ButtonNavigator buttonNavigator;
 
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;

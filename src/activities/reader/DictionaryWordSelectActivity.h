@@ -16,7 +16,7 @@ class DictionaryWordSelectActivity final : public ActivityWithSubactivity {
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, int fontId, int marginLeft, int marginTop,
                                         const std::string& cachePath, uint8_t orientation,
-                                        const std::function<void()>& onBack)
+                                        const std::function<void()>& onBack, const std::string& nextPageFirstWord = "")
       : ActivityWithSubactivity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         fontId(fontId),
@@ -24,7 +24,8 @@ class DictionaryWordSelectActivity final : public ActivityWithSubactivity {
         marginTop(marginTop),
         cachePath(cachePath),
         orientation(orientation),
-        onBack(onBack) {}
+        onBack(onBack),
+        nextPageFirstWord(nextPageFirstWord) {}
 
   void onEnter() override;
   void onExit() override;
@@ -56,6 +57,7 @@ class DictionaryWordSelectActivity final : public ActivityWithSubactivity {
   std::string cachePath;
   uint8_t orientation;
   const std::function<void()> onBack;
+  std::string nextPageFirstWord;
 
   std::vector<WordInfo> words;
   std::vector<Row> rows;

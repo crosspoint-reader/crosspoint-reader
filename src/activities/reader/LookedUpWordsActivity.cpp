@@ -118,14 +118,25 @@ void LookedUpWordsActivity::loop() {
 void LookedUpWordsActivity::renderScreen() {
   renderer.clearScreen();
 
-  constexpr int sidePadding = 20;
-  constexpr int titleY = 15;
-  constexpr int startY = 60;
+  const auto orient = renderer.getOrientation();
+  const bool isLandscapeCw = orient == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orient == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+  const int hintGutterHeight = isInverted ? 50 : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int sidePadding = 20;
+  const int leftPadding = contentX + sidePadding;
+  const int rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
+  const int contentWidth = renderer.getScreenWidth() - leftPadding - rightPadding;
+
+  const int titleY = 15 + hintGutterHeight;
+  const int startY = 60 + hintGutterHeight;
   constexpr int lineHeight = 30;
 
   // Title
-  const int titleX =
-      (renderer.getScreenWidth() - renderer.getTextWidth(UI_12_FONT_ID, "Lookup History", EpdFontFamily::BOLD)) / 2;
+  const int titleTextWidth = renderer.getTextWidth(UI_12_FONT_ID, "Lookup History", EpdFontFamily::BOLD);
+  const int titleX = contentX + (renderer.getScreenWidth() - hintGutterWidth - titleTextWidth) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, titleY, "Lookup History", true, EpdFontFamily::BOLD);
 
   if (words.empty()) {
@@ -143,10 +154,10 @@ void LookedUpWordsActivity::renderScreen() {
       const bool isSelected = (idx == selectedIndex);
 
       if (isSelected) {
-        renderer.fillRect(0, displayY - 2, renderer.getScreenWidth() - 1, lineHeight);
+        renderer.fillRect(contentX, displayY - 2, contentWidth + sidePadding * 2, lineHeight);
       }
 
-      renderer.drawText(UI_10_FONT_ID, sidePadding, displayY, words[idx].c_str(), !isSelected);
+      renderer.drawText(UI_10_FONT_ID, leftPadding, displayY, words[idx].c_str(), !isSelected);
     }
   }
 
@@ -161,12 +172,12 @@ void LookedUpWordsActivity::renderScreen() {
     std::string msg = "Delete '" + displayWord + "'?";
 
     constexpr int margin = 15;
-    constexpr int popupY = 200;
+    const int popupY = 200 + hintGutterHeight;
     const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, msg.c_str(), EpdFontFamily::BOLD);
     const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
     const int w = textWidth + margin * 2;
     const int h = textHeight + margin * 2;
-    const int x = (renderer.getScreenWidth() - w) / 2;
+    const int x = contentX + (renderer.getScreenWidth() - hintGutterWidth - w) / 2;
 
     renderer.fillRect(x - 2, popupY - 2, w + 4, h + 4, true);
     renderer.fillRect(x, popupY, w, h, false);
@@ -183,12 +194,12 @@ void LookedUpWordsActivity::renderScreen() {
     if (!words.empty()) {
       const char* deleteHint = "Hold select to delete";
       const int hintWidth = renderer.getTextWidth(SMALL_FONT_ID, deleteHint);
-      renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - hintWidth) / 2, renderer.getScreenHeight() - 70,
-                        deleteHint);
+      const int hintX = contentX + (renderer.getScreenWidth() - hintGutterWidth - hintWidth) / 2;
+      renderer.drawText(SMALL_FONT_ID, hintX, renderer.getScreenHeight() - 70, deleteHint);
     }
 
     // Normal button hints
-    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "^", "v");
+    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "Up", "Down");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 

@@ -67,21 +67,15 @@ void DictionarySuggestionsActivity::loop() {
     return;
   }
 
-  const int count = static_cast<int>(suggestions.size());
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    selectedIndex = (selectedIndex > 0) ? selectedIndex - 1 : count - 1;
+  buttonNavigator.onNext([this] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(suggestions.size()));
     updateRequired = true;
-  }
+  });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    selectedIndex = (selectedIndex < count - 1) ? selectedIndex + 1 : 0;
+  buttonNavigator.onPrevious([this] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(suggestions.size()));
     updateRequired = true;
-  }
+  });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const std::string& selected = suggestions[selectedIndex];
@@ -97,7 +91,7 @@ void DictionarySuggestionsActivity::loop() {
 
     LookupHistory::addWord(cachePath, selected);
     enterNewActivity(new DictionaryDefinitionActivity(
-        renderer, mappedInput, selected, definition, readerFontId, orientation, [this]() { pendingBackFromDef = true; },
+        renderer, mappedInput, selected, definition, readerFontId, [this]() { pendingBackFromDef = true; },
         [this]() { pendingExitToReader = true; }));
     return;
   }
@@ -111,21 +105,33 @@ void DictionarySuggestionsActivity::loop() {
 void DictionarySuggestionsActivity::renderScreen() {
   renderer.clearScreen();
 
-  constexpr int sidePadding = 20;
-  constexpr int titleY = 15;
-  constexpr int subtitleY = 45;
-  constexpr int startY = 80;
+  const auto orient = renderer.getOrientation();
+  const bool isLandscapeCw = orient == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orient == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+  const int hintGutterHeight = isInverted ? 50 : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int sidePadding = 20;
+  const int leftPadding = contentX + sidePadding;
+  const int rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
+  const int contentWidth = renderer.getScreenWidth() - leftPadding - rightPadding;
+
+  const int titleY = 15 + hintGutterHeight;
+  const int subtitleY = 45 + hintGutterHeight;
+  const int separatorY = 68 + hintGutterHeight;
+  const int startY = 80 + hintGutterHeight;
   constexpr int lineHeight = 30;
 
   // Title
-  renderer.drawText(UI_12_FONT_ID, sidePadding, titleY, "Did you mean?", true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, leftPadding, titleY, "Did you mean?", true, EpdFontFamily::BOLD);
 
   // Subtitle: the original word
   std::string subtitle = "\"" + originalWord + "\" not found";
-  renderer.drawText(SMALL_FONT_ID, sidePadding, subtitleY, subtitle.c_str());
+  renderer.drawText(SMALL_FONT_ID, leftPadding, subtitleY, subtitle.c_str());
 
   // Separator
-  renderer.drawLine(sidePadding, 68, renderer.getScreenWidth() - sidePadding, 68);
+  renderer.drawLine(leftPadding, separatorY, renderer.getScreenWidth() - rightPadding, separatorY);
 
   // Suggestion list
   for (int i = 0; i < static_cast<int>(suggestions.size()); i++) {
@@ -133,14 +139,14 @@ void DictionarySuggestionsActivity::renderScreen() {
     const bool isSelected = (i == selectedIndex);
 
     if (isSelected) {
-      renderer.fillRect(0, displayY - 2, renderer.getScreenWidth() - 1, lineHeight);
+      renderer.fillRect(contentX, displayY - 2, contentWidth + sidePadding * 2, lineHeight);
     }
 
-    renderer.drawText(UI_10_FONT_ID, sidePadding + 10, displayY, suggestions[i].c_str(), !isSelected);
+    renderer.drawText(UI_10_FONT_ID, leftPadding + 10, displayY, suggestions[i].c_str(), !isSelected);
   }
 
   // Button hints
-  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "^", "v");
+  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "Up", "Down");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);

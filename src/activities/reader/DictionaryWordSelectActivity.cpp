@@ -193,6 +193,32 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords() {
     words[nextWordIdx].continuationIndex = nextWordIdx;  // self-ref so highlight logic finds the second part
   }
 
+  // Cross-page hyphenation: last word on page + first word of next page
+  if (!nextPageFirstWord.empty() && !rows.empty()) {
+    int lastWordIdx = rows.back().wordIndices.back();
+    const std::string& lastWord = words[lastWordIdx].text;
+    if (!lastWord.empty()) {
+      bool endsWithHyphen = false;
+      if (lastWord.back() == '-') {
+        endsWithHyphen = true;
+      } else if (lastWord.size() >= 2 && static_cast<uint8_t>(lastWord[lastWord.size() - 2]) == 0xC2 &&
+                 static_cast<uint8_t>(lastWord[lastWord.size() - 1]) == 0xAD) {
+        endsWithHyphen = true;
+      }
+      if (endsWithHyphen) {
+        std::string firstPart = lastWord;
+        if (firstPart.back() == '-') {
+          firstPart.pop_back();
+        } else if (firstPart.size() >= 2 && static_cast<uint8_t>(firstPart[firstPart.size() - 2]) == 0xC2 &&
+                   static_cast<uint8_t>(firstPart[firstPart.size() - 1]) == 0xAD) {
+          firstPart.erase(firstPart.size() - 2);
+        }
+        std::string merged = firstPart + nextPageFirstWord;
+        words[lastWordIdx].lookupText = merged;
+      }
+    }
+  }
+
   // Remove empty rows that may result from merging (e.g., a row whose only word was a continuation)
   rows.erase(std::remove_if(rows.begin(), rows.end(), [](const Row& r) { return r.wordIndices.empty(); }), rows.end());
 }
@@ -363,7 +389,7 @@ void DictionaryWordSelectActivity::loop() {
     if (!definition.empty()) {
       LookupHistory::addWord(cachePath, cleaned);
       enterNewActivity(new DictionaryDefinitionActivity(
-          renderer, mappedInput, cleaned, definition, fontId, orientation, [this]() { pendingBackFromDef = true; },
+          renderer, mappedInput, cleaned, definition, fontId, [this]() { pendingBackFromDef = true; },
           [this]() { pendingExitToReader = true; }));
       return;
     }
@@ -375,7 +401,7 @@ void DictionaryWordSelectActivity::loop() {
       if (!stemDef.empty()) {
         LookupHistory::addWord(cachePath, stem);
         enterNewActivity(new DictionaryDefinitionActivity(
-            renderer, mappedInput, stem, stemDef, fontId, orientation, [this]() { pendingBackFromDef = true; },
+            renderer, mappedInput, stem, stemDef, fontId, [this]() { pendingBackFromDef = true; },
             [this]() { pendingExitToReader = true; }));
         return;
       }
@@ -385,8 +411,8 @@ void DictionaryWordSelectActivity::loop() {
     auto similar = Dictionary::findSimilar(cleaned, 6);
     if (!similar.empty()) {
       enterNewActivity(new DictionarySuggestionsActivity(
-          renderer, mappedInput, cleaned, similar, fontId, cachePath, orientation,
-          [this]() { pendingBackFromDef = true; }, [this]() { pendingExitToReader = true; }));
+          renderer, mappedInput, cleaned, similar, fontId, cachePath, [this]() { pendingBackFromDef = true; },
+          [this]() { pendingExitToReader = true; }));
       return;
     }
 

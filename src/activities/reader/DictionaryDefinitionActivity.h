@@ -13,13 +13,12 @@ class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         const std::string& headword, const std::string& definition, int readerFontId,
-                                        uint8_t orientation, const std::function<void()>& onBack,
+                                        const std::function<void()>& onBack,
                                         const std::function<void()>& onDone = nullptr)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         definition(definition),
         readerFontId(readerFontId),
-        orientation(orientation),
         onBack(onBack),
         onDone(onDone) {}
 
@@ -31,7 +30,6 @@ class DictionaryDefinitionActivity final : public Activity {
   std::string headword;
   std::string definition;
   int readerFontId;
-  uint8_t orientation;
   const std::function<void()> onBack;
   const std::function<void()> onDone;
 
@@ -40,6 +38,11 @@ class DictionaryDefinitionActivity final : public Activity {
   int linesPerPage = 0;
   int totalPages = 0;
   bool updateRequired = false;
+
+  // Orientation-aware layout gutters (computed in wrapText, used in renderScreen)
+  int leftPadding = 20;
+  int rightPadding = 20;
+  int hintGutterHeight = 0;
 
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
