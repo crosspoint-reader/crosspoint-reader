@@ -17,13 +17,9 @@ std::string ClippingStore::getBasePath(const std::string& bookPath) {
   return std::string(CLIPPINGS_DIR) + "/" + hexHash;
 }
 
-std::string ClippingStore::getIndexPath(const std::string& bookPath) {
-  return getBasePath(bookPath) + ".idx";
-}
+std::string ClippingStore::getIndexPath(const std::string& bookPath) { return getBasePath(bookPath) + ".idx"; }
 
-std::string ClippingStore::getMdPath(const std::string& bookPath) {
-  return getBasePath(bookPath) + ".md";
-}
+std::string ClippingStore::getMdPath(const std::string& bookPath) { return getBasePath(bookPath) + ".md"; }
 
 bool ClippingStore::writeIndex(const std::string& path, const std::vector<ClippingEntry>& entries) {
   FsFile file;
@@ -276,7 +272,8 @@ std::string ClippingStore::loadClippingPreview(const std::string& bookPath, cons
 
   // Strip leading whitespace/newlines
   size_t start = 0;
-  while (start < text.size() && (text[start] == ' ' || text[start] == '\n' || text[start] == '\r' || text[start] == '\t')) {
+  while (start < text.size() &&
+         (text[start] == ' ' || text[start] == '\n' || text[start] == '\r' || text[start] == '\t')) {
     start++;
   }
   text = text.substr(start);

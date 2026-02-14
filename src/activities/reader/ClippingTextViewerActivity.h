@@ -27,8 +27,7 @@ class ClippingTextViewerActivity final : public ActivityWithSubactivity {
   void renderScreen();
 
  public:
-  explicit ClippingTextViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                      std::string text,
+  explicit ClippingTextViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string text,
                                       const std::function<void()>& onGoBack)
       : ActivityWithSubactivity("ClippingTextViewer", renderer, mappedInput),
         text(std::move(text)),

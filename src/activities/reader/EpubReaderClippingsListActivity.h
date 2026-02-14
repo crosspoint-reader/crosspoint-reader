@@ -29,8 +29,7 @@ class EpubReaderClippingsListActivity final : public ActivityWithSubactivity {
 
  public:
   explicit EpubReaderClippingsListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                           const std::string& bookPath,
-                                           const std::function<void()>& onGoBack)
+                                           const std::string& bookPath, const std::function<void()>& onGoBack)
       : ActivityWithSubactivity("EpubReaderClippingsList", renderer, mappedInput),
         bookPath(bookPath),
         onGoBack(onGoBack) {}

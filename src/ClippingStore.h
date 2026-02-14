@@ -15,13 +15,13 @@ struct CapturedPage {
 
 // Metadata for a single clipping (stored in .idx file).
 struct ClippingEntry {
-  uint32_t textOffset;    // byte offset into .md where this clipping's text starts
-  uint32_t textLength;    // byte length of the clipping text in .md
-  uint8_t bookPercent;    // 0-100 overall book progress at capture start
-  uint8_t chapterPercent; // 0-100 chapter progress at capture start
-  uint16_t spineIndex;    // spine item where capture started
-  uint16_t startPage;     // first page captured (within spine item)
-  uint16_t endPage;       // last page captured (within spine item)
+  uint32_t textOffset;     // byte offset into .md where this clipping's text starts
+  uint32_t textLength;     // byte length of the clipping text in .md
+  uint8_t bookPercent;     // 0-100 overall book progress at capture start
+  uint8_t chapterPercent;  // 0-100 chapter progress at capture start
+  uint16_t spineIndex;     // spine item where capture started
+  uint16_t startPage;      // first page captured (within spine item)
+  uint16_t endPage;        // last page captured (within spine item)
 };
 
 // Stores clippings as two files per book:
@@ -34,8 +34,8 @@ struct ClippingEntry {
 class ClippingStore {
  public:
   // Save a new clipping (appends to both .idx and .md). Returns true on success.
-  static bool saveClipping(const std::string& bookPath, const std::string& bookTitle,
-                           const std::string& bookAuthor, const std::vector<CapturedPage>& pages);
+  static bool saveClipping(const std::string& bookPath, const std::string& bookTitle, const std::string& bookAuthor,
+                           const std::vector<CapturedPage>& pages);
 
   // Load clipping index entries for a book.
   static std::vector<ClippingEntry> loadIndex(const std::string& bookPath);

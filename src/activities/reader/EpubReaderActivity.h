@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "BookmarkStore.h"
-#include "EpubReaderMenuActivity.h"
 #include "ClippingStore.h"
+#include "EpubReaderMenuActivity.h"
 #include "activities/ActivityWithSubactivity.h"
 
 class EpubReaderActivity final : public ActivityWithSubactivity {

@@ -5,16 +5,16 @@
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
+#include "ClippingTextViewerActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderBookmarkListActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
+#include "EpubReaderClippingsListActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
-#include "EpubReaderClippingsListActivity.h"
-#include "ClippingTextViewerActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -160,8 +160,7 @@ void EpubReaderActivity::captureCurrentPage() {
       clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
   const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
   captureBuffer.push_back({pageText, chapterTitle, bookPercent, chapterPercent,
-                           static_cast<uint16_t>(currentSpineIndex),
-                           static_cast<uint16_t>(section->currentPage)});
+                           static_cast<uint16_t>(currentSpineIndex), static_cast<uint16_t>(section->currentPage)});
 }
 
 void EpubReaderActivity::startCapture() {
@@ -301,8 +300,7 @@ void EpubReaderActivity::loop() {
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
         this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-        SETTINGS.orientation,
-        [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
+        SETTINGS.orientation, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
@@ -541,9 +539,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::CLIPPINGS: {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
-      enterNewActivity(new EpubReaderClippingsListActivity(
-          this->renderer, this->mappedInput, epub->getPath(),
-          [this]() {
+      enterNewActivity(
+          new EpubReaderClippingsListActivity(this->renderer, this->mappedInput, epub->getPath(), [this]() {
             exitActivity();
             updateRequired = true;
           }));
