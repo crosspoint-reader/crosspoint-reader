@@ -9,3 +9,4 @@ build
 **/__pycache__/
 /compile_commands.json
 /.cache
+my_platformio.ini
