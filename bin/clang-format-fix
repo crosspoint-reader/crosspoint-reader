@@ -1,9 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# Check if clang-format is availible
+command -v clang-format >/dev/null 2>&1 || {
+    printf "'clang-format' not found in current environment\n"
+    printf "install 'clang', 'clang-tools', or 'clang-format' depending on your distro/os and tooling requirements\n"
+    exit 1
+}
 
 GIT_LS_FILES_FLAGS=""
 if [[ "$1" == "-g" ]]; then
   GIT_LS_FILES_FLAGS="--modified"
 fi
+
 
 # --- Main Logic ---
 
