@@ -17,6 +17,16 @@
 
 const char* SettingsActivity::categoryNames[categoryCount] = {"Display", "Reader", "Controls", "System"};
 
+//Make it safe to static_cast between the orientation enums
+static_assert(static_cast<GfxRenderer::Orientation>(CrossPointSettings::ORIENTATION::PORTRAIT)
+  == GfxRenderer::Orientation::Portrait);
+static_assert(static_cast<GfxRenderer::Orientation>(CrossPointSettings::ORIENTATION::LANDSCAPE_CW)
+  == GfxRenderer::Orientation::LandscapeClockwise);
+static_assert(static_cast<GfxRenderer::Orientation>(CrossPointSettings::ORIENTATION::INVERTED)
+  == GfxRenderer::Orientation::PortraitInverted);
+static_assert(static_cast<GfxRenderer::Orientation>(CrossPointSettings::ORIENTATION::LANDSCAPE_CCW)
+  == GfxRenderer::Orientation::LandscapeCounterClockwise);
+
 void SettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<SettingsActivity*>(param);
   self->displayTaskLoop();
