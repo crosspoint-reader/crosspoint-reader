@@ -28,21 +28,28 @@ class HttpDownloader {
    * Fetch text content from a URL.
    * @param url The URL to fetch
    * @param outContent The fetched content (output)
+   * @param username Optional username for HTTP Basic authentication
+   * @param password Optional password for HTTP Basic authentication
    * @return true if fetch succeeded, false on error
    */
-  static bool fetchUrl(const std::string& url, std::string& outContent);
+  static bool fetchUrl(const std::string& url, std::string& outContent,
+                       const char* username = nullptr, const char* password = nullptr);
 
-  static bool fetchUrl(const std::string& url, Stream& stream);
+  static bool fetchUrl(const std::string& url, Stream& stream,
+                       const char* username = nullptr, const char* password = nullptr);
 
   /**
    * Download a file to the SD card.
    * @param url The URL to download
    * @param destPath The destination path on SD card
    * @param progress Optional progress callback
+   * @param username Optional username for HTTP Basic authentication
+   * @param password Optional password for HTTP Basic authentication
    * @return DownloadError indicating success or failure type
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
-                                      ProgressCallback progress = nullptr);
+                                      ProgressCallback progress = nullptr,
+                                      const char* username = nullptr, const char* password = nullptr);
 
   /**
    * Ensure a list of assets are available on SD card, downloading missing ones.

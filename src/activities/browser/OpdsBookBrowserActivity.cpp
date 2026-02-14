@@ -271,7 +271,9 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
   {
     OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream)) {
+    if (!HttpDownloader::fetchUrl(url, stream, 
+                                  CrossPointSettings::getInstance().opdsUsername,
+                                  CrossPointSettings::getInstance().opdsPassword)) {
       state = BrowserState::ERROR;
       errorMessage = "Failed to fetch feed";
       updateRequired = true;
@@ -358,7 +360,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
         downloadProgress = downloaded;
         downloadTotal = total;
         updateRequired = true;
-      });
+      }, CrossPointSettings::getInstance().opdsUsername, CrossPointSettings::getInstance().opdsPassword);
 
   if (result == HttpDownloader::OK) {
     LOG_DBG("OPDS", "Download complete: %s", filename.c_str());

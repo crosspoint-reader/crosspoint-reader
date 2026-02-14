@@ -13,7 +13,14 @@
 #include "CrossPointSettings.h"
 #include "util/UrlUtils.h"
 
-bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
+#define STRINGIFY(x) #x
+
+// Compile-time repository URL for asset downloads
+// To override for forks, modify this URL or use build flags
+const char* ASSET_REPO_URL = "https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/master";
+
+bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent,
+                           const char* username, const char* password) {
   // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
   std::unique_ptr<WiFiClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
@@ -31,9 +38,9 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
-  // Add Basic HTTP auth if credentials are configured
-  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
-    std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
+  // Add Basic HTTP auth if credentials are provided
+  if (username && password && strlen(username) > 0 && strlen(password) > 0) {
+    std::string credentials = std::string(username) + ":" + password;
     String encoded = base64::encode(credentials.c_str());
     http.addHeader("Authorization", "Basic " + encoded);
   }
@@ -53,9 +60,10 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   return true;
 }
 
-bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
+bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent,
+                           const char* username, const char* password) {
   StreamString stream;
-  if (!fetchUrl(url, stream)) {
+  if (!fetchUrl(url, stream, username, password)) {
     return false;
   }
   outContent = stream.c_str();
@@ -63,7 +71,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
-                                                             ProgressCallback progress) {
+                                                             ProgressCallback progress,
+                                                             const char* username, const char* password) {
   // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
   std::unique_ptr<WiFiClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
@@ -82,9 +91,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
-  // Add Basic HTTP auth if credentials are configured
-  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
-    std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
+  // Add Basic HTTP auth if credentials are provided
+  if (username && password && strlen(username) > 0 && strlen(password) > 0) {
+    std::string credentials = std::string(username) + ":" + password;
     String encoded = base64::encode(credentials.c_str());
     http.addHeader("Authorization", "Basic " + encoded);
   }
@@ -175,22 +184,25 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* const* assetNames, const char* loggerPrefix) {
   // Determine base paths based on asset type
   const char* sdBasePath;
-  const char* githubBasePath;
+  const char* assetSubPath;
   
   switch (assetType) {
     case WEB_ASSETS:
       sdBasePath = "/web/";
-      githubBasePath = "https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/master/data/web/";
+      assetSubPath = "/data/web/";
       break;
     // Future asset types can be added here:
-    // case HYPHEN_ASSETS:
-    //   sdBasePath = "/hyphen/";
-    //   githubBasePath = "https://raw.githubusercontent.com/crosspoint-reader/assets/main/hyphen/";
+    // case FONT_ASSETS:
+    //   sdBasePath = "/fonts/";
+    //   assetSubPath = "/data/fonts/";
     //   break;
     default:
       LOG_ERR(loggerPrefix, "Unknown asset type: %d", assetType);
       return false;
   }
+
+  // Construct GitHub base URL using compile-time repository URL
+  String githubBaseUrl = String(ASSET_REPO_URL) + assetSubPath;
 
   bool allAssetsAvailable = true;
 
@@ -224,7 +236,7 @@ bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* cons
     }
 
     // Construct download URL
-    String downloadUrl = String(githubBasePath) + assetName;
+    String downloadUrl = githubBaseUrl + assetName;
 
     LOG_INF(loggerPrefix, "Downloading %s from %s", fullSdPath.c_str(), downloadUrl.c_str());
 
