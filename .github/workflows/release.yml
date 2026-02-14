@@ -39,34 +39,3 @@ jobs:
             .pio/build/gh_release/firmware.elf
             .pio/build/gh_release/firmware.map
             .pio/build/gh_release/partitions.bin
-            data/web/
-
-      - name: Upload Web Assets
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./data/web/HomePage.html
-          asset_name: HomePage.html
-          asset_content_type: text/html
-
-      - name: Upload Files Page
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./data/web/FilesPage.html
-          asset_name: FilesPage.html
-          asset_content_type: text/html
-
-      - name: Upload Settings Page
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./data/web/SettingsPage.html
-          asset_name: SettingsPage.html
-          asset_content_type: text/html
