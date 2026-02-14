@@ -34,4 +34,5 @@ class ClearSystemCacheActivity final : public ActivityWithSubactivity {
   [[noreturn]] void displayTaskLoop();
   void render();
   void clearSystemCache();
+  bool recursiveDelete(const String& path);
 };

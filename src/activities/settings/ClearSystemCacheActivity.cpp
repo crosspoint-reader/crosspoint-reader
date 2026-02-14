@@ -105,53 +105,73 @@ void ClearSystemCacheActivity::render() {
 void ClearSystemCacheActivity::clearSystemCache() {
   LOG_DBG("CLEAR_SYSTEM_CACHE", "Clearing system cache...");
 
-  // Open .crosspoint/data directory
-  auto root = Storage.open("/.crosspoint/data");
-  if (!root || !root.isDirectory()) {
-    LOG_DBG("CLEAR_SYSTEM_CACHE", "Failed to open system cache directory");
-    if (root) root.close();
+  clearedCount = 0;
+  failedCount = 0;
+
+  // Recursively delete everything in /.crosspoint/data
+  if (!recursiveDelete("/.crosspoint/data")) {
+    LOG_ERR("CLEAR_SYSTEM_CACHE", "Failed to clear system cache");
     state = FAILED;
     updateRequired = true;
     return;
   }
 
-  clearedCount = 0;
-  failedCount = 0;
-  char name[128];
-
-  // Iterate through all entries in the directory
-  for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
-    file.getName(name, sizeof(name));
-    String itemName(name);
-
-    // Delete all files and directories in /.crosspoint/data
-    String fullPath = "/.crosspoint/data/" + itemName;
-    LOG_DBG("CLEAR_SYSTEM_CACHE", "Removing: %s", fullPath.c_str());
-
-    file.close();  // Close before attempting to delete
-
-    if (file.isDirectory()) {
-      if (Storage.removeDir(fullPath.c_str())) {
-        clearedCount++;
-      } else {
-        LOG_ERR("CLEAR_SYSTEM_CACHE", "Failed to remove directory: %s", fullPath.c_str());
-        failedCount++;
-      }
-    } else {
-      if (Storage.remove(fullPath.c_str())) {
-        clearedCount++;
-      } else {
-        LOG_ERR("CLEAR_SYSTEM_CACHE", "Failed to remove file: %s", fullPath.c_str());
-        failedCount++;
-      }
-    }
-  }
-  root.close();
-
   LOG_DBG("CLEAR_SYSTEM_CACHE", "System cache cleared: %d removed, %d failed", clearedCount, failedCount);
 
   state = SUCCESS;
   updateRequired = true;
+}
+
+bool ClearSystemCacheActivity::recursiveDelete(const String& path) {
+  // Open the directory
+  auto dir = Storage.open(path.c_str());
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return false;
+  }
+
+  char name[128];
+  bool success = true;
+
+  // Iterate through all entries
+  for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
+    file.getName(name, sizeof(name));
+    String itemName(name);
+    String fullPath = path + "/" + itemName;
+
+    if (file.isDirectory()) {
+      // Recursively delete subdirectory
+      file.close();
+      if (!recursiveDelete(fullPath)) {
+        success = false;
+        failedCount++;
+      }
+    } else {
+      // Delete file
+      file.close();
+      if (Storage.remove(fullPath.c_str())) {
+        clearedCount++;
+      } else {
+        LOG_ERR("CLEAR_SYSTEM_CACHE", "Failed to remove file: %s", fullPath.c_str());
+        success = false;
+        failedCount++;
+      }
+    }
+  }
+  dir.close();
+
+  // Remove the directory itself (if not the root)
+  if (path != "/.crosspoint/data") {
+    if (Storage.rmdir(path.c_str())) {
+      clearedCount++;
+    } else {
+      LOG_ERR("CLEAR_SYSTEM_CACHE", "Failed to remove directory: %s", path.c_str());
+      success = false;
+      failedCount++;
+    }
+  }
+
+  return success;
 }
 
 void ClearSystemCacheActivity::loop() {
