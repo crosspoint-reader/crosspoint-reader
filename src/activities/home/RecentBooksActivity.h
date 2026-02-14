@@ -1,7 +1,4 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <functional>
 #include <string>
@@ -13,12 +10,9 @@
 
 class RecentBooksActivity final : public Activity {
  private:
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
-  bool updateRequired = false;
 
   // Recent tab state
   std::vector<RecentBook> recentBooks;
@@ -26,10 +20,6 @@ class RecentBooksActivity final : public Activity {
   // Callbacks
   const std::function<void(const std::string& path)> onSelectBook;
   const std::function<void()> onGoHome;
-
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render() const;
 
   // Data loading
   void loadRecentBooks();
@@ -42,4 +32,5 @@ class RecentBooksActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
 };

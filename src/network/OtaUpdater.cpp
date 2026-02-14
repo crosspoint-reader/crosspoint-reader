@@ -243,7 +243,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
     processedSize = esp_https_ota_get_image_len_read(ota_handle);
     /* Sent signal to  OtaUpdateActivity */
     render = true;
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    delay(100);  // TODO: should we replace this with something better?
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 
   /* Return back to default power saving for WiFi in case of failing */

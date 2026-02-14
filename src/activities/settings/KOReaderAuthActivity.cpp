@@ -10,11 +10,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-void KOReaderAuthActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<KOReaderAuthActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();
 
@@ -23,7 +18,7 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
     state = FAILED;
     errorMessage = "WiFi connection failed";
     xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -31,7 +26,7 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
   state = AUTHENTICATING;
   statusMessage = "Authenticating...";
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
 
   performAuthentication();
 }
@@ -48,20 +43,11 @@ void KOReaderAuthActivity::performAuthentication() {
     errorMessage = KOReaderSyncClient::errorString(result);
   }
   xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
 }
 
 void KOReaderAuthActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
-
-  renderingMutex = xSemaphoreCreateMutex();
-
-  xTaskCreate(&KOReaderAuthActivity::taskTrampoline, "KOAuthTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
 
   // Turn on WiFi
   WiFi.mode(WIFI_STA);
@@ -70,7 +56,7 @@ void KOReaderAuthActivity::onEnter() {
   if (WiFi.status() == WL_CONNECTED) {
     state = AUTHENTICATING;
     statusMessage = "Authenticating...";
-    updateRequired = true;
+    requestUpdate();
 
     // Perform authentication in a separate task
     xTaskCreate(
@@ -96,33 +82,9 @@ void KOReaderAuthActivity::onExit() {
   delay(100);
   WiFi.mode(WIFI_OFF);
   delay(100);
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
 }
 
-void KOReaderAuthActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void KOReaderAuthActivity::render() {
-  if (subActivity) {
-    return;
-  }
-
+void KOReaderAuthActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
   renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Auth", true, EpdFontFamily::BOLD);
 

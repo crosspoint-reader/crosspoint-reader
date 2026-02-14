@@ -24,19 +24,12 @@ constexpr unsigned long skipPageMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 }  // namespace
 
-void XtcReaderActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<XtcReaderActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void XtcReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   if (!xtc) {
     return;
   }
-
-  renderingMutex = xSemaphoreCreateMutex();
 
   xtc->setupCacheDir();
 
@@ -49,27 +42,12 @@ void XtcReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
 
   // Trigger first update
-  updateRequired = true;
-
-  xTaskCreate(&XtcReaderActivity::taskTrampoline, "XtcReaderActivityTask",
-              4096,               // Stack size (smaller than EPUB since no parsing needed)
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
 void XtcReaderActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
-  // Wait until not rendering to delete task
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   xtc.reset();
@@ -85,20 +63,18 @@ void XtcReaderActivity::loop() {
   // Enter chapter selection activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
       enterNewActivity(new XtcReaderChapterSelectionActivity(
           this->renderer, this->mappedInput, xtc, currentPage,
           [this] {
             exitActivity();
-            updateRequired = true;
+            requestUpdate();
           },
           [this](const uint32_t newPage) {
             currentPage = newPage;
             exitActivity();
-            updateRequired = true;
+            requestUpdate();
           }));
-      xSemaphoreGive(renderingMutex);
     }
   }
 
@@ -135,7 +111,7 @@ void XtcReaderActivity::loop() {
   // Handle end of book
   if (currentPage >= xtc->getPageCount()) {
     currentPage = xtc->getPageCount() - 1;
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -148,29 +124,17 @@ void XtcReaderActivity::loop() {
     } else {
       currentPage = 0;
     }
-    updateRequired = true;
+    requestUpdate();
   } else if (nextTriggered) {
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void XtcReaderActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void XtcReaderActivity::renderScreen() {
+void XtcReaderActivity::render(Activity::RenderLock&&) {
   if (!xtc) {
     return;
   }
