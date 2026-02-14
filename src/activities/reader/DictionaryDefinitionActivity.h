@@ -43,6 +43,8 @@ class DictionaryDefinitionActivity final : public Activity {
   int leftPadding = 20;
   int rightPadding = 20;
   int hintGutterHeight = 0;
+  int contentX = 0;
+  int hintGutterWidth = 0;
 
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;

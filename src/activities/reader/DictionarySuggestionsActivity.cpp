@@ -113,38 +113,27 @@ void DictionarySuggestionsActivity::renderScreen() {
   const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.sideButtonHintsWidth : 0;
   const int hintGutterHeight = isInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int sidePadding = metrics.contentSidePadding;
-  const int leftPadding = contentX + sidePadding;
-  const int rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
-  const int contentWidth = renderer.getScreenWidth() - leftPadding - rightPadding;
+  const int leftPadding = contentX + metrics.contentSidePadding;
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
 
-  const int titleY = 15 + hintGutterHeight;
-  const int subtitleY = 45 + hintGutterHeight;
-  const int separatorY = 68 + hintGutterHeight;
-  const int startY = 80 + hintGutterHeight;
-  constexpr int lineHeight = 30;
+  // Header
+  GUI.drawHeader(
+      renderer,
+      Rect{contentX, hintGutterHeight + metrics.topPadding, pageWidth - hintGutterWidth, metrics.headerHeight},
+      "Did you mean?");
 
-  // Title
-  renderer.drawText(UI_12_FONT_ID, leftPadding, titleY, "Did you mean?", true, EpdFontFamily::BOLD);
-
-  // Subtitle: the original word
+  // Subtitle: the original word (manual, below header)
+  const int subtitleY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + 5;
   std::string subtitle = "\"" + originalWord + "\" not found";
   renderer.drawText(SMALL_FONT_ID, leftPadding, subtitleY, subtitle.c_str());
 
-  // Separator
-  renderer.drawLine(leftPadding, separatorY, renderer.getScreenWidth() - rightPadding, separatorY);
-
   // Suggestion list
-  for (int i = 0; i < static_cast<int>(suggestions.size()); i++) {
-    const int displayY = startY + i * lineHeight;
-    const bool isSelected = (i == selectedIndex);
-
-    if (isSelected) {
-      renderer.fillRect(contentX, displayY - 2, contentWidth + sidePadding * 2, lineHeight);
-    }
-
-    renderer.drawText(UI_10_FONT_ID, leftPadding + 10, displayY, suggestions[i].c_str(), !isSelected);
-  }
+  const int listTop = subtitleY + 25;
+  const int listHeight = pageHeight - listTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  GUI.drawList(
+      renderer, Rect{contentX, listTop, pageWidth - hintGutterWidth, listHeight}, suggestions.size(), selectedIndex,
+      [this](int index) { return suggestions[index]; }, nullptr, nullptr, nullptr);
 
   // Button hints
   const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "Up", "Down");

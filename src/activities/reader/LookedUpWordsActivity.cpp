@@ -130,14 +130,14 @@ void LookedUpWordsActivity::loop() {
 }
 
 int LookedUpWordsActivity::getPageItems() const {
-  constexpr int lineHeight = 30;
   const auto orient = renderer.getOrientation();
   const auto metrics = UITheme::getInstance().getMetrics();
   const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
   const int hintGutterHeight = isInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
-  const int startY = 60 + hintGutterHeight;
-  const int availableHeight = renderer.getScreenHeight() - startY - lineHeight;
-  return std::max(1, availableHeight / lineHeight);
+  const int contentTop = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  return std::max(1, contentHeight / metrics.listRowHeight);
 }
 
 void LookedUpWordsActivity::renderScreen() {
@@ -151,50 +151,24 @@ void LookedUpWordsActivity::renderScreen() {
   const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.sideButtonHintsWidth : 0;
   const int hintGutterHeight = isInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int sidePadding = metrics.contentSidePadding;
-  const int leftPadding = contentX + sidePadding;
-  const int rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
-  const int contentWidth = renderer.getScreenWidth() - leftPadding - rightPadding;
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
 
-  const int titleY = 15 + hintGutterHeight;
-  const int startY = 60 + hintGutterHeight;
-  constexpr int lineHeight = 30;
+  // Header
+  GUI.drawHeader(
+      renderer,
+      Rect{contentX, hintGutterHeight + metrics.topPadding, pageWidth - hintGutterWidth, metrics.headerHeight},
+      "Lookup History");
 
-  // Title
-  const int titleTextWidth = renderer.getTextWidth(UI_12_FONT_ID, "Lookup History", EpdFontFamily::BOLD);
-  const int titleX = contentX + (renderer.getScreenWidth() - hintGutterWidth - titleTextWidth) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, titleY, "Lookup History", true, EpdFontFamily::BOLD);
+  const int contentTop = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   if (words.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "No words looked up yet");
+    renderer.drawCenteredText(UI_10_FONT_ID, contentTop + 20, "No words looked up yet");
   } else {
-    const int pageItems = getPageItems();
-    const int totalItems = static_cast<int>(words.size());
-    const int pageStart = selectedIndex / pageItems * pageItems;
-
-    for (int i = 0; i < pageItems; i++) {
-      int idx = pageStart + i;
-      if (idx >= totalItems) break;
-
-      const int displayY = startY + i * lineHeight;
-      const bool isSelected = (idx == selectedIndex);
-
-      if (isSelected) {
-        renderer.fillRect(contentX, displayY - 2, contentWidth + sidePadding * 2, lineHeight);
-      }
-
-      renderer.drawText(UI_10_FONT_ID, leftPadding, displayY, words[idx].c_str(), !isSelected);
-    }
-
-    // Page indicator
-    const int totalPages = (totalItems + pageItems - 1) / pageItems;
-    if (totalPages > 1) {
-      const int currentPage = pageStart / pageItems + 1;
-      std::string pageInfo = std::to_string(currentPage) + "/" + std::to_string(totalPages);
-      const int pageInfoWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo.c_str());
-      renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - rightPadding - pageInfoWidth,
-                        renderer.getScreenHeight() - 70, pageInfo.c_str());
-    }
+    GUI.drawList(
+        renderer, Rect{contentX, contentTop, pageWidth - hintGutterWidth, contentHeight}, words.size(), selectedIndex,
+        [this](int index) { return words[index]; }, nullptr, nullptr, nullptr);
   }
 
   if (deleteConfirmMode && pendingDeleteIndex < static_cast<int>(words.size())) {
@@ -231,7 +205,9 @@ void LookedUpWordsActivity::renderScreen() {
       const char* deleteHint = "Hold select to delete";
       const int hintWidth = renderer.getTextWidth(SMALL_FONT_ID, deleteHint);
       const int hintX = contentX + (renderer.getScreenWidth() - hintGutterWidth - hintWidth) / 2;
-      renderer.drawText(SMALL_FONT_ID, hintX, renderer.getScreenHeight() - 70, deleteHint);
+      renderer.drawText(SMALL_FONT_ID, hintX,
+                        renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing * 2,
+                        deleteHint);
     }
 
     // Normal button hints

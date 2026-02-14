@@ -50,9 +50,9 @@ void DictionaryDefinitionActivity::wrapText() {
   const bool isLandscapeCw = orient == GfxRenderer::Orientation::LandscapeClockwise;
   const bool isLandscapeCcw = orient == GfxRenderer::Orientation::LandscapeCounterClockwise;
   const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.sideButtonHintsWidth : 0;
+  hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.sideButtonHintsWidth : 0;
   hintGutterHeight = isInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
-  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  contentX = isLandscapeCw ? hintGutterWidth : 0;
   const int sidePadding = metrics.contentSidePadding;
   leftPadding = contentX + sidePadding;
   rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
@@ -60,8 +60,8 @@ void DictionaryDefinitionActivity::wrapText() {
   const int screenWidth = renderer.getScreenWidth();
   const int lineHeight = renderer.getLineHeight(readerFontId);
   const int maxWidth = screenWidth - leftPadding - rightPadding;
-  const int topArea = 50 + hintGutterHeight;
-  constexpr int bottomArea = 50;
+  const int topArea = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
 
   linesPerPage = (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight;
   if (linesPerPage < 1) linesPerPage = 1;
@@ -151,16 +151,15 @@ void DictionaryDefinitionActivity::loop() {
 void DictionaryDefinitionActivity::renderScreen() {
   renderer.clearScreen();
 
-  const int titleY = 10 + hintGutterHeight;
+  const auto metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(readerFontId);
-  const int separatorY = 40 + hintGutterHeight;
-  const int bodyStartY = 50 + hintGutterHeight;
 
-  // Title: the word in bold (use UI font for title)
-  renderer.drawText(UI_12_FONT_ID, leftPadding, titleY, headword.c_str(), true, EpdFontFamily::BOLD);
-
-  // Separator line
-  renderer.drawLine(leftPadding, separatorY, renderer.getScreenWidth() - rightPadding, separatorY);
+  // Header
+  GUI.drawHeader(renderer,
+                 Rect{contentX, hintGutterHeight + metrics.topPadding, renderer.getScreenWidth() - hintGutterWidth,
+                      metrics.headerHeight},
+                 headword.c_str());
+  const int bodyStartY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
   // Body: wrapped definition lines using the same reader font
   int startLine = currentPage * linesPerPage;
@@ -174,7 +173,8 @@ void DictionaryDefinitionActivity::renderScreen() {
     std::string pageInfo = std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
     int textWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo.c_str());
     renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - rightPadding - textWidth,
-                      renderer.getScreenHeight() - 50, pageInfo.c_str());
+                      renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing,
+                      pageInfo.c_str());
   }
 
   // Button hints
