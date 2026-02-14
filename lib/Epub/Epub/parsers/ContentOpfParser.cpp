@@ -1,7 +1,7 @@
 #include "ContentOpfParser.h"
 
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
 
 #include "../BookMetadataCache.h"
@@ -15,7 +15,7 @@ constexpr char itemCacheFile[] = "/.items.bin";
 bool ContentOpfParser::setup() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
-    Serial.printf("[%lu] [COF] Couldn't allocate memory for parser\n", millis());
+    LOG_DBG("COF", "Couldn't allocate memory for parser");
     return false;
   }
 
@@ -56,7 +56,7 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
     void* const buf = XML_GetBuffer(parser, 1024);
 
     if (!buf) {
-      Serial.printf("[%lu] [COF] Couldn't allocate memory for buffer\n", millis());
+      LOG_ERR("COF", "Couldn't allocate memory for buffer");
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -69,8 +69,8 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
     memcpy(buf, currentBufferPos, toRead);
 
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [COF] Parse error at line %lu: %s\n", millis(), XML_GetCurrentLineNumber(parser),
-                    XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_DBG("COF", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
+              XML_ErrorString(XML_GetErrorCode(parser)));
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -119,9 +119,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_PACKAGE && (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0)) {
     self->state = IN_MANIFEST;
     if (!Storage.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      Serial.printf(
-          "[%lu] [COF] Couldn't open temp items file for writing. This is probably going to be a fatal error.\n",
-          millis());
+      LOG_ERR("COF", "Couldn't open temp items file for writing. This is probably going to be a fatal error.");
     }
     return;
   }
@@ -129,9 +127,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_PACKAGE && (strcmp(name, "spine") == 0 || strcmp(name, "opf:spine") == 0)) {
     self->state = IN_SPINE;
     if (!Storage.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      Serial.printf(
-          "[%lu] [COF] Couldn't open temp items file for reading. This is probably going to be a fatal error.\n",
-          millis());
+      LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
     }
 
     // Sort item index for binary search if we have enough items
@@ -140,7 +136,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
       });
       self->useItemIndex = true;
-      Serial.printf("[%lu] [COF] Using fast index for %zu manifest items\n", millis(), self->itemIndex.size());
+      LOG_DBG("COF", "Using fast index for %zu manifest items", self->itemIndex.size());
     }
     return;
   }
@@ -148,11 +144,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_PACKAGE && (strcmp(name, "guide") == 0 || strcmp(name, "opf:guide") == 0)) {
     self->state = IN_GUIDE;
     // TODO Remove print
-    Serial.printf("[%lu] [COF] Entering guide state.\n", millis());
+    LOG_DBG("COF", "Entering guide state.");
     if (!Storage.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      Serial.printf(
-          "[%lu] [COF] Couldn't open temp items file for reading. This is probably going to be a fatal error.\n",
-          millis());
+      LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
     }
     return;
   }
@@ -214,8 +208,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       if (self->tocNcxPath.empty()) {
         self->tocNcxPath = href;
       } else {
-        Serial.printf("[%lu] [COF] Warning: Multiple NCX files found in manifest. Ignoring duplicate: %s\n", millis(),
-                      href.c_str());
+        LOG_DBG("COF", "Warning: Multiple NCX files found in manifest. Ignoring duplicate: %s", href.c_str());
       }
     }
 
@@ -229,7 +222,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       // Properties is space-separated, check if "nav" is present as a word
       if (properties == "nav" || properties.find("nav ") == 0 || properties.find(" nav") != std::string::npos) {
         self->tocNavPath = href;
-        Serial.printf("[%lu] [COF] Found EPUB 3 nav document: %s\n", millis(), href.c_str());
+        LOG_DBG("COF", "Found EPUB 3 nav document: %s", href.c_str());
       }
     }
 
@@ -310,7 +303,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         if (type == "text" || type == "start") {
           continue;
         } else {
-          Serial.printf("[%lu] [COF] Skipping non-text reference in guide: %s\n", millis(), type.c_str());
+          LOG_DBG("COF", "Skipping non-text reference in guide: %s", type.c_str());
           break;
         }
       } else if (strcmp(atts[i], "href") == 0) {
@@ -318,7 +311,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
     }
     if ((type == "text" || (type == "start" && !self->textReferenceHref.empty())) && (textHref.length() > 0)) {
-      Serial.printf("[%lu] [COF] Found %s reference in guide: %s.\n", millis(), type.c_str(), textHref.c_str());
+      LOG_DBG("COF", "Found %s reference in guide: %s.", type.c_str(), textHref.c_str());
       self->textReferenceHref = textHref;
     }
     return;

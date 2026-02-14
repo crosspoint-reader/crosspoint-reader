@@ -1,6 +1,6 @@
 #include "BookMetadataCache.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
 #include <ZipFile.h>
 
@@ -21,12 +21,12 @@ bool BookMetadataCache::beginWrite() {
   buildMode = true;
   spineCount = 0;
   tocCount = 0;
-  Serial.printf("[%lu] [BMC] Entering write mode\n", millis());
+  LOG_DBG("BMC", "Entering write mode");
   return true;
 }
 
 bool BookMetadataCache::beginContentOpfPass() {
-  Serial.printf("[%lu] [BMC] Beginning content opf pass\n", millis());
+  LOG_DBG("BMC", "Beginning content opf pass");
 
   // Open spine file for writing
   return Storage.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile);
@@ -38,7 +38,7 @@ bool BookMetadataCache::endContentOpfPass() {
 }
 
 bool BookMetadataCache::beginTocPass() {
-  Serial.printf("[%lu] [BMC] Beginning toc pass\n", millis());
+  LOG_DBG("BMC", "Beginning toc pass");
 
   if (!Storage.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
@@ -66,7 +66,7 @@ bool BookMetadataCache::beginTocPass() {
               });
     spineFile.seek(0);
     useSpineHrefIndex = true;
-    Serial.printf("[%lu] [BMC] Using fast index for %d spine items\n", millis(), spineCount);
+    LOG_DBG("BMC", "Using fast index for %d spine items", spineCount);
   } else {
     useSpineHrefIndex = false;
   }
@@ -87,12 +87,12 @@ bool BookMetadataCache::endTocPass() {
 
 bool BookMetadataCache::endWrite() {
   if (!buildMode) {
-    Serial.printf("[%lu] [BMC] endWrite called but not in build mode\n", millis());
+    LOG_DBG("BMC", "endWrite called but not in build mode");
     return false;
   }
 
   buildMode = false;
-  Serial.printf("[%lu] [BMC] Wrote %d spine, %d TOC entries\n", millis(), spineCount, tocCount);
+  LOG_DBG("BMC", "Wrote %d spine, %d TOC entries", spineCount, tocCount);
   return true;
 }
 
@@ -167,7 +167,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   ZipFile zip(epubPath);
   // Pre-open zip file to speed up size calculations
   if (!zip.open()) {
-    Serial.printf("[%lu] [BMC] Could not open EPUB zip for size calculations\n", millis());
+    LOG_ERR("BMC", "Could not open EPUB zip for size calculations");
     bookFile.close();
     spineFile.close();
     tocFile.close();
@@ -185,7 +185,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   bool useBatchSizes = false;
 
   if (spineCount >= LARGE_SPINE_THRESHOLD) {
-    Serial.printf("[%lu] [BMC] Using batch size lookup for %d spine items\n", millis(), spineCount);
+    LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
 
     std::vector<ZipFile::SizeTarget> targets;
     targets.reserve(spineCount);
@@ -208,7 +208,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
     spineSizes.resize(spineCount, 0);
     int matched = zip.fillUncompressedSizes(targets, spineSizes);
-    Serial.printf("[%lu] [BMC] Batch lookup matched %d/%d spine items\n", millis(), matched, spineCount);
+    LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
 
     targets.clear();
     targets.shrink_to_fit();
@@ -227,9 +227,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     // Not a huge deal if we don't fine a TOC entry for the spine entry, this is expected behaviour for EPUBs
     // Logging here is for debugging
     if (spineEntry.tocIndex == -1) {
-      Serial.printf(
-          "[%lu] [BMC] Warning: Could not find TOC entry for spine item %d: %s, using title from last section\n",
-          millis(), i, spineEntry.href.c_str());
+      LOG_DBG("BMC", "Warning: Could not find TOC entry for spine item %d: %s, using title from last section", i,
+              spineEntry.href.c_str());
       spineEntry.tocIndex = lastSpineTocIndex;
     }
     lastSpineTocIndex = spineEntry.tocIndex;
@@ -240,13 +239,13 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
       if (itemSize == 0) {
         const std::string path = FsHelpers::normalisePath(spineEntry.href);
         if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
-          Serial.printf("[%lu] [BMC] Warning: Could not get size for spine item: %s\n", millis(), path.c_str());
+          LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
         }
       }
     } else {
       const std::string path = FsHelpers::normalisePath(spineEntry.href);
       if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
-        Serial.printf("[%lu] [BMC] Warning: Could not get size for spine item: %s\n", millis(), path.c_str());
+        LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
       }
     }
 
@@ -270,7 +269,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   spineFile.close();
   tocFile.close();
 
-  Serial.printf("[%lu] [BMC] Successfully built book.bin\n", millis());
+  LOG_DBG("BMC", "Successfully built book.bin");
   return true;
 }
 
@@ -306,7 +305,7 @@ uint32_t BookMetadataCache::writeTocEntry(FsFile& file, const TocEntry& entry) c
 // this is because in this function we're marking positions of the items
 void BookMetadataCache::createSpineEntry(const std::string& href) {
   if (!buildMode || !spineFile) {
-    Serial.printf("[%lu] [BMC] createSpineEntry called but not in build mode\n", millis());
+    LOG_DBG("BMC", "createSpineEntry called but not in build mode");
     return;
   }
 
@@ -318,7 +317,7 @@ void BookMetadataCache::createSpineEntry(const std::string& href) {
 void BookMetadataCache::createTocEntry(const std::string& title, const std::string& href, const std::string& anchor,
                                        const uint8_t level) {
   if (!buildMode || !tocFile || !spineFile) {
-    Serial.printf("[%lu] [BMC] createTocEntry called but not in build mode\n", millis());
+    LOG_DBG("BMC", "createTocEntry called but not in build mode");
     return;
   }
 
@@ -340,7 +339,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
     }
 
     if (spineIndex == -1) {
-      Serial.printf("[%lu] [BMC] createTocEntry: Could not find spine item for TOC href %s\n", millis(), href.c_str());
+      LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
     }
   } else {
     spineFile.seek(0);
@@ -352,7 +351,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
       }
     }
     if (spineIndex == -1) {
-      Serial.printf("[%lu] [BMC] createTocEntry: Could not find spine item for TOC href %s\n", millis(), href.c_str());
+      LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
     }
   }
 
@@ -371,7 +370,7 @@ bool BookMetadataCache::load() {
   uint8_t version;
   serialization::readPod(bookFile, version);
   if (version != BOOK_CACHE_VERSION) {
-    Serial.printf("[%lu] [BMC] Cache version mismatch: expected %d, got %d\n", millis(), BOOK_CACHE_VERSION, version);
+    LOG_DBG("BMC", "Cache version mismatch: expected %d, got %d", BOOK_CACHE_VERSION, version);
     bookFile.close();
     return false;
   }
@@ -387,18 +386,18 @@ bool BookMetadataCache::load() {
   serialization::readString(bookFile, coreMetadata.textReferenceHref);
 
   loaded = true;
-  Serial.printf("[%lu] [BMC] Loaded cache data: %d spine, %d TOC entries\n", millis(), spineCount, tocCount);
+  LOG_DBG("BMC", "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);
   return true;
 }
 
 BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) {
   if (!loaded) {
-    Serial.printf("[%lu] [BMC] getSpineEntry called but cache not loaded\n", millis());
+    LOG_ERR("BMC", "getSpineEntry called but cache not loaded");
     return {};
   }
 
   if (index < 0 || index >= static_cast<int>(spineCount)) {
-    Serial.printf("[%lu] [BMC] getSpineEntry index %d out of range\n", millis(), index);
+    LOG_ERR("BMC", "getSpineEntry index %d out of range", index);
     return {};
   }
 
@@ -412,12 +411,12 @@ BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) 
 
 BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
   if (!loaded) {
-    Serial.printf("[%lu] [BMC] getTocEntry called but cache not loaded\n", millis());
+    LOG_ERR("BMC", "getTocEntry called but cache not loaded");
     return {};
   }
 
   if (index < 0 || index >= static_cast<int>(tocCount)) {
-    Serial.printf("[%lu] [BMC] getTocEntry index %d out of range\n", millis(), index);
+    LOG_ERR("BMC", "getTocEntry index %d out of range", index);
     return {};
   }
 
