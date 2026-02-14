@@ -43,6 +43,12 @@
       --alert-border-color: #f1aeb5;
       --alert-link-color: #58151c;
     }
+    .alert-warning {
+      --alert-color: #664d03;
+      --alert-background: #fff3cd;
+      --alert-border-color: #ffe69c;
+      --alert-link-color: #664d03;
+    }
     @media (prefers-color-scheme: dark) {
       body {
         --font-color: #f5f5f5;
@@ -66,6 +72,12 @@
         --alert-background: #2c0b0e;
         --alert-border-color: #842029;
         --alert-link-color: #ea868f;
+      }
+      .alert-warning {
+        --alert-color: #ffda6a;
+        --alert-background: #332701;
+        --alert-border-color: #997404;
+        --alert-link-color: #ffda6a;
       }
     }
     .alert {
@@ -228,6 +240,11 @@
       gap: 6px;
       font-size: 16px;
     }
+    .btn-sm {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+      border-radius: 0.25rem;
+    }
     .btn-primary {
       background-color: var(--accent-color);
     }
@@ -338,6 +355,9 @@
     th.actions-col {
       text-align: end;
     }
+    td.size-col {
+      font-size: 0.85rem;
+    }
     .upload-form {
       margin-top: 10px;
     }
@@ -444,12 +464,8 @@
     }
     /* Failed uploads banner */
     .failed-uploads-banner {
-      background-color: #fff3cd;
-      border: 1px solid #ffc107;
-      border-radius: 4px;
-      padding: 15px;
-      margin-bottom: 15px;
       display: none;
+      margin: 16px 0;
     }
     .failed-uploads-banner.show {
       display: block;
@@ -462,27 +478,30 @@
     }
     .failed-uploads-title {
       font-weight: 600;
-      color: #856404;
       margin: 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .failed-uploads-title .icon {
+      width: 24px;
+      height: 24px;
     }
     .dismiss-btn {
       background: none;
       border: none;
       font-size: 1.2em;
       cursor: pointer;
-      color: #856404;
       padding: 0;
       line-height: 1;
-    }
-    .dismiss-btn:hover {
-      color: #533f03;
+      color: var(--alert-link-color);
     }
     .failed-file-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 8px 0;
-      border-bottom: 1px solid #ffe69c;
+      border-bottom: 1px solid var(--alert-border-color);
     }
     .failed-file-item:last-child {
       border-bottom: none;
@@ -491,23 +510,19 @@
       flex: 1;
     }
     .failed-file-name {
-      font-weight: 500;
-      color: #856404;
+      display: flex;
+      gap: 4px;
+      align-items: center;
     }
     .failed-file-error {
       font-size: 0.85em;
-      color: #856404;
       opacity: 0.8;
+      margin-inline-start: 20px;
     }
     .retry-btn {
       background-color: #ffc107;
       color: #533f03;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 4px;
       cursor: pointer;
-      font-size: 0.9em;
-      font-weight: 600;
     }
     .retry-btn:hover {
       background-color: #e0a800;
@@ -515,12 +530,7 @@
     .retry-all-btn {
       background-color: #ffc107;
       color: #533f03;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
       cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
       margin-top: 10px;
     }
     .retry-all-btn:hover {
@@ -589,6 +599,9 @@
     svg.icon-epub {
       color: #86b918;
     }
+    .alert svg.icon-epub {
+      color: var(--alert-color);
+    }
     footer {
       display: flex;
       gap: 6px;
@@ -645,13 +658,40 @@
         padding: 8px 10px;
         font-size: 0.85em;
       }
-      .file-table th,
-      .file-table td {
-        padding: 8px 6px;
-        font-size: 0.9em;
+      .file-table thead {
+        display: none;
       }
-      .file-table th {
-        font-size: 0.85em;
+      .file-table td {
+        padding: 6px;
+        font-size: 0.9em;
+        border-bottom: none;
+      }
+      .file-table tbody tr {
+        display: grid;
+        grid-template-columns: 24px min-content 25% auto;
+      }
+      .file-table tbody tr td:first-child {
+        grid-row: 1;
+        grid-column: 1;
+        width: 20px;
+      }
+      .file-table tbody tr td:nth-child(2) {
+        grid-row: 1;
+        grid-column: 2/5;
+        font-size: 14px;
+      }
+      .file-table tbody tr td:nth-child(3) {
+        grid-row: 2;
+        grid-column: 2;
+      }
+      .file-table tbody tr td:nth-child(4) {
+        grid-row: 2;
+        grid-column: 3;
+        text-align: start;
+      }
+      .file-table tbody tr td:nth-child(5) {
+        grid-row: 2;
+        grid-column: 4;
       }
       .epub-badge,
       .folder-badge {
@@ -734,13 +774,13 @@
 <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
 
 <!-- Failed Uploads Banner -->
-<div class="failed-uploads-banner" id="failedUploadsBanner">
+<div class="alert alert-warning failed-uploads-banner" id="failedUploadsBanner">
   <div class="failed-uploads-header">
-    <h3 class="failed-uploads-title">⚠️ Some files failed to upload</h3>
+    <h3 class="failed-uploads-title"><svg class="icon" aria-hidden="true"><use href="#icon-warning"></use></svg> Some files failed to upload</h3>
     <button class="dismiss-btn" onclick="dismissFailedUploads()" title="Dismiss">&times;</button>
   </div>
   <div id="failedFilesList"></div>
-  <button class="retry-all-btn" onclick="retryAllFailedUploads()">Retry All Failed Uploads</button>
+  <button class="btn btn-warning btn-sm retry-all-btn" onclick="retryAllFailedUploads()">Retry All Failed Uploads</button>
 </div>
 
 <div class="card contents-card">
@@ -1050,7 +1090,7 @@
           fileTableContent += '<td><span class="file-icon"><svg class="icon icon-folder" aria-hidden="true"><use href="#icon-folder"></use></svg></span></td>';
           fileTableContent += `<td><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
           fileTableContent += '<td>Folder</td>';
-          fileTableContent += '<td class="text-nowrap text-end">&ndash;</td>';
+          fileTableContent += '<td class="size-col text-nowrap text-end">&ndash;</td>';
           fileTableContent += `<td class="text-end"><div class="action-icon-group"><button class="btn btn-icon btn-danger delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder"><svg class="icon icon-trash" aria-hidden="true"><use href="#icon-trash"></use></svg></button></div></td>`;
           fileTableContent += '</tr>';
         } else {
@@ -1060,13 +1100,14 @@
 
           const match = file.name.match(FILE_EXTENSION_REGEX);
           const fileExtension = match ? match[1].toUpperCase() : '';
+          const icon = file.isEpub ? 'epub' : 'file';
 
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
-          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '<svg class="icon icon-epub" aria-hidden="true"><use href="#icon-epub"></use></svg>' : '<svg class="icon icon-file" aria-hidden="true"><use href="#icon-file"></use></svg>'}</span></td>`;
+          fileTableContent += `<td><span class="file-icon"><svg class="icon icon-${icon}" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span></td>`;
           fileTableContent += `<td>${escapeHtml(file.name)}`;
           fileTableContent += '</td>';
           fileTableContent += `<td>${fileExtension}</td>`;
-          fileTableContent += `<td class="text-nowrap text-end"><code>${formatFileSize(file.size)}</code></td>`;
+          fileTableContent += `<td class="size-col text-nowrap text-end"><code>${formatFileSize(file.size)}</code></td>`;
           fileTableContent += `<td class="text-end"><div class="action-icon-group">`;
           fileTableContent += `<button class="btn btn-icon move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', ${file.isEpub})" title="Move file"><svg class="icon icon-move-file" aria-hidden="true"><use href="#icon-move-file"></use></svg></button>`;
           fileTableContent += `<button class="btn btn-icon rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', ${file.isEpub})" title="Rename file"><svg class="icon icon-edit" aria-hidden="true"><use href="#icon-edit"></use></svg></button>`;
@@ -1115,7 +1156,17 @@
     uploadBtn.disabled = !(files.length > 0);
   }
 
-let failedUploadsGlobal = [];
+let failedUploadsGlobal = [
+  {
+    name: 'example_failed_upload.epub',
+    error: 'Connection lost'
+  },
+  {
+    name: 'another_failed_upload.pdf',
+    error: 'File too large'
+  }
+];
+showFailedUploadsBanner();
 let wsConnection = null;
 const WS_PORT = 81;
 const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
@@ -1369,14 +1420,18 @@ function showFailedUploadsBanner() {
   filesList.innerHTML = '';
   
   failedUploadsGlobal.forEach((failedFile, index) => {
+    const match = failedFile.name.match(FILE_EXTENSION_REGEX);
+    const fileExtension = match ? match[1].toUpperCase() : '';
+    const icon = fileExtension === 'EPUB' ? 'epub' : 'file';
+
     const item = document.createElement('div');
     item.className = 'failed-file-item';
     item.innerHTML = `
       <div class="failed-file-info">
-        <div class="failed-file-name">📄 ${escapeHtml(failedFile.name)}</div>
+        <div class="failed-file-name"><svg class="icon icon-${icon}" aria-hidden="true"><use href="#icon-${icon}"></use></svg> ${escapeHtml(failedFile.name)}</div>
         <div class="failed-file-error">Error: ${escapeHtml(failedFile.error)}</div>
       </div>
-      <button class="retry-btn" onclick="retrySingleUpload(${index})">Retry</button>
+      <button class="btn btn-sm retry-btn" onclick="retrySingleUpload(${index})">Retry</button>
     `;
     filesList.appendChild(item);
   });

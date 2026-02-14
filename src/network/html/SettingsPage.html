@@ -117,6 +117,7 @@
     }
     .setting-row {
       display: flex;
+      gap: 6px;
       justify-content: space-between;
       align-items: center;
       padding: 10px 0;
@@ -125,15 +126,6 @@
     .setting-row:last-child {
       border-bottom: none;
       padding-bottom: 0;
-    }
-    .setting-name {
-      color: var(--title-color);
-      flex: 1;
-      min-width: 0;
-      padding-right: 12px;
-    }
-    .setting-control {
-      flex-shrink: 0;
     }
     .setting-control select,
     .setting-control input[type="number"],
@@ -190,8 +182,9 @@
       transform: translateX(22px);
     }
     .save-container {
-      text-align: center;
-      margin: 20px 0;
+      display: flex;
+      justify-content: center;
+      margin: 20px 0 30px;
     }
     .save-btn {
       background-color: #27ae60;
@@ -262,6 +255,12 @@
       align-items: center;
       gap: 6px;
       font-size: 16px;
+      line-height: 1.5;
+    }
+    .btn-lg {
+      padding: 0.5rem 1rem;
+      font-size: 1.25rem;
+      border-radius: 0.5rem;
     }
     .btn-primary {
       background-color: var(--accent-color);
@@ -317,16 +316,17 @@
         font-size: 0.9em;
       }
       .setting-row {
-        flex-wrap: wrap;
-        gap: 6px;
         padding: 4px 0;
         border: none;
       }
-      .setting-control select,
-      .setting-control input[type="text"],
-      .setting-control input[type="password"] {
+      .setting-control select {
         min-width: 0;
         width: 100%;
+      }
+
+      .setting-control input[type="text"],
+      .setting-control input[type="password"] {
+        width: 100px;
       }
       footer {
         justify-self: center;
@@ -361,7 +361,7 @@
   </div>
 
   <div class="save-container" id="save-container" style="display:none;">
-    <button class="btn btn-primary" id="saveBtn" onclick="saveSettings(event)">Save Settings</button>
+    <button class="btn btn-lg btn-primary" id="saveBtn" onclick="saveSettings(event)">Save Settings</button>
   </div>
 
   <footer>
@@ -473,6 +473,9 @@
         { category: 'Reader', key: 'font_size', name: 'Font Size', type: 'enum', options: ['Small', 'Medium', 'Large'], value: 1 },
         { category: 'Reader', key: 'line_spacing', name: 'Line Spacing', type: 'enum', options: ['Tight', 'Normal', 'Loose'], value: 1 },
         { category: 'Reader', key: 'margin_size', name: 'Screen Margin', type: 'enum', options: ['15'], value: 0 },
+        { category: 'Reader', key: 'text_example', name: 'Text Example', type: 'string', value: 'test' },
+        { category: 'Reader', key: 'number_example', name: 'Number Example', type: 'value', value: 10 },
+        { category: 'Reader', key: 'invalid_example', name: 'Invalid Example', type: 'invalid', value: 'test' },
         { category: 'Controls', key: 'side_button_layout', name: 'Side Button Layout', type: 'enum', options: ['Prev, Next', 'Next, Prev'], value: 0 },
         { category: 'Controls', key: 'long_press_chapter_skip', name: 'Long Press Chapter Skip', type: 'toggle', value: 1 },
       ];
