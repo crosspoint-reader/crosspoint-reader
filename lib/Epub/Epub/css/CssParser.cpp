@@ -1,7 +1,7 @@
 #include "CssParser.h"
 
 #include <Arduino.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <array>
@@ -325,7 +325,7 @@ CssStyle CssParser::parseDeclarations(const std::string& declBlock) {
 void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, const CssStyle& style) {
   // Check if we've reached the rule limit before processing
   if (rulesBySelector_.size() >= MAX_RULES) {
-    Serial.printf("[%lu] [CSS] Reached max rules limit (%zu), stopping CSS parsing\n", millis(), MAX_RULES);
+    LOG_DBG("CSS", "Reached max rules limit (%zu), stopping CSS parsing", MAX_RULES);
     return;
   }
 
@@ -335,7 +335,7 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
   for (const auto& sel : selectors) {
     // Validate selector length before processing
     if (sel.size() > MAX_SELECTOR_LENGTH) {
-      Serial.printf("[%lu] [CSS] Selector too long (%zu > %zu), skipping\n", millis(), sel.size(), MAX_SELECTOR_LENGTH);
+      LOG_DBG("CSS", "Selector too long (%zu > %zu), skipping", sel.size(), MAX_SELECTOR_LENGTH);
       continue;
     }
 
@@ -345,7 +345,7 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
 
     // Skip if this would exceed the rule limit
     if (rulesBySelector_.size() >= MAX_RULES) {
-      Serial.printf("[%lu] [CSS] Reached max rules limit, stopping selector processing\n", millis());
+      LOG_DBG("CSS", "Reached max rules limit, stopping selector processing");
       return;
     }
 
@@ -363,7 +363,7 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
 
 bool CssParser::loadFromStream(FsFile& source) {
   if (!source) {
-    Serial.printf("[%lu] [CSS] Cannot read from invalid file\n", millis());
+    LOG_ERR("CSS", "Cannot read from invalid file");
     return false;
   }
 
@@ -503,7 +503,7 @@ bool CssParser::loadFromStream(FsFile& source) {
     handleChar('/');
   }
 
-  Serial.printf("[%lu] [CSS] Parsed %zu rules from %zu bytes\n", millis(), rulesBySelector_.size(), totalRead);
+  LOG_DBG("CSS", "Parsed %zu rules from %zu bytes", rulesBySelector_.size(), totalRead);
   return true;
 }
 
@@ -627,7 +627,7 @@ bool CssParser::saveToCache() const {
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
-  Serial.printf("[%lu] [CSS] Saved %u rules to cache\n", millis(), ruleCount);
+  LOG_DBG("CSS", "Saved %u rules to cache", ruleCount);
   file.close();
   return true;
 }
@@ -648,7 +648,7 @@ bool CssParser::loadFromCache() {
   // Read and verify version
   uint8_t version = 0;
   if (file.read(&version, 1) != 1 || version != CSS_CACHE_VERSION) {
-    Serial.printf("[%lu] [CSS] Cache version mismatch (got %u, expected %u)\n", millis(), version, CSS_CACHE_VERSION);
+    LOG_DBG("CSS", "Cache version mismatch (got %u, expected %u)", version, CSS_CACHE_VERSION);
     file.close();
     return false;
   }
@@ -755,7 +755,7 @@ bool CssParser::loadFromCache() {
     rulesBySelector_[selector] = style;
   }
 
-  Serial.printf("[%lu] [CSS] Loaded %u rules from cache\n", millis(), ruleCount);
+  LOG_DBG("CSS", "Loaded %u rules from cache", ruleCount);
   file.close();
   return true;
 }
