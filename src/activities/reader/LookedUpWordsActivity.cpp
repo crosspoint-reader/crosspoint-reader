@@ -4,9 +4,12 @@
 
 #include <algorithm>
 
+#include "DictionaryDefinitionActivity.h"
+#include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Dictionary.h"
 #include "util/LookupHistory.h"
 
 void LookedUpWordsActivity::taskTrampoline(void* param) {
@@ -49,6 +52,16 @@ void LookedUpWordsActivity::onExit() {
 void LookedUpWordsActivity::loop() {
   if (subActivity) {
     subActivity->loop();
+    if (pendingBackFromDef) {
+      pendingBackFromDef = false;
+      exitActivity();
+      updateRequired = true;
+    }
+    if (pendingExitToReader) {
+      pendingExitToReader = false;
+      exitActivity();
+      onDone();
+    }
     return;
   }
 
@@ -119,7 +132,44 @@ void LookedUpWordsActivity::loop() {
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    onSelectWord(words[selectedIndex]);
+    const std::string& headword = words[selectedIndex];
+
+    Rect popupLayout = GUI.drawPopup(renderer, "Looking up...");
+    std::string definition = Dictionary::lookup(
+        headword, [this, &popupLayout](int percent) { GUI.fillPopupProgress(renderer, popupLayout, percent); });
+
+    if (!definition.empty()) {
+      enterNewActivity(new DictionaryDefinitionActivity(
+          renderer, mappedInput, headword, definition, readerFontId, [this]() { pendingBackFromDef = true; },
+          [this]() { pendingExitToReader = true; }));
+      return;
+    }
+
+    // Try stem variants
+    auto stems = Dictionary::getStemVariants(headword);
+    for (const auto& stem : stems) {
+      std::string stemDef = Dictionary::lookup(stem);
+      if (!stemDef.empty()) {
+        enterNewActivity(new DictionaryDefinitionActivity(
+            renderer, mappedInput, stem, stemDef, readerFontId, [this]() { pendingBackFromDef = true; },
+            [this]() { pendingExitToReader = true; }));
+        return;
+      }
+    }
+
+    // Show similar word suggestions
+    auto similar = Dictionary::findSimilar(headword, 6);
+    if (!similar.empty()) {
+      enterNewActivity(new DictionarySuggestionsActivity(
+          renderer, mappedInput, headword, similar, readerFontId, cachePath, [this]() { pendingBackFromDef = true; },
+          [this]() { pendingExitToReader = true; }));
+      return;
+    }
+
+    GUI.drawPopup(renderer, "Not found");
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    vTaskDelay(1500 / portTICK_PERIOD_MS);
+    updateRequired = true;
     return;
   }
 

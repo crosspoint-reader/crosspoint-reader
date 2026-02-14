@@ -13,12 +13,13 @@
 class LookedUpWordsActivity final : public ActivityWithSubactivity {
  public:
   explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& cachePath,
-                                 const std::function<void()>& onBack,
-                                 const std::function<void(const std::string&)>& onSelectWord)
+                                 int readerFontId, const std::function<void()>& onBack,
+                                 const std::function<void()>& onDone)
       : ActivityWithSubactivity("LookedUpWords", renderer, mappedInput),
         cachePath(cachePath),
+        readerFontId(readerFontId),
         onBack(onBack),
-        onSelectWord(onSelectWord) {}
+        onDone(onDone) {}
 
   void onEnter() override;
   void onExit() override;
@@ -26,12 +27,15 @@ class LookedUpWordsActivity final : public ActivityWithSubactivity {
 
  private:
   std::string cachePath;
+  int readerFontId;
   const std::function<void()> onBack;
-  const std::function<void(const std::string&)> onSelectWord;
+  const std::function<void()> onDone;
 
   std::vector<std::string> words;
   int selectedIndex = 0;
   bool updateRequired = false;
+  bool pendingBackFromDef = false;
+  bool pendingExitToReader = false;
   ButtonNavigator buttonNavigator;
 
   // Delete confirmation state

@@ -8,7 +8,6 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "DictionarySuggestionsActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -18,7 +17,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
-#include "util/LookupHistory.h"
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
@@ -540,56 +538,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::LOOKED_UP_WORDS: {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      const std::string bookCachePath = epub->getCachePath();
-      const int readerFontId = SETTINGS.getReaderFontId();
 
       exitActivity();
       enterNewActivity(new LookedUpWordsActivity(
-          renderer, mappedInput, bookCachePath,
-          [this]() {
-            // On back from looked up words
-            pendingSubactivityExit = true;
-          },
-          [this, bookCachePath, readerFontId](const std::string& headword) {
-            // Look up the word and show definition with progress bar
-            Rect popupLayout = GUI.drawPopup(renderer, "Looking up...");
-
-            std::string definition = Dictionary::lookup(
-                headword, [this, &popupLayout](int percent) { GUI.fillPopupProgress(renderer, popupLayout, percent); });
-
-            if (definition.empty()) {
-              // Try stem variants
-              auto stems = Dictionary::getStemVariants(headword);
-              for (const auto& stem : stems) {
-                std::string stemDef = Dictionary::lookup(stem);
-                if (!stemDef.empty()) {
-                  exitActivity();
-                  enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, stem, stemDef, readerFontId,
-                                                                    [this]() { pendingSubactivityExit = true; }));
-                  return;
-                }
-              }
-
-              // Show similar word suggestions
-              auto similar = Dictionary::findSimilar(headword, 6);
-              if (!similar.empty()) {
-                exitActivity();
-                enterNewActivity(new DictionarySuggestionsActivity(
-                    renderer, mappedInput, headword, similar, readerFontId, bookCachePath,
-                    [this]() { pendingSubactivityExit = true; }, [this]() { pendingSubactivityExit = true; }));
-                return;
-              }
-
-              GUI.drawPopup(renderer, "Not found");
-              renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-              vTaskDelay(1500 / portTICK_PERIOD_MS);
-              return;
-            }
-
-            exitActivity();
-            enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, headword, definition, readerFontId,
-                                                              [this]() { pendingSubactivityExit = true; }));
-          }));
+          renderer, mappedInput, epub->getCachePath(), SETTINGS.getReaderFontId(),
+          [this]() { pendingSubactivityExit = true; }, [this]() { pendingSubactivityExit = true; }));
       xSemaphoreGive(renderingMutex);
       break;
     }
