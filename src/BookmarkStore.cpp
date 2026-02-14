@@ -5,21 +5,15 @@
 #include <algorithm>
 
 std::string BookmarkStore::getBookmarkPath(const std::string& bookPath) {
-  std::string filename;
-  const auto lastSlash = bookPath.rfind('/');
-  if (lastSlash != std::string::npos) {
-    filename = bookPath.substr(lastSlash + 1);
-  } else {
-    filename = bookPath;
+  // FNV-1a hash of full book path to avoid filename collisions
+  uint32_t hash = 2166136261u;
+  for (const char c : bookPath) {
+    hash ^= static_cast<uint8_t>(c);
+    hash *= 16777619u;
   }
-  const auto lastDot = filename.rfind('.');
-  if (lastDot != std::string::npos) {
-    filename.resize(lastDot);
-  }
-  if (filename.empty()) {
-    filename = "untitled";
-  }
-  return std::string(BOOKMARKS_DIR) + "/" + filename + ".bookmarks";
+  char hexHash[9];
+  snprintf(hexHash, sizeof(hexHash), "%08x", hash);
+  return std::string(BOOKMARKS_DIR) + "/" + hexHash + ".bookmarks";
 }
 
 std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookPath) {
@@ -106,16 +100,17 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
     return true;
   }
 
+  // Reject if at capacity (uint8_t count field supports max 255)
+  if (entries.size() >= 255) {
+    Serial.printf("[%lu] [%s] Bookmark limit reached (255)\n", millis(), TAG);
+    return false;
+  }
+
   entries.push_back(entry);
 
   // Sort by bookPercent ascending
   std::sort(entries.begin(), entries.end(),
             [](const BookmarkEntry& a, const BookmarkEntry& b) { return a.bookPercent < b.bookPercent; });
-
-  // Enforce max 255 entries (uint8_t count)
-  if (entries.size() > 255) {
-    entries.resize(255);
-  }
 
   const bool ok = writeBookmarks(path, entries);
   if (ok) {

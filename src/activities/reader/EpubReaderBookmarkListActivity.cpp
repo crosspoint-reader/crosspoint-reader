@@ -90,14 +90,16 @@ void EpubReaderBookmarkListActivity::loop() {
     onGoBack();
   } else if (prevReleased) {
     if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + totalItems) % totalItems;
+      const int prevPage = selectorIndex / pageItems - 1;
+      selectorIndex = prevPage >= 0 ? prevPage * pageItems : (totalItems - 1) / pageItems * pageItems;
     } else {
       selectorIndex = (selectorIndex + totalItems - 1) % totalItems;
     }
     requestUpdate();
   } else if (nextReleased) {
     if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % totalItems;
+      const int nextPageStart = (selectorIndex / pageItems + 1) * pageItems;
+      selectorIndex = nextPageStart < totalItems ? nextPageStart : 0;
     } else {
       selectorIndex = (selectorIndex + 1) % totalItems;
     }

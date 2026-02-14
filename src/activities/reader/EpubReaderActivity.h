@@ -24,8 +24,8 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingSubactivityExit = false;  // Defer subactivity exit to avoid use-after-free
   bool pendingGoHome = false;           // Defer go home to avoid race condition with display task
   bool pendingScreenshot = false;
-  bool skipNextButtonCheck = false;     // Skip button processing for one frame after subactivity exit
-  std::string statusBarOverride;        // Temporary override text (e.g. "Bookmarked"), cleared on page turn
+  bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
+  std::string statusBarOverride;     // Temporary override text (e.g. "Bookmarked"), cleared on page turn
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
