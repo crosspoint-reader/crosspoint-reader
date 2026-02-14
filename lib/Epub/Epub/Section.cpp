@@ -189,7 +189,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
         LOG_ERR("SCT", "Failed to load CSS from cache");
       }
     }
-
   }
   ChapterHtmlSlimParser visitor(
       tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
