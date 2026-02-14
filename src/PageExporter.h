@@ -4,13 +4,7 @@
 #include <string>
 #include <vector>
 
-// A single captured page with its metadata.
-struct CapturedPage {
-  std::string pageText;
-  std::string chapterTitle;
-  int bookPercent;
-  int chapterPercent;
-};
+#include "ClippingStore.h"
 
 // Exports captured clippings to per-book .md files on the SD card.
 // Files are stored at /clippings/<book-filename>.md
