@@ -104,13 +104,15 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   }
 
   serialization::readPod(file, pageCount);
+  serialization::readPod(file, cachedLutOffset);
   file.close();
   LOG_DBG("SCT", "Deserialization succeeded: %d pages", pageCount);
   return true;
 }
 
-// Your updated class method (assuming you are using the 'SD' object, which is a wrapper for a specific filesystem)
-bool Section::clearCache() const {
+bool Section::clearCache() {
+  file.close();
+  cachedLutOffset = 0;
   if (!Storage.exists(filePath.c_str())) {
     LOG_DBG("SCT", "Cache does not exist, no action needed");
     return true;
@@ -129,6 +131,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                 const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
                                 const std::function<void()>& popupFn) {
+#ifdef CROSSPOINT_PERF_TIMING
+  const auto t0 = millis();
+#endif
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
 
@@ -197,7 +202,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     return false;
   }
 
-  const uint32_t lutOffset = file.position();
+  cachedLutOffset = file.position();
   bool hasFailedLutRecords = false;
   // Write LUT
   for (const uint32_t& pos : lut) {
@@ -218,25 +223,37 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   // Go back and write LUT offset
   file.seek(HEADER_SIZE - sizeof(uint32_t) - sizeof(pageCount));
   serialization::writePod(file, pageCount);
-  serialization::writePod(file, lutOffset);
+  serialization::writePod(file, cachedLutOffset);
   file.close();
+
+#ifdef CROSSPOINT_PERF_TIMING
+  Serial.printf("[%lu] [SCT] createSectionFile: %lu ms, %d pages\n", millis(), millis() - t0, pageCount);
+#endif
+
   return true;
 }
 
 std::unique_ptr<Page> Section::loadPageFromSectionFile() {
-  if (!Storage.openFileForRead("SCT", filePath, file)) {
-    return nullptr;
+#ifdef CROSSPOINT_PERF_TIMING
+  const auto t0 = millis();
+#endif
+
+  if (!file) {
+    if (!Storage.openFileForRead("SCT", filePath, file)) {
+      return nullptr;
+    }
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t));
-  uint32_t lutOffset;
-  serialization::readPod(file, lutOffset);
-  file.seek(lutOffset + sizeof(uint32_t) * currentPage);
+  file.seek(cachedLutOffset + sizeof(uint32_t) * currentPage);
   uint32_t pagePos;
   serialization::readPod(file, pagePos);
   file.seek(pagePos);
 
   auto page = Page::deserialize(file);
-  file.close();
+
+#ifdef CROSSPOINT_PERF_TIMING
+  Serial.printf("[%lu] [SCT] loadPage %d: %lu ms\n", millis(), currentPage, millis() - t0);
+#endif
+
   return page;
 }

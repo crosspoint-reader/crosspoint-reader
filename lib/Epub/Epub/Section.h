@@ -13,6 +13,7 @@ class Section {
   GfxRenderer& renderer;
   std::string filePath;
   FsFile file;
+  uint32_t cachedLutOffset = 0;
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
@@ -28,10 +29,10 @@ class Section {
         spineIndex(spineIndex),
         renderer(renderer),
         filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin") {}
-  ~Section() = default;
+  ~Section() { file.close(); }
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle);
-  bool clearCache() const;
+  bool clearCache();
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
                          const std::function<void()>& popupFn = nullptr);
