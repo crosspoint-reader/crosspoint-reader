@@ -12,7 +12,7 @@ struct BookmarkEntry {
 };
 
 // Stores and retrieves bookmarks in binary files on the SD card.
-// Files are stored at /.crosspoint/bookmarks/<book-filename>.bookmarks
+// Files are stored at /.crosspoint/bookmarks/<path-hash>.bookmarks
 // Binary format: [version:1][count:1][entries: count * 6 bytes]
 // Each entry: [bookPercent:1][chapterPercent:1][spineIndex:2 LE][pageIndex:2 LE]
 class BookmarkStore {
