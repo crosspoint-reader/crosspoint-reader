@@ -18,7 +18,7 @@ int EpubReaderBookmarkListActivity::getPageItems() const {
   const auto orientation = renderer.getOrientation();
   const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
   const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int startY = 60 + hintGutterHeight;
+  const int startY = 75 + hintGutterHeight;
   const int availableHeight = screenHeight - startY - lineHeight;
   return std::max(1, availableHeight / lineHeight);
 }
@@ -169,12 +169,12 @@ void EpubReaderBookmarkListActivity::renderScreen() {
   }
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(contentX, 60 + contentY + (selectorIndex % pageItems) * 30 - 2, contentWidth - 1, 30);
+  renderer.fillRect(contentX, 75 + contentY + (selectorIndex % pageItems) * 30 - 2, contentWidth - 1, 30);
 
   for (int i = 0; i < pageItems; i++) {
     const int itemIndex = pageStartIndex + i;
     if (itemIndex >= totalItems) break;
-    const int displayY = 60 + contentY + i * 30;
+    const int displayY = 75 + contentY + i * 30;
     const bool isSelected = (itemIndex == selectorIndex);
 
     const auto& bk = bookmarks[itemIndex];
