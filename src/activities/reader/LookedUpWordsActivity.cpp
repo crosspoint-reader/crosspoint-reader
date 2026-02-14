@@ -30,6 +30,7 @@ void LookedUpWordsActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
   renderingMutex = xSemaphoreCreateMutex();
   words = LookupHistory::load(cachePath);
+  std::reverse(words.begin(), words.end());
   updateRequired = true;
   xTaskCreate(&LookedUpWordsActivity::taskTrampoline, "LookedUpTask", 4096, this, 1, &displayTaskHandle);
 }
@@ -94,13 +95,26 @@ void LookedUpWordsActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(words.size()));
+  const int totalItems = static_cast<int>(words.size());
+  const int pageItems = getPageItems();
+
+  buttonNavigator.onNextRelease([this, totalItems] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, totalItems);
     updateRequired = true;
   });
 
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(words.size()));
+  buttonNavigator.onPreviousRelease([this, totalItems] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
+    selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, totalItems, pageItems);
+    updateRequired = true;
+  });
+
+  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
+    selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, totalItems, pageItems);
     updateRequired = true;
   });
 
@@ -113,6 +127,17 @@ void LookedUpWordsActivity::loop() {
     onBack();
     return;
   }
+}
+
+int LookedUpWordsActivity::getPageItems() const {
+  constexpr int lineHeight = 30;
+  const auto orient = renderer.getOrientation();
+  const auto metrics = UITheme::getInstance().getMetrics();
+  const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterHeight = isInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
+  const int startY = 60 + hintGutterHeight;
+  const int availableHeight = renderer.getScreenHeight() - startY - lineHeight;
+  return std::max(1, availableHeight / lineHeight);
 }
 
 void LookedUpWordsActivity::renderScreen() {
@@ -143,13 +168,13 @@ void LookedUpWordsActivity::renderScreen() {
   if (words.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, 300, "No words looked up yet");
   } else {
-    const int screenHeight = renderer.getScreenHeight();
-    const int pageItems = std::max(1, (screenHeight - startY - 40) / lineHeight);
+    const int pageItems = getPageItems();
+    const int totalItems = static_cast<int>(words.size());
     const int pageStart = selectedIndex / pageItems * pageItems;
 
     for (int i = 0; i < pageItems; i++) {
       int idx = pageStart + i;
-      if (idx >= static_cast<int>(words.size())) break;
+      if (idx >= totalItems) break;
 
       const int displayY = startY + i * lineHeight;
       const bool isSelected = (idx == selectedIndex);
@@ -159,6 +184,16 @@ void LookedUpWordsActivity::renderScreen() {
       }
 
       renderer.drawText(UI_10_FONT_ID, leftPadding, displayY, words[idx].c_str(), !isSelected);
+    }
+
+    // Page indicator
+    const int totalPages = (totalItems + pageItems - 1) / pageItems;
+    if (totalPages > 1) {
+      const int currentPage = pageStart / pageItems + 1;
+      std::string pageInfo = std::to_string(currentPage) + "/" + std::to_string(totalPages);
+      const int pageInfoWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo.c_str());
+      renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - rightPadding - pageInfoWidth,
+                        renderer.getScreenHeight() - 70, pageInfo.c_str());
     }
   }
 

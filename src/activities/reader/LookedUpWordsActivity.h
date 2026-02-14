@@ -42,6 +42,7 @@ class LookedUpWordsActivity final : public ActivityWithSubactivity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
 
+  int getPageItems() const;
   void renderScreen();
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
