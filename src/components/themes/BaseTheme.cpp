@@ -102,14 +102,21 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
 }
 
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
-                                const char* btn4) const {
+                                const char* btn4, const bool allowInvertedText) const {
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
-  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  const bool invertText = allowInvertedText && (orig_orientation == GfxRenderer::Orientation::PortraitInverted);
+
+  // The hints look bad if most of a menu is inverted but they aren't
+  if (invertText) {
+    renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+  } else {
+    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  }
 
   const int pageHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
-  constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;  // Distance from bottom
+  const int buttonY = invertText ? pageHeight : BaseMetrics::values.buttonHintsHeight; // Distance from bottom
   constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
   constexpr int buttonPositions[] = {25, 130, 245, 350};
   const char* labels[] = {btn1, btn2, btn3, btn4};
@@ -117,7 +124,7 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   for (int i = 0; i < 4; i++) {
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = buttonPositions[i];
+      const int x = buttonPositions[invertText ? (3-i) : i];
       renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
       const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);

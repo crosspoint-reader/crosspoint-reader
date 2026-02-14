@@ -134,6 +134,7 @@ uint8_t CrossPointSettings::writeSettings(FsFile& file, bool count_only) const {
   writer.writeItem(file, frontButtonRight);
   writer.writeItem(file, fadingFix);
   writer.writeItem(file, embeddedStyle);
+  writer.writeItem(file, autoBtnOrientation);
   // New fields need to be added at end for backward compatibility
 
   return writer.item_count;
@@ -260,6 +261,8 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, fadingFix);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, embeddedStyle);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, autoBtnOrientation, AUTO_BUTTON_ORIENTATION_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
   } while (false);

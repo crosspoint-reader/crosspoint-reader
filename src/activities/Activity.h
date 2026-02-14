@@ -47,6 +47,7 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
+  virtual bool supportsOrientation() const { return false; }
 
   // RAII helper to lock rendering mutex for the duration of a scope.
   class RenderLock {

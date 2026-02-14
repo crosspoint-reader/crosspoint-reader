@@ -45,4 +45,5 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void onExit() override;
   void loop() override;
   void render(Activity::RenderLock&& lock) override;
+  bool supportsOrientation() const override { return true; }
 };
