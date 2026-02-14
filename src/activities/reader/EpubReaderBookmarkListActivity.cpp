@@ -156,6 +156,10 @@ void EpubReaderBookmarkListActivity::renderScreen() {
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, titleText, EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, titleText, true, EpdFontFamily::BOLD);
 
+  if (!confirmingDelete && totalItems > 0) {
+    renderer.drawCenteredText(UI_10_FONT_ID, 40 + contentY, "Hold confirm to delete");
+  }
+
   if (totalItems == 0) {
     renderer.drawCenteredText(UI_10_FONT_ID, 300, "No bookmarks", true);
     const auto labels = mappedInput.mapLabels("« Back", "", "", "");
