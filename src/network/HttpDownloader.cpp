@@ -250,6 +250,7 @@ bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* cons
   }
 
   LOG_INF(loggerPrefix, "Downloading missing assets...");
+  const unsigned long downloadStartTime = millis();
 
   // Download missing assets
   for (size_t i = 0; assetNames[i] != nullptr; ++i) {
@@ -276,6 +277,7 @@ bool HttpDownloader::ensureAssetsAvailable(AssetType assetType, const char* cons
     LOG_INF(loggerPrefix, "Successfully downloaded: %s", fullSdPath.c_str());
   }
 
-  LOG_INF(loggerPrefix, "All assets downloaded successfully");
+  const unsigned long downloadEndTime = millis();
+  LOG_INF(loggerPrefix, "Asset download completed in %lu ms", downloadEndTime - downloadStartTime);
   return true;
 }
