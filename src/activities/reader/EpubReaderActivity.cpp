@@ -564,9 +564,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                 std::string stemDef = Dictionary::lookup(stem);
                 if (!stemDef.empty()) {
                   exitActivity();
-                  enterNewActivity(new DictionaryDefinitionActivity(
-                      renderer, mappedInput, stem, stemDef, readerFontId,
-                      [this]() { pendingSubactivityExit = true; }));
+                  enterNewActivity(new DictionaryDefinitionActivity(renderer, mappedInput, stem, stemDef, readerFontId,
+                                                                    [this]() { pendingSubactivityExit = true; }));
                   return;
                 }
               }
@@ -577,8 +576,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                 exitActivity();
                 enterNewActivity(new DictionarySuggestionsActivity(
                     renderer, mappedInput, headword, similar, readerFontId, bookCachePath,
-                    [this]() { pendingSubactivityExit = true; },
-                    [this]() { pendingSubactivityExit = true; }));
+                    [this]() { pendingSubactivityExit = true; }, [this]() { pendingSubactivityExit = true; }));
                 return;
               }
 
