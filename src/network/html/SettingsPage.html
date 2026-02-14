@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CrossPoint Reader - Settings</title>
   <style>
-  body {
+    body {
       --font-color: #333;
       --background: #f5f5f5;
       --title-color: #2c3e50;
@@ -329,7 +329,7 @@
         width: 100px;
       }
       footer {
-        justify-self: center;
+        justify-content: center;
       }
     }
   </style>
@@ -459,26 +459,26 @@
 
   async function loadSettings() {
     try {
-      // TODO: Uncomment before merge
-      // const response = await fetch('/api/settings');
-      // if (!response.ok) {
-      //   throw new Error('Failed to load settings: ' + response.status);
-      // }
-      // allSettings = await response.json();
-      allSettings = [
-        { category: 'Display', key: 'sleep_screen', name: 'Sleep Screen', type: 'enum', options: ['Cover', 'None', 'Dark'], value: 0 },
-        { category: 'Display', key: 'sleep_screen_cover_mode', name: 'Sleep Screen Cover Mode', type: 'enum', options: ['Fit', 'Crop'], value: 1 },
-        { category: 'Display', key: 'sleep_screen_cover_filter', name: 'Sleep Screen Cover Filter', type: 'enum', options: ['None', 'Grayscale', 'Inverted'], value: 0 },
-        { category: 'Reader', key: 'font_family', name: 'Font Family', type: 'enum', options: ['Bookerly'], value: 0 },
-        { category: 'Reader', key: 'font_size', name: 'Font Size', type: 'enum', options: ['Small', 'Medium', 'Large'], value: 1 },
-        { category: 'Reader', key: 'line_spacing', name: 'Line Spacing', type: 'enum', options: ['Tight', 'Normal', 'Loose'], value: 1 },
-        { category: 'Reader', key: 'margin_size', name: 'Screen Margin', type: 'enum', options: ['15'], value: 0 },
-        { category: 'Reader', key: 'text_example', name: 'Text Example', type: 'string', value: 'test' },
-        { category: 'Reader', key: 'number_example', name: 'Number Example', type: 'value', value: 10 },
-        { category: 'Reader', key: 'invalid_example', name: 'Invalid Example', type: 'invalid', value: 'test' },
-        { category: 'Controls', key: 'side_button_layout', name: 'Side Button Layout', type: 'enum', options: ['Prev, Next', 'Next, Prev'], value: 0 },
-        { category: 'Controls', key: 'long_press_chapter_skip', name: 'Long Press Chapter Skip', type: 'toggle', value: 1 },
-      ];
+      const response = await fetch('/api/settings');
+      if (!response.ok) {
+        throw new Error('Failed to load settings: ' + response.status);
+      }
+      allSettings = await response.json();
+      // Mock data
+      // allSettings = [
+      //   { category: 'Display', key: 'sleep_screen', name: 'Sleep Screen', type: 'enum', options: ['Cover', 'None', 'Dark'], value: 0 },
+      //   { category: 'Display', key: 'sleep_screen_cover_mode', name: 'Sleep Screen Cover Mode', type: 'enum', options: ['Fit', 'Crop'], value: 1 },
+      //   { category: 'Display', key: 'sleep_screen_cover_filter', name: 'Sleep Screen Cover Filter', type: 'enum', options: ['None', 'Grayscale', 'Inverted'], value: 0 },
+      //   { category: 'Reader', key: 'font_family', name: 'Font Family', type: 'enum', options: ['Bookerly'], value: 0 },
+      //   { category: 'Reader', key: 'font_size', name: 'Font Size', type: 'enum', options: ['Small', 'Medium', 'Large'], value: 1 },
+      //   { category: 'Reader', key: 'line_spacing', name: 'Line Spacing', type: 'enum', options: ['Tight', 'Normal', 'Loose'], value: 1 },
+      //   { category: 'Reader', key: 'margin_size', name: 'Screen Margin', type: 'enum', options: ['15'], value: 0 },
+      //   { category: 'Reader', key: 'text_example', name: 'Text Example', type: 'string', value: 'test' },
+      //   { category: 'Reader', key: 'number_example', name: 'Number Example', type: 'value', value: 10 },
+      //   { category: 'Reader', key: 'invalid_example', name: 'Invalid Example', type: 'invalid', value: 'test' },
+      //   { category: 'Controls', key: 'side_button_layout', name: 'Side Button Layout', type: 'enum', options: ['Prev, Next', 'Next, Prev'], value: 0 },
+      //   { category: 'Controls', key: 'long_press_chapter_skip', name: 'Long Press Chapter Skip', type: 'toggle', value: 1 },
+      // ];
 
       // Store original values
       originalValues = {};

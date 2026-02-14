@@ -6,21 +6,21 @@
   <title>CrossPoint Reader - Files</title>
   <style>
     body {
-        --font-color: #333;
-        --background: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-background: white;
-        --label-color: #7f8c8d;
-        --muted-color: #95a5a6;
-        --status-ok: #27ae60;
-        --border-color: #eee;
-        --accent-color-rgb: 110, 154, 130;
-        --accent-color: rgb(var(--accent-color-rgb));
-        --accent-color-10: rgba(var(--accent-color-rgb), .1);
-        --accent-color-25: rgba(var(--accent-color-rgb), .25);
-        --accent-color-50: rgba(var(--accent-color-rgb), .5);
-        --accent-color-75: rgba(var(--accent-color-rgb), .75);
-        --accent-color-highlight: #5a8c73;
+      --font-color: #333;
+      --background: #f5f5f5;
+      --title-color: #2c3e50;
+      --card-background: white;
+      --label-color: #7f8c8d;
+      --muted-color: #95a5a6;
+      --status-ok: #27ae60;
+      --border-color: #eee;
+      --accent-color-rgb: 110, 154, 130;
+      --accent-color: rgb(var(--accent-color-rgb));
+      --accent-color-10: rgba(var(--accent-color-rgb), .1);
+      --accent-color-25: rgba(var(--accent-color-rgb), .25);
+      --accent-color-50: rgba(var(--accent-color-rgb), .5);
+      --accent-color-75: rgba(var(--accent-color-rgb), .75);
+      --accent-color-highlight: #5a8c73;
 
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       Oxygen, Ubuntu, sans-serif;
@@ -1012,47 +1012,47 @@
       }
       files = await response.json();
     } catch (e) {
-      files = [
-        {
-          "name": "Classics",
-          "type": "directory",
-          "size": 0,
-          "isDirectory": true
-        },
-        {
-          "name": "Conversacion en La Catedral - Mario Vargas Llosa.epub",
-          "type": "file",
-          "size": 727000,
-          "isEpub": true
-        },
-        {
-          "name": "Homero - La Iliada [2392] (r1.6).epub",
-          "type": "file",
-          "size": 1200000,
-          "isEpub": true
-        },
-        {
-          "name": "Homero - La Odisea [2408] (r1.4).epub",
-          "type": "file",
-          "size": 1480000,
-          "isEpub": true
-        },
-        {
-          "name": "Pedro Paramo - Juan Rulfo_141.txt",
-          "type": "file",
-          "size": 213100,
-          "isEpub": false
-        },
-        {
-          "name": "Viajes - Beatriz Sarlo.pdf",
-          "type": "file",
-          "size": 505430,
-          "isEpub": false
-        }
-      ];
-      // TODO: Uncomment before merge
-      // fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
-      // return;
+      // Mock data
+      // files = [
+      //   {
+      //     "name": "Classics",
+      //     "type": "directory",
+      //     "size": 0,
+      //     "isDirectory": true
+      //   },
+      //   {
+      //     "name": "Conversacion en La Catedral - Mario Vargas Llosa.epub",
+      //     "type": "file",
+      //     "size": 727000,
+      //     "isEpub": true
+      //   },
+      //   {
+      //     "name": "Homero - La Iliada [2392] (r1.6).epub",
+      //     "type": "file",
+      //     "size": 1200000,
+      //     "isEpub": true
+      //   },
+      //   {
+      //     "name": "Homero - La Odisea [2408] (r1.4).epub",
+      //     "type": "file",
+      //     "size": 1480000,
+      //     "isEpub": true
+      //   },
+      //   {
+      //     "name": "Pedro Paramo - Juan Rulfo_141.txt",
+      //     "type": "file",
+      //     "size": 213100,
+      //     "isEpub": false
+      //   },
+      //   {
+      //     "name": "Viajes - Beatriz Sarlo.pdf",
+      //     "type": "file",
+      //     "size": 505430,
+      //     "isEpub": false
+      //   }
+      // ];
+      fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
+      return;
     }
 
     let folderCount = 0;
@@ -1156,17 +1156,19 @@
     uploadBtn.disabled = !(files.length > 0);
   }
 
-let failedUploadsGlobal = [
-  {
-    name: 'example_failed_upload.epub',
-    error: 'Connection lost'
-  },
-  {
-    name: 'another_failed_upload.pdf',
-    error: 'File too large'
-  }
-];
-showFailedUploadsBanner();
+let failedUploadsGlobal = [];
+// Mock data
+// let failedUploadsGlobal = [
+//   {
+//     name: 'example_failed_upload.epub',
+//     error: 'Connection lost'
+//   },
+//   {
+//     name: 'another_failed_upload.pdf',
+//     error: 'File too large'
+//   }
+// ];
+// showFailedUploadsBanner();
 let wsConnection = null;
 const WS_PORT = 81;
 const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability

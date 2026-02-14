@@ -14,7 +14,8 @@
         --muted-color: #95a5a6;
         --status-ok: #27ae60;
         --border-color: #eee;
-        --accent-color: #6e9a82;
+        --accent-color-rgb: 110, 154, 130;
+        --accent-color: rgb(var(--accent-color-rgb));
         --accent-color-10: rgba(var(--accent-color-rgb), .1);
         --accent-color-25: rgba(var(--accent-color-rgb), .25);
         --accent-color-50: rgba(var(--accent-color-rgb), .5);
@@ -99,36 +100,39 @@
         font-size: 0.9em;
       }
       .nav-links {
-        margin: 20px 0 15px;
-        border-bottom: solid 2px var(--border-color);
-        display: flex;
-        gap: 8px;
-        padding-bottom: 8px;
-      }
-      .nav-links a {
-        padding: 8px 15px;
-        font-size: 0.85em;
-        color: var(--font-color);
-        text-decoration: none;
-        border-radius: 4px;
-      }
-      .nav-links a.active {
-        color: var(--font-color);
-        text-decoration: none;
-        background: var(--accent-color);
-      }
-      .nav-links a:not(.active):hover {
-        color: var(--font-color);
-        text-decoration: none;
-        background: var(--border-color);
-      }
-      a {
-        color: var(--accent-color);
-        text-decoration: none;
-      }
-      a:hover {
-        text-decoration: underline;
-      }
+      margin: 20px 0 15px;
+      border-bottom: solid 2px var(--border-color);
+      display: flex;
+      gap: 8px;
+      padding-bottom: 8px;
+    }
+    .nav-links a {
+      padding: 8px 15px;
+      font-size: 0.85em;
+      color: var(--font-color);
+      text-decoration: none;
+      border-radius: 4px;
+    }
+    .nav-links a.active {
+      color: #FFF;
+      text-decoration: none;
+      background: var(--accent-color);
+    }
+    .nav-links a:not(.active):hover {
+      color: var(--font-color);
+      text-decoration: none;
+      background: var(--border-color);
+    }
+    .nav-links a.active:hover {
+      background: var(--accent-color-highlight);
+    }
+    a {
+      color: var(--accent-color);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
       footer {
         display: flex;
         gap: 6px;
@@ -184,7 +188,7 @@
       <h2>Device Status</h2>
       <div class="info-row">
         <span class="label">Version</span>
-        <span class="value" id="version"></span>
+        <span class="value" id="version">1.0.0</span>
       </div>
       <div class="info-row">
         <span class="label">WiFi Status</span>
@@ -192,11 +196,11 @@
       </div>
       <div class="info-row">
         <span class="label">IP Address</span>
-        <span class="value" id="ip-address"></span>
+        <span class="value" id="ip-address">192.168.1.1</span>
       </div>
       <div class="info-row">
         <span class="label">Free Memory</span>
-        <span class="value" id="free-heap"></span>
+        <span class="value" id="free-heap">132,423 bytes</span>
       </div>
     </div>
 
