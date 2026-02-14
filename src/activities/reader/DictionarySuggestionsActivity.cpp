@@ -7,7 +7,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
-#include "util/LookupHistory.h"
 
 void DictionarySuggestionsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<DictionarySuggestionsActivity*>(param);
@@ -89,8 +88,6 @@ void DictionarySuggestionsActivity::loop() {
       return;
     }
 
-    LookupHistory::addWord(cachePath, originalWord);
-    LookupHistory::addWord(cachePath, selected);
     enterNewActivity(new DictionaryDefinitionActivity(
         renderer, mappedInput, selected, definition, readerFontId, [this]() { pendingBackFromDef = true; },
         [this]() { pendingExitToReader = true; }));

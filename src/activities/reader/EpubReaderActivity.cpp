@@ -8,6 +8,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionarySuggestionsActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -557,6 +558,30 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                 headword, [this, &popupLayout](int percent) { GUI.fillPopupProgress(renderer, popupLayout, percent); });
 
             if (definition.empty()) {
+              // Try stem variants
+              auto stems = Dictionary::getStemVariants(headword);
+              for (const auto& stem : stems) {
+                std::string stemDef = Dictionary::lookup(stem);
+                if (!stemDef.empty()) {
+                  exitActivity();
+                  enterNewActivity(new DictionaryDefinitionActivity(
+                      renderer, mappedInput, stem, stemDef, readerFontId,
+                      [this]() { pendingSubactivityExit = true; }));
+                  return;
+                }
+              }
+
+              // Show similar word suggestions
+              auto similar = Dictionary::findSimilar(headword, 6);
+              if (!similar.empty()) {
+                exitActivity();
+                enterNewActivity(new DictionarySuggestionsActivity(
+                    renderer, mappedInput, headword, similar, readerFontId, bookCachePath,
+                    [this]() { pendingSubactivityExit = true; },
+                    [this]() { pendingSubactivityExit = true; }));
+                return;
+              }
+
               GUI.drawPopup(renderer, "Not found");
               renderer.displayBuffer(HalDisplay::FAST_REFRESH);
               vTaskDelay(1500 / portTICK_PERIOD_MS);

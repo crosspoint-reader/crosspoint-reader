@@ -378,8 +378,9 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
 
+    LookupHistory::addWord(cachePath, cleaned);
+
     if (!definition.empty()) {
-      LookupHistory::addWord(cachePath, cleaned);
       enterNewActivity(new DictionaryDefinitionActivity(
           renderer, mappedInput, cleaned, definition, fontId, [this]() { pendingBackFromDef = true; },
           [this]() { pendingExitToReader = true; }));
@@ -391,7 +392,6 @@ void DictionaryWordSelectActivity::loop() {
     for (const auto& stem : stems) {
       std::string stemDef = Dictionary::lookup(stem);
       if (!stemDef.empty()) {
-        LookupHistory::addWord(cachePath, stem);
         enterNewActivity(new DictionaryDefinitionActivity(
             renderer, mappedInput, stem, stemDef, fontId, [this]() { pendingBackFromDef = true; },
             [this]() { pendingExitToReader = true; }));
