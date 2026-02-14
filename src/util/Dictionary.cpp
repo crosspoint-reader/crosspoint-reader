@@ -316,14 +316,17 @@ std::vector<std::string> Dictionary::getStemVariants(const std::string& word) {
 
   // Plurals (longer suffixes first to avoid partial matches)
   if (endsWith("sses")) add(word.substr(0, len - 2));
+  if (endsWith("ses")) add(word.substr(0, len - 2) + "is");  // analyses → analysis
   if (endsWith("ies")) {
     add(word.substr(0, len - 3) + "y");
-    if (len == 4) add(word.substr(0, len - 1));
+    add(word.substr(0, len - 2));  // dies → die, ties → tie
   }
   if (endsWith("ves")) {
-    add(word.substr(0, len - 3) + "f");
-    add(word.substr(0, len - 3) + "fe");
+    add(word.substr(0, len - 3) + "f");   // wolves → wolf
+    add(word.substr(0, len - 3) + "fe");  // knives → knife
+    add(word.substr(0, len - 1));         // misgives → misgive
   }
+  if (endsWith("men")) add(word.substr(0, len - 3) + "man");  // firemen → fireman
   if (endsWith("es") && !endsWith("sses") && !endsWith("ies") && !endsWith("ves")) {
     add(word.substr(0, len - 2));
     add(word.substr(0, len - 1));
@@ -358,10 +361,18 @@ std::vector<std::string> Dictionary::getStemVariants(const std::string& word) {
   }
 
   // Adverb
-  if (endsWith("ily")) {
+  if (endsWith("ically")) {
+    add(word.substr(0, len - 6) + "ic");  // historically → historic
+    add(word.substr(0, len - 4));         // basically → basic
+  }
+  if (endsWith("ally") && !endsWith("ically")) {
+    add(word.substr(0, len - 4) + "al");  // accidentally → accidental
+    add(word.substr(0, len - 2));         // naturally → natur... (fallback to -ly strip)
+  }
+  if (endsWith("ily") && !endsWith("ally")) {
     add(word.substr(0, len - 3) + "y");
   }
-  if (endsWith("ly") && !endsWith("ily")) {
+  if (endsWith("ly") && !endsWith("ily") && !endsWith("ally")) {
     add(word.substr(0, len - 2));
   }
 
@@ -396,18 +407,69 @@ std::vector<std::string> Dictionary::getStemVariants(const std::string& word) {
     add(word.substr(0, len - 4));
     add(word.substr(0, len - 4) + "e");
   }
-  if (endsWith("tion")) add(word.substr(0, len - 4) + "te");
-  if (endsWith("ation")) add(word.substr(0, len - 5) + "e");
+  if (endsWith("ible")) {
+    add(word.substr(0, len - 4));
+    add(word.substr(0, len - 4) + "e");
+  }
+  if (endsWith("ation")) {
+    add(word.substr(0, len - 5));          // information → inform
+    add(word.substr(0, len - 5) + "e");    // exploration → explore
+    add(word.substr(0, len - 5) + "ate");  // donation → donate
+  }
+  if (endsWith("tion") && !endsWith("ation")) {
+    add(word.substr(0, len - 4) + "te");  // completion → complete
+    add(word.substr(0, len - 3));         // action → act
+    add(word.substr(0, len - 3) + "e");   // reduction → reduce
+  }
+  if (endsWith("ion") && !endsWith("tion")) {
+    add(word.substr(0, len - 3));        // revision → revis (→ revise via +e)
+    add(word.substr(0, len - 3) + "e");  // revision → revise
+  }
+  if (endsWith("al") && !endsWith("ial")) {
+    add(word.substr(0, len - 2));
+    add(word.substr(0, len - 2) + "e");
+  }
+  if (endsWith("ial")) {
+    add(word.substr(0, len - 3));
+    add(word.substr(0, len - 3) + "e");
+  }
+  if (endsWith("ous")) {
+    add(word.substr(0, len - 3));        // dangerous → danger
+    add(word.substr(0, len - 3) + "e");  // famous → fame
+  }
+  if (endsWith("ive")) {
+    add(word.substr(0, len - 3));        // active → act
+    add(word.substr(0, len - 3) + "e");  // creative → create
+  }
+  if (endsWith("ize")) {
+    add(word.substr(0, len - 3));  // modernize → modern
+    add(word.substr(0, len - 3) + "e");
+  }
+  if (endsWith("ise")) {
+    add(word.substr(0, len - 3));  // advertise → advert
+    add(word.substr(0, len - 3) + "e");
+  }
+  if (endsWith("en")) {
+    add(word.substr(0, len - 2));        // darken → dark
+    add(word.substr(0, len - 2) + "e");  // widen → wide
+  }
 
   // Prefix removal
   if (len > 5 && word.compare(0, 2, "un") == 0) add(word.substr(2));
   if (len > 6 && word.compare(0, 3, "dis") == 0) add(word.substr(3));
+  if (len > 6 && word.compare(0, 3, "mis") == 0) add(word.substr(3));
+  if (len > 6 && word.compare(0, 3, "pre") == 0) add(word.substr(3));
+  if (len > 7 && word.compare(0, 4, "over") == 0) add(word.substr(4));
   if (len > 5 && word.compare(0, 2, "re") == 0) add(word.substr(2));
 
-  // Deduplicate
-  std::sort(variants.begin(), variants.end());
-  variants.erase(std::unique(variants.begin(), variants.end()), variants.end());
-  return variants;
+  // Deduplicate while preserving insertion order (inflectional stems first, prefixes last)
+  std::vector<std::string> deduped;
+  for (const auto& v : variants) {
+    if (std::find(deduped.begin(), deduped.end(), v) != deduped.end()) continue;
+    // cppcheck-suppress useStlAlgorithm
+    deduped.push_back(v);
+  }
+  return deduped;
 }
 
 int Dictionary::editDistance(const std::string& a, const std::string& b, int maxDist) {
