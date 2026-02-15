@@ -11,6 +11,31 @@
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
 
+// SD I/O Optimization: Stream adapter to eliminate temp file double I/O
+// Forwards ZIP decompression directly to parser without intermediate temp file
+template <typename Parser>
+class ParserStreamAdapter : public Print {
+  Parser& parser;
+  bool error = false;
+
+ public:
+  explicit ParserStreamAdapter(Parser& p) : parser(p) {}
+
+  size_t write(uint8_t byte) override { return write(&byte, 1); }
+
+  size_t write(const uint8_t* buffer, size_t size) override {
+    if (error) return 0;
+    const size_t processed = parser.write(buffer, size);
+    if (processed != size) {
+      error = true;
+      return 0;
+    }
+    return processed;
+  }
+
+  bool hasError() const { return error; }
+};
+
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
   size_t containerSize;
@@ -103,50 +128,46 @@ bool Epub::parseTocNcxFile() const {
 
   LOG_DBG("EBP", "Parsing toc ncx file: %s", tocNcxItem.c_str());
 
-  const auto tmpNcxPath = getCachePath() + "/toc.ncx";
-  FsFile tempNcxFile;
-  if (!Storage.openFileForWrite("EBP", tmpNcxPath, tempNcxFile)) {
+  // SD I/O Optimization #3: Stream directly from ZIP to parser (no temp file)
+  // Old: ZIP → temp file → close → reopen → read → parser
+  // New: ZIP → parser (eliminates 50% of I/O operations)
+
+  size_t ncxSize;
+  if (!getItemSize(tocNcxItem, &ncxSize)) {
+    LOG_ERR("EBP", "Could not get NCX file size");
     return false;
   }
-  readItemContentsToStream(tocNcxItem, tempNcxFile, 1024);
-  tempNcxFile.close();
-  if (!Storage.openFileForRead("EBP", tmpNcxPath, tempNcxFile)) {
-    return false;
-  }
-  const auto ncxSize = tempNcxFile.size();
 
   TocNcxParser ncxParser(contentBasePath, ncxSize, bookMetadataCache.get());
 
   if (!ncxParser.setup()) {
     LOG_ERR("EBP", "Could not setup toc ncx parser");
-    tempNcxFile.close();
     return false;
   }
 
-  const auto ncxBuffer = static_cast<uint8_t*>(malloc(1024));
-  if (!ncxBuffer) {
-    LOG_ERR("EBP", "Could not allocate memory for toc ncx parser");
-    tempNcxFile.close();
+  // Stream directly from ZIP decompression to parser
+  ParserStreamAdapter<TocNcxParser> adapter(ncxParser);
+
+  // Timing instrumentation for ZIP read performance
+  unsigned long zipReadStart = micros();
+  long heapBefore = static_cast<long>(ESP.getFreeHeap());
+
+  if (!readItemContentsToStream(tocNcxItem, adapter, 1024)) {
+    LOG_ERR("EBP", "Could not stream NCX contents to parser");
     return false;
   }
 
-  while (tempNcxFile.available()) {
-    const auto readSize = tempNcxFile.read(ncxBuffer, 1024);
-    if (readSize == 0) break;
-    const auto processedSize = ncxParser.write(ncxBuffer, readSize);
+  unsigned long zipReadTime = micros() - zipReadStart;
+  long heapAfter = static_cast<long>(ESP.getFreeHeap());
+  long heapDelta = heapBefore - heapAfter;
 
-    if (processedSize != readSize) {
-      LOG_ERR("EBP", "Could not process all toc ncx data");
-      free(ncxBuffer);
-      tempNcxFile.close();
-      return false;
-    }
+  if (adapter.hasError()) {
+    LOG_ERR("EBP", "Parser reported error during NCX streaming");
+    return false;
   }
 
-  free(ncxBuffer);
-  tempNcxFile.close();
-  Storage.remove(tmpNcxPath.c_str());
-
+  LOG_DBG("ZIP_IO", "NCX: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes", ncxSize, zipReadTime / 1000,
+          (float)zipReadTime / ncxSize, heapDelta);
   LOG_DBG("EBP", "Parsed TOC items");
   return true;
 }
@@ -160,17 +181,12 @@ bool Epub::parseTocNavFile() const {
 
   LOG_DBG("EBP", "Parsing toc nav file: %s", tocNavItem.c_str());
 
-  const auto tmpNavPath = getCachePath() + "/toc.nav";
-  FsFile tempNavFile;
-  if (!Storage.openFileForWrite("EBP", tmpNavPath, tempNavFile)) {
+  // SD I/O Optimization #3: Stream directly from ZIP to parser (no temp file)
+  size_t navSize;
+  if (!getItemSize(tocNavItem, &navSize)) {
+    LOG_ERR("EBP", "Could not get NAV file size");
     return false;
   }
-  readItemContentsToStream(tocNavItem, tempNavFile, 1024);
-  tempNavFile.close();
-  if (!Storage.openFileForRead("EBP", tmpNavPath, tempNavFile)) {
-    return false;
-  }
-  const auto navSize = tempNavFile.size();
 
   // Note: We can't use `contentBasePath` here as the nav file may be in a different folder to the content.opf
   // and the HTMLX nav file will have hrefs relative to itself
@@ -182,28 +198,29 @@ bool Epub::parseTocNavFile() const {
     return false;
   }
 
-  const auto navBuffer = static_cast<uint8_t*>(malloc(1024));
-  if (!navBuffer) {
-    LOG_ERR("EBP", "Could not allocate memory for toc nav parser");
+  // Stream directly from ZIP decompression to parser
+  ParserStreamAdapter<TocNavParser> adapter(navParser);
+
+  // Timing instrumentation for ZIP read performance
+  unsigned long zipReadStart = micros();
+  long heapBefore = static_cast<long>(ESP.getFreeHeap());
+
+  if (!readItemContentsToStream(tocNavItem, adapter, 1024)) {
+    LOG_ERR("EBP", "Could not stream NAV contents to parser");
     return false;
   }
 
-  while (tempNavFile.available()) {
-    const auto readSize = tempNavFile.read(navBuffer, 1024);
-    const auto processedSize = navParser.write(navBuffer, readSize);
+  unsigned long zipReadTime = micros() - zipReadStart;
+  long heapAfter = static_cast<long>(ESP.getFreeHeap());
+  long heapDelta = heapBefore - heapAfter;
 
-    if (processedSize != readSize) {
-      LOG_ERR("EBP", "Could not process all toc nav data");
-      free(navBuffer);
-      tempNavFile.close();
-      return false;
-    }
+  if (adapter.hasError()) {
+    LOG_ERR("EBP", "Parser reported error during NAV streaming");
+    return false;
   }
 
-  free(navBuffer);
-  tempNavFile.close();
-  Storage.remove(tmpNavPath.c_str());
-
+  LOG_DBG("ZIP_IO", "NAV: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes", navSize, zipReadTime / 1000,
+          (float)zipReadTime / navSize, heapDelta);
   LOG_DBG("EBP", "Parsed TOC nav items");
   return true;
 }

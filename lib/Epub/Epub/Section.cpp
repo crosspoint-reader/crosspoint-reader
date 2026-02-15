@@ -239,13 +239,25 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 }
 
 std::unique_ptr<Page> Section::loadPageFromSectionFile() {
+  // unsigned long startTime = micros();
+
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return nullptr;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t));
+  // Read LUT offset from cache or disk (SD I/O optimization #1)
   uint32_t lutOffset;
-  serialization::readPod(file, lutOffset);
+  bool wasCacheHit = lutOffsetCached;
+  if (lutOffsetCached) {
+    lutOffset = cachedLutOffset;
+  } else {
+    file.seek(HEADER_SIZE - sizeof(uint32_t));
+    serialization::readPod(file, lutOffset);
+    cachedLutOffset = lutOffset;
+    lutOffsetCached = true;
+  }
+
+  // Now only 1 seek instead of 2 per page load (after first page)
   file.seek(lutOffset + sizeof(uint32_t) * currentPage);
   uint32_t pagePos;
   serialization::readPod(file, pagePos);
@@ -253,5 +265,14 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
 
   auto page = Page::deserialize(file);
   file.close();
+  /*
+  unsigned long loadTime = micros() - startTime;
+
+  // Log every 10th page to avoid spam
+  if (currentPage % 10 == 0) {
+    LOG_INF("PAGE_IO", "Page %d (optimized): %lu us (%s)",
+            currentPage, loadTime, wasCacheHit ? "cache hit" : "cache miss");
+  }
+  */
   return page;
 }
