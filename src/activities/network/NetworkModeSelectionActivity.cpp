@@ -3,13 +3,17 @@
 #include <GfxRenderer.h>
 
 #include "MappedInputManager.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEM_COUNT = 2;
-const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Create Hotspot"};
-const char* MENU_DESCRIPTIONS[MENU_ITEM_COUNT] = {"Connect to an existing WiFi network",
-                                                  "Create a WiFi network others can join"};
+constexpr int MENU_ITEM_COUNT = 3;
+const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Connect to Calibre", "Create Hotspot"};
+const char* MENU_DESCRIPTIONS[MENU_ITEM_COUNT] = {
+    "Connect to an existing WiFi network",
+    "Use Calibre wireless device transfers",
+    "Create a WiFi network others can join",
+};
 }  // namespace
 
 void NetworkModeSelectionActivity::taskTrampoline(void* param) {
@@ -58,24 +62,26 @@ void NetworkModeSelectionActivity::loop() {
 
   // Handle confirm button - select current option
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    const NetworkMode mode = (selectedIndex == 0) ? NetworkMode::JOIN_NETWORK : NetworkMode::CREATE_HOTSPOT;
+    NetworkMode mode = NetworkMode::JOIN_NETWORK;
+    if (selectedIndex == 1) {
+      mode = NetworkMode::CONNECT_CALIBRE;
+    } else if (selectedIndex == 2) {
+      mode = NetworkMode::CREATE_HOTSPOT;
+    }
     onModeSelected(mode);
     return;
   }
 
   // Handle navigation
-  const bool prevPressed = mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-                           mappedInput.wasPressed(MappedInputManager::Button::Left);
-  const bool nextPressed = mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-                           mappedInput.wasPressed(MappedInputManager::Button::Right);
+  buttonNavigator.onNext([this] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEM_COUNT);
+    updateRequired = true;
+  });
 
-  if (prevPressed) {
-    selectedIndex = (selectedIndex + MENU_ITEM_COUNT - 1) % MENU_ITEM_COUNT;
+  buttonNavigator.onPrevious([this] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEM_COUNT);
     updateRequired = true;
-  } else if (nextPressed) {
-    selectedIndex = (selectedIndex + 1) % MENU_ITEM_COUNT;
-    updateRequired = true;
-  }
+  });
 }
 
 void NetworkModeSelectionActivity::displayTaskLoop() {
@@ -123,7 +129,7 @@ void NetworkModeSelectionActivity::render() const {
 
   // Draw help text at bottom
   const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

@@ -1,21 +1,29 @@
 #include "CrossPointWebServer.h"
 
 #include <ArduinoJson.h>
+#include <Epub.h>
 #include <FsHelpers.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
 #include <algorithm>
 
+#include "CrossPointSettings.h"
+#include "SettingsList.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/SettingsPageHtml.generated.h"
+#include "util/StringUtils.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
 // Note: Items starting with "." are automatically hidden
 const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
+constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
@@ -28,6 +36,48 @@ size_t wsUploadSize = 0;
 size_t wsUploadReceived = 0;
 unsigned long wsUploadStartTime = 0;
 bool wsUploadInProgress = false;
+String wsLastCompleteName;
+size_t wsLastCompleteSize = 0;
+unsigned long wsLastCompleteAt = 0;
+
+// Helper function to clear epub cache after upload
+void clearEpubCacheIfNeeded(const String& filePath) {
+  // Only clear cache for .epub files
+  if (StringUtils::checkFileExtension(filePath, ".epub")) {
+    Epub(filePath.c_str(), "/.crosspoint").clearCache();
+    LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
+  }
+}
+
+String normalizeWebPath(const String& inputPath) {
+  if (inputPath.isEmpty() || inputPath == "/") {
+    return "/";
+  }
+  std::string normalized = FsHelpers::normalisePath(inputPath.c_str());
+  String result = normalized.c_str();
+  if (result.isEmpty()) {
+    return "/";
+  }
+  if (!result.startsWith("/")) {
+    result = "/" + result;
+  }
+  if (result.length() > 1 && result.endsWith("/")) {
+    result = result.substring(0, result.length() - 1);
+  }
+  return result;
+}
+
+bool isProtectedItemName(const String& name) {
+  if (name.startsWith(".")) {
+    return true;
+  }
+  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+    if (name.equals(HIDDEN_ITEMS[i])) {
+      return true;
+    }
+  }
+  return false;
+}
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -40,7 +90,7 @@ CrossPointWebServer::~CrossPointWebServer() { stop(); }
 
 void CrossPointWebServer::begin() {
   if (running) {
-    Serial.printf("[%lu] [WEB] Web server already running\n", millis());
+    LOG_DBG("WEB", "Web server already running");
     return;
   }
 
@@ -50,18 +100,17 @@ void CrossPointWebServer::begin() {
   const bool isInApMode = (wifiMode & WIFI_MODE_AP) && (WiFi.softAPgetStationNum() >= 0);  // AP is running
 
   if (!isStaConnected && !isInApMode) {
-    Serial.printf("[%lu] [WEB] Cannot start webserver - no valid network (mode=%d, status=%d)\n", millis(), wifiMode,
-                  WiFi.status());
+    LOG_DBG("WEB", "Cannot start webserver - no valid network (mode=%d, status=%d)", wifiMode, WiFi.status());
     return;
   }
 
   // Store AP mode flag for later use (e.g., in handleStatus)
   apMode = isInApMode;
 
-  Serial.printf("[%lu] [WEB] [MEM] Free heap before begin: %d bytes\n", millis(), ESP.getFreeHeap());
-  Serial.printf("[%lu] [WEB] Network mode: %s\n", millis(), apMode ? "AP" : "STA");
+  LOG_DBG("WEB", "[MEM] Free heap before begin: %d bytes", ESP.getFreeHeap());
+  LOG_DBG("WEB", "Network mode: %s", apMode ? "AP" : "STA");
 
-  Serial.printf("[%lu] [WEB] Creating web server on port %d...\n", millis(), port);
+  LOG_DBG("WEB", "Creating web server on port %d...", port);
   server.reset(new WebServer(port));
 
   // Disable WiFi sleep to improve responsiveness and prevent 'unreachable' errors.
@@ -71,64 +120,78 @@ void CrossPointWebServer::begin() {
   // Note: WebServer class doesn't have setNoDelay() in the standard ESP32 library.
   // We rely on disabling WiFi sleep for responsiveness.
 
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after WebServer allocation: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEB", "[MEM] Free heap after WebServer allocation: %d bytes", ESP.getFreeHeap());
 
   if (!server) {
-    Serial.printf("[%lu] [WEB] Failed to create WebServer!\n", millis());
+    LOG_ERR("WEB", "Failed to create WebServer!");
     return;
   }
 
   // Setup routes
-  Serial.printf("[%lu] [WEB] Setting up routes...\n", millis());
+  LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
+  server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
   // Upload endpoint with special handling for multipart form data
-  server->on("/upload", HTTP_POST, [this] { handleUploadPost(); }, [this] { handleUpload(); });
+  server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
 
   // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
 
+  // Rename file endpoint
+  server->on("/rename", HTTP_POST, [this] { handleRename(); });
+
+  // Move file endpoint
+  server->on("/move", HTTP_POST, [this] { handleMove(); });
+
   // Delete file/folder endpoint
   server->on("/delete", HTTP_POST, [this] { handleDelete(); });
 
+  // Settings endpoints
+  server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
+  server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
+  server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
+
   server->onNotFound([this] { handleNotFound(); });
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after route setup: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   server->begin();
 
   // Start WebSocket server for fast binary uploads
-  Serial.printf("[%lu] [WEB] Starting WebSocket server on port %d...\n", millis(), wsPort);
+  LOG_DBG("WEB", "Starting WebSocket server on port %d...", wsPort);
   wsServer.reset(new WebSocketsServer(wsPort));
   wsInstance = const_cast<CrossPointWebServer*>(this);
   wsServer->begin();
   wsServer->onEvent(wsEventCallback);
-  Serial.printf("[%lu] [WEB] WebSocket server started\n", millis());
+  LOG_DBG("WEB", "WebSocket server started");
+
+  udpActive = udp.begin(LOCAL_UDP_PORT);
+  LOG_DBG("WEB", "Discovery UDP %s on port %d", udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);
 
   running = true;
 
-  Serial.printf("[%lu] [WEB] Web server started on port %d\n", millis(), port);
+  LOG_DBG("WEB", "Web server started on port %d", port);
   // Show the correct IP based on network mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
-  Serial.printf("[%lu] [WEB] Access at http://%s/\n", millis(), ipAddr.c_str());
-  Serial.printf("[%lu] [WEB] WebSocket at ws://%s:%d/\n", millis(), ipAddr.c_str(), wsPort);
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after server.begin(): %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEB", "Access at http://%s/", ipAddr.c_str());
+  LOG_DBG("WEB", "WebSocket at ws://%s:%d/", ipAddr.c_str(), wsPort);
+  LOG_DBG("WEB", "[MEM] Free heap after server.begin(): %d bytes", ESP.getFreeHeap());
 }
 
 void CrossPointWebServer::stop() {
   if (!running || !server) {
-    Serial.printf("[%lu] [WEB] stop() called but already stopped (running=%d, server=%p)\n", millis(), running,
-                  server.get());
+    LOG_DBG("WEB", "stop() called but already stopped (running=%d, server=%p)", running, server.get());
     return;
   }
 
-  Serial.printf("[%lu] [WEB] STOP INITIATED - setting running=false first\n", millis());
+  LOG_DBG("WEB", "STOP INITIATED - setting running=false first");
   running = false;  // Set this FIRST to prevent handleClient from using server
 
-  Serial.printf("[%lu] [WEB] [MEM] Free heap before stop: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEB", "[MEM] Free heap before stop: %d bytes", ESP.getFreeHeap());
 
   // Close any in-progress WebSocket upload
   if (wsUploadInProgress && wsUploadFile) {
@@ -138,32 +201,37 @@ void CrossPointWebServer::stop() {
 
   // Stop WebSocket server
   if (wsServer) {
-    Serial.printf("[%lu] [WEB] Stopping WebSocket server...\n", millis());
+    LOG_DBG("WEB", "Stopping WebSocket server...");
     wsServer->close();
     wsServer.reset();
     wsInstance = nullptr;
-    Serial.printf("[%lu] [WEB] WebSocket server stopped\n", millis());
+    LOG_DBG("WEB", "WebSocket server stopped");
+  }
+
+  if (udpActive) {
+    udp.stop();
+    udpActive = false;
   }
 
   // Brief delay to allow any in-flight handleClient() calls to complete
   delay(20);
 
   server->stop();
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after server->stop(): %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEB", "[MEM] Free heap after server->stop(): %d bytes", ESP.getFreeHeap());
 
   // Brief delay before deletion
   delay(10);
 
   server.reset();
-  Serial.printf("[%lu] [WEB] Web server stopped and deleted\n", millis());
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after delete server: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEB", "Web server stopped and deleted");
+  LOG_DBG("WEB", "[MEM] Free heap after delete server: %d bytes", ESP.getFreeHeap());
 
   // Note: Static upload variables (uploadFileName, uploadPath, uploadError) are declared
   // later in the file and will be cleared when they go out of scope or on next upload
-  Serial.printf("[%lu] [WEB] [MEM] Free heap final: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEB", "[MEM] Free heap final: %d bytes", ESP.getFreeHeap());
 }
 
-void CrossPointWebServer::handleClient() const {
+void CrossPointWebServer::handleClient() {
   static unsigned long lastDebugPrint = 0;
 
   // Check running flag FIRST before accessing server
@@ -173,13 +241,13 @@ void CrossPointWebServer::handleClient() const {
 
   // Double-check server pointer is valid
   if (!server) {
-    Serial.printf("[%lu] [WEB] WARNING: handleClient called with null server!\n", millis());
+    LOG_DBG("WEB", "WARNING: handleClient called with null server!");
     return;
   }
 
   // Print debug every 10 seconds to confirm handleClient is being called
   if (millis() - lastDebugPrint > 10000) {
-    Serial.printf("[%lu] [WEB] handleClient active, server running on port %d\n", millis(), port);
+    LOG_DBG("WEB", "handleClient active, server running on port %d", port);
     lastDebugPrint = millis();
   }
 
@@ -189,11 +257,50 @@ void CrossPointWebServer::handleClient() const {
   if (wsServer) {
     wsServer->loop();
   }
+
+  // Respond to discovery broadcasts
+  if (udpActive) {
+    int packetSize = udp.parsePacket();
+    if (packetSize > 0) {
+      char buffer[16];
+      int len = udp.read(buffer, sizeof(buffer) - 1);
+      if (len > 0) {
+        buffer[len] = '\0';
+        if (strcmp(buffer, "hello") == 0) {
+          String hostname = WiFi.getHostname();
+          if (hostname.isEmpty()) {
+            hostname = "crosspoint";
+          }
+          String message = "crosspoint (on " + hostname + ");" + String(wsPort);
+          udp.beginPacket(udp.remoteIP(), udp.remotePort());
+          udp.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.length());
+          udp.endPacket();
+        }
+      }
+    }
+  }
+}
+
+CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() const {
+  WsUploadStatus status;
+  status.inProgress = wsUploadInProgress;
+  status.received = wsUploadReceived;
+  status.total = wsUploadSize;
+  status.filename = wsUploadFileName.c_str();
+  status.lastCompleteName = wsLastCompleteName.c_str();
+  status.lastCompleteSize = wsLastCompleteSize;
+  status.lastCompleteAt = wsLastCompleteAt;
+  return status;
+}
+
+static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "text/html", data, len);
 }
 
 void CrossPointWebServer::handleRoot() const {
-  server->send(200, "text/html", HomePageHtml);
-  Serial.printf("[%lu] [WEB] Served root page\n", millis());
+  sendHtmlContent(server.get(), HomePageHtml, sizeof(HomePageHtml));
+  LOG_DBG("WEB", "Served root page");
 }
 
 void CrossPointWebServer::handleNotFound() const {
@@ -220,19 +327,19 @@ void CrossPointWebServer::handleStatus() const {
 }
 
 void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
-  FsFile root = SdMan.open(path);
+  FsFile root = Storage.open(path);
   if (!root) {
-    Serial.printf("[%lu] [WEB] Failed to open directory: %s\n", millis(), path);
+    LOG_DBG("WEB", "Failed to open directory: %s", path);
     return;
   }
 
   if (!root.isDirectory()) {
-    Serial.printf("[%lu] [WEB] Not a directory: %s\n", millis(), path);
+    LOG_DBG("WEB", "Not a directory: %s", path);
     root.close();
     return;
   }
 
-  Serial.printf("[%lu] [WEB] Scanning files in: %s\n", millis(), path);
+  LOG_DBG("WEB", "Scanning files in: %s", path);
 
   FsFile file = root.openNextFile();
   char name[500];
@@ -283,7 +390,9 @@ bool CrossPointWebServer::isEpubFile(const String& filename) const {
   return lower.endsWith(".epub");
 }
 
-void CrossPointWebServer::handleFileList() const { server->send(200, "text/html", FilesPageHtml); }
+void CrossPointWebServer::handleFileList() const {
+  sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
+}
 
 void CrossPointWebServer::handleFileListData() const {
   // Get current path from query string (default to root)
@@ -318,7 +427,7 @@ void CrossPointWebServer::handleFileListData() const {
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) {
       // JSON output truncated; skip this entry to avoid sending malformed JSON
-      Serial.printf("[%lu] [WEB] Skipping file entry with oversized JSON for name: %s\n", millis(), info.name.c_str());
+      LOG_DBG("WEB", "Skipping file entry with oversized JSON for name: %s", info.name.c_str());
       return;
     }
 
@@ -332,50 +441,97 @@ void CrossPointWebServer::handleFileListData() const {
   server->sendContent("]");
   // End of streamed response, empty chunk to signal client
   server->sendContent("");
-  Serial.printf("[%lu] [WEB] Served file listing page for path: %s\n", millis(), currentPath.c_str());
+  LOG_DBG("WEB", "Served file listing page for path: %s", currentPath.c_str());
 }
 
-// Static variables for upload handling
-static FsFile uploadFile;
-static String uploadFileName;
-static String uploadPath = "/";
-static size_t uploadSize = 0;
-static bool uploadSuccess = false;
-static String uploadError = "";
+void CrossPointWebServer::handleDownload() const {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
 
-// Upload write buffer - batches small writes into larger SD card operations
-// 4KB is a good balance: large enough to reduce syscall overhead, small enough
-// to keep individual write times short and avoid watchdog issues
-constexpr size_t UPLOAD_BUFFER_SIZE = 4096;  // 4KB buffer
-static uint8_t uploadBuffer[UPLOAD_BUFFER_SIZE];
-static size_t uploadBufferPos = 0;
+  String itemPath = server->arg("path");
+  if (itemPath.isEmpty() || itemPath == "/") {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+  if (!itemPath.startsWith("/")) {
+    itemPath = "/" + itemPath;
+  }
+
+  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+  if (itemName.startsWith(".")) {
+    server->send(403, "text/plain", "Cannot access system files");
+    return;
+  }
+  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+    if (itemName.equals(HIDDEN_ITEMS[i])) {
+      server->send(403, "text/plain", "Cannot access protected items");
+      return;
+    }
+  }
+
+  if (!Storage.exists(itemPath.c_str())) {
+    server->send(404, "text/plain", "Item not found");
+    return;
+  }
+
+  FsFile file = Storage.open(itemPath.c_str());
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open file");
+    return;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    server->send(400, "text/plain", "Path is a directory");
+    return;
+  }
+
+  String contentType = "application/octet-stream";
+  if (isEpubFile(itemPath)) {
+    contentType = "application/epub+zip";
+  }
+
+  char nameBuf[128] = {0};
+  String filename = "download";
+  if (file.getName(nameBuf, sizeof(nameBuf))) {
+    filename = nameBuf;
+  }
+
+  server->setContentLength(file.size());
+  server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+  server->send(200, contentType.c_str(), "");
+
+  WiFiClient client = server->client();
+  client.write(file);
+  file.close();
+}
 
 // Diagnostic counters for upload performance analysis
 static unsigned long uploadStartTime = 0;
 static unsigned long totalWriteTime = 0;
 static size_t writeCount = 0;
 
-static bool flushUploadBuffer() {
-  if (uploadBufferPos > 0 && uploadFile) {
+static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
+  if (state.bufferPos > 0 && state.file) {
     esp_task_wdt_reset();  // Reset watchdog before potentially slow SD write
     const unsigned long writeStart = millis();
-    const size_t written = uploadFile.write(uploadBuffer, uploadBufferPos);
+    const size_t written = state.file.write(state.buffer.data(), state.bufferPos);
     totalWriteTime += millis() - writeStart;
     writeCount++;
     esp_task_wdt_reset();  // Reset watchdog after SD write
 
-    if (written != uploadBufferPos) {
-      Serial.printf("[%lu] [WEB] [UPLOAD] Buffer flush failed: expected %d, wrote %d\n", millis(), uploadBufferPos,
-                    written);
-      uploadBufferPos = 0;
+    if (written != state.bufferPos) {
+      LOG_DBG("WEB", "[UPLOAD] Buffer flush failed: expected %d, wrote %d", state.bufferPos, written);
+      state.bufferPos = 0;
       return false;
     }
-    uploadBufferPos = 0;
+    state.bufferPos = 0;
   }
   return true;
 }
 
-void CrossPointWebServer::handleUpload() const {
+void CrossPointWebServer::handleUpload(UploadState& state) const {
   static size_t lastLoggedSize = 0;
 
   // Reset watchdog at start of every upload callback - HTTP parsing can be slow
@@ -383,7 +539,7 @@ void CrossPointWebServer::handleUpload() const {
 
   // Safety check: ensure server is still valid
   if (!running || !server) {
-    Serial.printf("[%lu] [WEB] [UPLOAD] ERROR: handleUpload called but server not running!\n", millis());
+    LOG_DBG("WEB", "[UPLOAD] ERROR: handleUpload called but server not running!");
     return;
   }
 
@@ -393,13 +549,13 @@ void CrossPointWebServer::handleUpload() const {
     // Reset watchdog - this is the critical 1% crash point
     esp_task_wdt_reset();
 
-    uploadFileName = upload.filename;
-    uploadSize = 0;
-    uploadSuccess = false;
-    uploadError = "";
+    state.fileName = upload.filename;
+    state.size = 0;
+    state.success = false;
+    state.error = "";
     uploadStartTime = millis();
     lastLoggedSize = 0;
-    uploadBufferPos = 0;
+    state.bufferPos = 0;
     totalWriteTime = 0;
     writeCount = 0;
 
@@ -407,121 +563,127 @@ void CrossPointWebServer::handleUpload() const {
     // Note: We use query parameter instead of form data because multipart form
     // fields aren't available until after file upload completes
     if (server->hasArg("path")) {
-      uploadPath = server->arg("path");
+      state.path = server->arg("path");
       // Ensure path starts with /
-      if (!uploadPath.startsWith("/")) {
-        uploadPath = "/" + uploadPath;
+      if (!state.path.startsWith("/")) {
+        state.path = "/" + state.path;
       }
       // Remove trailing slash unless it's root
-      if (uploadPath.length() > 1 && uploadPath.endsWith("/")) {
-        uploadPath = uploadPath.substring(0, uploadPath.length() - 1);
+      if (state.path.length() > 1 && state.path.endsWith("/")) {
+        state.path = state.path.substring(0, state.path.length() - 1);
       }
     } else {
-      uploadPath = "/";
+      state.path = "/";
     }
 
-    Serial.printf("[%lu] [WEB] [UPLOAD] START: %s to path: %s\n", millis(), uploadFileName.c_str(), uploadPath.c_str());
-    Serial.printf("[%lu] [WEB] [UPLOAD] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
+    LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
+    LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
 
     // Create file path
-    String filePath = uploadPath;
+    String filePath = state.path;
     if (!filePath.endsWith("/")) filePath += "/";
-    filePath += uploadFileName;
+    filePath += state.fileName;
 
     // Check if file already exists - SD operations can be slow
     esp_task_wdt_reset();
-    if (SdMan.exists(filePath.c_str())) {
-      Serial.printf("[%lu] [WEB] [UPLOAD] Overwriting existing file: %s\n", millis(), filePath.c_str());
+    if (Storage.exists(filePath.c_str())) {
+      LOG_DBG("WEB", "[UPLOAD] Overwriting existing file: %s", filePath.c_str());
       esp_task_wdt_reset();
-      SdMan.remove(filePath.c_str());
+      Storage.remove(filePath.c_str());
     }
 
     // Open file for writing - this can be slow due to FAT cluster allocation
     esp_task_wdt_reset();
-    if (!SdMan.openFileForWrite("WEB", filePath, uploadFile)) {
-      uploadError = "Failed to create file on SD card";
-      Serial.printf("[%lu] [WEB] [UPLOAD] FAILED to create file: %s\n", millis(), filePath.c_str());
+    if (!Storage.openFileForWrite("WEB", filePath, state.file)) {
+      state.error = "Failed to create file on SD card";
+      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", filePath.c_str());
       return;
     }
     esp_task_wdt_reset();
 
-    Serial.printf("[%lu] [WEB] [UPLOAD] File created successfully: %s\n", millis(), filePath.c_str());
+    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadFile && uploadError.isEmpty()) {
+    if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
       // This reduces SD card write operations and improves throughput
       const uint8_t* data = upload.buf;
       size_t remaining = upload.currentSize;
 
       while (remaining > 0) {
-        const size_t space = UPLOAD_BUFFER_SIZE - uploadBufferPos;
+        const size_t space = UploadState::UPLOAD_BUFFER_SIZE - state.bufferPos;
         const size_t toCopy = (remaining < space) ? remaining : space;
 
-        memcpy(uploadBuffer + uploadBufferPos, data, toCopy);
-        uploadBufferPos += toCopy;
+        memcpy(state.buffer.data() + state.bufferPos, data, toCopy);
+        state.bufferPos += toCopy;
         data += toCopy;
         remaining -= toCopy;
 
         // Flush buffer when full
-        if (uploadBufferPos >= UPLOAD_BUFFER_SIZE) {
-          if (!flushUploadBuffer()) {
-            uploadError = "Failed to write to SD card - disk may be full";
-            uploadFile.close();
+        if (state.bufferPos >= UploadState::UPLOAD_BUFFER_SIZE) {
+          if (!flushUploadBuffer(state)) {
+            state.error = "Failed to write to SD card - disk may be full";
+            state.file.close();
             return;
           }
         }
       }
 
-      uploadSize += upload.currentSize;
+      state.size += upload.currentSize;
 
       // Log progress every 100KB
-      if (uploadSize - lastLoggedSize >= 102400) {
+      if (state.size - lastLoggedSize >= 102400) {
         const unsigned long elapsed = millis() - uploadStartTime;
-        const float kbps = (elapsed > 0) ? (uploadSize / 1024.0) / (elapsed / 1000.0) : 0;
-        Serial.printf("[%lu] [WEB] [UPLOAD] %d bytes (%.1f KB), %.1f KB/s, %d writes\n", millis(), uploadSize,
-                      uploadSize / 1024.0, kbps, writeCount);
-        lastLoggedSize = uploadSize;
+        const float kbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
+        LOG_DBG("WEB", "[UPLOAD] %d bytes (%.1f KB), %.1f KB/s, %d writes", state.size, state.size / 1024.0, kbps,
+                writeCount);
+        lastLoggedSize = state.size;
       }
     }
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadFile) {
+    if (state.file) {
       // Flush any remaining buffered data
-      if (!flushUploadBuffer()) {
-        uploadError = "Failed to write final data to SD card";
+      if (!flushUploadBuffer(state)) {
+        state.error = "Failed to write final data to SD card";
       }
-      uploadFile.close();
+      state.file.close();
 
-      if (uploadError.isEmpty()) {
-        uploadSuccess = true;
+      if (state.error.isEmpty()) {
+        state.success = true;
         const unsigned long elapsed = millis() - uploadStartTime;
-        const float avgKbps = (elapsed > 0) ? (uploadSize / 1024.0) / (elapsed / 1000.0) : 0;
+        const float avgKbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
         const float writePercent = (elapsed > 0) ? (totalWriteTime * 100.0 / elapsed) : 0;
-        Serial.printf("[%lu] [WEB] [UPLOAD] Complete: %s (%d bytes in %lu ms, avg %.1f KB/s)\n", millis(),
-                      uploadFileName.c_str(), uploadSize, elapsed, avgKbps);
-        Serial.printf("[%lu] [WEB] [UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)\n", millis(),
-                      writeCount, totalWriteTime, writePercent);
+        LOG_DBG("WEB", "[UPLOAD] Complete: %s (%d bytes in %lu ms, avg %.1f KB/s)", state.fileName.c_str(), state.size,
+                elapsed, avgKbps);
+        LOG_DBG("WEB", "[UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)", writeCount, totalWriteTime,
+                writePercent);
+
+        // Clear epub cache to prevent stale metadata issues when overwriting files
+        String filePath = state.path;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += state.fileName;
+        clearEpubCacheIfNeeded(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    uploadBufferPos = 0;  // Discard buffered data
-    if (uploadFile) {
-      uploadFile.close();
+    state.bufferPos = 0;  // Discard buffered data
+    if (state.file) {
+      state.file.close();
       // Try to delete the incomplete file
-      String filePath = uploadPath;
+      String filePath = state.path;
       if (!filePath.endsWith("/")) filePath += "/";
-      filePath += uploadFileName;
-      SdMan.remove(filePath.c_str());
+      filePath += state.fileName;
+      Storage.remove(filePath.c_str());
     }
-    uploadError = "Upload aborted";
-    Serial.printf("[%lu] [WEB] Upload aborted\n", millis());
+    state.error = "Upload aborted";
+    LOG_DBG("WEB", "Upload aborted");
   }
 }
 
-void CrossPointWebServer::handleUploadPost() const {
-  if (uploadSuccess) {
-    server->send(200, "text/plain", "File uploaded successfully: " + uploadFileName);
+void CrossPointWebServer::handleUploadPost(UploadState& state) const {
+  if (state.success) {
+    server->send(200, "text/plain", "File uploaded successfully: " + state.fileName);
   } else {
-    const String error = uploadError.isEmpty() ? "Unknown error during upload" : uploadError;
+    const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
     server->send(400, "text/plain", error);
   }
 }
@@ -558,21 +720,196 @@ void CrossPointWebServer::handleCreateFolder() const {
   if (!folderPath.endsWith("/")) folderPath += "/";
   folderPath += folderName;
 
-  Serial.printf("[%lu] [WEB] Creating folder: %s\n", millis(), folderPath.c_str());
+  LOG_DBG("WEB", "Creating folder: %s", folderPath.c_str());
 
   // Check if already exists
-  if (SdMan.exists(folderPath.c_str())) {
+  if (Storage.exists(folderPath.c_str())) {
     server->send(400, "text/plain", "Folder already exists");
     return;
   }
 
   // Create the folder
-  if (SdMan.mkdir(folderPath.c_str())) {
-    Serial.printf("[%lu] [WEB] Folder created successfully: %s\n", millis(), folderPath.c_str());
+  if (Storage.mkdir(folderPath.c_str())) {
+    LOG_DBG("WEB", "Folder created successfully: %s", folderPath.c_str());
     server->send(200, "text/plain", "Folder created: " + folderName);
   } else {
-    Serial.printf("[%lu] [WEB] Failed to create folder: %s\n", millis(), folderPath.c_str());
+    LOG_DBG("WEB", "Failed to create folder: %s", folderPath.c_str());
     server->send(500, "text/plain", "Failed to create folder");
+  }
+}
+
+void CrossPointWebServer::handleRename() const {
+  if (!server->hasArg("path") || !server->hasArg("name")) {
+    server->send(400, "text/plain", "Missing path or new name");
+    return;
+  }
+
+  String itemPath = normalizeWebPath(server->arg("path"));
+  String newName = server->arg("name");
+  newName.trim();
+
+  if (itemPath.isEmpty() || itemPath == "/") {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+  if (newName.isEmpty()) {
+    server->send(400, "text/plain", "New name cannot be empty");
+    return;
+  }
+  if (newName.indexOf('/') >= 0 || newName.indexOf('\\') >= 0) {
+    server->send(400, "text/plain", "Invalid file name");
+    return;
+  }
+  if (isProtectedItemName(newName)) {
+    server->send(403, "text/plain", "Cannot rename to protected name");
+    return;
+  }
+
+  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+  if (isProtectedItemName(itemName)) {
+    server->send(403, "text/plain", "Cannot rename protected item");
+    return;
+  }
+  if (newName == itemName) {
+    server->send(200, "text/plain", "Name unchanged");
+    return;
+  }
+
+  if (!Storage.exists(itemPath.c_str())) {
+    server->send(404, "text/plain", "Item not found");
+    return;
+  }
+
+  FsFile file = Storage.open(itemPath.c_str());
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open file");
+    return;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    server->send(400, "text/plain", "Only files can be renamed");
+    return;
+  }
+
+  String parentPath = itemPath.substring(0, itemPath.lastIndexOf('/'));
+  if (parentPath.isEmpty()) {
+    parentPath = "/";
+  }
+  String newPath = parentPath;
+  if (!newPath.endsWith("/")) {
+    newPath += "/";
+  }
+  newPath += newName;
+
+  if (Storage.exists(newPath.c_str())) {
+    file.close();
+    server->send(409, "text/plain", "Target already exists");
+    return;
+  }
+
+  clearEpubCacheIfNeeded(itemPath);
+  const bool success = file.rename(newPath.c_str());
+  file.close();
+
+  if (success) {
+    LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    server->send(200, "text/plain", "Renamed successfully");
+  } else {
+    LOG_ERR("WEB", "Failed to rename file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    server->send(500, "text/plain", "Failed to rename file");
+  }
+}
+
+void CrossPointWebServer::handleMove() const {
+  if (!server->hasArg("path") || !server->hasArg("dest")) {
+    server->send(400, "text/plain", "Missing path or destination");
+    return;
+  }
+
+  String itemPath = normalizeWebPath(server->arg("path"));
+  String destPath = normalizeWebPath(server->arg("dest"));
+
+  if (itemPath.isEmpty() || itemPath == "/") {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+  if (destPath.isEmpty()) {
+    server->send(400, "text/plain", "Invalid destination");
+    return;
+  }
+
+  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+  if (isProtectedItemName(itemName)) {
+    server->send(403, "text/plain", "Cannot move protected item");
+    return;
+  }
+  if (destPath != "/") {
+    const String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
+    if (isProtectedItemName(destName)) {
+      server->send(403, "text/plain", "Cannot move into protected folder");
+      return;
+    }
+  }
+
+  if (!Storage.exists(itemPath.c_str())) {
+    server->send(404, "text/plain", "Item not found");
+    return;
+  }
+
+  FsFile file = Storage.open(itemPath.c_str());
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open file");
+    return;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    server->send(400, "text/plain", "Only files can be moved");
+    return;
+  }
+
+  if (!Storage.exists(destPath.c_str())) {
+    file.close();
+    server->send(404, "text/plain", "Destination not found");
+    return;
+  }
+  FsFile destDir = Storage.open(destPath.c_str());
+  if (!destDir || !destDir.isDirectory()) {
+    if (destDir) {
+      destDir.close();
+    }
+    file.close();
+    server->send(400, "text/plain", "Destination is not a folder");
+    return;
+  }
+  destDir.close();
+
+  String newPath = destPath;
+  if (!newPath.endsWith("/")) {
+    newPath += "/";
+  }
+  newPath += itemName;
+
+  if (newPath == itemPath) {
+    file.close();
+    server->send(200, "text/plain", "Already in destination");
+    return;
+  }
+  if (Storage.exists(newPath.c_str())) {
+    file.close();
+    server->send(409, "text/plain", "Target already exists");
+    return;
+  }
+
+  clearEpubCacheIfNeeded(itemPath);
+  const bool success = file.rename(newPath.c_str());
+  file.close();
+
+  if (success) {
+    LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    server->send(200, "text/plain", "Moved successfully");
+  } else {
+    LOG_ERR("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    server->send(500, "text/plain", "Failed to move file");
   }
 }
 
@@ -602,7 +939,7 @@ void CrossPointWebServer::handleDelete() const {
 
   // Check if item starts with a dot (hidden/system file)
   if (itemName.startsWith(".")) {
-    Serial.printf("[%lu] [WEB] Delete rejected - hidden/system item: %s\n", millis(), itemPath.c_str());
+    LOG_DBG("WEB", "Delete rejected - hidden/system item: %s", itemPath.c_str());
     server->send(403, "text/plain", "Cannot delete system files");
     return;
   }
@@ -610,26 +947,26 @@ void CrossPointWebServer::handleDelete() const {
   // Check against explicitly protected items
   for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
     if (itemName.equals(HIDDEN_ITEMS[i])) {
-      Serial.printf("[%lu] [WEB] Delete rejected - protected item: %s\n", millis(), itemPath.c_str());
+      LOG_DBG("WEB", "Delete rejected - protected item: %s", itemPath.c_str());
       server->send(403, "text/plain", "Cannot delete protected items");
       return;
     }
   }
 
   // Check if item exists
-  if (!SdMan.exists(itemPath.c_str())) {
-    Serial.printf("[%lu] [WEB] Delete failed - item not found: %s\n", millis(), itemPath.c_str());
+  if (!Storage.exists(itemPath.c_str())) {
+    LOG_DBG("WEB", "Delete failed - item not found: %s", itemPath.c_str());
     server->send(404, "text/plain", "Item not found");
     return;
   }
 
-  Serial.printf("[%lu] [WEB] Attempting to delete %s: %s\n", millis(), itemType.c_str(), itemPath.c_str());
+  LOG_DBG("WEB", "Attempting to delete %s: %s", itemType.c_str(), itemPath.c_str());
 
   bool success = false;
 
   if (itemType == "folder") {
     // For folders, try to remove (will fail if not empty)
-    FsFile dir = SdMan.open(itemPath.c_str());
+    FsFile dir = Storage.open(itemPath.c_str());
     if (dir && dir.isDirectory()) {
       // Check if folder is empty
       FsFile entry = dir.openNextFile();
@@ -637,25 +974,187 @@ void CrossPointWebServer::handleDelete() const {
         // Folder is not empty
         entry.close();
         dir.close();
-        Serial.printf("[%lu] [WEB] Delete failed - folder not empty: %s\n", millis(), itemPath.c_str());
+        LOG_DBG("WEB", "Delete failed - folder not empty: %s", itemPath.c_str());
         server->send(400, "text/plain", "Folder is not empty. Delete contents first.");
         return;
       }
       dir.close();
     }
-    success = SdMan.rmdir(itemPath.c_str());
+    success = Storage.rmdir(itemPath.c_str());
   } else {
     // For files, use remove
-    success = SdMan.remove(itemPath.c_str());
+    success = Storage.remove(itemPath.c_str());
   }
 
   if (success) {
-    Serial.printf("[%lu] [WEB] Successfully deleted: %s\n", millis(), itemPath.c_str());
+    LOG_DBG("WEB", "Successfully deleted: %s", itemPath.c_str());
     server->send(200, "text/plain", "Deleted successfully");
   } else {
-    Serial.printf("[%lu] [WEB] Failed to delete: %s\n", millis(), itemPath.c_str());
+    LOG_ERR("WEB", "Failed to delete: %s", itemPath.c_str());
     server->send(500, "text/plain", "Failed to delete item");
   }
+}
+
+void CrossPointWebServer::handleSettingsPage() const {
+  sendHtmlContent(server.get(), SettingsPageHtml, sizeof(SettingsPageHtml));
+  LOG_DBG("WEB", "Served settings page");
+}
+
+void CrossPointWebServer::handleGetSettings() const {
+  auto settings = getSettingsList();
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("[");
+
+  char output[512];
+  constexpr size_t outputSize = sizeof(output);
+  bool seenFirst = false;
+  JsonDocument doc;
+
+  for (const auto& s : settings) {
+    if (!s.key) continue;  // Skip ACTION-only entries
+
+    doc.clear();
+    doc["key"] = s.key;
+    doc["name"] = s.name;
+    doc["category"] = s.category;
+
+    switch (s.type) {
+      case SettingType::TOGGLE: {
+        doc["type"] = "toggle";
+        if (s.valuePtr) {
+          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+        }
+        break;
+      }
+      case SettingType::ENUM: {
+        doc["type"] = "enum";
+        if (s.valuePtr) {
+          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+        } else if (s.valueGetter) {
+          doc["value"] = static_cast<int>(s.valueGetter());
+        }
+        JsonArray options = doc["options"].to<JsonArray>();
+        for (const auto& opt : s.enumValues) {
+          options.add(opt);
+        }
+        break;
+      }
+      case SettingType::VALUE: {
+        doc["type"] = "value";
+        if (s.valuePtr) {
+          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+        }
+        doc["min"] = s.valueRange.min;
+        doc["max"] = s.valueRange.max;
+        doc["step"] = s.valueRange.step;
+        break;
+      }
+      case SettingType::STRING: {
+        doc["type"] = "string";
+        if (s.stringGetter) {
+          doc["value"] = s.stringGetter();
+        } else if (s.stringPtr) {
+          doc["value"] = s.stringPtr;
+        }
+        break;
+      }
+      default:
+        continue;
+    }
+
+    const size_t written = serializeJson(doc, output, outputSize);
+    if (written >= outputSize) {
+      LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
+      continue;
+    }
+
+    if (seenFirst) {
+      server->sendContent(",");
+    } else {
+      seenFirst = true;
+    }
+    server->sendContent(output);
+  }
+
+  server->sendContent("]");
+  server->sendContent("");
+  LOG_DBG("WEB", "Served settings API");
+}
+
+void CrossPointWebServer::handlePostSettings() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  auto settings = getSettingsList();
+  int applied = 0;
+
+  for (auto& s : settings) {
+    if (!s.key) continue;
+    if (!doc[s.key].is<JsonVariant>()) continue;
+
+    switch (s.type) {
+      case SettingType::TOGGLE: {
+        const int val = doc[s.key].as<int>() ? 1 : 0;
+        if (s.valuePtr) {
+          SETTINGS.*(s.valuePtr) = val;
+        }
+        applied++;
+        break;
+      }
+      case SettingType::ENUM: {
+        const int val = doc[s.key].as<int>();
+        if (val >= 0 && val < static_cast<int>(s.enumValues.size())) {
+          if (s.valuePtr) {
+            SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+          } else if (s.valueSetter) {
+            s.valueSetter(static_cast<uint8_t>(val));
+          }
+          applied++;
+        }
+        break;
+      }
+      case SettingType::VALUE: {
+        const int val = doc[s.key].as<int>();
+        if (val >= s.valueRange.min && val <= s.valueRange.max) {
+          if (s.valuePtr) {
+            SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+          }
+          applied++;
+        }
+        break;
+      }
+      case SettingType::STRING: {
+        const std::string val = doc[s.key].as<std::string>();
+        if (s.stringSetter) {
+          s.stringSetter(val);
+        } else if (s.stringPtr && s.stringMaxLen > 0) {
+          strncpy(s.stringPtr, val.c_str(), s.stringMaxLen - 1);
+          s.stringPtr[s.stringMaxLen - 1] = '\0';
+        }
+        applied++;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  SETTINGS.saveToFile();
+
+  LOG_DBG("WEB", "Applied %d setting(s)", applied);
+  server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
 }
 
 // WebSocket callback trampoline
@@ -674,7 +1173,7 @@ void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* p
 void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_DISCONNECTED:
-      Serial.printf("[%lu] [WS] Client %u disconnected\n", millis(), num);
+      LOG_DBG("WS", "Client %u disconnected", num);
       // Clean up any in-progress upload
       if (wsUploadInProgress && wsUploadFile) {
         wsUploadFile.close();
@@ -682,21 +1181,21 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        SdMan.remove(filePath.c_str());
-        Serial.printf("[%lu] [WS] Deleted incomplete upload: %s\n", millis(), filePath.c_str());
+        Storage.remove(filePath.c_str());
+        LOG_DBG("WS", "Deleted incomplete upload: %s", filePath.c_str());
       }
       wsUploadInProgress = false;
       break;
 
     case WStype_CONNECTED: {
-      Serial.printf("[%lu] [WS] Client %u connected\n", millis(), num);
+      LOG_DBG("WS", "Client %u connected", num);
       break;
     }
 
     case WStype_TEXT: {
       // Parse control messages
       String msg = String((char*)payload);
-      Serial.printf("[%lu] [WS] Text from client %u: %s\n", millis(), num, msg.c_str());
+      LOG_DBG("WS", "Text from client %u: %s", num, msg.c_str());
 
       if (msg.startsWith("START:")) {
         // Parse: START:<filename>:<size>:<path>
@@ -721,18 +1220,18 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           if (!filePath.endsWith("/")) filePath += "/";
           filePath += wsUploadFileName;
 
-          Serial.printf("[%lu] [WS] Starting upload: %s (%d bytes) to %s\n", millis(), wsUploadFileName.c_str(),
-                        wsUploadSize, filePath.c_str());
+          LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
+                  filePath.c_str());
 
           // Check if file exists and remove it
           esp_task_wdt_reset();
-          if (SdMan.exists(filePath.c_str())) {
-            SdMan.remove(filePath.c_str());
+          if (Storage.exists(filePath.c_str())) {
+            Storage.remove(filePath.c_str());
           }
 
           // Open file for writing
           esp_task_wdt_reset();
-          if (!SdMan.openFileForWrite("WS", filePath, wsUploadFile)) {
+          if (!Storage.openFileForWrite("WS", filePath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
             wsUploadInProgress = false;
             return;
@@ -781,11 +1280,21 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         wsUploadFile.close();
         wsUploadInProgress = false;
 
+        wsLastCompleteName = wsUploadFileName;
+        wsLastCompleteSize = wsUploadSize;
+        wsLastCompleteAt = millis();
+
         unsigned long elapsed = millis() - wsUploadStartTime;
         float kbps = (elapsed > 0) ? (wsUploadSize / 1024.0) / (elapsed / 1000.0) : 0;
 
-        Serial.printf("[%lu] [WS] Upload complete: %s (%d bytes in %lu ms, %.1f KB/s)\n", millis(),
-                      wsUploadFileName.c_str(), wsUploadSize, elapsed, kbps);
+        LOG_DBG("WS", "Upload complete: %s (%d bytes in %lu ms, %.1f KB/s)", wsUploadFileName.c_str(), wsUploadSize,
+                elapsed, kbps);
+
+        // Clear epub cache to prevent stale metadata issues when overwriting files
+        String filePath = wsUploadPath;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += wsUploadFileName;
+        clearEpubCacheIfNeeded(filePath);
 
         wsServer->sendTXT(num, "DONE");
         lastProgressSent = 0;

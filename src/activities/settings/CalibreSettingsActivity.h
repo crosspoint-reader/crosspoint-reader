@@ -6,10 +6,11 @@
 #include <functional>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 /**
- * Submenu for Calibre settings.
- * Shows Calibre Web URL and Calibre Wireless Device options.
+ * Submenu for OPDS Browser settings.
+ * Shows OPDS Server URL and HTTP authentication options.
  */
 class CalibreSettingsActivity final : public ActivityWithSubactivity {
  public:
@@ -24,6 +25,7 @@ class CalibreSettingsActivity final : public ActivityWithSubactivity {
  private:
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
 
   int selectedIndex = 0;

@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Reusable keyboard entry activity for text input.
@@ -65,12 +66,13 @@ class KeyboardEntryActivity : public Activity {
   bool isPassword;
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   bool updateRequired = false;
 
   // Keyboard state
   int selectedRow = 0;
   int selectedCol = 0;
-  bool shiftActive = false;
+  int shiftState = 0;  // 0 = lower case, 1 = upper case, 2 = shift lock)
 
   // Callbacks
   OnCompleteCallback onComplete;
@@ -81,6 +83,7 @@ class KeyboardEntryActivity : public Activity {
   static constexpr int KEYS_PER_ROW = 13;  // Max keys per row (rows 0 and 1 have 13 keys)
   static const char* const keyboard[NUM_ROWS];
   static const char* const keyboardShift[NUM_ROWS];
+  static const char* const shiftString[3];
 
   // Special key positions (bottom row)
   static constexpr int SPECIAL_ROW = 4;

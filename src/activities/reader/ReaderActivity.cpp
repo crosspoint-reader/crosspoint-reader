@@ -1,8 +1,10 @@
 #include "ReaderActivity.h"
 
+#include <HalStorage.h>
+
+#include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
-#include "FileSelectionActivity.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
@@ -23,29 +25,28 @@ bool ReaderActivity::isXtcFile(const std::string& path) {
 }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
-  if (path.length() < 4) return false;
-  std::string ext4 = path.substr(path.length() - 4);
-  return ext4 == ".txt" || ext4 == ".TXT";
+  return StringUtils::checkFileExtension(path, ".txt") ||
+         StringUtils::checkFileExtension(path, ".md");  // Treat .md as txt files (until we have a markdown reader)
 }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
-  if (!SdMan.exists(path.c_str())) {
-    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+  if (!Storage.exists(path.c_str())) {
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
   }
 
   auto epub = std::unique_ptr<Epub>(new Epub(path, "/.crosspoint"));
-  if (epub->load()) {
+  if (epub->load(true, SETTINGS.embeddedStyle == 0)) {
     return epub;
   }
 
-  Serial.printf("[%lu] [   ] Failed to load epub\n", millis());
+  LOG_ERR("READER", "Failed to load epub");
   return nullptr;
 }
 
 std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
-  if (!SdMan.exists(path.c_str())) {
-    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+  if (!Storage.exists(path.c_str())) {
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
   }
 
@@ -54,13 +55,13 @@ std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
     return xtc;
   }
 
-  Serial.printf("[%lu] [   ] Failed to load XTC\n", millis());
+  LOG_ERR("READER", "Failed to load XTC");
   return nullptr;
 }
 
 std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
-  if (!SdMan.exists(path.c_str())) {
-    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+  if (!Storage.exists(path.c_str())) {
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
   }
 
@@ -69,60 +70,14 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
     return txt;
   }
 
-  Serial.printf("[%lu] [   ] Failed to load TXT\n", millis());
+  LOG_ERR("READER", "Failed to load TXT");
   return nullptr;
 }
 
-void ReaderActivity::onSelectBookFile(const std::string& path) {
-  currentBookPath = path;  // Track current book path
-  exitActivity();
-  enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Loading..."));
-
-  if (isXtcFile(path)) {
-    // Load XTC file
-    auto xtc = loadXtc(path);
-    if (xtc) {
-      onGoToXtcReader(std::move(xtc));
-    } else {
-      exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load XTC",
-                                                     EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
-      delay(2000);
-      onGoToFileSelection();
-    }
-  } else if (isTxtFile(path)) {
-    // Load TXT file
-    auto txt = loadTxt(path);
-    if (txt) {
-      onGoToTxtReader(std::move(txt));
-    } else {
-      exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load TXT",
-                                                     EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
-      delay(2000);
-      onGoToFileSelection();
-    }
-  } else {
-    // Load EPUB file
-    auto epub = loadEpub(path);
-    if (epub) {
-      onGoToEpubReader(std::move(epub));
-    } else {
-      exitActivity();
-      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load epub",
-                                                     EpdFontFamily::REGULAR, EInkDisplay::HALF_REFRESH));
-      delay(2000);
-      onGoToFileSelection();
-    }
-  }
-}
-
-void ReaderActivity::onGoToFileSelection(const std::string& fromBookPath) {
-  exitActivity();
+void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   // If coming from a book, start in that book's folder; otherwise start from root
   const auto initialPath = fromBookPath.empty() ? "/" : extractFolderPath(fromBookPath);
-  enterNewActivity(new FileSelectionActivity(
-      renderer, mappedInput, [this](const std::string& path) { onSelectBookFile(path); }, onGoBack, initialPath));
+  onGoToLibrary(initialPath);
 }
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
@@ -130,8 +85,7 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   currentBookPath = epubPath;
   exitActivity();
   enterNewActivity(new EpubReaderActivity(
-      renderer, mappedInput, std::move(epub), [this, epubPath] { onGoToFileSelection(epubPath); },
-      [this] { onGoBack(); }));
+      renderer, mappedInput, std::move(epub), [this, epubPath] { goToLibrary(epubPath); }, [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
@@ -139,8 +93,7 @@ void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   currentBookPath = xtcPath;
   exitActivity();
   enterNewActivity(new XtcReaderActivity(
-      renderer, mappedInput, std::move(xtc), [this, xtcPath] { onGoToFileSelection(xtcPath); },
-      [this] { onGoBack(); }));
+      renderer, mappedInput, std::move(xtc), [this, xtcPath] { goToLibrary(xtcPath); }, [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
@@ -148,15 +101,14 @@ void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
   currentBookPath = txtPath;
   exitActivity();
   enterNewActivity(new TxtReaderActivity(
-      renderer, mappedInput, std::move(txt), [this, txtPath] { onGoToFileSelection(txtPath); },
-      [this] { onGoBack(); }));
+      renderer, mappedInput, std::move(txt), [this, txtPath] { goToLibrary(txtPath); }, [this] { onGoBack(); }));
 }
 
 void ReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   if (initialBookPath.empty()) {
-    onGoToFileSelection();  // Start from root when entering via Browse
+    goToLibrary();  // Start from root when entering via Browse
     return;
   }
 

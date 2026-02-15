@@ -15,7 +15,8 @@ class Section {
   FsFile file;
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                              uint16_t viewportWidth, uint16_t viewportHeight);
+                              uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
+                              bool embeddedStyle);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
  public:
@@ -29,11 +30,10 @@ class Section {
         filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin") {}
   ~Section() = default;
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                       uint16_t viewportWidth, uint16_t viewportHeight);
+                       uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle);
   bool clearCache() const;
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                         uint16_t viewportWidth, uint16_t viewportHeight,
-                         const std::function<void()>& progressSetupFn = nullptr,
-                         const std::function<void(int)>& progressFn = nullptr);
+                         uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
+                         const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
 };

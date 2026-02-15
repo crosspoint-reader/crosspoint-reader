@@ -22,8 +22,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     const EpdGlyph* glyph = getGlyph(cp);
 
     if (!glyph) {
-      // TODO: Replace with fallback glyph property?
-      glyph = getGlyph('?');
+      glyph = getGlyph(REPLACEMENT_GLYPH);
     }
 
     if (!glyph) {

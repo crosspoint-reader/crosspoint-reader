@@ -6,13 +6,15 @@
 #include <functional>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 // Enum for network mode selection
-enum class NetworkMode { JOIN_NETWORK, CREATE_HOTSPOT };
+enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };
 
 /**
  * NetworkModeSelectionActivity presents the user with a choice:
  * - "Join a Network" - Connect to an existing WiFi network (STA mode)
+ * - "Connect to Calibre" - Use Calibre wireless device transfers
  * - "Create Hotspot" - Create an Access Point that others can connect to (AP mode)
  *
  * The onModeSelected callback is called with the user's choice.
@@ -21,6 +23,8 @@ enum class NetworkMode { JOIN_NETWORK, CREATE_HOTSPOT };
 class NetworkModeSelectionActivity final : public Activity {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
+
   int selectedIndex = 0;
   bool updateRequired = false;
   const std::function<void(NetworkMode)> onModeSelected;

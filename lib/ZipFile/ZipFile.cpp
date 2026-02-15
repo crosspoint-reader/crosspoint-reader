@@ -1,14 +1,16 @@
 #include "ZipFile.h"
 
-#include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 #include <miniz.h>
+
+#include <algorithm>
 
 bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t* outputBuf, const size_t inflatedSize) {
   // Setup inflator
   const auto inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
   if (!inflator) {
-    Serial.printf("[%lu] [ZIP] Failed to allocate memory for inflator\n", millis());
+    LOG_ERR("ZIP", "Failed to allocate memory for inflator");
     return false;
   }
   memset(inflator, 0, sizeof(tinfl_decompressor));
@@ -21,7 +23,7 @@ bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t*
   free(inflator);
 
   if (status != TINFL_STATUS_DONE) {
-    Serial.printf("[%lu] [ZIP] tinfl_decompress() failed with status %d\n", millis(), status);
+    LOG_ERR("ZIP", "tinfl_decompress() failed with status %d", status);
     return false;
   }
 
@@ -74,6 +76,10 @@ bool ZipFile::loadAllFileStatSlims() {
     file.seekCur(m + k);
   }
 
+  // Set cursor to start of central directory for sequential access
+  lastCentralDirPos = zipDetails.centralDirOffset;
+  lastCentralDirPosValid = true;
+
   if (!wasOpen) {
     close();
   }
@@ -102,15 +108,35 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
     return false;
   }
 
-  file.seek(zipDetails.centralDirOffset);
+  // Phase 1: Try scanning from cursor position first
+  uint32_t startPos = lastCentralDirPosValid ? lastCentralDirPos : zipDetails.centralDirOffset;
+  uint32_t wrapPos = zipDetails.centralDirOffset;
+  bool wrapped = false;
+  bool found = false;
+
+  file.seek(startPos);
 
   uint32_t sig;
   char itemName[256];
-  bool found = false;
 
-  while (file.available()) {
-    file.read(&sig, 4);
-    if (sig != 0x02014b50) break;  // End of list
+  while (true) {
+    uint32_t entryStart = file.position();
+
+    if (file.read(&sig, 4) != 4 || sig != 0x02014b50) {
+      // End of central directory
+      if (!wrapped && lastCentralDirPosValid && startPos != zipDetails.centralDirOffset) {
+        // Wrap around to beginning
+        file.seek(zipDetails.centralDirOffset);
+        wrapped = true;
+        continue;
+      }
+      break;
+    }
+
+    // If we've wrapped and reached our start position, stop
+    if (wrapped && entryStart >= startPos) {
+      break;
+    }
 
     file.seekCur(6);
     file.read(&fileStat->method, 2);
@@ -123,15 +149,25 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
     file.read(&k, 2);
     file.seekCur(8);
     file.read(&fileStat->localHeaderOffset, 4);
-    file.read(itemName, nameLen);
-    itemName[nameLen] = '\0';
 
-    if (strcmp(itemName, filename) == 0) {
-      found = true;
-      break;
+    if (nameLen < 256) {
+      file.read(itemName, nameLen);
+      itemName[nameLen] = '\0';
+
+      if (strcmp(itemName, filename) == 0) {
+        // Found it! Update cursor to next entry
+        file.seekCur(m + k);
+        lastCentralDirPos = file.position();
+        lastCentralDirPosValid = true;
+        found = true;
+        break;
+      }
+    } else {
+      // Name too long, skip it
+      file.seekCur(nameLen);
     }
 
-    // Skip the rest of this entry (extra field + comment)
+    // Skip extra field + comment
     file.seekCur(m + k);
   }
 
@@ -159,13 +195,13 @@ long ZipFile::getDataOffset(const FileStatSlim& fileStat) {
   }
 
   if (read != localHeaderSize) {
-    Serial.printf("[%lu] [ZIP] Something went wrong reading the local header\n", millis());
+    LOG_ERR("ZIP", "Something went wrong reading the local header");
     return -1;
   }
 
   if (pLocalHeader[0] + (pLocalHeader[1] << 8) + (pLocalHeader[2] << 16) + (pLocalHeader[3] << 24) !=
       0x04034b50 /* MZ_ZIP_LOCAL_DIR_HEADER_SIG */) {
-    Serial.printf("[%lu] [ZIP] Not a valid zip file header\n", millis());
+    LOG_ERR("ZIP", "Not a valid zip file header");
     return -1;
   }
 
@@ -186,7 +222,7 @@ bool ZipFile::loadZipDetails() {
 
   const size_t fileSize = file.size();
   if (fileSize < 22) {
-    Serial.printf("[%lu] [ZIP] File too small to be a valid zip\n", millis());
+    LOG_ERR("ZIP", "File too small to be a valid zip");
     if (!wasOpen) {
       close();
     }
@@ -198,7 +234,7 @@ bool ZipFile::loadZipDetails() {
   const int scanRange = fileSize > 1024 ? 1024 : fileSize;
   const auto buffer = static_cast<uint8_t*>(malloc(scanRange));
   if (!buffer) {
-    Serial.printf("[%lu] [ZIP] Failed to allocate memory for EOCD scan buffer\n", millis());
+    LOG_ERR("ZIP", "Failed to allocate memory for EOCD scan buffer");
     if (!wasOpen) {
       close();
     }
@@ -219,7 +255,7 @@ bool ZipFile::loadZipDetails() {
   }
 
   if (foundOffset == -1) {
-    Serial.printf("[%lu] [ZIP] EOCD signature not found in zip file\n", millis());
+    LOG_ERR("ZIP", "EOCD signature not found in zip file");
     free(buffer);
     if (!wasOpen) {
       close();
@@ -243,7 +279,7 @@ bool ZipFile::loadZipDetails() {
 }
 
 bool ZipFile::open() {
-  if (!SdMan.openFileForRead("ZIP", filePath, file)) {
+  if (!Storage.openFileForRead("ZIP", filePath, file)) {
     return false;
   }
   return true;
@@ -253,6 +289,8 @@ bool ZipFile::close() {
   if (file) {
     file.close();
   }
+  lastCentralDirPos = 0;
+  lastCentralDirPosValid = false;
   return true;
 }
 
@@ -264,6 +302,80 @@ bool ZipFile::getInflatedFileSize(const char* filename, size_t* size) {
 
   *size = static_cast<size_t>(fileStat.uncompressedSize);
   return true;
+}
+
+int ZipFile::fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector<uint32_t>& sizes) {
+  if (targets.empty()) {
+    return 0;
+  }
+
+  const bool wasOpen = isOpen();
+  if (!wasOpen && !open()) {
+    return 0;
+  }
+
+  if (!loadZipDetails()) {
+    if (!wasOpen) {
+      close();
+    }
+    return 0;
+  }
+
+  file.seek(zipDetails.centralDirOffset);
+
+  int matched = 0;
+  uint32_t sig;
+  char itemName[256];
+
+  while (file.available()) {
+    file.read(&sig, 4);
+    if (sig != 0x02014b50) break;
+
+    file.seekCur(6);
+    uint16_t method;
+    file.read(&method, 2);
+    file.seekCur(8);
+    uint32_t compressedSize, uncompressedSize;
+    file.read(&compressedSize, 4);
+    file.read(&uncompressedSize, 4);
+    uint16_t nameLen, m, k;
+    file.read(&nameLen, 2);
+    file.read(&m, 2);
+    file.read(&k, 2);
+    file.seekCur(8);
+    uint32_t localHeaderOffset;
+    file.read(&localHeaderOffset, 4);
+
+    if (nameLen < 256) {
+      file.read(itemName, nameLen);
+      itemName[nameLen] = '\0';
+
+      uint64_t hash = fnvHash64(itemName, nameLen);
+      SizeTarget key = {hash, nameLen, 0};
+
+      auto it = std::lower_bound(targets.begin(), targets.end(), key, [](const SizeTarget& a, const SizeTarget& b) {
+        return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+      });
+
+      while (it != targets.end() && it->hash == hash && it->len == nameLen) {
+        if (it->index < sizes.size()) {
+          sizes[it->index] = uncompressedSize;
+          matched++;
+        }
+        ++it;
+      }
+    } else {
+      file.seekCur(nameLen);
+    }
+
+    file.seekCur(m + k);
+  }
+
+  if (!wasOpen) {
+    close();
+  }
+
+  return matched;
 }
 
 uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const bool trailingNullByte) {
@@ -295,7 +407,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
   const auto dataSize = trailingNullByte ? inflatedDataSize + 1 : inflatedDataSize;
   const auto data = static_cast<uint8_t*>(malloc(dataSize));
   if (data == nullptr) {
-    Serial.printf("[%lu] [ZIP] Failed to allocate memory for output buffer (%zu bytes)\n", millis(), dataSize);
+    LOG_ERR("ZIP", "Failed to allocate memory for output buffer (%zu bytes)", dataSize);
     if (!wasOpen) {
       close();
     }
@@ -310,7 +422,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     }
 
     if (dataRead != inflatedDataSize) {
-      Serial.printf("[%lu] [ZIP] Failed to read data\n", millis());
+      LOG_ERR("ZIP", "Failed to read data");
       free(data);
       return nullptr;
     }
@@ -320,7 +432,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     // Read out deflated content from file
     const auto deflatedData = static_cast<uint8_t*>(malloc(deflatedDataSize));
     if (deflatedData == nullptr) {
-      Serial.printf("[%lu] [ZIP] Failed to allocate memory for decompression buffer\n", millis());
+      LOG_ERR("ZIP", "Failed to allocate memory for decompression buffer");
       if (!wasOpen) {
         close();
       }
@@ -333,7 +445,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     }
 
     if (dataRead != deflatedDataSize) {
-      Serial.printf("[%lu] [ZIP] Failed to read data, expected %d got %d\n", millis(), deflatedDataSize, dataRead);
+      LOG_ERR("ZIP", "Failed to read data, expected %d got %d", deflatedDataSize, dataRead);
       free(deflatedData);
       free(data);
       return nullptr;
@@ -343,14 +455,14 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     free(deflatedData);
 
     if (!success) {
-      Serial.printf("[%lu] [ZIP] Failed to inflate file\n", millis());
+      LOG_ERR("ZIP", "Failed to inflate file");
       free(data);
       return nullptr;
     }
 
     // Continue out of block with data set
   } else {
-    Serial.printf("[%lu] [ZIP] Unsupported compression method\n", millis());
+    LOG_ERR("ZIP", "Unsupported compression method");
     if (!wasOpen) {
       close();
     }
@@ -386,7 +498,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     // no deflation, just read content
     const auto buffer = static_cast<uint8_t*>(malloc(chunkSize));
     if (!buffer) {
-      Serial.printf("[%lu] [ZIP] Failed to allocate memory for buffer\n", millis());
+      LOG_ERR("ZIP", "Failed to allocate memory for buffer");
       if (!wasOpen) {
         close();
       }
@@ -397,7 +509,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     while (remaining > 0) {
       const size_t dataRead = file.read(buffer, remaining < chunkSize ? remaining : chunkSize);
       if (dataRead == 0) {
-        Serial.printf("[%lu] [ZIP] Could not read more bytes\n", millis());
+        LOG_ERR("ZIP", "Could not read more bytes");
         free(buffer);
         if (!wasOpen) {
           close();
@@ -420,7 +532,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     // Setup inflator
     const auto inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
     if (!inflator) {
-      Serial.printf("[%lu] [ZIP] Failed to allocate memory for inflator\n", millis());
+      LOG_ERR("ZIP", "Failed to allocate memory for inflator");
       if (!wasOpen) {
         close();
       }
@@ -432,7 +544,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     // Setup file read buffer
     const auto fileReadBuffer = static_cast<uint8_t*>(malloc(chunkSize));
     if (!fileReadBuffer) {
-      Serial.printf("[%lu] [ZIP] Failed to allocate memory for zip file read buffer\n", millis());
+      LOG_ERR("ZIP", "Failed to allocate memory for zip file read buffer");
       free(inflator);
       if (!wasOpen) {
         close();
@@ -442,7 +554,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
 
     const auto outputBuffer = static_cast<uint8_t*>(malloc(TINFL_LZ_DICT_SIZE));
     if (!outputBuffer) {
-      Serial.printf("[%lu] [ZIP] Failed to allocate memory for dictionary\n", millis());
+      LOG_ERR("ZIP", "Failed to allocate memory for dictionary");
       free(inflator);
       free(fileReadBuffer);
       if (!wasOpen) {
@@ -493,7 +605,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
       if (outBytes > 0) {
         processedOutputBytes += outBytes;
         if (out.write(outputBuffer + outputCursor, outBytes) != outBytes) {
-          Serial.printf("[%lu] [ZIP] Failed to write all output bytes to stream\n", millis());
+          LOG_ERR("ZIP", "Failed to write all output bytes to stream");
           if (!wasOpen) {
             close();
           }
@@ -507,7 +619,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
       }
 
       if (status < 0) {
-        Serial.printf("[%lu] [ZIP] tinfl_decompress() failed with status %d\n", millis(), status);
+        LOG_ERR("ZIP", "tinfl_decompress() failed with status %d", status);
         if (!wasOpen) {
           close();
         }
@@ -518,8 +630,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
       }
 
       if (status == TINFL_STATUS_DONE) {
-        Serial.printf("[%lu] [ZIP] Decompressed %d bytes into %d bytes\n", millis(), deflatedDataSize,
-                      inflatedDataSize);
+        LOG_ERR("ZIP", "Decompressed %d bytes into %d bytes", deflatedDataSize, inflatedDataSize);
         if (!wasOpen) {
           close();
         }
@@ -531,7 +642,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     }
 
     // If we get here, EOF reached without TINFL_STATUS_DONE
-    Serial.printf("[%lu] [ZIP] Unexpected EOF\n", millis());
+    LOG_ERR("ZIP", "Unexpected EOF");
     if (!wasOpen) {
       close();
     }
@@ -545,6 +656,6 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     close();
   }
 
-  Serial.printf("[%lu] [ZIP] Unsupported compression method\n", millis());
+  LOG_ERR("ZIP", "Unsupported compression method");
   return false;
 }

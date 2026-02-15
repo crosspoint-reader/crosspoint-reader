@@ -9,12 +9,14 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -41,9 +43,10 @@ void XtcReaderActivity::onEnter() {
   // Load saved progress
   loadProgress();
 
-  // Save current XTC as last opened book
+  // Save current XTC as last opened book and add to recent books
   APP_STATE.openEpubPath = xtc->getPath();
   APP_STATE.saveToFile();
+  RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
 
   // Trigger first update
   updateRequired = true;
@@ -67,6 +70,8 @@ void XtcReaderActivity::onExit() {
   }
   vSemaphoreDelete(renderingMutex);
   renderingMutex = nullptr;
+  APP_STATE.readerActivityLoadCount = 0;
+  APP_STATE.saveToFile();
   xtc.reset();
 }
 
@@ -97,26 +102,33 @@ void XtcReaderActivity::loop() {
     }
   }
 
-  // Long press BACK (1s+) goes directly to home
+  // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    onGoHome();
-    return;
-  }
-
-  // Short press BACK goes to file selection
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
     onGoBack();
     return;
   }
 
-  const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                            (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                             mappedInput.wasReleased(MappedInputManager::Button::Power)) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Right);
+  // Short press BACK goes directly to home
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
+    onGoHome();
+    return;
+  }
 
-  if (!prevReleased && !nextReleased) {
+  // When long-press chapter skip is disabled, turn pages on press instead of release.
+  const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
+  const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
+                                                    mappedInput.wasPressed(MappedInputManager::Button::Left))
+                                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                                                    mappedInput.wasReleased(MappedInputManager::Button::Left));
+  const bool powerPageTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                             mappedInput.wasReleased(MappedInputManager::Button::Power);
+  const bool nextTriggered = usePressForPageTurn
+                                 ? (mappedInput.wasPressed(MappedInputManager::Button::PageForward) || powerPageTurn ||
+                                    mappedInput.wasPressed(MappedInputManager::Button::Right))
+                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
+                                    mappedInput.wasReleased(MappedInputManager::Button::Right));
+
+  if (!prevTriggered && !nextTriggered) {
     return;
   }
 
@@ -127,17 +139,17 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = mappedInput.getHeldTime() > skipPageMs;
+  const bool skipPages = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipPageMs;
   const int skipAmount = skipPages ? 10 : 1;
 
-  if (prevReleased) {
+  if (prevTriggered) {
     if (currentPage >= static_cast<uint32_t>(skipAmount)) {
       currentPage -= skipAmount;
     } else {
       currentPage = 0;
     }
     updateRequired = true;
-  } else if (nextReleased) {
+  } else if (nextTriggered) {
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
@@ -194,7 +206,7 @@ void XtcReaderActivity::renderPage() {
   // Allocate page buffer
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
   if (!pageBuffer) {
-    Serial.printf("[%lu] [XTR] Failed to allocate page buffer (%lu bytes)\n", millis(), pageBufferSize);
+    LOG_ERR("XTR", "Failed to allocate page buffer (%lu bytes)", pageBufferSize);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, "Memory error", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
@@ -204,7 +216,7 @@ void XtcReaderActivity::renderPage() {
   // Load page data
   size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
   if (bytesRead == 0) {
-    Serial.printf("[%lu] [XTR] Failed to load page %lu\n", millis(), currentPage);
+    LOG_ERR("XTR", "Failed to load page %lu", currentPage);
     free(pageBuffer);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, "Page load error", true, EpdFontFamily::BOLD);
@@ -253,8 +265,8 @@ void XtcReaderActivity::renderPage() {
         pixelCounts[getPixelValue(x, y)]++;
       }
     }
-    Serial.printf("[%lu] [XTR] Pixel distribution: White=%lu, DarkGrey=%lu, LightGrey=%lu, Black=%lu\n", millis(),
-                  pixelCounts[0], pixelCounts[1], pixelCounts[2], pixelCounts[3]);
+    LOG_DBG("XTR", "Pixel distribution: White=%lu, DarkGrey=%lu, LightGrey=%lu, Black=%lu", pixelCounts[0],
+            pixelCounts[1], pixelCounts[2], pixelCounts[3]);
 
     // Pass 1: BW buffer - draw all non-white pixels as black
     for (uint16_t y = 0; y < pageHeight; y++) {
@@ -267,7 +279,7 @@ void XtcReaderActivity::renderPage() {
 
     // Display BW with conditional refresh based on pagesUntilFullRefresh
     if (pagesUntilFullRefresh <= 1) {
-      renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
     } else {
       renderer.displayBuffer();
@@ -317,8 +329,7 @@ void XtcReaderActivity::renderPage() {
 
     free(pageBuffer);
 
-    Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (2-bit grayscale)\n", millis(), currentPage + 1,
-                  xtc->getPageCount());
+    LOG_DBG("XTR", "Rendered page %lu/%lu (2-bit grayscale)", currentPage + 1, xtc->getPageCount());
     return;
   } else {
     // 1-bit mode: 8 pixels per byte, MSB first
@@ -347,20 +358,19 @@ void XtcReaderActivity::renderPage() {
 
   // Display with appropriate refresh
   if (pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
     renderer.displayBuffer();
     pagesUntilFullRefresh--;
   }
 
-  Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (%u-bit)\n", millis(), currentPage + 1, xtc->getPageCount(),
-                bitDepth);
+  LOG_DBG("XTR", "Rendered page %lu/%lu (%u-bit)", currentPage + 1, xtc->getPageCount(), bitDepth);
 }
 
 void XtcReaderActivity::saveProgress() const {
   FsFile f;
-  if (SdMan.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
+  if (Storage.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;
@@ -373,11 +383,11 @@ void XtcReaderActivity::saveProgress() const {
 
 void XtcReaderActivity::loadProgress() {
   FsFile f;
-  if (SdMan.openFileForRead("XTR", xtc->getCachePath() + "/progress.bin", f)) {
+  if (Storage.openFileForRead("XTR", xtc->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
       currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
-      Serial.printf("[%lu] [XTR] Loaded progress: page %lu\n", millis(), currentPage);
+      LOG_DBG("XTR", "Loaded progress: page %lu", currentPage);
 
       // Validate page number
       if (currentPage >= xtc->getPageCount()) {

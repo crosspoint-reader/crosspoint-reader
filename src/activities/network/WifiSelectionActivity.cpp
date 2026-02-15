@@ -1,6 +1,7 @@
 #include "WifiSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <WiFi.h>
 
 #include <map>
@@ -8,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 void WifiSelectionActivity::taskTrampoline(void* param) {
@@ -20,7 +22,8 @@ void WifiSelectionActivity::onEnter() {
 
   renderingMutex = xSemaphoreCreateMutex();
 
-  // Load saved WiFi credentials - SD card operations need lock as we use SPI for both
+  // Load saved WiFi credentials - SD card operations need lock as we use SPI
+  // for both
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   WIFI_STORE.loadFromFile();
   xSemaphoreGive(renderingMutex);
@@ -36,10 +39,17 @@ void WifiSelectionActivity::onEnter() {
   usedSavedPassword = false;
   savePromptSelection = 0;
   forgetPromptSelection = 0;
+  autoConnecting = false;
 
-  // Trigger first update to show scanning message
-  updateRequired = true;
+  // Cache MAC address for display
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macStr[32];
+  snprintf(macStr, sizeof(macStr), "MAC address: %02x-%02x-%02x-%02x-%02x-%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
+           mac[5]);
+  cachedMacAddress = std::string(macStr);
 
+  // Task creation
   xTaskCreate(&WifiSelectionActivity::taskTrampoline, "WifiSelectionTask",
               4096,               // Stack size (larger for WiFi operations)
               this,               // Parameters
@@ -47,46 +57,68 @@ void WifiSelectionActivity::onEnter() {
               &displayTaskHandle  // Task handle
   );
 
-  // Start WiFi scan
+  // Attempt to auto-connect to the last network
+  if (allowAutoConnect) {
+    const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
+    if (!lastSsid.empty()) {
+      const auto* cred = WIFI_STORE.findCredential(lastSsid);
+      if (cred) {
+        LOG_DBG("WIFI", "Attempting to auto-connect to %s", lastSsid.c_str());
+        selectedSSID = cred->ssid;
+        enteredPassword = cred->password;
+        selectedRequiresPassword = !cred->password.empty();
+        usedSavedPassword = true;
+        autoConnecting = true;
+        attemptConnection();
+        updateRequired = true;
+        return;
+      }
+    }
+  }
+
+  // Fallback to scanning
   startWifiScan();
 }
 
 void WifiSelectionActivity::onExit() {
   Activity::onExit();
 
-  Serial.printf("[%lu] [WIFI] [MEM] Free heap at onExit start: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WIFI] [MEM", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   // Stop any ongoing WiFi scan
-  Serial.printf("[%lu] [WIFI] Deleting WiFi scan...\n", millis());
+  LOG_DBG("WIFI", "Deleting WiFi scan...");
   WiFi.scanDelete();
-  Serial.printf("[%lu] [WIFI] [MEM] Free heap after scanDelete: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WIFI] [MEM", "Free heap after scanDelete: %d bytes", ESP.getFreeHeap());
 
-  // Note: We do NOT disconnect WiFi here - the parent activity (CrossPointWebServerActivity)
-  // manages WiFi connection state. We just clean up the scan and task.
+  // Note: We do NOT disconnect WiFi here - the parent activity
+  // (CrossPointWebServerActivity) manages WiFi connection state. We just clean
+  // up the scan and task.
 
   // Acquire mutex before deleting task to ensure task isn't using it
   // This prevents hangs/crashes if the task holds the mutex when deleted
-  Serial.printf("[%lu] [WIFI] Acquiring rendering mutex before task deletion...\n", millis());
+  LOG_DBG("WIFI", "Acquiring rendering mutex before task deletion...");
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
 
-  // Delete the display task (we now hold the mutex, so task is blocked if it needs it)
-  Serial.printf("[%lu] [WIFI] Deleting display task...\n", millis());
+  // Delete the display task (we now hold the mutex, so task is blocked if it
+  // needs it)
+  LOG_DBG("WIFI", "Deleting display task...");
   if (displayTaskHandle) {
     vTaskDelete(displayTaskHandle);
     displayTaskHandle = nullptr;
-    Serial.printf("[%lu] [WIFI] Display task deleted\n", millis());
+    LOG_DBG("WIFI", "Display task deleted");
   }
 
   // Now safe to delete the mutex since we own it
-  Serial.printf("[%lu] [WIFI] Deleting mutex...\n", millis());
+  LOG_DBG("WIFI", "Deleting mutex...");
   vSemaphoreDelete(renderingMutex);
   renderingMutex = nullptr;
-  Serial.printf("[%lu] [WIFI] Mutex deleted\n", millis());
+  LOG_DBG("WIFI", "Mutex deleted");
 
-  Serial.printf("[%lu] [WIFI] [MEM] Free heap at onExit end: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WIFI] [MEM", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
 
 void WifiSelectionActivity::startWifiScan() {
+  autoConnecting = false;
   state = WifiSelectionState::SCANNING;
   networks.clear();
   updateRequired = true;
@@ -172,6 +204,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
   selectedRequiresPassword = network.isEncrypted;
   usedSavedPassword = false;
   enteredPassword.clear();
+  autoConnecting = false;
 
   // Check if we have saved credentials for this network
   const auto* savedCred = WIFI_STORE.findCredential(selectedSSID);
@@ -179,8 +212,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     // Use saved password - connect directly
     enteredPassword = savedCred->password;
     usedSavedPassword = true;
-    Serial.printf("[%lu] [WiFi] Using saved password for %s, length: %zu\n", millis(), selectedSSID.c_str(),
-                  enteredPassword.size());
+    LOG_DBG("WiFi", "Using saved password for %s, length: %zu", selectedSSID.c_str(), enteredPassword.size());
     attemptConnection();
     return;
   }
@@ -214,7 +246,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
 }
 
 void WifiSelectionActivity::attemptConnection() {
-  state = WifiSelectionState::CONNECTING;
+  state = autoConnecting ? WifiSelectionState::AUTO_CONNECTING : WifiSelectionState::CONNECTING;
   connectionStartTime = millis();
   connectedIP.clear();
   connectionError.clear();
@@ -230,7 +262,7 @@ void WifiSelectionActivity::attemptConnection() {
 }
 
 void WifiSelectionActivity::checkConnectionStatus() {
-  if (state != WifiSelectionState::CONNECTING) {
+  if (state != WifiSelectionState::CONNECTING && state != WifiSelectionState::AUTO_CONNECTING) {
     return;
   }
 
@@ -242,6 +274,13 @@ void WifiSelectionActivity::checkConnectionStatus() {
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     connectedIP = ipStr;
+    autoConnecting = false;
+
+    // Save this as the last connected network - SD card operations need lock as
+    // we use SPI for both
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    WIFI_STORE.setLastConnectedSsid(selectedSSID);
+    xSemaphoreGive(renderingMutex);
 
     // If we entered a new password, ask if user wants to save it
     // Otherwise, immediately complete so parent can start web server
@@ -251,16 +290,18 @@ void WifiSelectionActivity::checkConnectionStatus() {
       updateRequired = true;
     } else {
       // Using saved password or open network - complete immediately
-      Serial.printf("[%lu] [WIFI] Connected with saved/open credentials, completing immediately\n", millis());
+      LOG_DBG("WIFI",
+              "Connected with saved/open credentials, "
+              "completing immediately");
       onComplete(true);
     }
     return;
   }
 
   if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
-    connectionError = "Connection failed";
+    connectionError = "Error: General failure";
     if (status == WL_NO_SSID_AVAIL) {
-      connectionError = "Network not found";
+      connectionError = "Error: Network not found";
     }
     state = WifiSelectionState::CONNECTION_FAILED;
     updateRequired = true;
@@ -270,7 +311,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
   // Check for timeout
   if (millis() - connectionStartTime > CONNECTION_TIMEOUT_MS) {
     WiFi.disconnect();
-    connectionError = "Connection timeout";
+    connectionError = "Error: Connection timeout";
     state = WifiSelectionState::CONNECTION_FAILED;
     updateRequired = true;
     return;
@@ -290,7 +331,7 @@ void WifiSelectionActivity::loop() {
   }
 
   // Check connection progress
-  if (state == WifiSelectionState::CONNECTING) {
+  if (state == WifiSelectionState::CONNECTING || state == WifiSelectionState::AUTO_CONNECTING) {
     checkConnectionStatus();
     return;
   }
@@ -346,8 +387,8 @@ void WifiSelectionActivity::loop() {
         updateRequired = true;
       }
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (forgetPromptSelection == 0) {
-        // User chose "Yes" - forget the network
+      if (forgetPromptSelection == 1) {
+        // User chose "Forget network" - forget the network
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
         WIFI_STORE.removeCredential(selectedSSID);
         xSemaphoreGive(renderingMutex);
@@ -358,18 +399,17 @@ void WifiSelectionActivity::loop() {
           network->hasSavedPassword = false;
         }
       }
-      // Go back to network list
-      state = WifiSelectionState::NETWORK_LIST;
-      updateRequired = true;
+      // Go back to network list (whether Cancel or Forget network was selected)
+      startWifiScan();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       // Skip forgetting, go back to network list
-      state = WifiSelectionState::NETWORK_LIST;
-      updateRequired = true;
+      startWifiScan();
     }
     return;
   }
 
-  // Handle connected state (should not normally be reached - connection completes immediately)
+  // Handle connected state (should not normally be reached - connection
+  // completes immediately)
   if (state == WifiSelectionState::CONNECTED) {
     // Safety fallback - immediately complete
     onComplete(true);
@@ -380,12 +420,14 @@ void WifiSelectionActivity::loop() {
   if (state == WifiSelectionState::CONNECTION_FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      // If we used saved credentials, offer to forget the network
-      if (usedSavedPassword) {
+      // If we were auto-connecting or using a saved credential, offer to forget
+      // the network
+      if (autoConnecting || usedSavedPassword) {
+        autoConnecting = false;
         state = WifiSelectionState::FORGET_PROMPT;
-        forgetPromptSelection = 0;  // Default to "Yes"
+        forgetPromptSelection = 0;  // Default to "Cancel"
       } else {
-        // Go back to network list on failure
+        // Go back to network list on failure for non-saved credentials
         state = WifiSelectionState::NETWORK_LIST;
       }
       updateRequired = true;
@@ -411,20 +453,33 @@ void WifiSelectionActivity::loop() {
       return;
     }
 
-    // Handle UP/DOWN navigation
-    if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      if (selectedNetworkIndex > 0) {
-        selectedNetworkIndex--;
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      startWifiScan();
+      return;
+    }
+
+    const bool leftPressed = mappedInput.wasPressed(MappedInputManager::Button::Left);
+    if (leftPressed) {
+      const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
+      if (hasSavedPassword) {
+        selectedSSID = networks[selectedNetworkIndex].ssid;
+        state = WifiSelectionState::FORGET_PROMPT;
+        forgetPromptSelection = 0;  // Default to "Cancel"
         updateRequired = true;
-      }
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-               mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      if (!networks.empty() && selectedNetworkIndex < static_cast<int>(networks.size()) - 1) {
-        selectedNetworkIndex++;
-        updateRequired = true;
+        return;
       }
     }
+
+    // Handle navigation
+    buttonNavigator.onNext([this] {
+      selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
+      updateRequired = true;
+    });
+
+    buttonNavigator.onPrevious([this] {
+      selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size());
+      updateRequired = true;
+    });
   }
 }
 
@@ -474,6 +529,9 @@ void WifiSelectionActivity::render() const {
   renderer.clearScreen();
 
   switch (state) {
+    case WifiSelectionState::AUTO_CONNECTING:
+      renderConnecting();
+      break;
     case WifiSelectionState::SCANNING:
       renderConnecting();  // Reuse connecting screen with different message
       break;
@@ -512,7 +570,7 @@ void WifiSelectionActivity::renderNetworkList() const {
     const auto height = renderer.getLineHeight(UI_10_FONT_ID);
     const auto top = (pageHeight - height) / 2;
     renderer.drawCenteredText(UI_10_FONT_ID, top, "No networks found");
-    renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, "Press OK to scan again");
+    renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, "Press Connect to scan again");
   } else {
     // Calculate how many networks we can display
     constexpr int startY = 60;
@@ -538,8 +596,8 @@ void WifiSelectionActivity::renderNetworkList() const {
 
       // Draw network name (truncate if too long)
       std::string displayName = network.ssid;
-      if (displayName.length() > 16) {
-        displayName.replace(13, displayName.length() - 13, "...");
+      if (displayName.length() > 33) {
+        displayName.replace(30, displayName.length() - 30, "...");
       }
       renderer.drawText(UI_10_FONT_ID, 20, networkY, displayName.c_str());
 
@@ -572,10 +630,17 @@ void WifiSelectionActivity::renderNetworkList() const {
     renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 90, countStr);
   }
 
+  // Show MAC address above the network count and legend
+  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 105, cachedMacAddress.c_str());
+
   // Draw help text
   renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 75, "* = Encrypted | + = Saved");
-  const auto labels = mappedInput.mapLabels("« Back", "Connect", "", "");
-  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
+  const char* forgetLabel = hasSavedPassword ? "Forget" : "";
+
+  const auto labels = mappedInput.mapLabels("« Back", "Connect", forgetLabel, "Refresh");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void WifiSelectionActivity::renderConnecting() const {
@@ -612,7 +677,9 @@ void WifiSelectionActivity::renderConnected() const {
   const std::string ipInfo = "IP Address: " + connectedIP;
   renderer.drawCenteredText(UI_10_FONT_ID, top + 40, ipInfo.c_str());
 
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "Press any button to continue");
+  // Use centralized button hints
+  const auto labels = mappedInput.mapLabels("", "Continue", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void WifiSelectionActivity::renderSavePrompt() const {
@@ -652,7 +719,9 @@ void WifiSelectionActivity::renderSavePrompt() const {
     renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, "No");
   }
 
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm");
+  // Use centralized button hints
+  const auto labels = mappedInput.mapLabels("« Skip", "Select", "Left", "Right");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void WifiSelectionActivity::renderConnectionFailed() const {
@@ -662,7 +731,10 @@ void WifiSelectionActivity::renderConnectionFailed() const {
 
   renderer.drawCenteredText(UI_12_FONT_ID, top - 20, "Connection Failed", true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(UI_10_FONT_ID, top + 20, connectionError.c_str());
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "Press any button to continue");
+
+  // Use centralized button hints
+  const auto labels = mappedInput.mapLabels("« Back", "Continue", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void WifiSelectionActivity::renderForgetPrompt() const {
@@ -671,36 +743,37 @@ void WifiSelectionActivity::renderForgetPrompt() const {
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height * 3) / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Forget Network?", true, EpdFontFamily::BOLD);
-
+  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, "Forget Network", true, EpdFontFamily::BOLD);
   std::string ssidInfo = "Network: " + selectedSSID;
   if (ssidInfo.length() > 28) {
     ssidInfo.replace(25, ssidInfo.length() - 25, "...");
   }
   renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
 
-  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, "Remove saved password?");
+  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, "Forget network and remove saved password?");
 
-  // Draw Yes/No buttons
+  // Draw Cancel/Forget network buttons
   const int buttonY = top + 80;
-  constexpr int buttonWidth = 60;
+  constexpr int buttonWidth = 120;
   constexpr int buttonSpacing = 30;
   constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
   const int startX = (pageWidth - totalWidth) / 2;
 
-  // Draw "Yes" button
+  // Draw "Cancel" button
   if (forgetPromptSelection == 0) {
-    renderer.drawText(UI_10_FONT_ID, startX, buttonY, "[Yes]");
+    renderer.drawText(UI_10_FONT_ID, startX, buttonY, "[Cancel]");
   } else {
-    renderer.drawText(UI_10_FONT_ID, startX + 4, buttonY, "Yes");
+    renderer.drawText(UI_10_FONT_ID, startX + 4, buttonY, "Cancel");
   }
 
-  // Draw "No" button
+  // Draw "Forget network" button
   if (forgetPromptSelection == 1) {
-    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, "[No]");
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, "[Forget network]");
   } else {
-    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, "No");
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, "Forget network");
   }
 
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm");
+  // Use centralized button hints
+  const auto labels = mappedInput.mapLabels("« Back", "Select", "Left", "Right");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
