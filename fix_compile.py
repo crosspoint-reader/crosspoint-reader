@@ -1,4 +1,7 @@
-#include "EpubReaderActivity.h"
+import os
+
+file_path = "src/activities/reader/EpubReaderActivity.cpp"
+content = r"""#include "EpubReaderActivity.h"
 
 #include <Epub/Page.h>
 #include <FsHelpers.h>
@@ -851,16 +854,15 @@ void EpubReaderActivity::renderScreen() {
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.forceBoldText)) {
+                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.forceBoldText)) {
       LOG_DBG("ERS", "Cache not found, building...\n");
 
       const auto popupFn = [this]() { GUI.drawPopup(renderer, "Indexing..."); };
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, popupFn,
-                                      SETTINGS.forceBoldText)) {
+                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                      popupFn, SETTINGS.forceBoldText)) {
         LOG_ERR("ERS", "Failed to persist page data to SD\n");
         section.reset();
         return;
@@ -948,6 +950,7 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
+  
   // Render clean text. (True Bold flag is natively baked into the parsed Page object!)
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
 
@@ -1143,3 +1146,8 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
                       title.c_str());
   }
 }
+"""
+
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(content.strip() + "\n")
+print(f"Patched {file_path} successfully!")
