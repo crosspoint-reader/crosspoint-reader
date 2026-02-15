@@ -6,8 +6,8 @@
 
 #include <algorithm>
 
-bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t* outputBuf, const size_t inflatedSize) {
-  // Setup inflator
+static bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t* outputBuf,
+                           const size_t inflatedSize) {
   const auto inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
   if (!inflator) {
     LOG_ERR("ZIP", "Failed to allocate memory for inflator");
@@ -20,6 +20,7 @@ bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t*
   size_t outBytes = inflatedSize;
   const tinfl_status status = tinfl_decompress(inflator, inputBuf, &inBytes, nullptr, outputBuf, &outBytes,
                                                TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+
   free(inflator);
 
   if (status != TINFL_STATUS_DONE) {
@@ -451,7 +452,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
       return nullptr;
     }
 
-    const bool success = inflateOneShot(deflatedData, deflatedDataSize, data, inflatedDataSize);
+    bool success = inflateOneShot(deflatedData, deflatedDataSize, data, inflatedDataSize);
     free(deflatedData);
 
     if (!success) {
@@ -529,8 +530,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
   }
 
   if (fileStat.method == MZ_DEFLATED) {
-    // Setup inflator
-    const auto inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
+    auto* inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
     if (!inflator) {
       LOG_ERR("ZIP", "Failed to allocate memory for inflator");
       if (!wasOpen) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <EpdFontFamily.h>
+#include <FontDecompressor.h>
 #include <HalDisplay.h>
 
 #include <map>
@@ -36,9 +37,11 @@ class GfxRenderer {
   uint8_t* frameBuffer = nullptr;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
+  FontDecompressor* fontDecompressor = nullptr;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
+  const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
   template <Color color>
   void drawPixelDither(int x, int y) const;
   template <Color color>
@@ -57,6 +60,10 @@ class GfxRenderer {
   // Setup
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
+  void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
+  void clearFontCache() {
+    if (fontDecompressor) fontDecompressor->clearCache();
+  }
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }

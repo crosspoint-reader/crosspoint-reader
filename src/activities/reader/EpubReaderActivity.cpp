@@ -646,6 +646,7 @@ void EpubReaderActivity::renderScreen() {
       return renderScreen();
     }
     const auto start = millis();
+    renderer.clearFontCache();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }

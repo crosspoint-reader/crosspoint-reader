@@ -1,0 +1,133 @@
+#include "FontDecompressor.h"
+
+#include <HardwareSerial.h>
+#include <uzlib.h>
+
+#include <cstdlib>
+#include <cstring>
+
+bool FontDecompressor::init() {
+  memset(&decomp, 0, sizeof(decomp));
+  return true;
+}
+
+void FontDecompressor::deinit() {
+  for (auto& entry : cache) {
+    if (entry.data) {
+      free(entry.data);
+      entry.data = nullptr;
+    }
+    entry.valid = false;
+  }
+}
+
+void FontDecompressor::clearCache() {
+  for (auto& entry : cache) {
+    if (entry.data) {
+      free(entry.data);
+      entry.data = nullptr;
+    }
+    entry.valid = false;
+  }
+  accessCounter = 0;
+}
+
+uint16_t FontDecompressor::getGroupIndex(const EpdFontData* fontData, uint16_t glyphIndex) {
+  for (uint16_t i = 0; i < fontData->groupCount; i++) {
+    uint16_t first = fontData->groups[i].firstGlyphIndex;
+    if (glyphIndex >= first && glyphIndex < first + fontData->groups[i].glyphCount) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+FontDecompressor::CacheEntry* FontDecompressor::findInCache(const EpdFontData* fontData, uint16_t groupIndex) {
+  for (auto& entry : cache) {
+    if (entry.valid && entry.font == fontData && entry.groupIndex == groupIndex) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
+FontDecompressor::CacheEntry* FontDecompressor::findEvictionCandidate() {
+  // Find an invalid slot first
+  for (auto& entry : cache) {
+    if (!entry.valid) {
+      return &entry;
+    }
+  }
+  // Otherwise evict LRU
+  CacheEntry* lru = &cache[0];
+  for (auto& entry : cache) {
+    if (entry.lastUsed < lru->lastUsed) {
+      lru = &entry;
+    }
+  }
+  return lru;
+}
+
+bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t groupIndex, CacheEntry* entry) {
+  const EpdFontGroup& group = fontData->groups[groupIndex];
+
+  // Free old buffer if reusing a slot
+  if (entry->data) {
+    free(entry->data);
+    entry->data = nullptr;
+  }
+  entry->valid = false;
+
+  // Allocate output buffer
+  auto* outBuf = static_cast<uint8_t*>(malloc(group.uncompressedSize));
+  if (!outBuf) {
+    Serial.printf("[%lu] [FDC] Failed to allocate %u bytes for group %u\n", millis(), group.uncompressedSize,
+                  groupIndex);
+    return false;
+  }
+
+  // Decompress using uzlib
+  const uint8_t* inputBuf = &fontData->bitmap[group.compressedOffset];
+
+  uzlib_uncompress_init(&decomp, NULL, 0);
+  decomp.source = inputBuf;
+  decomp.source_limit = inputBuf + group.compressedSize;
+  decomp.dest_start = outBuf;
+  decomp.dest = outBuf;
+  decomp.dest_limit = outBuf + group.uncompressedSize;
+
+  int res = uzlib_uncompress(&decomp);
+
+  if (res < 0) {
+    Serial.printf("[%lu] [FDC] Decompression failed for group %u (status %d)\n", millis(), groupIndex, res);
+    free(outBuf);
+    return false;
+  }
+
+  entry->font = fontData;
+  entry->groupIndex = groupIndex;
+  entry->data = outBuf;
+  entry->dataSize = group.uncompressedSize;
+  entry->valid = true;
+  return true;
+}
+
+const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint16_t glyphIndex) {
+  uint16_t groupIndex = getGroupIndex(fontData, glyphIndex);
+
+  // Check cache
+  CacheEntry* entry = findInCache(fontData, groupIndex);
+  if (entry) {
+    entry->lastUsed = ++accessCounter;
+    return &entry->data[glyph->dataOffset];
+  }
+
+  // Cache miss - decompress
+  entry = findEvictionCandidate();
+  if (!decompressGroup(fontData, groupIndex, entry)) {
+    return nullptr;
+  }
+
+  entry->lastUsed = ++accessCounter;
+  return &entry->data[glyph->dataOffset];
+}
