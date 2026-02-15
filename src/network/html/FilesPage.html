@@ -797,8 +797,8 @@
 </div>
 
 <footer>
-  <svg class="icon icon-github" aria-hidden="true">
-    <use href="#icon-github"></use>
+  <svg class="icon icon-github" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path fill="currentColor" d="M12,2A10,10,0,0,0,8.84,21.5c.5.08.66-.23.66-.5V19.31C6.73,19.91,6.14,18,6.14,18A2.69,2.69,0,0,0,5,16.5c-.91-.62.07-.6.07-.6a2.1,2.1,0,0,1,1.53,1,2.15,2.15,0,0,0,2.91.83,2.16,2.16,0,0,1,.63-1.34C8,16.17,5.62,15.31,5.62,11.5a3.87,3.87,0,0,1,1-2.71,3.58,3.58,0,0,1,.1-2.64s.84-.27,2.75,1a9.63,9.63,0,0,1,5,0c1.91-1.29,2.75-1,2.75-1a3.58,3.58,0,0,1,.1,2.64,3.87,3.87,0,0,1,1,2.71c0,3.82-2.34,4.66-4.57,4.91a2.39,2.39,0,0,1,.69,1.85V21c0,.27.16.59.67.5A10,10,0,0,0,12,2Z"></path>
   </svg>
   <a
     href="https://github.com/crosspoint-reader/crosspoint-reader"
@@ -917,10 +917,6 @@
     <path fill="currentColor" d="M20.7736 8.09994C22.3834 6.48381 22.315 4.36152 21.113 3.06183C20.5268 2.4281 19.6926 2.0233 18.7477 2.00098C17.7993 1.97858 16.8167 2.34127 15.91 3.09985C15.8868 3.11925 15.8645 3.13969 15.8432 3.16111L2.87446 16.1816C2.31443 16.7438 2 17.5051 2 18.2987V19.9922C2 21.0937 2.89197 22 4.00383 22H5.68265C6.48037 22 7.24524 21.6823 7.80819 21.1171L20.7736 8.09994ZM17.2071 5.79295C16.8166 5.40243 16.1834 5.40243 15.7929 5.79295C15.4024 6.18348 15.4024 6.81664 15.7929 7.20717L16.7929 8.20717C17.1834 8.59769 17.8166 8.59769 18.2071 8.20717C18.5976 7.81664 18.5976 7.18348 18.2071 6.79295L17.2071 5.79295Z"></path>
   </symbol>
 
-  <symbol viewBox="0 0 24 24" id="icon-github">
-    <path fill="currentColor" d="M12,2A10,10,0,0,0,8.84,21.5c.5.08.66-.23.66-.5V19.31C6.73,19.91,6.14,18,6.14,18A2.69,2.69,0,0,0,5,16.5c-.91-.62.07-.6.07-.6a2.1,2.1,0,0,1,1.53,1,2.15,2.15,0,0,0,2.91.83,2.16,2.16,0,0,1,.63-1.34C8,16.17,5.62,15.31,5.62,11.5a3.87,3.87,0,0,1,1-2.71,3.58,3.58,0,0,1,.1-2.64s.84-.27,2.75,1a9.63,9.63,0,0,1,5,0c1.91-1.29,2.75-1,2.75-1a3.58,3.58,0,0,1,.1,2.64,3.87,3.87,0,0,1,1,2.71c0,3.82-2.34,4.66-4.57,4.91a2.39,2.39,0,0,1,.69,1.85V21c0,.27.16.59.67.5A10,10,0,0,0,12,2Z"></path>
-  </symbol>
-
   <symbol viewBox="0 0 24 24" id="icon-folder">
     <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M1 5C1 3.34315 2.34315 2 4 2H8.55848C9.84977 2 10.9962 2.82629 11.4045 4.05132L11.7208 5H20C21.1046 5 22 5.89543 22 7V9.00961C23.1475 9.12163 23.9808 10.196 23.7695 11.3578L22.1332 20.3578C21.9603 21.3087 21.132 22 20.1654 22H3C1.89543 22 1 21.1046 1 20V5ZM20 9V7H11.7208C10.8599 7 10.0956 6.44914 9.82339 5.63246L9.50716 4.68377C9.37105 4.27543 8.98891 4 8.55848 4H4C3.44772 4 3 4.44772 3 5V12.2709L3.35429 10.588C3.54913 9.66249 4.36562 9 5.31139 9H20ZM3.36634 20C3.41777 19.9109 3.4562 19.8122 3.47855 19.706L5.31139 11L21 11H21.8018L20.1654 20L3.36634 20Z"></path>
   </symbol>
@@ -1012,45 +1008,6 @@
       }
       files = await response.json();
     } catch (e) {
-      // Mock data
-      // files = [
-      //   {
-      //     "name": "Classics",
-      //     "type": "directory",
-      //     "size": 0,
-      //     "isDirectory": true
-      //   },
-      //   {
-      //     "name": "Conversacion en La Catedral - Mario Vargas Llosa.epub",
-      //     "type": "file",
-      //     "size": 727000,
-      //     "isEpub": true
-      //   },
-      //   {
-      //     "name": "Homero - La Iliada [2392] (r1.6).epub",
-      //     "type": "file",
-      //     "size": 1200000,
-      //     "isEpub": true
-      //   },
-      //   {
-      //     "name": "Homero - La Odisea [2408] (r1.4).epub",
-      //     "type": "file",
-      //     "size": 1480000,
-      //     "isEpub": true
-      //   },
-      //   {
-      //     "name": "Pedro Paramo - Juan Rulfo_141.txt",
-      //     "type": "file",
-      //     "size": 213100,
-      //     "isEpub": false
-      //   },
-      //   {
-      //     "name": "Viajes - Beatriz Sarlo.pdf",
-      //     "type": "file",
-      //     "size": 505430,
-      //     "isEpub": false
-      //   }
-      // ];
       fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
       return;
     }
@@ -1157,18 +1114,6 @@
   }
 
 let failedUploadsGlobal = [];
-// Mock data
-// let failedUploadsGlobal = [
-//   {
-//     name: 'example_failed_upload.epub',
-//     error: 'Connection lost'
-//   },
-//   {
-//     name: 'another_failed_upload.pdf',
-//     error: 'File too large'
-//   }
-// ];
-// showFailedUploadsBanner();
 let wsConnection = null;
 const WS_PORT = 81;
 const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability

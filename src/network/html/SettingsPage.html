@@ -365,8 +365,8 @@
   </div>
 
   <footer>
-    <svg class="icon icon-github" aria-hidden="true">
-      <use href="#icon-github"></use>
+    <svg class="icon icon-github" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path fill="currentColor" d="M12,2A10,10,0,0,0,8.84,21.5c.5.08.66-.23.66-.5V19.31C6.73,19.91,6.14,18,6.14,18A2.69,2.69,0,0,0,5,16.5c-.91-.62.07-.6.07-.6a2.1,2.1,0,0,1,1.53,1,2.15,2.15,0,0,0,2.91.83,2.16,2.16,0,0,1,.63-1.34C8,16.17,5.62,15.31,5.62,11.5a3.87,3.87,0,0,1,1-2.71,3.58,3.58,0,0,1,.1-2.64s.84-.27,2.75,1a9.63,9.63,0,0,1,5,0c1.91-1.29,2.75-1,2.75-1a3.58,3.58,0,0,1,.1,2.64,3.87,3.87,0,0,1,1,2.71c0,3.82-2.34,4.66-4.57,4.91a2.39,2.39,0,0,1,.69,1.85V21c0,.27.16.59.67.5A10,10,0,0,0,12,2Z"></path>
     </svg>
     <a
       href="https://github.com/crosspoint-reader/crosspoint-reader"
@@ -374,12 +374,6 @@
       >CrossPoint E-Reader • Open Source</a
     >
   </footer>
-
-  <svg xmlns="http://www.w3.org/2000/svg" style="display: none">
-    <symbol viewBox="0 0 24 24" id="icon-github">
-      <path fill="currentColor" d="M12,2A10,10,0,0,0,8.84,21.5c.5.08.66-.23.66-.5V19.31C6.73,19.91,6.14,18,6.14,18A2.69,2.69,0,0,0,5,16.5c-.91-.62.07-.6.07-.6a2.1,2.1,0,0,1,1.53,1,2.15,2.15,0,0,0,2.91.83,2.16,2.16,0,0,1,.63-1.34C8,16.17,5.62,15.31,5.62,11.5a3.87,3.87,0,0,1,1-2.71,3.58,3.58,0,0,1,.1-2.64s.84-.27,2.75,1a9.63,9.63,0,0,1,5,0c1.91-1.29,2.75-1,2.75-1a3.58,3.58,0,0,1,.1,2.64,3.87,3.87,0,0,1,1,2.71c0,3.82-2.34,4.66-4.57,4.91a2.39,2.39,0,0,1,.69,1.85V21c0,.27.16.59.67.5A10,10,0,0,0,12,2Z"></path>
-    </symbol>
-  </svg>
 
 <script>
   let allSettings = [];
@@ -464,21 +458,6 @@
         throw new Error('Failed to load settings: ' + response.status);
       }
       allSettings = await response.json();
-      // Mock data
-      // allSettings = [
-      //   { category: 'Display', key: 'sleep_screen', name: 'Sleep Screen', type: 'enum', options: ['Cover', 'None', 'Dark'], value: 0 },
-      //   { category: 'Display', key: 'sleep_screen_cover_mode', name: 'Sleep Screen Cover Mode', type: 'enum', options: ['Fit', 'Crop'], value: 1 },
-      //   { category: 'Display', key: 'sleep_screen_cover_filter', name: 'Sleep Screen Cover Filter', type: 'enum', options: ['None', 'Grayscale', 'Inverted'], value: 0 },
-      //   { category: 'Reader', key: 'font_family', name: 'Font Family', type: 'enum', options: ['Bookerly'], value: 0 },
-      //   { category: 'Reader', key: 'font_size', name: 'Font Size', type: 'enum', options: ['Small', 'Medium', 'Large'], value: 1 },
-      //   { category: 'Reader', key: 'line_spacing', name: 'Line Spacing', type: 'enum', options: ['Tight', 'Normal', 'Loose'], value: 1 },
-      //   { category: 'Reader', key: 'margin_size', name: 'Screen Margin', type: 'enum', options: ['15'], value: 0 },
-      //   { category: 'Reader', key: 'text_example', name: 'Text Example', type: 'string', value: 'test' },
-      //   { category: 'Reader', key: 'number_example', name: 'Number Example', type: 'value', value: 10 },
-      //   { category: 'Reader', key: 'invalid_example', name: 'Invalid Example', type: 'invalid', value: 'test' },
-      //   { category: 'Controls', key: 'side_button_layout', name: 'Side Button Layout', type: 'enum', options: ['Prev, Next', 'Next, Prev'], value: 0 },
-      //   { category: 'Controls', key: 'long_press_chapter_skip', name: 'Long Press Chapter Skip', type: 'toggle', value: 1 },
-      // ];
 
       // Store original values
       originalValues = {};
