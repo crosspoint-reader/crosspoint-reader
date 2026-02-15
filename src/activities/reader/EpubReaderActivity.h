@@ -5,7 +5,10 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include "DictionaryDefinitionActivity.h"
+#include "DictionaryWordSelectActivity.h"
 #include "EpubReaderMenuActivity.h"
+#include "LookedUpWordsActivity.h"
 #include "activities/ActivityWithSubactivity.h"
 
 class EpubReaderActivity final : public ActivityWithSubactivity {

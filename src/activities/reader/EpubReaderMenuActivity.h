@@ -14,13 +14,24 @@
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  public:
   // Menu actions available from the reader menu.
-  enum class MenuAction { SELECT_CHAPTER, GO_TO_PERCENT, ROTATE_SCREEN, GO_HOME, SYNC, DELETE_CACHE };
+  enum class MenuAction {
+    SELECT_CHAPTER,
+    GO_TO_PERCENT,
+    ROTATE_SCREEN,
+    LOOKUP,
+    LOOKED_UP_WORDS,
+    GO_HOME,
+    SYNC,
+    DELETE_CACHE
+  };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const std::function<void(uint8_t)>& onBack,
+                                  const uint8_t currentOrientation, const bool hasDictionary,
+                                  const std::function<void(uint8_t)>& onBack,
                                   const std::function<void(MenuAction)>& onAction)
       : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
+        menuItems(buildMenuItems(hasDictionary)),
         title(title),
         pendingOrientation(currentOrientation),
         currentPage(currentPage),
@@ -39,11 +50,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
     std::string label;
   };
 
-  // Fixed menu layout (order matters for up/down navigation).
-  const std::vector<MenuItem> menuItems = {
-      {MenuAction::SELECT_CHAPTER, "Go to Chapter"}, {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
-      {MenuAction::GO_TO_PERCENT, "Go to %"},        {MenuAction::GO_HOME, "Go Home"},
-      {MenuAction::SYNC, "Sync Progress"},           {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
+  std::vector<MenuItem> menuItems;
 
   int selectedIndex = 0;
   bool updateRequired = false;
@@ -59,6 +66,20 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
 
   const std::function<void(uint8_t)> onBack;
   const std::function<void(MenuAction)> onAction;
+
+  static std::vector<MenuItem> buildMenuItems(bool hasDictionary) {
+    std::vector<MenuItem> items = {{MenuAction::SELECT_CHAPTER, "Go to Chapter"},
+                                   {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
+                                   {MenuAction::GO_TO_PERCENT, "Go to %"}};
+    if (hasDictionary) {
+      items.push_back({MenuAction::LOOKUP, "Lookup"});
+      items.push_back({MenuAction::LOOKED_UP_WORDS, "Lookup History"});
+    }
+    items.push_back({MenuAction::GO_HOME, "Go Home"});
+    items.push_back({MenuAction::SYNC, "Sync Progress"});
+    items.push_back({MenuAction::DELETE_CACHE, "Delete Book Cache"});
+    return items;
+  }
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();

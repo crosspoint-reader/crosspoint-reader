@@ -27,6 +27,9 @@ class TextBlock final : public Block {
   ~TextBlock() override = default;
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  const std::list<std::string>& getWords() const { return words; }
+  const std::list<uint16_t>& getWordXpos() const { return wordXpos; }
+  const std::list<EpdFontFamily::Style>& getWordStyles() const { return wordStyles; }
   bool isEmpty() override { return words.empty(); }
   void layout(GfxRenderer& renderer) override {};
   // given a renderer works out where to break the words into lines

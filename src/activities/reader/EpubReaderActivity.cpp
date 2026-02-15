@@ -16,6 +16,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Dictionary.h"
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
@@ -196,10 +197,11 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+    const bool hasDictionary = Dictionary::exists();
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
         this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-        SETTINGS.orientation, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
+        SETTINGS.orientation, hasDictionary, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
@@ -478,6 +480,70 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             }));
         xSemaphoreGive(renderingMutex);
       }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+
+      // Compute margins (same logic as renderScreen)
+      int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+      renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                       &orientedMarginLeft);
+      orientedMarginTop += SETTINGS.screenMargin;
+      orientedMarginLeft += SETTINGS.screenMargin;
+      orientedMarginRight += SETTINGS.screenMargin;
+      orientedMarginBottom += SETTINGS.screenMargin;
+
+      if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
+        auto metrics = UITheme::getInstance().getMetrics();
+        const bool showProgressBar =
+            SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
+            SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR ||
+            SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
+        orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
+                                (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
+      }
+
+      // Load the current page
+      auto pageForLookup = section ? section->loadPageFromSectionFile() : nullptr;
+      const int readerFontId = SETTINGS.getReaderFontId();
+      const std::string bookCachePath = epub->getCachePath();
+      const uint8_t currentOrientation = SETTINGS.orientation;
+
+      // Get first word of next page for cross-page hyphenation
+      std::string nextPageFirstWord;
+      if (section && section->currentPage < section->pageCount - 1) {
+        int savedPage = section->currentPage;
+        section->currentPage = savedPage + 1;
+        auto nextPage = section->loadPageFromSectionFile();
+        section->currentPage = savedPage;
+        if (nextPage && !nextPage->elements.empty()) {
+          const auto* firstLine = static_cast<const PageLine*>(nextPage->elements[0].get());
+          if (firstLine->getBlock() && !firstLine->getBlock()->getWords().empty()) {
+            nextPageFirstWord = firstLine->getBlock()->getWords().front();
+          }
+        }
+      }
+
+      exitActivity();
+
+      if (pageForLookup) {
+        enterNewActivity(new DictionaryWordSelectActivity(
+            renderer, mappedInput, std::move(pageForLookup), readerFontId, orientedMarginLeft, orientedMarginTop,
+            bookCachePath, currentOrientation, [this]() { pendingSubactivityExit = true; }, nextPageFirstWord));
+      }
+
+      xSemaphoreGive(renderingMutex);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKED_UP_WORDS: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+
+      exitActivity();
+      enterNewActivity(new LookedUpWordsActivity(
+          renderer, mappedInput, epub->getCachePath(), SETTINGS.getReaderFontId(),
+          [this]() { pendingSubactivityExit = true; }, [this]() { pendingSubactivityExit = true; }));
+      xSemaphoreGive(renderingMutex);
       break;
     }
   }
