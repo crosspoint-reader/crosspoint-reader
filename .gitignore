@@ -10,7 +10,3 @@ build
 /compile_commands.json
 /.cache
 .history/
-node_modules/
-package.json
-package-lock.json
-mise.toml
