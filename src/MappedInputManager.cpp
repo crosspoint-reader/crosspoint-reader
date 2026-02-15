@@ -18,7 +18,14 @@ constexpr SideLayoutMap kSideLayouts[] = {
 }  // namespace
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
-  const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
+  auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
+
+  // Lock the side button swap to portrait orientation only.
+  // In landscape modes, we enforce the default physical layout to prevent awkward top/bottom page turning.
+  if (SETTINGS.orientation != CrossPointSettings::PORTRAIT) {
+    sideLayout = CrossPointSettings::PREV_NEXT;
+  }
+
   const auto& side = kSideLayouts[sideLayout];
 
   switch (button) {

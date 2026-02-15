@@ -34,6 +34,7 @@ inline std::vector<SettingInfo> getSettingsList() {
                         "fontFamily", "Reader"),
       SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}, "fontSize",
                         "Reader"),
+      SettingInfo::Toggle("Force Bold Text", &CrossPointSettings::forceBoldText, "forceBoldText", "Reader"),
       SettingInfo::Enum("Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}, "lineSpacing",
                         "Reader"),
       SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin", "Reader"),
@@ -50,6 +51,10 @@ inline std::vector<SettingInfo> getSettingsList() {
       // --- Controls ---
       SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
                         {"Prev, Next", "Next, Prev"}, "sideButtonLayout", "Controls"),
+      SettingInfo::Enum("Button Mod", &CrossPointSettings::buttonModMode, {"Off", "Simple", "Full"}, "buttonModMode",
+                        "Controls"),
+      SettingInfo::Toggle("Swap Portrait Controls", &CrossPointSettings::swapPortraitControls, "swapPortraitControls",
+                          "Controls"),
       SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip, "longPressChapterSkip",
                           "Controls"),
       SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"},

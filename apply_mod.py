@@ -1,4 +1,7 @@
-#include "EpubReaderActivity.h"
+import os
+
+files_to_write = {
+    "src/activities/reader/EpubReaderActivity.cpp": r"""#include "EpubReaderActivity.h"
 
 #include <Epub/Page.h>
 #include <FsHelpers.h>
@@ -862,16 +865,15 @@ void EpubReaderActivity::renderScreen() {
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.forceBoldText)) {
+                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.forceBoldText)) {
       LOG_DBG("ERS", "Cache not found, building...\n");
 
       const auto popupFn = [this]() { GUI.drawPopup(renderer, "Indexing..."); };
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, popupFn,
-                                      SETTINGS.forceBoldText)) {
+                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                      popupFn, SETTINGS.forceBoldText)) {
         LOG_ERR("ERS", "Failed to persist page data to SD\n");
         section.reset();
         return;
@@ -959,6 +961,7 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
+  
   // Render clean text utilizing True Bold parameter
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop, SETTINGS.forceBoldText);
 
@@ -1154,4 +1157,736 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
                       title.c_str());
   }
 }
+
 }
+""",
+    "src/CrossPointSettings.h": r"""#pragma once
+#include <cstdint>
+#include <iosfwd>
+
+class CrossPointSettings {
+ private:
+  CrossPointSettings() = default;
+  static CrossPointSettings instance;
+
+ public:
+  CrossPointSettings(const CrossPointSettings&) = delete;
+  CrossPointSettings& operator=(const CrossPointSettings&) = delete;
+
+  enum SLEEP_SCREEN_MODE {
+    DARK = 0,
+    LIGHT = 1,
+    CUSTOM = 2,
+    COVER = 3,
+    BLANK = 4,
+    COVER_CUSTOM = 5,
+    SLEEP_SCREEN_MODE_COUNT
+  };
+  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
+  enum SLEEP_SCREEN_COVER_FILTER {
+    NO_FILTER = 0,
+    BLACK_AND_WHITE = 1,
+    INVERTED_BLACK_AND_WHITE = 2,
+    SLEEP_SCREEN_COVER_FILTER_COUNT
+  };
+  enum STATUS_BAR_MODE {
+    NONE = 0,
+    NO_PROGRESS = 1,
+    FULL = 2,
+    BOOK_PROGRESS_BAR = 3,
+    ONLY_BOOK_PROGRESS_BAR = 4,
+    CHAPTER_PROGRESS_BAR = 5,
+    STATUS_BAR_MODE_COUNT
+  };
+  enum ORIENTATION { PORTRAIT = 0, LANDSCAPE_CW = 1, INVERTED = 2, LANDSCAPE_CCW = 3, ORIENTATION_COUNT };
+  enum FRONT_BUTTON_LAYOUT {
+    BACK_CONFIRM_LEFT_RIGHT = 0,
+    LEFT_RIGHT_BACK_CONFIRM = 1,
+    LEFT_BACK_CONFIRM_RIGHT = 2,
+    BACK_CONFIRM_RIGHT_LEFT = 3,
+    FRONT_BUTTON_LAYOUT_COUNT
+  };
+  enum FRONT_BUTTON_HARDWARE {
+    FRONT_HW_BACK = 0,
+    FRONT_HW_CONFIRM = 1,
+    FRONT_HW_LEFT = 2,
+    FRONT_HW_RIGHT = 3,
+    FRONT_BUTTON_HARDWARE_COUNT
+  };
+  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTON_LAYOUT_COUNT };
+  enum BUTTON_MOD_MODE { MOD_OFF = 0, MOD_SIMPLE = 1, MOD_FULL = 2, BUTTON_MOD_MODE_COUNT };
+  enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
+  enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3, FONT_SIZE_COUNT };
+  enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
+  enum PARAGRAPH_ALIGNMENT {
+    JUSTIFIED = 0,
+    LEFT_ALIGN = 1,
+    CENTER_ALIGN = 2,
+    RIGHT_ALIGN = 3,
+    BOOK_STYLE = 4,
+    PARAGRAPH_ALIGNMENT_COUNT
+  };
+  enum SLEEP_TIMEOUT {
+    SLEEP_1_MIN = 0,
+    SLEEP_5_MIN = 1,
+    SLEEP_10_MIN = 2,
+    SLEEP_15_MIN = 3,
+    SLEEP_30_MIN = 4,
+    SLEEP_TIMEOUT_COUNT
+  };
+  enum REFRESH_FREQUENCY {
+    REFRESH_1 = 0,
+    REFRESH_5 = 1,
+    REFRESH_10 = 2,
+    REFRESH_15 = 3,
+    REFRESH_30 = 4,
+    REFRESH_FREQUENCY_COUNT
+  };
+  enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, SHORT_PWRBTN_COUNT };
+  enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
+  enum UI_THEME { CLASSIC = 0, LYRA = 1 };
+
+  uint8_t sleepScreen = DARK;
+  uint8_t sleepScreenCoverMode = FIT;
+  uint8_t sleepScreenCoverFilter = NO_FILTER;
+  uint8_t statusBar = FULL;
+  uint8_t extraParagraphSpacing = 1;
+  uint8_t textAntiAliasing = 1;
+  uint8_t shortPwrBtn = IGNORE;
+  uint8_t orientation = PORTRAIT;
+  uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
+  uint8_t sideButtonLayout = PREV_NEXT;
+  uint8_t frontButtonBack = FRONT_HW_BACK;
+  uint8_t frontButtonConfirm = FRONT_HW_CONFIRM;
+  uint8_t frontButtonLeft = FRONT_HW_LEFT;
+  uint8_t frontButtonRight = FRONT_HW_RIGHT;
+  uint8_t fontFamily = BOOKERLY;
+  uint8_t fontSize = MEDIUM;
+  uint8_t lineSpacing = NORMAL;
+  uint8_t paragraphAlignment = JUSTIFIED;
+  uint8_t sleepTimeout = SLEEP_10_MIN;
+  uint8_t refreshFrequency = REFRESH_15;
+  uint8_t hyphenationEnabled = 0;
+  uint8_t screenMargin = 5;
+  char opdsServerUrl[128] = "";
+  char opdsUsername[64] = "";
+  char opdsPassword[64] = "";
+  char blePageTurnerMac[18] = "";
+  uint8_t hideBatteryPercentage = HIDE_NEVER;
+  uint8_t longPressChapterSkip = 1;
+  uint8_t uiTheme = LYRA;
+  uint8_t fadingFix = 0;
+  uint8_t embeddedStyle = 1;
+  uint8_t buttonModMode = MOD_FULL;
+  uint8_t forceBoldText = 0;
+  uint8_t swapPortraitControls = 0;
+
+  ~CrossPointSettings() = default;
+
+  static CrossPointSettings& getInstance() { return instance; }
+
+  uint16_t getPowerButtonDuration() const {
+    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
+  }
+  int getReaderFontId() const;
+  bool saveToFile() const;
+  bool loadFromFile();
+  float getReaderLineCompression() const;
+  unsigned long getSleepTimeoutMs() const;
+  int getRefreshFrequency() const;
+};
+
+#define SETTINGS CrossPointSettings::getInstance()
+""",
+    "src/CrossPointSettings.cpp": r"""#include "CrossPointSettings.h"
+
+#include <HalStorage.h>
+#include <Logging.h>
+#include <Serialization.h>
+
+#include <cstring>
+
+#include "fontIds.h"
+
+// Initialize the static instance
+CrossPointSettings CrossPointSettings::instance;
+
+void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
+  uint8_t tempValue;
+  serialization::readPod(file, tempValue);
+  if (tempValue < maxValue) {
+    member = tempValue;
+  }
+}
+
+namespace {
+constexpr uint8_t SETTINGS_FILE_VERSION = 1;
+// Increment this when adding new persisted settings fields
+constexpr uint8_t SETTINGS_COUNT = 33;
+constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
+
+// Validate front button mapping to ensure each hardware button is unique.
+// If duplicates are detected, reset to the default physical order to prevent invalid mappings.
+void validateFrontButtonMapping(CrossPointSettings& settings) {
+  // Snapshot the logical->hardware mapping so we can compare for duplicates.
+  const uint8_t mapping[] = {settings.frontButtonBack, settings.frontButtonConfirm, settings.frontButtonLeft,
+                             settings.frontButtonRight};
+  for (size_t i = 0; i < 4; i++) {
+    for (size_t j = i + 1; j < 4; j++) {
+      if (mapping[i] == mapping[j]) {
+        // Duplicate detected: restore the default physical order (Back, Confirm, Left, Right).
+        settings.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
+        settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
+        settings.frontButtonLeft = CrossPointSettings::FRONT_HW_LEFT;
+        settings.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
+        return;
+      }
+    }
+  }
+}
+
+// Convert legacy front button layout into explicit logical->hardware mapping.
+void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
+  switch (static_cast<CrossPointSettings::FRONT_BUTTON_LAYOUT>(settings.frontButtonLayout)) {
+    case CrossPointSettings::LEFT_RIGHT_BACK_CONFIRM:
+      settings.frontButtonBack = CrossPointSettings::FRONT_HW_LEFT;
+      settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_RIGHT;
+      settings.frontButtonLeft = CrossPointSettings::FRONT_HW_BACK;
+      settings.frontButtonRight = CrossPointSettings::FRONT_HW_CONFIRM;
+      break;
+    case CrossPointSettings::LEFT_BACK_CONFIRM_RIGHT:
+      settings.frontButtonBack = CrossPointSettings::FRONT_HW_CONFIRM;
+      settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_LEFT;
+      settings.frontButtonLeft = CrossPointSettings::FRONT_HW_BACK;
+      settings.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
+      break;
+    case CrossPointSettings::BACK_CONFIRM_RIGHT_LEFT:
+      settings.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
+      settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
+      settings.frontButtonLeft = CrossPointSettings::FRONT_HW_RIGHT;
+      settings.frontButtonRight = CrossPointSettings::FRONT_HW_LEFT;
+      break;
+    case CrossPointSettings::BACK_CONFIRM_LEFT_RIGHT:
+    default:
+      settings.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
+      settings.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
+      settings.frontButtonLeft = CrossPointSettings::FRONT_HW_LEFT;
+      settings.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
+      break;
+  }
+}
+}  // namespace
+
+bool CrossPointSettings::saveToFile() const {
+  // Make sure the directory exists
+  Storage.mkdir("/.crosspoint");
+
+  FsFile outputFile;
+  if (!Storage.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
+    return false;
+  }
+
+  serialization::writePod(outputFile, SETTINGS_FILE_VERSION);
+  serialization::writePod(outputFile, SETTINGS_COUNT);
+  serialization::writePod(outputFile, sleepScreen);
+  serialization::writePod(outputFile, extraParagraphSpacing);
+  serialization::writePod(outputFile, shortPwrBtn);
+  serialization::writePod(outputFile, statusBar);
+  serialization::writePod(outputFile, orientation);
+  serialization::writePod(outputFile, frontButtonLayout);  // legacy
+  serialization::writePod(outputFile, sideButtonLayout);
+  serialization::writePod(outputFile, fontFamily);
+  serialization::writePod(outputFile, fontSize);
+  serialization::writePod(outputFile, lineSpacing);
+  serialization::writePod(outputFile, paragraphAlignment);
+  serialization::writePod(outputFile, sleepTimeout);
+  serialization::writePod(outputFile, refreshFrequency);
+  serialization::writePod(outputFile, screenMargin);
+  serialization::writePod(outputFile, sleepScreenCoverMode);
+  serialization::writeString(outputFile, std::string(opdsServerUrl));
+  serialization::writePod(outputFile, textAntiAliasing);
+  serialization::writePod(outputFile, hideBatteryPercentage);
+  serialization::writePod(outputFile, longPressChapterSkip);
+  serialization::writePod(outputFile, hyphenationEnabled);
+  serialization::writeString(outputFile, std::string(opdsUsername));
+  serialization::writeString(outputFile, std::string(opdsPassword));
+  serialization::writePod(outputFile, sleepScreenCoverFilter);
+  serialization::writePod(outputFile, uiTheme);
+  serialization::writePod(outputFile, frontButtonBack);
+  serialization::writePod(outputFile, frontButtonConfirm);
+  serialization::writePod(outputFile, frontButtonLeft);
+  serialization::writePod(outputFile, frontButtonRight);
+  serialization::writePod(outputFile, fadingFix);
+  serialization::writePod(outputFile, embeddedStyle);
+  serialization::writePod(outputFile, forceBoldText);
+  serialization::writePod(outputFile, buttonModMode);
+  serialization::writePod(outputFile, swapPortraitControls);
+  // New fields added at end for backward compatibility
+  outputFile.close();
+
+  LOG_DBG("CPS", "Settings saved to file");
+  return true;
+}
+
+bool CrossPointSettings::loadFromFile() {
+  FsFile inputFile;
+  if (!Storage.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
+    return false;
+  }
+
+  uint8_t version;
+  serialization::readPod(inputFile, version);
+  if (version != SETTINGS_FILE_VERSION) {
+    LOG_ERR("CPS", "Deserialization failed: Unknown version %u", version);
+    inputFile.close();
+    return false;
+  }
+
+  uint8_t fileSettingsCount = 0;
+  serialization::readPod(inputFile, fileSettingsCount);
+
+  // load settings that exist (support older files with fewer fields)
+  uint8_t settingsRead = 0;
+  // Track whether remap fields were present in the settings file.
+  bool frontButtonMappingRead = false;
+  do {
+    readAndValidate(inputFile, sleepScreen, SLEEP_SCREEN_MODE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, extraParagraphSpacing);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, shortPwrBtn, SHORT_PWRBTN_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, statusBar, STATUS_BAR_MODE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, orientation, ORIENTATION_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, frontButtonLayout, FRONT_BUTTON_LAYOUT_COUNT);  // legacy
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, sideButtonLayout, SIDE_BUTTON_LAYOUT_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, fontFamily, FONT_FAMILY_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, fontSize, FONT_SIZE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, lineSpacing, LINE_COMPRESSION_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, paragraphAlignment, PARAGRAPH_ALIGNMENT_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, sleepTimeout, SLEEP_TIMEOUT_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, refreshFrequency, REFRESH_FREQUENCY_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, screenMargin);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, sleepScreenCoverMode, SLEEP_SCREEN_COVER_MODE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string urlStr;
+      serialization::readString(inputFile, urlStr);
+      strncpy(opdsServerUrl, urlStr.c_str(), sizeof(opdsServerUrl) - 1);
+      opdsServerUrl[sizeof(opdsServerUrl) - 1] = '\0';
+    }
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, textAntiAliasing);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, hideBatteryPercentage, HIDE_BATTERY_PERCENTAGE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, longPressChapterSkip);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, hyphenationEnabled);
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string usernameStr;
+      serialization::readString(inputFile, usernameStr);
+      strncpy(opdsUsername, usernameStr.c_str(), sizeof(opdsUsername) - 1);
+      opdsUsername[sizeof(opdsUsername) - 1] = '\0';
+    }
+    if (++settingsRead >= fileSettingsCount) break;
+    {
+      std::string passwordStr;
+      serialization::readString(inputFile, passwordStr);
+      strncpy(opdsPassword, passwordStr.c_str(), sizeof(opdsPassword) - 1);
+      opdsPassword[sizeof(opdsPassword) - 1] = '\0';
+    }
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, sleepScreenCoverFilter, SLEEP_SCREEN_COVER_FILTER_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, uiTheme);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, frontButtonBack, FRONT_BUTTON_HARDWARE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, frontButtonConfirm, FRONT_BUTTON_HARDWARE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, frontButtonLeft, FRONT_BUTTON_HARDWARE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, frontButtonRight, FRONT_BUTTON_HARDWARE_COUNT);
+    frontButtonMappingRead = true;
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, fadingFix);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, embeddedStyle);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, forceBoldText);
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, buttonModMode, BUTTON_MOD_MODE_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, swapPortraitControls);
+    if (++settingsRead >= fileSettingsCount) break;
+    // New fields added at end for backward compatibility
+  } while (false);
+
+  if (frontButtonMappingRead) {
+    validateFrontButtonMapping(*this);
+  } else {
+    applyLegacyFrontButtonLayout(*this);
+  }
+
+  inputFile.close();
+  LOG_DBG("CPS", "Settings loaded from file");
+  return true;
+}
+
+float CrossPointSettings::getReaderLineCompression() const {
+  switch (fontFamily) {
+    case BOOKERLY:
+    default:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.95f;
+        case NORMAL:
+        default:
+          return 1.0f;
+        case WIDE:
+          return 1.1f;
+      }
+    case NOTOSANS:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.90f;
+        case NORMAL:
+        default:
+          return 0.95f;
+        case WIDE:
+          return 1.0f;
+      }
+    case OPENDYSLEXIC:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.90f;
+        case NORMAL:
+        default:
+          return 0.95f;
+        case WIDE:
+          return 1.0f;
+      }
+  }
+}
+
+unsigned long CrossPointSettings::getSleepTimeoutMs() const {
+  switch (sleepTimeout) {
+    case SLEEP_1_MIN:
+      return 1UL * 60 * 1000;
+    case SLEEP_5_MIN:
+      return 5UL * 60 * 1000;
+    case SLEEP_10_MIN:
+    default:
+      return 10UL * 60 * 1000;
+    case SLEEP_15_MIN:
+      return 15UL * 60 * 1000;
+    case SLEEP_30_MIN:
+      return 30UL * 60 * 1000;
+  }
+}
+
+int CrossPointSettings::getRefreshFrequency() const {
+  switch (refreshFrequency) {
+    case REFRESH_1:
+      return 1;
+    case REFRESH_5:
+      return 5;
+    case REFRESH_10:
+      return 10;
+    case REFRESH_15:
+    default:
+      return 15;
+    case REFRESH_30:
+      return 30;
+  }
+}
+
+int CrossPointSettings::getReaderFontId() const {
+  switch (fontFamily) {
+    case BOOKERLY:
+    default:
+      switch (fontSize) {
+        case SMALL:
+          return BOOKERLY_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return BOOKERLY_14_FONT_ID;
+        case LARGE:
+          return BOOKERLY_16_FONT_ID;
+        case EXTRA_LARGE:
+          return BOOKERLY_18_FONT_ID;
+      }
+    case NOTOSANS:
+      switch (fontSize) {
+        case SMALL:
+          return NOTOSANS_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return NOTOSANS_14_FONT_ID;
+        case LARGE:
+          return NOTOSANS_16_FONT_ID;
+        case EXTRA_LARGE:
+          return NOTOSANS_18_FONT_ID;
+      }
+    case OPENDYSLEXIC:
+      switch (fontSize) {
+        case SMALL:
+          return OPENDYSLEXIC_8_FONT_ID;
+        case MEDIUM:
+        default:
+          return OPENDYSLEXIC_10_FONT_ID;
+        case LARGE:
+          return OPENDYSLEXIC_12_FONT_ID;
+        case EXTRA_LARGE:
+          return OPENDYSLEXIC_14_FONT_ID;
+      }
+  }
+}
+""",
+    "src/MappedInputManager.cpp": r"""#include "MappedInputManager.h"
+
+#include "CrossPointSettings.h"
+
+namespace {
+using ButtonIndex = uint8_t;
+
+struct SideLayoutMap {
+  ButtonIndex pageBack;
+  ButtonIndex pageForward;
+};
+
+// Order matches CrossPointSettings::SIDE_BUTTON_LAYOUT.
+constexpr SideLayoutMap kSideLayouts[] = {
+    {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},
+    {HalGPIO::BTN_DOWN, HalGPIO::BTN_UP},
+};
+}  // namespace
+
+bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
+  auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
+
+  // Lock the side button swap to portrait orientation only.
+  // In landscape modes, we enforce the default physical layout to prevent awkward top/bottom page turning.
+  if (SETTINGS.orientation != CrossPointSettings::PORTRAIT) {
+    sideLayout = CrossPointSettings::PREV_NEXT;
+  }
+
+  const auto& side = kSideLayouts[sideLayout];
+
+  switch (button) {
+    case Button::Back:
+      // Logical Back maps to user-configured front button.
+      return (gpio.*fn)(SETTINGS.frontButtonBack);
+    case Button::Confirm:
+      // Logical Confirm maps to user-configured front button.
+      return (gpio.*fn)(SETTINGS.frontButtonConfirm);
+    case Button::Left:
+      // Logical Left maps to user-configured front button.
+      return (gpio.*fn)(SETTINGS.frontButtonLeft);
+    case Button::Right:
+      // Logical Right maps to user-configured front button.
+      return (gpio.*fn)(SETTINGS.frontButtonRight);
+    case Button::Up:
+      // Side buttons remain fixed for Up/Down.
+      return (gpio.*fn)(HalGPIO::BTN_UP);
+    case Button::Down:
+      // Side buttons remain fixed for Up/Down.
+      return (gpio.*fn)(HalGPIO::BTN_DOWN);
+    case Button::Power:
+      // Power button bypasses remapping.
+      return (gpio.*fn)(HalGPIO::BTN_POWER);
+    case Button::PageBack:
+      // Reader page navigation uses side buttons and can be swapped via settings.
+      return (gpio.*fn)(side.pageBack);
+    case Button::PageForward:
+      // Reader page navigation uses side buttons and can be swapped via settings.
+      return (gpio.*fn)(side.pageForward);
+  }
+
+  return false;
+}
+
+bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
+
+bool MappedInputManager::wasReleased(const Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
+
+bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
+
+bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
+
+bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
+
+unsigned long MappedInputManager::getHeldTime() const { return gpio.getHeldTime(); }
+
+MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const char* confirm, const char* previous,
+                                                         const char* next) const {
+  // Build the label order based on the configured hardware mapping.
+  auto labelForHardware = [&](uint8_t hw) -> const char* {
+    // Compare against configured logical roles and return the matching label.
+    if (hw == SETTINGS.frontButtonBack) {
+      return back;
+    }
+    if (hw == SETTINGS.frontButtonConfirm) {
+      return confirm;
+    }
+    if (hw == SETTINGS.frontButtonLeft) {
+      return previous;
+    }
+    if (hw == SETTINGS.frontButtonRight) {
+      return next;
+    }
+    return "";
+  };
+
+  return {labelForHardware(HalGPIO::BTN_BACK), labelForHardware(HalGPIO::BTN_CONFIRM),
+          labelForHardware(HalGPIO::BTN_LEFT), labelForHardware(HalGPIO::BTN_RIGHT)};
+}
+
+int MappedInputManager::getPressedFrontButton() const {
+  // Scan the raw front buttons in hardware order.
+  // This bypasses remapping so the remap activity can capture physical presses.
+  if (gpio.wasPressed(HalGPIO::BTN_BACK)) {
+    return HalGPIO::BTN_BACK;
+  }
+  if (gpio.wasPressed(HalGPIO::BTN_CONFIRM)) {
+    return HalGPIO::BTN_CONFIRM;
+  }
+  if (gpio.wasPressed(HalGPIO::BTN_LEFT)) {
+    return HalGPIO::BTN_LEFT;
+  }
+  if (gpio.wasPressed(HalGPIO::BTN_RIGHT)) {
+    return HalGPIO::BTN_RIGHT;
+  }
+  return -1;
+}
+""",
+    "src/SettingsList.h": r"""#pragma once
+
+#include <vector>
+
+#include "CrossPointSettings.h"
+#include "KOReaderCredentialStore.h"
+#include "activities/settings/SettingsActivity.h"
+
+// Shared settings list used by both the device settings UI and the web settings API.
+// Each entry has a key (for JSON API) and category (for grouping).
+// ACTION-type entries and entries without a key are device-only.
+inline std::vector<SettingInfo> getSettingsList() {
+  return {
+      // --- Display ---
+      SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen,
+                        {"Dark", "Light", "Custom", "Cover", "None", "Cover + Custom"}, "sleepScreen", "Display"),
+      SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"},
+                        "sleepScreenCoverMode", "Display"),
+      SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
+                        {"None", "Contrast", "Inverted"}, "sleepScreenCoverFilter", "Display"),
+      SettingInfo::Enum(
+          "Status Bar", &CrossPointSettings::statusBar,
+          {"None", "No Progress", "Full w/ Percentage", "Full w/ Book Bar", "Book Bar Only", "Full w/ Chapter Bar"},
+          "statusBar", "Display"),
+      SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"},
+                        "hideBatteryPercentage", "Display"),
+      SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
+                        {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"}, "refreshFrequency", "Display"),
+      SettingInfo::Enum("UI Theme", &CrossPointSettings::uiTheme, {"Classic", "Lyra"}, "uiTheme", "Display"),
+      SettingInfo::Toggle("Sunlight Fading Fix", &CrossPointSettings::fadingFix, "fadingFix", "Display"),
+
+      // --- Reader ---
+      SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"},
+                        "fontFamily", "Reader"),
+      SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}, "fontSize",
+                        "Reader"),
+      SettingInfo::Toggle("Force Bold Text", &CrossPointSettings::forceBoldText, "forceBoldText", "Reader"),
+      SettingInfo::Enum("Line Spacing", &CrossPointSettings::lineSpacing, {"Tight", "Normal", "Wide"}, "lineSpacing",
+                        "Reader"),
+      SettingInfo::Value("Screen Margin", &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin", "Reader"),
+      SettingInfo::Enum("Paragraph Alignment", &CrossPointSettings::paragraphAlignment,
+                        {"Justify", "Left", "Center", "Right", "Book's Style"}, "paragraphAlignment", "Reader"),
+      SettingInfo::Toggle("Book's Embedded Style", &CrossPointSettings::embeddedStyle, "embeddedStyle", "Reader"),
+      SettingInfo::Toggle("Hyphenation", &CrossPointSettings::hyphenationEnabled, "hyphenationEnabled", "Reader"),
+      SettingInfo::Enum("Reading Orientation", &CrossPointSettings::orientation,
+                        {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"}, "orientation", "Reader"),
+      SettingInfo::Toggle("Extra Paragraph Spacing", &CrossPointSettings::extraParagraphSpacing,
+                          "extraParagraphSpacing", "Reader"),
+      SettingInfo::Toggle("Text Anti-Aliasing", &CrossPointSettings::textAntiAliasing, "textAntiAliasing", "Reader"),
+
+      // --- Controls ---
+      SettingInfo::Enum("Side Button Layout (reader)", &CrossPointSettings::sideButtonLayout,
+                        {"Prev, Next", "Next, Prev"}, "sideButtonLayout", "Controls"),
+      SettingInfo::Enum("Button Mod", &CrossPointSettings::buttonModMode, {"Off", "Simple", "Full"}, "buttonModMode",
+                        "Controls"),
+      SettingInfo::Toggle("Swap Portrait Controls", &CrossPointSettings::swapPortraitControls, "swapPortraitControls",
+                          "Controls"),
+      SettingInfo::Toggle("Long-press Chapter Skip", &CrossPointSettings::longPressChapterSkip, "longPressChapterSkip",
+                          "Controls"),
+      SettingInfo::Enum("Short Power Button Click", &CrossPointSettings::shortPwrBtn, {"Ignore", "Sleep", "Page Turn"},
+                        "shortPwrBtn", "Controls"),
+
+      // --- System ---
+      SettingInfo::Enum("Time to Sleep", &CrossPointSettings::sleepTimeout,
+                        {"1 min", "5 min", "10 min", "15 min", "30 min"}, "sleepTimeout", "System"),
+
+      // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
+      SettingInfo::DynamicString(
+          "KOReader Username", [] { return KOREADER_STORE.getUsername(); },
+          [](const std::string& v) {
+            KOREADER_STORE.setCredentials(v, KOREADER_STORE.getPassword());
+            KOREADER_STORE.saveToFile();
+          },
+          "koUsername", "KOReader Sync"),
+      SettingInfo::DynamicString(
+          "KOReader Password", [] { return KOREADER_STORE.getPassword(); },
+          [](const std::string& v) {
+            KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), v);
+            KOREADER_STORE.saveToFile();
+          },
+          "koPassword", "KOReader Sync"),
+      SettingInfo::DynamicString(
+          "Sync Server URL", [] { return KOREADER_STORE.getServerUrl(); },
+          [](const std::string& v) {
+            KOREADER_STORE.setServerUrl(v);
+            KOREADER_STORE.saveToFile();
+          },
+          "koServerUrl", "KOReader Sync"),
+      SettingInfo::DynamicEnum(
+          "Document Matching", {"Filename", "Binary"},
+          [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
+          [](uint8_t v) {
+            KOREADER_STORE.setMatchMethod(static_cast<DocumentMatchMethod>(v));
+            KOREADER_STORE.saveToFile();
+          },
+          "koMatchMethod", "KOReader Sync"),
+
+      // --- OPDS Browser (web-only, uses CrossPointSettings char arrays) ---
+      SettingInfo::String("OPDS Server URL", SETTINGS.opdsServerUrl, sizeof(SETTINGS.opdsServerUrl), "opdsServerUrl",
+                          "OPDS Browser"),
+      SettingInfo::String("OPDS Username", SETTINGS.opdsUsername, sizeof(SETTINGS.opdsUsername), "opdsUsername",
+                          "OPDS Browser"),
+      SettingInfo::String("OPDS Password", SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword), "opdsPassword",
+                          "OPDS Browser"),
+  };
+}
+"""
+}
+
+for path, content in files_to_write.items():
+    # Make sure directories exist
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(content.strip() + '\n')
+    print(f"Updated {path}")
+
+print("\nAll files successfully written!")
