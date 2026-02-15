@@ -945,8 +945,7 @@
 
 <script>
   // get current path from query parameter
-  // const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
-  const currentPath = '/Classics/EPUBs/to-read';
+  const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
   const FILE_EXTENSION_REGEX = /\.([0-9a-z]+)(?:[\?#]|$)/i;
 
   function escapeHtml(unsafe) {
