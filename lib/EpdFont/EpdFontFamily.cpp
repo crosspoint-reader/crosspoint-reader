@@ -18,12 +18,13 @@ const EpdFont* EpdFontFamily::getFont(const Style style) const {
   return regular;
 }
 
-void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const Style style) const {
-  getFont(style)->getTextDimensions(string, w, h);
+void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const Style style,
+                                      const bool kerningEnabled) const {
+  getFont(style)->getTextDimensions(string, w, h, kerningEnabled);
 }
 
-bool EpdFontFamily::hasPrintableChars(const char* string, const Style style) const {
-  return getFont(style)->hasPrintableChars(string);
+bool EpdFontFamily::hasPrintableChars(const char* string, const Style style, const bool kerningEnabled) const {
+  return getFont(style)->hasPrintableChars(string, kerningEnabled);
 }
 
 const EpdFontData* EpdFontFamily::getData(const Style style) const { return getFont(style)->data; }
@@ -31,3 +32,11 @@ const EpdFontData* EpdFontFamily::getData(const Style style) const { return getF
 const EpdGlyph* EpdFontFamily::getGlyph(const uint32_t cp, const Style style) const {
   return getFont(style)->getGlyph(cp);
 };
+
+int8_t EpdFontFamily::getKerning(const uint32_t leftCp, const uint32_t rightCp, const Style style) const {
+  return getFont(style)->getKerning(leftCp, rightCp);
+}
+
+uint32_t EpdFontFamily::getLigature(const uint32_t leftCp, const uint32_t rightCp, const Style style) const {
+  return getFont(style)->getLigature(leftCp, rightCp);
+}
