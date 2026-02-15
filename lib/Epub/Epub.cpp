@@ -152,7 +152,7 @@ bool Epub::parseTocNcxFile() const {
 
   // Timing instrumentation for ZIP read performance
   unsigned long zipReadStart = micros();
-  unsigned long heapBefore = ESP.getFreeHeap();
+  long heapBefore = static_cast<long>(ESP.getFreeHeap());
 
   if (!readItemContentsToStream(tocNcxItem, adapter, 1024)) {
     LOG_ERR("EBP", "Could not stream NCX contents to parser");
@@ -160,15 +160,15 @@ bool Epub::parseTocNcxFile() const {
   }
 
   unsigned long zipReadTime = micros() - zipReadStart;
-  unsigned long heapAfter = ESP.getFreeHeap();
-  long heapDelta = static_cast<long>(heapBefore) - static_cast<long>(heapAfter);
+  long heapAfter = static_cast<long>(ESP.getFreeHeap());
+  long heapDelta = heapBefore - heapAfter;
 
   if (adapter.hasError()) {
     LOG_ERR("EBP", "Parser reported error during NCX streaming");
     return false;
   }
 
-  LOG_INF("ZIP_IO", "NCX: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes",
+  LOG_DBG("ZIP_IO", "NCX: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes",
           ncxSize, zipReadTime / 1000, (float)zipReadTime / ncxSize, heapDelta);
   LOG_DBG("EBP", "Parsed TOC items");
   return true;
@@ -205,7 +205,7 @@ bool Epub::parseTocNavFile() const {
 
   // Timing instrumentation for ZIP read performance
   unsigned long zipReadStart = micros();
-  unsigned long heapBefore = ESP.getFreeHeap();
+  long heapBefore = static_cast<long>(ESP.getFreeHeap());
 
   if (!readItemContentsToStream(tocNavItem, adapter, 1024)) {
     LOG_ERR("EBP", "Could not stream NAV contents to parser");
@@ -213,15 +213,15 @@ bool Epub::parseTocNavFile() const {
   }
 
   unsigned long zipReadTime = micros() - zipReadStart;
-  unsigned long heapAfter = ESP.getFreeHeap();
-  long heapDelta = static_cast<long>(heapBefore) - static_cast<long>(heapAfter);
+  long heapAfter = static_cast<long>(ESP.getFreeHeap());
+  long heapDelta = heapBefore - heapAfter;
 
   if (adapter.hasError()) {
     LOG_ERR("EBP", "Parser reported error during NAV streaming");
     return false;
   }
 
-  LOG_INF("ZIP_IO", "NAV: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes",
+  LOG_DBG("ZIP_IO", "NAV: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes",
           navSize, zipReadTime / 1000, (float)zipReadTime / navSize, heapDelta);
   LOG_DBG("EBP", "Parsed TOC nav items");
   return true;
