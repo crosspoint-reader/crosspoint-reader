@@ -270,10 +270,10 @@ void KeyboardEntryActivity::render() const {
   renderer.drawText(UI_10_FONT_ID, pageWidth - 15, inputEndY, "]");
 
   // Draw keyboard - use compact spacing to fit 5 rows on screen
-  const int keyboardStartY = inputEndY + 25;
-  constexpr int keyWidth = 18;
-  constexpr int keyHeight = 18;
-  constexpr int keySpacing = 3;
+  const int keyboardStartY = inputEndY + 35;
+  constexpr int keyWidth = 22;
+  constexpr int keyHeight = 30;
+  constexpr int keySpacing = 10;
 
   const char* const* layout = shiftState ? keyboardShift : keyboard;
 
