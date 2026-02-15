@@ -151,6 +151,7 @@ void EpubReaderClippingsListActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired && !subActivity) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      // cppcheck-suppress knownConditionTrueFalse
       if (updateRequired && !subActivity) {
         updateRequired = false;
         renderScreen();

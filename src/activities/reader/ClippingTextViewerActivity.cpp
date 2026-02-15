@@ -162,6 +162,7 @@ void ClippingTextViewerActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired && !subActivity) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      // cppcheck-suppress knownConditionTrueFalse
       if (updateRequired && !subActivity) {
         updateRequired = false;
         renderScreen();
@@ -175,7 +176,6 @@ void ClippingTextViewerActivity::displayTaskLoop() {
 void ClippingTextViewerActivity::renderScreen() {
   renderer.clearScreen();
 
-  const auto pageWidth = renderer.getScreenWidth();
   const auto orientation = renderer.getOrientation();
   const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
   const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
