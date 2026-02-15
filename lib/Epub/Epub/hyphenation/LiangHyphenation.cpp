@@ -303,8 +303,10 @@ bool transition(const EmbeddedAutomaton& automaton, const AutomatonState& state,
 // Converts odd score positions back into codepoint indexes, honoring min prefix/suffix constraints.
 // Each break corresponds to scores[breakIndex + 1] because of the leading '.' sentinel.
 // Convert odd score entries into hyphen positions while honoring prefix/suffix limits.
-std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, const std::vector<uint8_t>& scores,
-                                        const size_t minPrefix, const size_t minSuffix) {
+// Template version that works with both stack arrays and heap vectors.
+template <typename ScoreContainer>
+std::vector<size_t> collectBreakIndexesImpl(const std::vector<CodepointInfo>& cps, const ScoreContainer& scores,
+                                            const size_t scoreCount, const size_t minPrefix, const size_t minSuffix) {
   std::vector<size_t> indexes;
   const size_t cpCount = cps.size();
   if (cpCount < 2) {
@@ -322,7 +324,7 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
     }
 
     const size_t scoreIdx = breakIndex + 1;
-    if (scoreIdx >= scores.size()) {
+    if (scoreIdx >= scoreCount) {
       break;
     }
     if ((scores[scoreIdx] & 1u) == 0) {
@@ -332,6 +334,12 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
   }
 
   return indexes;
+}
+
+// Backward-compatible wrapper for heap-allocated vectors
+std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, const std::vector<uint8_t>& scores,
+                                        const size_t minPrefix, const size_t minSuffix) {
+  return collectBreakIndexesImpl(cps, scores, scores.size(), minPrefix, minSuffix);
 }
 
 }  // namespace
@@ -354,52 +362,109 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
     return {};
   }
 
-  // Liang scores: one entry per augmented char (leading/trailing dots included).
-  std::vector<uint8_t> scores(augmented.charCount(), 0);
+  const size_t scoreCount = augmented.charCount();
 
-  // Walk every starting character position and stream bytes through the trie.
-  for (size_t charStart = 0; charStart < augmented.charByteOffsets.size(); ++charStart) {
-    const size_t byteStart = augmented.charByteOffsets[charStart];
-    AutomatonState state = root;
+  // Optimization: Use stack allocation for small words (covers 99% of cases).
+  // Saves heap allocation and improves cache locality.
+  constexpr size_t MAX_STACK_SCORES = 64;
 
-    for (size_t cursor = byteStart; cursor < augmented.bytes.size(); ++cursor) {
-      AutomatonState next;
-      if (!transition(automaton, state, augmented.bytes[cursor], next)) {
-        break;  // No more matches for this prefix.
-      }
-      state = next;
+  if (scoreCount <= MAX_STACK_SCORES) {
+    // Fast path: Stack-allocated scores for small words
+    uint8_t stackScores[MAX_STACK_SCORES] = {0};
 
-      if (state.levels && state.levelsLen > 0) {
-        size_t offset = 0;
-        // Each packed byte stores the byte-distance delta and the Liang level digit.
-        for (size_t i = 0; i < state.levelsLen; ++i) {
-          const uint8_t packed = state.levels[i];
-          const size_t dist = static_cast<size_t>(packed / 10);
-          const uint8_t level = static_cast<uint8_t>(packed % 10);
+    // Walk every starting character position and stream bytes through the trie.
+    for (size_t charStart = 0; charStart < augmented.charByteOffsets.size(); ++charStart) {
+      const size_t byteStart = augmented.charByteOffsets[charStart];
+      AutomatonState state = root;
 
-          offset += dist;
-          const size_t splitByte = byteStart + offset;
-          if (splitByte >= augmented.byteToCharIndex.size()) {
-            continue;
+      for (size_t cursor = byteStart; cursor < augmented.bytes.size(); ++cursor) {
+        AutomatonState next;
+        if (!transition(automaton, state, augmented.bytes[cursor], next)) {
+          break;  // No more matches for this prefix.
+        }
+        state = next;
+
+        if (state.levels && state.levelsLen > 0) {
+          size_t offset = 0;
+          // Each packed byte stores the byte-distance delta and the Liang level digit.
+          for (size_t i = 0; i < state.levelsLen; ++i) {
+            const uint8_t packed = state.levels[i];
+            const size_t dist = static_cast<size_t>(packed / 10);
+            const uint8_t level = static_cast<uint8_t>(packed % 10);
+
+            offset += dist;
+            const size_t splitByte = byteStart + offset;
+            if (splitByte >= augmented.byteToCharIndex.size()) {
+              continue;
+            }
+
+            const int32_t boundary = augmented.byteToCharIndex[splitByte];
+            if (boundary < 0) {
+              continue;  // Mid-codepoint byte, wait for the next one.
+            }
+            if (boundary < 2 || boundary + 2 > static_cast<int32_t>(augmented.charCount())) {
+              continue;  // Skip splits that land in the leading/trailing sentinels.
+            }
+
+            const size_t idx = static_cast<size_t>(boundary);
+            if (idx >= scoreCount) {
+              continue;
+            }
+            stackScores[idx] = std::max(stackScores[idx], level);
           }
-
-          const int32_t boundary = augmented.byteToCharIndex[splitByte];
-          if (boundary < 0) {
-            continue;  // Mid-codepoint byte, wait for the next one.
-          }
-          if (boundary < 2 || boundary + 2 > static_cast<int32_t>(augmented.charCount())) {
-            continue;  // Skip splits that land in the leading/trailing sentinels.
-          }
-
-          const size_t idx = static_cast<size_t>(boundary);
-          if (idx >= scores.size()) {
-            continue;
-          }
-          scores[idx] = std::max(scores[idx], level);
         }
       }
     }
-  }
 
-  return collectBreakIndexes(cps, scores, config.minPrefix, config.minSuffix);
+    return collectBreakIndexesImpl(cps, stackScores, scoreCount, config.minPrefix, config.minSuffix);
+  } else {
+    // Slow path: Heap-allocated scores for very long words (rare)
+    std::vector<uint8_t> heapScores(scoreCount, 0);
+
+    // Walk every starting character position and stream bytes through the trie.
+    for (size_t charStart = 0; charStart < augmented.charByteOffsets.size(); ++charStart) {
+      const size_t byteStart = augmented.charByteOffsets[charStart];
+      AutomatonState state = root;
+
+      for (size_t cursor = byteStart; cursor < augmented.bytes.size(); ++cursor) {
+        AutomatonState next;
+        if (!transition(automaton, state, augmented.bytes[cursor], next)) {
+          break;  // No more matches for this prefix.
+        }
+        state = next;
+
+        if (state.levels && state.levelsLen > 0) {
+          size_t offset = 0;
+          // Each packed byte stores the byte-distance delta and the Liang level digit.
+          for (size_t i = 0; i < state.levelsLen; ++i) {
+            const uint8_t packed = state.levels[i];
+            const size_t dist = static_cast<size_t>(packed / 10);
+            const uint8_t level = static_cast<uint8_t>(packed % 10);
+
+            offset += dist;
+            const size_t splitByte = byteStart + offset;
+            if (splitByte >= augmented.byteToCharIndex.size()) {
+              continue;
+            }
+
+            const int32_t boundary = augmented.byteToCharIndex[splitByte];
+            if (boundary < 0) {
+              continue;  // Mid-codepoint byte, wait for the next one.
+            }
+            if (boundary < 2 || boundary + 2 > static_cast<int32_t>(augmented.charCount())) {
+              continue;  // Skip splits that land in the leading/trailing sentinels.
+            }
+
+            const size_t idx = static_cast<size_t>(boundary);
+            if (idx >= heapScores.size()) {
+              continue;
+            }
+            heapScores[idx] = std::max(heapScores[idx], level);
+          }
+        }
+      }
+    }
+
+    return collectBreakIndexes(cps, heapScores, config.minPrefix, config.minSuffix);
+  }
 }
