@@ -1,11 +1,11 @@
 #pragma once
 
+#include <HalGPIO.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <vector>
-
-#include "Battery.h"
 
 class GfxRenderer;
 struct RecentBook;
@@ -91,10 +91,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
 
 class BaseTheme {
  public:
+  BaseTheme(HalGPIO* gpio = nullptr) : gpio(gpio) {}
   virtual ~BaseTheme() = default;
-
-  static BatteryPercentageRingBuffer batteryBuffer;
-
+  HalGPIO* gpio;
   // Component drawing methods
   virtual void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   virtual void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const;

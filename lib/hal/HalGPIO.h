@@ -4,6 +4,8 @@
 #include <BatteryMonitor.h>
 #include <InputManager.h>
 
+#include "../../src/Battery.h"
+
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
 #define EPD_SCLK 8   // SPI Clock
 #define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
@@ -25,6 +27,8 @@ class HalGPIO {
 
  public:
   HalGPIO() = default;
+
+  static BatteryPercentageRingBuffer batteryBuffer;
 
   // Start button GPIO and setup SPI for screen and SD card
   void begin();

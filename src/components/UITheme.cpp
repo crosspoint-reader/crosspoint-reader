@@ -11,8 +11,11 @@
 
 UITheme UITheme::instance;
 
-UITheme::UITheme() {
+UITheme::UITheme() : gpio(nullptr) {}
+
+UITheme::UITheme(HalGPIO& gpioRef) {
   auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
+  gpio = &gpioRef;
   setTheme(themeType);
 }
 
@@ -25,12 +28,12 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
   switch (type) {
     case CrossPointSettings::UI_THEME::CLASSIC:
       LOG_DBG("UI", "Using Classic theme");
-      currentTheme = new BaseTheme();
+      currentTheme = new BaseTheme(gpio);
       currentMetrics = &BaseMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA:
       LOG_DBG("UI", "Using Lyra theme");
-      currentTheme = new LyraTheme();
+      currentTheme = new LyraTheme(gpio);
       currentMetrics = &LyraMetrics::values;
       break;
   }

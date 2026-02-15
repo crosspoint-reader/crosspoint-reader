@@ -1,5 +1,7 @@
 #pragma once
 
+#include <HalGPIO.h>
+
 #include <functional>
 #include <vector>
 
@@ -12,6 +14,7 @@ class UITheme {
 
  public:
   UITheme();
+  UITheme(HalGPIO& gpioRef);
   static UITheme& getInstance() { return instance; }
 
   const ThemeMetrics& getMetrics() { return *currentMetrics; }
@@ -21,6 +24,8 @@ class UITheme {
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
+
+  HalGPIO* gpio = nullptr;
 
  private:
   const ThemeMetrics* currentMetrics;

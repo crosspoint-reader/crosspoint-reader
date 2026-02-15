@@ -20,22 +20,11 @@ constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 }  // namespace
 
-BatteryPercentageRingBuffer BaseTheme::batteryBuffer;
-
 void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   const bool charging = (digitalRead(20) == HIGH);
 
   // Left aligned battery icon and percentage
-  uint8_t percentage = battery.readPercentage();
-
-  if (charging) {
-    // If charging reinitialize buffer with current percentage and display this value
-    batteryBuffer.init(percentage);
-  } else {
-    // Else update buffer with new percentage and return smoothed validated percentage to display
-    batteryBuffer.update(percentage);
-    percentage = batteryBuffer.evaluate();
-  }
+  uint8_t percentage = gpio->getBatteryPercentage();
 
   // Left aligned battery icon and percentage
   // TODO refactor this so the percentage doesnt change after we position it

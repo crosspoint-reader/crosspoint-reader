@@ -24,16 +24,7 @@ void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool s
   const bool charging = (digitalRead(20) == HIGH);
 
   // Left aligned battery icon and percentage
-  uint8_t percentage = battery.readPercentage();
-
-  if (charging) {
-    // If charging reinitialize buffer with current percentage and display this value
-    batteryBuffer.init(percentage);
-  } else {
-    // Else update buffer with new percentage and return smoothed validated percentage to display
-    batteryBuffer.update(percentage);
-    percentage = batteryBuffer.evaluate();
-  }
+  uint8_t percentage = gpio->getBatteryPercentage();
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
