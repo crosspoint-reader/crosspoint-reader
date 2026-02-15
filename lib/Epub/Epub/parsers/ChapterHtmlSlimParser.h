@@ -43,6 +43,7 @@ class ChapterHtmlSlimParser {
   bool hyphenationEnabled;
   const CssParser* cssParser;
   bool embeddedStyle;
+  bool useBold;
 
   // Style tracking (replaces depth-based approach)
   struct StyleStackEntry {
@@ -74,7 +75,7 @@ class ChapterHtmlSlimParser {
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const bool embeddedStyle, const std::function<void()>& popupFn = nullptr,
-                                 const CssParser* cssParser = nullptr)
+                                 const CssParser* cssParser = nullptr, const bool useBold = false)
 
       : filepath(filepath),
         renderer(renderer),
@@ -88,7 +89,8 @@ class ChapterHtmlSlimParser {
         completePageFn(completePageFn),
         popupFn(popupFn),
         cssParser(cssParser),
-        embeddedStyle(embeddedStyle) {}
+        embeddedStyle(embeddedStyle),
+        useBold(useBold) {}
 
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
