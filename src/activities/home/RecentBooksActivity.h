@@ -1,4 +1,5 @@
 #pragma once
+#include <I18n.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
