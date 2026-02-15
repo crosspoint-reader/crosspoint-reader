@@ -30,7 +30,18 @@ inline std::vector<SettingInfo> getSettingsList() {
       SettingInfo::Toggle("Sunlight Fading Fix", &CrossPointSettings::fadingFix, "fadingFix", "Display"),
 
       // --- Reader ---
-      SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily, {"Bookerly", "Noto Sans", "Open Dyslexic"},
+      SettingInfo::Enum("Font Family", &CrossPointSettings::fontFamily,
+                        {
+#ifdef ENABLE_FONT_BOOKERLY
+                            "Bookerly",
+#endif
+#ifdef ENABLE_FONT_NOTOSANS
+                            "Noto Sans",
+#endif
+#ifdef ENABLE_FONT_OPENDYSLEXIC
+                            "Open Dyslexic",
+#endif
+                        },
                         "fontFamily", "Reader"),
       SettingInfo::Enum("Font Size", &CrossPointSettings::fontSize, {"Small", "Medium", "Large", "X Large"}, "fontSize",
                         "Reader"),
