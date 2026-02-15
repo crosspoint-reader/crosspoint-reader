@@ -296,15 +296,57 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
     """
     Format string segments (from escape_cpp_string) as indented C++ string
     literal lines, each wrapped in quotes.
-
-    Example:
-        ['Fran\\xC3', '\\xA7', 'ais']
-      becomes:
-        ['    "Fran\\xC3" "\\xA7" "ais"']
+    Also wraps long segments to respect ~120 column limit.
     """
-    # Join all segments with quotes, separated by space (valid C++ string concat)
-    joined = ' '.join(f'"{seg}"' for seg in segments)
-    return [f"{indent}{joined}"]
+    # Effective limit for content: 120 - 4 (indent) - 2 (quotes) - 1 (comma/safety) = 113
+    # Using 113 to match clang-format exactly (120 - 4 - 2 - 1)
+    MAX_CONTENT_LEN = 113
+
+    lines: List[str] = []
+
+    for seg in segments:
+        # Short segment (e.g. hex escape or short text)
+        if len(seg) <= MAX_CONTENT_LEN:
+            lines.append(f'{indent}"{seg}"')
+            continue
+
+        # Long segment - wrap it
+        current = seg
+        while len(current) > MAX_CONTENT_LEN:
+            # Find best split point
+            # Scan forward to find last space <= MAX_CONTENT_LEN
+            last_space = -1
+            idx = 0
+            while idx <= MAX_CONTENT_LEN and idx < len(current):
+                if current[idx] == ' ':
+                    last_space = idx
+
+                # Handle escapes to step correctly
+                if current[idx] == '\\':
+                    idx += 2
+                else:
+                    idx += 1
+
+            # If we found a space, split after it
+            if last_space != -1:
+                # Include the space in the first line
+                split_point = last_space + 1
+                lines.append(f'{indent}"{current[:split_point]}"')
+                current = current[split_point:]
+            else:
+                # No space, forced break at MAX_CONTENT_LEN (or slightly less)
+                cut_at = MAX_CONTENT_LEN
+                # Don't cut in the middle of an escape sequence
+                if current[cut_at - 1] == '\\':
+                    cut_at -= 1
+
+                lines.append(f'{indent}"{current[:cut_at]}"')
+                current = current[cut_at:]
+
+        if current:
+            lines.append(f'{indent}"{current}"')
+
+    return lines
 
 
 # ---------------------------------------------------------------------------
