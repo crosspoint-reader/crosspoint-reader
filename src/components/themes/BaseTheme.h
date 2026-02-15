@@ -51,10 +51,14 @@ struct ThemeMetrics {
   int buttonHintsHeight;
   int sideButtonHintsWidth;
 
-  int versionTextRightX;
-  int versionTextY;
-
+  int progressBarHeight;
   int bookProgressBarHeight;
+
+  int keyboardKeyWidth;
+  int keyboardKeyHeight;
+  int keyboardKeySpacing;
+  bool keyboardBottomAligned;
+  bool keyboardCenteredText;
 };
 
 // Default theme implementation (Classic Theme)
@@ -82,9 +86,13 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeRecentBooksCount = 1,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
-                                 .versionTextRightX = 20,
-                                 .versionTextY = 738,
-                                 .bookProgressBarHeight = 4};
+                                 .progressBarHeight = 16,
+                                 .bookProgressBarHeight = 4,
+                                 .keyboardKeyWidth = 18,
+                                 .keyboardKeyHeight = 18,
+                                 .keyboardKeySpacing = 3,
+                                 .keyboardBottomAligned = false,
+                                 .keyboardCenteredText = false};
 }
 
 class BaseTheme {
@@ -93,17 +101,21 @@ class BaseTheme {
 
   // Component drawing methods
   virtual void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
-  virtual void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const;
+  virtual void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
+                           bool alignRight = false) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                         const std::function<std::string(int index)>& rowTitle,
-                        const std::function<std::string(int index)>& rowSubtitle,
-                        const std::function<std::string(int index)>& rowIcon,
-                        const std::function<std::string(int index)>& rowValue) const;
-
-  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const;
+                        const std::function<std::string(int index)>& rowSubtitle = nullptr,
+                        const std::function<std::string(int index)>& rowIcon = nullptr,
+                        const std::function<std::string(int index)>& rowValue = nullptr,
+                        bool highlightValue = false) const;
+  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
+                          const char* subtitle = nullptr) const;
+  virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
+                             const char* rightLabel = nullptr) const;
   virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                           bool selected) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
@@ -115,4 +127,7 @@ class BaseTheme {
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   virtual void drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const;
+  virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
+  virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const;
+  virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const;
 };
