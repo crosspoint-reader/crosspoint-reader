@@ -1,10 +1,12 @@
 #include "FormatSDCardActivity.h"
 
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 #include <esp_system.h>
 
 #include "MappedInputManager.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 void FormatSDCardActivity::taskTrampoline(void* param) {
@@ -66,7 +68,7 @@ void FormatSDCardActivity::render() {
     renderer.drawCenteredText(UI_10_FONT_ID, 380, "This action CANNOT be undone.");
 
     const auto labels = mappedInput.mapLabels("Cancel", "FORMAT", "", "");
-    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FORMATTING) {
     renderer.drawCenteredText(UI_10_FONT_ID, 300, "Formatting...", true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 350, "Please wait, do not power off");
@@ -79,7 +81,7 @@ void FormatSDCardActivity::render() {
     renderer.drawCenteredText(UI_10_FONT_ID, 350, "Please try again or check SD card.");
 
     const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();
@@ -120,15 +122,15 @@ void FormatSDCardActivity::loop() {
 }
 
 void FormatSDCardActivity::performFormat() {
-  Serial.printf("[%lu] [FORMAT] Starting SD card format...\n", millis());
+  LOG_INF("FORMAT", "Starting SD card format...");
 
-  // Call the format method on SDCardManager
-  bool success = SdMan.format(&Serial);
+  // Call the format method on HalStorage
+  bool success = Storage.format(&logSerial);
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = success ? SUCCESS : FAILED;
   xSemaphoreGive(renderingMutex);
   updateRequired = true;
 
-  Serial.printf("[%lu] [FORMAT] Format %s\n", millis(), success ? "succeeded" : "failed");
+  LOG_INF("FORMAT", "Format %s", success ? "succeeded" : "failed");
 }

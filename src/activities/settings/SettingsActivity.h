@@ -22,6 +22,7 @@ enum class SettingAction {
   Network,
   ClearCache,
   CheckForUpdates,
+  FormatSDCard,
 };
 
 struct SettingInfo {
