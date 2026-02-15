@@ -6,9 +6,12 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include "ClippingTextViewerActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "EpubReaderBookmarkListActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
+#include "EpubReaderClippingsListActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
@@ -21,6 +24,7 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
+constexpr unsigned long captureHoldMs = 1000;
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
 
@@ -138,6 +142,92 @@ void EpubReaderActivity::onExit() {
   epub.reset();
 }
 
+void EpubReaderActivity::captureCurrentPage() {
+  if (!section || !epub) {
+    return;
+  }
+  auto page = section->loadPageFromSectionFile();
+  if (!page) {
+    return;
+  }
+  const std::string pageText = page->getPlainText();
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
+  const float chapterProgress = (section->pageCount > 0)
+                                    ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                                    : 0.0f;
+  const int bookPercent =
+      clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
+  captureBuffer.push_back({pageText, chapterTitle, bookPercent, chapterPercent,
+                           static_cast<uint16_t>(currentSpineIndex), static_cast<uint16_t>(section->currentPage)});
+}
+
+void EpubReaderActivity::startCapture() {
+  // Prevent capturing from books stored inside the exports directory
+  if (epub && epub->getPath().find("/.crosspoint/") != std::string::npos) {
+    statusBarOverride = "Cannot capture here";
+    updateRequired = true;
+    return;
+  }
+  captureBuffer.clear();
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  captureCurrentPage();
+  xSemaphoreGive(renderingMutex);
+  captureState = CaptureState::CAPTURING;
+  statusBarOverride = "Capture started";
+  updateRequired = true;
+}
+
+void EpubReaderActivity::stopCapture() {
+  if (captureBuffer.empty()) {
+    cancelCapture();
+    return;
+  }
+  const bool ok = ClippingStore::saveClipping(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
+  statusBarOverride = ok ? "Clipping saved" : "Save failed";
+  captureBuffer.clear();
+  captureState = CaptureState::IDLE;
+  updateRequired = true;
+}
+
+void EpubReaderActivity::cancelCapture() {
+  captureBuffer.clear();
+  captureState = CaptureState::IDLE;
+  pendingCaptureAfterRender = false;
+}
+
+void EpubReaderActivity::addBookmark() {
+  if (!section || !epub) {
+    return;
+  }
+  // Prevent bookmarking from books stored inside the exports directory
+  if (epub->getPath().find("/.crosspoint/") != std::string::npos) {
+    statusBarOverride = "Cannot bookmark here";
+    updateRequired = true;
+    return;
+  }
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  const float chapterProgress = (section->pageCount > 0)
+                                    ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                                    : 0.0f;
+  const int bookPercent =
+      clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+  xSemaphoreGive(renderingMutex);
+
+  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
+
+  BookmarkEntry entry;
+  entry.bookPercent = static_cast<uint8_t>(bookPercent);
+  entry.chapterPercent = static_cast<uint8_t>(chapterPercent);
+  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+  entry.pageIndex = static_cast<uint16_t>(section->currentPage);
+
+  const bool ok = BookmarkStore::addBookmark(epub->getPath(), entry);
+  statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
+  updateRequired = true;
+}
+
 void EpubReaderActivity::loop() {
   // Pass input responsibility to sub activity if exists
   if (subActivity) {
@@ -184,10 +274,24 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Enter reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    // Don't start activity transition while rendering
+  // Long press CONFIRM (1s+): always bookmark
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= captureHoldMs) {
+    addBookmark();
+    // Wait for button release before processing further input
+    skipNextButtonCheck = true;
+    return;
+  }
+
+  // Short press CONFIRM opens reader menu
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < captureHoldMs) {
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    // Auto-save capture when opening menu (inside mutex to prevent render race)
+    if (captureState == CaptureState::CAPTURING) {
+      stopCapture();
+      // Show "Clipping saved" feedback before opening menu
+      renderScreen();
+      vTaskDelay(400 / portTICK_PERIOD_MS);
+    }
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
@@ -206,12 +310,18 @@ void EpubReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
+    if (captureState == CaptureState::CAPTURING) {
+      cancelCapture();
+    }
     onGoBack();
     return;
   }
 
-  // Short press BACK goes directly to home
+  // Short press BACK goes directly to home (or cancels capture)
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
+    if (captureState == CaptureState::CAPTURING) {
+      cancelCapture();
+    }
     onGoHome();
     return;
   }
@@ -230,8 +340,18 @@ void EpubReaderActivity::loop() {
                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
                                     mappedInput.wasReleased(MappedInputManager::Button::Right));
 
+  // Clear any status bar override on page turn (but not the capture marker)
+  if (prevTriggered || nextTriggered) {
+    statusBarOverride.clear();
+  }
+
   if (!prevTriggered && !nextTriggered) {
     return;
+  }
+
+  // Page backward while capturing: save passage and then do the backward turn
+  if (prevTriggered && captureState == CaptureState::CAPTURING) {
+    stopCapture();
   }
 
   // any botton press when at end of the book goes back to the last page
@@ -285,6 +405,18 @@ void EpubReaderActivity::loop() {
       xSemaphoreGive(renderingMutex);
     }
     updateRequired = true;
+
+    // Capture the new page after a forward page turn while capturing
+    if (captureState == CaptureState::CAPTURING) {
+      if (section) {
+        xSemaphoreTake(renderingMutex, portMAX_DELAY);
+        captureCurrentPage();
+        xSemaphoreGive(renderingMutex);
+      } else {
+        // Section boundary crossed — defer capture until renderScreen() loads the new section
+        pendingCaptureAfterRender = true;
+      }
+    }
   }
 }
 
@@ -401,6 +533,47 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       xSemaphoreGive(renderingMutex);
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::CAPTURE: {
+      exitActivity();
+      applyOrientation(SETTINGS.orientation);
+      startCapture();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::CLIPPINGS: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new EpubReaderClippingsListActivity(renderer, mappedInput, epub->getPath(), [this]() {
+        exitActivity();
+        updateRequired = true;
+      }));
+      xSemaphoreGive(renderingMutex);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new EpubReaderBookmarkListActivity(
+          this->renderer, this->mappedInput, epub->getPath(),
+          [this](uint16_t spineIndex) -> std::string {
+            const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+            return (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
+          },
+          [this]() {
+            exitActivity();
+            updateRequired = true;
+          },
+          [this](const int spineIndex, const int pageIndex) {
+            if (currentSpineIndex != spineIndex || (section && section->currentPage != pageIndex)) {
+              currentSpineIndex = spineIndex;
+              nextPageNumber = pageIndex;
+              section.reset();
+            }
+            exitActivity();
+            updateRequired = true;
+          }));
+      xSemaphoreGive(renderingMutex);
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
       // Launch the slider-based percent selector and return here on confirm/cancel.
       float bookProgress = 0.0f;
@@ -511,10 +684,13 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 
 void EpubReaderActivity::displayTaskLoop() {
   while (true) {
-    if (updateRequired) {
-      updateRequired = false;
+    if (updateRequired && !subActivity) {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
+      // cppcheck-suppress knownConditionTrueFalse
+      if (updateRequired && !subActivity) {
+        updateRequired = false;
+        renderScreen();
+      }
       xSemaphoreGive(renderingMutex);
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -619,6 +795,12 @@ void EpubReaderActivity::renderScreen() {
     }
   }
 
+  // Deferred capture after section boundary crossing during multi-page capture
+  if (pendingCaptureAfterRender && section) {
+    captureCurrentPage();
+    pendingCaptureAfterRender = false;
+  }
+
   renderer.clearScreen();
 
   if (section->pageCount == 0) {
@@ -656,8 +838,8 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
   FsFile f;
   if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
-    data[0] = currentSpineIndex & 0xFF;
-    data[1] = (currentSpineIndex >> 8) & 0xFF;
+    data[0] = spineIndex & 0xFF;
+    data[1] = (spineIndex >> 8) & 0xFF;
     data[2] = currentPage & 0xFF;
     data[3] = (currentPage >> 8) & 0xFF;
     data[4] = pageCount & 0xFF;
@@ -669,6 +851,7 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     LOG_ERR("ERS", "Could not save progress!");
   }
 }
+
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
@@ -711,6 +894,26 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                          const int orientedMarginLeft) const {
   auto metrics = UITheme::getInstance().getMetrics();
+
+  if (!statusBarOverride.empty()) {
+    const auto screenHeight = renderer.getScreenHeight();
+    const auto textY = screenHeight - orientedMarginBottom - 4;
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, statusBarOverride.c_str());
+    const int x = (renderer.getScreenWidth() - textWidth) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, textY, statusBarOverride.c_str());
+    return;
+  }
+
+  // Show persistent capture indicator
+  if (captureState == CaptureState::CAPTURING) {
+    const auto screenHeight = renderer.getScreenHeight();
+    const auto textY = screenHeight - orientedMarginBottom - 4;
+    const char* capText = "Capturing...";
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, capText);
+    const int x = (renderer.getScreenWidth() - textWidth) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, textY, capText);
+    return;
+  }
 
   // determine visible status bar elements
   const bool showProgressPercentage = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
@@ -795,11 +998,12 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     int titleWidth;
     if (tocIndex == -1) {
       title = "Unnamed";
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, "Unnamed");
     } else {
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
+    }
+    titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
+    if (tocIndex != -1) {
       if (titleWidth > availableTitleSpace) {
         // Not enough space to center on the screen, center it within the remaining space instead
         availableTitleSpace = rendererableScreenWidth - titleMarginLeft - titleMarginRight;

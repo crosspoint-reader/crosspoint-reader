@@ -19,6 +19,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
+    - [Bookmarks & Clippings](#bookmarks--clippings)
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
   - [5. Chapter Selection Screen](#5-chapter-selection-screen)
@@ -198,11 +199,52 @@ If the **Short Power Button Click** setting is set to "Page Turn", you can also 
 
 This feature can be disabled in **[Settings](#35-settings)** to help avoid changing chapters by mistake.
 
+### Bookmarks & Clippings
+
+**Bookmarks** and **Clippings** are separate features for marking your place and saving text.
+
+#### Bookmarks
+
+Hold **Confirm** for about 1 second to bookmark the current page. The status bar will briefly show "Bookmarked".
+
+**Viewing bookmarks:** Press **Confirm** to open the reader menu → select **Bookmarks**. This opens a list of all bookmarks for the current book, showing the book percentage for each.
+
+**In the bookmark list:**
+- Use **Up**/**Down** (or **Left**/**Right**) to navigate
+- Press **Confirm** to jump to a bookmark
+- Long-press **Confirm** to delete the selected bookmark (with confirmation)
+- Press **Back** to return to reading
+
+Bookmarks are stored internally on the SD card (one file per book).
+
+#### Clippings
+
+You can capture text from pages and view them later in a dedicated clippings viewer.
+
+**Capturing a clipping:**
+1. Press **Confirm** to open the reader menu → select **Capture**
+2. "Capture started" appears, and "Capturing..." stays in the status bar
+3. Turn pages forward to capture more pages
+4. Open the reader menu to automatically save the captured pages
+
+**Other ways to save/cancel:**
+- **Turn backward** saves the capture and goes back one page
+- **Press Back** discards the capture without saving
+
+**Viewing clippings:** Press **Confirm** → select **Clippings** from the reader menu. This opens a list showing a text preview for each clipping.
+
+**In the clippings list:**
+- Use **Up**/**Down** (or **Left**/**Right**) to navigate
+- Press **Confirm** to view the full clipping text (scrollable)
+- Long-press **Confirm** to delete the selected clipping (with confirmation)
+- Press **Back** to return to reading
+
+Clippings are stored internally on the SD card (one file per book). A `.md` export file is also maintained for reading on a computer.
 
 ### System Navigation
 * **Return to Book Selection:** Press **Back** to close the book and return to the **[Book Selection](#32-book-selection)** screen.
 * **Return to Home:** Press and **hold** the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
-* **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)**.
+* **Reader Menu:** Press **Confirm** to open the reader menu (chapter selection, bookmarks, clippings, and more).
 
 ### Supported Languages
 

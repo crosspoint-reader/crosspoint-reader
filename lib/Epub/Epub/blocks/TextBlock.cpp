@@ -119,3 +119,14 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   return std::unique_ptr<TextBlock>(
       new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle));
 }
+
+std::string TextBlock::getPlainText() const {
+  std::string result;
+  for (auto it = words.begin(); it != words.end(); ++it) {
+    if (it != words.begin()) {
+      result += ' ';
+    }
+    result += *it;
+  }
+  return result;
+}
