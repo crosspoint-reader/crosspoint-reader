@@ -21,6 +21,7 @@
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
 #include "activities/home/MyLibraryActivity.h"
+#include "activities/home/ToDoActivity.h"
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
@@ -222,6 +223,11 @@ void onGoToFileTransfer() {
   enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToToDo() {
+    exitActivity();
+    enterNewActivity(new ToDoActivity(renderer, mappedInputManager, onGoHome));
+}
+
 void onGoToSettings() {
   exitActivity();
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
@@ -249,8 +255,17 @@ void onGoToBrowser() {
 
 void onGoHome() {
   exitActivity();
-  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
-                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser));
+  enterNewActivity(new HomeActivity(
+    renderer, 
+    mappedInputManager, 
+    onGoToReader,       // 3
+    onGoToMyLibrary,    // 4
+    onGoToRecentBooks,  // 5
+    onGoToSettings,     // 6
+    onGoToFileTransfer, // 7
+    onGoToBrowser,      // 8 (OpdsBrowser)
+    onGoToToDo          // 9 (ToDo)
+  ));
 }
 
 void setupDisplayAndFonts() {
