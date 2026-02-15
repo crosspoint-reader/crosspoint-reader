@@ -636,14 +636,15 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
-void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const {
+void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress,
+                                       const int additionalYPadding) const {
   int vieweableMarginTop, vieweableMarginRight, vieweableMarginBottom, vieweableMarginLeft;
   renderer.getOrientedViewableTRBL(&vieweableMarginTop, &vieweableMarginRight, &vieweableMarginBottom,
                                    &vieweableMarginLeft);
 
   const int progressBarMaxWidth = renderer.getScreenWidth() - vieweableMarginLeft - vieweableMarginRight;
-  const int progressBarY =
-      renderer.getScreenHeight() - vieweableMarginBottom - BaseMetrics::values.bookProgressBarHeight;
+  const int progressBarY = renderer.getScreenHeight() - vieweableMarginBottom -
+                           BaseMetrics::values.bookProgressBarHeight - additionalYPadding;
   const int barWidth = progressBarMaxWidth * bookProgress / 100;
   renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BaseMetrics::values.bookProgressBarHeight, true);
 }

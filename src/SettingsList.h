@@ -18,10 +18,6 @@ inline std::vector<SettingInfo> getSettingsList() {
                         "sleepScreenCoverMode", "Display"),
       SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
                         {"None", "Contrast", "Inverted"}, "sleepScreenCoverFilter", "Display"),
-      SettingInfo::Enum(
-          "Status Bar", &CrossPointSettings::statusBar,
-          {"None", "No Progress", "Full w/ Percentage", "Full w/ Book Bar", "Book Bar Only", "Full w/ Chapter Bar"},
-          "statusBar", "Display"),
       SettingInfo::Enum("Hide Battery %", &CrossPointSettings::hideBatteryPercentage, {"Never", "In Reader", "Always"},
                         "hideBatteryPercentage", "Display"),
       SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,

@@ -11,6 +11,7 @@
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "SettingsList.h"
+#include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -49,6 +50,7 @@ void SettingsActivity::onEnter() {
   // Append device-only ACTION items
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action("Remap Front Buttons", SettingAction::RemapFrontButtons));
+  readerSettings.push_back(SettingInfo::Action("Customise Status Bar", SettingAction::CustomiseStatusBar));
   systemSettings.push_back(SettingInfo::Action("Network", SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action("KOReader Sync", SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action("OPDS Browser", SettingAction::OPDSBrowser));
@@ -201,6 +203,9 @@ void SettingsActivity::toggleCurrentSetting() {
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
         enterSubActivity(new ButtonRemapActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::CustomiseStatusBar:
+        enterSubActivity(new StatusBarSettingsActivity(renderer, mappedInput, onComplete));
         break;
       case SettingAction::KOReaderSync:
         enterSubActivity(new KOReaderSettingsActivity(renderer, mappedInput, onComplete));
