@@ -19,6 +19,10 @@ class Hyphenator {
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
 
+  // Returns true if a language-specific hyphenator is currently active (language is supported).
+  // Returns false if current language lacks Liang patterns, indicating fallback breaks may be needed.
+  static bool hasLanguageSupport() { return cachedHyphenator_ != nullptr; }
+
  private:
   static const LanguageHyphenator* cachedHyphenator_;
 };

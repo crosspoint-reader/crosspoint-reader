@@ -280,7 +280,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
 
       // Word would overflow — try to split based on hyphenation points
       const int availableWidth = effectivePageWidth - lineWidth - spacing;
-      const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
+      // Enable fallback breaks for: (1) first word on line, or (2) unsupported languages
+      const bool allowFallbackBreaks = isFirstWord || !Hyphenator::hasLanguageSupport();
 
       if (availableWidth > 0 && hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths,
                                                      allowFallbackBreaks, &continuesVec)) {
