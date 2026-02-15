@@ -300,9 +300,8 @@ bool transition(const EmbeddedAutomaton& automaton, const AutomatonState& state,
   return false;
 }
 
-// Converts odd score positions back into codepoint indexes, honoring min prefix/suffix constraints.
+// Converts odd-valued score entries into codepoint break (hyphen) indexes while honoring min prefix/suffix constraints.
 // Each break corresponds to scores[breakIndex + 1] because of the leading '.' sentinel.
-// Convert odd score entries into hyphen positions while honoring prefix/suffix limits.
 // Template version that works with both stack arrays and heap vectors.
 template <typename ScoreContainer>
 std::vector<size_t> collectBreakIndexesImpl(const std::vector<CodepointInfo>& cps, const ScoreContainer& scores,
