@@ -45,24 +45,8 @@ class HalPowerManager {
     bool valid = false;
 
    public:
-    Lock(LockMode mode = NormalSpeed) {
-      xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
-      // Current limitation: only one lock at a time
-      if (powerManager.currentLockMode != None) {
-        LOG_ERR("PWR", "Lock already held, ignore");
-        valid = false;
-      }
-      powerManager.currentLockMode = mode;
-      valid = true;
-      xSemaphoreGive(powerManager.modeMutex);
-    }
-    ~Lock() {
-      xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
-      if (valid) {
-        powerManager.currentLockMode = None;
-      }
-      xSemaphoreGive(powerManager.modeMutex);
-    }
+    explicit Lock(LockMode mode = NormalSpeed);
+    ~Lock();
   };
 };
 

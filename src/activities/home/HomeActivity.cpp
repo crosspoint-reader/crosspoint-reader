@@ -290,3 +290,24 @@ void HomeActivity::render() {
     loadRecentCovers(metrics.homeCoverHeight);
   }
 }
+
+HalPowerManager::Lock::Lock(LockMode mode) {
+  xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
+  // Current limitation: only one lock at a time
+  if (powerManager.currentLockMode != None) {
+    LOG_ERR("PWR", "Lock already held, ignore");
+    valid = false;
+  } else {
+    powerManager.currentLockMode = mode;
+    valid = true;
+  }
+  xSemaphoreGive(powerManager.modeMutex);
+}
+
+HalPowerManager::Lock::~Lock() {
+  xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
+  if (valid) {
+    powerManager.currentLockMode = None;
+  }
+  xSemaphoreGive(powerManager.modeMutex);
+}
