@@ -1,7 +1,8 @@
 # Architecture Overview
 
-CrossPoint is firmware for the Xteink X4 built with PlatformIO, Arduino, and ESP32-C3.
-At a high level, it is an activity-driven app loop with persistent settings/state, SD-card-first caching, and a rendering pipeline optimized for e-ink constraints.
+CrossPoint is firmware for the Xteink X4 (unaffiliated with Xteink), built with PlatformIO targeting the ESP32-C3 microcontroller.
+
+At a high level, it is firmware that uses an activity-driven application architecture loop with persistent settings/state, SD-card-first caching, and a rendering pipeline optimized for e-ink constraints.
 
 ## System at a glance
 
@@ -82,6 +83,47 @@ Why caching matters:
 
 - RAM is limited on ESP32-C3, so expensive parsed/layout data is persisted to SD
 - repeat opens/page navigation can reuse cached data instead of full reparsing
+
+## Reader internals call graph
+
+This diagram zooms into the EPUB path to show the main control and data flow from activity entry to on-screen draw.
+
+```mermaid
+flowchart TD
+    A[ReaderActivity onEnter] --> B{File type}
+    B -->|EPUB| C[Create Epub object]
+    B -->|XTC/TXT| Z[Use format-specific reader]
+
+    C --> D[Epub load]
+    D --> E[Locate container and OPF]
+    E --> F[Build or load BookMetadataCache]
+    F --> G[Load TOC and spine]
+    G --> H[Load or parse CSS rules]
+
+    H --> I[EpubReaderActivity]
+    I --> J{Section cache exists for current settings?}
+    J -->|Yes| K[Read section bin from SD cache]
+    J -->|No| L[Parse chapter HTML and layout text]
+    L --> M[Apply typography settings and hyphenation]
+    M --> N[Write section cache bin]
+
+    K --> O[Build page model]
+    N --> O
+    O --> P[GfxRenderer draw calls]
+    P --> Q[HAL display framebuffer update]
+    Q --> R[E-ink refresh policy]
+
+    S[SETTINGS singleton] -. influences .-> J
+    S -. influences .-> M
+    T[APP_STATE singleton] -. persists .-> U[Reading progress and resume context]
+    U -. used by .-> I
+```
+
+Notes:
+
+- "section cache exists" depends on cache-busting parameters such as font and layout related settings
+- rendering favors reusing precomputed layout data to keep page turns responsive on constrained hardware
+- progress/session state is persisted so the reader can reopen at the last position after reboot/sleep
 
 ## State and persistence
 
