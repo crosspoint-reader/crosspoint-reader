@@ -300,9 +300,7 @@ void setup() {
     LOG_ERR("MAIN", "SD card initialization failed");
     setupDisplayAndFonts();
     exitActivity();
-    I18N.loadSettings();
-    enterNewActivity(
-        new FullScreenMessageActivity(renderer, mappedInputManager, tr(STR_SD_CARD_ERROR), EpdFontFamily::BOLD));
+    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, "SD card error", EpdFontFamily::BOLD));
     return;
   }
 
