@@ -23,7 +23,8 @@ constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
-
+// pages per minute, first item is 1 to prevent division by zero if accessed
+const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
 int clampPercent(int percent) {
   if (percent < 0) {
     return 0;
@@ -184,6 +185,37 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (automaticPageTurnActive) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      automaticPageTurnActive = false;
+      // updates chapter title space to indicate page turn disabled
+      updateRequired = true;
+      return;
+    }
+
+    if (!section) {
+      updateRequired = true;
+      return;
+    }
+
+    const unsigned long currentTime = millis();
+    if ((currentTime - lastPageTurnTime) >= pageTurnDuration) {
+      lastPageTurnTime = currentTime;
+      if (section->currentPage < section->pageCount - 1) {
+        section->currentPage++;
+      } else {
+        xSemaphoreTake(renderingMutex, portMAX_DELAY);
+        nextPageNumber = 0;
+        currentSpineIndex++;
+        section.reset();
+        xSemaphoreGive(renderingMutex);
+      }
+      updateRequired = true;
+      return;
+    }
+  }
+
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Don't start activity transition while rendering
@@ -199,7 +231,10 @@ void EpubReaderActivity::loop() {
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
         this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-        SETTINGS.orientation, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
+        SETTINGS.orientation,
+        [this](const uint8_t orientation, const uint8_t selectedPageTurnOption) {
+          onReaderMenuBack(orientation, selectedPageTurnOption);
+        },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
     xSemaphoreGive(renderingMutex);
   }
@@ -249,6 +284,10 @@ void EpubReaderActivity::loop() {
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     nextPageNumber = 0;
     currentSpineIndex = nextTriggered ? currentSpineIndex + 1 : currentSpineIndex - 1;
+    // if chapter was skipped manually, reset time elapsed
+    if (automaticPageTurnActive) {
+      lastPageTurnTime = millis();
+    }
     section.reset();
     xSemaphoreGive(renderingMutex);
     updateRequired = true;
@@ -262,6 +301,10 @@ void EpubReaderActivity::loop() {
   }
 
   if (prevTriggered) {
+    // if page was turned manually, reset time elapsed
+    if (automaticPageTurnActive) {
+      lastPageTurnTime = millis();
+    }
     if (section->currentPage > 0) {
       section->currentPage--;
     } else {
@@ -274,6 +317,10 @@ void EpubReaderActivity::loop() {
     }
     updateRequired = true;
   } else {
+    // if page was turned manually, reset time elapsed
+    if (automaticPageTurnActive) {
+      lastPageTurnTime = millis();
+    }
     if (section->currentPage < section->pageCount - 1) {
       section->currentPage++;
     } else {
@@ -288,11 +335,12 @@ void EpubReaderActivity::loop() {
   }
 }
 
-void EpubReaderActivity::onReaderMenuBack(const uint8_t orientation) {
+void EpubReaderActivity::onReaderMenuBack(const uint8_t orientation, const uint8_t selectedPageTurnOption) {
   exitActivity();
   // Apply the user-selected orientation when the menu is dismissed.
   // This ensures the menu can be navigated without immediately rotating the screen.
   applyOrientation(orientation);
+  toggleAutoPageTurn(selectedPageTurnOption);
   updateRequired = true;
 }
 
@@ -509,6 +557,28 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   xSemaphoreGive(renderingMutex);
 }
 
+void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
+  if (selectedPageTurnOption == 0) {
+    automaticPageTurnActive = false;
+  } else {
+    lastPageTurnTime = millis();
+    // calculates page turn duration by dividing by number of pages
+    pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_LABELS[selectedPageTurnOption];
+    automaticPageTurnActive = true;
+  }
+
+  // resets cached section so that space is reserved for auto page turn indicator when progress bar is None
+  if (SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NONE) {
+    // Preserve current reading position so we can restore after reflow.
+    if (section) {
+      cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = section->pageCount;
+      nextPageNumber = section->currentPage;
+    }
+    section.reset();
+  }
+}
+
 void EpubReaderActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired) {
@@ -541,6 +611,8 @@ void EpubReaderActivity::renderScreen() {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, "End of book", true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
+    // turns off automatic page turn when end of book is reached
+    automaticPageTurnActive = false;
     return;
   }
 
@@ -563,6 +635,9 @@ void EpubReaderActivity::renderScreen() {
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
     orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
                             (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
+  } else if (automaticPageTurnActive) {
+    // reserves space for automatic page turn indicator when no status bar is shown
+    orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin;
   }
 
   if (!section) {
@@ -776,7 +851,26 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
                     showBatteryPercentage);
   }
 
-  if (showChapterTitle) {
+  std::string title;
+  int titleWidth;
+
+  if (automaticPageTurnActive) {
+    title = "Auto Turn Enabled: " + std::to_string(60 * 1000 / pageTurnDuration) + " PPM";
+    titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
+  } else if (showChapterTitle) {
+    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+    if (tocIndex == -1) {
+      title = "Unnamed";
+      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, "Unnamed");
+    } else {
+      const auto tocItem = epub->getTocItem(tocIndex);
+      title = tocItem.title;
+      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
+    }
+  }
+
+  // generic method for drawing text to middle of status bar
+  if (!title.empty()) {
     // Centered chatper title text
     // Page width minus existing content with 30px padding on each side
     const int rendererableScreenWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
@@ -789,28 +883,15 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     // available space.
     int titleMarginLeftAdjusted = std::max(titleMarginLeft, titleMarginRight);
     int availableTitleSpace = rendererableScreenWidth - 2 * titleMarginLeftAdjusted;
-    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-
-    std::string title;
-    int titleWidth;
-    if (tocIndex == -1) {
-      title = "Unnamed";
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, "Unnamed");
-    } else {
-      const auto tocItem = epub->getTocItem(tocIndex);
-      title = tocItem.title;
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-      if (titleWidth > availableTitleSpace) {
-        // Not enough space to center on the screen, center it within the remaining space instead
-        availableTitleSpace = rendererableScreenWidth - titleMarginLeft - titleMarginRight;
-        titleMarginLeftAdjusted = titleMarginLeft;
-      }
-      if (titleWidth > availableTitleSpace) {
-        title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), availableTitleSpace);
-        titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-      }
+    if (titleWidth > availableTitleSpace) {
+      // Not enough space to center on the screen, center it within the remaining space instead
+      availableTitleSpace = rendererableScreenWidth - titleMarginLeft - titleMarginRight;
+      titleMarginLeftAdjusted = titleMarginLeft;
     }
-
+    if (titleWidth > availableTitleSpace) {
+      title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), availableTitleSpace);
+      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
+    }
     renderer.drawText(SMALL_FONT_ID,
                       titleMarginLeftAdjusted + orientedMarginLeft + (availableTitleSpace - titleWidth) / 2, textY,
                       title.c_str());
