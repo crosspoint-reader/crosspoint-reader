@@ -8,6 +8,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "EpubReaderBookmarkListActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -21,6 +22,7 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
+constexpr unsigned long bookmarkHoldMs = 1000;
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
 
@@ -138,6 +140,31 @@ void EpubReaderActivity::onExit() {
   epub.reset();
 }
 
+void EpubReaderActivity::addBookmark() {
+  if (!section || !epub) {
+    return;
+  }
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  const float chapterProgress = (section->pageCount > 0)
+                                    ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                                    : 0.0f;
+  const int bookPercent =
+      clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+  xSemaphoreGive(renderingMutex);
+
+  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
+
+  BookmarkEntry entry;
+  entry.bookPercent = static_cast<uint8_t>(bookPercent);
+  entry.chapterPercent = static_cast<uint8_t>(chapterPercent);
+  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+  entry.pageIndex = static_cast<uint16_t>(section->currentPage);
+
+  const bool ok = BookmarkStore::addBookmark(epub->getPath(), entry);
+  statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
+  updateRequired = true;
+}
+
 void EpubReaderActivity::loop() {
   // Pass input responsibility to sub activity if exists
   if (subActivity) {
@@ -184,8 +211,16 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Enter reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Long press CONFIRM (1s+): bookmark
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= bookmarkHoldMs) {
+    addBookmark();
+    // Wait for button release before processing further input
+    skipNextButtonCheck = true;
+    return;
+  }
+
+  // Short press CONFIRM opens reader menu
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < bookmarkHoldMs) {
     // Don't start activity transition while rendering
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
     const int currentPage = section ? section->currentPage + 1 : 0;
@@ -229,6 +264,11 @@ void EpubReaderActivity::loop() {
                                     mappedInput.wasPressed(MappedInputManager::Button::Right))
                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
                                     mappedInput.wasReleased(MappedInputManager::Button::Right));
+
+  // Clear any status bar override on page turn
+  if (prevTriggered || nextTriggered) {
+    statusBarOverride.clear();
+  }
 
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -398,6 +438,31 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             updateRequired = true;
           }));
 
+      xSemaphoreGive(renderingMutex);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      exitActivity();
+      enterNewActivity(new EpubReaderBookmarkListActivity(
+          this->renderer, this->mappedInput, epub->getPath(),
+          [this](uint16_t spineIndex) -> std::string {
+            const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+            return (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
+          },
+          [this]() {
+            exitActivity();
+            updateRequired = true;
+          },
+          [this](const int spineIndex, const int pageIndex) {
+            if (currentSpineIndex != spineIndex || (section && section->currentPage != pageIndex)) {
+              currentSpineIndex = spineIndex;
+              nextPageNumber = pageIndex;
+              section.reset();
+            }
+            exitActivity();
+            updateRequired = true;
+          }));
       xSemaphoreGive(renderingMutex);
       break;
     }
@@ -711,6 +776,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,
                                          const int orientedMarginLeft) const {
   auto metrics = UITheme::getInstance().getMetrics();
+
+  if (!statusBarOverride.empty()) {
+    const auto screenHeight = renderer.getScreenHeight();
+    const auto textY = screenHeight - orientedMarginBottom - 4;
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, statusBarOverride.c_str());
+    const int x = (renderer.getScreenWidth() - textWidth) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, textY, statusBarOverride.c_str());
+    return;
+  }
 
   // determine visible status bar elements
   const bool showProgressPercentage = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::FULL;
