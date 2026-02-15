@@ -342,8 +342,8 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
       // Find the minimum textOffset among remaining entries to determine header size
       uint32_t minOffset = origFile.size();
       for (const auto& e : entries) {
-        // cppcheck-suppress useStlAlgorithm
         if (e.textOffset < minOffset) {
+          // cppcheck-suppress useStlAlgorithm
           minOffset = e.textOffset;
         }
       }
