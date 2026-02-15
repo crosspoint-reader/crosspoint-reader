@@ -21,9 +21,7 @@ class ParserStreamAdapter : public Print {
  public:
   explicit ParserStreamAdapter(Parser& p) : parser(p) {}
 
-  size_t write(uint8_t byte) override {
-    return write(&byte, 1);
-  }
+  size_t write(uint8_t byte) override { return write(&byte, 1); }
 
   size_t write(const uint8_t* buffer, size_t size) override {
     if (error) return 0;
@@ -168,8 +166,8 @@ bool Epub::parseTocNcxFile() const {
     return false;
   }
 
-  LOG_DBG("ZIP_IO", "NCX: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes",
-          ncxSize, zipReadTime / 1000, (float)zipReadTime / ncxSize, heapDelta);
+  LOG_DBG("ZIP_IO", "NCX: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes", ncxSize, zipReadTime / 1000,
+          (float)zipReadTime / ncxSize, heapDelta);
   LOG_DBG("EBP", "Parsed TOC items");
   return true;
 }
@@ -221,8 +219,8 @@ bool Epub::parseTocNavFile() const {
     return false;
   }
 
-  LOG_DBG("ZIP_IO", "NAV: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes",
-          navSize, zipReadTime / 1000, (float)zipReadTime / navSize, heapDelta);
+  LOG_DBG("ZIP_IO", "NAV: %zu bytes in %lu ms (%.2f us/byte), heap: %+ld bytes", navSize, zipReadTime / 1000,
+          (float)zipReadTime / navSize, heapDelta);
   LOG_DBG("EBP", "Parsed TOC nav items");
   return true;
 }
