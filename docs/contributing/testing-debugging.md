@@ -4,6 +4,9 @@ CrossPoint runs on real hardware, so debugging usually combines local build chec
 
 ## Local checks
 
+Make sure `clang-format` 21+ is installed and available in `PATH` before running the formatting step.
+If needed, see [Getting Started](./getting-started.md).
+
 ```sh
 ./bin/clang-format-fix
 pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
