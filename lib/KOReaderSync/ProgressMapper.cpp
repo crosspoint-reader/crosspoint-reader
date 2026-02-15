@@ -1,6 +1,6 @@
 #include "ProgressMapper.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 
 #include <cmath>
 
@@ -23,8 +23,8 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
   const int tocIndex = epub->getTocIndexForSpineIndex(pos.spineIndex);
   const std::string chapterName = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "unknown";
 
-  Serial.printf("[%lu] [ProgressMapper] CrossPoint -> KOReader: chapter='%s', page=%d/%d -> %.2f%% at %s\n", millis(),
-                chapterName.c_str(), pos.pageNumber, pos.totalPages, result.percentage * 100, result.xpath.c_str());
+  LOG_DBG("ProgressMapper", "CrossPoint -> KOReader: chapter='%s', page=%d/%d -> %.2f%% at %s", chapterName.c_str(),
+          pos.pageNumber, pos.totalPages, result.percentage * 100, result.xpath.c_str());
 
   return result;
 }
@@ -76,8 +76,8 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     }
   }
 
-  Serial.printf("[%lu] [ProgressMapper] KOReader -> CrossPoint: %.2f%% at %s -> spine=%d, page=%d\n", millis(),
-                koPos.percentage * 100, koPos.xpath.c_str(), result.spineIndex, result.pageNumber);
+  LOG_DBG("ProgressMapper", "KOReader -> CrossPoint: %.2f%% at %s -> spine=%d, page=%d", koPos.percentage * 100,
+          koPos.xpath.c_str(), result.spineIndex, result.pageNumber);
 
   return result;
 }

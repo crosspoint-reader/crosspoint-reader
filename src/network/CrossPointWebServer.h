@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDCardManager.h>
+#include <HalStorage.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
 #include <WiFiUdp.h>
@@ -100,4 +100,9 @@ class CrossPointWebServer {
   void handleRename() const;
   void handleMove() const;
   void handleDelete() const;
+
+  // Settings handlers
+  void handleSettingsPage() const;
+  void handleGetSettings() const;
+  void handlePostSettings();
 };

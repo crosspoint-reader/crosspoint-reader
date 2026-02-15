@@ -18,7 +18,7 @@
  * 1. Connect to WiFi (if not connected)
  * 2. Calculate document hash
  * 3. Fetch remote progress
- * 4. Show comparison and options (Apply/Upload/Cancel)
+ * 4. Show comparison and options (Apply/Upload)
  * 5. Apply or upload progress
  */
 class KOReaderSyncActivity final : public ActivityWithSubactivity {
@@ -82,7 +82,7 @@ class KOReaderSyncActivity final : public ActivityWithSubactivity {
   // Local progress as KOReader format (for display)
   KOReaderPosition localProgress;
 
-  // Selection in result screen (0=Apply, 1=Upload, 2=Cancel)
+  // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
 
   OnCancelCallback onCancel;

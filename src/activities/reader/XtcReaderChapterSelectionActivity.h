@@ -7,11 +7,13 @@
 #include <memory>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 class XtcReaderChapterSelectionActivity final : public Activity {
   std::shared_ptr<Xtc> xtc;
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
+  ButtonNavigator buttonNavigator;
   uint32_t currentPage = 0;
   int selectorIndex = 0;
   bool updateRequired = false;

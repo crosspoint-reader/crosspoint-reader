@@ -1,7 +1,7 @@
 #include "CrossPointSettings.h"
 
-#include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 #include <Serialization.h>
 
 #include <cstring>
@@ -22,7 +22,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 29;
+constexpr uint8_t SETTINGS_COUNT = 30;
 constexpr char SETTINGS_FILE[] = "/.crosspoint/settings.bin";
 
 // Validate front button mapping to ensure each hardware button is unique.
@@ -79,10 +79,10 @@ void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
 
 bool CrossPointSettings::saveToFile() const {
   // Make sure the directory exists
-  SdMan.mkdir("/.crosspoint");
+  Storage.mkdir("/.crosspoint");
 
   FsFile outputFile;
-  if (!SdMan.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
+  if (!Storage.openFileForWrite("CPS", SETTINGS_FILE, outputFile)) {
     return false;
   }
 
@@ -117,23 +117,24 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, frontButtonLeft);
   serialization::writePod(outputFile, frontButtonRight);
   serialization::writePod(outputFile, fadingFix);
+  serialization::writePod(outputFile, embeddedStyle);
   // New fields added at end for backward compatibility
   outputFile.close();
 
-  Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
+  LOG_DBG("CPS", "Settings saved to file");
   return true;
 }
 
 bool CrossPointSettings::loadFromFile() {
   FsFile inputFile;
-  if (!SdMan.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
+  if (!Storage.openFileForRead("CPS", SETTINGS_FILE, inputFile)) {
     return false;
   }
 
   uint8_t version;
   serialization::readPod(inputFile, version);
   if (version != SETTINGS_FILE_VERSION) {
-    Serial.printf("[%lu] [CPS] Deserialization failed: Unknown version %u\n", millis(), version);
+    LOG_ERR("CPS", "Deserialization failed: Unknown version %u", version);
     inputFile.close();
     return false;
   }
@@ -220,6 +221,8 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, fadingFix);
     if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, embeddedStyle);
+    if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
   } while (false);
 
@@ -230,7 +233,7 @@ bool CrossPointSettings::loadFromFile() {
   }
 
   inputFile.close();
-  Serial.printf("[%lu] [CPS] Settings loaded from file\n", millis());
+  LOG_DBG("CPS", "Settings loaded from file");
   return true;
 }
 

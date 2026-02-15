@@ -1,7 +1,8 @@
 #include "BaseTheme.h"
 
 #include <GfxRenderer.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 #include <Utf8.h>
 
 #include <cstdint>
@@ -174,7 +175,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     const int centerX = rect.x + rect.width - indicatorWidth / 2 - margin;
     const int indicatorTop = rect.y;  // Offset to avoid overlapping side button hints
-    const int indicatorBottom = rect.y + rect.height - 30;
+    const int indicatorBottom = rect.y + rect.height - arrowSize;
 
     // Draw up arrow at top (^) - narrow point at top, wide base at bottom
     for (int i = 0; i < arrowSize; ++i) {
@@ -301,15 +302,17 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   {
     // Draw cover image as background if available (inside the box)
     // Only load from SD on first render, then use stored buffer
+
     if (hasContinueReading && !recentBooks[0].coverBmpPath.empty() && !coverRendered) {
       const std::string coverBmpPath =
           UITheme::getCoverThumbPath(recentBooks[0].coverBmpPath, BaseMetrics::values.homeCoverHeight);
 
       // First time: load cover from SD and render
       FsFile file;
-      if (SdMan.openFileForRead("HOME", coverBmpPath, file)) {
+      if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          LOG_DBG("THEME", "Rendering bmp");
           // Calculate position to center image within the book card
           int coverX, coverY;
 
@@ -343,13 +346,16 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
           // First render: if selected, draw selection indicators now
           if (bookSelected) {
+            LOG_DBG("THEME", "Drawing selection");
             renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
             renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
           }
         }
         file.close();
       }
-    } else if (!bufferRestored && !coverRendered) {
+    }
+
+    if (!bufferRestored && !coverRendered) {
       // No cover image: draw border or fill, plus bookmark as visual flair
       if (bookSelected) {
         renderer.fillRect(bookX, bookY, bookWidth, bookHeight);

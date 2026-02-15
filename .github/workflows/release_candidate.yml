@@ -1,0 +1,48 @@
+name: Compile Release Candidate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-release-candidate:
+    if: startsWith(github.ref_name, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Extract env
+        run: |
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "BRANCH_SUFFIX=${GITHUB_REF_NAME#release/}" >> $GITHUB_ENV
+
+      - name: Build CrossPoint Release Candidate
+        env:
+          CROSSPOINT_RC_HASH: ${{ env.SHORT_SHA }}
+        run: pio run -e gh_release_rc
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrossPoint-RC-${{ env.BRANCH_SUFFIX }}
+          path: |
+            .pio/build/gh_release_rc/bootloader.bin
+            .pio/build/gh_release_rc/firmware.bin
+            .pio/build/gh_release_rc/firmware.elf
+            .pio/build/gh_release_rc/firmware.map
+            .pio/build/gh_release_rc/partitions.bin

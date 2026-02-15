@@ -26,7 +26,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .homeCoverTileHeight = 287,
                                  .homeRecentBooksCount = 3,
                                  .buttonHintsHeight = 40,
-                                 .sideButtonHintsWidth = 19,
+                                 .sideButtonHintsWidth = 30,
                                  .versionTextRightX = 20,
                                  .versionTextY = 55,
                                  .bookProgressBarHeight = 4};

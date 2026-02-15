@@ -51,7 +51,7 @@ For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) do
 
 ### Web (latest firmware)
 
-1. Connect your Xteink X4 to your computer via USB-C
+1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
 2. Go to https://xteink.dve.al/ and click "Flash CrossPoint firmware"
 
 To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap

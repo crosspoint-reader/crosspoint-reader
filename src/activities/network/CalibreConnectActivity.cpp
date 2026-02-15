@@ -96,7 +96,7 @@ void CalibreConnectActivity::startWebServer() {
 
   if (MDNS.begin(HOSTNAME)) {
     // mDNS is optional for the Calibre plugin but still helpful for users.
-    Serial.printf("[%lu] [CAL] mDNS started: http://%s.local/\n", millis(), HOSTNAME);
+    LOG_DBG("CAL", "mDNS started: http://%s.local/", HOSTNAME);
   }
 
   webServer.reset(new CrossPointWebServer());
@@ -131,7 +131,7 @@ void CalibreConnectActivity::loop() {
   if (webServer && webServer->isRunning()) {
     const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
     if (lastHandleClientTime > 0 && timeSinceLastHandleClient > 100) {
-      Serial.printf("[%lu] [CAL] WARNING: %lu ms gap since last handleClient\n", millis(), timeSinceLastHandleClient);
+      LOG_DBG("CAL", "WARNING: %lu ms gap since last handleClient", timeSinceLastHandleClient);
     }
 
     esp_task_wdt_reset();

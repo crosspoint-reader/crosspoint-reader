@@ -1,6 +1,6 @@
 #include "CssParser.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cctype>
@@ -283,6 +283,8 @@ CssLength CssParser::interpretLength(const std::string& val) {
     unit = CssUnit::Rem;
   } else if (unitPart == "pt") {
     unit = CssUnit::Points;
+  } else if (unitPart == "%") {
+    unit = CssUnit::Percent;
   }
   // px and unitless default to Pixels
 
@@ -447,7 +449,7 @@ void CssParser::processRuleBlock(const std::string& selectorGroup, const std::st
 
 bool CssParser::loadFromStream(FsFile& source) {
   if (!source) {
-    Serial.printf("[%lu] [CSS] Cannot read from invalid file\n", millis());
+    LOG_ERR("CSS", "Cannot read from invalid file");
     return false;
   }
 
@@ -468,7 +470,7 @@ bool CssParser::loadFromStream(FsFile& source) {
     processRuleBlock(selector, body);
   }
 
-  Serial.printf("[%lu] [CSS] Parsed %zu rules\n", millis(), rulesBySelector_.size());
+  LOG_DBG("CSS", "Parsed %zu rules", rulesBySelector_.size());
   return true;
 }
 
@@ -518,7 +520,7 @@ CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return par
 // Cache serialization
 
 // Cache format version - increment when format changes
-constexpr uint8_t CSS_CACHE_VERSION = 1;
+constexpr uint8_t CSS_CACHE_VERSION = 2;
 
 bool CssParser::saveToCache(FsFile& file) const {
   if (!file) {
@@ -580,7 +582,7 @@ bool CssParser::saveToCache(FsFile& file) const {
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
-  Serial.printf("[%lu] [CSS] Saved %u rules to cache\n", millis(), ruleCount);
+  LOG_DBG("CSS", "Saved %u rules to cache", ruleCount);
   return true;
 }
 
@@ -595,7 +597,7 @@ bool CssParser::loadFromCache(FsFile& file) {
   // Read and verify version
   uint8_t version = 0;
   if (file.read(&version, 1) != 1 || version != CSS_CACHE_VERSION) {
-    Serial.printf("[%lu] [CSS] Cache version mismatch (got %u, expected %u)\n", millis(), version, CSS_CACHE_VERSION);
+    LOG_DBG("CSS", "Cache version mismatch (got %u, expected %u)", version, CSS_CACHE_VERSION);
     return false;
   }
 
@@ -692,6 +694,6 @@ bool CssParser::loadFromCache(FsFile& file) {
     rulesBySelector_[selector] = style;
   }
 
-  Serial.printf("[%lu] [CSS] Loaded %u rules from cache\n", millis(), ruleCount);
+  LOG_DBG("CSS", "Loaded %u rules from cache", ruleCount);
   return true;
 }
