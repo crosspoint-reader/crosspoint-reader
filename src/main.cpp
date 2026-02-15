@@ -10,7 +10,6 @@
 
 #include <cstring>
 
-#include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -194,11 +193,31 @@ void waitForPowerRelease() {
   }
 }
 
+bool verifyPowerButtonDurationX3() {
+  // Match X4 semantics: require only the *remaining* hold time after boot.
+  // This avoids extra wake-delay windows and sleep/retry loops.
+  const uint16_t requiredHoldMs = SETTINGS.getPowerButtonDuration();
+  const uint16_t calibration = millis();
+  const uint16_t calibratedPressDuration = (calibration < requiredHoldMs) ? (requiredHoldMs - calibration) : 1;
+  const uint8_t powerPin = InputManager::POWER_BUTTON_PIN;
+
+  // Wake is already caused by power button; require it to still be held now.
+  if (digitalRead(powerPin) != LOW) return false;
+
+  const unsigned long holdStart = millis();
+  while (millis() - holdStart < calibratedPressDuration) {
+    if (digitalRead(powerPin) != LOW) return false;
+    delay(5);
+  }
+  return true;
+}
+
 // Enter deep sleep mode
 void enterDeepSleep() {
   APP_STATE.lastSleepFromReader = currentActivity && currentActivity->isReaderActivity();
   APP_STATE.saveToFile();
   exitActivity();
+  display.requestResync();
   enterNewActivity(new SleepActivity(renderer, mappedInputManager));
 
   display.deepSleep();
@@ -248,12 +267,19 @@ void onGoToBrowser() {
 }
 
 void onGoHome() {
+  const bool returningFromReader = currentActivity && currentActivity->isReaderActivity();
+  if (returningFromReader) {
+    display.requestResync(1);
+  }
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
                                     onGoToSettings, onGoToFileTransfer, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {
+  if (gpio.getDeviceType() == HalGPIO::DeviceType::X3) {
+    display.setDisplayDimensions(792, 528);
+  }
   display.begin();
   renderer.begin();
   LOG_DBG("MAIN", "Display initialized");
@@ -308,11 +334,18 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
-  switch (gpio.getWakeupReason()) {
+  const auto wakeupReason = gpio.getWakeupReason();
+  switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      // For normal wakeups, verify power button press duration
-      LOG_DBG("MAIN", "Verifying power button press duration");
-      verifyPowerButtonDuration();
+      if (gpio.getDeviceType() == HalGPIO::DeviceType::X3) {
+        LOG_DBG("MAIN", "Verifying power button press duration (X3)");
+        if (!verifyPowerButtonDurationX3()) {
+          gpio.startDeepSleep();
+        }
+      } else {
+        LOG_DBG("MAIN", "Verifying power button press duration");
+        verifyPowerButtonDuration();
+      }
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
@@ -330,6 +363,10 @@ void setup() {
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
   setupDisplayAndFonts();
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
+      wakeupReason == HalGPIO::WakeupReason::Other) {
+    display.requestResync();
+  }
 
   exitActivity();
   enterNewActivity(new BootActivity(renderer, mappedInputManager));

@@ -24,6 +24,17 @@ class HalGPIO {
 #endif
 
  public:
+  enum class DeviceType : uint8_t { X4, X3 };
+
+ private:
+  DeviceType _deviceType = DeviceType::X4;
+  int _detectAdcValue = 0;
+  int _batteryPin = BAT_GPIO0;
+  bool _useI2C = false;
+  uint8_t _i2cAddr = 0;
+  uint8_t _socRegister = 0;
+
+ public:
   HalGPIO() = default;
 
   // Start button GPIO and setup SPI for screen and SD card
@@ -47,6 +58,11 @@ class HalGPIO {
   // Check if USB is connected
   bool isUsbConnected() const;
 
+  // Device detection helpers
+  DeviceType getDeviceType() const { return _deviceType; }
+  int getDetectAdcValue() const { return _detectAdcValue; }
+  int getBatteryPin() const { return _batteryPin; }
+
   enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
 
   WakeupReason getWakeupReason() const;
@@ -60,3 +76,5 @@ class HalGPIO {
   static constexpr uint8_t BTN_DOWN = 5;
   static constexpr uint8_t BTN_POWER = 6;
 };
+
+extern HalGPIO gpio;

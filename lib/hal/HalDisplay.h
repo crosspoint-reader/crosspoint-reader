@@ -20,6 +20,9 @@ class HalDisplay {
   // Initialize the display hardware and driver
   void begin();
 
+  // Pre-begin display config passthroughs (used by X3 setup path)
+  void setDisplayDimensions(uint16_t width, uint16_t height);
+
   // Display dimensions
   static constexpr uint16_t DISPLAY_WIDTH = EInkDisplay::DISPLAY_WIDTH;
   static constexpr uint16_t DISPLAY_HEIGHT = EInkDisplay::DISPLAY_HEIGHT;
@@ -33,6 +36,9 @@ class HalDisplay {
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
+  // Hint the display driver to perform a one-shot full resync on next update.
+  // Optional settle passes are used by X3 only.
+  void requestResync(uint8_t settlePasses = 0);
 
   // Power management
   void deepSleep();
@@ -46,6 +52,12 @@ class HalDisplay {
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
 
   void displayGrayBuffer(bool turnOffScreen = false);
+
+  // Runtime geometry passthrough
+  uint16_t getDisplayWidth() const;
+  uint16_t getDisplayHeight() const;
+  uint16_t getDisplayWidthBytes() const;
+  uint32_t getBufferSize() const;
 
  private:
   EInkDisplay einkDisplay;

@@ -9,6 +9,10 @@ HalDisplay::~HalDisplay() {}
 
 void HalDisplay::begin() { einkDisplay.begin(); }
 
+void HalDisplay::setDisplayDimensions(uint16_t width, uint16_t height) {
+  einkDisplay.setDisplayDimensions(width, height);
+}
+
 void HalDisplay::clearScreen(uint8_t color) const { einkDisplay.clearScreen(color); }
 
 void HalDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
@@ -36,6 +40,8 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
 
+void HalDisplay::requestResync(uint8_t settlePasses) { einkDisplay.requestResync(settlePasses); }
+
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
@@ -51,3 +57,11 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
 void HalDisplay::displayGrayBuffer(bool turnOffScreen) { einkDisplay.displayGrayBuffer(turnOffScreen); }
+
+uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
+
+uint16_t HalDisplay::getDisplayHeight() const { return einkDisplay.getDisplayHeight(); }
+
+uint16_t HalDisplay::getDisplayWidthBytes() const { return einkDisplay.getDisplayWidthBytes(); }
+
+uint32_t HalDisplay::getBufferSize() const { return einkDisplay.getBufferSize(); }
