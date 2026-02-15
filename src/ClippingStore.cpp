@@ -296,8 +296,8 @@ std::string ClippingStore::loadClippingPreview(const std::string& bookPath, cons
   text = text.substr(start);
 
   // Replace newlines with spaces for single-line preview
-  // cppcheck-suppress useStlAlgorithm
   for (auto& ch : text) {
+    // cppcheck-suppress useStlAlgorithm
     if (ch == '\n' || ch == '\r') ch = ' ';
   }
 
@@ -341,8 +341,8 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
     if (SdMan.openFileForRead(TAG, mdPath, origFile)) {
       // Find the minimum textOffset among remaining entries to determine header size
       uint32_t minOffset = origFile.size();
-      // cppcheck-suppress useStlAlgorithm
       for (const auto& e : entries) {
+        // cppcheck-suppress useStlAlgorithm
         if (e.textOffset < minOffset) {
           minOffset = e.textOffset;
         }
