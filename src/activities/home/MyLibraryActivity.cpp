@@ -97,6 +97,7 @@ void MyLibraryActivity::loadFiles() {
       if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
           StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
           StringUtils::checkFileExtension(filename, ".md")) {
+        // || StringUtils::checkFileExtension(filename, ".bmp")) { // Enable this once we have an image viewer
         files.emplace_back(filename);
       }
     }
@@ -191,7 +192,6 @@ void MyLibraryActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
-
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     updateRequired = true;
@@ -225,6 +225,22 @@ void MyLibraryActivity::displayTaskLoop() {
   }
 }
 
+std::string MyLibraryActivity::getFileType(std::string filename) const {
+  if (filename.back() == '/') {
+    return "Folder";
+  }
+  const auto pos = filename.rfind('.');
+  return filename.substr(pos + 1);
+}
+
+std::string MyLibraryActivity::getFileName(std::string filename) const {
+  if (filename.back() == '/') {
+    return filename.substr(0, filename.length() - 1);
+  }
+  const auto pos = filename.rfind('.');
+  return filename.substr(0, pos);
+}
+
 void MyLibraryActivity::render() const {
   renderer.clearScreen();
 
@@ -242,7 +258,8 @@ void MyLibraryActivity::render() const {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return files[index]; }, nullptr, nullptr, nullptr);
+        [this](int index) { return getFileName(files[index]); }, nullptr,
+        [this](int index) { return getFileType(files[index]); }, nullptr);
   }
 
   // Help text

@@ -6,6 +6,8 @@
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
 
+class MappedInputManager;
+
 class UITheme {
   // Static instance
   static UITheme instance;
