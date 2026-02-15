@@ -542,11 +542,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::CLIPPINGS: {
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       exitActivity();
-      enterNewActivity(
-          new EpubReaderClippingsListActivity(renderer, mappedInput, epub->getPath(), [this]() {
-            exitActivity();
-            updateRequired = true;
-          }));
+      enterNewActivity(new EpubReaderClippingsListActivity(renderer, mappedInput, epub->getPath(), [this]() {
+        exitActivity();
+        updateRequired = true;
+      }));
       xSemaphoreGive(renderingMutex);
       break;
     }
