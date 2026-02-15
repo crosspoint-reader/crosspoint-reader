@@ -305,7 +305,8 @@ void setup() {
 
   SETTINGS.loadFromFile();
   KOREADER_STORE.loadFromFile();
-  UITheme::getInstance().reload();
+  UITheme uiTheme(gpio);
+  uiTheme.getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
   switch (gpio.getWakeupReason()) {

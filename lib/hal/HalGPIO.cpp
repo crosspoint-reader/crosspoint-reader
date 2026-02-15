@@ -2,6 +2,8 @@
 #include <SPI.h>
 #include <esp_sleep.h>
 
+BatteryPercentageRingBuffer HalGPIO::batteryBuffer;
+
 void HalGPIO::begin() {
   inputMgr.begin();
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
@@ -37,7 +39,19 @@ void HalGPIO::startDeepSleep() {
 
 int HalGPIO::getBatteryPercentage() const {
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
-  return battery.readPercentage();
+
+  uint8_t percentage = battery.readPercentage();
+
+  if (isUsbConnected()) {
+    // If charging reinitialize buffer with current percentage and display this value
+    batteryBuffer.init(percentage);
+  } else {
+    // Else update buffer with new percentage and return smoothed validated percentage to display
+    batteryBuffer.update(percentage);
+    percentage = batteryBuffer.evaluate();
+  }
+
+  return percentage;
 }
 
 bool HalGPIO::isUsbConnected() const {

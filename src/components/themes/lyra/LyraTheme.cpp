@@ -21,8 +21,12 @@ constexpr int topHintButtonY = 345;
 }  // namespace
 
 void LyraTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+  // Check charging, Lyra theme doesnt show charing state currently
+  // const bool charging = (digitalRead(20) == HIGH);
+
   // Left aligned battery icon and percentage
-  const uint16_t percentage = battery.readPercentage();
+  uint8_t percentage = gpio->getBatteryPercentage();
+
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + LyraMetrics::values.batteryWidth, rect.y,
