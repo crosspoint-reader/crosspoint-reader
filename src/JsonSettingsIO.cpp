@@ -94,7 +94,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json) {
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
 
   s.sleepScreen = clamp(doc["sleepScreen"] | (uint8_t)S::DARK, S::SLEEP_SCREEN_MODE_COUNT, S::DARK);
-  s.sleepScreenCoverMode = clamp(doc["sleepScreenCoverMode"] | (uint8_t)S::FIT, S::SLEEP_SCREEN_COVER_MODE_COUNT, S::FIT);
+  s.sleepScreenCoverMode =
+      clamp(doc["sleepScreenCoverMode"] | (uint8_t)S::FIT, S::SLEEP_SCREEN_COVER_MODE_COUNT, S::FIT);
   s.sleepScreenCoverFilter =
       clamp(doc["sleepScreenCoverFilter"] | (uint8_t)S::NO_FILTER, S::SLEEP_SCREEN_COVER_FILTER_COUNT, S::NO_FILTER);
   s.statusBar = clamp(doc["statusBar"] | (uint8_t)S::FULL, S::STATUS_BAR_MODE_COUNT, S::FULL);
@@ -102,11 +103,12 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json) {
   s.textAntiAliasing = doc["textAntiAliasing"] | (uint8_t)1;
   s.shortPwrBtn = clamp(doc["shortPwrBtn"] | (uint8_t)S::IGNORE, S::SHORT_PWRBTN_COUNT, S::IGNORE);
   s.orientation = clamp(doc["orientation"] | (uint8_t)S::PORTRAIT, S::ORIENTATION_COUNT, S::PORTRAIT);
-  s.sideButtonLayout = clamp(doc["sideButtonLayout"] | (uint8_t)S::PREV_NEXT, S::SIDE_BUTTON_LAYOUT_COUNT, S::PREV_NEXT);
+  s.sideButtonLayout =
+      clamp(doc["sideButtonLayout"] | (uint8_t)S::PREV_NEXT, S::SIDE_BUTTON_LAYOUT_COUNT, S::PREV_NEXT);
   s.frontButtonBack =
       clamp(doc["frontButtonBack"] | (uint8_t)S::FRONT_HW_BACK, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_BACK);
-  s.frontButtonConfirm =
-      clamp(doc["frontButtonConfirm"] | (uint8_t)S::FRONT_HW_CONFIRM, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_CONFIRM);
+  s.frontButtonConfirm = clamp(doc["frontButtonConfirm"] | (uint8_t)S::FRONT_HW_CONFIRM, S::FRONT_BUTTON_HARDWARE_COUNT,
+                               S::FRONT_HW_CONFIRM);
   s.frontButtonLeft =
       clamp(doc["frontButtonLeft"] | (uint8_t)S::FRONT_HW_LEFT, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_LEFT);
   s.frontButtonRight =
@@ -121,8 +123,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json) {
   s.refreshFrequency =
       clamp(doc["refreshFrequency"] | (uint8_t)S::REFRESH_15, S::REFRESH_FREQUENCY_COUNT, S::REFRESH_15);
   s.screenMargin = doc["screenMargin"] | (uint8_t)5;
-  s.hideBatteryPercentage = clamp(doc["hideBatteryPercentage"] | (uint8_t)S::HIDE_NEVER, S::HIDE_BATTERY_PERCENTAGE_COUNT,
-                                  S::HIDE_NEVER);
+  s.hideBatteryPercentage =
+      clamp(doc["hideBatteryPercentage"] | (uint8_t)S::HIDE_NEVER, S::HIDE_BATTERY_PERCENTAGE_COUNT, S::HIDE_NEVER);
   s.longPressChapterSkip = doc["longPressChapterSkip"] | (uint8_t)1;
   s.hyphenationEnabled = doc["hyphenationEnabled"] | (uint8_t)0;
   s.uiTheme = doc["uiTheme"] | (uint8_t)S::LYRA;

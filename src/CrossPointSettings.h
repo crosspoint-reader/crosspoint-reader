@@ -197,7 +197,6 @@ class CrossPointSettings {
   bool loadFromBinaryFile();
 
  public:
-
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
