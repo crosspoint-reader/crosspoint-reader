@@ -8,39 +8,10 @@
 
 void EpubReaderMenuActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
-  renderingMutex = xSemaphoreCreateMutex();
-  updateRequired = true;
-
-  xTaskCreate(&EpubReaderMenuActivity::taskTrampoline, "EpubMenuTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
-void EpubReaderMenuActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
-
-void EpubReaderMenuActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderMenuActivity*>(param);
-  self->displayTaskLoop();
-}
-
-void EpubReaderMenuActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
+void EpubReaderMenuActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void EpubReaderMenuActivity::loop() {
   if (subActivity) {
@@ -51,12 +22,12 @@ void EpubReaderMenuActivity::loop() {
   // Handle navigation
   buttonNavigator.onNext([this] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPrevious([this] {
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
-    updateRequired = true;
+    requestUpdate();
   });
 
   // Use local variables for items we need to check after potential deletion
@@ -65,7 +36,7 @@ void EpubReaderMenuActivity::loop() {
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       // Cycle orientation preview locally; actual rotation happens on menu exit.
       pendingOrientation = (pendingOrientation + 1) % orientationLabels.size();
-      updateRequired = true;
+      requestUpdate();
       return;
     }
 
@@ -84,7 +55,7 @@ void EpubReaderMenuActivity::loop() {
   }
 }
 
-void EpubReaderMenuActivity::renderScreen() {
+void EpubReaderMenuActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
   const auto pageWidth = renderer.getScreenWidth();
   const auto orientation = renderer.getOrientation();

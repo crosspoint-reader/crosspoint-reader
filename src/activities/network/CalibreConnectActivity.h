@@ -1,7 +1,4 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <functional>
 #include <memory>
@@ -17,9 +14,6 @@ enum class CalibreConnectState { WIFI_SELECTION, SERVER_STARTING, SERVER_RUNNING
  * but renders Calibre-specific instructions instead of the web transfer UI.
  */
 class CalibreConnectActivity final : public ActivityWithSubactivity {
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-  bool updateRequired = false;
   CalibreConnectState state = CalibreConnectState::WIFI_SELECTION;
   const std::function<void()> onComplete;
 
@@ -34,9 +28,6 @@ class CalibreConnectActivity final : public ActivityWithSubactivity {
   unsigned long lastCompleteAt = 0;
   bool exitRequested = false;
 
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render() const;
   void renderServerRunning() const;
 
   void onWifiSelectionComplete(bool connected);
@@ -50,6 +41,7 @@ class CalibreConnectActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
   bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
   bool preventAutoSleep() override { return webServer && webServer->isRunning(); }
 };
