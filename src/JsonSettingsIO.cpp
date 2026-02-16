@@ -149,16 +149,10 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json) {
 
 // ---- KOReaderCredentialStore ----
 
-namespace {
-constexpr uint8_t KOREADER_OBFUSCATION_KEY[] = {0x4B, 0x4F, 0x52, 0x65, 0x61, 0x64, 0x65, 0x72};
-constexpr size_t KOREADER_KEY_LENGTH = sizeof(KOREADER_OBFUSCATION_KEY);
-}  // namespace
-
 bool JsonSettingsIO::saveKOReader(const KOReaderCredentialStore& store, const char* path) {
   JsonDocument doc;
   doc["username"] = store.getUsername();
-  doc["password_obf"] =
-      obfuscation::obfuscateToBase64(store.getPassword(), KOREADER_OBFUSCATION_KEY, KOREADER_KEY_LENGTH);
+  doc["password_obf"] = obfuscation::obfuscateToBase64(store.getPassword());
   doc["serverUrl"] = store.getServerUrl();
   doc["matchMethod"] = static_cast<uint8_t>(store.getMatchMethod());
 
@@ -176,8 +170,7 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
   }
 
   store.username = doc["username"] | std::string("");
-  store.password =
-      obfuscation::deobfuscateFromBase64(doc["password_obf"] | "", KOREADER_OBFUSCATION_KEY, KOREADER_KEY_LENGTH);
+  store.password = obfuscation::deobfuscateFromBase64(doc["password_obf"] | "");
   store.serverUrl = doc["serverUrl"] | std::string("");
   uint8_t method = doc["matchMethod"] | (uint8_t)0;
   store.matchMethod = static_cast<DocumentMatchMethod>(method);
@@ -188,11 +181,6 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
 
 // ---- WifiCredentialStore ----
 
-namespace {
-constexpr uint8_t WIFI_OBFUSCATION_KEY[] = {0x43, 0x72, 0x6F, 0x73, 0x73, 0x50, 0x6F, 0x69, 0x6E, 0x74};
-constexpr size_t WIFI_KEY_LENGTH = sizeof(WIFI_OBFUSCATION_KEY);
-}  // namespace
-
 bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path) {
   JsonDocument doc;
   doc["lastConnectedSsid"] = store.getLastConnectedSsid();
@@ -201,7 +189,7 @@ bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path
   for (const auto& cred : store.getCredentials()) {
     JsonObject obj = arr.add<JsonObject>();
     obj["ssid"] = cred.ssid;
-    obj["password_obf"] = obfuscation::obfuscateToBase64(cred.password, WIFI_OBFUSCATION_KEY, WIFI_KEY_LENGTH);
+    obj["password_obf"] = obfuscation::obfuscateToBase64(cred.password);
   }
 
   String json;
@@ -225,7 +213,7 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json) {
     if (store.credentials.size() >= store.MAX_NETWORKS) break;
     WifiCredential cred;
     cred.ssid = obj["ssid"] | std::string("");
-    cred.password = obfuscation::deobfuscateFromBase64(obj["password_obf"] | "", WIFI_OBFUSCATION_KEY, WIFI_KEY_LENGTH);
+    cred.password = obfuscation::deobfuscateFromBase64(obj["password_obf"] | "");
     store.credentials.push_back(cred);
   }
 

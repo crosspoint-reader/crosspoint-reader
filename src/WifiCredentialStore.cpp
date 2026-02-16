@@ -18,18 +18,16 @@ constexpr char WIFI_FILE_BIN[] = "/.crosspoint/wifi.bin";
 constexpr char WIFI_FILE_JSON[] = "/.crosspoint/wifi.json";
 constexpr char WIFI_FILE_BAK[] = "/.crosspoint/wifi.bin.bak";
 
-// Obfuscation key - "CrossPoint" in ASCII
-// This is NOT cryptographic security, just prevents casual file reading
-constexpr uint8_t OBFUSCATION_KEY[] = {0x43, 0x72, 0x6F, 0x73, 0x73, 0x50, 0x6F, 0x69, 0x6E, 0x74};
-constexpr size_t KEY_LENGTH = sizeof(OBFUSCATION_KEY);
-}  // namespace
+// Legacy obfuscation key - "CrossPoint" in ASCII (only used for binary migration)
+constexpr uint8_t LEGACY_OBFUSCATION_KEY[] = {0x43, 0x72, 0x6F, 0x73, 0x73, 0x50, 0x6F, 0x69, 0x6E, 0x74};
+constexpr size_t LEGACY_KEY_LENGTH = sizeof(LEGACY_OBFUSCATION_KEY);
 
-void WifiCredentialStore::obfuscate(std::string& data) const {
-  LOG_DBG("WCS", "Obfuscating/deobfuscating %zu bytes", data.size());
+void legacyDeobfuscate(std::string& data) {
   for (size_t i = 0; i < data.size(); i++) {
-    data[i] ^= OBFUSCATION_KEY[i % KEY_LENGTH];
+    data[i] ^= LEGACY_OBFUSCATION_KEY[i % LEGACY_KEY_LENGTH];
   }
 }
+}  // namespace
 
 bool WifiCredentialStore::saveToFile() const {
   Storage.mkdir("/.crosspoint");
@@ -86,7 +84,7 @@ bool WifiCredentialStore::loadFromBinaryFile() {
     WifiCredential cred;
     serialization::readString(file, cred.ssid);
     serialization::readString(file, cred.password);
-    obfuscate(cred.password);
+    legacyDeobfuscate(cred.password);
     credentials.push_back(cred);
   }
 

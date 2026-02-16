@@ -29,9 +29,6 @@ class WifiCredentialStore {
   // Private constructor for singleton
   WifiCredentialStore() = default;
 
-  // XOR obfuscation (symmetric - same for encode/decode, used by binary migration)
-  void obfuscate(std::string& data) const;
-
   bool loadFromBinaryFile();
 
   friend bool JsonSettingsIO::saveWifi(const WifiCredentialStore&, const char*);

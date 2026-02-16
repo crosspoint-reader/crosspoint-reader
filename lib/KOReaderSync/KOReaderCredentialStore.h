@@ -30,9 +30,6 @@ class KOReaderCredentialStore {
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
 
-  // XOR obfuscation (symmetric - same for encode/decode, used by binary migration)
-  void obfuscate(std::string& data) const;
-
   bool loadFromBinaryFile();
 
   friend bool JsonSettingsIO::saveKOReader(const KOReaderCredentialStore&, const char*);

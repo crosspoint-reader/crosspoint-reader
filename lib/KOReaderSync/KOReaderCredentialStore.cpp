@@ -23,17 +23,16 @@ constexpr char KOREADER_FILE_BAK[] = "/.crosspoint/koreader.bin.bak";
 // Default sync server URL
 constexpr char DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
 
-// Obfuscation key - "KOReader" in ASCII
-// This is NOT cryptographic security, just prevents casual file reading
-constexpr uint8_t OBFUSCATION_KEY[] = {0x4B, 0x4F, 0x52, 0x65, 0x61, 0x64, 0x65, 0x72};
-constexpr size_t KEY_LENGTH = sizeof(OBFUSCATION_KEY);
-}  // namespace
+// Legacy obfuscation key - "KOReader" in ASCII (only used for binary migration)
+constexpr uint8_t LEGACY_OBFUSCATION_KEY[] = {0x4B, 0x4F, 0x52, 0x65, 0x61, 0x64, 0x65, 0x72};
+constexpr size_t LEGACY_KEY_LENGTH = sizeof(LEGACY_OBFUSCATION_KEY);
 
-void KOReaderCredentialStore::obfuscate(std::string& data) const {
+void legacyDeobfuscate(std::string& data) {
   for (size_t i = 0; i < data.size(); i++) {
-    data[i] ^= OBFUSCATION_KEY[i % KEY_LENGTH];
+    data[i] ^= LEGACY_OBFUSCATION_KEY[i % LEGACY_KEY_LENGTH];
   }
 }
+}  // namespace
 
 bool KOReaderCredentialStore::saveToFile() const {
   Storage.mkdir("/.crosspoint");
@@ -85,7 +84,7 @@ bool KOReaderCredentialStore::loadFromBinaryFile() {
 
   if (file.available()) {
     serialization::readString(file, password);
-    obfuscate(password);
+    legacyDeobfuscate(password);
   } else {
     password.clear();
   }
