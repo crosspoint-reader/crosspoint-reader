@@ -1,11 +1,12 @@
 #include "KOReaderCredentialStore.h"
 
 #include <HalStorage.h>
-#include "../../src/JsonSettingsIO.h"
 #include <Logging.h>
 #include <MD5Builder.h>
 #include <ObfuscationUtils.h>
 #include <Serialization.h>
+
+#include "../../src/JsonSettingsIO.h"
 
 // Initialize the static instance
 KOReaderCredentialStore KOReaderCredentialStore::instance;
