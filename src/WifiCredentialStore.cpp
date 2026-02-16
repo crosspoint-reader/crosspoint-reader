@@ -39,7 +39,13 @@ bool WifiCredentialStore::loadFromFile() {
   if (Storage.exists(WIFI_FILE_JSON)) {
     String json = Storage.readFile(WIFI_FILE_JSON);
     if (!json.isEmpty()) {
-      return JsonSettingsIO::loadWifi(*this, json.c_str());
+      bool resave = false;
+      bool result = JsonSettingsIO::loadWifi(*this, json.c_str(), &resave);
+      if (result && resave) {
+        LOG_DBG("WCS", "Resaving JSON with obfuscated passwords");
+        saveToFile();
+      }
+      return result;
     }
   }
 
@@ -93,7 +99,7 @@ bool WifiCredentialStore::loadFromBinaryFile() {
   }
 
   file.close();
-  LOG_DBG("WCS", "Loaded %zu WiFi credentials from binary file", credentials.size());
+  // LOG_DBG("WCS", "Loaded %zu WiFi credentials from binary file", credentials.size());
   return true;
 }
 

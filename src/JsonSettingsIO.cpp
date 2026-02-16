@@ -2,25 +2,8 @@
 
 #include <ArduinoJson.h>
 #include <HalStorage.h>
+#include <Logging.h>
 #include <ObfuscationUtils.h>
-
-// JSON_DEBUG: 0 = no logging, 1 = errors only, 2 = all
-#ifndef JSON_DEBUG
-#define JSON_DEBUG 1
-#endif
-
-#if JSON_DEBUG >= 2
-#include <Logging.h>
-#define JSON_LOG_DBG(tag, ...) LOG_DBG(tag, __VA_ARGS__)
-#define JSON_LOG_ERR(tag, ...) LOG_ERR(tag, __VA_ARGS__)
-#elif JSON_DEBUG >= 1
-#include <Logging.h>
-#define JSON_LOG_DBG(tag, ...) ((void)0)
-#define JSON_LOG_ERR(tag, ...) LOG_ERR(tag, __VA_ARGS__)
-#else
-#define JSON_LOG_DBG(tag, ...) ((void)0)
-#define JSON_LOG_ERR(tag, ...) ((void)0)
-#endif
 
 #include <cstring>
 
@@ -48,7 +31,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
-    JSON_LOG_ERR("CPS", "JSON parse error: %s", error.c_str());
+    LOG_ERR("CPS", "JSON parse error: %s", error.c_str());
     return false;
   }
 
@@ -99,11 +82,12 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   return Storage.writeFile(path, json);
 }
 
-bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json) {
+bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool* needsResave) {
+  if (needsResave) *needsResave = false;
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
-    JSON_LOG_ERR("CPS", "JSON parse error: %s", error.c_str());
+    LOG_ERR("CPS", "JSON parse error: %s", error.c_str());
     return false;
   }
 
@@ -160,10 +144,11 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json) {
   std::string pass = obfuscation::deobfuscateFromBase64(doc["opdsPassword_obf"] | "", &passOk);
   if (!passOk || pass.empty()) {
     pass = doc["opdsPassword"] | "";
+    if (!pass.empty() && needsResave) *needsResave = true;
   }
   strncpy(s.opdsPassword, pass.c_str(), sizeof(s.opdsPassword) - 1);
   s.opdsPassword[sizeof(s.opdsPassword) - 1] = '\0';
-  JSON_LOG_DBG("CPS", "Settings loaded from file");
+  LOG_DBG("CPS", "Settings loaded from file");
   return true;
 }
 
@@ -181,11 +166,12 @@ bool JsonSettingsIO::saveKOReader(const KOReaderCredentialStore& store, const ch
   return Storage.writeFile(path, json);
 }
 
-bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* json) {
+bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* json, bool* needsResave) {
+  if (needsResave) *needsResave = false;
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
-    JSON_LOG_ERR("KRS", "JSON parse error: %s", error.c_str());
+    LOG_ERR("KRS", "JSON parse error: %s", error.c_str());
     return false;
   }
 
@@ -194,12 +180,13 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
   store.password = obfuscation::deobfuscateFromBase64(doc["password_obf"] | "", &ok);
   if (!ok || store.password.empty()) {
     store.password = doc["password"] | std::string("");
+    if (!store.password.empty() && needsResave) *needsResave = true;
   }
   store.serverUrl = doc["serverUrl"] | std::string("");
   uint8_t method = doc["matchMethod"] | (uint8_t)0;
   store.matchMethod = static_cast<DocumentMatchMethod>(method);
 
-  JSON_LOG_DBG("KRS", "Loaded KOReader credentials for user: %s", store.username.c_str());
+  LOG_DBG("KRS", "Loaded KOReader credentials for user: %s", store.username.c_str());
   return true;
 }
 
@@ -221,11 +208,12 @@ bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path
   return Storage.writeFile(path, json);
 }
 
-bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json) {
+bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool* needsResave) {
+  if (needsResave) *needsResave = false;
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
-    JSON_LOG_ERR("WCS", "JSON parse error: %s", error.c_str());
+    LOG_ERR("WCS", "JSON parse error: %s", error.c_str());
     return false;
   }
 
@@ -241,11 +229,12 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json) {
     cred.password = obfuscation::deobfuscateFromBase64(obj["password_obf"] | "", &ok);
     if (!ok || cred.password.empty()) {
       cred.password = obj["password"] | std::string("");
+      if (!cred.password.empty() && needsResave) *needsResave = true;
     }
     store.credentials.push_back(cred);
   }
 
-  JSON_LOG_DBG("WCS", "Loaded %zu WiFi credentials from file", store.credentials.size());
+  LOG_DBG("WCS", "Loaded %zu WiFi credentials from file", store.credentials.size());
   return true;
 }
 
@@ -271,7 +260,7 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
-    JSON_LOG_ERR("RBS", "JSON parse error: %s", error.c_str());
+    LOG_ERR("RBS", "JSON parse error: %s", error.c_str());
     return false;
   }
 
@@ -287,6 +276,6 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
     store.recentBooks.push_back(book);
   }
 
-  JSON_LOG_DBG("RBS", "Recent books loaded from file (%d entries)", store.getCount());
+  LOG_DBG("RBS", "Recent books loaded from file (%d entries)", store.getCount());
   return true;
 }

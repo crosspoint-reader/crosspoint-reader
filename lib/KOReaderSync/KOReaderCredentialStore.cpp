@@ -44,7 +44,13 @@ bool KOReaderCredentialStore::loadFromFile() {
   if (Storage.exists(KOREADER_FILE_JSON)) {
     String json = Storage.readFile(KOREADER_FILE_JSON);
     if (!json.isEmpty()) {
-      return JsonSettingsIO::loadKOReader(*this, json.c_str());
+      bool resave = false;
+      bool result = JsonSettingsIO::loadKOReader(*this, json.c_str(), &resave);
+      if (result && resave) {
+        saveToFile();
+        LOG_DBG("KRS", "Resaved KOReader credentials to update format");
+      }
+      return result;
     }
   }
 
