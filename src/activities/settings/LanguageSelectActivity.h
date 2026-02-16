@@ -13,11 +13,11 @@ class MappedInputManager;
 /**
  * Activity for selecting UI language
  */
-class LanguageSelectActivity final : public ActivityWithSubactivity {
+class LanguageSelectActivity final : public Activity {
  public:
   explicit LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                   const std::function<void()>& onBack)
-      : ActivityWithSubactivity("LanguageSelect", renderer, mappedInput), onBack(onBack) {}
+      : Activity("LanguageSelect", renderer, mappedInput), onBack(onBack) {}
 
   void onEnter() override;
   void onExit() override;

@@ -17,14 +17,9 @@ void LanguageSelectActivity::onEnter() {
   requestUpdate();
 }
 
-void LanguageSelectActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void LanguageSelectActivity::onExit() { Activity::onExit(); }
 
 void LanguageSelectActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onBack();
     return;
