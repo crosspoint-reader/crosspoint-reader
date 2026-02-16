@@ -44,7 +44,8 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
                                            {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
                                            {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},
                                            {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
-                                           {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}};
+                                           {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE},
+                                           {MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK}};
 
   int selectedIndex = 0;
 
