@@ -93,7 +93,10 @@ class BaseTheme {
 
   // Component drawing methods
   virtual void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
-  virtual void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const;
+  virtual void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
+                               bool showPercentage = true) const;  // Left aligned (reader mode)
+  virtual void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
+                                bool showPercentage = true) const;  // Right aligned (UI headers)
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
