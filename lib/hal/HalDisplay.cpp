@@ -48,7 +48,7 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
-  if (gpio.deviceIsX3() && lastBufferWasGray) {
+  if (gpio.deviceIsX3() && (lastBufferWasGray || mode == RefreshMode::HALF_REFRESH)) {
     einkDisplay.requestResync();
   }
   lastBufferWasGray = false;
@@ -56,7 +56,7 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
 }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
-  if (gpio.deviceIsX3() && lastBufferWasGray) {
+  if (gpio.deviceIsX3() && (lastBufferWasGray || mode == RefreshMode::HALF_REFRESH)) {
     einkDisplay.requestResync();
   }
   lastBufferWasGray = false;
@@ -78,8 +78,11 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
 void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
-  einkDisplay.displayGrayBuffer(turnOffScreen);
+  if (gpio.deviceIsX3() && !lastBufferWasGray) {
+    einkDisplay.requestResync();
+  }
   lastBufferWasGray = true;
+  einkDisplay.displayGrayBuffer(turnOffScreen);
 }
 
 uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
