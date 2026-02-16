@@ -2,8 +2,8 @@
 
 #include <HalStorage.h>
 #include <Serialization.h>
-#include "Logging.h"
 
+#include "Logging.h"
 #include "Page.h"
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
@@ -119,12 +119,10 @@ bool Section::clearCache() const {
     LOG_INF("SCT", "Cache does not exist, no action needed");
     return true;
   }
-
   if (!Storage.remove(filePath.c_str())) {
     LOG_ERR("SCT", "Failed to clear cache");
     return false;
   }
-
   LOG_INF("SCT", "Cache cleared successfully");
   return true;
 }
@@ -148,11 +146,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       LOG_INF("SCT", "Retrying stream (attempt %d)...", attempt + 1);
       delay(50);
     }
-
     if (Storage.exists(tmpHtmlPath.c_str())) {
       Storage.remove(tmpHtmlPath.c_str());
     }
-
     FsFile tmpHtml;
     if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
       continue;
@@ -182,14 +178,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                          viewportHeight, hyphenationEnabled, embeddedStyle, forceBold);
 
   std::vector<uint32_t> lut = {};
-
   CssParser* cssParser = nullptr;
   if (embeddedStyle) {
     cssParser = epub->getCssParser();
-    if (cssParser) {
-      if (!cssParser->loadFromCache()) {
-        LOG_ERR("SCT", "Failed to load CSS from cache");
-      }
+    if (cssParser && !cssParser->loadFromCache()) {
+      LOG_ERR("SCT", "Failed to load CSS from cache");
     }
   }
 
@@ -215,7 +208,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 
   const uint32_t lutOffset = file.position();
   bool hasFailedLutRecords = false;
-
   for (const uint32_t& pos : lut) {
     if (pos == 0) {
       hasFailedLutRecords = true;
@@ -245,7 +237,6 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return nullptr;
   }
-
   file.seek(HEADER_SIZE - sizeof(uint32_t));
   uint32_t lutOffset;
   serialization::readPod(file, lutOffset);
@@ -253,7 +244,6 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   uint32_t pagePos;
   serialization::readPod(file, pagePos);
   file.seek(pagePos);
-
   auto page = Page::deserialize(file);
   file.close();
   return page;
