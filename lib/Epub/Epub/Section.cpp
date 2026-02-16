@@ -9,7 +9,7 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 12;
+constexpr uint8_t SECTION_FILE_VERSION = 13;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint32_t);
@@ -181,11 +181,26 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                          viewportHeight, hyphenationEnabled, embeddedStyle);
   std::vector<uint32_t> lut = {};
 
+  // Derive the content base directory and image cache path prefix for the parser
+  size_t lastSlash = localPath.find_last_of('/');
+  std::string contentBase = (lastSlash != std::string::npos) ? localPath.substr(0, lastSlash + 1) : "";
+  std::string imageBasePath = epub->getCachePath() + "/img_" + std::to_string(spineIndex) + "_";
+
+  CssParser* cssParser = nullptr;
+  if (embeddedStyle) {
+    cssParser = epub->getCssParser();
+    if (cssParser) {
+      if (!cssParser->loadFromCache()) {
+        LOG_ERR("SCT", "Failed to load CSS from cache");
+      }
+    }
+  }
+
   ChapterHtmlSlimParser visitor(
-      tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+      epub, tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
       viewportHeight, hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
-      embeddedStyle, popupFn, embeddedStyle ? epub->getCssParser() : nullptr);
+      embeddedStyle, contentBase, imageBasePath, popupFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   success = visitor.parseAndBuildPages();
 
@@ -194,6 +209,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     LOG_ERR("SCT", "Failed to parse XML and build pages");
     file.close();
     Storage.remove(filePath.c_str());
+    if (cssParser) {
+      cssParser->clear();
+    }
     return false;
   }
 
@@ -220,6 +238,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
   file.close();
+  if (cssParser) {
+    cssParser->clear();
+  }
   return true;
 }
 

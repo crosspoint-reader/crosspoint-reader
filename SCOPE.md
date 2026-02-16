@@ -25,6 +25,8 @@ usability over "swiss-army-knife" functionality.
 * **Library Management:** E.g. Simple, intuitive ways to organize and navigate a collection of books.
 * **Local Transfer:** E.g. Simple, "pull" based book loading via a basic web-server or public and widely-used standards.
 * **Language Support:** E.g. Support for multiple languages both in the reader and in the interfaces.
+* **Reference Tools:** E.g. Local dictionary lookup. Providing quick, offline definitions to enhance comprehension 
+  without breaking focus.
 
 ### Out-of-Scope
 
@@ -34,8 +36,8 @@ usability over "swiss-army-knife" functionality.
 * **Active Connectivity:** No RSS readers, News aggregators, or Web browsers. Background Wi-Fi tasks drain the battery
   and complicate the single-core CPU's execution.
 * **Media Playback:** No Audio players or Audio-books.
-* **Complex Reader Features:** No highlighting, notes, or dictionary lookup. These features are better suited for
-  devices with better input capabilities and more powerful chips.
+* **Complex Annotation:** No typed out notes. These features are better suited for devices with better input
+  capabilities and more powerful chips.
 
 ## 3. Idea Evaluation
 
