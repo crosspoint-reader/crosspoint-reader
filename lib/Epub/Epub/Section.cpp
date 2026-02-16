@@ -230,9 +230,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
   file.close();
-  if (cssParser) {
-    cssParser->clear();
-  }
   return true;
 }
 
