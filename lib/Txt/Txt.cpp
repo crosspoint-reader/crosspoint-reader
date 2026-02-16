@@ -97,10 +97,13 @@ std::string Txt::findCoverImage() const {
 
 std::string Txt::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
-bool Txt::generateCoverBmp() const {
-  // Already generated, return true
-  if (Storage.exists(getCoverBmpPath().c_str())) {
+bool Txt::generateCoverBmp(bool forceRegenerate) const {
+  // Already generated, return true unless force regeneration is requested.
+  if (!forceRegenerate && Storage.exists(getCoverBmpPath().c_str())) {
     return true;
+  }
+  if (forceRegenerate) {
+    Storage.remove(getCoverBmpPath().c_str());
   }
 
   std::string coverImagePath = findCoverImage();
@@ -152,7 +155,10 @@ bool Txt::generateCoverBmp() const {
       coverJpg.close();
       return false;
     }
-    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
+    constexpr int kCoverTargetMaxWidth = 1200;
+    constexpr int kCoverTargetMaxHeight = 2000;
+    const bool success =
+        JpegToBmpConverter::jpegFileToBmpStreamWithSize(coverJpg, coverBmp, kCoverTargetMaxWidth, kCoverTargetMaxHeight);
     coverJpg.close();
     coverBmp.close();
 

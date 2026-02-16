@@ -13,6 +13,6 @@ class SleepActivity final : public Activity {
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
-  void renderBitmapSleepScreen(const Bitmap& bitmap) const;
+  void renderBitmapSleepScreen(const Bitmap& bitmap, bool allowUpscale = true, bool forceScaleToViewport = false) const;
   void renderBlankSleepScreen() const;
 };
