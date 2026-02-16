@@ -133,8 +133,28 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
       drawPixel(x, y1, state);
     }
   } else {
-    // TODO: Implement
-    LOG_ERR("GFX", "Line drawing not supported");
+    // Bresenham's line algorithm — integer arithmetic only
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+    int sx = (dx > 0) ? 1 : -1;
+    int sy = (dy > 0) ? 1 : -1;
+    dx = sx * dx;  // abs
+    dy = sy * dy;  // abs
+
+    int err = dx - dy;
+    while (true) {
+      drawPixel(x1, y1, state);
+      if (x1 == x2 && y1 == y2) break;
+      int e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x1 += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y1 += sy;
+      }
+    }
   }
 }
 
