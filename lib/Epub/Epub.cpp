@@ -260,14 +260,11 @@ bool Epub::parseTocNavFile() const {
 std::string Epub::getCssRulesCache() const { return cachePath + "/css_rules.cache"; }
 
 bool Epub::loadCssRulesFromCache() const {
-  FsFile cssCacheFile;
-  if (Storage.openFileForRead("EBP", getCssRulesCache(), cssCacheFile)) {
-    if (cssParser->loadFromCache(cssCacheFile)) {
-      cssCacheFile.close();
-      LOG_DBG("EBP", "Loaded CSS rules from cache");
-      return true;
-    }
-    cssCacheFile.close();
+  if (cssParser && cssParser->loadFromCache()) {
+    LOG_DBG("EBP", "Loaded CSS rules from cache");
+    return true;
+  }
+  if (cssParser && cssParser->hasCache()) {
     LOG_DBG("EBP", "CSS cache invalid, reparsing");
   }
   return false;
@@ -311,10 +308,8 @@ void Epub::parseCssFiles() const {
     }
 
     // Save to cache for next time
-    FsFile cssCacheFile;
-    if (Storage.openFileForWrite("EBP", getCssRulesCache(), cssCacheFile)) {
-      cssParser->saveToCache(cssCacheFile);
-      cssCacheFile.close();
+    if (cssParser) {
+      cssParser->saveToCache();
     }
 
     LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files", cssParser->ruleCount(), cssFiles.size());
