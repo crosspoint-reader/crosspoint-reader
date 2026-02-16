@@ -6,6 +6,7 @@
 #include <Serialization.h>
 
 #include <cstring>
+#include <string>
 
 #include "fontIds.h"
 

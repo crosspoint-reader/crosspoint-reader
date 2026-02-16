@@ -15,37 +15,14 @@ constexpr int MENU_ITEMS = 3;
 const char* menuNames[MENU_ITEMS] = {"OPDS Server URL", "Username", "Password"};
 }  // namespace
 
-void CalibreSettingsActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<CalibreSettingsActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void CalibreSettingsActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
   selectedIndex = 0;
-  updateRequired = true;
-
-  xTaskCreate(&CalibreSettingsActivity::taskTrampoline, "CalibreSettingsTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void CalibreSettingsActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void CalibreSettingsActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void CalibreSettingsActivity::loop() {
   if (subActivity) {
@@ -66,18 +43,16 @@ void CalibreSettingsActivity::loop() {
   // Handle navigation
   buttonNavigator.onNext([this] {
     selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPrevious([this] {
     selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
-    updateRequired = true;
+    requestUpdate();
   });
 }
 
 void CalibreSettingsActivity::handleSelection() {
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-
   if (selectedIndex == 0) {
     // OPDS Server URL
     exitActivity();
@@ -90,11 +65,11 @@ void CalibreSettingsActivity::handleSelection() {
           SETTINGS.opdsServerUrl[sizeof(SETTINGS.opdsServerUrl) - 1] = '\0';
           SETTINGS.saveToFile();
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         },
         [this]() {
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         }));
   } else if (selectedIndex == 1) {
     // Username
@@ -108,11 +83,11 @@ void CalibreSettingsActivity::handleSelection() {
           SETTINGS.opdsUsername[sizeof(SETTINGS.opdsUsername) - 1] = '\0';
           SETTINGS.saveToFile();
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         },
         [this]() {
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         }));
   } else if (selectedIndex == 2) {
     // Password
@@ -126,30 +101,16 @@ void CalibreSettingsActivity::handleSelection() {
           SETTINGS.opdsPassword[sizeof(SETTINGS.opdsPassword) - 1] = '\0';
           SETTINGS.saveToFile();
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         },
         [this]() {
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         }));
   }
-
-  xSemaphoreGive(renderingMutex);
 }
 
-void CalibreSettingsActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void CalibreSettingsActivity::render() {
+void CalibreSettingsActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

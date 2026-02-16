@@ -23,11 +23,6 @@ constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
 }  // namespace
 
-void TxtReaderActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<TxtReaderActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void TxtReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
@@ -53,8 +48,6 @@ void TxtReaderActivity::onEnter() {
       break;
   }
 
-  renderingMutex = xSemaphoreCreateMutex();
-
   txt->setupCacheDir();
 
   // Save current txt as last opened file and add to recent books
@@ -65,14 +58,7 @@ void TxtReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(filePath, fileName, "", "");
 
   // Trigger first update
-  updateRequired = true;
-
-  xTaskCreate(&TxtReaderActivity::taskTrampoline, "TxtReaderActivityTask",
-              6144,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
 void TxtReaderActivity::onExit() {
@@ -81,14 +67,6 @@ void TxtReaderActivity::onExit() {
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
-  // Wait until not rendering to delete task
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
   pageOffsets.clear();
   currentPageLines.clear();
   APP_STATE.readerActivityLoadCount = 0;
@@ -134,22 +112,10 @@ void TxtReaderActivity::loop() {
 
   if (prevTriggered && currentPage > 0) {
     currentPage--;
-    updateRequired = true;
+    requestUpdate();
   } else if (nextTriggered && currentPage < totalPages - 1) {
     currentPage++;
-    updateRequired = true;
-  }
-}
-
-void TxtReaderActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    requestUpdate();
   }
 }
 
@@ -372,7 +338,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   return !outLines.empty();
 }
 
-void TxtReaderActivity::renderScreen() {
+void TxtReaderActivity::render(Activity::RenderLock&&) {
   if (!txt) {
     return;
   }
