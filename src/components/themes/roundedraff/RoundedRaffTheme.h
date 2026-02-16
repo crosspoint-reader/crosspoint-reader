@@ -49,5 +49,5 @@ class RoundedRaffTheme : public BaseTheme {
                 const std::function<std::string(int index)>& rowValue) const override;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
-  bool homeMenuShowsContinueReading() const override { return true; }
+  bool homeMenuShowsContinueReading() const { return true; }
 };
