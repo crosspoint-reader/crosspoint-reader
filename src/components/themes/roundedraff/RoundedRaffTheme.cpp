@@ -34,10 +34,10 @@ void maskRoundedRectOutsideCorners(const GfxRenderer& renderer, int x, int y, in
       const int tx = rr - dx;
       const int ty = rr - dy;
       if (tx * tx + ty * ty > rr2) {
-        renderer.drawPixel(x + dx, y + dy, false);                                   // top-left
-        renderer.drawPixel(x + width - 1 - dx, y + dy, false);                       // top-right
-        renderer.drawPixel(x + dx, y + height - 1 - dy, false);                      // bottom-left
-        renderer.drawPixel(x + width - 1 - dx, y + height - 1 - dy, false);          // bottom-right
+        renderer.drawPixel(x + dx, y + dy, false);                           // top-left
+        renderer.drawPixel(x + width - 1 - dx, y + dy, false);               // top-right
+        renderer.drawPixel(x + dx, y + height - 1 - dy, false);              // bottom-left
+        renderer.drawPixel(x + width - 1 - dx, y + height - 1 - dy, false);  // bottom-right
       }
     }
   }
@@ -55,7 +55,7 @@ std::string sanitizeButtonLabel(std::string label) {
   return label;
 }
 
-}
+}  // namespace
 
 void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const {
   // Home screen header is custom-rendered in drawRecentBookCover.
@@ -76,9 +76,10 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
 
   auto headerTitle = renderer.truncatedText(kTitleFontId, title, batteryX - sidePadding - 20, EpdFontFamily::BOLD);
   renderer.drawText(kTitleFontId, sidePadding, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
-  drawBattery(renderer,
-              Rect{batteryX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
-              showBatteryPercentage);
+  drawBattery(
+      renderer,
+      Rect{batteryX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
+      showBatteryPercentage);
 }
 
 void RoundedRaffTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
@@ -147,8 +148,10 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
     }
   }
 
-  drawBattery(renderer, Rect{batteryX, titleY + 2, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
-              showBatteryPercentage);
+  drawBattery(
+      renderer,
+      Rect{batteryX, titleY + 2, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
+      showBatteryPercentage);
 
   const int coverX = sidePadding;
   const int coverY = titleY + renderer.getLineHeight(kTitleFontId) + 20;  // 20px gap below top title+battery bar
@@ -306,8 +309,7 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
       if (!valueText.empty()) {
         int valueW = renderer.getTextWidth(kTitleFontId, valueText.c_str(), EpdFontFamily::REGULAR);
         renderer.drawText(kTitleFontId, rowX + rowWidth - kInteractiveInsetX - valueW,
-                          rowY + (rowHeight - renderer.getLineHeight(kTitleFontId)) / 2, valueText.c_str(),
-                          !isSelected,
+                          rowY + (rowHeight - renderer.getLineHeight(kTitleFontId)) / 2, valueText.c_str(), !isSelected,
                           EpdFontFamily::REGULAR);
         textAreaWidth -= valueW + kInteractiveInsetX;
       }

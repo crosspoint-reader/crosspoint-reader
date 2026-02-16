@@ -157,8 +157,8 @@ bool Txt::generateCoverBmp(bool forceRegenerate) const {
     }
     constexpr int kCoverTargetMaxWidth = 1200;
     constexpr int kCoverTargetMaxHeight = 2000;
-    const bool success =
-        JpegToBmpConverter::jpegFileToBmpStreamWithSize(coverJpg, coverBmp, kCoverTargetMaxWidth, kCoverTargetMaxHeight);
+    const bool success = JpegToBmpConverter::jpegFileToBmpStreamWithSize(coverJpg, coverBmp, kCoverTargetMaxWidth,
+                                                                         kCoverTargetMaxHeight);
     coverJpg.close();
     coverBmp.close();
 

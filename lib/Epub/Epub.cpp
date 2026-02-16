@@ -550,8 +550,8 @@ bool Epub::generateCoverBmp(bool cropped, bool forceRegenerate) const {
     // from aggressive downscaling in cached sleep-cover BMPs.
     constexpr int kCoverTargetMaxWidth = 1200;
     constexpr int kCoverTargetMaxHeight = 2000;
-    const bool success =
-        JpegToBmpConverter::jpegFileToBmpStreamWithSize(coverJpg, coverBmp, kCoverTargetMaxWidth, kCoverTargetMaxHeight);
+    const bool success = JpegToBmpConverter::jpegFileToBmpStreamWithSize(coverJpg, coverBmp, kCoverTargetMaxWidth,
+                                                                         kCoverTargetMaxHeight);
     coverJpg.close();
     coverBmp.close();
     Storage.remove(coverJpgTempPath.c_str());
