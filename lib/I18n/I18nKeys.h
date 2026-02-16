@@ -36,7 +36,6 @@ extern const char* const CHARACTER_SETS[];
 
 // String IDs
 enum class StrId : uint16_t {
-  STR_CROSSPOINT,
   STR_BOOTING,
   STR_SLEEPING,
   STR_ENTERING_SLEEP,
@@ -203,9 +202,6 @@ enum class StrId : uint16_t {
   STR_FRONT_LAYOUT_LBCR,
   STR_PREV_NEXT,
   STR_NEXT_PREV,
-  STR_BOOKERLY,
-  STR_NOTO_SANS,
-  STR_OPEN_DYSLEXIC,
   STR_SMALL,
   STR_MEDIUM,
   STR_LARGE,
