@@ -16,15 +16,9 @@ constexpr uint8_t kUnassigned = 0xFF;
 constexpr unsigned long kErrorDisplayMs = 1500;
 }  // namespace
 
-void ButtonRemapActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<ButtonRemapActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void ButtonRemapActivity::onEnter() {
   Activity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
   // Start with all roles unassigned to avoid duplicate blocking.
   currentStep = 0;
   tempMapping[0] = kUnassigned;
@@ -33,25 +27,20 @@ void ButtonRemapActivity::onEnter() {
   tempMapping[3] = kUnassigned;
   errorMessage.clear();
   errorUntil = 0;
-  updateRequired = true;
-
-  xTaskCreate(&ButtonRemapActivity::taskTrampoline, "ButtonRemapTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
-void ButtonRemapActivity::onExit() {
-  Activity::onExit();
-
-  // Ensure display task is stopped outside of active rendering.
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void ButtonRemapActivity::onExit() { Activity::onExit(); }
 
 void ButtonRemapActivity::loop() {
+  // Clear any temporary warning after its timeout.
+  if (errorUntil > 0 && millis() > errorUntil) {
+    errorMessage.clear();
+    errorUntil = 0;
+    requestUpdate();
+    return;
+  }
+
   // Side buttons:
   // - Up: reset mapping to defaults and exit.
   // - Down: cancel without saving.
@@ -72,60 +61,39 @@ void ButtonRemapActivity::loop() {
     return;
   }
 
-  // Wait for the UI to refresh before accepting another assignment.
-  // This avoids rapid double-presses that can advance the step without a visible redraw.
-  if (updateRequired) {
-    return;
-  }
+  {
+    // Wait for the UI to refresh before accepting another assignment.
+    // This avoids rapid double-presses that can advance the step without a visible redraw.
+    requestUpdateAndWait();
 
-  // Wait for a front button press to assign to the current role.
-  const int pressedButton = mappedInput.getPressedFrontButton();
-  if (pressedButton < 0) {
-    return;
-  }
-
-  // Update temporary mapping and advance the remap step.
-  // Only accept the press if this hardware button isn't already assigned elsewhere.
-  if (!validateUnassigned(static_cast<uint8_t>(pressedButton))) {
-    updateRequired = true;
-    return;
-  }
-  tempMapping[currentStep] = static_cast<uint8_t>(pressedButton);
-  currentStep++;
-
-  if (currentStep >= kRoleCount) {
-    // All roles assigned; save to settings and exit.
-    applyTempMapping();
-    SETTINGS.saveToFile();
-    onBack();
-    return;
-  }
-
-  updateRequired = true;
-}
-
-[[noreturn]] void ButtonRemapActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      // Ensure render calls are serialized with UI thread changes.
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      updateRequired = false;
-      xSemaphoreGive(renderingMutex);
+    // Wait for a front button press to assign to the current role.
+    const int pressedButton = mappedInput.getPressedFrontButton();
+    if (pressedButton < 0) {
+      return;
     }
 
-    // Clear any temporary warning after its timeout.
-    if (errorUntil > 0 && millis() > errorUntil) {
-      errorMessage.clear();
-      errorUntil = 0;
-      updateRequired = true;
+    // Update temporary mapping and advance the remap step.
+    // Only accept the press if this hardware button isn't already assigned elsewhere.
+    if (!validateUnassigned(static_cast<uint8_t>(pressedButton))) {
+      requestUpdate();
+      return;
+    }
+    tempMapping[currentStep] = static_cast<uint8_t>(pressedButton);
+    currentStep++;
+
+    if (currentStep >= kRoleCount) {
+      // All roles assigned; save to settings and exit.
+      applyTempMapping();
+      SETTINGS.saveToFile();
+      onBack();
+      return;
     }
 
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    requestUpdate();
   }
 }
 
-void ButtonRemapActivity::render() {
+void ButtonRemapActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

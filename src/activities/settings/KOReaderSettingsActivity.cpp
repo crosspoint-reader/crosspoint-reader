@@ -16,37 +16,14 @@ constexpr int MENU_ITEMS = 5;
 const char* menuNames[MENU_ITEMS] = {"Username", "Password", "Sync Server URL", "Document Matching", "Authenticate"};
 }  // namespace
 
-void KOReaderSettingsActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<KOReaderSettingsActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void KOReaderSettingsActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
   selectedIndex = 0;
-  updateRequired = true;
-
-  xTaskCreate(&KOReaderSettingsActivity::taskTrampoline, "KOReaderSettingsTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void KOReaderSettingsActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void KOReaderSettingsActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void KOReaderSettingsActivity::loop() {
   if (subActivity) {
@@ -67,18 +44,16 @@ void KOReaderSettingsActivity::loop() {
   // Handle navigation
   buttonNavigator.onNext([this] {
     selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPrevious([this] {
     selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
-    updateRequired = true;
+    requestUpdate();
   });
 }
 
 void KOReaderSettingsActivity::handleSelection() {
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-
   if (selectedIndex == 0) {
     // Username
     exitActivity();
@@ -90,11 +65,11 @@ void KOReaderSettingsActivity::handleSelection() {
           KOREADER_STORE.setCredentials(username, KOREADER_STORE.getPassword());
           KOREADER_STORE.saveToFile();
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         },
         [this]() {
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         }));
   } else if (selectedIndex == 1) {
     // Password
@@ -107,11 +82,11 @@ void KOReaderSettingsActivity::handleSelection() {
           KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), password);
           KOREADER_STORE.saveToFile();
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         },
         [this]() {
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         }));
   } else if (selectedIndex == 2) {
     // Sync Server URL - prefill with https:// if empty to save typing
@@ -128,11 +103,11 @@ void KOReaderSettingsActivity::handleSelection() {
           KOREADER_STORE.setServerUrl(urlToSave);
           KOREADER_STORE.saveToFile();
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         },
         [this]() {
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         }));
   } else if (selectedIndex == 3) {
     // Document Matching - toggle between Filename and Binary
@@ -141,7 +116,7 @@ void KOReaderSettingsActivity::handleSelection() {
         (current == DocumentMatchMethod::FILENAME) ? DocumentMatchMethod::BINARY : DocumentMatchMethod::FILENAME;
     KOREADER_STORE.setMatchMethod(newMethod);
     KOREADER_STORE.saveToFile();
-    updateRequired = true;
+    requestUpdate();
   } else if (selectedIndex == 4) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
@@ -152,26 +127,12 @@ void KOReaderSettingsActivity::handleSelection() {
     exitActivity();
     enterNewActivity(new KOReaderAuthActivity(renderer, mappedInput, [this] {
       exitActivity();
-      updateRequired = true;
+      requestUpdate();
     }));
   }
-
-  xSemaphoreGive(renderingMutex);
 }
 
-void KOReaderSettingsActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void KOReaderSettingsActivity::render() {
+void KOReaderSettingsActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

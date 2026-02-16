@@ -2,58 +2,22 @@
 
 #include <GfxRenderer.h>
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-void ClearCacheActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<ClearCacheActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void ClearCacheActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
   state = WARNING;
-  updateRequired = true;
-
-  xTaskCreate(&ClearCacheActivity::taskTrampoline, "ClearCacheActivityTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void ClearCacheActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+void ClearCacheActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
-
-void ClearCacheActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void ClearCacheActivity::render() {
+void ClearCacheActivity::render(Activity::RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
@@ -104,15 +68,15 @@ void ClearCacheActivity::render() {
 }
 
 void ClearCacheActivity::clearCache() {
-  Serial.printf("[%lu] [CLEAR_CACHE] Clearing cache...\n", millis());
+  LOG_DBG("CLEAR_CACHE", "Clearing cache...");
 
   // Open .crosspoint directory
   auto root = Storage.open("/.crosspoint");
   if (!root || !root.isDirectory()) {
-    Serial.printf("[%lu] [CLEAR_CACHE] Failed to open cache directory\n", millis());
+    LOG_DBG("CLEAR_CACHE", "Failed to open cache directory");
     if (root) root.close();
     state = FAILED;
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -128,14 +92,14 @@ void ClearCacheActivity::clearCache() {
     // Only delete directories starting with epub_ or xtc_
     if (file.isDirectory() && (itemName.startsWith("epub_") || itemName.startsWith("xtc_"))) {
       String fullPath = "/.crosspoint/" + itemName;
-      Serial.printf("[%lu] [CLEAR_CACHE] Removing cache: %s\n", millis(), fullPath.c_str());
+      LOG_DBG("CLEAR_CACHE", "Removing cache: %s", fullPath.c_str());
 
       file.close();  // Close before attempting to delete
 
       if (Storage.removeDir(fullPath.c_str())) {
         clearedCount++;
       } else {
-        Serial.printf("[%lu] [CLEAR_CACHE] Failed to remove: %s\n", millis(), fullPath.c_str());
+        LOG_ERR("CLEAR_CACHE", "Failed to remove: %s", fullPath.c_str());
         failedCount++;
       }
     } else {
@@ -144,27 +108,26 @@ void ClearCacheActivity::clearCache() {
   }
   root.close();
 
-  Serial.printf("[%lu] [CLEAR_CACHE] Cache cleared: %d removed, %d failed\n", millis(), clearedCount, failedCount);
+  LOG_DBG("CLEAR_CACHE", "Cache cleared: %d removed, %d failed", clearedCount, failedCount);
 
   state = SUCCESS;
-  updateRequired = true;
+  requestUpdate();
 }
 
 void ClearCacheActivity::loop() {
   if (state == WARNING) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      Serial.printf("[%lu] [CLEAR_CACHE] User confirmed, starting cache clear\n", millis());
+      LOG_DBG("CLEAR_CACHE", "User confirmed, starting cache clear");
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = CLEARING;
       xSemaphoreGive(renderingMutex);
-      updateRequired = true;
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      requestUpdateAndWait();
 
       clearCache();
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      Serial.printf("[%lu] [CLEAR_CACHE] User cancelled\n", millis());
+      LOG_DBG("CLEAR_CACHE", "User cancelled");
       goBack();
     }
     return;

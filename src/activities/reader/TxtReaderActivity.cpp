@@ -23,11 +23,6 @@ constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
 }  // namespace
 
-void TxtReaderActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<TxtReaderActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void TxtReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
@@ -53,8 +48,6 @@ void TxtReaderActivity::onEnter() {
       break;
   }
 
-  renderingMutex = xSemaphoreCreateMutex();
-
   txt->setupCacheDir();
 
   // Save current txt as last opened file and add to recent books
@@ -65,14 +58,7 @@ void TxtReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(filePath, fileName, "", "");
 
   // Trigger first update
-  updateRequired = true;
-
-  xTaskCreate(&TxtReaderActivity::taskTrampoline, "TxtReaderActivityTask",
-              6144,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
 void TxtReaderActivity::onExit() {
@@ -81,14 +67,6 @@ void TxtReaderActivity::onExit() {
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
-  // Wait until not rendering to delete task
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
   pageOffsets.clear();
   currentPageLines.clear();
   APP_STATE.readerActivityLoadCount = 0;
@@ -134,22 +112,10 @@ void TxtReaderActivity::loop() {
 
   if (prevTriggered && currentPage > 0) {
     currentPage--;
-    updateRequired = true;
+    requestUpdate();
   } else if (nextTriggered && currentPage < totalPages - 1) {
     currentPage++;
-    updateRequired = true;
-  }
-}
-
-void TxtReaderActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    requestUpdate();
   }
 }
 
@@ -191,8 +157,7 @@ void TxtReaderActivity::initializeReader() {
   linesPerPage = viewportHeight / lineHeight;
   if (linesPerPage < 1) linesPerPage = 1;
 
-  Serial.printf("[%lu] [TRS] Viewport: %dx%d, lines per page: %d\n", millis(), viewportWidth, viewportHeight,
-                linesPerPage);
+  LOG_DBG("TRS", "Viewport: %dx%d, lines per page: %d", viewportWidth, viewportHeight, linesPerPage);
 
   // Try to load cached page index first
   if (!loadPageIndexCache()) {
@@ -215,7 +180,7 @@ void TxtReaderActivity::buildPageIndex() {
   size_t offset = 0;
   const size_t fileSize = txt->getFileSize();
 
-  Serial.printf("[%lu] [TRS] Building page index for %zu bytes...\n", millis(), fileSize);
+  LOG_DBG("TRS", "Building page index for %zu bytes...", fileSize);
 
   GUI.drawPopup(renderer, "Indexing...");
 
@@ -244,7 +209,7 @@ void TxtReaderActivity::buildPageIndex() {
   }
 
   totalPages = pageOffsets.size();
-  Serial.printf("[%lu] [TRS] Built page index: %d pages\n", millis(), totalPages);
+  LOG_DBG("TRS", "Built page index: %d pages", totalPages);
 }
 
 bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset) {
@@ -259,7 +224,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   size_t chunkSize = std::min(CHUNK_SIZE, fileSize - offset);
   auto* buffer = static_cast<uint8_t*>(malloc(chunkSize + 1));
   if (!buffer) {
-    Serial.printf("[%lu] [TRS] Failed to allocate %zu bytes\n", millis(), chunkSize);
+    LOG_ERR("TRS", "Failed to allocate %zu bytes", chunkSize);
     return false;
   }
 
@@ -373,7 +338,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   return !outLines.empty();
 }
 
-void TxtReaderActivity::renderScreen() {
+void TxtReaderActivity::render(Activity::RenderLock&&) {
   if (!txt) {
     return;
   }
@@ -588,7 +553,7 @@ void TxtReaderActivity::loadProgress() {
       if (currentPage < 0) {
         currentPage = 0;
       }
-      Serial.printf("[%lu] [TRS] Loaded progress: page %d/%d\n", millis(), currentPage, totalPages);
+      LOG_DBG("TRS", "Loaded progress: page %d/%d", currentPage, totalPages);
     }
     f.close();
   }
@@ -610,7 +575,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   std::string cachePath = txt->getCachePath() + "/index.bin";
   FsFile f;
   if (!Storage.openFileForRead("TRS", cachePath, f)) {
-    Serial.printf("[%lu] [TRS] No page index cache found\n", millis());
+    LOG_DBG("TRS", "No page index cache found");
     return false;
   }
 
@@ -618,7 +583,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   uint32_t magic;
   serialization::readPod(f, magic);
   if (magic != CACHE_MAGIC) {
-    Serial.printf("[%lu] [TRS] Cache magic mismatch, rebuilding\n", millis());
+    LOG_DBG("TRS", "Cache magic mismatch, rebuilding");
     f.close();
     return false;
   }
@@ -626,7 +591,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   uint8_t version;
   serialization::readPod(f, version);
   if (version != CACHE_VERSION) {
-    Serial.printf("[%lu] [TRS] Cache version mismatch (%d != %d), rebuilding\n", millis(), version, CACHE_VERSION);
+    LOG_DBG("TRS", "Cache version mismatch (%d != %d), rebuilding", version, CACHE_VERSION);
     f.close();
     return false;
   }
@@ -634,7 +599,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   uint32_t fileSize;
   serialization::readPod(f, fileSize);
   if (fileSize != txt->getFileSize()) {
-    Serial.printf("[%lu] [TRS] Cache file size mismatch, rebuilding\n", millis());
+    LOG_DBG("TRS", "Cache file size mismatch, rebuilding");
     f.close();
     return false;
   }
@@ -642,7 +607,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   int32_t cachedWidth;
   serialization::readPod(f, cachedWidth);
   if (cachedWidth != viewportWidth) {
-    Serial.printf("[%lu] [TRS] Cache viewport width mismatch, rebuilding\n", millis());
+    LOG_DBG("TRS", "Cache viewport width mismatch, rebuilding");
     f.close();
     return false;
   }
@@ -650,7 +615,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   int32_t cachedLines;
   serialization::readPod(f, cachedLines);
   if (cachedLines != linesPerPage) {
-    Serial.printf("[%lu] [TRS] Cache lines per page mismatch, rebuilding\n", millis());
+    LOG_DBG("TRS", "Cache lines per page mismatch, rebuilding");
     f.close();
     return false;
   }
@@ -658,7 +623,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   int32_t fontId;
   serialization::readPod(f, fontId);
   if (fontId != cachedFontId) {
-    Serial.printf("[%lu] [TRS] Cache font ID mismatch (%d != %d), rebuilding\n", millis(), fontId, cachedFontId);
+    LOG_DBG("TRS", "Cache font ID mismatch (%d != %d), rebuilding", fontId, cachedFontId);
     f.close();
     return false;
   }
@@ -666,7 +631,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   int32_t margin;
   serialization::readPod(f, margin);
   if (margin != cachedScreenMargin) {
-    Serial.printf("[%lu] [TRS] Cache screen margin mismatch, rebuilding\n", millis());
+    LOG_DBG("TRS", "Cache screen margin mismatch, rebuilding");
     f.close();
     return false;
   }
@@ -674,7 +639,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   uint8_t alignment;
   serialization::readPod(f, alignment);
   if (alignment != cachedParagraphAlignment) {
-    Serial.printf("[%lu] [TRS] Cache paragraph alignment mismatch, rebuilding\n", millis());
+    LOG_DBG("TRS", "Cache paragraph alignment mismatch, rebuilding");
     f.close();
     return false;
   }
@@ -694,7 +659,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
 
   f.close();
   totalPages = pageOffsets.size();
-  Serial.printf("[%lu] [TRS] Loaded page index cache: %d pages\n", millis(), totalPages);
+  LOG_DBG("TRS", "Loaded page index cache: %d pages", totalPages);
   return true;
 }
 
@@ -702,7 +667,7 @@ void TxtReaderActivity::savePageIndexCache() const {
   std::string cachePath = txt->getCachePath() + "/index.bin";
   FsFile f;
   if (!Storage.openFileForWrite("TRS", cachePath, f)) {
-    Serial.printf("[%lu] [TRS] Failed to save page index cache\n", millis());
+    LOG_ERR("TRS", "Failed to save page index cache");
     return;
   }
 
@@ -723,5 +688,5 @@ void TxtReaderActivity::savePageIndexCache() const {
   }
 
   f.close();
-  Serial.printf("[%lu] [TRS] Saved page index cache: %d pages\n", millis(), totalPages);
+  LOG_DBG("TRS", "Saved page index cache: %d pages", totalPages);
 }

@@ -37,11 +37,6 @@ int XtcReaderChapterSelectionActivity::findChapterIndexForPage(uint32_t page) co
   return 0;
 }
 
-void XtcReaderChapterSelectionActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<XtcReaderChapterSelectionActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void XtcReaderChapterSelectionActivity::onEnter() {
   Activity::onEnter();
 
@@ -49,29 +44,12 @@ void XtcReaderChapterSelectionActivity::onEnter() {
     return;
   }
 
-  renderingMutex = xSemaphoreCreateMutex();
   selectorIndex = findChapterIndexForPage(currentPage);
 
-  updateRequired = true;
-  xTaskCreate(&XtcReaderChapterSelectionActivity::taskTrampoline, "XtcReaderChapterSelectionActivityTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void XtcReaderChapterSelectionActivity::onExit() {
-  Activity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void XtcReaderChapterSelectionActivity::onExit() { Activity::onExit(); }
 
 void XtcReaderChapterSelectionActivity::loop() {
   const int pageItems = getPageItems();
@@ -88,38 +66,26 @@ void XtcReaderChapterSelectionActivity::loop() {
 
   buttonNavigator.onNextRelease([this, totalItems] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this, totalItems] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
     selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
     selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    updateRequired = true;
+    requestUpdate();
   });
 }
 
-void XtcReaderChapterSelectionActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void XtcReaderChapterSelectionActivity::renderScreen() {
+void XtcReaderChapterSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
