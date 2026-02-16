@@ -7,6 +7,7 @@
 #include <Logging.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
+#include <esp_system.h>
 
 #include <cstring>
 
@@ -145,6 +146,11 @@ void enterNewActivity(Activity* activity) {
 // Verify power button press duration on wake-up from deep sleep
 // Pre-condition: isWakeupByPowerButton() == true
 void verifyPowerButtonDuration() {
+  // Skip verification for software resets (e.g. after SD card format calls esp_restart)
+  if (esp_reset_reason() == ESP_RST_SW) {
+    return;
+  }
+
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
     // Fast path for short press
     // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state

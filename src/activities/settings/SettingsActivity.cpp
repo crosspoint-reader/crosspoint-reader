@@ -7,6 +7,7 @@
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "FormatSDCardActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
@@ -48,6 +49,7 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action("OPDS Browser", SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action("Clear Cache", SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action("Check for updates", SettingAction::CheckForUpdates));
+  systemSettings.push_back(SettingInfo::Action("Format SD Card", SettingAction::FormatSDCard));
 
   // Reset selection to first category
   selectedCategoryIndex = 0;
@@ -192,6 +194,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::CheckForUpdates:
         enterSubActivity(new OtaUpdateActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::FormatSDCard:
+        enterSubActivity(new FormatSDCardActivity(renderer, mappedInput, onComplete));
         break;
       case SettingAction::None:
         // Do nothing
