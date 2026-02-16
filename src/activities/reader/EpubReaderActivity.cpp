@@ -7,6 +7,7 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include "../util/ConfirmationActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -435,17 +436,31 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const std::string bookPath = epub->getPath();
       const std::string cachePath = epub->getCachePath();
 
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      section.reset();
-      epub.reset();
+      // Construct the full message: "Delete Book: /path/to/file.epub"
+      std::string fullMsg = std::string(I18N.get(StrId::STR_DELETE_BOOK)) + ": " + bookPath;
 
-      // Delete the file and cleanup cache/recents
-      if (Storage.remove(bookPath.c_str())) {
-        RECENT_BOOKS.removeBook(bookPath);
-        Storage.removeDir(cachePath.c_str());
-      }
-      xSemaphoreGive(renderingMutex);
-      pendingGoHome = true;
+      auto doDelete = [this, bookPath, cachePath](bool confirmed) {
+        if (confirmed) {
+          xSemaphoreTake(renderingMutex, portMAX_DELAY);
+          APP_STATE.openEpubPath = "";
+          APP_STATE.saveToFile();
+
+          section.reset();
+          epub.reset();
+          if (Storage.remove(bookPath.c_str())) {
+            RECENT_BOOKS.removeBook(bookPath);
+            RECENT_BOOKS.saveToFile();
+            Storage.removeDir(cachePath.c_str());
+          }
+          xSemaphoreGive(renderingMutex);
+
+          this->pendingGoHome = true;
+          this->skipNextButtonCheck = true;
+        }
+        this->pendingSubactivityExit = true;
+      };
+
+      enterNewActivity(new ConfirmationActivity(renderer, mappedInput, fullMsg, doDelete));
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
