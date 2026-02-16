@@ -122,6 +122,11 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
   CacheEntry* entry = findInCache(fontData, groupIndex);
   if (entry) {
     entry->lastUsed = ++accessCounter;
+    if (glyph->dataOffset >= entry->dataSize) {
+      LOG_ERR("FDC", "dataOffset %u out of bounds for group %u (size %u)", glyph->dataOffset, groupIndex,
+              entry->dataSize);
+      return nullptr;
+    }
     return &entry->data[glyph->dataOffset];
   }
 
@@ -132,5 +137,10 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
   }
 
   entry->lastUsed = ++accessCounter;
+  if (glyph->dataOffset >= entry->dataSize) {
+    LOG_ERR("FDC", "dataOffset %u out of bounds for group %u (size %u)", glyph->dataOffset, groupIndex,
+            entry->dataSize);
+    return nullptr;
+  }
   return &entry->data[glyph->dataOffset];
 }
