@@ -13,7 +13,7 @@
 
 class MyLibraryActivity final : public ActivityWithSubactivity {
  private:
-  enum class State { BROWSING, DELETE_MENU, DELETE_CONFIRM };
+  enum class State { BROWSING, FILE_ACTIONS, DELETE_CONFIRM, MOVE_BROWSING };
 
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
@@ -29,6 +29,15 @@ class MyLibraryActivity final : public ActivityWithSubactivity {
   std::string basepath = "/";
   std::vector<std::string> files;
 
+  // Move state
+  std::string moveSourcePath;
+  std::string moveSourceName;
+  bool moveSourceIsDir = false;
+  std::string moveBrowsePath;
+  std::vector<std::string> moveDirs;
+  size_t moveSelectorIndex = 0;
+  std::string moveError;
+
   // Callbacks
   const std::function<void(const std::string& path)> onSelectBook;
   const std::function<void()> onGoHome;
@@ -39,6 +48,7 @@ class MyLibraryActivity final : public ActivityWithSubactivity {
 
   // Data loading
   void loadFiles();
+  void loadMoveDirs();
   size_t findEntry(const std::string& name) const;
 
   // Delete
@@ -46,6 +56,10 @@ class MyLibraryActivity final : public ActivityWithSubactivity {
 
   // Rename
   void startRename();
+
+  // Move
+  void startMove();
+  void executeMoveHere();
 
  public:
   explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

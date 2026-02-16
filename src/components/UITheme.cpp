@@ -34,7 +34,7 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentMetrics = &LyraMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::FILE_BROWSER:
-      Serial.printf("[%lu] [UI] Using File Browser theme (Classic base)\n", millis());
+      LOG_DBG("UI", "Using File Browser theme (Classic base)");
       currentTheme = new BaseTheme();
       currentMetrics = &BaseMetrics::values;
       break;

@@ -44,7 +44,7 @@ void RecentBooksStore::removeBook(const std::string& path) {
   if (it != recentBooks.end()) {
     recentBooks.erase(it);
     saveToFile();
-    Serial.printf("[%lu] [RBS] Removed book from recent list: %s\n", millis(), path.c_str());
+    LOG_DBG("RBS", "Removed book from recent list: %s", path.c_str());
   }
 }
 
