@@ -104,16 +104,14 @@ const T* binarySearchPairs(const T* pairs, const uint32_t pairCount, const uint3
 }
 
 int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
-  if (const auto* found = binarySearchPairs(data->kernPairs, data->kernPairCount, leftCp, rightCp))
-  {
+  if (const auto* found = binarySearchPairs(data->kernPairs, data->kernPairCount, leftCp, rightCp)) {
     return found->adjust;
   }
   return 0;
 }
 
 uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) const {
-  if (const auto* found = binarySearchPairs(data->ligaturePairs, data->ligaturePairCount, leftCp, rightCp))
-  {
+  if (const auto* found = binarySearchPairs(data->ligaturePairs, data->ligaturePairCount, leftCp, rightCp)) {
     return found->ligatureCp;
   }
   return 0;
