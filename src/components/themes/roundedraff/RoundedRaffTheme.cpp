@@ -355,7 +355,6 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const int bottomMargin = 10;
   const int hintHeight = RoundedRaffMetrics::values.buttonHintsHeight - 10;  // 30px total guide height
   const int groupWidth = (pageWidth - sidePadding * 2 - groupGap) / 2;
-  const int halfWidth = groupWidth / 2;
   const int hintY = pageHeight - hintHeight - bottomMargin;
   const int textY = hintY + (hintHeight - renderer.getLineHeight(kGuideFontId)) / 2;
 
@@ -368,9 +367,7 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const std::string downText = sanitizeButtonLabel((btn4 && btn4[0] != '\0') ? std::string(btn4) : "DOWN");
 
   renderer.drawRoundedRect(leftGroupX, hintY, groupWidth, hintHeight, 2, kBottomRadius, true);
-  const int backWidth = renderer.getTextWidth(kGuideFontId, backLabel.c_str(), EpdFontFamily::REGULAR);
   const int selectWidth = renderer.getTextWidth(kGuideFontId, selectText.c_str(), EpdFontFamily::REGULAR);
-  const int upWidth = renderer.getTextWidth(kGuideFontId, upText.c_str(), EpdFontFamily::REGULAR);
   const int downWidth = renderer.getTextWidth(kGuideFontId, downText.c_str(), EpdFontFamily::REGULAR);
   constexpr int innerEdgePadding = 16;
 
