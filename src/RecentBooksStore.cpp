@@ -77,8 +77,8 @@ bool RecentBooksStore::saveToFile() const {
 }
 
 void RecentBooksStore::removeBook(const std::string& path) {
-  auto it = std::find_if(recentBooks.begin(), recentBooks.end(), 
-                         [&](const RecentBook& book) { return book.path == path; });
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
     recentBooks.erase(it);
     saveToFile();

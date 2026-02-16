@@ -456,16 +456,22 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_BOOK: {
-    std::string bookPath = epub->getPath();
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    // Delete the file and cleanup
-    if (Storage.remove(bookPath.c_str())) {
+      const std::string bookPath = epub->getPath();
+      const std::string cachePath = epub->getCachePath();
+
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      section.reset();
+      epub.reset();
+
+      // Delete the file and cleanup cache/recents
+      if (Storage.remove(bookPath.c_str())) {
         RECENT_BOOKS.removeBook(bookPath);
+        Storage.removeDir(cachePath.c_str());
+      }
+      xSemaphoreGive(renderingMutex);
+      pendingGoHome = true;
+      break;
     }
-    xSemaphoreGive(renderingMutex); 
-    pendingGoHome = true;
-    break; 
-}
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
