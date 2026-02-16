@@ -54,5 +54,3 @@ class HalPowerManager {
     Lock& operator=(Lock&&) = delete;
   };
 };
-
-extern HalPowerManager powerManager;  // Singleton
