@@ -1,8 +1,7 @@
 #pragma once
 
-#include <HardwareSerial.h>
-#include <SDCardManager.h>
-#include <SdFat.h>
+#include <HalStorage.h>
+#include <Logging.h>
 #include <stdint.h>
 
 #include <cstring>
@@ -32,14 +31,13 @@ struct PixelCache {
     bytesPerRow = (w + 3) / 4;  // 2 bits per pixel, 4 pixels per byte
     size_t bufferSize = (size_t)bytesPerRow * h;
     if (bufferSize > MAX_CACHE_BYTES) {
-      Serial.printf("[%lu] [IMG] Cache buffer too large: %d bytes for %dx%d (limit %d)\n", millis(), bufferSize, w, h,
-                    MAX_CACHE_BYTES);
+      LOG_ERR("IMG", "Cache buffer too large: %d bytes for %dx%d (limit %d)", bufferSize, w, h, MAX_CACHE_BYTES);
       return false;
     }
     buffer = (uint8_t*)malloc(bufferSize);
     if (buffer) {
       memset(buffer, 0, bufferSize);
-      Serial.printf("[%lu] [IMG] Allocated cache buffer: %d bytes for %dx%d\n", millis(), bufferSize, w, h);
+      LOG_DBG("IMG", "Allocated cache buffer: %d bytes for %dx%d", bufferSize, w, h);
     }
     return buffer != nullptr;
   }
@@ -60,7 +58,7 @@ struct PixelCache {
 
     FsFile cacheFile;
     if (!Storage.openFileForWrite("IMG", cachePath, cacheFile)) {
-      Serial.printf("[%lu] [IMG] Failed to open cache file for writing: %s\n", millis(), cachePath.c_str());
+      LOG_ERR("IMG", "Failed to open cache file for writing: %s", cachePath.c_str());
       return false;
     }
 
@@ -71,8 +69,7 @@ struct PixelCache {
     cacheFile.write(buffer, bytesPerRow * height);
     cacheFile.close();
 
-    Serial.printf("[%lu] [IMG] Cache written: %s (%dx%d, %d bytes)\n", millis(), cachePath.c_str(), width, height,
-                  4 + bytesPerRow * height);
+    LOG_DBG("IMG", "Cache written: %s (%dx%d, %d bytes)", cachePath.c_str(), width, height, 4 + bytesPerRow * height);
     return true;
   }
 

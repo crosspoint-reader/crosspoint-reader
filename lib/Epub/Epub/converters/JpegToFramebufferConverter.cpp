@@ -1,7 +1,7 @@
 #include "JpegToFramebufferConverter.h"
 
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 #include <SdFat.h>
 #include <picojpeg.h>
@@ -23,7 +23,7 @@ struct JpegContext {
 bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
   FsFile file;
   if (!Storage.openFileForRead("JPG", imagePath, file)) {
-    Serial.printf("[%lu] [JPG] Failed to open file for dimensions: %s\n", millis(), imagePath.c_str());
+    LOG_ERR("JPG", "Failed to open file for dimensions: %s", imagePath.c_str());
     return false;
   }
 
@@ -34,23 +34,23 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
   file.close();
 
   if (status != 0) {
-    Serial.printf("[%lu] [JPG] Failed to init JPEG for dimensions: %d\n", millis(), status);
+    LOG_ERR("JPG", "Failed to init JPEG for dimensions: %d", status);
     return false;
   }
 
   out.width = imageInfo.m_width;
   out.height = imageInfo.m_height;
-  Serial.printf("[%lu] [JPG] Image dimensions: %dx%d\n", millis(), out.width, out.height);
+  LOG_DBG("JPG", "Image dimensions: %dx%d", out.width, out.height);
   return true;
 }
 
 bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
                                                      const RenderConfig& config) {
-  Serial.printf("[%lu] [JPG] Decoding JPEG: %s\n", millis(), imagePath.c_str());
+  LOG_DBG("JPG", "Decoding JPEG: %s", imagePath.c_str());
 
   FsFile file;
   if (!Storage.openFileForRead("JPG", imagePath, file)) {
-    Serial.printf("[%lu] [JPG] Failed to open file: %s\n", millis(), imagePath.c_str());
+    LOG_ERR("JPG", "Failed to open file: %s", imagePath.c_str());
     return false;
   }
 
@@ -59,7 +59,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 
   int status = pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, 0);
   if (status != 0) {
-    Serial.printf("[%lu] [JPG] picojpeg init failed: %d\n", millis(), status);
+    LOG_ERR("JPG", "picojpeg init failed: %d", status);
     file.close();
     return false;
   }
@@ -93,12 +93,11 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     destHeight = (int)(imageInfo.m_height * scale);
   }
 
-  Serial.printf("[%lu] [JPG] JPEG %dx%d -> %dx%d (scale %.2f), scan type: %d, MCU: %dx%d\n", millis(),
-                imageInfo.m_width, imageInfo.m_height, destWidth, destHeight, scale, imageInfo.m_scanType,
-                imageInfo.m_MCUWidth, imageInfo.m_MCUHeight);
+  LOG_DBG("JPG", "JPEG %dx%d -> %dx%d (scale %.2f), scan type: %d, MCU: %dx%d", imageInfo.m_width, imageInfo.m_height,
+          destWidth, destHeight, scale, imageInfo.m_scanType, imageInfo.m_MCUWidth, imageInfo.m_MCUHeight);
 
   if (!imageInfo.m_pMCUBufR || !imageInfo.m_pMCUBufG || !imageInfo.m_pMCUBufB) {
-    Serial.printf("[%lu] [JPG] Null buffer pointers in imageInfo\n", millis());
+    LOG_ERR("JPG", "Null buffer pointers in imageInfo");
     file.close();
     return false;
   }
@@ -111,7 +110,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   bool caching = !config.cachePath.empty();
   if (caching) {
     if (!cache.allocate(destWidth, destHeight, config.x, config.y)) {
-      Serial.printf("[%lu] [JPG] Failed to allocate cache buffer, continuing without caching\n", millis());
+      LOG_ERR("JPG", "Failed to allocate cache buffer, continuing without caching");
       caching = false;
     }
   }
@@ -125,7 +124,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
       break;
     }
     if (status != 0) {
-      Serial.printf("[%lu] [JPG] MCU decode failed: %d\n", millis(), status);
+      LOG_ERR("JPG", "MCU decode failed: %d", status);
       file.close();
       return false;
     }
@@ -254,7 +253,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     }
   }
 
-  Serial.printf("[%lu] [JPG] Decoding complete\n", millis());
+  LOG_DBG("JPG", "Decoding complete");
   file.close();
 
   // Write cache file if caching was enabled

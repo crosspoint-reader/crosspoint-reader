@@ -3,8 +3,8 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
-#include <PngToBmpConverter.h>
 #include <Logging.h>
+#include <PngToBmpConverter.h>
 #include <ZipFile.h>
 
 #include "Epub/parsers/ContainerParser.h"
@@ -487,9 +487,11 @@ bool Epub::generateCoverBmp(bool cropped) const {
       LOG_ERR("EBP", "Failed to generate BMP from cover image");
       Storage.remove(getCoverBmpPath(cropped).c_str());
     }
-    LOG_DBG("EBP", "Generated BMP from cover image, success: %s", success ? "yes" : "no");
+    LOG_DBG("EBP", "Generated BMP from JPG cover image, success: %s", success ? "yes" : "no");
     return success;
-  } else if (coverImageHref.substr(coverImageHref.length() - 4) == ".png") {
+  }
+
+  if (coverImageHref.substr(coverImageHref.length() - 4) == ".png") {
     LOG_DBG("EBP", "Generating BMP from PNG cover image (%s mode)", cropped ? "cropped" : "fit");
     const auto coverPngTempPath = getCachePath() + "/.cover.png";
 
@@ -515,15 +517,14 @@ bool Epub::generateCoverBmp(bool cropped) const {
     Storage.remove(coverPngTempPath.c_str());
 
     if (!success) {
-      Serial.printf("[%lu] [EBP] Failed to generate BMP from PNG cover image\n", millis());
+      LOG_ERR("EBP", "Failed to generate BMP from PNG cover image");
       Storage.remove(getCoverBmpPath(cropped).c_str());
     }
-    Serial.printf("[%lu] [EBP] Generated BMP from PNG cover image, success: %s\n", millis(), success ? "yes" : "no");
+    LOG_DBG("EBP", "Generated BMP from PNG cover image, success: %s", success ? "yes" : "no");
     return success;
-  } else {
-    LOG_ERR("EBP", "Cover image is not a supported format, skipping");
   }
 
+  LOG_ERR("EBP", "Cover image is not a supported format, skipping");
   return false;
 }
 
@@ -603,18 +604,17 @@ bool Epub::generateThumbBmp(int height) const {
     }
     int THUMB_TARGET_WIDTH = height * 0.6;
     int THUMB_TARGET_HEIGHT = height;
-    const bool success = PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH,
-                                                                           THUMB_TARGET_HEIGHT);
+    const bool success =
+        PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
     coverPng.close();
     thumbBmp.close();
     Storage.remove(coverPngTempPath.c_str());
 
     if (!success) {
-      Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from PNG cover image\n", millis());
+      LOG_ERR("EBP", "Failed to generate thumb BMP from PNG cover image");
       Storage.remove(getThumbBmpPath(height).c_str());
     }
-    Serial.printf("[%lu] [EBP] Generated thumb BMP from PNG cover image, success: %s\n", millis(),
-                  success ? "yes" : "no");
+    LOG_DBG("EBP", "Generated thumb BMP from PNG cover image, success: %s", success ? "yes" : "no");
     return success;
   } else {
     LOG_ERR("EBP", "Cover image is not a supported format, skipping thumbnail");

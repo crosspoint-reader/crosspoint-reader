@@ -1,7 +1,7 @@
 #include "PngToBmpConverter.h"
 
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <miniz.h>
 
 #include <cstdio>
@@ -155,7 +155,7 @@ static void writeBmpHeader2bit(Print& bmpOut, const int width, const int height)
   write32(bmpOut, 4);
 
   uint8_t palette[16] = {0x00, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x00,
-                          0xAA, 0xAA, 0xAA, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
+                         0xAA, 0xAA, 0xAA, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
   for (const uint8_t i : palette) {
     bmpOut.write(i);
   }
@@ -279,7 +279,7 @@ static bool decompressBytes(PngDecodeContext& ctx, uint8_t* dest, size_t needed)
 
     int ret = mz_inflate(&ctx.zstream, MZ_SYNC_FLUSH);
     if (ret != MZ_OK && ret != MZ_STREAM_END && ret != MZ_BUF_ERROR) {
-      Serial.printf("[%lu] [PNG] zlib inflate error: %d\n", millis(), ret);
+      LOG_ERR("PNG", "zlib inflate error: %d", ret);
       return false;
     }
     if (ret == MZ_STREAM_END) break;
@@ -334,7 +334,7 @@ static bool decodeScanline(PngDecodeContext& ctx) {
       break;
 
     default:
-      Serial.printf("[%lu] [PNG] Unknown filter type: %d\n", millis(), filterType);
+      LOG_ERR("PNG", "Unknown filter type: %d", filterType);
       return false;
   }
 
@@ -419,14 +419,13 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                    bool oneBit, bool crop) {
-  Serial.printf("[%lu] [PNG] Converting PNG to %s BMP (target: %dx%d)\n", millis(), oneBit ? "1-bit" : "2-bit",
-                targetWidth, targetHeight);
+                                                   bool oneBit, bool crop) {
+  LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   // Verify PNG signature
   uint8_t sig[8];
   if (pngFile.read(sig, 8) != 8 || memcmp(sig, PNG_SIGNATURE, 8) != 0) {
-    Serial.printf("[%lu] [PNG] Invalid PNG signature\n", millis());
+    LOG_ERR("PNG", "Invalid PNG signature");
     return false;
   }
 
@@ -436,7 +435,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
 
   uint8_t ihdrType[4];
   if (pngFile.read(ihdrType, 4) != 4 || memcmp(ihdrType, "IHDR", 4) != 0) {
-    Serial.printf("[%lu] [PNG] Missing IHDR chunk\n", millis());
+    LOG_ERR("PNG", "Missing IHDR chunk");
     return false;
   }
 
@@ -455,16 +454,15 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   // Skip IHDR CRC
   pngFile.seekCur(4);
 
-  Serial.printf("[%lu] [PNG] Image: %ux%u, depth=%u, color=%u, interlace=%u\n", millis(), width, height, bitDepth,
-                colorType, interlace);
+  LOG_DBG("PNG", "Image: %ux%u, depth=%u, color=%u, interlace=%u", width, height, bitDepth, colorType, interlace);
 
   if (compression != 0 || filter != 0) {
-    Serial.printf("[%lu] [PNG] Unsupported compression/filter method\n", millis());
+    LOG_ERR("PNG", "Unsupported compression/filter method");
     return false;
   }
 
   if (interlace != 0) {
-    Serial.printf("[%lu] [PNG] Interlaced PNGs not supported\n", millis());
+    LOG_ERR("PNG", "Interlaced PNGs not supported");
     return false;
   }
 
@@ -473,7 +471,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   constexpr int MAX_IMAGE_HEIGHT = 3072;
 
   if (width > MAX_IMAGE_WIDTH || height > MAX_IMAGE_HEIGHT || width == 0 || height == 0) {
-    Serial.printf("[%lu] [PNG] Image too large or zero (%ux%u)\n", millis(), width, height);
+    LOG_ERR("PNG", "Image too large or zero (%ux%u)", width, height);
     return false;
   }
 
@@ -512,13 +510,13 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
       rawRowBytes = width * bytesPerPixel;
       break;
     default:
-      Serial.printf("[%lu] [PNG] Unsupported color type: %d\n", millis(), colorType);
+      LOG_ERR("PNG", "Unsupported color type: %d", colorType);
       return false;
   }
 
   // Validate raw row bytes won't cause memory issues
   if (rawRowBytes > 16384) {
-    Serial.printf("[%lu] [PNG] Row too large: %u bytes\n", millis(), rawRowBytes);
+    LOG_ERR("PNG", "Row too large: %u bytes", rawRowBytes);
     return false;
   }
 
@@ -544,7 +542,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   ctx.currentRow = static_cast<uint8_t*>(malloc(rawRowBytes));
   ctx.previousRow = static_cast<uint8_t*>(calloc(rawRowBytes, 1));
   if (!ctx.currentRow || !ctx.previousRow) {
-    Serial.printf("[%lu] [PNG] Failed to allocate scanline buffers (%u bytes each)\n", millis(), rawRowBytes);
+    LOG_ERR("PNG", "Failed to allocate scanline buffers (%u bytes each)", rawRowBytes);
     free(ctx.currentRow);
     free(ctx.previousRow);
     return false;
@@ -581,7 +579,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   }
 
   if (!foundIdat) {
-    Serial.printf("[%lu] [PNG] No IDAT chunk found\n", millis());
+    LOG_ERR("PNG", "No IDAT chunk found");
     free(ctx.currentRow);
     free(ctx.previousRow);
     return false;
@@ -590,7 +588,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   // Initialize zlib decompression
   memset(&ctx.zstream, 0, sizeof(ctx.zstream));
   if (mz_inflateInit(&ctx.zstream) != MZ_OK) {
-    Serial.printf("[%lu] [PNG] Failed to initialize zlib\n", millis());
+    LOG_ERR("PNG", "Failed to initialize zlib");
     free(ctx.currentRow);
     free(ctx.previousRow);
     return false;
@@ -604,7 +602,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   uint32_t scaleY_fp = 65536;
   bool needsScaling = false;
 
-  if (targetWidth > 0 && targetHeight > 0 && (static_cast<int>(width) > targetWidth || static_cast<int>(height) > targetHeight)) {
+  if (targetWidth > 0 && targetHeight > 0 &&
+      (static_cast<int>(width) > targetWidth || static_cast<int>(height) > targetHeight)) {
     const float scaleToFitWidth = static_cast<float>(targetWidth) / width;
     const float scaleToFitHeight = static_cast<float>(targetHeight) / height;
     float scale = 1.0;
@@ -623,8 +622,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
     scaleY_fp = (static_cast<uint32_t>(height) << 16) / outHeight;
     needsScaling = true;
 
-    Serial.printf("[%lu] [PNG] Pre-scaling %ux%u -> %dx%d (fit to %dx%d)\n", millis(), width, height, outWidth,
-                  outHeight, targetWidth, targetHeight);
+    LOG_DBG("PNG", "Pre-scaling %ux%u -> %dx%d (fit to %dx%d)", width, height, outWidth, outHeight, targetWidth,
+            targetHeight);
   }
 
   // Write BMP header
@@ -643,7 +642,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   // Allocate BMP row buffer
   auto* rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
   if (!rowBuffer) {
-    Serial.printf("[%lu] [PNG] Failed to allocate row buffer\n", millis());
+    LOG_ERR("PNG", "Failed to allocate row buffer");
     mz_inflateEnd(&ctx.zstream);
     free(ctx.currentRow);
     free(ctx.previousRow);
@@ -681,7 +680,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   // per-pixel getPixelGray() switch overhead in the hot loops
   auto* grayRow = static_cast<uint8_t*>(malloc(width));
   if (!grayRow) {
-    Serial.printf("[%lu] [PNG] Failed to allocate grayscale row buffer\n", millis());
+    LOG_ERR("PNG", "Failed to allocate grayscale row buffer");
     delete[] rowAccum;
     delete[] rowCount;
     delete atkinsonDitherer;
@@ -700,7 +699,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   for (uint32_t y = 0; y < height; y++) {
     // Decode one scanline
     if (!decodeScanline(ctx)) {
-      Serial.printf("[%lu] [PNG] Failed to decode scanline %u\n", millis(), y);
+      LOG_ERR("PNG", "Failed to decode scanline %u", y);
       success = false;
       break;
     }
@@ -718,7 +717,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
         }
       } else if (oneBit) {
         for (int x = 0; x < outWidth; x++) {
-          const uint8_t bit = atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(grayRow[x], x) : quantize1bit(grayRow[x], x, y);
+          const uint8_t bit =
+              atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(grayRow[x], x) : quantize1bit(grayRow[x], x, y);
           const int byteIndex = x / 8;
           const int bitOffset = 7 - (x % 8);
           rowBuffer[byteIndex] |= (bit << bitOffset);
@@ -781,8 +781,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
         } else if (oneBit) {
           for (int x = 0; x < outWidth; x++) {
             const uint8_t gray = (rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0;
-            const uint8_t bit = atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(gray, x)
-                                                     : quantize1bit(gray, x, currentOutY);
+            const uint8_t bit =
+                atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(gray, x) : quantize1bit(gray, x, currentOutY);
             const int byteIndex = x / 8;
             const int bitOffset = 7 - (x % 8);
             rowBuffer[byteIndex] |= (bit << bitOffset);
@@ -838,7 +838,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   free(ctx.previousRow);
 
   if (success) {
-    Serial.printf("[%lu] [PNG] Successfully converted PNG to BMP\n", millis());
+    LOG_DBG("PNG", "Successfully converted PNG to BMP");
   }
   return success;
 }
@@ -848,11 +848,11 @@ bool PngToBmpConverter::pngFileToBmpStream(FsFile& pngFile, Print& bmpOut, bool 
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                    int targetMaxHeight) {
+                                                   int targetMaxHeight) {
   return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
 }
 
 bool PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                        int targetMaxHeight) {
+                                                       int targetMaxHeight) {
   return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
 }
