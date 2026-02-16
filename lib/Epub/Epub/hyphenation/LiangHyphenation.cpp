@@ -300,11 +300,12 @@ bool transition(const EmbeddedAutomaton& automaton, const AutomatonState& state,
   return false;
 }
 
-// Converts odd score positions back into codepoint indexes, honoring min prefix/suffix constraints.
+// Converts odd-valued score entries into codepoint break (hyphen) indexes while honoring min prefix/suffix constraints.
 // Each break corresponds to scores[breakIndex + 1] because of the leading '.' sentinel.
-// Convert odd score entries into hyphen positions while honoring prefix/suffix limits.
-std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, const std::vector<uint8_t>& scores,
-                                        const size_t minPrefix, const size_t minSuffix) {
+// Template version that works with both stack arrays and heap vectors.
+template <typename ScoreContainer>
+std::vector<size_t> collectBreakIndexesImpl(const std::vector<CodepointInfo>& cps, const ScoreContainer& scores,
+                                            const size_t scoreCount, const size_t minPrefix, const size_t minSuffix) {
   std::vector<size_t> indexes;
   const size_t cpCount = cps.size();
   if (cpCount < 2) {
@@ -322,7 +323,7 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
     }
 
     const size_t scoreIdx = breakIndex + 1;
-    if (scoreIdx >= scores.size()) {
+    if (scoreIdx >= scoreCount) {
       break;
     }
     if ((scores[scoreIdx] & 1u) == 0) {
@@ -334,29 +335,17 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
   return indexes;
 }
 
-}  // namespace
+// Backward-compatible wrapper for heap-allocated vectors
+std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, const std::vector<uint8_t>& scores,
+                                        const size_t minPrefix, const size_t minSuffix) {
+  return collectBreakIndexesImpl(cps, scores, scores.size(), minPrefix, minSuffix);
+}
 
-// Entry point that runs the full Liang pipeline for a single word.
-std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
-                                      const SerializedHyphenationPatterns& patterns, const LiangWordConfig& config) {
-  const auto augmented = buildAugmentedWord(cps, config);
-  if (augmented.empty()) {
-    return {};
-  }
-
-  const EmbeddedAutomaton& automaton = getAutomaton(patterns);
-  if (!automaton.valid()) {
-    return {};
-  }
-
-  const AutomatonState root = decodeState(automaton, automaton.rootOffset);
-  if (!root.valid()) {
-    return {};
-  }
-
-  // Liang scores: one entry per augmented char (leading/trailing dots included).
-  std::vector<uint8_t> scores(augmented.charCount(), 0);
-
+// Apply Liang patterns to populate scores by walking the trie for all character positions.
+// Template version that works with both stack arrays and heap vectors.
+template <typename ScoreContainer>
+void applyPatternsImpl(const AugmentedWord& augmented, const EmbeddedAutomaton& automaton, const AutomatonState& root,
+                       ScoreContainer& scores, size_t scoreCount) {
   // Walk every starting character position and stream bytes through the trie.
   for (size_t charStart = 0; charStart < augmented.charByteOffsets.size(); ++charStart) {
     const size_t byteStart = augmented.charByteOffsets[charStart];
@@ -392,7 +381,7 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
           }
 
           const size_t idx = static_cast<size_t>(boundary);
-          if (idx >= scores.size()) {
+          if (idx >= scoreCount) {
             continue;
           }
           scores[idx] = std::max(scores[idx], level);
@@ -400,6 +389,43 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
       }
     }
   }
+}
 
-  return collectBreakIndexes(cps, scores, config.minPrefix, config.minSuffix);
+}  // namespace
+
+// Entry point that runs the full Liang pipeline for a single word.
+std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
+                                      const SerializedHyphenationPatterns& patterns, const LiangWordConfig& config) {
+  const auto augmented = buildAugmentedWord(cps, config);
+  if (augmented.empty()) {
+    return {};
+  }
+
+  const EmbeddedAutomaton& automaton = getAutomaton(patterns);
+  if (!automaton.valid()) {
+    return {};
+  }
+
+  const AutomatonState root = decodeState(automaton, automaton.rootOffset);
+  if (!root.valid()) {
+    return {};
+  }
+
+  const size_t scoreCount = augmented.charCount();
+
+  // Optimization: Use stack allocation for small words (covers 99% of cases).
+  // Saves heap allocation and improves cache locality.
+  constexpr size_t MAX_STACK_SCORES = 64;
+
+  if (scoreCount <= MAX_STACK_SCORES) {
+    // Fast path: Stack-allocated scores for small words
+    uint8_t stackScores[MAX_STACK_SCORES] = {0};
+    applyPatternsImpl(augmented, automaton, root, stackScores, scoreCount);
+    return collectBreakIndexesImpl(cps, stackScores, scoreCount, config.minPrefix, config.minSuffix);
+  } else {
+    // Slow path: Heap-allocated scores for very long words (rare)
+    std::vector<uint8_t> heapScores(scoreCount, 0);
+    applyPatternsImpl(augmented, automaton, root, heapScores, scoreCount);
+    return collectBreakIndexes(cps, heapScores, config.minPrefix, config.minSuffix);
+  }
 }
