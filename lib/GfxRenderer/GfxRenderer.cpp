@@ -768,12 +768,17 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     LOG_ERR("GFX", "Font %d not found", fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+
+  const auto& font = fontMap.at(fontId);
 
   // No printable characters
   if (!font.hasPrintableChars(text, style)) {
     return;
   }
+
+  const auto* const fontData = font.getData(style);
+  const bool is2Bit = fontData->is2Bit;
+  const int ascender = fontData->ascender;
 
   // For 90° clockwise rotation:
   // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
@@ -791,24 +796,23 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       continue;
     }
 
-    const int is2Bit = font.getData(style)->is2Bit;
     const uint32_t offset = glyph->dataOffset;
     const uint8_t width = glyph->width;
     const uint8_t height = glyph->height;
     const int left = glyph->left;
     const int top = glyph->top;
 
-    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
+    const uint8_t* const bitmap = &fontData->bitmap[offset];
 
     if (bitmap != nullptr) {
       for (int glyphY = 0; glyphY < height; glyphY++) {
+        // 90° clockwise rotation transformation:
+        // screenX = x + (ascender - top + glyphY)
+        // screenY = yPos - (left + glyphX)
+        const int screenX = x + ascender - top + glyphY;
+
         for (int glyphX = 0; glyphX < width; glyphX++) {
           const int pixelPosition = glyphY * width + glyphX;
-
-          // 90° clockwise rotation transformation:
-          // screenX = x + (ascender - top + glyphY)
-          // screenY = yPos - (left + glyphX)
-          const int screenX = x + (font.getData(style)->ascender - top + glyphY);
           const int screenY = yPos - left - glyphX;
 
           if (is2Bit) {
@@ -956,14 +960,14 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
     return;
   }
 
-  const int is2Bit = fontFamily.getData(style)->is2Bit;
+  const auto* const fontData = fontFamily.getData(style);
+  const bool is2Bit = fontData->is2Bit;
   const uint32_t offset = glyph->dataOffset;
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
 
-  const uint8_t* bitmap = nullptr;
-  bitmap = &fontFamily.getData(style)->bitmap[offset];
+  const uint8_t* const bitmap = &fontData->bitmap[offset];
 
   if (bitmap != nullptr) {
     for (int glyphY = 0; glyphY < height; glyphY++) {
