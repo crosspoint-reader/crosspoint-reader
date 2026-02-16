@@ -46,10 +46,14 @@ bool WifiCredentialStore::loadFromFile() {
   // Fall back to binary migration
   if (Storage.exists(WIFI_FILE_BIN)) {
     if (loadFromBinaryFile()) {
-      saveToFile();
-      Storage.rename(WIFI_FILE_BIN, WIFI_FILE_BAK);
-      LOG_DBG("WCS", "Migrated wifi.bin to wifi.json");
-      return true;
+      if (saveToFile()) {
+        Storage.rename(WIFI_FILE_BIN, WIFI_FILE_BAK);
+        LOG_DBG("WCS", "Migrated wifi.bin to wifi.json");
+        return true;
+      } else {
+        LOG_ERR("WCS", "Failed to save wifi during migration");
+        return false;
+      }
     }
   }
 

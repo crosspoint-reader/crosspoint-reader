@@ -51,10 +51,14 @@ bool KOReaderCredentialStore::loadFromFile() {
   // Fall back to binary migration
   if (Storage.exists(KOREADER_FILE_BIN)) {
     if (loadFromBinaryFile()) {
-      saveToFile();
-      Storage.rename(KOREADER_FILE_BIN, KOREADER_FILE_BAK);
-      LOG_DBG("KRS", "Migrated koreader.bin to koreader.json");
-      return true;
+      if (saveToFile()) {
+        Storage.rename(KOREADER_FILE_BIN, KOREADER_FILE_BAK);
+        LOG_DBG("KRS", "Migrated koreader.bin to koreader.json");
+        return true;
+      } else {
+        LOG_ERR("KRS", "Failed to save KOReader credentials during migration");
+        return false;
+      }
     }
   }
 

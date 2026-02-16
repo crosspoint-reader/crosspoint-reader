@@ -31,10 +31,14 @@ bool CrossPointState::loadFromFile() {
   // Fall back to binary migration
   if (Storage.exists(STATE_FILE_BIN)) {
     if (loadFromBinaryFile()) {
-      saveToFile();
-      Storage.rename(STATE_FILE_BIN, STATE_FILE_BAK);
-      LOG_DBG("CPS", "Migrated state.bin to state.json");
-      return true;
+      if (saveToFile()) {
+        Storage.rename(STATE_FILE_BIN, STATE_FILE_BAK);
+        LOG_DBG("CPS", "Migrated state.bin to state.json");
+        return true;
+      } else {
+        LOG_ERR("CPS", "Failed to save state during migration");
+        return false;
+      }
     }
   }
 
