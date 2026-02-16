@@ -1,14 +1,14 @@
 # Web Server Guide
 
-This guide explains how to connect your CrossPoint Reader to WiFi and use the built-in web server to upload EPUB files from your computer or phone.
+This guide explains how to connect your CrossPoint Reader to WiFi and use the built-in web server to upload files from your computer or phone.
 
 ## Overview
 
 CrossPoint Reader includes a built-in web server that allows you to:
 
-- Upload EPUB files wirelessly from any device on the same WiFi network
+- Upload files wirelessly from any device on the same WiFi network
 - Browse and manage files on your device's SD card
-- Create folders to organize your ebooks
+- Create folders to organize your library
 - Delete files and folders
 
 ## Prerequisites
@@ -131,21 +131,19 @@ Click **File Manager** to access file management features.
 - The file manager displays all files and folders on your SD card
 - **Folders** are highlighted in yellow with a 📁 icon
 - **EPUB files** are highlighted in green with a 📗 icon
+- **other files** are indicated with a 📄 icon
 - Click on a folder name to navigate into it
 - Use the breadcrumb navigation at the top to go back to parent folders
 
 <img src="./images/wifi/webserver_files.png" width="600">
 
-#### Uploading EPUB Files
+#### Uploading Files
 
-1. Click the **+ Add** button in the top-right corner
-2. Select **Upload eBook** from the dropdown menu
-3. Click **Choose File** and select an `.epub` file from your device
+1. Click the **Upload** button in the top-right corner
+3. Click **Choose File** and select a file from your device
 4. Click **Upload**
 5. A progress bar will show the upload status
 6. The page will automatically refresh when the upload is complete
-
-**Note:** Only `.epub` files are accepted. Other file types will be rejected.
 
 <img src="./images/wifi/webserver_upload.png" width="600">
 
@@ -189,7 +187,6 @@ For power users, you can manage files directly from your terminal using `curl` w
 - **Supported WiFi:** 2.4GHz networks (802.11 b/g/n)
 - **Web Server Port:** 80 (HTTP)
 - **Maximum Upload Size:** Limited by available SD card space
-- **Supported File Format:** `.epub` only
 - **Browser Compatibility:** All modern browsers (Chrome, Firefox, Safari, Edge)
 
 ---
