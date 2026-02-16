@@ -3,7 +3,6 @@
 #include <Bitmap.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
