@@ -4,7 +4,11 @@
 #include <Utf8.h>
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
-  if (fontData->groups != nullptr && fontDecompressor != nullptr) {
+  if (fontData->groups != nullptr) {
+    if (!fontDecompressor) {
+      LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
+      return nullptr;
+    }
     uint16_t glyphIndex = static_cast<uint16_t>(glyph - fontData->glyph);
     return fontDecompressor->getBitmap(fontData, glyph, glyphIndex);
   }

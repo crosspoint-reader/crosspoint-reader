@@ -1,6 +1,6 @@
 #include "FontDecompressor.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <uzlib.h>
 
 #include <cstdlib>
@@ -81,8 +81,7 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
   // Allocate output buffer
   auto* outBuf = static_cast<uint8_t*>(malloc(group.uncompressedSize));
   if (!outBuf) {
-    Serial.printf("[%lu] [FDC] Failed to allocate %u bytes for group %u\n", millis(), group.uncompressedSize,
-                  groupIndex);
+    LOG_ERR("FDC", "Failed to allocate %u bytes for group %u", group.uncompressedSize, groupIndex);
     return false;
   }
 
@@ -98,8 +97,8 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
 
   int res = uzlib_uncompress(&decomp);
 
-  if (res < 0) {
-    Serial.printf("[%lu] [FDC] Decompression failed for group %u (status %d)\n", millis(), groupIndex, res);
+  if (res < 0 || decomp.dest != decomp.dest_limit) {
+    LOG_ERR("FDC", "Decompression failed for group %u (status %d)", groupIndex, res);
     free(outBuf);
     return false;
   }
@@ -113,6 +112,10 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
 }
 
 const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint16_t glyphIndex) {
+  if (!fontData->groups || fontData->groupCount == 0) {
+    return &fontData->bitmap[glyph->dataOffset];
+  }
+
   uint16_t groupIndex = getGroupIndex(fontData, glyphIndex);
 
   // Check cache

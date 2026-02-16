@@ -141,7 +141,7 @@ def main():
 
     for filename in files:
         filepath = os.path.join(font_dir, filename)
-        font_name, success, message = verify_font_file(filepath)
+        _font_name, success, message = verify_font_file(filepath)
 
         if success is None:
             skipped += 1
