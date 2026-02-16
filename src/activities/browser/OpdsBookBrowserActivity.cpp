@@ -189,7 +189,7 @@ void OpdsBookBrowserActivity::render(Activity::RenderLock&&) {
   if (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) {
     confirmLabel = tr(STR_DOWNLOAD);
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (entries.empty()) {
