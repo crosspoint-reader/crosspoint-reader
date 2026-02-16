@@ -32,6 +32,9 @@ void stripSoftHyphensInPlace(std::string& word) {
 // Returns the rendered width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
 uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
                           const EpdFontFamily::Style style, const bool appendHyphen = false) {
+  if (word.size() == 1 && word[0] == ' ' && !appendHyphen) {
+    return renderer.getSpaceWidth(fontId);
+  }
   const bool hasSoftHyphen = containsSoftHyphen(word);
   if (!hasSoftHyphen && !appendHyphen) {
     return renderer.getTextWidth(fontId, word.c_str(), style);

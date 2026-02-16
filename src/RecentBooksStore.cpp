@@ -1,8 +1,8 @@
 #include "RecentBooksStore.h"
 
 #include <Epub.h>
-#include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 #include <Serialization.h>
 #include <Xtc.h>
 
@@ -53,10 +53,10 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
 
 bool RecentBooksStore::saveToFile() const {
   // Make sure the directory exists
-  SdMan.mkdir("/.crosspoint");
+  Storage.mkdir("/.crosspoint");
 
   FsFile outputFile;
-  if (!SdMan.openFileForWrite("RBS", RECENT_BOOKS_FILE, outputFile)) {
+  if (!Storage.openFileForWrite("RBS", RECENT_BOOKS_FILE, outputFile)) {
     return false;
   }
 
@@ -72,7 +72,7 @@ bool RecentBooksStore::saveToFile() const {
   }
 
   outputFile.close();
-  Serial.printf("[%lu] [RBS] Recent books saved to file (%d entries)\n", millis(), count);
+  LOG_DBG("RBS", "Recent books saved to file (%d entries)", count);
   return true;
 }
 
@@ -83,12 +83,12 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
     lastBookFileName = path.substr(lastSlash + 1);
   }
 
-  Serial.printf("Loading recent book: %s\n", path.c_str());
+  LOG_DBG("RBS", "Loading recent book: %s", path.c_str());
 
   // If epub, try to load the metadata for title/author and cover
   if (StringUtils::checkFileExtension(lastBookFileName, ".epub")) {
     Epub epub(path, "/.crosspoint");
-    epub.load(false);
+    epub.load(false, true);
     return RecentBook{path, epub.getTitle(), epub.getAuthor(), epub.getThumbBmpPath()};
   } else if (StringUtils::checkFileExtension(lastBookFileName, ".xtch") ||
              StringUtils::checkFileExtension(lastBookFileName, ".xtc")) {
@@ -106,7 +106,7 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
 
 bool RecentBooksStore::loadFromFile() {
   FsFile inputFile;
-  if (!SdMan.openFileForRead("RBS", RECENT_BOOKS_FILE, inputFile)) {
+  if (!Storage.openFileForRead("RBS", RECENT_BOOKS_FILE, inputFile)) {
     return false;
   }
 
@@ -136,7 +136,7 @@ bool RecentBooksStore::loadFromFile() {
         }
       }
     } else {
-      Serial.printf("[%lu] [RBS] Deserialization failed: Unknown version %u\n", millis(), version);
+      LOG_ERR("RBS", "Deserialization failed: Unknown version %u", version);
       inputFile.close();
       return false;
     }
@@ -158,6 +158,6 @@ bool RecentBooksStore::loadFromFile() {
   }
 
   inputFile.close();
-  Serial.printf("[%lu] [RBS] Recent books loaded from file (%d entries)\n", millis(), recentBooks.size());
+  LOG_DBG("RBS", "Recent books loaded from file (%d entries)", recentBooks.size());
   return true;
 }

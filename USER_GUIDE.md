@@ -230,6 +230,7 @@ Accessible by pressing **Confirm** while inside a book.
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
 * **Images:** Embedded images in e-books will not render.
+* **Cover Images:** Large cover images embedded into EPUB require several seconds (~10s for ~2000 pixel tall image) to convert for sleep screen and home screen thumbnail. Consider optimizing the EPUB with e.g. https://github.com/bigbag/epub-to-xtc-converter to speed this up.
 
 ---
 
@@ -242,3 +243,5 @@ pio device monitor
 ```
 
 If the device is stuck in a bootloop, press and release the Reset button. Then, press and hold on to the configured Back button and the Power Button to boot to the Home Screen.
+
+There can be issues with broken cache or config. In this case, delete the `.crosspoint` directory on your SD card (or consider deleting only `settings.bin`, `state.bin`, or `epub_*` cache directories in the `.crosspoint/` folder).
