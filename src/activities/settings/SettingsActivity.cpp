@@ -7,6 +7,7 @@
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "GenerateAllCoversActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
@@ -47,6 +48,7 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action("KOReader Sync", SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action("OPDS Browser", SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action("Clear Cache", SettingAction::ClearCache));
+  systemSettings.push_back(SettingInfo::Action("Generate All Covers", SettingAction::GenerateAllCovers));
   systemSettings.push_back(SettingInfo::Action("Check for updates", SettingAction::CheckForUpdates));
 
   // Reset selection to first category
@@ -189,6 +191,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::ClearCache:
         enterSubActivity(new ClearCacheActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::GenerateAllCovers:
+        enterSubActivity(new GenerateAllCoversActivity(renderer, mappedInput, onComplete));
         break;
       case SettingAction::CheckForUpdates:
         enterSubActivity(new OtaUpdateActivity(renderer, mappedInput, onComplete));
