@@ -1143,4 +1143,3 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
                       title.c_str());
   }
 }
-}
