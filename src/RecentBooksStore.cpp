@@ -76,6 +76,15 @@ bool RecentBooksStore::saveToFile() const {
   return true;
 }
 
+void RecentBooksStore::removeBook(const std::string& path) {
+  auto it = std::find_if(recentBooks.begin(), recentBooks.end(), 
+                         [&](const RecentBook& book) { return book.path == path; });
+  if (it != recentBooks.end()) {
+    recentBooks.erase(it);
+    saveToFile();
+  }
+}
+
 RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
   std::string lastBookFileName = "";
   const size_t lastSlash = path.find_last_of('/');

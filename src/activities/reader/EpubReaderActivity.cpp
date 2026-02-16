@@ -455,6 +455,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       pendingGoHome = true;
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::DELETE_BOOK: {
+    std::string bookPath = epub->getPath();
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    // Delete the file and cleanup
+    if (Storage.remove(bookPath.c_str())) {
+        RECENT_BOOKS.removeBook(bookPath);
+    }
+    xSemaphoreGive(renderingMutex); 
+    pendingGoHome = true;
+    break; 
+}
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
         xSemaphoreTake(renderingMutex, portMAX_DELAY);

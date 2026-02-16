@@ -26,6 +26,8 @@ class RecentBooksStore {
   // Add a book to the recent list (moves to front if already exists)
   void addBook(const std::string& path, const std::string& title, const std::string& author,
                const std::string& coverBmpPath);
+               
+  void removeBook(const std::string& path);
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
