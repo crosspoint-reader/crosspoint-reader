@@ -293,8 +293,13 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
   return status;
 }
 
+static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "text/html", data, len);
+}
+
 void CrossPointWebServer::handleRoot() const {
-  server->send(200, "text/html", HomePageHtml);
+  sendHtmlContent(server.get(), HomePageHtml, sizeof(HomePageHtml));
   LOG_DBG("WEB", "Served root page");
 }
 
@@ -385,7 +390,9 @@ bool CrossPointWebServer::isEpubFile(const String& filename) const {
   return lower.endsWith(".epub");
 }
 
-void CrossPointWebServer::handleFileList() const { server->send(200, "text/html", FilesPageHtml); }
+void CrossPointWebServer::handleFileList() const {
+  sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
+}
 
 void CrossPointWebServer::handleFileListData() const {
   // Get current path from query string (default to root)
@@ -989,7 +996,7 @@ void CrossPointWebServer::handleDelete() const {
 }
 
 void CrossPointWebServer::handleSettingsPage() const {
-  server->send(200, "text/html", SettingsPageHtml);
+  sendHtmlContent(server.get(), SettingsPageHtml, sizeof(SettingsPageHtml));
   LOG_DBG("WEB", "Served settings page");
 }
 

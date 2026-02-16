@@ -1,8 +1,5 @@
 #pragma once
 #include <I18n.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <functional>
 #include <string>
@@ -137,10 +134,8 @@ struct SettingInfo {
 };
 
 class SettingsActivity final : public ActivityWithSubactivity {
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
   ButtonNavigator buttonNavigator;
-  bool updateRequired = false;
+
   int selectedCategoryIndex = 0;  // Currently selected category
   int selectedSettingIndex = 0;
   int settingsCount = 0;
@@ -157,9 +152,6 @@ class SettingsActivity final : public ActivityWithSubactivity {
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];
 
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render() const;
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
 
@@ -170,4 +162,5 @@ class SettingsActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
 };

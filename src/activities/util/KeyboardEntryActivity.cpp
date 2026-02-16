@@ -19,51 +19,14 @@ const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()
 // Shift state strings
 const char* const KeyboardEntryActivity::shiftString[3] = {"shift", "SHIFT", "LOCK"};
 
-void KeyboardEntryActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<KeyboardEntryActivity*>(param);
-  self->displayTaskLoop();
-}
-
-void KeyboardEntryActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
 void KeyboardEntryActivity::onEnter() {
   Activity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
-
   // Trigger first update
-  updateRequired = true;
-
-  xTaskCreate(&KeyboardEntryActivity::taskTrampoline, "KeyboardEntryActivity",
-              2048,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void KeyboardEntryActivity::onExit() {
-  Activity::onExit();
-
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
 int KeyboardEntryActivity::getRowLength(const int row) const {
   if (row < 0 || row >= NUM_ROWS) return 0;
@@ -150,7 +113,7 @@ void KeyboardEntryActivity::loop() {
 
     const int maxCol = getRowLength(selectedRow) - 1;
     if (selectedCol > maxCol) selectedCol = maxCol;
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] {
@@ -158,7 +121,7 @@ void KeyboardEntryActivity::loop() {
 
     const int maxCol = getRowLength(selectedRow) - 1;
     if (selectedCol > maxCol) selectedCol = maxCol;
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] {
@@ -184,7 +147,7 @@ void KeyboardEntryActivity::loop() {
       selectedCol = ButtonNavigator::previousIndex(selectedCol, maxCol + 1);
     }
 
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] {
@@ -209,13 +172,13 @@ void KeyboardEntryActivity::loop() {
     } else {
       selectedCol = ButtonNavigator::nextIndex(selectedCol, maxCol + 1);
     }
-    updateRequired = true;
+    requestUpdate();
   });
 
   // Selection
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     handleKeyPress();
-    updateRequired = true;
+    requestUpdate();
   }
 
   // Cancel
@@ -223,11 +186,11 @@ void KeyboardEntryActivity::loop() {
     if (onCancel) {
       onCancel();
     }
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void KeyboardEntryActivity::render() const {
+void KeyboardEntryActivity::render(Activity::RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();

@@ -208,30 +208,14 @@ bool Epub::parseTocNavFile() const {
   return true;
 }
 
-std::string Epub::getCssRulesCache() const { return cachePath + "/css_rules.cache"; }
-
-bool Epub::loadCssRulesFromCache() const {
-  FsFile cssCacheFile;
-  if (Storage.openFileForRead("EBP", getCssRulesCache(), cssCacheFile)) {
-    if (cssParser->loadFromCache(cssCacheFile)) {
-      cssCacheFile.close();
-      LOG_DBG("EBP", "Loaded CSS rules from cache");
-      return true;
-    }
-    cssCacheFile.close();
-    LOG_DBG("EBP", "CSS cache invalid, reparsing");
-  }
-  return false;
-}
-
 void Epub::parseCssFiles() const {
   if (cssFiles.empty()) {
     LOG_DBG("EBP", "No CSS files to parse, but CssParser created for inline styles");
   }
 
-  // Try to load from CSS cache first
-  if (!loadCssRulesFromCache()) {
-    // Cache miss - parse CSS files
+  // See if we have a cached version of the CSS rules
+  if (!cssParser->hasCache()) {
+    // No cache yet - parse CSS files
     for (const auto& cssPath : cssFiles) {
       LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
 
@@ -262,11 +246,10 @@ void Epub::parseCssFiles() const {
     }
 
     // Save to cache for next time
-    FsFile cssCacheFile;
-    if (Storage.openFileForWrite("EBP", getCssRulesCache(), cssCacheFile)) {
-      cssParser->saveToCache(cssCacheFile);
-      cssCacheFile.close();
+    if (!cssParser->saveToCache()) {
+      LOG_ERR("EBP", "Failed to save CSS rules to cache");
     }
+    cssParser->clear();
 
     LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files", cssParser->ruleCount(), cssFiles.size());
   }
@@ -279,11 +262,11 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   // Always create CssParser - needed for inline style parsing even without CSS files
-  cssParser.reset(new CssParser());
+  cssParser.reset(new CssParser(cachePath));
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
-    if (!skipLoadingCss && !loadCssRulesFromCache()) {
+    if (!skipLoadingCss && !cssParser->hasCache()) {
       LOG_DBG("EBP", "Warning: CSS rules cache not found, attempting to parse CSS files");
       // to get CSS file list
       if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
