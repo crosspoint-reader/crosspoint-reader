@@ -24,11 +24,6 @@ int EpubReaderChapterSelectionActivity::getPageItems() const {
   return std::max(1, availableHeight / lineHeight);
 }
 
-void EpubReaderChapterSelectionActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderChapterSelectionActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void EpubReaderChapterSelectionActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
@@ -36,35 +31,16 @@ void EpubReaderChapterSelectionActivity::onEnter() {
     return;
   }
 
-  renderingMutex = xSemaphoreCreateMutex();
-
   selectorIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
   if (selectorIndex == -1) {
     selectorIndex = 0;
   }
 
   // Trigger first update
-  updateRequired = true;
-  xTaskCreate(&EpubReaderChapterSelectionActivity::taskTrampoline, "EpubReaderChapterSelectionActivityTask",
-              4096,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
-void EpubReaderChapterSelectionActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void EpubReaderChapterSelectionActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void EpubReaderChapterSelectionActivity::loop() {
   if (subActivity) {
@@ -88,38 +64,26 @@ void EpubReaderChapterSelectionActivity::loop() {
 
   buttonNavigator.onNextRelease([this, totalItems] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this, totalItems] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
     selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
     selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    updateRequired = true;
+    requestUpdate();
   });
 }
 
-void EpubReaderChapterSelectionActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void EpubReaderChapterSelectionActivity::renderScreen() {
+void EpubReaderChapterSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

@@ -12,21 +12,15 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-void WifiSelectionActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<WifiSelectionActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
-
   // Load saved WiFi credentials - SD card operations need lock as we use SPI
   // for both
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  WIFI_STORE.loadFromFile();
-  xSemaphoreGive(renderingMutex);
+  {
+    RenderLock lock(*this);
+    WIFI_STORE.loadFromFile();
+  }
 
   // Reset state
   selectedNetworkIndex = 0;
@@ -49,13 +43,8 @@ void WifiSelectionActivity::onEnter() {
            mac[5]);
   cachedMacAddress = std::string(macStr);
 
-  // Task creation
-  xTaskCreate(&WifiSelectionActivity::taskTrampoline, "WifiSelectionTask",
-              4096,               // Stack size (larger for WiFi operations)
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  // Trigger first update to show scanning message
+  requestUpdate();
 
   // Attempt to auto-connect to the last network
   if (allowAutoConnect) {
@@ -70,7 +59,7 @@ void WifiSelectionActivity::onEnter() {
         usedSavedPassword = true;
         autoConnecting = true;
         attemptConnection();
-        updateRequired = true;
+        requestUpdate();
         return;
       }
     }
@@ -83,45 +72,25 @@ void WifiSelectionActivity::onEnter() {
 void WifiSelectionActivity::onExit() {
   Activity::onExit();
 
-  LOG_DBG("WIFI] [MEM", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
+  LOG_DBG("WIFI", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   // Stop any ongoing WiFi scan
   LOG_DBG("WIFI", "Deleting WiFi scan...");
   WiFi.scanDelete();
-  LOG_DBG("WIFI] [MEM", "Free heap after scanDelete: %d bytes", ESP.getFreeHeap());
+  LOG_DBG("WIFI", "Free heap after scanDelete: %d bytes", ESP.getFreeHeap());
 
   // Note: We do NOT disconnect WiFi here - the parent activity
   // (CrossPointWebServerActivity) manages WiFi connection state. We just clean
   // up the scan and task.
 
-  // Acquire mutex before deleting task to ensure task isn't using it
-  // This prevents hangs/crashes if the task holds the mutex when deleted
-  LOG_DBG("WIFI", "Acquiring rendering mutex before task deletion...");
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-
-  // Delete the display task (we now hold the mutex, so task is blocked if it
-  // needs it)
-  LOG_DBG("WIFI", "Deleting display task...");
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-    LOG_DBG("WIFI", "Display task deleted");
-  }
-
-  // Now safe to delete the mutex since we own it
-  LOG_DBG("WIFI", "Deleting mutex...");
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-  LOG_DBG("WIFI", "Mutex deleted");
-
-  LOG_DBG("WIFI] [MEM", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
+  LOG_DBG("WIFI", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
 
 void WifiSelectionActivity::startWifiScan() {
   autoConnecting = false;
   state = WifiSelectionState::SCANNING;
   networks.clear();
-  updateRequired = true;
+  requestUpdate();
 
   // Set WiFi mode to station
   WiFi.mode(WIFI_STA);
@@ -142,7 +111,7 @@ void WifiSelectionActivity::processWifiScanResults() {
 
   if (scanResult == WIFI_SCAN_FAILED) {
     state = WifiSelectionState::NETWORK_LIST;
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -191,7 +160,7 @@ void WifiSelectionActivity::processWifiScanResults() {
   WiFi.scanDelete();
   state = WifiSelectionState::NETWORK_LIST;
   selectedNetworkIndex = 0;
-  updateRequired = true;
+  requestUpdate();
 }
 
 void WifiSelectionActivity::selectNetwork(const int index) {
@@ -221,7 +190,6 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     // Show password entry
     state = WifiSelectionState::PASSWORD_ENTRY;
     // Don't allow screen updates while changing activity
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
     enterNewActivity(new KeyboardEntryActivity(
         renderer, mappedInput, "Enter WiFi Password",
         "",     // No initial text
@@ -234,11 +202,9 @@ void WifiSelectionActivity::selectNetwork(const int index) {
         },
         [this] {
           state = WifiSelectionState::NETWORK_LIST;
-          updateRequired = true;
           exitActivity();
+          requestUpdate();
         }));
-    updateRequired = true;
-    xSemaphoreGive(renderingMutex);
   } else {
     // Connect directly for open networks
     attemptConnection();
@@ -250,7 +216,7 @@ void WifiSelectionActivity::attemptConnection() {
   connectionStartTime = millis();
   connectedIP.clear();
   connectionError.clear();
-  updateRequired = true;
+  requestUpdate();
 
   WiFi.mode(WIFI_STA);
 
@@ -287,7 +253,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     if (!usedSavedPassword && !enteredPassword.empty()) {
       state = WifiSelectionState::SAVE_PROMPT;
       savePromptSelection = 0;  // Default to "Yes"
-      updateRequired = true;
+      requestUpdate();
     } else {
       // Using saved password or open network - complete immediately
       LOG_DBG("WIFI",
@@ -304,7 +270,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
       connectionError = "Error: Network not found";
     }
     state = WifiSelectionState::CONNECTION_FAILED;
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
@@ -313,7 +279,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     WiFi.disconnect();
     connectionError = "Error: Connection timeout";
     state = WifiSelectionState::CONNECTION_FAILED;
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 }
@@ -348,20 +314,19 @@ void WifiSelectionActivity::loop() {
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (savePromptSelection > 0) {
         savePromptSelection--;
-        updateRequired = true;
+        requestUpdate();
       }
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
                mappedInput.wasPressed(MappedInputManager::Button::Right)) {
       if (savePromptSelection < 1) {
         savePromptSelection++;
-        updateRequired = true;
+        requestUpdate();
       }
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (savePromptSelection == 0) {
         // User chose "Yes" - save the password
-        xSemaphoreTake(renderingMutex, portMAX_DELAY);
+        RenderLock lock(*this);
         WIFI_STORE.addCredential(selectedSSID, enteredPassword);
-        xSemaphoreGive(renderingMutex);
       }
       // Complete - parent will start web server
       onComplete(true);
@@ -378,20 +343,19 @@ void WifiSelectionActivity::loop() {
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (forgetPromptSelection > 0) {
         forgetPromptSelection--;
-        updateRequired = true;
+        requestUpdate();
       }
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
                mappedInput.wasPressed(MappedInputManager::Button::Right)) {
       if (forgetPromptSelection < 1) {
         forgetPromptSelection++;
-        updateRequired = true;
+        requestUpdate();
       }
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (forgetPromptSelection == 1) {
+        RenderLock lock(*this);
         // User chose "Forget network" - forget the network
-        xSemaphoreTake(renderingMutex, portMAX_DELAY);
         WIFI_STORE.removeCredential(selectedSSID);
-        xSemaphoreGive(renderingMutex);
         // Update the network list to reflect the change
         const auto network = find_if(networks.begin(), networks.end(),
                                      [this](const WifiNetworkInfo& net) { return net.ssid == selectedSSID; });
@@ -430,7 +394,7 @@ void WifiSelectionActivity::loop() {
         // Go back to network list on failure for non-saved credentials
         state = WifiSelectionState::NETWORK_LIST;
       }
-      updateRequired = true;
+      requestUpdate();
       return;
     }
   }
@@ -465,7 +429,7 @@ void WifiSelectionActivity::loop() {
         selectedSSID = networks[selectedNetworkIndex].ssid;
         state = WifiSelectionState::FORGET_PROMPT;
         forgetPromptSelection = 0;  // Default to "Cancel"
-        updateRequired = true;
+        requestUpdate();
         return;
       }
     }
@@ -473,12 +437,12 @@ void WifiSelectionActivity::loop() {
     // Handle navigation
     buttonNavigator.onNext([this] {
       selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
-      updateRequired = true;
+      requestUpdate();
     });
 
     buttonNavigator.onPrevious([this] {
       selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size());
-      updateRequired = true;
+      requestUpdate();
     });
   }
 }
@@ -500,32 +464,14 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
   return "    ";  // Very weak
 }
 
-void WifiSelectionActivity::displayTaskLoop() {
-  while (true) {
-    // If a subactivity is active, yield CPU time but don't render
-    if (subActivity) {
-      vTaskDelay(10 / portTICK_PERIOD_MS);
-      continue;
-    }
-
-    // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
-    // from the keyboard subactivity back to the main activity
-    if (state == WifiSelectionState::PASSWORD_ENTRY) {
-      vTaskDelay(10 / portTICK_PERIOD_MS);
-      continue;
-    }
-
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+void WifiSelectionActivity::render(Activity::RenderLock&&) {
+  // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
+  // from the keyboard subactivity back to the main activity
+  if (state == WifiSelectionState::PASSWORD_ENTRY) {
+    requestUpdateAndWait();
+    return;
   }
-}
 
-void WifiSelectionActivity::render() const {
   renderer.clearScreen();
 
   switch (state) {

@@ -2,6 +2,9 @@
 #include <cstdint>
 #include <iosfwd>
 
+// Forward declarations
+class FsFile;
+
 class CrossPointSettings {
  private:
   // Private constructor for singleton
@@ -181,6 +184,9 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+
+  // If count_only is true, returns the number of settings items that would be written.
+  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
 
   bool saveToFile() const;
   bool loadFromFile();
