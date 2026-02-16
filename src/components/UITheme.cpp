@@ -1,6 +1,7 @@
 #include "UITheme.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 
 #include <memory>
 
@@ -23,12 +24,12 @@ void UITheme::reload() {
 void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
   switch (type) {
     case CrossPointSettings::UI_THEME::CLASSIC:
-      Serial.printf("[%lu] [UI] Using Classic theme\n", millis());
+      LOG_DBG("UI", "Using Classic theme");
       currentTheme = new BaseTheme();
       currentMetrics = &BaseMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA:
-      Serial.printf("[%lu] [UI] Using Lyra theme\n", millis());
+      LOG_DBG("UI", "Using Lyra theme");
       currentTheme = new LyraTheme();
       currentMetrics = &LyraMetrics::values;
       break;

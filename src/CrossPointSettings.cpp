@@ -1,7 +1,7 @@
 #include "CrossPointSettings.h"
 
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
 
 #include <cstring>
@@ -121,7 +121,7 @@ bool CrossPointSettings::saveToFile() const {
   // New fields added at end for backward compatibility
   outputFile.close();
 
-  Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
+  LOG_DBG("CPS", "Settings saved to file");
   return true;
 }
 
@@ -134,7 +134,7 @@ bool CrossPointSettings::loadFromFile() {
   uint8_t version;
   serialization::readPod(inputFile, version);
   if (version != SETTINGS_FILE_VERSION) {
-    Serial.printf("[%lu] [CPS] Deserialization failed: Unknown version %u\n", millis(), version);
+    LOG_ERR("CPS", "Deserialization failed: Unknown version %u", version);
     inputFile.close();
     return false;
   }
@@ -233,7 +233,7 @@ bool CrossPointSettings::loadFromFile() {
   }
 
   inputFile.close();
-  Serial.printf("[%lu] [CPS] Settings loaded from file\n", millis());
+  LOG_DBG("CPS", "Settings loaded from file");
   return true;
 }
 

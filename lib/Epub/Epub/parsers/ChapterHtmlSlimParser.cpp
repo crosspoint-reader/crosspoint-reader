@@ -2,10 +2,11 @@
 
 #include <GfxRenderer.h>
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <expat.h>
 
 #include "../Page.h"
+#include "../htmlEntities.h"
 
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
@@ -168,7 +169,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
     }
 
-    Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
+    LOG_DBG("EHP", "Image alt: %s", alt.c_str());
 
     self->startNewTextBlock(centeredBlockStyle);
     self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
@@ -359,6 +360,28 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
+    // Detect U+00A0 (non-breaking space): UTF-8 encoding is 0xC2 0xA0
+    // Render a visible space without allowing a line break around it.
+    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
+      // Flush any pending text so style is applied correctly.
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+
+      // Add a standalone space that attaches to the previous word.
+      self->partWordBuffer[0] = ' ';
+      self->partWordBuffer[1] = '\0';
+      self->partWordBufferIndex = 1;
+      self->nextWordContinues = true;  // Attach space to previous word (no break).
+      self->flushPartWordBuffer();
+
+      // Ensure the next real word attaches to this space (no break).
+      self->nextWordContinues = true;
+
+      i++;  // Skip the second byte (0xA0)
+      continue;
+    }
+
     // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
     const XML_Char FEFF_BYTE_1 = static_cast<XML_Char>(0xEF);
     const XML_Char FEFF_BYTE_2 = static_cast<XML_Char>(0xBB);
@@ -386,11 +409,27 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // memory.
   // Spotted when reading Intermezzo, there are some really long text blocks in there.
   if (self->currentTextBlock->size() > 750) {
-    Serial.printf("[%lu] [EHP] Text block too long, splitting into multiple pages\n", millis());
+    LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, self->viewportWidth,
         [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
   }
+}
+
+void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const XML_Char* s, const int len) {
+  // Check if this looks like an entity reference (&...;)
+  if (len >= 3 && s[0] == '&' && s[len - 1] == ';') {
+    const char* utf8Value = lookupHtmlEntity(s, len);
+    if (utf8Value != nullptr) {
+      // Known entity: expand to its UTF-8 value
+      characterData(userData, utf8Value, strlen(utf8Value));
+      return;
+    }
+    // Unknown entity: preserve original &...; sequence
+    characterData(userData, s, len);
+    return;
+  }
+  // Not an entity we recognize - skip it
 }
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
@@ -477,9 +516,13 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   int done;
 
   if (!parser) {
-    Serial.printf("[%lu] [EHP] Couldn't allocate memory for parser\n", millis());
+    LOG_ERR("EHP", "Couldn't allocate memory for parser");
     return false;
   }
+
+  // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD
+  // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE
+  XML_SetDefaultHandlerExpand(parser, defaultHandlerExpand);
 
   FsFile file;
   if (!Storage.openFileForRead("EHP", filepath, file)) {
@@ -499,7 +542,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   do {
     void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
-      Serial.printf("[%lu] [EHP] Couldn't allocate memory for buffer\n", millis());
+      LOG_ERR("EHP", "Couldn't allocate memory for buffer");
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -511,7 +554,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     const size_t len = file.read(buf, 1024);
 
     if (len == 0 && file.available() > 0) {
-      Serial.printf("[%lu] [EHP] File read error\n", millis());
+      LOG_ERR("EHP", "File read error");
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -523,8 +566,8 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     done = file.available() == 0;
 
     if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [EHP] Parse error at line %lu:\n%s\n", millis(), XML_GetCurrentLineNumber(parser),
-                    XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
+              XML_ErrorString(XML_GetErrorCode(parser)));
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -568,7 +611,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
 void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock) {
-    Serial.printf("[%lu] [EHP] !! No text block to make pages for !!\n", millis());
+    LOG_ERR("EHP", "!! No text block to make pages for !!");
     return;
   }
 
