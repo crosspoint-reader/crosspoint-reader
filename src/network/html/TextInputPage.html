@@ -57,6 +57,7 @@
   <div class="container">
     <h1>&#9000; CrossPoint Text Input</h1>
     <p class="subtitle">Type your text and send it to the device</p>
+    <p class="subtitle" style="font-weight:600;color:#007bff;">Session PIN: {{SESSION_PIN}}</p>
     <textarea id="textInput" autofocus placeholder="Type your text here..."></textarea>
     <button class="btn btn-send" id="sendBtn" onclick="sendText()">Send to Device</button>
     <div class="status" id="status"></div>
@@ -80,7 +81,7 @@
         const resp = await fetch('/api/keyboard-input', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'text=' + encodeURIComponent(text)
+          body: 'pin={{SESSION_PIN}}&text=' + encodeURIComponent(text)
         });
         if (resp.ok) {
           statusEl.className = 'status success';

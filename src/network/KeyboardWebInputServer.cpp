@@ -2,6 +2,7 @@
 
 #include <ESPmDNS.h>
 #include <WiFi.h>
+#include <esp_random.h>
 #include <esp_wifi.h>
 
 #include "NetworkConstants.h"
@@ -72,6 +73,10 @@ bool KeyboardWebInputServer::start() {
 
   // Disable WiFi sleep for responsiveness
   WiFi.setSleep(false);
+
+  // Generate a session PIN for request validation
+  sessionPin = generateSessionPin();
+  Serial.printf("[%lu] [KB-WEB] Session PIN: %s\n", millis(), sessionPin.c_str());
 
   // Create and start web server
   server.reset(new WebServer(NetworkConstants::HTTP_PORT));
@@ -152,7 +157,27 @@ std::string KeyboardWebInputServer::getUrl() const {
 }
 
 std::string KeyboardWebInputServer::getWifiQRString() const {
-  return std::string("WIFI:S:") + NetworkConstants::AP_SSID + ";;";
+  const std::string escapedSsid = escapeWifiSpecialChars(NetworkConstants::AP_SSID);
+  return "WIFI:T:nopass;S:" + escapedSsid + ";;";
+}
+
+std::string KeyboardWebInputServer::escapeWifiSpecialChars(const std::string& input) {
+  std::string result;
+  result.reserve(input.size());
+  for (const char c : input) {
+    if (c == '\\' || c == ';' || c == ',' || c == ':' || c == '"') {
+      result += '\\';
+    }
+    result += c;
+  }
+  return result;
+}
+
+std::string KeyboardWebInputServer::generateSessionPin() {
+  const uint32_t pin = esp_random() % 10000;
+  char buf[5];
+  snprintf(buf, sizeof(buf), "%04u", pin);
+  return std::string(buf);
 }
 
 void KeyboardWebInputServer::setupRoutes() {
@@ -167,11 +192,21 @@ void KeyboardWebInputServer::setupRoutes() {
 }
 
 void KeyboardWebInputServer::handleRootPage() {
-  server->send(200, "text/html", TextInputPageHtml);
+  // Inject session PIN into the page so the client can include it in requests
+  String html(TextInputPageHtml);
+  html.replace("{{SESSION_PIN}}", sessionPin.c_str());
+  server->send(200, "text/html", html);
   Serial.printf("[%lu] [KB-WEB] Served text input page\n", millis());
 }
 
 void KeyboardWebInputServer::handleTextSubmit() {
+  // Validate session PIN
+  if (!server->hasArg("pin") || server->arg("pin").c_str() != sessionPin) {
+    Serial.printf("[%lu] [KB-WEB] Rejected request: invalid or missing session PIN\n", millis());
+    server->send(403, "text/plain", "Invalid session PIN");
+    return;
+  }
+
   if (!server->hasArg("text")) {
     server->send(400, "text/plain", "Missing 'text' parameter");
     return;
@@ -180,8 +215,7 @@ void KeyboardWebInputServer::handleTextSubmit() {
   receivedText = server->arg("text").c_str();
   textReceived = true;
 
-  Serial.printf("[%lu] [KB-WEB] Received text (%zu chars): %.40s%s\n", millis(), receivedText.length(),
-                receivedText.c_str(), receivedText.length() > 40 ? "..." : "");
+  Serial.printf("[%lu] [KB-WEB] Received text (%zu chars)\n", millis(), receivedText.length());
 
   server->send(200, "text/plain", "OK");
 }

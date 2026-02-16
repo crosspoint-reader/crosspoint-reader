@@ -63,9 +63,14 @@ class KeyboardWebInputServer {
 
   /**
    * Get the WiFi QR code string for connecting to the AP.
-   * Format: WIFI:S:<ssid>;;
+   * Format: WIFI:T:nopass;S:<ssid>;;
    */
   std::string getWifiQRString() const;
+
+  /**
+   * Get the session PIN displayed on screen for request validation.
+   */
+  std::string getSessionPin() const { return sessionPin; }
 
   /**
    * Get the device IP address.
@@ -82,8 +87,11 @@ class KeyboardWebInputServer {
   bool textReceived = false;
   std::string receivedText;
   std::string ipAddress;
+  std::string sessionPin;
   wifi_ps_type_t previousSleepMode = WIFI_PS_NONE;
 
+  static std::string generateSessionPin();
+  static std::string escapeWifiSpecialChars(const std::string& input);
   void setupRoutes();
   void handleRootPage();
   void handleTextSubmit();

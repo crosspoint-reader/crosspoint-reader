@@ -128,8 +128,13 @@ void KeyboardEntryActivity::loop() {
       webInputServer->handleClient();
       if (webInputServer->hasReceivedText()) {
         std::string received = webInputServer->consumeReceivedText();
-        if (maxLength > 0 && text.length() + received.length() > maxLength) {
-          received.resize(maxLength - text.length());
+        if (maxLength > 0) {
+          const size_t remaining = text.length() < maxLength ? maxLength - text.length() : 0;
+          if (remaining == 0) {
+            received.clear();
+          } else if (received.length() > remaining) {
+            received.resize(remaining);
+          }
         }
         text += received;
         stopWebInputServer();
