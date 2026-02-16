@@ -81,8 +81,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
   if (bookMetadata.coverItemHref.empty() && !opfParser.guideCoverPageHref.empty()) {
-    Serial.printf("[%lu] [EBP] No cover from metadata, trying guide cover page: %s\n", millis(),
-                  opfParser.guideCoverPageHref.c_str());
+    LOG_DBG("EBP", "No cover from metadata, trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
     size_t coverPageSize;
     uint8_t* coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
     if (coverPageData) {
@@ -121,7 +120,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
 
       if (!imageRef.empty()) {
         bookMetadata.coverItemHref = FsHelpers::normalisePath(coverPageBase + imageRef);
-        Serial.printf("[%lu] [EBP] Found cover image from guide: %s\n", millis(), bookMetadata.coverItemHref.c_str());
+        LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
       }
     }
   }
