@@ -11,7 +11,7 @@ bool FontDecompressor::init() {
   return true;
 }
 
-void FontDecompressor::deinit() {
+void FontDecompressor::freeAllEntries() {
   for (auto& entry : cache) {
     if (entry.data) {
       free(entry.data);
@@ -21,14 +21,10 @@ void FontDecompressor::deinit() {
   }
 }
 
+void FontDecompressor::deinit() { freeAllEntries(); }
+
 void FontDecompressor::clearCache() {
-  for (auto& entry : cache) {
-    if (entry.data) {
-      free(entry.data);
-      entry.data = nullptr;
-    }
-    entry.valid = false;
-  }
+  freeAllEntries();
   accessCounter = 0;
 }
 

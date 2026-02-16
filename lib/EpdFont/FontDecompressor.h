@@ -34,6 +34,7 @@ class FontDecompressor {
   CacheEntry cache[CACHE_SLOTS] = {};
   uint32_t accessCounter = 0;
 
+  void freeAllEntries();
   uint16_t getGroupIndex(const EpdFontData* fontData, uint16_t glyphIndex);
   CacheEntry* findInCache(const EpdFontData* fontData, uint16_t groupIndex);
   CacheEntry* findEvictionCandidate();
