@@ -39,7 +39,7 @@ uint16_t FontDecompressor::getGroupIndex(const EpdFontData* fontData, uint16_t g
       return i;
     }
   }
-  return 0;
+  return fontData->groupCount;  // sentinel = not found
 }
 
 FontDecompressor::CacheEntry* FontDecompressor::findInCache(const EpdFontData* fontData, uint16_t groupIndex) {
@@ -117,6 +117,10 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
   }
 
   uint16_t groupIndex = getGroupIndex(fontData, glyphIndex);
+  if (groupIndex >= fontData->groupCount) {
+    LOG_ERR("FDC", "Glyph %u not found in any group", glyphIndex);
+    return nullptr;
+  }
 
   // Check cache
   CacheEntry* entry = findInCache(fontData, groupIndex);

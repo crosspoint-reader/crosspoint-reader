@@ -79,6 +79,8 @@ def verify_font_file(filepath):
         return (font_name, False, "could not find Groups array")
 
     groups = parse_groups(groups_array_match.group(1))
+    if not groups:
+        return (font_name, False, "Groups array parsed to 0 entries; check format")
 
     # Extract glyphs
     glyphs_match = re.search(
