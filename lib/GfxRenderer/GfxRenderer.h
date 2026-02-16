@@ -110,6 +110,9 @@ class GfxRenderer {
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
+  std::vector<std::string> wrappedText(int fontId, const char* text, int maxWidth, int maxLines,
+                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;

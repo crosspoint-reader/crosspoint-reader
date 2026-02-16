@@ -679,6 +679,80 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   return item.empty() ? ellipsis : item + ellipsis;
 }
 
+std::vector<std::string> GfxRenderer::wrappedText(
+    const int fontId,
+    const char* text,
+    const int maxWidth,
+    const int maxLines,
+    const EpdFontFamily::Style style) const
+{
+    std::vector<std::string> lines;
+
+    if (!text || maxWidth <= 0 || maxLines <= 0)
+        return lines;
+
+    std::string remaining = text;
+    std::string currentLine;
+
+    while (!remaining.empty())
+    {
+        if ((int)lines.size() == maxLines - 1)
+        {
+            std::string lastLine = truncatedText(fontId, remaining.c_str(), maxWidth, style);
+            lines.push_back(lastLine);
+            return lines;
+        }
+
+        // Find next word
+        size_t spacePos = remaining.find(' ');
+        std::string word;
+
+        if (spacePos == std::string::npos)
+        {
+            word = remaining;
+            remaining.clear();
+        }
+        else
+        {
+            word = remaining.substr(0, spacePos);
+            remaining.erase(0, spacePos + 1);
+        }
+
+        std::string testLine = currentLine.empty()
+            ? word
+            : currentLine + " " + word;
+
+        if (getTextWidth(fontId, testLine.c_str(), style) <= maxWidth)
+        {
+            currentLine = testLine;
+        }
+        else
+        {
+            if (!currentLine.empty())
+            {
+                lines.push_back(currentLine);
+                currentLine = word;
+            }
+            else
+            {
+                // If a single word longer than maxWidth, we will truncate it and return
+                // this is to avoid complicated splitting rules since they are different 
+                // between languages. This results in an aesthetically pleasing end.
+                std::string truncated = truncatedText(fontId, word.c_str(), maxWidth, style);
+                lines.push_back(truncated);
+                return lines;
+            }
+        }
+    }
+
+    if (!currentLine.empty() && (int)lines.size() < maxLines)
+    {
+        lines.push_back(currentLine);
+    }
+
+    return lines;
+}
+
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
   switch (orientation) {
