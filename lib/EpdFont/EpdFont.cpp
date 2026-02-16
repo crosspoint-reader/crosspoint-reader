@@ -74,24 +74,24 @@ bool EpdFont::hasPrintableChars(const char* string, const bool kerningEnabled) c
   return w > 0 || h > 0;
 }
 
-int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
-  if (!data->kernPairs || data->kernPairCount == 0) {
-    return 0;
+template <typename T>
+const T* binarySearchPairs(const T* pairs, const uint32_t pairCount, const uint32_t leftCp, const uint32_t rightCp) {
+  if (!pairs || pairCount == 0) {
+    return nullptr;
   }
   if (leftCp > 0xFFFF || rightCp > 0xFFFF) {
-    return 0;
+    return nullptr;
   }
 
   const uint32_t key = (leftCp << 16) | rightCp;
-  const EpdKernPair* pairs = data->kernPairs;
   int left = 0;
-  int right = static_cast<int>(data->kernPairCount) - 1;
+  int right = static_cast<int>(pairCount) - 1;
 
   while (left <= right) {
     const int mid = left + (right - left) / 2;
     const uint32_t midKey = pairs[mid].pair;
     if (midKey == key) {
-      return pairs[mid].adjust;
+      return &pairs[mid];
     }
     if (midKey < key) {
       left = mid + 1;
@@ -99,36 +99,22 @@ int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const 
       right = mid - 1;
     }
   }
+  return nullptr;
+}
 
+int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
+  if (const auto* found = binarySearchPairs(data->kernPairs, data->kernPairCount, leftCp, rightCp))
+  {
+    return found->adjust;
+  }
   return 0;
 }
 
 uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) const {
-  if (!data->ligaturePairs || data->ligaturePairCount == 0) {
-    return 0;
+  if (const auto* found = binarySearchPairs(data->ligaturePairs, data->ligaturePairCount, leftCp, rightCp))
+  {
+    return found->ligatureCp;
   }
-  if (leftCp > 0xFFFF || rightCp > 0xFFFF) {
-    return 0;
-  }
-
-  const uint32_t key = (leftCp << 16) | rightCp;
-  const EpdLigaturePair* pairs = data->ligaturePairs;
-  int left = 0;
-  int right = static_cast<int>(data->ligaturePairCount) - 1;
-
-  while (left <= right) {
-    const int mid = left + (right - left) / 2;
-    const uint32_t midKey = pairs[mid].pair;
-    if (midKey == key) {
-      return pairs[mid].ligatureCp;
-    }
-    if (midKey < key) {
-      left = mid + 1;
-    } else {
-      right = mid - 1;
-    }
-  }
-
   return 0;
 }
 
