@@ -200,9 +200,10 @@ void KOReaderSyncActivity::onEnter() {
           auto* self = static_cast<KOReaderSyncActivity*>(param);
           // Sync time first
           syncTimeWithNTP();
-          xSemaphoreTake(self->renderingMutex, portMAX_DELAY);
-          self->statusMessage = "Calculating document hash...";
-          xSemaphoreGive(self->renderingMutex);
+          {
+            RenderLock lock(*self);
+            self->statusMessage = "Calculating document hash...";
+          }
           self->requestUpdate();
           self->performSync();
           vTaskDelete(nullptr);
