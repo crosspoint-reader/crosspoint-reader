@@ -1,7 +1,7 @@
 #include "PngToFramebufferConverter.h"
 
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <PNGdec.h>
 #include <SDCardManager.h>
 #include <SdFat.h>
@@ -216,14 +216,13 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
   size_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < MIN_FREE_HEAP_FOR_PNG) {
-    Serial.printf("[%lu] [PNG] Not enough heap for PNG decoder (%u free, need %u)\n", millis(), freeHeap,
-                  MIN_FREE_HEAP_FOR_PNG);
+    LOG_ERR("PNG", "Not enough heap for PNG decoder (%u free, need %u)", freeHeap, MIN_FREE_HEAP_FOR_PNG);
     return false;
   }
 
   PNG* png = new (std::nothrow) PNG();
   if (!png) {
-    Serial.printf("[%lu] [PNG] Failed to allocate PNG decoder for dimensions\n", millis());
+    LOG_ERR("PNG", "Failed to allocate PNG decoder for dimensions");
     return false;
   }
 
@@ -231,7 +230,7 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
                      nullptr);
 
   if (rc != 0) {
-    Serial.printf("[%lu] [PNG] Failed to open PNG for dimensions: %d\n", millis(), rc);
+    LOG_ERR("PNG", "Failed to open PNG for dimensions: %d", rc);
     delete png;
     return false;
   }
@@ -246,19 +245,18 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
 
 bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
                                                     const RenderConfig& config) {
-  Serial.printf("[%lu] [PNG] Decoding PNG: %s\n", millis(), imagePath.c_str());
+  LOG_DBG("PNG", "Decoding PNG: %s", imagePath.c_str());
 
   size_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < MIN_FREE_HEAP_FOR_PNG) {
-    Serial.printf("[%lu] [PNG] Not enough heap for PNG decoder (%u free, need %u)\n", millis(), freeHeap,
-                  MIN_FREE_HEAP_FOR_PNG);
+    LOG_ERR("PNG", "Not enough heap for PNG decoder (%u free, need %u)", freeHeap, MIN_FREE_HEAP_FOR_PNG);
     return false;
   }
 
   // Heap-allocate PNG decoder (~42 KB) - freed at end of function
   PNG* png = new (std::nothrow) PNG();
   if (!png) {
-    Serial.printf("[%lu] [PNG] Failed to allocate PNG decoder\n", millis());
+    LOG_ERR("PNG", "Failed to allocate PNG decoder");
     return false;
   }
 
@@ -271,7 +269,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
                      pngDrawCallback);
   if (rc != PNG_SUCCESS) {
-    Serial.printf("[%lu] [PNG] Failed to open PNG: %d\n", millis(), rc);
+    LOG_ERR("PNG", "Failed to open PNG: %d", rc);
     delete png;
     return false;
   }
@@ -303,8 +301,8 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   }
   ctx.lastDstY = -1;  // Reset row tracking
 
-  Serial.printf("[%lu] [PNG] PNG %dx%d -> %dx%d (scale %.2f), bpp: %d\n", millis(), ctx.srcWidth, ctx.srcHeight,
-                ctx.dstWidth, ctx.dstHeight, ctx.scale, png->getBpp());
+  LOG_DBG("PNG", "PNG %dx%d -> %dx%d (scale %.2f), bpp: %d", ctx.srcWidth, ctx.srcHeight, ctx.dstWidth, ctx.dstHeight,
+          ctx.scale, png->getBpp());
 
   if (png->getBpp() != 8) {
     warnUnsupportedFeature("bit depth (" + std::to_string(png->getBpp()) + "bpp)", imagePath);
@@ -314,7 +312,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   const size_t grayBufSize = PNG_MAX_BUFFERED_PIXELS / 2;
   ctx.grayLineBuffer = static_cast<uint8_t*>(malloc(grayBufSize));
   if (!ctx.grayLineBuffer) {
-    Serial.printf("[%lu] [PNG] Failed to allocate gray line buffer\n", millis());
+    LOG_ERR("PNG", "Failed to allocate gray line buffer");
     png->close();
     delete png;
     return false;
@@ -324,7 +322,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.caching = !config.cachePath.empty();
   if (ctx.caching) {
     if (!ctx.cache.allocate(ctx.dstWidth, ctx.dstHeight, config.x, config.y)) {
-      Serial.printf("[%lu] [PNG] Failed to allocate cache buffer, continuing without caching\n", millis());
+      LOG_ERR("PNG", "Failed to allocate cache buffer, continuing without caching");
       ctx.caching = false;
     }
   }
@@ -337,7 +335,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.grayLineBuffer = nullptr;
 
   if (rc != PNG_SUCCESS) {
-    Serial.printf("[%lu] [PNG] Decode failed: %d\n", millis(), rc);
+    LOG_ERR("PNG", "Decode failed: %d", rc);
     png->close();
     delete png;
     return false;
@@ -345,7 +343,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   png->close();
   delete png;
-  Serial.printf("[%lu] [PNG] PNG decoding complete - render time: %lu ms\n", millis(), decodeTime);
+  LOG_DBG("PNG", "PNG decoding complete - render time: %lu ms", decodeTime);
 
   // Write cache file if caching was enabled and buffer was allocated
   if (ctx.caching) {

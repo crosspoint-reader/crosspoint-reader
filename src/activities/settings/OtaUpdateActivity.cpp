@@ -21,33 +21,37 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
 
   LOG_DBG("OTA", "WiFi connected, checking for update");
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = CHECKING_FOR_UPDATE;
-  xSemaphoreGive(renderingMutex);
+  {
+    RenderLock lock(*this);
+    state = CHECKING_FOR_UPDATE;
+  }
   requestUpdateAndWait();
 
   const auto res = updater.checkForUpdate();
   if (res != OtaUpdater::OK) {
     LOG_DBG("OTA", "Update check failed: %d", res);
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    state = FAILED;
-    xSemaphoreGive(renderingMutex);
+    {
+      RenderLock lock(*this);
+      state = FAILED;
+    }
     requestUpdate();
     return;
   }
 
   if (!updater.isUpdateNewer()) {
     LOG_DBG("OTA", "No new update available");
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    state = NO_UPDATE;
-    xSemaphoreGive(renderingMutex);
+    {
+      RenderLock lock(*this);
+      state = NO_UPDATE;
+    }
     requestUpdate();
     return;
   }
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = WAITING_CONFIRMATION;
-  xSemaphoreGive(renderingMutex);
+  {
+    RenderLock lock(*this);
+    state = WAITING_CONFIRMATION;
+  }
   requestUpdate();
 }
 

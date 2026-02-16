@@ -245,9 +245,10 @@ void WifiSelectionActivity::checkConnectionStatus() {
 
     // Save this as the last connected network - SD card operations need lock as
     // we use SPI for both
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    WIFI_STORE.setLastConnectedSsid(selectedSSID);
-    xSemaphoreGive(renderingMutex);
+    {
+      RenderLock lock(*this);
+      WIFI_STORE.setLastConnectedSsid(selectedSSID);
+    }
 
     // If we entered a new password, ask if user wants to save it
     // Otherwise, immediately complete so parent can start web server

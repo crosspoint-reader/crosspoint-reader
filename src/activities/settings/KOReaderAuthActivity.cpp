@@ -15,18 +15,20 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();
 
   if (!success) {
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    state = FAILED;
-    errorMessage = tr(STR_WIFI_CONN_FAILED);
-    xSemaphoreGive(renderingMutex);
+    {
+      RenderLock lock(*this);
+      state = FAILED;
+      errorMessage = tr(STR_WIFI_CONN_FAILED);
+    }
     requestUpdate();
     return;
   }
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = AUTHENTICATING;
-  statusMessage = tr(STR_AUTHENTICATING);
-  xSemaphoreGive(renderingMutex);
+  {
+    RenderLock lock(*this);
+    state = AUTHENTICATING;
+    statusMessage = tr(STR_AUTHENTICATING);
+  }
   requestUpdate();
 
   performAuthentication();
@@ -35,15 +37,16 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
 void KOReaderAuthActivity::performAuthentication() {
   const auto result = KOReaderSyncClient::authenticate();
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (result == KOReaderSyncClient::OK) {
-    state = SUCCESS;
-    statusMessage = tr(STR_AUTH_SUCCESS);
-  } else {
-    state = FAILED;
-    errorMessage = KOReaderSyncClient::errorString(result);
+  {
+    RenderLock lock(*this);
+    if (result == KOReaderSyncClient::OK) {
+      state = SUCCESS;
+      statusMessage = tr(STR_AUTH_SUCCESS);
+    } else {
+      state = FAILED;
+      errorMessage = KOReaderSyncClient::errorString(result);
+    }
   }
-  xSemaphoreGive(renderingMutex);
   requestUpdate();
 }
 

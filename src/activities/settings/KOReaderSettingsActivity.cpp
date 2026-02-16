@@ -123,7 +123,6 @@ void KOReaderSettingsActivity::handleSelection() {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
-      xSemaphoreGive(renderingMutex);
       return;
     }
     exitActivity();

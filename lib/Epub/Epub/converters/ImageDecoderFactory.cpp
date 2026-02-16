@@ -1,6 +1,6 @@
 #include "ImageDecoderFactory.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 
 #include <memory>
 #include <string>
@@ -35,7 +35,7 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
     return pngDecoder.get();
   }
 
-  Serial.printf("[%lu] [DEC] No decoder found for image: %s\n", millis(), imagePath.c_str());
+  LOG_ERR("DEC", "No decoder found for image: %s", imagePath.c_str());
   return nullptr;
 }
 
