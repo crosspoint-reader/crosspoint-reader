@@ -7,6 +7,12 @@ struct WifiCredential {
   std::string password;  // Stored obfuscated in file
 };
 
+class WifiCredentialStore;
+namespace JsonSettingsIO {
+bool saveWifi(const WifiCredentialStore& store, const char* path);
+bool loadWifi(WifiCredentialStore& store, const char* json);
+}  // namespace JsonSettingsIO
+
 /**
  * Singleton class for storing WiFi credentials on the SD card.
  * Credentials are stored in /sd/.crosspoint/wifi.bin with basic
@@ -23,8 +29,13 @@ class WifiCredentialStore {
   // Private constructor for singleton
   WifiCredentialStore() = default;
 
-  // XOR obfuscation (symmetric - same for encode/decode)
+  // XOR obfuscation (symmetric - same for encode/decode, used by binary migration)
   void obfuscate(std::string& data) const;
+
+  bool loadFromBinaryFile();
+
+  friend bool JsonSettingsIO::saveWifi(const WifiCredentialStore&, const char*);
+  friend bool JsonSettingsIO::loadWifi(WifiCredentialStore&, const char*);
 
  public:
   // Delete copy constructor and assignment

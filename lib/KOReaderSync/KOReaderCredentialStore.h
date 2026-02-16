@@ -8,6 +8,12 @@ enum class DocumentMatchMethod : uint8_t {
   BINARY = 1,    // Match by partial MD5 of file content (more accurate, but files must be identical)
 };
 
+class KOReaderCredentialStore;
+namespace JsonSettingsIO {
+bool saveKOReader(const KOReaderCredentialStore& store, const char* path);
+bool loadKOReader(KOReaderCredentialStore& store, const char* json);
+}  // namespace JsonSettingsIO
+
 /**
  * Singleton class for storing KOReader sync credentials on the SD card.
  * Credentials are stored in /sd/.crosspoint/koreader.bin with basic
@@ -24,8 +30,13 @@ class KOReaderCredentialStore {
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
 
-  // XOR obfuscation (symmetric - same for encode/decode)
+  // XOR obfuscation (symmetric - same for encode/decode, used by binary migration)
   void obfuscate(std::string& data) const;
+
+  bool loadFromBinaryFile();
+
+  friend bool JsonSettingsIO::saveKOReader(const KOReaderCredentialStore&, const char*);
+  friend bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore&, const char*);
 
  public:
   // Delete copy constructor and assignment

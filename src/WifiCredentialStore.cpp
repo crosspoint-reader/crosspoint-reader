@@ -1,18 +1,22 @@
 #include "WifiCredentialStore.h"
 
 #include <HalStorage.h>
+#include <JsonSettingsIO.h>
 #include <Logging.h>
+#include <ObfuscationUtils.h>
 #include <Serialization.h>
 
 // Initialize the static instance
 WifiCredentialStore WifiCredentialStore::instance;
 
 namespace {
-// File format version
-constexpr uint8_t WIFI_FILE_VERSION = 2;  // Increased version
+// File format version (for binary migration)
+constexpr uint8_t WIFI_FILE_VERSION = 2;
 
-// WiFi credentials file path
-constexpr char WIFI_FILE[] = "/.crosspoint/wifi.bin";
+// File paths
+constexpr char WIFI_FILE_BIN[] = "/.crosspoint/wifi.bin";
+constexpr char WIFI_FILE_JSON[] = "/.crosspoint/wifi.json";
+constexpr char WIFI_FILE_BAK[] = "/.crosspoint/wifi.bin.bak";
 
 // Obfuscation key - "CrossPoint" in ASCII
 // This is NOT cryptographic security, just prevents casual file reading
@@ -28,43 +32,38 @@ void WifiCredentialStore::obfuscate(std::string& data) const {
 }
 
 bool WifiCredentialStore::saveToFile() const {
-  // Make sure the directory exists
   Storage.mkdir("/.crosspoint");
-
-  FsFile file;
-  if (!Storage.openFileForWrite("WCS", WIFI_FILE, file)) {
-    return false;
-  }
-
-  // Write header
-  serialization::writePod(file, WIFI_FILE_VERSION);
-  serialization::writeString(file, lastConnectedSsid);  // Save last connected SSID
-  serialization::writePod(file, static_cast<uint8_t>(credentials.size()));
-
-  // Write each credential
-  for (const auto& cred : credentials) {
-    // Write SSID (plaintext - not sensitive)
-    serialization::writeString(file, cred.ssid);
-    LOG_DBG("WCS", "Saving SSID: %s, password length: %zu", cred.ssid.c_str(), cred.password.size());
-
-    // Write password (obfuscated)
-    std::string obfuscatedPwd = cred.password;
-    obfuscate(obfuscatedPwd);
-    serialization::writeString(file, obfuscatedPwd);
-  }
-
-  file.close();
-  LOG_DBG("WCS", "Saved %zu WiFi credentials to file", credentials.size());
-  return true;
+  return JsonSettingsIO::saveWifi(*this, WIFI_FILE_JSON);
 }
 
 bool WifiCredentialStore::loadFromFile() {
+  // Try JSON first
+  if (Storage.exists(WIFI_FILE_JSON)) {
+    String json = Storage.readFile(WIFI_FILE_JSON);
+    if (!json.isEmpty()) {
+      return JsonSettingsIO::loadWifi(*this, json.c_str());
+    }
+  }
+
+  // Fall back to binary migration
+  if (Storage.exists(WIFI_FILE_BIN)) {
+    if (loadFromBinaryFile()) {
+      saveToFile();
+      Storage.rename(WIFI_FILE_BIN, WIFI_FILE_BAK);
+      LOG_DBG("WCS", "Migrated wifi.bin to wifi.json");
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool WifiCredentialStore::loadFromBinaryFile() {
   FsFile file;
-  if (!Storage.openFileForRead("WCS", WIFI_FILE, file)) {
+  if (!Storage.openFileForRead("WCS", WIFI_FILE_BIN, file)) {
     return false;
   }
 
-  // Read and verify version
   uint8_t version;
   serialization::readPod(file, version);
   if (version > WIFI_FILE_VERSION) {
@@ -79,29 +78,20 @@ bool WifiCredentialStore::loadFromFile() {
     lastConnectedSsid.clear();
   }
 
-  // Read credential count
   uint8_t count;
   serialization::readPod(file, count);
 
-  // Read credentials
   credentials.clear();
   for (uint8_t i = 0; i < count && i < MAX_NETWORKS; i++) {
     WifiCredential cred;
-
-    // Read SSID
     serialization::readString(file, cred.ssid);
-
-    // Read and deobfuscate password
     serialization::readString(file, cred.password);
-    LOG_DBG("WCS", "Loaded SSID: %s, obfuscated password length: %zu", cred.ssid.c_str(), cred.password.size());
-    obfuscate(cred.password);  // XOR is symmetric, so same function deobfuscates
-    LOG_DBG("WCS", "After deobfuscation, password length: %zu", cred.password.size());
-
+    obfuscate(cred.password);
     credentials.push_back(cred);
   }
 
   file.close();
-  LOG_DBG("WCS", "Loaded %zu WiFi credentials from file", credentials.size());
+  LOG_DBG("WCS", "Loaded %zu WiFi credentials from binary file", credentials.size());
   return true;
 }
 
