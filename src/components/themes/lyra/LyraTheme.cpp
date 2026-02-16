@@ -275,8 +275,8 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
            i++) {
         std::string coverPath = recentBooks[i].coverBmpPath;
         int tileX = LyraMetrics::values.contentSidePadding + tileWidth * i;
-        renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                              tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight);
+        renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection, tileWidth - 2 * hPaddingInSelection,
+                          LyraMetrics::values.homeCoverHeight);
         if (!coverPath.empty()) {
           const std::string coverBmpPath = UITheme::getCoverThumbPath(coverPath, LyraMetrics::values.homeCoverHeight);
 
@@ -293,7 +293,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
               float cropX = 1.0f - (tileRatio / ratio);
               renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
                                   tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight, cropX);
-            } 
+            }
             file.close();
           }
         }
