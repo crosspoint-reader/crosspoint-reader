@@ -40,7 +40,8 @@ void BmpViewerActivity::onEnter() {
     renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2, "Could not open file");
   }
 
-  GUI.drawButtonHints(renderer, "Back", "", "", "");
+  const auto labels = mappedInput.mapLabels("« Back", "", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
