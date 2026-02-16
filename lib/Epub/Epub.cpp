@@ -328,7 +328,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   // Always create CssParser - needed for inline style parsing even without CSS files
-  cssParser.reset(new CssParser());
+  cssParser.reset(new CssParser(cachePath));
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
