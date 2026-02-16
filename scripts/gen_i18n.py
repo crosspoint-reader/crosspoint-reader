@@ -560,14 +560,20 @@ def _write_file(path: str, lines: List[str]) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
-    if len(sys.argv) != 3:
-        print("Usage: python gen_i18n.py <translations_dir> <output_dir>")
-        print("Example: python gen_i18n.py lib/I18n/translations lib/I18n/")
-        sys.exit(1)
+def main(translations_dir=None, output_dir=None) -> None:
+    # Default paths (relative to project root)
+    default_translations_dir = "lib/I18n/translations"
+    default_output_dir = "lib/I18n/"
 
-    translations_dir = sys.argv[1]
-    output_dir = sys.argv[2]
+    if translations_dir is None or output_dir is None:
+        if len(sys.argv) == 3:
+            translations_dir = sys.argv[1]
+            output_dir = sys.argv[2]
+        else:
+            # Default for no arguments or weird arguments (e.g. SCons)
+            translations_dir = default_translations_dir
+            output_dir = default_output_dir
+
 
     if not os.path.isdir(translations_dir):
         print(f"Error: Translations directory not found: {translations_dir}")
@@ -605,3 +611,10 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+else:
+    try:
+        Import("env")
+        print("Running i18n generation script from PlatformIO...")
+        main()
+    except NameError:
+        pass
