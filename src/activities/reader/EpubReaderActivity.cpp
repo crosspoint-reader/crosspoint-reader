@@ -441,21 +441,19 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
       auto doDelete = [this, bookPath, cachePath](bool confirmed) {
         if (confirmed) {
+          this->skipNextButtonCheck = true;
           xSemaphoreTake(renderingMutex, portMAX_DELAY);
-          APP_STATE.openEpubPath = "";
-          APP_STATE.saveToFile();
-
-          section.reset();
-          epub.reset();
           if (Storage.remove(bookPath.c_str())) {
+            APP_STATE.openEpubPath = "";
+            APP_STATE.saveToFile();
+            section.reset();
+            epub.reset();
             RECENT_BOOKS.removeBook(bookPath);
             RECENT_BOOKS.saveToFile();
             Storage.removeDir(cachePath.c_str());
           }
           xSemaphoreGive(renderingMutex);
-
           this->pendingGoHome = true;
-          this->skipNextButtonCheck = true;
         }
         this->pendingSubactivityExit = true;
       };
