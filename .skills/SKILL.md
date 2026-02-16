@@ -1,4 +1,4 @@
-# CrossPoint Reader Development Guide (CLAUDE.md)
+# CrossPoint Reader Development Guide
 
 Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3)
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
@@ -532,7 +532,6 @@ docs/<topic>                      # Documentation updates
 
 <optional detailed description>
 
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 ```
 
 **Types**: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`
@@ -545,8 +544,6 @@ Implements progress tracking for book downloads using
 UITheme progress bar component with heap-safe updates.
 
 Tested in all 4 orientations with 5MB+ files.
-
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 ```
 
 ### When to Commit
