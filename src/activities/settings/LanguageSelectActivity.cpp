@@ -6,36 +6,18 @@
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
-void LanguageSelectActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<LanguageSelectActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void LanguageSelectActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   totalItems = getLanguageCount();
-  renderingMutex = xSemaphoreCreateMutex();
 
   // Set current selection based on current language
   selectedIndex = static_cast<int>(I18N.getLanguage());
 
-  updateRequired = false;  // Don't trigger render immediately to avoid race with parent activity
-
-  xTaskCreate(&LanguageSelectActivity::taskTrampoline, "LanguageSelectTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
-void LanguageSelectActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void LanguageSelectActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void LanguageSelectActivity::loop() {
   if (subActivity) {
@@ -56,44 +38,25 @@ void LanguageSelectActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
       mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     selectedIndex = (selectedIndex + totalItems - 1) % totalItems;
-    updateRequired = true;
+    requestUpdate();
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     selectedIndex = (selectedIndex + 1) % totalItems;
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
 void LanguageSelectActivity::handleSelection() {
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-
-  // Set the selected language (setLanguage internally calls saveSettings)
-  I18N.setLanguage(static_cast<Language>(selectedIndex));
-
-  xSemaphoreGive(renderingMutex);
+  {
+    RenderLock lock(*this);
+    I18N.setLanguage(static_cast<Language>(selectedIndex));
+  }
 
   // Return to previous page
   onBack();
 }
 
-void LanguageSelectActivity::displayTaskLoop() {
-  // Wait for parent activity's rendering to complete (screen refresh takes ~422ms)
-  // Wait 500ms to be safe and avoid race conditions with parent activity
-  vTaskDelay(500 / portTICK_PERIOD_MS);
-  updateRequired = true;
-
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void LanguageSelectActivity::render() {
+void LanguageSelectActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

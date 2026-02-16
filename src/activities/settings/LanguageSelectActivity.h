@@ -22,18 +22,12 @@ class LanguageSelectActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
 
  private:
-  static void taskTrampoline(void* param);
-  void displayTaskLoop();
-  void render();
   void handleSelection();
 
   std::function<void()> onBack;
   int selectedIndex = 0;
   int totalItems = 0;
-
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-  volatile bool updateRequired = false;
 };
