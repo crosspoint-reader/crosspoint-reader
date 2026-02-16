@@ -2,7 +2,6 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
-#include "Logging.h"
 #include <JpegToBmpConverter.h>
 #include <ZipFile.h>
 
@@ -10,30 +9,27 @@
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
+#include "Logging.h"
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
   size_t containerSize;
 
-  // Get file size without loading it all into heap
   if (!getItemSize(containerPath, &containerSize)) {
     LOG_ERR("EBP", "Could not find or size META-INF/container.xml");
     return false;
   }
 
   ContainerParser containerParser(containerSize);
-
   if (!containerParser.setup()) {
     return false;
   }
 
-  // Stream read (reusing your existing stream logic)
   if (!readItemContentsToStream(containerPath, containerParser, 512)) {
     LOG_ERR("EBP", "Could not read META-INF/container.xml");
     return false;
   }
 
-  // Extract the result
   if (containerParser.fullPath.empty()) {
     LOG_ERR("EBP", "Could not find valid rootfile in container.xml");
     return false;
@@ -51,7 +47,6 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   }
 
   contentBasePath = contentOpfFilePath.substr(0, contentOpfFilePath.find_last_of('/') + 1);
-
   LOG_INF("EBP", "Parsing content.opf: %s", contentOpfFilePath.c_str());
 
   size_t contentOpfSize;
@@ -71,7 +66,6 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
     return false;
   }
 
-  // Grab data from opfParser into epub
   bookMetadata.title = opfParser.title;
   bookMetadata.author = opfParser.author;
   bookMetadata.language = opfParser.language;
@@ -81,11 +75,9 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   if (!opfParser.tocNcxPath.empty()) {
     tocNcxItem = opfParser.tocNcxPath;
   }
-
   if (!opfParser.tocNavPath.empty()) {
     tocNavItem = opfParser.tocNavPath;
   }
-
   if (!opfParser.cssFiles.empty()) {
     cssFiles = opfParser.cssFiles;
   }
@@ -95,7 +87,6 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
 }
 
 bool Epub::parseTocNcxFile() const {
-  // the ncx file should have been specified in the content.opf file
   if (tocNcxItem.empty()) {
     LOG_ERR("EBP", "No ncx file specified");
     return false;
@@ -116,7 +107,6 @@ bool Epub::parseTocNcxFile() const {
   const auto ncxSize = tempNcxFile.size();
 
   TocNcxParser ncxParser(contentBasePath, ncxSize, bookMetadataCache.get());
-
   if (!ncxParser.setup()) {
     LOG_ERR("EBP", "Could not setup toc ncx parser");
     tempNcxFile.close();
@@ -134,7 +124,6 @@ bool Epub::parseTocNcxFile() const {
     const auto readSize = tempNcxFile.read(ncxBuffer, 1024);
     if (readSize == 0) break;
     const auto processedSize = ncxParser.write(ncxBuffer, readSize);
-
     if (processedSize != readSize) {
       LOG_ERR("EBP", "Could not process all toc ncx data");
       free(ncxBuffer);
@@ -152,7 +141,6 @@ bool Epub::parseTocNcxFile() const {
 }
 
 bool Epub::parseTocNavFile() const {
-  // the nav file should have been specified in the content.opf file (EPUB 3)
   if (tocNavItem.empty()) {
     LOG_ERR("EBP", "No nav file specified");
     return false;
@@ -189,7 +177,6 @@ bool Epub::parseTocNavFile() const {
   while (tempNavFile.available()) {
     const auto readSize = tempNavFile.read(navBuffer, 1024);
     const auto processedSize = navParser.write(navBuffer, readSize);
-
     if (processedSize != readSize) {
       LOG_ERR("EBP", "Could not process all toc nav data");
       free(navBuffer);
@@ -230,7 +217,6 @@ void Epub::parseCssFiles() const {
   if (!cssParser->hasCache()) {
     for (const auto& cssPath : cssFiles) {
       LOG_INF("EBP", "Parsing CSS file: %s", cssPath.c_str());
-
       const auto tmpCssPath = getCachePath() + "/.tmp.css";
       FsFile tempCssFile;
       if (!Storage.openFileForWrite("EBP", tmpCssPath, tempCssFile)) {
@@ -259,14 +245,12 @@ void Epub::parseCssFiles() const {
       LOG_ERR("EBP", "Failed to save CSS rules to cache");
     }
     cssParser->clear();
-
     LOG_INF("EBP", "Loaded %zu CSS style rules from %zu files", cssParser->ruleCount(), cssFiles.size());
   }
 }
 
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_INF("EBP", "Loading ePub: %s", filepath.c_str());
-
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   cssParser.reset(new CssParser(cachePath));
 
@@ -290,7 +274,6 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   setupCacheDir();
 
   const uint32_t indexingStart = millis();
-
   if (!bookMetadataCache->beginWrite()) {
     LOG_ERR("EBP", "Could not begin writing cache");
     return false;
@@ -323,12 +306,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     LOG_INF("EBP", "Attempting to parse EPUB 3 nav document");
     tocParsed = parseTocNavFile();
   }
-
   if (!tocParsed && !tocNcxItem.empty()) {
     LOG_INF("EBP", "Falling back to NCX TOC");
     tocParsed = parseTocNcxFile();
   }
-
   if (!tocParsed) {
     LOG_INF("EBP", "Warning: Could not parse any TOC format");
   }
@@ -375,12 +356,10 @@ bool Epub::clearCache() const {
     LOG_INF("EPB", "Cache does not exist, no action needed");
     return true;
   }
-
   if (!Storage.removeDir(cachePath.c_str())) {
     LOG_ERR("EPB", "Failed to clear cache");
     return false;
   }
-
   LOG_INF("EPB", "Cache cleared successfully");
   return true;
 }
@@ -428,7 +407,6 @@ bool Epub::generateCoverBmp(bool cropped) const {
   if (Storage.exists(getCoverBmpPath(cropped).c_str())) {
     return true;
   }
-
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     LOG_ERR("EBP", "Cannot generate cover BMP, cache not loaded");
     return false;
@@ -444,7 +422,6 @@ bool Epub::generateCoverBmp(bool cropped) const {
       coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
     LOG_INF("EBP", "Generating BMP from JPG cover image (%s mode)", cropped ? "cropped" : "fit");
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
-
     FsFile coverJpg;
     if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
       return false;
@@ -475,7 +452,6 @@ bool Epub::generateCoverBmp(bool cropped) const {
   } else {
     LOG_INF("EBP", "Cover image is not a JPG, skipping");
   }
-
   return false;
 }
 
@@ -486,7 +462,6 @@ bool Epub::generateThumbBmp(int height) const {
   if (Storage.exists(getThumbBmpPath(height).c_str())) {
     return true;
   }
-
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     LOG_ERR("EBP", "Cannot generate thumb BMP, cache not loaded");
     return false;
@@ -499,7 +474,6 @@ bool Epub::generateThumbBmp(int height) const {
              coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
     LOG_INF("EBP", "Generating thumb BMP from JPG cover image");
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
-
     FsFile coverJpg;
     if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
       return false;
@@ -545,7 +519,6 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
     LOG_ERR("EBP", "Failed to read item, empty href");
     return nullptr;
   }
-
   const std::string path = FsHelpers::normalisePath(itemHref);
   const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
   if (!content) {
@@ -583,7 +556,6 @@ BookMetadataCache::SpineEntry Epub::getSpineItem(const int spineIndex) const {
     LOG_ERR("EBP", "getSpineItem called but cache not loaded");
     return {};
   }
-
   if (spineIndex < 0 || spineIndex >= bookMetadataCache->getSpineCount()) {
     LOG_ERR("EBP", "getSpineItem index:%d is out of range", spineIndex);
     return bookMetadataCache->getSpineEntry(0);
@@ -596,7 +568,6 @@ BookMetadataCache::TocEntry Epub::getTocItem(const int tocIndex) const {
     LOG_ERR("EBP", "getTocItem called but cache not loaded");
     return {};
   }
-
   if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
     LOG_ERR("EBP", "getTocItem index:%d is out of range", tocIndex);
     return {};
@@ -616,12 +587,10 @@ int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
     LOG_ERR("EBP", "getSpineIndexForTocIndex called but cache not loaded");
     return 0;
   }
-
   if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
     LOG_ERR("EBP", "getSpineIndexForTocIndex: tocIndex %d out of range", tocIndex);
     return 0;
   }
-
   const int spineIndex = bookMetadataCache->getTocEntry(tocIndex).spineIndex;
   if (spineIndex < 0) {
     LOG_ERR("EBP", "Section not found for TOC index %d", tocIndex);
@@ -645,19 +614,17 @@ int Epub::getSpineIndexForTextReference() const {
     return 0;
   }
   LOG_INF("ERS", "Core Metadata: cover(%d)=%s, textReference(%d)=%s",
-                bookMetadataCache->coreMetadata.coverItemHref.size(),
-                bookMetadataCache->coreMetadata.coverItemHref.c_str(),
-                bookMetadataCache->coreMetadata.textReferenceHref.size(),
-                bookMetadataCache->coreMetadata.textReferenceHref.c_str());
+          bookMetadataCache->coreMetadata.coverItemHref.size(), bookMetadataCache->coreMetadata.coverItemHref.c_str(),
+          bookMetadataCache->coreMetadata.textReferenceHref.size(),
+          bookMetadataCache->coreMetadata.textReferenceHref.c_str());
 
   if (bookMetadataCache->coreMetadata.textReferenceHref.empty()) {
     return 0;
   }
-
   for (size_t i = 0; i < getSpineItemsCount(); i++) {
     if (getSpineItem(i).href == bookMetadataCache->coreMetadata.textReferenceHref) {
-      LOG_INF("ERS", "Text reference %s found at index %d",
-                    bookMetadataCache->coreMetadata.textReferenceHref.c_str(), i);
+      LOG_INF("ERS", "Text reference %s found at index %d", bookMetadataCache->coreMetadata.textReferenceHref.c_str(),
+              i);
       return i;
     }
   }
