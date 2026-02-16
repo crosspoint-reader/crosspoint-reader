@@ -129,9 +129,9 @@ Click **File Manager** to access file management features.
 #### Browsing Files
 
 - The file manager displays all files and folders on your SD card
-- **Folders** are highlighted in yellow with a 📁 icon
-- **EPUB files** are highlighted in green with a 📗 icon
-- **other files** are indicated with a 📄 icon
+- **Folders** are highlighted in yellow and indicated with a 📁 icon
+- **EPUB Files** are highlighted in green and indicated with a 📗 icon
+- **All Other Files** are not highlighted and indicated with a 📄 icon
 - Click on a folder name to navigate into it
 - Use the breadcrumb navigation at the top to go back to parent folders
 
@@ -139,22 +139,21 @@ Click **File Manager** to access file management features.
 
 #### Uploading Files
 
-1. Click the **Upload** button in the top-right corner
-3. Click **Choose File** and select a file from your device
-4. Click **Upload**
-5. A progress bar will show the upload status
-6. The page will automatically refresh when the upload is complete
+1. Click the **📤 Upload** button in the top-right corner
+2. Click **Choose File** and select a file from your device
+3. Click **Upload**
+4. A progress bar will show the upload status
+5. The page will automatically refresh when the upload is complete
 
 <img src="./images/wifi/webserver_upload.png" width="600">
 
 #### Creating Folders
 
-1. Click the **+ Add** button in the top-right corner
-2. Select **New Folder** from the dropdown menu
-3. Enter a folder name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
-4. Click **Create Folder**
+1. Click the **📁 New Folder** button in the top-right corner
+2. Enter a folder name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
+3. Click **Create Folder**
 
-This is useful for organizing your ebooks by genre, author, or series.
+This is useful for organizing your library by genre, author, series or file type.
 
 #### Deleting Files and Folders
 
@@ -166,11 +165,25 @@ This is useful for organizing your ebooks by genre, author, or series.
 
 **Note:** Folders must be empty before they can be deleted.
 
+#### Moving Files
+
+1. Click the **📂** (folder) icon next to any file
+2. Enter a folder name or select one from the dropdown
+3. Click **Move** to relocate the file
+
+**Note:** Typing in a nonexistent folder name will result in the following error: "Failed to move: Destination not found"
+
+#### Renaming Files
+
+1. Click the **✏️** (pencil) icon next to any file
+2. Enter a file name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
+3. Click **Rename** to permanently rename the file
+
 ---
 
 ## Command Line File Management
 
-For power users, you can manage files directly from your terminal using `curl` while the device is in File Upload mode a detailed documentation can be found [here](./webserver-endpoints.md). 
+For power users, you can manage files directly from your terminal using `curl` while the device is in File Upload mode. Detailed documentation can be found [here](./webserver-endpoints.md). 
 
 ## Security Notes
 
@@ -195,7 +208,7 @@ For power users, you can manage files directly from your terminal using `curl` w
 
 1. **Organize with folders** - Create folders before uploading to keep your library organized
 2. **Check signal strength** - Stronger signals (`|||` or `||||`) provide faster, more reliable uploads
-3. **Upload multiple files** - You can upload files one at a time; the page refreshes after each upload
+3. **Upload multiple files** - You can select and upload multiple files at once; the manager will queue them and refresh when the batch is finished
 4. **Use descriptive names** - Name your folders clearly (e.g., "SciFi", "Mystery", "Non-Fiction")
 5. **Keep credentials saved** - Save your WiFi password for quick reconnection in the future
 6. **Exit when done** - Press **Back** to exit the WiFi screen and save battery
