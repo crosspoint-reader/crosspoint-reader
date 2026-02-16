@@ -2,7 +2,7 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
-#include <Logging.h>
+#include "Logging.h"
 #include <JpegToBmpConverter.h>
 #include <ZipFile.h>
 
