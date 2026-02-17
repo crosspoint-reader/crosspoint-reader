@@ -117,18 +117,20 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                                            bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
   const bool hasContinueReading = !recentBooks.empty();
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;
+  const int originX = rect.x;
+  const int originY = rect.y;
 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  int batteryX = rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
+  int batteryX = originX + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
   if (showBatteryPercentage) {
     const uint16_t percentage = battery.readPercentage();
     const auto percentageText = std::to_string(percentage) + "%";
     batteryX -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str()) + 4;
   }
 
-  const int titleX = sidePadding;
-  const int titleY = 18;
+  const int titleX = originX + sidePadding;
+  const int titleY = originY + 18;
   const int maxTextWidth = batteryX - 20 - titleX;  // Keep 20px gap before battery group
   if (hasContinueReading && maxTextWidth > 40) {
     constexpr int titleAuthorGap = 6;
@@ -153,7 +155,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       Rect{batteryX, titleY + 2, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
       showBatteryPercentage);
 
-  const int coverX = sidePadding;
+  const int coverX = originX + sidePadding;
   const int coverY = titleY + renderer.getLineHeight(kTitleFontId) + 20;  // 20px gap below top title+battery bar
   const int coverWidth = rect.width - sidePadding * 2;
   const int coverHeight = RoundedRaffMetrics::values.homeCoverHeight;
