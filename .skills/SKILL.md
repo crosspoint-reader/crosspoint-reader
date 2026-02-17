@@ -563,7 +563,7 @@ Tested in all 4 orientations with 5MB+ files.
 - Build fails or has warnings
 - Experimenting or debugging in progress
 - User hasn't explicitly requested commit
-- Generated files (*.generated.h) would be included
+- Files excluded by `.gitignore` would be included — always run `git status` and cross-check against `.gitignore` before staging (e.g., `*.generated.h`, `.pio/`, `compile_commands.json`, `platformio.local.ini`)
 
 **Rule**: **If uncertain, ASK before committing.**
 
@@ -585,7 +585,7 @@ Tested in all 4 orientations with 5MB+ files.
    - `lib/I18n/I18nKeys.h`, `lib/I18n/I18nStrings.h`, `lib/I18n/I18nStrings.cpp`
    - **Source**: YAML translation files in `lib/I18n/translations/` (one per language)
    - **To modify**: Edit source YAML files, then run `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
-   - **Commit**: Source YAML files only, NOT generated I18nKeys.h / I18nStrings.*
+   - **Commit**: Source YAML files + `I18nKeys.h` and `I18nStrings.h` (needed for IDE symbol resolution), but NOT `I18nStrings.cpp`
 
 3. **Build Artifacts** (in `.gitignore`):
    - `.pio/` - PlatformIO build output
@@ -607,7 +607,7 @@ Tested in all 4 orientations with 5MB+ files.
    - English (`english.yaml`) is the reference; missing keys in other languages fall back to English
 2. Run generator: `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
 3. Generated files update: `I18nKeys.h`, `I18nStrings.h`, `I18nStrings.cpp`
-4. **Commit ONLY** source YAML files, NOT generated I18n files
+4. **Commit** source YAML files + `I18nKeys.h` and `I18nStrings.h` (IDE needs these for symbol resolution), but NOT `I18nStrings.cpp`
 
 **To use translated strings in code**:
 ```cpp
@@ -668,7 +668,7 @@ build_flags =
 **AI agent scope** (what you CAN verify):
 1. ✅ **Build**: `pio run -t clean && pio run` (0 errors/warnings)
 2. ✅ **Quality**: `pio check` + `find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i`
-3. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.generated.h` or `platformio.local.ini`
+3. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.gitignore`-excluded files staged (e.g., `*.generated.h`, `.pio/`, `platformio.local.ini`)
 4. ✅ **CI**: Fix GitHub Actions failures before review
 5. ✅ **Code review**: Ensure orientation-aware logic is correct in all 4 modes by inspecting switch/case coverage
 
