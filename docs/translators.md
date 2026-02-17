@@ -9,15 +9,23 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 
 ## French
 - [Spigaw](https://github.com/Spigaw)
+- [CaptainFrito](https://github.com/CaptainFrito)
 
 ## German
 - [DavidOrtmann](https://github.com/DavidOrtmann)
+
+## Czech
+- [brbla](https://github.com/brbla)
+
+## Portuguese (Brazil)
+- [yagofarias](https://github.com/yagofarias)
 
 ## Italian
 - [fragolinux](https://github.com/fragolinux)
 
 ## Russian
 - [madebyKir](https://github.com/madebyKir)
+- [mrtnvgr](https://github.com/mrtnvgr)
 
 ## Spanish
 - [yeyeto2788](https://github.com/yeyeto2788)
