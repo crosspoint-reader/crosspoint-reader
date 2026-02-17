@@ -48,14 +48,20 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  if (gpio.deviceIsX3() && (lastBufferWasGray || mode == RefreshMode::HALF_REFRESH)) {
+    einkDisplay.requestResync(1);
+  }
+  lastBufferWasGray = false;
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  if (gpio.deviceIsX3() && (lastBufferWasGray || mode == RefreshMode::HALF_REFRESH)) {
+    einkDisplay.requestResync(1);
+  }
+  lastBufferWasGray = false;
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
-
-void HalDisplay::requestResync(uint8_t settlePasses) { einkDisplay.requestResync(settlePasses); }
 
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
@@ -71,7 +77,13 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
-void HalDisplay::displayGrayBuffer(bool turnOffScreen) { einkDisplay.displayGrayBuffer(turnOffScreen); }
+void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
+  if (gpio.deviceIsX3() && !lastBufferWasGray) {
+    einkDisplay.requestResync(1);
+  }
+  lastBufferWasGray = true;
+  einkDisplay.displayGrayBuffer(turnOffScreen);
+}
 
 uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
 

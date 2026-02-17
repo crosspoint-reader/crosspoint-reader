@@ -149,7 +149,6 @@ void enterDeepSleep() {
   APP_STATE.lastSleepFromReader = currentActivity && currentActivity->isReaderActivity();
   APP_STATE.saveToFile();
   exitActivity();
-  display.requestResync();
   enterNewActivity(new SleepActivity(renderer, mappedInputManager));
 
   display.deepSleep();
@@ -198,10 +197,6 @@ void onGoToBrowser() {
 }
 
 void onGoHome() {
-  const bool returningFromReader = currentActivity && currentActivity->isReaderActivity();
-  if (returningFromReader) {
-    display.requestResync(1);
-  }
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
                                     onGoToSettings, onGoToFileTransfer, onGoToBrowser));
