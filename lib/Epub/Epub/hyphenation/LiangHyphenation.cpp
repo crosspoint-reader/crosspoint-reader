@@ -53,6 +53,8 @@
 
 namespace {
 
+using EmbeddedAutomaton = SerializedHyphenationPatterns;
+
 struct AugmentedWord {
   std::vector<uint8_t> bytes;
   std::vector<size_t> charByteOffsets;
@@ -141,59 +143,10 @@ struct AutomatonState {
   bool valid() const { return data != nullptr; }
 };
 
-// Lightweight descriptor for the entire embedded automaton.
-// The blob format is:
-//   [0..3]  - big-endian root offset
-//   [4....] - node heap containing variable-sized headers + transition data
-struct EmbeddedAutomaton {
-  const uint8_t* data = nullptr;
-  size_t size = 0;
-  uint32_t rootOffset = 0;
-
-  bool valid() const { return data != nullptr && size >= 4 && rootOffset < size; }
-};
-
-// Decode the serialized automaton header and root offset.
-EmbeddedAutomaton parseAutomaton(const SerializedHyphenationPatterns& patterns) {
-  EmbeddedAutomaton automaton;
-  if (!patterns.data || patterns.size < 4) {
-    return automaton;
-  }
-
-  automaton.data = patterns.data;
-  automaton.size = patterns.size;
-  automaton.rootOffset = (static_cast<uint32_t>(patterns.data[0]) << 24) |
-                         (static_cast<uint32_t>(patterns.data[1]) << 16) |
-                         (static_cast<uint32_t>(patterns.data[2]) << 8) | static_cast<uint32_t>(patterns.data[3]);
-  if (automaton.rootOffset >= automaton.size) {
-    automaton.data = nullptr;
-    automaton.size = 0;
-  }
-  return automaton;
-}
-
-// Cache parsed automata per blob pointer to avoid reparsing.
-const EmbeddedAutomaton& getAutomaton(const SerializedHyphenationPatterns& patterns) {
-  struct CacheEntry {
-    const SerializedHyphenationPatterns* key;
-    EmbeddedAutomaton automaton;
-  };
-  static std::vector<CacheEntry> cache;
-
-  for (const auto& entry : cache) {
-    if (entry.key == &patterns) {
-      return entry.automaton;
-    }
-  }
-
-  cache.push_back({&patterns, parseAutomaton(patterns)});
-  return cache.back().automaton;
-}
-
 // Interpret the node located at `addr`, returning transition metadata.
 AutomatonState decodeState(const EmbeddedAutomaton& automaton, size_t addr) {
   AutomatonState state;
-  if (!automaton.valid() || addr >= automaton.size) {
+  if (addr >= automaton.size) {
     return state;
   }
 
@@ -234,7 +187,7 @@ AutomatonState decodeState(const EmbeddedAutomaton& automaton, size_t addr) {
     if (offset + levelsLen > automaton.size) {
       return AutomatonState{};
     }
-    levelsPtr = automaton.data + offset;
+    levelsPtr = automaton.data + offset - 4u;
   }
 
   if (pos + childCount > remaining) {
@@ -344,10 +297,7 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
     return {};
   }
 
-  const EmbeddedAutomaton& automaton = getAutomaton(patterns);
-  if (!automaton.valid()) {
-    return {};
-  }
+  const EmbeddedAutomaton& automaton = patterns;
 
   const AutomatonState root = decodeState(automaton, automaton.rootOffset);
   if (!root.valid()) {

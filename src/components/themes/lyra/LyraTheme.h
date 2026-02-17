@@ -26,7 +26,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .homeCoverTileHeight = 287,
                                  .homeRecentBooksCount = 3,
                                  .buttonHintsHeight = 40,
-                                 .sideButtonHintsWidth = 19,
+                                 .sideButtonHintsWidth = 30,
                                  .versionTextRightX = 20,
                                  .versionTextY = 55,
                                  .bookProgressBarHeight = 4};
@@ -36,7 +36,8 @@ class LyraTheme : public BaseTheme {
  public:
   // Component drawing methods
   //   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) override;
-  void drawBattery(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const override;
+  void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const override;
+  void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const override;
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const override;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                   bool selected) const override;

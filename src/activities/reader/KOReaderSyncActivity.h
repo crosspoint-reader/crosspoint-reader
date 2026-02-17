@@ -1,8 +1,5 @@
 #pragma once
 #include <Epub.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <functional>
 #include <memory>
@@ -18,7 +15,7 @@
  * 1. Connect to WiFi (if not connected)
  * 2. Calculate document hash
  * 3. Fetch remote progress
- * 4. Show comparison and options (Apply/Upload/Cancel)
+ * 4. Show comparison and options (Apply/Upload)
  * 5. Apply or upload progress
  */
 class KOReaderSyncActivity final : public ActivityWithSubactivity {
@@ -45,6 +42,7 @@ class KOReaderSyncActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
   bool preventAutoSleep() override { return state == CONNECTING || state == SYNCING; }
 
  private:
@@ -66,10 +64,6 @@ class KOReaderSyncActivity final : public ActivityWithSubactivity {
   int currentPage;
   int totalPagesInSpine;
 
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-  bool updateRequired = false;
-
   State state = WIFI_SELECTION;
   std::string statusMessage;
   std::string documentHash;
@@ -82,7 +76,7 @@ class KOReaderSyncActivity final : public ActivityWithSubactivity {
   // Local progress as KOReader format (for display)
   KOReaderPosition localProgress;
 
-  // Selection in result screen (0=Apply, 1=Upload, 2=Cancel)
+  // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
 
   OnCancelCallback onCancel;
@@ -91,8 +85,4 @@ class KOReaderSyncActivity final : public ActivityWithSubactivity {
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
-
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render();
 };

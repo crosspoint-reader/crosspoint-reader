@@ -7,11 +7,11 @@
 
 #include "Xtc.h"
 
-#include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 
 bool Xtc::load() {
-  Serial.printf("[%lu] [XTC] Loading XTC: %s\n", millis(), filepath.c_str());
+  LOG_DBG("XTC", "Loading XTC: %s", filepath.c_str());
 
   // Initialize parser
   parser.reset(new xtc::XtcParser());
@@ -19,43 +19,43 @@ bool Xtc::load() {
   // Open XTC file
   xtc::XtcError err = parser->open(filepath.c_str());
   if (err != xtc::XtcError::OK) {
-    Serial.printf("[%lu] [XTC] Failed to load: %s\n", millis(), xtc::errorToString(err));
+    LOG_ERR("XTC", "Failed to load: %s", xtc::errorToString(err));
     parser.reset();
     return false;
   }
 
   loaded = true;
-  Serial.printf("[%lu] [XTC] Loaded XTC: %s (%lu pages)\n", millis(), filepath.c_str(), parser->getPageCount());
+  LOG_DBG("XTC", "Loaded XTC: %s (%lu pages)", filepath.c_str(), parser->getPageCount());
   return true;
 }
 
 bool Xtc::clearCache() const {
-  if (!SdMan.exists(cachePath.c_str())) {
-    Serial.printf("[%lu] [XTC] Cache does not exist, no action needed\n", millis());
+  if (!Storage.exists(cachePath.c_str())) {
+    LOG_DBG("XTC", "Cache does not exist, no action needed");
     return true;
   }
 
-  if (!SdMan.removeDir(cachePath.c_str())) {
-    Serial.printf("[%lu] [XTC] Failed to clear cache\n", millis());
+  if (!Storage.removeDir(cachePath.c_str())) {
+    LOG_ERR("XTC", "Failed to clear cache");
     return false;
   }
 
-  Serial.printf("[%lu] [XTC] Cache cleared successfully\n", millis());
+  LOG_DBG("XTC", "Cache cleared successfully");
   return true;
 }
 
 void Xtc::setupCacheDir() const {
-  if (SdMan.exists(cachePath.c_str())) {
+  if (Storage.exists(cachePath.c_str())) {
     return;
   }
 
   // Create directories recursively
   for (size_t i = 1; i < cachePath.length(); i++) {
     if (cachePath[i] == '/') {
-      SdMan.mkdir(cachePath.substr(0, i).c_str());
+      Storage.mkdir(cachePath.substr(0, i).c_str());
     }
   }
-  SdMan.mkdir(cachePath.c_str());
+  Storage.mkdir(cachePath.c_str());
 }
 
 std::string Xtc::getTitle() const {
@@ -114,17 +114,17 @@ std::string Xtc::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
 bool Xtc::generateCoverBmp() const {
   // Already generated
-  if (SdMan.exists(getCoverBmpPath().c_str())) {
+  if (Storage.exists(getCoverBmpPath().c_str())) {
     return true;
   }
 
   if (!loaded || !parser) {
-    Serial.printf("[%lu] [XTC] Cannot generate cover BMP, file not loaded\n", millis());
+    LOG_ERR("XTC", "Cannot generate cover BMP, file not loaded");
     return false;
   }
 
   if (parser->getPageCount() == 0) {
-    Serial.printf("[%lu] [XTC] No pages in XTC file\n", millis());
+    LOG_ERR("XTC", "No pages in XTC file");
     return false;
   }
 
@@ -134,7 +134,7 @@ bool Xtc::generateCoverBmp() const {
   // Get first page info for cover
   xtc::PageInfo pageInfo;
   if (!parser->getPageInfo(0, pageInfo)) {
-    Serial.printf("[%lu] [XTC] Failed to get first page info\n", millis());
+    LOG_DBG("XTC", "Failed to get first page info");
     return false;
   }
 
@@ -152,22 +152,22 @@ bool Xtc::generateCoverBmp() const {
   }
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(bitmapSize));
   if (!pageBuffer) {
-    Serial.printf("[%lu] [XTC] Failed to allocate page buffer (%lu bytes)\n", millis(), bitmapSize);
+    LOG_ERR("XTC", "Failed to allocate page buffer (%lu bytes)", bitmapSize);
     return false;
   }
 
   // Load first page (cover)
   size_t bytesRead = const_cast<xtc::XtcParser*>(parser.get())->loadPage(0, pageBuffer, bitmapSize);
   if (bytesRead == 0) {
-    Serial.printf("[%lu] [XTC] Failed to load cover page\n", millis());
+    LOG_ERR("XTC", "Failed to load cover page");
     free(pageBuffer);
     return false;
   }
 
   // Create BMP file
   FsFile coverBmp;
-  if (!SdMan.openFileForWrite("XTC", getCoverBmpPath(), coverBmp)) {
-    Serial.printf("[%lu] [XTC] Failed to create cover BMP file\n", millis());
+  if (!Storage.openFileForWrite("XTC", getCoverBmpPath(), coverBmp)) {
+    LOG_DBG("XTC", "Failed to create cover BMP file");
     free(pageBuffer);
     return false;
   }
@@ -297,7 +297,7 @@ bool Xtc::generateCoverBmp() const {
   coverBmp.close();
   free(pageBuffer);
 
-  Serial.printf("[%lu] [XTC] Generated cover BMP: %s\n", millis(), getCoverBmpPath().c_str());
+  LOG_DBG("XTC", "Generated cover BMP: %s", getCoverBmpPath().c_str());
   return true;
 }
 
@@ -306,17 +306,17 @@ std::string Xtc::getThumbBmpPath(int height) const { return cachePath + "/thumb_
 
 bool Xtc::generateThumbBmp(int height) const {
   // Already generated
-  if (SdMan.exists(getThumbBmpPath(height).c_str())) {
+  if (Storage.exists(getThumbBmpPath(height).c_str())) {
     return true;
   }
 
   if (!loaded || !parser) {
-    Serial.printf("[%lu] [XTC] Cannot generate thumb BMP, file not loaded\n", millis());
+    LOG_ERR("XTC", "Cannot generate thumb BMP, file not loaded");
     return false;
   }
 
   if (parser->getPageCount() == 0) {
-    Serial.printf("[%lu] [XTC] No pages in XTC file\n", millis());
+    LOG_ERR("XTC", "No pages in XTC file");
     return false;
   }
 
@@ -326,7 +326,7 @@ bool Xtc::generateThumbBmp(int height) const {
   // Get first page info for cover
   xtc::PageInfo pageInfo;
   if (!parser->getPageInfo(0, pageInfo)) {
-    Serial.printf("[%lu] [XTC] Failed to get first page info\n", millis());
+    LOG_DBG("XTC", "Failed to get first page info");
     return false;
   }
 
@@ -340,7 +340,7 @@ bool Xtc::generateThumbBmp(int height) const {
   // Calculate scale factor
   float scaleX = static_cast<float>(THUMB_TARGET_WIDTH) / pageInfo.width;
   float scaleY = static_cast<float>(THUMB_TARGET_HEIGHT) / pageInfo.height;
-  float scale = (scaleX < scaleY) ? scaleX : scaleY;
+  float scale = (scaleX > scaleY) ? scaleX : scaleY;  // for cropping
 
   // Only scale down, never up
   if (scale >= 1.0f) {
@@ -348,8 +348,8 @@ bool Xtc::generateThumbBmp(int height) const {
     // Copy cover.bmp to thumb.bmp
     if (generateCoverBmp()) {
       FsFile src, dst;
-      if (SdMan.openFileForRead("XTC", getCoverBmpPath(), src)) {
-        if (SdMan.openFileForWrite("XTC", getThumbBmpPath(height), dst)) {
+      if (Storage.openFileForRead("XTC", getCoverBmpPath(), src)) {
+        if (Storage.openFileForWrite("XTC", getThumbBmpPath(height), dst)) {
           uint8_t buffer[512];
           while (src.available()) {
             size_t bytesRead = src.read(buffer, sizeof(buffer));
@@ -359,8 +359,8 @@ bool Xtc::generateThumbBmp(int height) const {
         }
         src.close();
       }
-      Serial.printf("[%lu] [XTC] Copied cover to thumb (no scaling needed)\n", millis());
-      return SdMan.exists(getThumbBmpPath(height).c_str());
+      LOG_DBG("XTC", "Copied cover to thumb (no scaling needed)");
+      return Storage.exists(getThumbBmpPath(height).c_str());
     }
     return false;
   }
@@ -368,8 +368,8 @@ bool Xtc::generateThumbBmp(int height) const {
   uint16_t thumbWidth = static_cast<uint16_t>(pageInfo.width * scale);
   uint16_t thumbHeight = static_cast<uint16_t>(pageInfo.height * scale);
 
-  Serial.printf("[%lu] [XTC] Generating thumb BMP: %dx%d -> %dx%d (scale: %.3f)\n", millis(), pageInfo.width,
-                pageInfo.height, thumbWidth, thumbHeight, scale);
+  LOG_DBG("XTC", "Generating thumb BMP: %dx%d -> %dx%d (scale: %.3f)", pageInfo.width, pageInfo.height, thumbWidth,
+          thumbHeight, scale);
 
   // Allocate buffer for page data
   size_t bitmapSize;
@@ -380,22 +380,22 @@ bool Xtc::generateThumbBmp(int height) const {
   }
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(bitmapSize));
   if (!pageBuffer) {
-    Serial.printf("[%lu] [XTC] Failed to allocate page buffer (%lu bytes)\n", millis(), bitmapSize);
+    LOG_ERR("XTC", "Failed to allocate page buffer (%lu bytes)", bitmapSize);
     return false;
   }
 
   // Load first page (cover)
   size_t bytesRead = const_cast<xtc::XtcParser*>(parser.get())->loadPage(0, pageBuffer, bitmapSize);
   if (bytesRead == 0) {
-    Serial.printf("[%lu] [XTC] Failed to load cover page for thumb\n", millis());
+    LOG_ERR("XTC", "Failed to load cover page for thumb");
     free(pageBuffer);
     return false;
   }
 
   // Create thumbnail BMP file - use 1-bit format for fast home screen rendering (no gray passes)
   FsFile thumbBmp;
-  if (!SdMan.openFileForWrite("XTC", getThumbBmpPath(height), thumbBmp)) {
-    Serial.printf("[%lu] [XTC] Failed to create thumb BMP file\n", millis());
+  if (!Storage.openFileForWrite("XTC", getThumbBmpPath(height), thumbBmp)) {
+    LOG_DBG("XTC", "Failed to create thumb BMP file");
     free(pageBuffer);
     return false;
   }
@@ -558,8 +558,7 @@ bool Xtc::generateThumbBmp(int height) const {
   thumbBmp.close();
   free(pageBuffer);
 
-  Serial.printf("[%lu] [XTC] Generated thumb BMP (%dx%d): %s\n", millis(), thumbWidth, thumbHeight,
-                getThumbBmpPath(height).c_str());
+  LOG_DBG("XTC", "Generated thumb BMP (%dx%d): %s", thumbWidth, thumbHeight, getThumbBmpPath(height).c_str());
   return true;
 }
 

@@ -2,6 +2,9 @@
 #include <cstdint>
 #include <iosfwd>
 
+// Forward declarations
+class FsFile;
+
 class CrossPointSettings {
  private:
   // Private constructor for singleton
@@ -86,6 +89,7 @@ class CrossPointSettings {
     LEFT_ALIGN = 1,
     CENTER_ALIGN = 2,
     RIGHT_ALIGN = 3,
+    BOOK_STYLE = 4,
     PARAGRAPH_ALIGNMENT_COUNT
   };
 
@@ -168,6 +172,8 @@ class CrossPointSettings {
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
+  uint8_t embeddedStyle = 1;
 
   ~CrossPointSettings() = default;
 
@@ -178,6 +184,9 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+
+  // If count_only is true, returns the number of settings items that would be written.
+  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
 
   bool saveToFile() const;
   bool loadFromFile();
