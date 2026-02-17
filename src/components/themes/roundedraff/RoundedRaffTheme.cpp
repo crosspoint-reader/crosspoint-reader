@@ -75,7 +75,7 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   }
 
   auto headerTitle = renderer.truncatedText(kTitleFontId, title, batteryX - sidePadding - 20, EpdFontFamily::BOLD);
-  renderer.drawText(kTitleFontId, sidePadding, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
+  renderer.drawText(kTitleFontId, rect.x + sidePadding, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
   drawBattery(
       renderer,
       Rect{batteryX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
