@@ -8,8 +8,8 @@
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
+#include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
-
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
@@ -38,6 +38,11 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentTheme = new LyraTheme();
       currentMetrics = &LyraMetrics::values;
       break;
+    case CrossPointSettings::UI_THEME::LYRA_3_COVERS:
+      Serial.printf("[%lu] [UI] Using Lyra 3 Covers theme\n", millis());
+      currentTheme = new Lyra3CoversTheme();
+      currentMetrics = &Lyra3CoversMetrics::values;
+      break;
   }
 }
 
@@ -65,30 +70,4 @@ std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight
     coverBmpPath.replace(pos, 8, std::to_string(coverHeight));
   }
   return coverBmpPath;
-}
-
-void UITheme::handleListScrolling(const GfxRenderer& renderer, int listSize, int pageItems, size_t& selectorIndex,
-                                  const MappedInputManager& mappedInput, bool& updateRequired) {
-  const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-                          mappedInput.wasReleased(MappedInputManager::Button::Up);
-  const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Down);
-
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
-
-  if (upReleased) {
-    if (skipPage) {
-      selectorIndex = std::max(static_cast<int>((selectorIndex / pageItems - 1) * pageItems), 0);
-    } else {
-      selectorIndex = (selectorIndex + listSize - 1) % listSize;
-    }
-    updateRequired = true;
-  } else if (downReleased) {
-    if (skipPage) {
-      selectorIndex = std::min(static_cast<int>((selectorIndex / pageItems + 1) * pageItems), listSize - 1);
-    } else {
-      selectorIndex = (selectorIndex + 1) % listSize;
-    }
-    updateRequired = true;
-  }
 }
