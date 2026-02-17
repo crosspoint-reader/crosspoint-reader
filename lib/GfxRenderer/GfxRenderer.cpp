@@ -108,11 +108,6 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
   const auto& font = fontIt->second;
 
-  // no printable characters
-  if (!font.hasPrintableChars(text, style)) {
-    return;
-  }
-
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     renderChar(font, cp, &xpos, &yPos, black, style);
@@ -779,11 +774,6 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   }
 
   const auto& font = fontIt->second;
-
-  // No printable characters
-  if (!font.hasPrintableChars(text, style)) {
-    return;
-  }
 
   // For 90° clockwise rotation:
   // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
