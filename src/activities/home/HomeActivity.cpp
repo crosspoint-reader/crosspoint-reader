@@ -25,7 +25,7 @@ void HomeActivity::taskTrampoline(void* param) {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // My Library, Recents, File transfer, Settings
+  int count = 5;  // My Library, Recents, Rosary, File transfer, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -215,6 +215,7 @@ void HomeActivity::loop() {
     const int myLibraryIdx = idx++;
     const int recentsIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
+    const int rosaryIdx = idx++;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
 
@@ -226,6 +227,8 @@ void HomeActivity::loop() {
       onRecentsOpen();
     } else if (menuSelectedIndex == opdsLibraryIdx) {
       onOpdsBrowserOpen();
+    } else if (menuSelectedIndex == rosaryIdx) {
+      onRosaryOpen();
     } else if (menuSelectedIndex == fileTransferIdx) {
       onFileTransferOpen();
     } else if (menuSelectedIndex == settingsIdx) {
@@ -263,8 +266,13 @@ void HomeActivity::render() {
   // Build menu items dynamically
   std::vector<const char*> menuItems = {"Browse Files", "Recents", "File Transfer", "Settings"};
   if (hasOpdsUrl) {
-    // Insert OPDS Browser after My Library
+    // Insert OPDS Browser after Recents
     menuItems.insert(menuItems.begin() + 2, "OPDS Browser");
+  }
+  // Insert Rosary after OPDS (or after Recents if no OPDS)
+  {
+    int rosaryInsertPos = hasOpdsUrl ? 3 : 2;
+    menuItems.insert(menuItems.begin() + rosaryInsertPos, "Rosary");
   }
 
   GUI.drawButtonMenu(
