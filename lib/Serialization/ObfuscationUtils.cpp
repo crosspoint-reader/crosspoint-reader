@@ -46,8 +46,11 @@ String obfuscateToBase64(const std::string& plaintext) {
 }
 
 std::string deobfuscateFromBase64(const char* encoded, bool* ok) {
+  if (encoded == nullptr || encoded[0] == '\0') {
+    if (ok) *ok = false;
+    return "";
+  }
   if (ok) *ok = true;
-  if (encoded == nullptr || encoded[0] == '\0') return "";
   size_t encodedLen = strlen(encoded);
   // First call: get required output buffer size
   size_t decodedLen = 0;

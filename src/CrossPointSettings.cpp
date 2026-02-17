@@ -88,8 +88,11 @@ bool CrossPointSettings::loadFromFile() {
       bool resave = false;
       bool result = JsonSettingsIO::loadSettings(*this, json.c_str(), &resave);
       if (result && resave) {
-        saveToFile();
-        LOG_DBG("CPS", "Resaved settings to update format");
+        if (saveToFile()) {
+          LOG_DBG("CPS", "Resaved settings to update format");
+        } else {
+          LOG_ERR("CPS", "Failed to resave settings after format update");
+        }
       }
       return result;
     }
