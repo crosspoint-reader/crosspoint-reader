@@ -148,7 +148,7 @@ BmpReaderError Bitmap::parseHeaders() {
   // Native levels are 0, 85, 170, 255 — i.e. values where (lum >> 6) is lossless.
   // If all palette entries are near a native level, we can skip dithering entirely.
   nativePalette = bpp <= 2;  // 1-bit and 2-bit are always native
-  if (!nativePalette && colorsUsed <= 4 && colorsUsed > 0) {
+  if (!nativePalette && colorsUsed > 0) {
     nativePalette = true;
     for (uint32_t i = 0; i < colorsUsed; i++) {
       const uint8_t lum = paletteLum[i];
