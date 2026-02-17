@@ -91,7 +91,7 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   // Use 64-bit arithmetic to avoid overflow for large files
   const int percent = static_cast<int>((static_cast<uint64_t>(current) * 100) / total);
 
-  Serial.printf("Drawing progress bar: current=%u, total=%u, percent=%d\n", current, total, percent);
+  LOG_DBG("UI", "Drawing progress bar: current=%u, total=%u, percent=%d", current, total, percent);
   // Draw outline
   renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
 
@@ -714,4 +714,20 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
   auto truncatedLabel =
       renderer.truncatedText(SMALL_FONT_ID, label, rect.width - metrics.contentSidePadding * 2, EpdFontFamily::REGULAR);
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
+}
+
+void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {
+  renderer.drawText(UI_12_FONT_ID, rect.x + 10, rect.y, "[");
+  renderer.drawText(UI_12_FONT_ID, rect.x + rect.width - 15, rect.y + rect.height, "]");
+}
+
+void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label,
+                                const bool isSelected) const {
+  const int itemWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
+  const int textX = rect.x + (rect.width - itemWidth) / 2;
+  if (isSelected) {
+    renderer.drawText(UI_10_FONT_ID, textX - 6, rect.y, "[");
+    renderer.drawText(UI_10_FONT_ID, textX + itemWidth, rect.y, "]");
+  }
+  renderer.drawText(UI_10_FONT_ID, textX, rect.y, label);
 }

@@ -450,3 +450,21 @@ Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   renderer.displayBuffer();
   return Rect{x, y, w, h};
 }
+
+void LyraTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {
+  int lineY = rect.y + rect.height + renderer.getLineHeight(UI_12_FONT_ID) + LyraMetrics::values.verticalSpacing;
+  int lineW = textWidth + hPaddingInSelection * 2;
+  renderer.drawLine(rect.x + (rect.width - lineW) / 2, lineY, rect.x + (rect.width + lineW) / 2, lineY, 3);
+}
+
+void LyraTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label,
+                                const bool isSelected) const {
+  if (isSelected) {
+    renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::Black);
+  }
+
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, label);
+  const int textX = rect.x + (rect.width - textWidth) / 2;
+  const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
+  renderer.drawText(UI_12_FONT_ID, textX, textY, label, !isSelected);
+}

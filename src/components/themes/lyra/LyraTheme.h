@@ -28,7 +28,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
-                                 .bookProgressBarHeight = 4};
+                                 .bookProgressBarHeight = 4,
+                                 .keyboardKeyWidth = 31,
+                                 .keyboardKeyHeight = 50,
+                                 .keyboardKeySpacing = 0,
+                                 .keyboardBottomAligned = true,
+                                 .keyboardCenteredText = true};
 }
 
 class LyraTheme : public BaseTheme {
@@ -57,4 +62,6 @@ class LyraTheme : public BaseTheme {
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const override;
+  void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const override;
+  void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const override;
 };

@@ -39,7 +39,7 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentMetrics = &LyraMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA_3_COVERS:
-      Serial.printf("[%lu] [UI] Using Lyra 3 Covers theme\n", millis());
+      LOG_DBG("UI", "Using Lyra 3 Covers theme");
       currentTheme = new Lyra3CoversTheme();
       currentMetrics = &Lyra3CoversMetrics::values;
       break;
