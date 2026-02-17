@@ -252,7 +252,8 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
     } else {
       // Draw the filled background and border for a SMALL-sized button
-      renderer.fillRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, cornerRadius, Color::White);
+      renderer.fillRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, cornerRadius,
+                               Color::White);
       renderer.drawRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, 1, cornerRadius, true,
                                true, false, false, true);
     }
