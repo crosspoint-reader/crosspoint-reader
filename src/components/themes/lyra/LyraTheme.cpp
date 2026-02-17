@@ -403,7 +403,17 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                       tileY + tileHeight / 2 - bookTitleHeight, title.c_str(), true, EpdFontFamily::BOLD);
     renderer.drawText(UI_10_FONT_ID, tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing,
                       tileY + tileHeight / 2 + 5, author.c_str(), true);
+  } else {
+    drawEmptyRecents(renderer, rect);
   }
+}
+
+void LyraTheme::drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) const {
+  constexpr int padding = 48;
+  renderer.drawText(UI_12_FONT_ID, rect.x + padding,
+                    rect.y + rect.height / 2 - renderer.getLineHeight(UI_12_FONT_ID) - 2, "No open book", true,
+                    EpdFontFamily::BOLD);
+  renderer.drawText(UI_10_FONT_ID, rect.x + padding, rect.y + rect.height / 2 + 2, "Start reading below", true);
 }
 
 void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,

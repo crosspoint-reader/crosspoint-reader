@@ -98,5 +98,7 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       renderer.drawText(UI_10_FONT_ID, tileX + hPaddingInSelection,
                         tileY + tileHeight - bookTitleHeight + hPaddingInSelection + 5, title.c_str(), true);
     }
+  } else {
+    drawEmptyRecents(renderer, rect);
   }
 }

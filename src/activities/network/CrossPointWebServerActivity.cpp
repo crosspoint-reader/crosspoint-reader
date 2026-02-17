@@ -1,4 +1,4 @@
-  #include "CrossPointWebServerActivity.h"
+#include "CrossPointWebServerActivity.h"
 
 #include <DNSServer.h>
 #include <ESPmDNS.h>

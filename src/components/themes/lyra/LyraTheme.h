@@ -61,6 +61,7 @@ class LyraTheme : public BaseTheme {
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;
+  void drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) const;
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const override;
   void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const override;
   void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const override;
