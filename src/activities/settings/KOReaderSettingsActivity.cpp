@@ -136,44 +136,37 @@ void KOReaderSettingsActivity::handleSelection() {
 void KOReaderSettingsActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
+  auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
 
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_KOREADER_SYNC), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_SYNC));
 
-  // Draw selection highlight
-  renderer.fillRect(0, 60 + selectedIndex * 30 - 2, pageWidth - 1, 30);
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
+      static_cast<int>(selectedIndex), [this](int index) { return menuNames[index]; }, nullptr, nullptr,
+      [this](int index) {
+        // Draw status for each setting
+        if (index == 0) {
+          auto username = KOREADER_STORE.getUsername();
+          return username.empty() ? tr(STR_NOT_SET) : username;
+        } else if (index == 1) {
+          return KOREADER_STORE.getPassword().empty() ? tr(STR_NOT_SET) : std::string("******");
+        } else if (index == 2) {
+          auto serverUrl = KOREADER_STORE.getServerUrl();
+          return serverUrl.empty() ? tr(STR_DEFAULT_VALUE) : serverUrl;
+        } else if (index == 3) {
+          return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? tr(STR_FILENAME) : tr(STR_BINARY);
+        } else if (index == 4) {
+          return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+        }
+        return tr(STR_NOT_SET);
+      });
 
-  // Draw menu items
-  for (int i = 0; i < MENU_ITEMS; i++) {
-    const int settingY = 60 + i * 30;
-    const bool isSelected = (i == selectedIndex);
-
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, I18N.get(menuNames[i]), !isSelected);
-
-    // Draw status for each item
-    std::string status = "";
-    if (i == 0) {
-      status = std::string("[") + (KOREADER_STORE.getUsername().empty() ? tr(STR_NOT_SET) : tr(STR_SET)) + "]";
-    } else if (i == 1) {
-      status = std::string("[") + (KOREADER_STORE.getPassword().empty() ? tr(STR_NOT_SET) : tr(STR_SET)) + "]";
-    } else if (i == 2) {
-      status =
-          std::string("[") + (KOREADER_STORE.getServerUrl().empty() ? tr(STR_DEFAULT_VALUE) : tr(STR_CUSTOM)) + "]";
-    } else if (i == 3) {
-      status = std::string("[") +
-               (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? tr(STR_FILENAME) : tr(STR_BINARY)) +
-               "]";
-    } else if (i == 4) {
-      status = KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
-    }
-
-    const auto width = renderer.getTextWidth(UI_10_FONT_ID, status.c_str());
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status.c_str(), !isSelected);
-  }
-
-  // Draw button hints
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
+  // Draw help text at bottom
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
