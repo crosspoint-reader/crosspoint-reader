@@ -49,6 +49,7 @@ class PageImage final : public PageElement {
   bool serialize(FsFile& file) override;
   PageElementTag getTag() const override { return TAG_PageImage; }
   static std::unique_ptr<PageImage> deserialize(FsFile& file);
+  const ImageBlock& getImageBlock() const { return *imageBlock; }
 };
 
 class Page {
@@ -63,5 +64,33 @@ class Page {
   bool hasImages() const {
     return std::any_of(elements.begin(), elements.end(),
                        [](const std::shared_ptr<PageElement>& el) { return el->getTag() == TAG_PageImage; });
+  }
+
+  // Get bounding box of all images on the page (union of image rects)
+  // Returns false if no images. Coordinates are relative to page origin.
+  bool getImageBoundingBox(int16_t& outX, int16_t& outY, int16_t& outW, int16_t& outH) const {
+    bool found = false;
+    int16_t minX = INT16_MAX, minY = INT16_MAX, maxX = INT16_MIN, maxY = INT16_MIN;
+    for (const auto& el : elements) {
+      if (el->getTag() == TAG_PageImage) {
+        const auto& img = static_cast<const PageImage&>(*el);
+        int16_t x = img.xPos;
+        int16_t y = img.yPos;
+        int16_t right = x + img.getImageBlock().getWidth();
+        int16_t bottom = y + img.getImageBlock().getHeight();
+        minX = std::min(minX, x);
+        minY = std::min(minY, y);
+        maxX = std::max(maxX, right);
+        maxY = std::max(maxY, bottom);
+        found = true;
+      }
+    }
+    if (found) {
+      outX = minX;
+      outY = minY;
+      outW = maxX - minX;
+      outH = maxY - minY;
+    }
+    return found;
   }
 };
