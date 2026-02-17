@@ -179,7 +179,7 @@ The **Sleep Screen** setting controls what is displayed when the device goes to 
 When using **Cover** or **Cover + Custom**, two additional settings apply:
 
 - **Sleep Screen Cover Mode**: **Fit** (scale to fit, white borders) or **Crop** (scale and crop to fill the screen).
-- **Sleep Screen Cover Filter**: **None** (grayscale), **Contrast** (black & white), or **Inverted Contrast** (inverted black & white).
+- **Sleep Screen Cover Filter**: **None** (grayscale), **Contrast** (black & white), or **Inverted** (inverted black & white).
 
 #### Custom images
 
