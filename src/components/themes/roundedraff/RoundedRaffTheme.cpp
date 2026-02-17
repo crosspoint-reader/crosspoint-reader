@@ -311,15 +311,22 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
     const bool isSelected = i == selectedIndex;
     renderer.fillRoundedRect(rowX, rowY, rowWidth, rowHeight, kRowRadius, isSelected ? Color::Black : Color::White);
 
+    constexpr int kMinTitleWidth = 40;
+    constexpr int kMinValueGap = kInteractiveInsetX;
     int textAreaWidth = rowWidth - kInteractiveInsetX * 2;
     if (rowValue != nullptr) {
       std::string valueText = rowValue(i);
       if (!valueText.empty()) {
-        int valueW = renderer.getTextWidth(kTitleFontId, valueText.c_str(), EpdFontFamily::REGULAR);
-        renderer.drawText(kTitleFontId, rowX + rowWidth - kInteractiveInsetX - valueW,
-                          rowY + (rowHeight - renderer.getLineHeight(kTitleFontId)) / 2, valueText.c_str(), !isSelected,
-                          EpdFontFamily::REGULAR);
-        textAreaWidth -= valueW + kInteractiveInsetX;
+        const int maxValueWidth = std::max(0, rowWidth - kInteractiveInsetX * 2 - kMinValueGap - kMinTitleWidth);
+        if (maxValueWidth > 0) {
+          const std::string truncatedValue =
+              renderer.truncatedText(kTitleFontId, valueText.c_str(), maxValueWidth, EpdFontFamily::REGULAR);
+          const int valueW = renderer.getTextWidth(kTitleFontId, truncatedValue.c_str(), EpdFontFamily::REGULAR);
+          renderer.drawText(kTitleFontId, rowX + rowWidth - kInteractiveInsetX - valueW,
+                            rowY + (rowHeight - renderer.getLineHeight(kTitleFontId)) / 2, truncatedValue.c_str(),
+                            !isSelected, EpdFontFamily::REGULAR);
+          textAreaWidth = std::max(0, textAreaWidth - valueW - kMinValueGap);
+        }
       }
     }
 
