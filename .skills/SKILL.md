@@ -478,7 +478,7 @@ git status --short
 ```
 
 **Example Output** (forked repository):
-```
+```text
 origin      https://github.com/<your-username>/crosspoint-reader.git (fetch/push)
 upstream    https://github.com/crosspoint-reader/crosspoint-reader.git (fetch/push)
 ```
@@ -515,7 +515,7 @@ upstream    https://github.com/crosspoint-reader/crosspoint-reader.git (fetch/pu
 ### Branch Naming Convention
 
 **For feature/fix branches**:
-```
+```text
 feature/<short-description>       # New features
 fix/<issue-number>-<description>  # Bug fixes
 refactor/<component-name>         # Code refactoring
@@ -530,7 +530,7 @@ docs/<topic>                      # Documentation updates
 ### Commit Message Format
 
 **Pattern**:
-```
+```text
 <type>: <short summary (50 chars max)>
 
 <optional detailed description>
@@ -540,7 +540,7 @@ docs/<topic>                      # Documentation updates
 **Types**: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`
 
 **Example**:
-```
+```text
 feat: add real-time SD download progress bar
 
 Implements progress tracking for book downloads using
