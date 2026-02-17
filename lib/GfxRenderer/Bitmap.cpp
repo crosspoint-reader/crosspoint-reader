@@ -198,8 +198,8 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
       color = fsDitherer->processPixel(adjustPixel(lum), currentX);
     } else {
       if (nativePalette) {
-        // Palette matches native gray levels: direct mapping
-        color = static_cast<uint8_t>(lum >> 6);
+        // Palette matches native gray levels: direct mapping (still apply brightness/contrast/gamma)
+        color = static_cast<uint8_t>(adjustPixel(lum) >> 6);
       } else {
         // Non-native palette with dithering disabled: simple quantization
         color = quantize(adjustPixel(lum), currentX, prevRowY);
