@@ -499,12 +499,15 @@ std::string Epub::getCoverBmpPath(bool cropped) const {
 }
 
 bool Epub::generateCoverBmp(bool cropped, bool forceRegenerate) const {
+  const std::string coverMarkerPath = cachePath + "/cover_v2.marker";
+
   // Already generated, return true unless force regeneration is requested.
   if (!forceRegenerate && Storage.exists(getCoverBmpPath(cropped).c_str())) {
     return true;
   }
   if (forceRegenerate) {
     Storage.remove(getCoverBmpPath(cropped).c_str());
+    Storage.remove(coverMarkerPath.c_str());
   }
 
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
@@ -552,8 +555,19 @@ bool Epub::generateCoverBmp(bool cropped, bool forceRegenerate) const {
     if (!success) {
       LOG_ERR("EBP", "Failed to generate BMP from cover image");
       Storage.remove(getCoverBmpPath(cropped).c_str());
+      Storage.remove(coverMarkerPath.c_str());
     }
-    LOG_DBG("EBP", "Generated BMP from JPG cover image, success: %s", success ? "yes" : "no");
+    LOG_DBG("EBP", "Generated BMP from cover image, success: %s", success ? "yes" : "no");
+
+    // Marker avoids re-generating on every sleep; we only need a single migration off old cached covers.
+    if (success && !cropped) {
+      FsFile marker;
+      if (Storage.openFileForWrite("EBP", coverMarkerPath, marker)) {
+        marker.write('2');
+        marker.write('\n');
+        marker.close();
+      }
+    }
     return success;
   }
 

@@ -98,12 +98,15 @@ std::string Txt::findCoverImage() const {
 std::string Txt::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
 bool Txt::generateCoverBmp(bool forceRegenerate) const {
+  const std::string coverMarkerPath = cachePath + "/cover_v2.marker";
+
   // Already generated, return true unless force regeneration is requested.
   if (!forceRegenerate && Storage.exists(getCoverBmpPath().c_str())) {
     return true;
   }
   if (forceRegenerate) {
     Storage.remove(getCoverBmpPath().c_str());
+    Storage.remove(coverMarkerPath.c_str());
   }
 
   std::string coverImagePath = findCoverImage();
@@ -141,6 +144,13 @@ bool Txt::generateCoverBmp(bool forceRegenerate) const {
     src.close();
     dst.close();
     LOG_DBG("TXT", "Copied BMP cover to cache");
+
+    FsFile marker;
+    if (Storage.openFileForWrite("TXT", coverMarkerPath, marker)) {
+      marker.write('2');
+      marker.write('\n');
+      marker.close();
+    }
     return true;
   }
 
@@ -165,8 +175,16 @@ bool Txt::generateCoverBmp(bool forceRegenerate) const {
     if (!success) {
       LOG_ERR("TXT", "Failed to generate BMP from JPG cover image");
       Storage.remove(getCoverBmpPath().c_str());
+      Storage.remove(coverMarkerPath.c_str());
     } else {
       LOG_DBG("TXT", "Generated BMP from JPG cover image");
+
+      FsFile marker;
+      if (Storage.openFileForWrite("TXT", coverMarkerPath, marker)) {
+        marker.write('2');
+        marker.write('\n');
+        marker.close();
+      }
     }
     return success;
   }

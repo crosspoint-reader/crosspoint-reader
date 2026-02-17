@@ -213,6 +213,7 @@ void SleepActivity::renderCoverSleepScreen() const {
 
   std::string coverBmpPath;
   const bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+  const auto coverMarkerPathForCache = [](const std::string& cachePath) { return cachePath + "/cover_v2.marker"; };
 
   // Check if the current book is XTC, TXT, or EPUB
   if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
@@ -238,7 +239,10 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastTxt.generateCoverBmp(true)) {
+    coverBmpPath = lastTxt.getCoverBmpPath();
+    const bool forceRegenerate = cropped && Storage.exists(coverBmpPath.c_str()) &&
+                                 !Storage.exists(coverMarkerPathForCache(lastTxt.getCachePath()).c_str());
+    if (!lastTxt.generateCoverBmp(forceRegenerate)) {
       LOG_ERR("SLP", "No cover image found for TXT file");
       return (this->*renderNoCoverSleepScreen)();
     }
@@ -254,8 +258,11 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     // Use non-cropped cover asset and crop at render time.
-    // This avoids artifacts seen in pre-cropped cached cover bitmaps.
-    if (!lastEpub.generateCoverBmp(false, true)) {
+    // Regenerate once when migrating from old cached covers to avoid artifacts.
+    coverBmpPath = lastEpub.getCoverBmpPath(false);
+    const bool forceRegenerate = cropped && Storage.exists(coverBmpPath.c_str()) &&
+                                 !Storage.exists(coverMarkerPathForCache(lastEpub.getCachePath()).c_str());
+    if (!lastEpub.generateCoverBmp(false, forceRegenerate)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
