@@ -33,10 +33,28 @@ def _symbol_from_output(path: pathlib.Path) -> str:
 
 def write_header(path: pathlib.Path, blob: bytes, symbol: str) -> None:
     # Emit a constexpr header containing the raw bytes plus a SerializedHyphenationPatterns descriptor.
+    # The binary format has:
+    #   - 4 bytes: big-endian root address
+    #   - levels tape: from byte 4 to root_addr
+    #   - nodes data: from root_addr onwards
+    
+    if len(blob) < 4:
+        raise ValueError(f"Blob too small: {len(blob)} bytes")
+    
+    # Parse root address (big-endian uint32)
+    root_addr = (blob[0] << 24) | (blob[1] << 16) | (blob[2] << 8) | blob[3]
+    
+    if root_addr > len(blob):
+        raise ValueError(f"Root address {root_addr} exceeds blob size {len(blob)}")
+    
+    # Remove the 4-byte root address and adjust the offset
+    bytes_literal = _format_bytes(blob[4:])
+    root_addr_new = root_addr - 4
+
     path.parent.mkdir(parents=True, exist_ok=True)
     data_symbol = f"{symbol}_trie_data"
     patterns_symbol = f"{symbol}_patterns"
-    bytes_literal = _format_bytes(blob)
+
     content = f"""#pragma once
 
 #include <cstddef>
@@ -50,6 +68,7 @@ alignas(4) constexpr uint8_t {data_symbol}[] = {{
 }};
 
 constexpr SerializedHyphenationPatterns {patterns_symbol} = {{
+    {f"0x{root_addr_new:02X}"}u,
     {data_symbol},
     sizeof({data_symbol}),
 }};
