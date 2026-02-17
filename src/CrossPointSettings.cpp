@@ -98,10 +98,14 @@ bool CrossPointSettings::loadFromFile() {
   // Fall back to binary migration
   if (Storage.exists(SETTINGS_FILE_BIN)) {
     if (loadFromBinaryFile()) {
-      saveToFile();
-      Storage.rename(SETTINGS_FILE_BIN, SETTINGS_FILE_BAK);
-      LOG_DBG("CPS", "Migrated settings.bin to settings.json");
-      return true;
+      if (saveToFile()) {
+        Storage.rename(SETTINGS_FILE_BIN, SETTINGS_FILE_BAK);
+        LOG_DBG("CPS", "Migrated settings.bin to settings.json");
+        return true;
+      } else {
+        LOG_ERR("CPS", "Failed to save migrated settings to JSON");
+        return false;
+      }
     }
   }
 
