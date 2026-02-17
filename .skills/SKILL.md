@@ -665,15 +665,18 @@ build_flags =
 
 ### Testing Checklist
 
-**Before Commit/PR**:
+**AI agent scope** (what you CAN verify):
 1. ✅ **Build**: `pio run -t clean && pio run` (0 errors/warnings)
 2. ✅ **Quality**: `pio check` + `find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i`
-3. ✅ **Device**: Test on hardware if available
-4. ✅ **Orientations**: All 4 modes (Portrait/Inverted/Landscape CW/CCW)
-5. ✅ **Heap**: `ESP.getFreeHeap()` > 50KB, no leaks
-6. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.generated.h` or `platformio.local.ini`
-7. ✅ **CI**: Fix GitHub Actions failures before review
-8. ✅ **Cache**: If EPUB modified, delete `.crosspoint/` and verify re-parse
+3. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.generated.h` or `platformio.local.ini`
+4. ✅ **CI**: Fix GitHub Actions failures before review
+5. ✅ **Code review**: Ensure orientation-aware logic is correct in all 4 modes by inspecting switch/case coverage
+
+**Human tester scope** (flag these for the user):
+6. 🔲 **Device**: Test on hardware
+7. 🔲 **Orientations**: Verify all 4 modes (Portrait/Inverted/Landscape CW/CCW)
+8. 🔲 **Heap**: `ESP.getFreeHeap()` > 50KB, no leaks
+9. 🔲 **Cache**: If EPUB modified, delete `.crosspoint/` and verify re-parse
 
 ### CI/CD Pipeline Awareness
 
