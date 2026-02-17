@@ -35,7 +35,6 @@ class Epub {
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void parseCssFiles() const;
-  std::string getCssRulesCache() const;
   bool loadCssRulesFromCache() const;
 
  public:
