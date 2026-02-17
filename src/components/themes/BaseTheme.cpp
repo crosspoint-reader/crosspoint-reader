@@ -1,7 +1,6 @@
 #include "BaseTheme.h"
 
 #include <GfxRenderer.h>
-#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Utf8.h>
@@ -9,6 +8,8 @@
 #include <cstdint>
 #include <string>
 
+#include <HalGPIO.h>
+#include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -18,41 +19,63 @@ namespace {
 constexpr int batteryPercentSpacing = 4;
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
+
+// Helper: draw battery icon at given position
+void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight, uint16_t percentage) {
+  // Top line
+  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
+  // Bottom line
+  renderer.drawLine(x + 1, y + rectHeight - 1, x + battWidth - 3, y + rectHeight - 1);
+  // Left line
+  renderer.drawLine(x, y + 1, x, y + rectHeight - 2);
+  // Battery end
+  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2);
+  renderer.drawPixel(x + battWidth - 1, y + 3);
+  renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
+  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
+
+  // The +1 is to round up, so that we always fill at least one pixel
+  int filledWidth = percentage * (battWidth - 5) / 100 + 1;
+  if (filledWidth > battWidth - 5) {
+    filledWidth = battWidth - 5;  // Ensure we don't overflow
+  }
+
+  renderer.fillRect(x + 2, y + 2, filledWidth, rectHeight - 4);
+}
 }  // namespace
 
-void BaseTheme::drawBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
-  // Left aligned battery icon and percentage
-  // TODO refactor this so the percentage doesnt change after we position it
+void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+  // Left aligned: icon on left, percentage on right (reader mode)
   const uint16_t percentage = gpio.getBatteryPercentage();
+  const int y = rect.y + 6;
+
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + BaseMetrics::values.batteryWidth, rect.y,
                       percentageText.c_str());
   }
-  // 1 column on left, 2 columns on right, 5 columns of battery body
-  const int x = rect.x;
+
+  drawBatteryIcon(renderer, rect.x, y, BaseMetrics::values.batteryWidth, rect.height, percentage);
+}
+
+void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+  // Right aligned: percentage on left, icon on right (UI headers)
+  // rect.x is already positioned for the icon (drawHeader calculated it)
+  const uint16_t percentage = gpio.getBatteryPercentage();
   const int y = rect.y + 6;
-  const int battWidth = BaseMetrics::values.batteryWidth;
 
-  // Top line
-  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
-  // Bottom line
-  renderer.drawLine(x + 1, y + rect.height - 1, x + battWidth - 3, y + rect.height - 1);
-  // Left line
-  renderer.drawLine(x, y + 1, x, y + rect.height - 2);
-  // Battery end
-  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rect.height - 2);
-  renderer.drawPixel(x + battWidth - 1, y + 3);
-  renderer.drawPixel(x + battWidth - 1, y + rect.height - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rect.height - 5);
-
-  // The +1 is to round up, so that we always fill at least one pixel
-  int filledWidth = percentage * (rect.width - 5) / 100 + 1;
-  if (filledWidth > rect.width - 5) {
-    filledWidth = rect.width - 5;  // Ensure we don't overflow
+  if (showPercentage) {
+    const auto percentageText = std::to_string(percentage) + "%";
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+    // Clear the area where we're going to draw the text to prevent ghosting
+    const auto textHeight = renderer.getTextHeight(SMALL_FONT_ID);
+    renderer.fillRect(rect.x - textWidth - batteryPercentSpacing, rect.y, textWidth, textHeight, false);
+    // Draw text to the left of the icon
+    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str());
   }
 
-  renderer.fillRect(x + 2, y + 2, filledWidth, rect.height - 4);
+  // Icon is already at correct position from rect.x
+  drawBatteryIcon(renderer, rect.x, y, BaseMetrics::values.batteryWidth, rect.height, percentage);
 }
 
 void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,
@@ -88,12 +111,7 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
   constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;  // Distance from bottom
   constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
-
-  // X3 has wider screen in portrait (528 vs 480), use more spacing
-  // X3: buttons at 38, 154, 268, 384 (10px between pairs, 8px between groups)
-  constexpr int x4ButtonPositions[] = {25, 130, 245, 350};
-  constexpr int x3ButtonPositions[] = {38, 154, 268, 384};
-  const int* buttonPositions = gpio.deviceIsX3() ? x3ButtonPositions : x4ButtonPositions;
+  constexpr int buttonPositions[] = {25, 130, 245, 350};
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < 4; i++) {
@@ -115,78 +133,50 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
   constexpr int buttonHeight = 80;                                       // Height on screen (width when rotated)
-  constexpr int buttonMargin = 4;                                        // Distance from edge
+  constexpr int buttonX = 4;                                             // Distance from right edge
+  // Position for the button group - buttons share a border so they're adjacent
+  constexpr int topButtonY = 345;  // Top button position
 
-  if (gpio.deviceIsX3()) {
-    // X3 layout: Up on left side, Down on right side, positioned higher
-    constexpr int x3ButtonY = 155;  // Higher position for X3
+  const char* labels[] = {topBtn, bottomBtn};
 
-    // Draw Up button on left side (topBtn)
-    if (topBtn != nullptr && topBtn[0] != '\0') {
-      const int leftX = buttonMargin;
-      renderer.drawRect(leftX, x3ButtonY, buttonWidth, buttonHeight);
+  // Draw the shared border for both buttons as one unit
+  const int x = screenWidth - buttonX - buttonWidth;
 
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, topBtn);
+  // Draw top button outline (3 sides, bottom open)
+  if (topBtn != nullptr && topBtn[0] != '\0') {
+    renderer.drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);                                       // Top
+    renderer.drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);                                      // Left
+    renderer.drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);  // Right
+  }
+
+  // Draw shared middle border
+  if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
+    renderer.drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);  // Shared border
+  }
+
+  // Draw bottom button outline (3 sides, top is shared)
+  if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
+    renderer.drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);  // Left
+    renderer.drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1,
+                      topButtonY + 2 * buttonHeight - 1);  // Right
+    renderer.drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1,
+                      topButtonY + 2 * buttonHeight - 1);  // Bottom
+  }
+
+  // Draw text for each button
+  for (int i = 0; i < 2; i++) {
+    if (labels[i] != nullptr && labels[i][0] != '\0') {
+      const int y = topButtonY + i * buttonHeight;
+
+      // Draw rotated text centered in the button
+      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
       const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-      const int textX = leftX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, topBtn);
-    }
 
-    // Draw Down button on right side (bottomBtn)
-    if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      const int rightX = screenWidth - buttonMargin - buttonWidth;
-      renderer.drawRect(rightX, x3ButtonY, buttonWidth, buttonHeight);
+      // Center the rotated text in the button
+      const int textX = x + (buttonWidth - textHeight) / 2;
+      const int textY = y + (buttonHeight + textWidth) / 2;
 
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, bottomBtn);
-      const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-      const int textX = rightX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, bottomBtn);
-    }
-  } else {
-    // X4 layout: Both buttons stacked on right side
-    constexpr int topButtonY = 345;  // Top button position
-    const int x = screenWidth - buttonMargin - buttonWidth;
-
-    const char* labels[] = {topBtn, bottomBtn};
-
-    // Draw top button outline (3 sides, bottom open)
-    if (topBtn != nullptr && topBtn[0] != '\0') {
-      renderer.drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);                                       // Top
-      renderer.drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);                                      // Left
-      renderer.drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);  // Right
-    }
-
-    // Draw shared middle border
-    if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
-      renderer.drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);  // Shared border
-    }
-
-    // Draw bottom button outline (3 sides, top is shared)
-    if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      renderer.drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);  // Left
-      renderer.drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1,
-                        topButtonY + 2 * buttonHeight - 1);  // Right
-      renderer.drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1,
-                        topButtonY + 2 * buttonHeight - 1);  // Bottom
-    }
-
-    // Draw text for each button
-    for (int i = 0; i < 2; i++) {
-      if (labels[i] != nullptr && labels[i][0] != '\0') {
-        const int y = topButtonY + i * buttonHeight;
-
-        // Draw rotated text centered in the button
-        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-        const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-
-        // Center the rotated text in the button
-        const int textX = x + (buttonWidth - textHeight) / 2;
-        const int textY = y + (buttonHeight + textWidth) / 2;
-
-        renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, labels[i]);
-      }
+      renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, labels[i]);
     }
   }
 }
@@ -264,17 +254,14 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const {
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  int batteryX = rect.x + rect.width - BaseMetrics::values.contentSidePadding - BaseMetrics::values.batteryWidth;
-  if (showBatteryPercentage) {
-    const uint16_t percentage = gpio.getBatteryPercentage();
-    const auto percentageText = std::to_string(percentage) + "%";
-    batteryX -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-  }
-  drawBattery(renderer, Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
-              showBatteryPercentage);
+  // Position icon at right edge, drawBatteryRight will place text to the left
+  const int batteryX = rect.x + rect.width - 12 - BaseMetrics::values.batteryWidth;
+  drawBatteryRight(renderer,
+                   Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
+                   showBatteryPercentage);
 
   if (title) {
-    int padding = rect.width - batteryX;
+    int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::BOLD);
@@ -587,7 +574,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     const int continueY = bookY + bookHeight - renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
     if (coverRendered) {
       // Draw box behind "Continue Reading" text (inverted when selected: black box instead of white)
-      const char* continueText = "Continue Reading";
+      const char* continueText = tr(STR_CONTINUE_READING);
       const int continueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, continueText);
       constexpr int continuePadding = 6;
       const int continueBoxWidth = continueTextWidth + continuePadding * 2;
@@ -598,7 +585,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.drawRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, !bookSelected);
       renderer.drawCenteredText(UI_10_FONT_ID, continueY, continueText, !bookSelected);
     } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, continueY, "Continue Reading", !bookSelected);
+      renderer.drawCenteredText(UI_10_FONT_ID, continueY, tr(STR_CONTINUE_READING), !bookSelected);
     }
   } else {
     // No book to continue reading
@@ -626,7 +613,8 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
                         rect.width - BaseMetrics::values.contentSidePadding * 2, BaseMetrics::values.menuRowHeight);
     }
 
-    const char* label = buttonLabel(i).c_str();
+    std::string labelStr = buttonLabel(i);
+    const char* label = labelStr.c_str();
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
     const int textX = rect.x + (rect.width - textWidth) / 2;
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);

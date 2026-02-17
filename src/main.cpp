@@ -4,6 +4,7 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
+#include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
@@ -251,6 +252,7 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
+  I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
