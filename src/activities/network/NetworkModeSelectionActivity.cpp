@@ -65,19 +65,16 @@ void NetworkModeSelectionActivity::render(Activity::RenderLock&&) {
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-    // Menu items and descriptions
+  // Menu items and descriptions
   static constexpr StrId menuItems[MENU_ITEM_COUNT] = {StrId::STR_JOIN_NETWORK, StrId::STR_CALIBRE_WIRELESS,
                                                        StrId::STR_CREATE_HOTSPOT};
   static constexpr StrId menuDescs[MENU_ITEM_COUNT] = {StrId::STR_JOIN_DESC, StrId::STR_CALIBRE_DESC,
                                                        StrId::STR_HOTSPOT_DESC};
-                                                       
-  GUI.drawList(
-      renderer,
-      Rect{0, contentTop, pageWidth, contentHeight},
-      static_cast<int>(MENU_ITEM_COUNT), selectedIndex,
-      [this](int index) { return menuItems[index]; }, 
-      [this](int index) { return menuDescs[index]; }, nullptr, nullptr);
 
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEM_COUNT), selectedIndex,
+      [](int index) { return std::string(I18N.get(menuItems[index])); },
+      [](int index) { return std::string(I18N.get(menuDescs[index])); });
 
   // Draw help text at bottom
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

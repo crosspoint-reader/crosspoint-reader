@@ -274,7 +274,7 @@ void KeyboardEntryActivity::render(Activity::RenderLock&&) {
       const bool shiftSelected = (selectedRow == SPECIAL_ROW && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
       const int shiftWidth = SPACE_COL - SHIFT_COL;
       const int shiftXWidth = shiftWidth * (keyWidth + keySpacing);
-      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, shiftXWidth, keyHeight}, I18N.get(shiftIds[shiftState]),
+      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, shiftXWidth, keyHeight}, shiftString[shiftState],
                           shiftSelected);
       currentX += shiftXWidth;
 

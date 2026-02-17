@@ -395,11 +395,12 @@ void CrossPointWebServerActivity::renderServerRunning() const {
                     connectedSSID.c_str());
 
   int startY = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
+  int height10 = renderer.getLineHeight(UI_10_FONT_ID);
   if (isApMode) {
     // AP mode display
-    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, startY, "Scan QR code or connect to Wifi", true,
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, startY, tr(STR_CONNECT_WIFI_HINT), true,
                       EpdFontFamily::BOLD);
-    startY += renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing * 2;
+    startY += height10 + metrics.verticalSpacing * 2;
 
     // Show QR code for Wifi
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
@@ -408,18 +409,16 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     // Show network name
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
                       connectedSSID.c_str());
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 100,
-                      "network");
 
     startY += QR_CODE_HEIGHT + 2 * metrics.verticalSpacing;
 
     // Show primary URL (hostname)
-    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, startY, tr(STR_SCAN_QR_WIFI_HINT), true,
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, startY, tr(STR_OPEN_URL_HINT), true,
                       EpdFontFamily::BOLD);
-    startY += renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing * 2;
+    startY += height10 + metrics.verticalSpacing * 2;
 
     std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
-    std::string ipUrl = "or http://" + connectedIP + "/";
+    std::string ipUrl = tr(STR_OR_HTTP_PREFIX) + connectedIP + "/";
 
     // Show QR code for URL
     drawQRCode(renderer, metrics.contentSidePadding, startY, hostnameUrl);
@@ -434,8 +433,10 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // STA mode display (original behavior)
     // std::string ipInfo = "IP Address: " + connectedIP;
-    renderer.drawCenteredText(UI_12_FONT_ID, startY, "Scan QR code or open URL", true, EpdFontFamily::BOLD);
-    startY += renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing * 2;
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
+    startY += height10;
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, tr(STR_SCAN_QR_HINT), true, EpdFontFamily::BOLD);
+    startY += height10 + metrics.verticalSpacing * 2;
 
     // Show QR code for URL
     std::string webInfo = "http://" + connectedIP + "/";
@@ -444,7 +445,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // Show web server URL prominently
     renderer.drawCenteredText(UI_10_FONT_ID, startY, webInfo.c_str(), true);
-    startY += renderer.getLineHeight(UI_10_FONT_ID) + 5;
+    startY += height10 + 5;
 
     // Also show hostname URL
     std::string hostnameUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";

@@ -146,23 +146,25 @@ void KOReaderSettingsActivity::render(Activity::RenderLock&&) {
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
-      static_cast<int>(selectedIndex), [this](int index) { return menuNames[index]; }, nullptr, nullptr,
+      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
+      nullptr,
       [this](int index) {
         // Draw status for each setting
         if (index == 0) {
           auto username = KOREADER_STORE.getUsername();
-          return username.empty() ? tr(STR_NOT_SET) : username;
+          return username.empty() ? std::string(tr(STR_NOT_SET)) : username;
         } else if (index == 1) {
-          return KOREADER_STORE.getPassword().empty() ? tr(STR_NOT_SET) : std::string("******");
+          return KOREADER_STORE.getPassword().empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
         } else if (index == 2) {
           auto serverUrl = KOREADER_STORE.getServerUrl();
-          return serverUrl.empty() ? tr(STR_DEFAULT_VALUE) : serverUrl;
+          return serverUrl.empty() ? std::string(tr(STR_DEFAULT_VALUE)) : serverUrl;
         } else if (index == 3) {
-          return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? tr(STR_FILENAME) : tr(STR_BINARY);
+          return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? std::string(tr(STR_FILENAME))
+                                                                                  : std::string(tr(STR_BINARY));
         } else if (index == 4) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
-        return tr(STR_NOT_SET);
+        return std::string(tr(STR_NOT_SET));
       },
       true);
 
