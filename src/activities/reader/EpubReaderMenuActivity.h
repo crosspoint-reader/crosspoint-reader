@@ -41,6 +41,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   // Fixed menu layout (order matters for up/down navigation).
   const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
                                            {MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION},
+                                           {MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN},
                                            {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
                                            {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},
                                            {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
@@ -51,8 +52,11 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   ButtonNavigator buttonNavigator;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
+  uint8_t selectedPageTurnOption = 0;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
+  const std::vector<StrId> pageTurnLabels = {StrId::STR_STATE_OFF, StrId::STR_1, StrId::STR_3, StrId::STR_6,
+                                             StrId::STR_12};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

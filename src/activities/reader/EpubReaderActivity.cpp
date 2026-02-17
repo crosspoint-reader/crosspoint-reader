@@ -184,11 +184,10 @@ void EpubReaderActivity::loop() {
       if (section->currentPage < section->pageCount - 1) {
         section->currentPage++;
       } else {
-        xSemaphoreTake(renderingMutex, portMAX_DELAY);
+        RenderLock lock(*this);
         nextPageNumber = 0;
         currentSpineIndex++;
         section.reset();
-        xSemaphoreGive(renderingMutex);
       }
       requestUpdate();
       return;
@@ -821,20 +820,16 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   }
 
   std::string title;
-  int titleWidth;
 
   if (automaticPageTurnActive) {
-    title = "Auto Turn Enabled: " + std::to_string(60 * 1000 / pageTurnDuration) + " PPM";
-    titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
+    title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
   } else if (showChapterTitle) {
     const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
     if (tocIndex == -1) {
       title = tr(STR_UNNAMED);
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     } else {
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     }
   }
 
@@ -842,6 +837,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
   if (!title.empty()) {
     // Centered chatper title text
     // Page width minus existing content with 30px padding on each side
+    int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     const int rendererableScreenWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
 
     const int batterySize = showBattery ? (showBatteryPercentage ? 50 : 20) : 0;
