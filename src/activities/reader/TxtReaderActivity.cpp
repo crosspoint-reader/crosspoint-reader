@@ -400,8 +400,8 @@ void TxtReaderActivity::renderScreen() {
   loadPageAtOffset(offset, currentPageLines, nextOffset);
 
   renderer.clearScreen();
-  renderer.clearFontCache();
   renderPage();
+  renderer.clearFontCache();
 
   // Save progress
   saveProgress();

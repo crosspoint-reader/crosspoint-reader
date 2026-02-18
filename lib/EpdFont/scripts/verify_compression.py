@@ -3,8 +3,8 @@
 Round-trip verification for compressed font headers.
 
 Parses each generated .h file in the given directory, identifies compressed fonts
-(those with a Groups array), decompresses each group, and verifies the
-reconstituted bitmap data matches the original uncompressed glyph data.
+(those with a Groups array), decompresses each group, and verifies that
+decompression succeeds and all glyph offsets/lengths fall within bounds.
 """
 import os
 import re
