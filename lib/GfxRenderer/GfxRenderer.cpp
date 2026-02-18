@@ -708,16 +708,16 @@ int GfxRenderer::getScreenHeight() const {
   return HalDisplay::DISPLAY_WIDTH;
 }
 
-int GfxRenderer::getSpaceWidth(const int fontId) const {
+int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
+  return fontMap.at(fontId).getGlyph(' ', style)->advanceX;
 }
 
-int GfxRenderer::getTextAdvanceX(const int fontId, const char* text) const {
+int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
@@ -726,7 +726,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text) const {
   uint32_t cp;
   int width = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    width += fontMap.at(fontId).getGlyph(cp, EpdFontFamily::REGULAR)->advanceX;
+    width += fontMap.at(fontId).getGlyph(cp, style)->advanceX;
   }
   return width;
 }
