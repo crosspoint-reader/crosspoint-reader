@@ -186,7 +186,6 @@ void KOReaderPageTurnerActivity::render(Activity::RenderLock&&) {
     return;
   }
 
-  const auto pageWidth = renderer.getScreenWidth();
   constexpr int LINE_SPACING = 28;
 
   renderer.clearScreen();
