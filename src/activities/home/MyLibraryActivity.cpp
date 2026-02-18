@@ -1,5 +1,6 @@
 #include "MyLibraryActivity.h"
 
+#include <Bitmap.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
@@ -55,7 +56,7 @@ void MyLibraryActivity::loadFiles() {
       auto filename = std::string(name);
       if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
           StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
-          StringUtils::checkFileExtension(filename, ".md")) {
+          StringUtils::checkFileExtension(filename, ".md") || StringUtils::checkFileExtension(filename, ".bmp")) {
         files.emplace_back(filename);
       }
     }
@@ -105,15 +106,42 @@ void MyLibraryActivity::loop() {
     basepath = "/";
     loadFiles();
     selectorIndex = 0;
+    isViewingImage = false;
     updateRequired = true;
     return;
   }
 
   const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
                           mappedInput.wasReleased(MappedInputManager::Button::Up);
-  ;
   const bool downReleased = mappedInput.wasReleased(MappedInputManager::Button::Right) ||
                             mappedInput.wasReleased(MappedInputManager::Button::Down);
+
+  if (isViewingImage) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      isViewingImage = false;
+      updateRequired = true;
+      return;
+    }
+    const int listSize = static_cast<int>(files.size());
+    if (upReleased) {
+      // Find previous BMP
+      int nextIndex = selectorIndex;
+      do {
+        nextIndex = (nextIndex + listSize - 1) % listSize;
+      } while (nextIndex != selectorIndex && !StringUtils::checkFileExtension(files[nextIndex], ".bmp"));
+      selectorIndex = nextIndex;
+      updateRequired = true;
+    } else if (downReleased) {
+      // Find next BMP
+      int nextIndex = selectorIndex;
+      do {
+        nextIndex = (nextIndex + 1) % listSize;
+      } while (nextIndex != selectorIndex && !StringUtils::checkFileExtension(files[nextIndex], ".bmp"));
+      selectorIndex = nextIndex;
+      updateRequired = true;
+    }
+    return;
+  }
 
   const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
@@ -128,6 +156,9 @@ void MyLibraryActivity::loop() {
       basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
       loadFiles();
       selectorIndex = 0;
+      updateRequired = true;
+    } else if (StringUtils::checkFileExtension(files[selectorIndex], ".bmp")) {
+      isViewingImage = true;
       updateRequired = true;
     } else {
       onSelectBook(basepath + files[selectorIndex]);
@@ -191,6 +222,32 @@ void MyLibraryActivity::render() const {
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+
+  if (isViewingImage) {
+    std::string path = basepath;
+    if (path.back() != '/') path += "/";
+    path += files[selectorIndex];
+
+    FsFile file;
+    if (SdMan.openFileForRead("GFX", path, file)) {
+      Bitmap bitmap(file, true);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+        // Full screen display
+        renderer.drawBitmap(bitmap, 0, 0, pageWidth, pageHeight);
+      } else {
+        renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Error loading image");
+      }
+    } else {
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "File not found");
+    }
+
+    const auto labels = mappedInput.mapLabels("« Back", "", "Prev", "Next");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+    renderer.displayBuffer();
+    return;
+  }
+
   auto metrics = UITheme::getInstance().getMetrics();
 
   auto folderName = basepath == "/" ? "SD card" : basepath.substr(basepath.rfind('/') + 1).c_str();
