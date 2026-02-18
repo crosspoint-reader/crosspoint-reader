@@ -150,7 +150,6 @@ void RosaryPrayerActivity::drawWrappedText(int fontId, int x, int y, int maxWidt
   int currentX = x;
   int currentY = y;
 
-  const char* wordStart = text;
   const char* pos = text;
 
   while (*pos != '\0') {
