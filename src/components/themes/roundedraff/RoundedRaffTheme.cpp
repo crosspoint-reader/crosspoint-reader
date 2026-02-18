@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <I18n.h>
 
 #include <algorithm>
 #include <cctype>
@@ -208,11 +209,15 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       }
 
       const float bitmapRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
-      constexpr int kCoverImageVPadding = 40;
+      constexpr int kCoverImageTopPadding = 40;
+      constexpr int kCoverImageBottomGap = 12;
+      constexpr int kPillHeight = 40;
+      constexpr int kPillBottomPadding = 14;
       const int targetX = coverX;
-      const int targetY = coverY + kCoverImageVPadding;
+      const int targetY = coverY + kCoverImageTopPadding;
       const int targetWidth = coverWidth;
-      const int targetHeight = std::max(1, coverHeight - kCoverImageVPadding * 2);
+      const int bottomReserved = kPillHeight + kPillBottomPadding + kCoverImageBottomGap;
+      const int targetHeight = std::max(1, coverHeight - kCoverImageTopPadding - bottomReserved);
 
       int drawWidth = targetWidth;
       int drawHeight = targetHeight;
@@ -241,6 +246,27 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
     maskRoundedRectOutsideCorners(renderer, coverX, coverY, coverWidth, coverHeight, kCoverRadius);
     renderer.drawCenteredText(kTitleFontId, coverY + coverHeight / 2 - renderer.getLineHeight(kTitleFontId) / 2,
                               hasContinueReading ? "No cover preview" : "No open book");
+  }
+
+  if (hasContinueReading) {
+    const bool coverSelected = (selectorIndex == 0);
+    const char* label = tr(STR_CONTINUE_READING);
+
+    constexpr int kPillHeight = 40;
+    constexpr int kPillBottomPadding = 14;
+    constexpr int kPillLeftPadding = 20;
+    constexpr int kPillTextPaddingX = 18;
+
+    const int labelW = renderer.getTextWidth(kTitleFontId, label, EpdFontFamily::BOLD);
+    const int pillMaxW = std::max(1, coverWidth - kPillLeftPadding * 2);
+    const int pillW = std::min(pillMaxW, labelW + kPillTextPaddingX * 2);
+    const int pillX = coverX + kPillLeftPadding;
+    const int pillY = coverY + coverHeight - kPillBottomPadding - kPillHeight;
+
+    renderer.fillRoundedRect(pillX, pillY, pillW, kPillHeight, kMenuRadius,
+                             coverSelected ? Color::Black : Color::White);
+    const int textY = pillY + (kPillHeight - renderer.getLineHeight(kTitleFontId)) / 2;
+    renderer.drawText(kTitleFontId, pillX + kPillTextPaddingX, textY, label, !coverSelected, EpdFontFamily::BOLD);
   }
 
   // No outline border for the cover card; keep only rounded clipping.
