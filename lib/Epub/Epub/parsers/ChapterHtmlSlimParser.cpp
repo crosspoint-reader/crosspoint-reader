@@ -187,8 +187,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     tableCellBlockStyle.alignment = align;
     self->startNewTextBlock(tableCellBlockStyle);
 
-    const std::string headerText =
-        "Tab Row " + std::to_string(self->tableRowIndex + 1) + ", Cell " + std::to_string(self->tableCellIndex + 1) + ":";
+    const std::string headerText = "Tab Row " + std::to_string(self->tableRowIndex + 1) + ", Cell " +
+                                   std::to_string(self->tableCellIndex + 1) + ":";
     StyleStackEntry headerStyle;
     headerStyle.depth = self->depth;
     headerStyle.hasBold = true;
