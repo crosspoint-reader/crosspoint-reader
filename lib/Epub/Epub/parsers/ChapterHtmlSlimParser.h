@@ -62,6 +62,11 @@ class ChapterHtmlSlimParser {
   bool effectiveBold = false;
   bool effectiveItalic = false;
   bool effectiveUnderline = false;
+  bool inTable = false;
+  int tableDepth = INT_MAX;
+  int tableCellDepth = INT_MAX;
+  int tableRowIndex = -1;
+  int tableCellIndex = -1;
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
