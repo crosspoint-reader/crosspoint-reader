@@ -67,6 +67,17 @@ bool Page::serialize(FsFile& file) const {
     }
   }
 
+  // Serialize footnotes
+  const uint16_t fnCount = footnotes.size();
+  serialization::writePod(file, fnCount);
+  for (const auto& fn : footnotes) {
+    if (file.write(fn.number, sizeof(fn.number)) != sizeof(fn.number) ||
+        file.write(fn.href, sizeof(fn.href)) != sizeof(fn.href)) {
+      LOG_ERR("PGE", "Failed to write footnote");
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -90,6 +101,25 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;
     }
+  }
+
+  // Deserialize footnotes
+  uint16_t fnCount;
+  serialization::readPod(file, fnCount);
+  if (fnCount > 16) {
+    LOG_ERR("PGE", "Invalid footnote count %u", fnCount);
+    return nullptr;
+  }
+  for (uint16_t i = 0; i < fnCount; i++) {
+    FootnoteEntry entry;
+    if (file.read(entry.number, sizeof(entry.number)) != sizeof(entry.number) ||
+        file.read(entry.href, sizeof(entry.href)) != sizeof(entry.href)) {
+      LOG_ERR("PGE", "Failed to read footnote %u", i);
+      return nullptr;
+    }
+    entry.number[sizeof(entry.number) - 1] = '\0';
+    entry.href[sizeof(entry.href) - 1] = '\0';
+    page->footnotes.push_back(entry);
   }
 
   return page;

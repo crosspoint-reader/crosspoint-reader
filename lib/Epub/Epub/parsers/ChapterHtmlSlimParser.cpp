@@ -48,6 +48,24 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
   return false;
 }
 
+const char* getAttribute(const XML_Char** atts, const char* attrName) {
+  if (!atts) return nullptr;
+  for (int i = 0; atts[i]; i += 2) {
+    if (strcmp(atts[i], attrName) == 0) return atts[i + 1];
+  }
+  return nullptr;
+}
+
+bool isInternalEpubLink(const char* href) {
+  if (!href || href[0] == '\0') return false;
+  if (strncmp(href, "http://", 7) == 0 || strncmp(href, "https://", 8) == 0) return false;
+  if (strncmp(href, "mailto:", 7) == 0) return false;
+  if (strncmp(href, "ftp://", 6) == 0) return false;
+  if (strncmp(href, "tel:", 4) == 0) return false;
+  if (strncmp(href, "javascript:", 11) == 0) return false;
+  return true;
+}
+
 bool isHeaderOrBlock(const char* name) {
   return matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
 }
@@ -116,6 +134,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     makePages();
   }
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
+  wordsExtractedInBlock = 0;
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -300,6 +319,50 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  // Detect internal <a href="..."> links (footnotes, cross-references)
+  // Note: <aside epub:type="footnote"> elements are rendered as normal content
+  // without special handling. Links pointing to them are collected as footnotes.
+  if (strcmp(name, "a") == 0) {
+    const char* href = getAttribute(atts, "href");
+
+    bool isInternalLink = isInternalEpubLink(href);
+
+    // Special case: javascript:void(0) links with data attributes
+    // Example: <a href="javascript:void(0)"
+    // data-xyz="{&quot;name&quot;:&quot;OPS/ch2.xhtml&quot;,&quot;frag&quot;:&quot;id46&quot;}">
+    if (href && strncmp(href, "javascript:", 11) == 0) {
+      isInternalLink = false;
+      // TODO: Parse data-* attributes to extract actual href
+    }
+
+    if (isInternalLink) {
+      // Flush buffer before style change
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+        self->nextWordContinues = true;
+      }
+      self->insideFootnoteLink = true;
+      self->footnoteLinkDepth = self->depth;
+      strncpy(self->currentFootnoteLinkHref, href, sizeof(self->currentFootnoteLinkHref) - 1);
+      self->currentFootnoteLinkHref[sizeof(self->currentFootnoteLinkHref) - 1] = '\0';
+      self->currentFootnoteLinkText[0] = '\0';
+      self->currentFootnoteLinkTextLen = 0;
+
+      // Apply underline style to visually indicate the link
+      self->underlineUntilDepth = std::min(self->underlineUntilDepth, self->depth);
+      StyleStackEntry entry;
+      entry.depth = self->depth;
+      entry.hasUnderline = true;
+      entry.underline = true;
+      self->inlineStyleStack.push_back(entry);
+      self->updateEffectiveInlineStyle();
+
+      // Skip CSS resolution — we already handled styling for this <a> tag
+      self->depth += 1;
+      return;
+    }
+  }
+
   // Compute CSS style for this element
   CssStyle cssStyle;
   if (self->cssParser) {
@@ -447,6 +510,17 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     return;
   }
 
+  // Collect footnote link display text (for the number label)
+  if (self->insideFootnoteLink) {
+    int remaining = sizeof(self->currentFootnoteLinkText) - 1 - self->currentFootnoteLinkTextLen;
+    if (remaining > 0) {
+      int toCopy = (len < remaining) ? len : remaining;
+      memcpy(self->currentFootnoteLinkText + self->currentFootnoteLinkTextLen, s, toCopy);
+      self->currentFootnoteLinkTextLen += toCopy;
+      self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen] = '\0';
+    }
+  }
+
   for (int i = 0; i < len; i++) {
     if (isWhitespace(s[i])) {
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
@@ -566,6 +640,18 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 
   self->depth -= 1;
+
+  // Closing a footnote link — create entry from collected text and href
+  if (self->insideFootnoteLink && self->depth == self->footnoteLinkDepth) {
+    FootnoteEntry entry;
+    strncpy(entry.number, self->currentFootnoteLinkText, sizeof(entry.number) - 1);
+    entry.number[sizeof(entry.number) - 1] = '\0';
+    strncpy(entry.href, self->currentFootnoteLinkHref, sizeof(entry.href) - 1);
+    entry.href[sizeof(entry.href) - 1] = '\0';
+    int wordIndex = self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
+    self->pendingFootnotes.push_back({wordIndex, entry});
+    self->insideFootnoteLink = false;
+  }
 
   // Leaving skip
   if (self->skipUntilDepth == self->depth) {
@@ -702,6 +788,18 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
+  // Track cumulative words to assign footnotes to the page containing their anchor
+  wordsExtractedInBlock += line->wordCount();
+  auto it = pendingFootnotes.begin();
+  while (it != pendingFootnotes.end()) {
+    if (it->first <= wordsExtractedInBlock) {
+      currentPage->addFootnote(it->second.number, it->second.href);
+      it = pendingFootnotes.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
   currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
@@ -738,6 +836,16 @@ void ChapterHtmlSlimParser::makePages() {
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+
+  // Fallback: transfer any remaining pending footnotes to current page.
+  // Normally addLineToPage handles this via word-index tracking, but this catches
+  // edge cases where a footnote's word index equals the exact block size.
+  if (!pendingFootnotes.empty() && currentPage) {
+    for (const auto& [idx, fn] : pendingFootnotes) {
+      currentPage->addFootnote(fn.number, fn.href);
+    }
+    pendingFootnotes.clear();
+  }
 
   // Apply bottom spacing after the paragraph (stored in pixels)
   if (blockStyle.marginBottom > 0) {
