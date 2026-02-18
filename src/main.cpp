@@ -25,6 +25,8 @@
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
+#include "activities/trmnl/TrmnlSetupActivity.h"
+#include "trmnl/TrmnlService.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
@@ -197,6 +199,25 @@ void waitForPowerRelease() {
 
 // Enter deep sleep mode
 void enterDeepSleep() {
+  // TRMNL Sleep Integration
+  if (TrmnlService::getConfig().enabled) {
+    renderer.clearScreen();
+    renderer.drawCenteredText(UI_12_FONT_ID, 400, "Updating TRMNL...", true, EpdFontFamily::BOLD);
+    renderer.displayBuffer();
+    
+    if (WiFi.status() != WL_CONNECTED) {
+        WiFi.mode(WIFI_STA);
+        WiFi.begin();
+        int retries = 0;
+        while (WiFi.status() != WL_CONNECTED && retries < 20) {
+            delay(200);
+            retries++;
+        }
+    }
+    
+    TrmnlService::refreshScreen();
+  }
+
   APP_STATE.lastSleepFromReader = currentActivity && currentActivity->isReaderActivity();
   APP_STATE.saveToFile();
   exitActivity();
@@ -248,10 +269,15 @@ void onGoToBrowser() {
   enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToTrmnl() {
+  exitActivity();
+  enterNewActivity(new TrmnlSetupActivity(renderer, mappedInputManager, onGoHome));
+}
+
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
-                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser));
+                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser, onGoToTrmnl));
 }
 
 void setupDisplayAndFonts() {
