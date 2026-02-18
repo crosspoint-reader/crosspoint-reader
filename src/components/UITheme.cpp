@@ -25,12 +25,12 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
   switch (type) {
     case CrossPointSettings::UI_THEME::CLASSIC:
       LOG_DBG("UI", "Using Classic theme");
-      currentTheme = new BaseTheme();
+      currentTheme = std::make_unique<BaseTheme>();
       currentMetrics = &BaseMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA:
       LOG_DBG("UI", "Using Lyra theme");
-      currentTheme = new LyraTheme();
+      currentTheme = std::make_unique<LyraTheme>();
       currentMetrics = &LyraMetrics::values;
       break;
   }

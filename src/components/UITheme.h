@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -24,7 +25,7 @@ class UITheme {
 
  private:
   const ThemeMetrics* currentMetrics;
-  const BaseTheme* currentTheme;
+  std::unique_ptr<BaseTheme> currentTheme;
 };
 
 // Helper macro to access current theme
