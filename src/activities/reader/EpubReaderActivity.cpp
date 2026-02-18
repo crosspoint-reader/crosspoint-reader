@@ -437,7 +437,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const std::string cachePath = epub->getCachePath();
 
       // Construct the full message: "Delete Book: /path/to/file.epub"
-      std::string fullMsg = std::string(I18N.get(StrId::STR_DELETE_BOOK)) + ": " + bookPath;
+      std::string Heading = std::string(I18N.get(StrId::STR_DELETE_BOOK)) + ": ";
 
       auto doDelete = [this, bookPath, cachePath](bool confirmed) {
         if (confirmed) {
@@ -458,7 +458,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         this->pendingSubactivityExit = true;
       };
 
-      enterNewActivity(new ConfirmationActivity(renderer, mappedInput, fullMsg, doDelete));
+      enterNewActivity(new ConfirmationActivity(renderer, mappedInput, Heading, bookPath, doDelete));
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {

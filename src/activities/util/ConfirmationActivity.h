@@ -6,13 +6,14 @@
 
 class ConfirmationActivity : public Activity {
  public:
-  ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& message,
-                       std::function<void(bool)> onResult);
+  ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& heading,
+                       const std::string& body, std::function<void(bool)> onResult);
 
   void onEnter() override;
   void loop() override;
 
  private:
-  std::string message;
+  std::string heading;
+  std::string body;
   std::function<void(bool)> onResult;
 };
