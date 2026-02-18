@@ -28,36 +28,24 @@ esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
 }
 
 esp_err_t event_handler(esp_http_client_event_t* event) {
-  /* We do interested in only HTTP_EVENT_ON_DATA event only */
   if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
 
-  if (!esp_http_client_is_chunked_response(event->client)) {
-    int content_len = esp_http_client_get_content_length(event->client);
-    int copy_len = 0;
-
-    if (local_buf == NULL) {
-      /* local_buf life span is tracked by caller checkForUpdate */
-      local_buf = static_cast<char*>(calloc(content_len + 1, sizeof(char)));
-      output_len = 0;
-      if (local_buf == NULL) {
-        LOG_ERR("OTA", "HTTP Client Out of Memory Failed, Allocation %d", content_len);
-        return ESP_ERR_NO_MEM;
-      }
-    }
-    copy_len = min(event->data_len, (content_len - output_len));
-    if (copy_len) {
-      memcpy(local_buf + output_len, event->data, copy_len);
-    }
-    output_len += copy_len;
-  } else {
-    /* Code might be hits here, It happened once (for version checking) but I need more logs to handle that */
-    int chunked_len;
-    esp_http_client_get_chunk_length(event->client, &chunked_len);
-    LOG_DBG("OTA", "esp_http_client_is_chunked_response failed, chunked_len: %d", chunked_len);
+  // Append this chunk to local_buf regardless of whether the response uses
+  // Content-Length or Transfer-Encoding: chunked. realloc(NULL, n) is
+  // equivalent to malloc(n), so this handles the first call correctly for both.
+  const int data_len = event->data_len;
+  char* new_buf = static_cast<char*>(realloc(local_buf, output_len + data_len + 1));
+  if (new_buf == NULL) {
+    LOG_ERR("OTA", "Failed to allocate HTTP response buffer (%d bytes)", output_len + data_len + 1);
+    return ESP_ERR_NO_MEM;
   }
 
+  local_buf = new_buf;
+  memcpy(local_buf + output_len, event->data, data_len);
+  output_len += data_len;
+  local_buf[output_len] = '\0';
   return ESP_OK;
-} /* event_handler */
+}
 } /* namespace */
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
