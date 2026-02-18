@@ -150,34 +150,34 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
   if (strcmp(name, "table") == 0) {
+    // skip nested tables
+    if (self->tableDepth > 0) {
+      self->tableDepth += 1;
+      return;
+    }
+
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
-    self->inTable = true;
-    self->tableDepth = self->depth;
-    self->tableRowIndex = -1;
-    self->tableCellIndex = -1;
-    self->tableCellDepth = INT_MAX;
+    self->tableDepth += 1;
+    self->tableRowIndex = 0;
+    self->tableColIndex = 0;
     self->depth += 1;
     return;
   }
 
-  if (self->inTable && self->tableDepth < self->depth && strcmp(name, "tr") == 0) {
+  if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
     self->tableRowIndex += 1;
-    self->tableCellIndex = -1;
+    self->tableColIndex = 0;
     self->depth += 1;
     return;
   }
 
-  if (self->inTable && self->tableDepth < self->depth && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+  if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
-    if (self->tableRowIndex < 0) {
-      self->tableRowIndex = 0;
-    }
-    self->tableCellIndex += 1;
-    self->tableCellDepth = self->depth;
+    self->tableColIndex += 1;
 
     auto tableCellBlockStyle = BlockStyle();
     tableCellBlockStyle.textAlignDefined = true;
@@ -187,8 +187,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     tableCellBlockStyle.alignment = align;
     self->startNewTextBlock(tableCellBlockStyle);
 
-    const std::string headerText = "Tab Row " + std::to_string(self->tableRowIndex + 1) + ", Cell " +
-                                   std::to_string(self->tableCellIndex + 1) + ":";
+    const std::string headerText =
+        "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
     StyleStackEntry headerStyle;
     headerStyle.depth = self->depth;
     headerStyle.hasBold = true;
@@ -494,6 +494,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
+  // Skip content of nested table
+  if (self->tableDepth > 1) {
+    return;
+  }
+
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
     return;
@@ -599,6 +604,14 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   const bool headerOrBlockTag = isHeaderOrBlock(name);
   const bool tableStructuralTag = isTableStructuralTag(name);
 
+  if (self->tableDepth > 1 && strcmp(name, "table") == 0) {
+    // get rid of all text inside the nested table
+    self->partWordBufferIndex = 0;
+    self->tableDepth -= 1;
+    LOG_DBG("EHP", "nested table detected, get rid of its content");
+    return;
+  }
+
   // Flush buffer with current style BEFORE any style changes
   if (self->partWordBufferIndex > 0) {
     // Flush if style will change OR if we're closing a block/structural element
@@ -625,17 +638,18 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->skipUntilDepth = INT_MAX;
   }
 
-  if (self->inTable && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0) && self->tableCellDepth == self->depth) {
-    self->tableCellDepth = INT_MAX;
+  if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
     self->nextWordContinues = false;
   }
 
-  if (self->inTable && strcmp(name, "table") == 0 && self->tableDepth == self->depth) {
-    self->inTable = false;
-    self->tableDepth = INT_MAX;
-    self->tableRowIndex = -1;
-    self->tableCellIndex = -1;
-    self->tableCellDepth = INT_MAX;
+  if (self->tableDepth == 1 && (strcmp(name, "tr") == 0)) {
+    self->nextWordContinues = false;
+  }
+
+  if (self->tableDepth == 1 && strcmp(name, "table") == 0) {
+    self->tableDepth -= 1;
+    self->tableRowIndex = 0;
+    self->tableColIndex = 0;
     self->nextWordContinues = false;
   }
 
