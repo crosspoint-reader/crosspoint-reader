@@ -209,15 +209,11 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       }
 
       const float bitmapRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
-      constexpr int kCoverImageTopPadding = 40;
-      constexpr int kCoverImageBottomGap = 12;
-      constexpr int kPillHeight = 40;
-      constexpr int kPillBottomPadding = 14;
+      constexpr int kCoverImageVPadding = 40;
       const int targetX = coverX;
-      const int targetY = coverY + kCoverImageTopPadding;
+      const int targetY = coverY + kCoverImageVPadding;
       const int targetWidth = coverWidth;
-      const int bottomReserved = kPillHeight + kPillBottomPadding + kCoverImageBottomGap;
-      const int targetHeight = std::max(1, coverHeight - kCoverImageTopPadding - bottomReserved);
+      const int targetHeight = std::max(1, coverHeight - kCoverImageVPadding * 2);
 
       int drawWidth = targetWidth;
       int drawHeight = targetHeight;
@@ -247,21 +243,20 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
     renderer.drawCenteredText(kTitleFontId, coverY + coverHeight / 2 - renderer.getLineHeight(kTitleFontId) / 2,
                               hasContinueReading ? "No cover preview" : "No open book");
   }
-
   if (hasContinueReading) {
     const bool coverSelected = (selectorIndex == 0);
     const char* label = tr(STR_CONTINUE_READING);
 
     constexpr int kPillHeight = 40;
-    constexpr int kPillBottomPadding = 14;
-    constexpr int kPillLeftPadding = 20;
+    constexpr int kPillGapBelowCover = 14;
     constexpr int kPillTextPaddingX = 18;
 
     const int labelW = renderer.getTextWidth(kTitleFontId, label, EpdFontFamily::BOLD);
-    const int pillMaxW = std::max(1, coverWidth - kPillLeftPadding * 2);
-    const int pillW = std::min(pillMaxW, labelW + kPillTextPaddingX * 2);
-    const int pillX = coverX + kPillLeftPadding;
-    const int pillY = coverY + coverHeight - kPillBottomPadding - kPillHeight;
+    const int pillW = std::min(coverWidth, labelW + kPillTextPaddingX * 2);
+    const int pillX = coverX;
+    const int tileBottom = rect.y + rect.height;
+    const int desiredPillY = coverY + coverHeight + kPillGapBelowCover;
+    const int pillY = std::min(desiredPillY, tileBottom - kPillHeight - 2);
 
     renderer.fillRoundedRect(pillX, pillY, pillW, kPillHeight, kMenuRadius,
                              coverSelected ? Color::Black : Color::White);
