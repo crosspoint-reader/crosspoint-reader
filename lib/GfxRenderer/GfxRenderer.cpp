@@ -976,15 +976,15 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
   bitmap = &fontFamily.getData(style)->bitmap[offset];
 
   if (bitmap != nullptr) {
-    for (int glyphY = 0; glyphY < height; glyphY++) {
-      const int screenY = *y - glyph->top + glyphY;
-      for (int glyphX = 0; glyphX < width; glyphX++) {
-        const int pixelPosition = glyphY * width + glyphX;
-        const int screenX = *x + left + glyphX;
+    if (is2Bit) {
+      for (int glyphY = 0; glyphY < height; glyphY++) {
+        const int screenY = *y - glyph->top + glyphY;
+        for (int glyphX = 0; glyphX < width; glyphX++) {
+          const int pixelPosition = glyphY * width + glyphX;
+          const int screenX = *x + left + glyphX;
 
-        if (is2Bit) {
-          const uint8_t byte = bitmap[pixelPosition / 4];
-          const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+          const uint8_t byte = bitmap[pixelPosition >> 2];
+          const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
           // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
           // we swap this to better match the way images and screen think about colors:
           // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
@@ -1001,9 +1001,17 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
             // Dark gray
             drawPixel(screenX, screenY, false);
           }
-        } else {
-          const uint8_t byte = bitmap[pixelPosition / 8];
-          const uint8_t bit_index = 7 - (pixelPosition % 8);
+        }
+      }
+    } else {
+      for (int glyphY = 0; glyphY < height; glyphY++) {
+        const int screenY = *y - glyph->top + glyphY;
+        for (int glyphX = 0; glyphX < width; glyphX++) {
+          const int pixelPosition = glyphY * width + glyphX;
+          const int screenX = *x + left + glyphX;
+
+          const uint8_t byte = bitmap[pixelPosition >> 3];
+          const uint8_t bit_index = 7 - (pixelPosition & 7);
 
           if ((byte >> bit_index) & 1) {
             drawPixel(screenX, screenY, pixelState);
