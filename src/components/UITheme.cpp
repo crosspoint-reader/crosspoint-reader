@@ -8,6 +8,7 @@
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
+#include "components/themes/roundedraff/RoundedRaffTheme.h"
 
 UITheme UITheme::instance;
 
@@ -32,6 +33,11 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Lyra theme");
       currentTheme = new LyraTheme();
       currentMetrics = &LyraMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::ROUNDEDRAFF:
+      LOG_DBG("UI", "Using RoundedRaff theme");
+      currentTheme = new RoundedRaffTheme();
+      currentMetrics = &RoundedRaffMetrics::values;
       break;
   }
 }
