@@ -21,7 +21,7 @@
 #include "util/StringUtils.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // My Library, Recents, File transfer, Settings
+  int count = 5;  // My Library, Recents, File transfer, KOReader Page Turner, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -194,6 +194,7 @@ void HomeActivity::loop() {
     const int recentsIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
+    const int koReaderPageTurnerIdx = idx++;
     const int settingsIdx = idx;
 
     if (selectorIndex < recentBooks.size()) {
@@ -206,6 +207,8 @@ void HomeActivity::loop() {
       onOpdsBrowserOpen();
     } else if (menuSelectedIndex == fileTransferIdx) {
       onFileTransferOpen();
+    } else if (menuSelectedIndex == koReaderPageTurnerIdx) {
+      onKOReaderPageTurnerOpen();
     } else if (menuSelectedIndex == settingsIdx) {
       onSettingsOpen();
     }
@@ -232,7 +235,7 @@ void HomeActivity::render(Activity::RenderLock&&) {
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
 
   if (hasOpdsUrl) {
-    // Insert OPDS Browser after My Library
+    // Insert OPDS Browser after Recent Books
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }

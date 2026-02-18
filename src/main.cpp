@@ -27,6 +27,7 @@
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
+#include "activities/network/KOReaderPageTurnerActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
@@ -251,10 +252,15 @@ void onGoToBrowser() {
   enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToKOReaderPageTurner() {
+  exitActivity();
+  enterNewActivity(new KOReaderPageTurnerActivity(renderer, mappedInputManager, onGoHome));
+}
+
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
-                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser));
+                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser, onGoToKOReaderPageTurner));
 }
 
 void setupDisplayAndFonts() {
