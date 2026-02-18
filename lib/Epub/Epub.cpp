@@ -16,17 +16,17 @@
 class MemoryStream : public Stream {
  public:
   MemoryStream(const uint8_t* buffer, size_t size) : buffer_(buffer), size_(size), position_(0) {}
-  
+
   int available() override { return size_ - position_; }
-  int read() override { 
+  int read() override {
     if (position_ >= size_) return -1;
     return buffer_[position_++];
   }
-  int peek() override { 
+  int peek() override {
     if (position_ >= size_) return -1;
     return buffer_[position_];
   }
-  size_t write(uint8_t) override { return 0; }  // Not supported
+  size_t write(uint8_t) override { return 0; }                 // Not supported
   size_t write(const uint8_t*, size_t) override { return 0; }  // Not supported
   void flush() override {}
 
@@ -40,18 +40,18 @@ class MemoryStream : public Stream {
 class FileStream : public Stream {
  public:
   FileStream(FsFile& file) : file_(file), position_(0) {}
-  
+
   int available() override { return file_.available(); }
-  int read() override { 
+  int read() override {
     if (!file_.available()) return -1;
     position_++;
     return file_.read();
   }
-  int peek() override { 
+  int peek() override {
     if (!file_.available()) return -1;
     return file_.peek();
   }
-  size_t write(uint8_t) override { return 0; }  // Not supported
+  size_t write(uint8_t) override { return 0; }                 // Not supported
   size_t write(const uint8_t*, size_t) override { return 0; }  // Not supported
   void flush() override {}
 
@@ -297,8 +297,8 @@ void Epub::parseCssFiles() const {
       // Limit CSS file size to prevent memory exhaustion (200KB should work)
       const size_t MAX_CSS_SIZE = 200 * 1024;
       if (cssSize > MAX_CSS_SIZE) {
-        LOG_ERR("EBP", "CSS file too large (%zu bytes > %zu max), skipping: %s", 
-                cssSize, MAX_CSS_SIZE, cssPath.c_str());
+        LOG_ERR("EBP", "CSS file too large (%zu bytes > %zu max), skipping: %s", cssSize, MAX_CSS_SIZE,
+                cssPath.c_str());
         continue;
       }
 
@@ -312,8 +312,10 @@ void Epub::parseCssFiles() const {
       const size_t requiredMemory = cssSize + SAFETY_MARGIN;
       const bool useDirectParsing = (freeHeap > requiredMemory);
 
-      LOG_DBG("EBP", "CSS parsing strategy: %s (file: %zu bytes, free heap: %zu bytes, required: %zu bytes, margin: %zu bytes)",
-              useDirectParsing ? "direct" : "streaming", cssSize, freeHeap, requiredMemory, SAFETY_MARGIN);
+      LOG_DBG(
+          "EBP",
+          "CSS parsing strategy: %s (file: %zu bytes, free heap: %zu bytes, required: %zu bytes, margin: %zu bytes)",
+          useDirectParsing ? "direct" : "streaming", cssSize, freeHeap, requiredMemory, SAFETY_MARGIN);
 
       if (useDirectParsing) {
         // Small/medium file - load to memory
@@ -337,9 +339,8 @@ void Epub::parseCssFiles() const {
         const uint32_t parseEndTime = millis();
         const uint32_t parseDuration = parseEndTime - parseStartTime;
 
-        LOG_DBG("EBP", "CSS parsing: %s took %lu ms (%zu bytes, %.1f KB/s)", 
-                 cssPath.c_str(), parseDuration, cssSize, 
-                 cssSize / (parseDuration / 1000.0) / 1024.0);
+        LOG_DBG("EBP", "CSS parsing: %s took %lu ms (%zu bytes, %.1f KB/s)", cssPath.c_str(), parseDuration, cssSize,
+                cssSize / (parseDuration / 1000.0) / 1024.0);
 
         // Free the buffer
         free(cssBuffer);
@@ -352,7 +353,7 @@ void Epub::parseCssFiles() const {
           LOG_ERR("EBP", "Could not create temp CSS file: %s", cssTempPath.c_str());
           continue;
         }
-        
+
         // Time the ZIP decompression
         const uint32_t zipStartTime = millis();
         if (!readItemContentsToStream(cssPath, cssTempFile, 1024)) {
@@ -379,9 +380,8 @@ void Epub::parseCssFiles() const {
         const uint32_t parseEndTime = millis();
         const uint32_t parseDuration = parseEndTime - parseStartTime;
 
-        LOG_DBG("EBP", "CSS parsing: %s took %lu ms (%zu bytes, %.1f KB/s)", 
-                 cssPath.c_str(), parseDuration, cssSize, 
-                 cssSize / (parseDuration / 1000.0) / 1024.0);
+        LOG_DBG("EBP", "CSS parsing: %s took %lu ms (%zu bytes, %.1f KB/s)", cssPath.c_str(), parseDuration, cssSize,
+                cssSize / (parseDuration / 1000.0) / 1024.0);
 
         // Close and remove temp file
         cssTempFile.close();

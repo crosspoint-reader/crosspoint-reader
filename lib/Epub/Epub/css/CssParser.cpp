@@ -23,9 +23,7 @@ constexpr size_t MAX_CSS_FILE_SIZE = 200 * 1024;
 bool isCssWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
 
 // Fast ASCII-only tolower (much faster than std::tolower on ESP32)
-char fastTolower(const char c) {
-  return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c;
-}
+char fastTolower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; }
 
 // Remove CSS comments (/* ... */) from content
 std::string stripComments(const std::string& css) {
@@ -700,7 +698,7 @@ bool CssParser::parseStreaming(Stream& source) {
 #endif
   }
 
-  LOG_DBG("CSS", "Streaming parsing: read %zu bytes in %zu chunks, buffer size: %zu, rules processed: %zu", 
+  LOG_DBG("CSS", "Streaming parsing: read %zu bytes in %zu chunks, buffer size: %zu, rules processed: %zu",
           totalBytesRead, chunkCount, buffer.size(), totalRulesProcessed_);
 
   // Process any remaining complete rules
