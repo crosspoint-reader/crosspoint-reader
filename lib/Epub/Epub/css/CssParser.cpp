@@ -970,9 +970,14 @@ int CssParser::calculatePriority(const std::string& selector) {
     } else if (c == '.') {
       hasDot = true;
     } else if (c == '>' || c == '+' || c == '~' || c == ':' || c == '[') {
-      // Complex selectors (descendant, etc.) - low priority
+      // Complex selectors (child/sibling/pseudo/attr) - low priority
       return 1;
     }
+  }
+
+  // Descendant selectors (contain a space) are also treated as complex/low priority
+  if (hasSpace) {
+    return 1;
   }
 
   // Element.class combination - high priority
