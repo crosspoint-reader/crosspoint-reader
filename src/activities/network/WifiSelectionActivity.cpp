@@ -523,7 +523,9 @@ void WifiSelectionActivity::renderNetworkList() const {
     // Calculate how many networks we can display
     constexpr int startY = 60;
     constexpr int lineHeight = 25;
-    const int maxVisibleNetworks = (pageHeight - startY - 40) / lineHeight;
+    const int footerAreaHeight = 100; 
+    const int listBottomLimit = pageHeight - footerAreaHeight;
+    const int maxVisibleNetworks = (listBottomLimit - startY) / lineHeight;
 
     // Calculate scroll offset to keep selected item visible
     int scrollOffset = 0;
