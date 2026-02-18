@@ -21,7 +21,7 @@ constexpr int displaySettingsCount = 8;
 const SettingInfo displaySettings[displaySettingsCount] = {
     // Should match with SLEEP_SCREEN_MODE
     SettingInfo::Enum("Sleep Screen", &CrossPointSettings::sleepScreen,
-                      {"Dark", "Light", "Custom", "Cover", "None", "Cover + Custom"}),
+                      {"Dark", "Light", "Custom", "Cover", "None", "Cover + Custom", "Image from Folder"}),
     SettingInfo::Enum("Sleep Screen Cover Mode", &CrossPointSettings::sleepScreenCoverMode, {"Fit", "Crop"}),
     SettingInfo::Enum("Sleep Screen Cover Filter", &CrossPointSettings::sleepScreenCoverFilter,
                       {"None", "Contrast", "Inverted"}),
@@ -298,7 +298,18 @@ void SettingsActivity::render() const {
           valueText = value ? "ON" : "OFF";
         } else if (settingsList[i].type == SettingType::ENUM && settingsList[i].valuePtr != nullptr) {
           const uint8_t value = SETTINGS.*(settingsList[i].valuePtr);
-          valueText = settingsList[i].enumValues[value];
+          if (strcmp(settingsList[i].name, "Sleep Screen") == 0 &&
+              value == CrossPointSettings::SLEEP_SCREEN_MODE::IMAGE_FROM_FOLDER) {
+            std::string path(SETTINGS.sleepScreenImagePath);
+            size_t lastSlash = path.find_last_of('/');
+            if (lastSlash != std::string::npos) {
+              valueText = path.substr(lastSlash + 1);
+            } else {
+              valueText = path;
+            }
+          } else {
+            valueText = settingsList[i].enumValues[value];
+          }
         } else if (settingsList[i].type == SettingType::VALUE && settingsList[i].valuePtr != nullptr) {
           valueText = std::to_string(SETTINGS.*(settingsList[i].valuePtr));
         }

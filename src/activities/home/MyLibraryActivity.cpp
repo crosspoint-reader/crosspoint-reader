@@ -122,6 +122,22 @@ void MyLibraryActivity::loop() {
       updateRequired = true;
       return;
     }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      // Set as sleep screen
+      std::string path = basepath;
+      if (path.back() != '/') path += "/";
+      path += files[selectorIndex];
+
+      strncpy(SETTINGS.sleepScreenImagePath, path.c_str(), sizeof(SETTINGS.sleepScreenImagePath) - 1);
+      SETTINGS.sleepScreenImagePath[sizeof(SETTINGS.sleepScreenImagePath) - 1] = '\0';
+      SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::IMAGE_FROM_FOLDER;
+      SETTINGS.saveToFile();
+
+      // Show a brief message or just exit preview
+      isViewingImage = false;
+      updateRequired = true;
+      return;
+    }
     const int listSize = static_cast<int>(files.size());
     if (upReleased) {
       // Find previous BMP
@@ -241,7 +257,7 @@ void MyLibraryActivity::render() const {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "File not found");
     }
 
-    const auto labels = mappedInput.mapLabels("« Back", "", "Prev", "Next");
+    const auto labels = mappedInput.mapLabels("« Back", "Set Sleep", "Prev", "Next");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
     renderer.displayBuffer();

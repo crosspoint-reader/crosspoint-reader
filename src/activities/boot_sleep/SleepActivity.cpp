@@ -22,12 +22,28 @@ void SleepActivity::onEnter() {
       return renderBlankSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
       return renderCustomSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::IMAGE_FROM_FOLDER):
+      return renderFolderStaticSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       return renderCoverSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
+}
+
+void SleepActivity::renderFolderStaticSleepScreen() const {
+  FsFile file;
+  if (strlen(SETTINGS.sleepScreenImagePath) > 0 && SdMan.openFileForRead("SLP", SETTINGS.sleepScreenImagePath, file)) {
+    Bitmap bitmap(file, true);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      Serial.printf("[%lu] [SLP] Loading: %s\n", millis(), SETTINGS.sleepScreenImagePath);
+      renderBitmapSleepScreen(bitmap);
+      return;
+    }
+  }
+
+  renderDefaultSleepScreen();
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
