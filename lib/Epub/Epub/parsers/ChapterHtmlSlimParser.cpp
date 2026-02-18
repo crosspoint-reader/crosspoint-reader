@@ -463,14 +463,21 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->flushPartWordBuffer();
       }
       self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
+    } else if (strcmp(name, "li") == 0) {
+      self->currentCssStyle = cssStyle;
+      self->startNewTextBlock(userAlignmentBlockStyle);
+      self->updateEffectiveInlineStyle();
+      self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+      self->listItemUntilDepth = std::min(self->listItemUntilDepth, self->depth);
+    } else if (strcmp(name, "p") == 0 && self->listItemUntilDepth < self->depth) {
+      // Inside a <li> element - don't start a new text block for <p>
+      // This prevents bullet points from appearing on their own line
+      self->currentCssStyle = cssStyle;
+      self->updateEffectiveInlineStyle();
     } else {
       self->currentCssStyle = cssStyle;
       self->startNewTextBlock(userAlignmentBlockStyle);
       self->updateEffectiveInlineStyle();
-
-      if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
-      }
     }
   } else if (matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS)) {
     // Flush buffer before style change so preceding text gets current style
@@ -744,6 +751,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // Leaving underline tag
   if (self->underlineUntilDepth == self->depth) {
     self->underlineUntilDepth = INT_MAX;
+  }
+
+  // Leaving list item
+  if (self->listItemUntilDepth == self->depth) {
+    self->listItemUntilDepth = INT_MAX;
   }
 
   // Pop from inline style stack if we pushed an entry at this depth
