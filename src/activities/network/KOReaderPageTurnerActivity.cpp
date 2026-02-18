@@ -81,6 +81,12 @@ void KOReaderPageTurnerActivity::launchAddressEntry() {
 void KOReaderPageTurnerActivity::onAddressEntered(const std::string& address) {
   exitActivity();
 
+  if (address.empty()) {
+    LOG_DBG("KPT", "Empty address entered; reopening entry");
+    launchAddressEntry();
+    return;
+  }
+
   deviceAddress = address;
 
   // Cache the address in settings
@@ -153,7 +159,7 @@ void KOReaderPageTurnerActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::PageForward) ||
         mappedInput.wasPressed(MappedInputManager::Button::Right)) {
       if (!sendPageTurn(1)) {
-        errorMessage = std::string(tr(STR_KPT_ERROR_PREFIX)) + "Failed to turn page forward";
+        errorMessage = tr(STR_KPT_ERROR_FWD);
         requestUpdate();
       } else if (!errorMessage.empty()) {
         errorMessage.clear();
@@ -166,7 +172,7 @@ void KOReaderPageTurnerActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (!sendPageTurn(-1)) {
-        errorMessage = std::string(tr(STR_KPT_ERROR_PREFIX)) + "Failed to turn page back";
+        errorMessage = tr(STR_KPT_ERROR_BACK);
         requestUpdate();
       } else if (!errorMessage.empty()) {
         errorMessage.clear();
