@@ -129,18 +129,18 @@ void KOReaderSyncActivity::performSync() {
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
   localProgress = ProgressMapper::toKOReader(epub, localPos);
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = SHOWING_RESULT;
+  {
+    RenderLock lock(*this);
+    state = SHOWING_RESULT;
 
-  // Default to the option that corresponds to the furthest progress
-  if (localProgress.percentage > remoteProgress.percentage) {
-    selectedOption = 1;  // Upload local progress
-  } else {
-    selectedOption = 0;  // Apply remote progress
+    // Default to the option that corresponds to the furthest progress
+    if (localProgress.percentage > remoteProgress.percentage) {
+      selectedOption = 1;  // Upload local progress
+    } else {
+      selectedOption = 0;  // Apply remote progress
+    }
   }
-
-  xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  requestUpdate();
 }
 
 void KOReaderSyncActivity::performUpload() {
