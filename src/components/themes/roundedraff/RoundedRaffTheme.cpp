@@ -164,7 +164,8 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
   const int coverY = titleY + renderer.getLineHeight(kTitleFontId) + 20;  // 20px gap below top title+battery bar
   const int coverWidth = rect.width - sidePadding * 2;
   const int coverHeight = RoundedRaffMetrics::values.homeCoverHeight;
-  const int sourceThumbHeight = coverHeight * 2;  // Force larger source to guarantee full-width cover fill.
+  // Prefer smaller thumbs for speed; we still scale to fill the card.
+  const int sourceThumbHeight = coverHeight;
 
   // Use cached cover buffer when available; redraw only when needed for responsiveness.
   if (hasContinueReading && (!coverRendered || !bufferRestored)) {
@@ -174,6 +175,8 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
     const std::string thumbBmpPath = UITheme::getCoverThumbPath(recentBooks[0].coverBmpPath, sourceThumbHeight);
     std::vector<std::string> candidatePaths;
+    // Fast path: use the pre-generated thumbnail first (usually much smaller than cover.bmp).
+    candidatePaths.push_back(thumbBmpPath);
 
     const std::string coverTemplateToken = "/thumb_[HEIGHT].bmp";
     size_t tokenPos = recentBooks[0].coverBmpPath.rfind(coverTemplateToken);
@@ -182,9 +185,6 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       candidatePaths.push_back(base + "/cover_crop.bmp");
       candidatePaths.push_back(base + "/cover.bmp");
     }
-
-    // Fallback to themed thumbnail.
-    candidatePaths.push_back(thumbBmpPath);
 
     const std::string coverResolvedToken = "/thumb_";
     size_t resolvedPos = thumbBmpPath.rfind(coverResolvedToken);
