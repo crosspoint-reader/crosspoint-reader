@@ -1,11 +1,12 @@
 #include "GfxRenderer.h"
 
+#include <Logging.h>
 #include <Utf8.h>
 
 void GfxRenderer::begin() {
   frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
-    Serial.printf("[%lu] [GFX] !! No framebuffer\n", millis());
+    LOG_ERR("GFX", "!! No framebuffer");
     assert(false);
   }
 }
@@ -57,7 +58,7 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 
   // Bounds checking against physical panel dimensions
   if (phyX < 0 || phyX >= HalDisplay::DISPLAY_WIDTH || phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) {
-    Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n", millis(), x, y, phyX, phyY);
+    LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
     return;
   }
 
@@ -73,13 +74,14 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 }
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
   int w = 0, h = 0;
-  fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
+  fontIt->second.getTextDimensions(text, &w, &h, style);
   return w;
 }
 
@@ -99,11 +101,12 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+  const auto& font = fontIt->second;
 
   // no printable characters
   if (!font.hasPrintableChars(text, style)) {
@@ -133,7 +136,7 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
     }
   } else {
     // TODO: Implement
-    Serial.printf("[%lu] [GFX] Line drawing not supported\n", millis());
+    LOG_ERR("GFX", "Line drawing not supported");
   }
 }
 
@@ -419,8 +422,8 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   bool isScaled = false;
   int cropPixX = std::floor(bitmap.getWidth() * cropX / 2.0f);
   int cropPixY = std::floor(bitmap.getHeight() * cropY / 2.0f);
-  Serial.printf("[%lu] [GFX] Cropping %dx%d by %dx%d pix, is %s\n", millis(), bitmap.getWidth(), bitmap.getHeight(),
-                cropPixX, cropPixY, bitmap.isTopDown() ? "top-down" : "bottom-up");
+  LOG_DBG("GFX", "Cropping %dx%d by %dx%d pix, is %s", bitmap.getWidth(), bitmap.getHeight(), cropPixX, cropPixY,
+          bitmap.isTopDown() ? "top-down" : "bottom-up");
 
   if (maxWidth > 0 && (1.0f - cropX) * bitmap.getWidth() > maxWidth) {
     scale = static_cast<float>(maxWidth) / static_cast<float>((1.0f - cropX) * bitmap.getWidth());
@@ -430,7 +433,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>((1.0f - cropY) * bitmap.getHeight()));
     isScaled = true;
   }
-  Serial.printf("[%lu] [GFX] Scaling by %f - %s\n", millis(), scale, isScaled ? "scaled" : "not scaled");
+  LOG_DBG("GFX", "Scaling by %f - %s", scale, isScaled ? "scaled" : "not scaled");
 
   // Calculate output row size (2 bits per pixel, packed into bytes)
   // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
@@ -439,7 +442,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
 
   if (!outputRow || !rowBytes) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate BMP row buffers\n", millis());
+    LOG_ERR("GFX", "!! Failed to allocate BMP row buffers");
     free(outputRow);
     free(rowBytes);
     return;
@@ -458,7 +461,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     }
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
-      Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
+      LOG_ERR("GFX", "Failed to read row %d from bitmap", bmpY);
       free(outputRow);
       free(rowBytes);
       return;
@@ -521,7 +524,7 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
 
   if (!outputRow || !rowBytes) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate 1-bit BMP row buffers\n", millis());
+    LOG_ERR("GFX", "!! Failed to allocate 1-bit BMP row buffers");
     free(outputRow);
     free(rowBytes);
     return;
@@ -530,7 +533,7 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
-      Serial.printf("[%lu] [GFX] Failed to read row %d from 1-bit bitmap\n", millis(), bmpY);
+      LOG_ERR("GFX", "Failed to read row %d from 1-bit bitmap", bmpY);
       free(outputRow);
       free(rowBytes);
       return;
@@ -588,7 +591,7 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   // Allocate node buffer for scanline algorithm
   auto* nodeX = static_cast<int*>(malloc(numPoints * sizeof(int)));
   if (!nodeX) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate polygon node buffer\n", millis());
+    LOG_ERR("GFX", "!! Failed to allocate polygon node buffer");
     return;
   }
 
@@ -655,7 +658,7 @@ void GfxRenderer::invertScreen() const {
 
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
-  Serial.printf("[%lu] [GFX] Time = %lu ms from clearScreen to displayBuffer\n", millis(), elapsed);
+  LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   display.displayBuffer(refreshMode, fadingFix);
 }
 
@@ -708,52 +711,58 @@ int GfxRenderer::getScreenHeight() const {
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
+  return fontIt->second.getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
   uint32_t cp;
   int width = 0;
+  const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    width += fontMap.at(fontId).getGlyph(cp, EpdFontFamily::REGULAR)->advanceX;
+    width += font.getGlyph(cp, EpdFontFamily::REGULAR)->advanceX;
   }
   return width;
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  return fontIt->second.getData(EpdFontFamily::REGULAR)->advanceY;
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
@@ -763,11 +772,13 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     return;
   }
 
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+
+  const auto& font = fontIt->second;
 
   // No printable characters
   if (!font.hasPrintableChars(text, style)) {
@@ -872,8 +883,7 @@ bool GfxRenderer::storeBwBuffer() {
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if any chunks are already allocated
     if (bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk\n",
-                    millis(), i);
+      LOG_ERR("GFX", "!! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk", i);
       free(bwBufferChunks[i]);
       bwBufferChunks[i] = nullptr;
     }
@@ -882,8 +892,7 @@ bool GfxRenderer::storeBwBuffer() {
     bwBufferChunks[i] = static_cast<uint8_t*>(malloc(BW_BUFFER_CHUNK_SIZE));
 
     if (!bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! Failed to allocate BW buffer chunk %zu (%zu bytes)\n", millis(), i,
-                    BW_BUFFER_CHUNK_SIZE);
+      LOG_ERR("GFX", "!! Failed to allocate BW buffer chunk %zu (%zu bytes)", i, BW_BUFFER_CHUNK_SIZE);
       // Free previously allocated chunks
       freeBwBufferChunks();
       return false;
@@ -892,8 +901,7 @@ bool GfxRenderer::storeBwBuffer() {
     memcpy(bwBufferChunks[i], frameBuffer + offset, BW_BUFFER_CHUNK_SIZE);
   }
 
-  Serial.printf("[%lu] [GFX] Stored BW buffer in %zu chunks (%zu bytes each)\n", millis(), BW_BUFFER_NUM_CHUNKS,
-                BW_BUFFER_CHUNK_SIZE);
+  LOG_DBG("GFX", "Stored BW buffer in %zu chunks (%zu bytes each)", BW_BUFFER_NUM_CHUNKS, BW_BUFFER_CHUNK_SIZE);
   return true;
 }
 
@@ -920,7 +928,7 @@ void GfxRenderer::restoreBwBuffer() {
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if chunk is missing
     if (!bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! BW buffer chunks not stored - this is likely a bug\n", millis());
+      LOG_ERR("GFX", "!! BW buffer chunks not stored - this is likely a bug");
       freeBwBufferChunks();
       return;
     }
@@ -932,7 +940,7 @@ void GfxRenderer::restoreBwBuffer() {
   display.cleanupGrayscaleBuffers(frameBuffer);
 
   freeBwBufferChunks();
-  Serial.printf("[%lu] [GFX] Restored and freed BW buffer chunks\n", millis());
+  LOG_DBG("GFX", "Restored and freed BW buffer chunks");
 }
 
 /**
@@ -954,7 +962,7 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
 
   // no glyph?
   if (!glyph) {
-    Serial.printf("[%lu] [GFX] No glyph for codepoint %d\n", millis(), cp);
+    LOG_ERR("GFX", "No glyph for codepoint %d", cp);
     return;
   }
 

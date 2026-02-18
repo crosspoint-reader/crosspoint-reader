@@ -16,6 +16,7 @@ class WifiCredentialStore {
  private:
   static WifiCredentialStore instance;
   std::vector<WifiCredential> credentials;
+  std::string lastConnectedSsid;
 
   static constexpr size_t MAX_NETWORKS = 8;
 
@@ -47,6 +48,11 @@ class WifiCredentialStore {
 
   // Check if a network is saved
   bool hasSavedCredential(const std::string& ssid) const;
+
+  // Last connected network
+  void setLastConnectedSsid(const std::string& ssid);
+  const std::string& getLastConnectedSsid() const;
+  void clearLastConnectedSsid();
 
   // Clear all credentials
   void clearAll();

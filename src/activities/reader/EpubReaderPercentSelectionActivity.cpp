@@ -1,6 +1,7 @@
 #include "EpubReaderPercentSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -15,41 +16,10 @@ constexpr int kLargeStep = 10;
 void EpubReaderPercentSelectionActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
   // Set up rendering task and mark first frame dirty.
-  renderingMutex = xSemaphoreCreateMutex();
-  updateRequired = true;
-  xTaskCreate(&EpubReaderPercentSelectionActivity::taskTrampoline, "EpubPercentSlider", 4096, this, 1,
-              &displayTaskHandle);
+  requestUpdate();
 }
 
-void EpubReaderPercentSelectionActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-  // Ensure the render task is stopped before freeing the mutex.
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
-
-void EpubReaderPercentSelectionActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderPercentSelectionActivity*>(param);
-  self->displayTaskLoop();
-}
-
-void EpubReaderPercentSelectionActivity::displayTaskLoop() {
-  while (true) {
-    // Render only when the view is dirty and no subactivity is running.
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
+void EpubReaderPercentSelectionActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void EpubReaderPercentSelectionActivity::adjustPercent(const int delta) {
   // Apply delta and clamp within 0-100.
@@ -59,7 +29,7 @@ void EpubReaderPercentSelectionActivity::adjustPercent(const int delta) {
   } else if (percent > 100) {
     percent = 100;
   }
-  updateRequired = true;
+  requestUpdate();
 }
 
 void EpubReaderPercentSelectionActivity::loop() {
@@ -79,32 +49,18 @@ void EpubReaderPercentSelectionActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    adjustPercent(-kSmallStep);
-    return;
-  }
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { adjustPercent(-kSmallStep); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { adjustPercent(kSmallStep); });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    adjustPercent(kSmallStep);
-    return;
-  }
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    adjustPercent(kLargeStep);
-    return;
-  }
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    adjustPercent(-kLargeStep);
-    return;
-  }
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] { adjustPercent(kLargeStep); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { adjustPercent(-kLargeStep); });
 }
 
-void EpubReaderPercentSelectionActivity::renderScreen() {
+void EpubReaderPercentSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   // Title and numeric percent value.
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Go to Position", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_GO_TO_PERCENT), true, EpdFontFamily::BOLD);
 
   const std::string percentText = std::to_string(percent) + "%";
   renderer.drawCenteredText(UI_12_FONT_ID, 90, percentText.c_str(), true, EpdFontFamily::BOLD);
@@ -129,10 +85,10 @@ void EpubReaderPercentSelectionActivity::renderScreen() {
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
   // Hint text for step sizes.
-  renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, "Left/Right: 1%  Up/Down: 10%", true);
+  renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, tr(STR_PERCENT_STEP_HINT), true);
 
   // Button hints follow the current front button layout.
-  const auto labels = mappedInput.mapLabels("« Back", "Select", "-", "+");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
