@@ -21,6 +21,7 @@ constexpr int kBottomRadius = 15;
 constexpr int kRowRadius = 20;
 constexpr int kInteractiveInsetX = 20;
 constexpr int kSelectableRowGap = 6;
+constexpr int batteryPercentSpacing = 4;
 constexpr int kTitleFontId = UI_12_FONT_ID;     // Requested main title size: 12px
 constexpr int kSubtitleFontId = SMALL_FONT_ID;  // Requested subtitle size: 8px
 constexpr int kGuideFontId = SMALL_FONT_ID;     // Closest available to requested 6px
@@ -68,19 +69,21 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  int batteryX = rect.x + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
+  const int batteryIconX = rect.x + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
+  int batteryGroupLeftX = batteryIconX;
   if (showBatteryPercentage) {
     const uint16_t percentage = battery.readPercentage();
     const auto percentageText = std::to_string(percentage) + "%";
-    batteryX -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str()) + 4;
+    batteryGroupLeftX -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str()) + batteryPercentSpacing;
   }
 
-  auto headerTitle = renderer.truncatedText(kTitleFontId, title, batteryX - sidePadding - 20, EpdFontFamily::BOLD);
+  auto headerTitle =
+      renderer.truncatedText(kTitleFontId, title, batteryGroupLeftX - sidePadding - 20, EpdFontFamily::BOLD);
   renderer.drawText(kTitleFontId, rect.x + sidePadding, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
-  drawBatteryRight(
-      renderer,
-      Rect{batteryX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
-      showBatteryPercentage);
+  drawBatteryRight(renderer,
+                   Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
+                        RoundedRaffMetrics::values.batteryHeight},
+                   showBatteryPercentage);
 }
 
 void RoundedRaffTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
@@ -123,16 +126,17 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  int batteryX = originX + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
+  const int batteryIconX = originX + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
+  int batteryGroupLeftX = batteryIconX;
   if (showBatteryPercentage) {
     const uint16_t percentage = battery.readPercentage();
     const auto percentageText = std::to_string(percentage) + "%";
-    batteryX -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str()) + 4;
+    batteryGroupLeftX -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str()) + batteryPercentSpacing;
   }
 
   const int titleX = originX + sidePadding;
   const int titleY = originY + 18;
-  const int maxTextWidth = batteryX - 20 - titleX;  // Keep 20px gap before battery group
+  const int maxTextWidth = batteryGroupLeftX - 20 - titleX;  // Keep 20px gap before battery group
   if (hasContinueReading && maxTextWidth > 40) {
     constexpr int titleAuthorGap = 6;
     const std::string titleText =
@@ -153,7 +157,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
   drawBatteryRight(
       renderer,
-      Rect{batteryX, titleY + 2, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
+      Rect{batteryIconX, titleY + 2, RoundedRaffMetrics::values.batteryWidth, RoundedRaffMetrics::values.batteryHeight},
       showBatteryPercentage);
 
   const int coverX = originX + sidePadding;
@@ -254,9 +258,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
     const int labelW = renderer.getTextWidth(kTitleFontId, label, EpdFontFamily::BOLD);
     const int pillW = std::min(coverWidth, labelW + kPillTextPaddingX * 2);
     const int pillX = coverX;
-    const int tileBottom = rect.y + rect.height;
-    const int desiredPillY = coverY + coverHeight + kPillGapBelowCover;
-    const int pillY = std::min(desiredPillY, tileBottom - kPillHeight - 2);
+    const int pillY = coverY + coverHeight + kPillGapBelowCover;
 
     renderer.fillRoundedRect(pillX, pillY, pillW, kPillHeight, kMenuRadius,
                              coverSelected ? Color::Black : Color::White);
