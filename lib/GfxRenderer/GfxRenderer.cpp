@@ -791,6 +791,10 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   int yPos = y;  // Current Y position (decreases as we draw characters)
 
+  const EpdFontData* fontData = font.getData(style);
+  const bool is2Bit = fontData->is2Bit;
+  const int ascender = fontData->ascender;
+
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     const EpdGlyph* glyph = font.getGlyph(cp, style);
@@ -801,29 +805,29 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       continue;
     }
 
-    const int is2Bit = font.getData(style)->is2Bit;
     const uint32_t offset = glyph->dataOffset;
     const uint8_t width = glyph->width;
     const uint8_t height = glyph->height;
     const int left = glyph->left;
     const int top = glyph->top;
 
-    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
+    const uint8_t* bitmap = &fontData->bitmap[offset];
 
     if (bitmap != nullptr) {
-      for (int glyphY = 0; glyphY < height; glyphY++) {
-        for (int glyphX = 0; glyphX < width; glyphX++) {
-          const int pixelPosition = glyphY * width + glyphX;
+      // 90° clockwise rotation transformation:
+      // screenX = x + (ascender - top + glyphY)
+      // screenY = yPos - (left + glyphX)
+      const int screenXBase = x + ascender - top;
+      const int screenYBase = yPos - left;
+      if (is2Bit) {
+        int pixelPosition = 0;
+        for (int glyphY = 0; glyphY < height; glyphY++) {
+          const int screenX = screenXBase + glyphY;
+          for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
+            const int screenY = screenYBase - glyphX;
 
-          // 90° clockwise rotation transformation:
-          // screenX = x + (ascender - top + glyphY)
-          // screenY = yPos - (left + glyphX)
-          const int screenX = x + (font.getData(style)->ascender - top + glyphY);
-          const int screenY = yPos - left - glyphX;
-
-          if (is2Bit) {
-            const uint8_t byte = bitmap[pixelPosition / 4];
-            const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+            const uint8_t byte = bitmap[pixelPosition >> 2];
+            const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
             const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
 
             if (renderMode == BW && bmpVal < 3) {
@@ -833,9 +837,17 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
             } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
               drawPixel(screenX, screenY, false);
             }
-          } else {
-            const uint8_t byte = bitmap[pixelPosition / 8];
-            const uint8_t bit_index = 7 - (pixelPosition % 8);
+          }
+        }
+      } else {
+        int pixelPosition = 0;
+        for (int glyphY = 0; glyphY < height; glyphY++) {
+          const int screenX = screenXBase + glyphY;
+          for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
+            const int screenY = screenYBase - glyphX;
+
+            const uint8_t byte = bitmap[pixelPosition >> 3];
+            const uint8_t bit_index = 7 - (pixelPosition & 7);
 
             if ((byte >> bit_index) & 1) {
               drawPixel(screenX, screenY, black);
@@ -966,22 +978,23 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
     return;
   }
 
-  const int is2Bit = fontFamily.getData(style)->is2Bit;
+  const EpdFontData* fontData = fontFamily.getData(style);
+  const int is2Bit = fontData->is2Bit;
   const uint32_t offset = glyph->dataOffset;
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
 
-  const uint8_t* bitmap = nullptr;
-  bitmap = &fontFamily.getData(style)->bitmap[offset];
+  const uint8_t* bitmap = &fontData->bitmap[offset];
 
   if (bitmap != nullptr) {
+    const int screenXBase = *x + left;
     if (is2Bit) {
       for (int glyphY = 0; glyphY < height; glyphY++) {
         const int screenY = *y - glyph->top + glyphY;
-        for (int glyphX = 0; glyphX < width; glyphX++) {
-          const int pixelPosition = glyphY * width + glyphX;
-          const int screenX = *x + left + glyphX;
+        int pixelPosition = glyphY * width;
+        for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
+          const int screenX = screenXBase + glyphX;
 
           const uint8_t byte = bitmap[pixelPosition >> 2];
           const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
@@ -1006,9 +1019,9 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
     } else {
       for (int glyphY = 0; glyphY < height; glyphY++) {
         const int screenY = *y - glyph->top + glyphY;
-        for (int glyphX = 0; glyphX < width; glyphX++) {
-          const int pixelPosition = glyphY * width + glyphX;
-          const int screenX = *x + left + glyphX;
+        int pixelPosition = glyphY * width;
+        for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
+          const int screenX = screenXBase + glyphX;
 
           const uint8_t byte = bitmap[pixelPosition >> 3];
           const uint8_t bit_index = 7 - (pixelPosition & 7);
