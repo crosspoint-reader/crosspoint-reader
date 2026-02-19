@@ -5,17 +5,21 @@
 
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "KOReaderAuthActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
+#include "activities/network/KOReaderPageTurnerActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 5;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+constexpr int MENU_ITEMS = 7;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,        StrId::STR_PASSWORD,
+                                     StrId::STR_SYNC_SERVER_URL, StrId::STR_DOCUMENT_MATCHING,
+                                     StrId::STR_AUTHENTICATE,    StrId::STR_KPT_ADDRESS,
+                                     StrId::STR_KOREADER_PAGE_TURNER};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -130,6 +134,39 @@ void KOReaderSettingsActivity::handleSelection() {
       exitActivity();
       requestUpdate();
     }));
+  } else if (selectedIndex == 5) {
+    // Page Turner Address - prefill with 192.168. if empty to save typing
+    const std::string currentAddr = SETTINGS.koReaderPageTurnerAddress;
+    const std::string prefillAddr = currentAddr.empty() ? "192.168." : currentAddr;
+    exitActivity();
+    enterNewActivity(new KeyboardEntryActivity(
+        renderer, mappedInput, tr(STR_KPT_ENTER_ADDRESS), prefillAddr,
+        63,     // maxLength
+        false,  // not password
+        [this](const std::string& address) {
+          // Clear if user just left the prefilled 192.168.
+          const std::string addrToSave = (address == "192.168.") ? "" : address;
+          strncpy(SETTINGS.koReaderPageTurnerAddress, addrToSave.c_str(),
+                  sizeof(SETTINGS.koReaderPageTurnerAddress) - 1);
+          SETTINGS.koReaderPageTurnerAddress[sizeof(SETTINGS.koReaderPageTurnerAddress) - 1] = '\0';
+          SETTINGS.saveToFile();
+          exitActivity();
+          requestUpdate();
+        },
+        [this]() {
+          exitActivity();
+          requestUpdate();
+        }));
+  } else if (selectedIndex == 6) {
+    // Page Turner - launch only if address is configured
+    if (strlen(SETTINGS.koReaderPageTurnerAddress) == 0) {
+      return;
+    }
+    exitActivity();
+    enterNewActivity(new KOReaderPageTurnerActivity(renderer, mappedInput, [this] {
+      exitActivity();
+      requestUpdate();
+    }));
   }
 }
 
@@ -140,7 +177,7 @@ void KOReaderSettingsActivity::render(Activity::RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_SYNC));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_SETTINGS));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
@@ -163,6 +200,13 @@ void KOReaderSettingsActivity::render(Activity::RenderLock&&) {
                                                                                   : std::string(tr(STR_BINARY));
         } else if (index == 4) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+        } else if (index == 5) {
+          return strlen(SETTINGS.koReaderPageTurnerAddress) > 0 ? std::string(SETTINGS.koReaderPageTurnerAddress)
+                                                                : std::string(tr(STR_NOT_SET));
+        } else if (index == 6) {
+          return strlen(SETTINGS.koReaderPageTurnerAddress) > 0
+                     ? std::string("")
+                     : std::string("[") + tr(STR_KPT_SET_ADDRESS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));
       },

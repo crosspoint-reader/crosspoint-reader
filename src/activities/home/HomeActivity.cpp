@@ -21,7 +21,7 @@
 #include "util/StringUtils.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 5;  // My Library, Recents, File transfer, KOReader Page Turner, Settings
+  int count = 4;  // My Library, Recents, File transfer, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -194,7 +194,6 @@ void HomeActivity::loop() {
     const int recentsIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
-    const int koReaderPageTurnerIdx = idx++;
     const int settingsIdx = idx;
 
     if (selectorIndex < recentBooks.size()) {
@@ -207,8 +206,6 @@ void HomeActivity::loop() {
       onOpdsBrowserOpen();
     } else if (menuSelectedIndex == fileTransferIdx) {
       onFileTransferOpen();
-    } else if (menuSelectedIndex == koReaderPageTurnerIdx) {
-      onKOReaderPageTurnerOpen();
     } else if (menuSelectedIndex == settingsIdx) {
       onSettingsOpen();
     }
