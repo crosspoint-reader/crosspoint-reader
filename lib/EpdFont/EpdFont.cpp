@@ -56,14 +56,6 @@ void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
   *h = maxY - minY;
 }
 
-bool EpdFont::hasPrintableChars(const char* string) const {
-  int w = 0, h = 0;
-
-  getTextDimensions(string, &w, &h);
-
-  return w > 0 || h > 0;
-}
-
 template <typename T>
 const T* binarySearchPairs(const T* pairs, const uint32_t pairCount, const uint32_t leftCp, const uint32_t rightCp) {
   if (!pairs || pairCount == 0) {

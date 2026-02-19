@@ -58,7 +58,7 @@ void CalibreSettingsActivity::handleSelection() {
     // OPDS Server URL
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_CALIBRE_WEB_URL), SETTINGS.opdsServerUrl, 10,
+        renderer, mappedInput, tr(STR_CALIBRE_WEB_URL), SETTINGS.opdsServerUrl,
         127,    // maxLength
         false,  // not password
         [this](const std::string& url) {
@@ -76,7 +76,7 @@ void CalibreSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_USERNAME), SETTINGS.opdsUsername, 10,
+        renderer, mappedInput, tr(STR_USERNAME), SETTINGS.opdsUsername,
         63,     // maxLength
         false,  // not password
         [this](const std::string& username) {
@@ -94,7 +94,7 @@ void CalibreSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_PASSWORD), SETTINGS.opdsPassword, 10,
+        renderer, mappedInput, tr(STR_PASSWORD), SETTINGS.opdsPassword,
         63,     // maxLength
         false,  // not password mode
         [this](const std::string& password) {
@@ -114,41 +114,35 @@ void CalibreSettingsActivity::handleSelection() {
 void CalibreSettingsActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
+  auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_OPDS_BROWSER));
+  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                    tr(STR_CALIBRE_URL_HINT));
 
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_OPDS_BROWSER), true, EpdFontFamily::BOLD);
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
+      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
+      nullptr,
+      [this](int index) {
+        // Draw status for each setting
+        if (index == 0) {
+          return (strlen(SETTINGS.opdsServerUrl) > 0) ? std::string(SETTINGS.opdsServerUrl)
+                                                      : std::string(tr(STR_NOT_SET));
+        } else if (index == 1) {
+          return (strlen(SETTINGS.opdsUsername) > 0) ? std::string(SETTINGS.opdsUsername)
+                                                     : std::string(tr(STR_NOT_SET));
+        } else if (index == 2) {
+          return (strlen(SETTINGS.opdsPassword) > 0) ? std::string("******") : std::string(tr(STR_NOT_SET));
+        }
+        return std::string(tr(STR_NOT_SET));
+      },
+      true);
 
-  // Draw info text about Calibre
-  renderer.drawCenteredText(UI_10_FONT_ID, 40, tr(STR_CALIBRE_URL_HINT));
-
-  // Draw selection highlight
-  renderer.fillRect(0, 70 + selectedIndex * 30 - 2, pageWidth - 1, 30);
-
-  // Draw menu items
-  for (int i = 0; i < MENU_ITEMS; i++) {
-    const int settingY = 70 + i * 30;
-    const bool isSelected = (i == selectedIndex);
-
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, I18N.get(menuNames[i]), !isSelected);
-
-    // Draw status for each setting
-    std::string status = std::string("[") + tr(STR_NOT_SET) + "]";
-    if (i == 0) {
-      status = (strlen(SETTINGS.opdsServerUrl) > 0) ? std::string("[") + tr(STR_SET) + "]"
-                                                    : std::string("[") + tr(STR_NOT_SET) + "]";
-    } else if (i == 1) {
-      status = (strlen(SETTINGS.opdsUsername) > 0) ? std::string("[") + tr(STR_SET) + "]"
-                                                   : std::string("[") + tr(STR_NOT_SET) + "]";
-    } else if (i == 2) {
-      status = (strlen(SETTINGS.opdsPassword) > 0) ? std::string("[") + tr(STR_SET) + "]"
-                                                   : std::string("[") + tr(STR_NOT_SET) + "]";
-    }
-    const auto width = renderer.getTextWidth(UI_10_FONT_ID, status.c_str());
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status.c_str(), !isSelected);
-  }
-
-  // Draw button hints
+  // Draw help text at bottom
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

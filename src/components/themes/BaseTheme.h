@@ -51,11 +51,17 @@ struct ThemeMetrics {
   int buttonHintsHeight;
   int sideButtonHintsWidth;
 
-  int versionTextRightX;
-  int versionTextY;
-
+  int progressBarHeight;
   int bookProgressBarHeight;
+
+  int keyboardKeyWidth;
+  int keyboardKeyHeight;
+  int keyboardKeySpacing;
+  bool keyboardBottomAligned;
+  bool keyboardCenteredText;
 };
+
+enum UIIcon { Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot };
 
 // Default theme implementation (Classic Theme)
 // Additional themes can inherit from this and override methods as needed
@@ -82,9 +88,13 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeRecentBooksCount = 1,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
-                                 .versionTextRightX = 20,
-                                 .versionTextY = 738,
-                                 .bookProgressBarHeight = 4};
+                                 .progressBarHeight = 16,
+                                 .bookProgressBarHeight = 4,
+                                 .keyboardKeyWidth = 22,
+                                 .keyboardKeyHeight = 30,
+                                 .keyboardKeySpacing = 10,
+                                 .keyboardBottomAligned = false,
+                                 .keyboardCenteredText = false};
 }
 
 class BaseTheme {
@@ -102,11 +112,14 @@ class BaseTheme {
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                         const std::function<std::string(int index)>& rowTitle,
-                        const std::function<std::string(int index)>& rowSubtitle,
-                        const std::function<std::string(int index)>& rowIcon,
-                        const std::function<std::string(int index)>& rowValue) const;
-
-  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title) const;
+                        const std::function<std::string(int index)>& rowSubtitle = nullptr,
+                        const std::function<UIIcon(int index)>& rowIcon = nullptr,
+                        const std::function<std::string(int index)>& rowValue = nullptr,
+                        bool highlightValue = false) const;
+  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
+                          const char* subtitle = nullptr) const;
+  virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
+                             const char* rightLabel = nullptr) const;
   virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                           bool selected) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
@@ -114,8 +127,11 @@ class BaseTheme {
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
-                              const std::function<std::string(int index)>& rowIcon) const;
+                              const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   virtual void drawReadingProgressBar(const GfxRenderer& renderer, const size_t bookProgress) const;
+  virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
+  virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const;
+  virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const;
 };

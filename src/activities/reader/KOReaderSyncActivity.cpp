@@ -123,7 +123,7 @@ void KOReaderSyncActivity::performSync() {
   // Convert remote progress to CrossPoint position
   hasRemoteProgress = true;
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
-  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, totalPagesInSpine);
+  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
 
   // Calculate local progress in KOReader format (for display)
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
@@ -132,7 +132,13 @@ void KOReaderSyncActivity::performSync() {
   {
     RenderLock lock(*this);
     state = SHOWING_RESULT;
-    selectedOption = 0;  // Default to "Apply"
+
+    // Default to the option that corresponds to the furthest progress
+    if (localProgress.percentage > remoteProgress.percentage) {
+      selectedOption = 1;  // Upload local progress
+    } else {
+      selectedOption = 0;  // Apply remote progress
+    }
   }
   requestUpdate();
 }

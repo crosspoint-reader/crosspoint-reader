@@ -120,11 +120,6 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
   const auto& font = fontIt->second;
 
-  // no printable characters
-  if (!font.hasPrintableChars(text, style)) {
-    return;
-  }
-
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
@@ -150,8 +145,28 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
       drawPixel(x, y1, state);
     }
   } else {
-    // TODO: Implement
-    LOG_ERR("GFX", "Line drawing not supported");
+    // Bresenham's line algorithm — integer arithmetic only
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+    int sx = (dx > 0) ? 1 : -1;
+    int sy = (dy > 0) ? 1 : -1;
+    dx = sx * dx;  // abs
+    dy = sy * dy;  // abs
+
+    int err = dx - dy;
+    while (true) {
+      drawPixel(x1, y1, state);
+      if (x1 == x2 && y1 == y2) break;
+      int e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x1 += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y1 += sy;
+      }
+    }
   }
 }
 
@@ -337,7 +352,9 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
     return;
   }
 
-  const int maxRadius = std::min({cornerRadius, width / 2, height / 2});
+  // Assume if we're not rounding all corners then we are only rounding one side
+  const int roundedSides = (!roundTopLeft || !roundTopRight || !roundBottomLeft || !roundBottomRight) ? 1 : 2;
+  const int maxRadius = std::min({cornerRadius, width / roundedSides, height / roundedSides});
   if (maxRadius <= 0) {
     fillRectDither(x, y, width, height, color);
     return;
@@ -348,10 +365,16 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
     fillRectDither(x + maxRadius + 1, y, horizontalWidth - 2, height, color);
   }
 
-  const int verticalHeight = height - 2 * maxRadius - 2;
-  if (verticalHeight > 0) {
-    fillRectDither(x, y + maxRadius + 1, maxRadius + 1, verticalHeight, color);
-    fillRectDither(x + width - maxRadius - 1, y + maxRadius + 1, maxRadius + 1, verticalHeight, color);
+  const int leftFillTop = y + (roundTopLeft ? (maxRadius + 1) : 0);
+  const int leftFillBottom = y + height - 1 - (roundBottomLeft ? (maxRadius + 1) : 0);
+  if (leftFillBottom >= leftFillTop) {
+    fillRectDither(x, leftFillTop, maxRadius + 1, leftFillBottom - leftFillTop + 1, color);
+  }
+
+  const int rightFillTop = y + (roundTopRight ? (maxRadius + 1) : 0);
+  const int rightFillBottom = y + height - 1 - (roundBottomRight ? (maxRadius + 1) : 0);
+  if (rightFillBottom >= rightFillTop) {
+    fillRectDither(x + width - maxRadius - 1, rightFillTop, maxRadius + 1, rightFillBottom - rightFillTop + 1, color);
   }
 
   auto fillArcTemplated = [this](int maxRadius, int cx, int cy, int xDir, int yDir, Color color) {
@@ -375,26 +398,18 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 
   if (roundTopLeft) {
     fillArcTemplated(maxRadius, x + maxRadius, y + maxRadius, -1, -1, color);
-  } else {
-    fillRectDither(x, y, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundTopRight) {
     fillArcTemplated(maxRadius, x + width - maxRadius - 1, y + maxRadius, 1, -1, color);
-  } else {
-    fillRectDither(x + width - maxRadius - 1, y, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundBottomRight) {
     fillArcTemplated(maxRadius, x + width - maxRadius - 1, y + height - maxRadius - 1, 1, 1, color);
-  } else {
-    fillRectDither(x + width - maxRadius - 1, y + height - maxRadius - 1, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundBottomLeft) {
     fillArcTemplated(maxRadius, x + maxRadius, y + height - maxRadius - 1, -1, 1, color);
-  } else {
-    fillRectDither(x, y + height - maxRadius - 1, maxRadius + 1, maxRadius + 1, color);
   }
 }
 
@@ -422,7 +437,7 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
-  display.drawImage(bitmap, y, getScreenWidth() - width - x, height, width);
+  display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
@@ -815,11 +830,6 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   }
 
   const auto& font = fontIt->second;
-
-  // No printable characters
-  if (!font.hasPrintableChars(text, style)) {
-    return;
-  }
 
   // For 90° clockwise rotation:
   // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)

@@ -110,7 +110,7 @@ class GfxRenderer {
                         EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  int getSpaceWidth(int fontId, EpdFontFamily::Style style) const;
+  int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the kerning adjustment for a space between two codepoints:
   /// kern(leftCp, ' ') + kern(' ', rightCp). Returns 0 if kerning is unavailable.
   int getSpaceKernAdjust(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;

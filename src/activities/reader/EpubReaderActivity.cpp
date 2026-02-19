@@ -241,7 +241,7 @@ void EpubReaderActivity::loop() {
   if (prevTriggered) {
     if (section->currentPage > 0) {
       section->currentPage--;
-    } else {
+    } else if (currentSpineIndex > 0) {
       // We don't want to delete the section mid-render, so grab the semaphore
       {
         RenderLock lock(*this);
