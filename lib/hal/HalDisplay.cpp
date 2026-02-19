@@ -9,8 +9,10 @@ HalDisplay::~HalDisplay() {}
 
 void HalDisplay::begin() {
   // Set X3-specific display dimensions before initializing
+  static constexpr uint16_t X3_DISPLAY_WIDTH = 792;
+  static constexpr uint16_t X3_DISPLAY_HEIGHT = 528;
   if (gpio.deviceIsX3()) {
-    einkDisplay.setDisplayDimensions(792, 528);
+    einkDisplay.setDisplayDimensions(X3_DISPLAY_WIDTH, X3_DISPLAY_HEIGHT);
   }
 
   einkDisplay.begin();

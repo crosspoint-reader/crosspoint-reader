@@ -26,7 +26,7 @@ void HalGPIO::begin() {
     Wire.begin(20, 0, 400000);
     _batteryUseI2C = true;
     _batteryI2cAddr = 0x55;
-    _batterySocRegister = 0x2C;
+    _batterySocRegister = 0x1C;
   }
 }
 

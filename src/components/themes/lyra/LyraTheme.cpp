@@ -416,7 +416,7 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 
     for (int i = 0; i < 2; i++) {
       if (labels[i] != nullptr && labels[i][0] != '\0') {
-        const int y = topHintButtonY + (i * buttonHeight + 5);
+        const int y = topHintButtonY + (i * buttonHeight) + 5;
         const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
         renderer.drawTextRotated90CW(SMALL_FONT_ID, x, y + (buttonHeight + textWidth) / 2, labels[i]);
       }

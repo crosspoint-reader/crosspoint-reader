@@ -11,7 +11,9 @@
 HalPowerManager powerManager;  // Singleton instance
 
 void HalPowerManager::begin() {
-  pinMode(BAT_GPIO0, INPUT);
+  if (!gpio.deviceIsX3()) {
+    pinMode(BAT_GPIO0, INPUT);
+  }
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
   assert(modeMutex != nullptr);
