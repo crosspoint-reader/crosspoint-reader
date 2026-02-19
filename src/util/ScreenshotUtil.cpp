@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 #include <BitmapHelpers.h>
-#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -57,7 +56,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
 
   FsFile file;
   if (!Storage.openFileForWrite("SCR", filename, file)) {
-    Serial.printf("[%lu] [SCR] Failed to open file for writing\n", millis());
+    LOG_ERR("SCR", "Failed to save screenshot");
     return false;
   }
 
