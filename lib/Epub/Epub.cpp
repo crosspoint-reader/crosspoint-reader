@@ -258,6 +258,12 @@ bool Epub::parseTocNavFile() const {
 }
 
 void Epub::parseCssFiles() const {
+  // Maximum CSS file size we'll attempt to parse (uncompressed)
+  // Larger files risk memory exhaustion on ESP32
+  constexpr size_t MAX_CSS_FILE_SIZE = 128 * 1024;  // 128KB
+  // Minimum heap required before attempting CSS parsing
+  constexpr size_t MIN_HEAP_FOR_CSS_PARSING = 64 * 1024;  // 64KB
+
   if (cssFiles.empty()) {
     LOG_DBG("EBP", "No CSS files to parse, but CssParser created for inline styles");
   }
@@ -267,6 +273,24 @@ void Epub::parseCssFiles() const {
     // No cache yet - parse CSS files
     for (const auto& cssPath : cssFiles) {
       LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
+
+      // Check heap before parsing - CSS parsing allocates heavily
+      const uint32_t freeHeap = ESP.getFreeHeap();
+      if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
+        LOG_ERR("EBP", "Insufficient heap for CSS parsing (%u bytes free, need %zu), skipping: %s", freeHeap,
+                MIN_HEAP_FOR_CSS_PARSING, cssPath.c_str());
+        continue;
+      }
+
+      // Check CSS file size before decompressing - skip files that are too large
+      size_t cssFileSize = 0;
+      if (getItemSize(cssPath, &cssFileSize)) {
+        if (cssFileSize > MAX_CSS_FILE_SIZE) {
+          LOG_ERR("EBP", "CSS file too large (%zu bytes > %zu max), skipping: %s", cssFileSize, MAX_CSS_FILE_SIZE,
+                  cssPath.c_str());
+          continue;
+        }
+      }
 
       // Extract CSS file to temp location
       const auto tmpCssPath = getCachePath() + "/.tmp.css";
