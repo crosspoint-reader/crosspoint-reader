@@ -516,15 +516,17 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         }
       }
 
-      int newLineWidth = renderer.getTextWidth(UI_12_FONT_ID, currentLine.c_str());
+      int newLineWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, currentLine.c_str(), EpdFontFamily::REGULAR);
       if (newLineWidth > 0) {
         newLineWidth += spaceWidth;
       }
-      newLineWidth += wordWidth;
+      newLineWidth += renderer.getTextAdvanceX(UI_12_FONT_ID, i.c_str(), EpdFontFamily::REGULAR);
 
       if (newLineWidth > maxLineWidth && !currentLine.empty()) {
         // New line too long, push old line
         lines.push_back(currentLine);
+        currentLine = i;
+      } else if (currentLine.empty()) {
         currentLine = i;
       } else {
         currentLine.append(" ").append(i);

@@ -3,9 +3,11 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Utf8.h>
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "Battery.h"
 #include "RecentBooksStore.h"
@@ -480,13 +482,72 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                                hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
     }
 
-    auto title = renderer.truncatedText(UI_12_FONT_ID, book.title.c_str(), textWidth, EpdFontFamily::BOLD);
+    // Wrap title to up to 3 lines (word-wrap by advance width)
+    const std::string& lastBookTitle = book.title;
+    std::vector<std::string> words;
+    words.reserve(8);
+    size_t pos = 0;
+    while (pos < lastBookTitle.size()) {
+      while (pos < lastBookTitle.size() && lastBookTitle[pos] == ' ') ++pos;
+      if (pos >= lastBookTitle.size()) break;
+      const size_t start = pos;
+      while (pos < lastBookTitle.size() && lastBookTitle[pos] != ' ') ++pos;
+      words.emplace_back(lastBookTitle.substr(start, pos - start));
+    }
+    const int maxLineWidth = textWidth;
+    const int spaceWidth = renderer.getSpaceWidth(UI_12_FONT_ID, EpdFontFamily::BOLD);
+    std::vector<std::string> titleLines;
+    std::string currentLine;
+    for (auto& w : words) {
+      if (titleLines.size() >= 3) {
+        titleLines.back().append("...");
+        while (!titleLines.back().empty() &&
+               renderer.getTextWidth(UI_12_FONT_ID, titleLines.back().c_str(), EpdFontFamily::BOLD) > maxLineWidth) {
+          titleLines.back().resize(titleLines.back().size() - 3);
+          utf8RemoveLastChar(titleLines.back());
+          titleLines.back().append("...");
+        }
+        break;
+      }
+      int wordW = renderer.getTextWidth(UI_12_FONT_ID, w.c_str(), EpdFontFamily::BOLD);
+      while (wordW > maxLineWidth && !w.empty()) {
+        utf8RemoveLastChar(w);
+        std::string withE = w + "...";
+        wordW = renderer.getTextWidth(UI_12_FONT_ID, withE.c_str(), EpdFontFamily::BOLD);
+        if (wordW <= maxLineWidth) {
+          w = withE;
+          break;
+        }
+      }
+      int newW = renderer.getTextAdvanceX(UI_12_FONT_ID, currentLine.c_str(), EpdFontFamily::BOLD);
+      if (newW > 0) newW += spaceWidth;
+      newW += renderer.getTextAdvanceX(UI_12_FONT_ID, w.c_str(), EpdFontFamily::BOLD);
+      if (newW > maxLineWidth && !currentLine.empty()) {
+        titleLines.push_back(currentLine);
+        currentLine = w;
+      } else if (currentLine.empty()) {
+        currentLine = w;
+      } else {
+        currentLine.append(" ").append(w);
+      }
+    }
+    if (!currentLine.empty() && titleLines.size() < 3) titleLines.push_back(currentLine);
+
     auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
-    auto bookTitleHeight = renderer.getTextHeight(UI_12_FONT_ID);
-    renderer.drawText(UI_12_FONT_ID, tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing,
-                      tileY + tileHeight / 2 - bookTitleHeight, title.c_str(), true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing,
-                      tileY + tileHeight / 2 + 5, author.c_str(), true);
+    const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+    const int titleBlockHeight = titleLineHeight * static_cast<int>(titleLines.size());
+    const int authorHeight = book.author.empty() ? 0 : (renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2);
+    const int totalBlockHeight = titleBlockHeight + authorHeight;
+    int titleY = tileY + tileHeight / 2 - totalBlockHeight / 2;
+    const int textX = tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing;
+    for (const auto& line : titleLines) {
+      renderer.drawText(UI_12_FONT_ID, textX, titleY, line.c_str(), true, EpdFontFamily::BOLD);
+      titleY += titleLineHeight;
+    }
+    if (!book.author.empty()) {
+      titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
+      renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
+    }
   } else {
     drawEmptyRecents(renderer, rect);
   }
