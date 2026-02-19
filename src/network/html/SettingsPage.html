@@ -7,22 +7,24 @@
   <style>
     :root {
       --font-color: #333;
-      --background: #f5f5f5;
+      --bg: #f5f5f5;
       --title-color: #2c3e50;
-      --card-background: #FFF;
+      --card-bg: #FFF;
       --label-color: #7f8c8d;
       --border-color: #eee;
       --accent-color: rgb(110, 154, 130);
-      --accent-color-highlight: #5a8c73;
+      --accent-hover-color: #5a8c73;
+      --toggle-bg: #ccc;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --font-color: #f5f5f5;
-        --background: #333;
+        --bg: #333;
         --title-color: #ecf0f1;
-        --card-background: #444;
+        --card-bg: #444;
         --label-color: #bdc3c7;
         --border-color: #555;
+        --toggle-bg: #666;
         color-scheme: dark;
       }
     }
@@ -32,7 +34,7 @@
       max-width: 800px;
       margin: 0 auto;
       padding: 20px;
-      background-color: var(--background);
+      background-color: var(--bg);
       color: var(--font-color);
     }
     h1 {
@@ -45,7 +47,7 @@
       margin-top: 0;
     }
     .card {
-      background: var(--card-background);
+      background: var(--card-bg);
       border-radius: 8px;
       padding: 20px;
       margin: 15px 0;
@@ -57,7 +59,6 @@
       gap: 10px;
     }
     .nav-links a {
-      display: inline-block;
       padding: 10px 20px;
       color: var(--font-color);
       text-decoration: none;
@@ -68,7 +69,7 @@
       color: white;
     }
     .nav-links a:hover {
-      background-color: var(--accent-color-highlight);
+      background-color: var(--accent-hover-color);
       color: white;
     }
     .setting-row {
@@ -99,7 +100,7 @@
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 0.95em;
-      background: var(--card-background);
+      background: var(--card-bg);
     }
     .setting-control select {
       min-width: 160px;
@@ -127,7 +128,7 @@
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
-      background-color: #ccc;
+      background-color: var(--toggle-bg);
       border-radius: 26px;
       transition: 0.3s;
     }
@@ -220,7 +221,6 @@
       }
       .nav-links a {
         padding: 8px 12px;
-        margin-right: 6px;
         font-size: 0.9em;
       }
       .setting-row {
