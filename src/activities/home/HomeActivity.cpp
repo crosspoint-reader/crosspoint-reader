@@ -1,12 +1,10 @@
 #include "HomeActivity.h"
 
 #include <Bitmap.h>
-#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
-#include <Xtc.h>
 
 #include <cstring>
 #include <vector>
@@ -18,7 +16,6 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // My Library, Recents, File transfer, Settings
@@ -51,83 +48,27 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
   }
 }
 
-void HomeActivity::loadRecentCovers(int coverHeight) {
-  recentsLoading = true;
-  bool showingLoading = false;
-  Rect popupRect;
-
-  int progress = 0;
-  for (RecentBook& book : recentBooks) {
-    if (!book.coverBmpPath.empty()) {
-      std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!Storage.exists(coverPath.c_str())) {
-        // If epub, try to load the metadata for title/author and cover
-        if (StringUtils::checkFileExtension(book.path, ".epub")) {
-          Epub epub(book.path, "/.crosspoint");
-          // Skip loading css since we only need metadata here
-          epub.load(false, true);
-
-          // Try to generate thumbnail image for Continue Reading card
-          if (!showingLoading) {
-            showingLoading = true;
-            popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-          }
-          GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-          bool success = epub.generateThumbBmp(coverHeight);
-          if (!success) {
-            RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
-            book.coverBmpPath = "";
-          }
-          coverRendered = false;
-          requestUpdate();
-        } else if (StringUtils::checkFileExtension(book.path, ".xtch") ||
-                   StringUtils::checkFileExtension(book.path, ".xtc")) {
-          // Handle XTC file
-          Xtc xtc(book.path, "/.crosspoint");
-          if (xtc.load()) {
-            // Try to generate thumbnail image for Continue Reading card
-            if (!showingLoading) {
-              showingLoading = true;
-              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-            }
-            GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-            bool success = xtc.generateThumbBmp(coverHeight);
-            if (!success) {
-              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
-              book.coverBmpPath = "";
-            }
-            coverRendered = false;
-            requestUpdate();
-          }
-        }
-      }
-    }
-    progress++;
-  }
-
-  recentsLoaded = true;
-  recentsLoading = false;
-}
-
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-  // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
-
   selectorIndex = 0;
 
   auto metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
 
-  // Trigger first update
+  if (!recentBooks.empty()) {
+    coverLoader.start(&recentBooks, metrics.homeCoverHeight, this);
+  } else {
+    recentsLoaded = true;
+  }
+
   requestUpdate();
 }
 
 void HomeActivity::onExit() {
+  coverLoader.stop();
   Activity::onExit();
-
-  // Free the stored cover buffer if any
   freeCoverBuffer();
 }
 
@@ -254,8 +195,13 @@ void HomeActivity::render(Activity::RenderLock&&) {
   if (!firstRenderDone) {
     firstRenderDone = true;
     requestUpdate();
-  } else if (!recentsLoaded && !recentsLoading) {
-    recentsLoading = true;
-    loadRecentCovers(metrics.homeCoverHeight);
+  } else if (!recentsLoaded) {
+    auto status = coverLoader.mergeResults(recentBooks);
+    if (status.changed) {
+      coverRendered = false;
+    }
+    if (status.complete) {
+      recentsLoaded = true;
+    }
   }
 }
