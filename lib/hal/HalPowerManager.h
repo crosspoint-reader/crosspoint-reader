@@ -34,7 +34,7 @@ class HalPowerManager {
   void startDeepSleep(HalGPIO& gpio) const;
 
   // Get battery percentage (range 0-100)
-  int getBatteryPercentage() const;
+  uint16_t getBatteryPercentage() const;
 
   // RAII helper class to manage power saving locks
   // Usage: create an instance of Lock in a scope to disable power saving, for example when running a task that needs
