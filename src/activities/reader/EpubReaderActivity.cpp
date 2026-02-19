@@ -433,11 +433,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT:
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      pendingScreenshot = true;
+      {
+        RenderLock lock(*this);
+        pendingScreenshot = true;
+      }
       exitActivity();
       requestUpdate();
-      xSemaphoreGive(renderingMutex);
       break;
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
