@@ -261,29 +261,46 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 int displayHeight = 0;
                 const float emSize =
                     static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
-                const CssStyle imgStyle =
+                CssStyle imgStyle =
                     self->cssParser ? self->cssParser->resolveStyle("img", classAttr) : CssStyle{};
+                // Merge inline style (e.g. style="height: 2em") so it overrides stylesheet rules
+                if (!styleAttr.empty()) {
+                  imgStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
+                }
                 const bool hasCssHeight = imgStyle.hasImageHeight();
                 const bool hasCssWidth = imgStyle.hasImageWidth();
 
                 if (hasCssHeight && dims.height > 0) {
-                  // Use CSS height and derive width from image aspect ratio
+                  // Use CSS height (resolve % against viewport height) and derive width from aspect ratio
                   displayHeight = static_cast<int>(
-                      imgStyle.imageHeight.toPixels(emSize, static_cast<float>(self->viewportWidth)) + 0.5f);
+                      imgStyle.imageHeight.toPixels(emSize, static_cast<float>(self->viewportHeight)) + 0.5f);
                   if (displayHeight < 1) displayHeight = 1;
                   displayWidth = static_cast<int>(
                       displayHeight * (static_cast<float>(dims.width) / dims.height) + 0.5f);
-                  if (displayWidth > self->viewportWidth) displayWidth = self->viewportWidth;
+                  if (displayWidth > self->viewportWidth) {
+                    displayWidth = self->viewportWidth;
+                    // Rescale height to preserve aspect ratio when width is clamped
+                    displayHeight = static_cast<int>(
+                        displayWidth * (static_cast<float>(dims.height) / dims.width) + 0.5f);
+                    if (displayHeight < 1) displayHeight = 1;
+                  }
                   if (displayWidth < 1) displayWidth = 1;
                   LOG_DBG("EHP", "Display size from CSS height: %dx%d", displayWidth, displayHeight);
                 } else if (hasCssWidth && !hasCssHeight && dims.width > 0) {
-                  // Use CSS width and derive height from aspect ratio
+                  // Use CSS width (resolve % against viewport width) and derive height from aspect ratio
                   displayWidth = static_cast<int>(
                       imgStyle.imageWidth.toPixels(emSize, static_cast<float>(self->viewportWidth)) + 0.5f);
                   if (displayWidth > self->viewportWidth) displayWidth = self->viewportWidth;
                   if (displayWidth < 1) displayWidth = 1;
                   displayHeight = static_cast<int>(
                       displayWidth * (static_cast<float>(dims.height) / dims.width) + 0.5f);
+                  if (displayHeight > self->viewportHeight) {
+                    displayHeight = self->viewportHeight;
+                    // Rescale width to preserve aspect ratio when height is clamped
+                    displayWidth = static_cast<int>(
+                        displayHeight * (static_cast<float>(dims.width) / dims.height) + 0.5f);
+                    if (displayWidth < 1) displayWidth = 1;
+                  }
                   if (displayHeight < 1) displayHeight = 1;
                   LOG_DBG("EHP", "Display size from CSS width: %dx%d", displayWidth, displayHeight);
                 } else {
