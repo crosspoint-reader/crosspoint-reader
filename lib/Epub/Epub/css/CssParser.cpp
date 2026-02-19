@@ -74,7 +74,7 @@ std::string CssParser::normalized(const std::string& s) {
   }
 
   // Remove trailing space
-  if (!result.empty() && result.back() == ' ') {
+  while (!result.empty() && (result.back() == ' ' || result.back() == '\n')) {
     result.pop_back();
   }
   return result;
