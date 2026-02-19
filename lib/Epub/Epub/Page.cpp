@@ -1,5 +1,6 @@
 #include "Page.h"
 
+#include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
 
@@ -46,6 +47,49 @@ std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
 
   auto ib = ImageBlock::deserialize(file);
   return std::unique_ptr<PageImage>(new PageImage(std::move(ib), xPos, yPos));
+}
+
+bool PageImage::isCached() const { return imageBlock->isCached(); }
+
+void PageImage::renderPlaceholder(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
+  int x = xPos + xOffset;
+  int y = yPos + yOffset;
+  int w = imageBlock->getWidth();
+  int h = imageBlock->getHeight();
+  renderer.fillRect(x, y, w, h, true);
+  if (w > 2 && h > 2) {
+    renderer.fillRect(x + 1, y + 1, w - 2, h - 2, false);
+  }
+}
+
+void Page::renderTextOnly(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  for (auto& element : elements) {
+    if (element->getTag() == TAG_PageLine) {
+      element->render(renderer, fontId, xOffset, yOffset);
+    }
+  }
+}
+
+int Page::countUncachedImages() const {
+  int count = 0;
+  for (auto& element : elements) {
+    if (element->getTag() == TAG_PageImage) {
+      auto* img = static_cast<PageImage*>(element.get());
+      if (!img->isCached()) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+void Page::renderImagePlaceholders(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
+  for (auto& element : elements) {
+    if (element->getTag() == TAG_PageImage) {
+      auto* img = static_cast<PageImage*>(element.get());
+      img->renderPlaceholder(renderer, xOffset, yOffset);
+    }
+  }
 }
 
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {

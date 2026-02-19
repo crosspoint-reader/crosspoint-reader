@@ -16,6 +16,7 @@ class ImageBlock final : public Block {
   int16_t getHeight() const { return height; }
 
   bool imageExists() const;
+  bool isCached() const;
 
   BlockType getType() override { return IMAGE_BLOCK; }
   bool isEmpty() override { return false; }

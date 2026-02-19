@@ -10,7 +10,7 @@
 
 enum PageElementTag : uint8_t {
   TAG_PageLine = 1,
-  TAG_PageImage = 2,  // New tag
+  TAG_PageImage = 2,
 };
 
 // represents something that has been added to a page
@@ -48,6 +48,8 @@ class PageImage final : public PageElement {
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
   bool serialize(FsFile& file) override;
   PageElementTag getTag() const override { return TAG_PageImage; }
+  bool isCached() const;
+  void renderPlaceholder(GfxRenderer& renderer, int xOffset, int yOffset) const;
   static std::unique_ptr<PageImage> deserialize(FsFile& file);
 };
 
@@ -64,4 +66,8 @@ class Page {
     return std::any_of(elements.begin(), elements.end(),
                        [](const std::shared_ptr<PageElement>& el) { return el->getTag() == TAG_PageImage; });
   }
+
+  void renderTextOnly(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
+  int countUncachedImages() const;
+  void renderImagePlaceholders(GfxRenderer& renderer, int xOffset, int yOffset) const;
 };

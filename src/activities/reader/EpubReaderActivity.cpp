@@ -642,6 +642,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // as grayscale tones require half refresh to display correctly
   bool forceFullRefresh = page->hasImages() && SETTINGS.textAntiAliasing;
 
+  if (page->countUncachedImages() > 0) {
+    // Show text + empty image placeholders immediately while images decode
+    page->renderTextOnly(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    page->renderImagePlaceholders(renderer, orientedMarginLeft, orientedMarginTop);
+    renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    renderer.displayBuffer();
+    renderer.clearScreen();
+  }
+
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
   if (forceFullRefresh || pagesUntilFullRefresh <= 1) {
