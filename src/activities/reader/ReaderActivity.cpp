@@ -1,6 +1,7 @@
 #include "ReaderActivity.h"
 
 #include <HalStorage.h>
+#include <I18n.h>
 
 #include "CrossPointSettings.h"
 #include "Epub.h"
@@ -10,6 +11,7 @@
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 #include "util/StringUtils.h"
 
 std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
@@ -36,7 +38,19 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   }
 
   auto epub = std::unique_ptr<Epub>(new Epub(path, "/.crosspoint"));
-  if (epub->load(true, SETTINGS.embeddedStyle == 0)) {
+
+  bool popupShown = false;
+  Rect popupRect;
+  const auto progressFn = [this, &popupShown, &popupRect](int progress) {
+    if (!popupShown) {
+      popupShown = true;
+      renderer.clearScreen();
+      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+    }
+    GUI.fillPopupProgress(renderer, popupRect, progress);
+  };
+
+  if (epub->load(true, SETTINGS.embeddedStyle == 0, progressFn)) {
     return epub;
   }
 

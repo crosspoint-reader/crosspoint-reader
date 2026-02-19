@@ -2,6 +2,7 @@
 
 #include <Print.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -43,7 +44,8 @@ class Epub {
   }
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
-  bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  bool load(bool buildIfMissing = true, bool skipLoadingCss = false,
+            const std::function<void(int progress)>& progressFn = nullptr);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
