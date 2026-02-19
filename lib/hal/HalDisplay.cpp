@@ -53,18 +53,28 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
-void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen, HalDisplay::UpdateType updateType) {
+  if (gpio.deviceIsX3() && updateType == UpdateType::SCENE_CHANGE && mode == RefreshMode::FAST_REFRESH) {
+    mode = RefreshMode::HALF_REFRESH;
+  }
+
   if (gpio.deviceIsX3() && (lastBufferWasGray || mode == RefreshMode::HALF_REFRESH)) {
     einkDisplay.requestResync(1);
   }
+
   lastBufferWasGray = false;
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 
-void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen, HalDisplay::UpdateType updateType) {
+  if (gpio.deviceIsX3() && updateType == UpdateType::SCENE_CHANGE && mode == RefreshMode::FAST_REFRESH) {
+    mode = RefreshMode::HALF_REFRESH;
+  }
+
   if (gpio.deviceIsX3() && (lastBufferWasGray || mode == RefreshMode::HALF_REFRESH)) {
     einkDisplay.requestResync(1);
   }
+
   lastBufferWasGray = false;
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
@@ -84,8 +94,10 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
 void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
-  if (gpio.deviceIsX3() && !lastBufferWasGray) {
-    einkDisplay.requestResync(1);
+  if (gpio.deviceIsX3()) {
+    // Hard-disable grayscale display passes on X3 until native LUT path is stable.
+    lastBufferWasGray = false;
+    return;
   }
   lastBufferWasGray = true;
   einkDisplay.displayGrayBuffer(turnOffScreen);

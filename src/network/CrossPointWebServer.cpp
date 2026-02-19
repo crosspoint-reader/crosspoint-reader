@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -1002,6 +1003,7 @@ void CrossPointWebServer::handleSettingsPage() const {
 
 void CrossPointWebServer::handleGetSettings() const {
   auto settings = getSettingsList();
+  const bool hideTextAAOnX3 = gpio.deviceIsX3();
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1013,6 +1015,7 @@ void CrossPointWebServer::handleGetSettings() const {
   JsonDocument doc;
 
   for (const auto& s : settings) {
+    if (hideTextAAOnX3 && s.nameId == StrId::STR_TEXT_AA) continue;
     if (!s.key) continue;  // Skip ACTION-only entries
 
     doc.clear();
@@ -1098,9 +1101,11 @@ void CrossPointWebServer::handlePostSettings() {
   }
 
   auto settings = getSettingsList();
+  const bool hideTextAAOnX3 = gpio.deviceIsX3();
   int applied = 0;
 
   for (auto& s : settings) {
+    if (hideTextAAOnX3 && s.nameId == StrId::STR_TEXT_AA) continue;
     if (!s.key) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
 

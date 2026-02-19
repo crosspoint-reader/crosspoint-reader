@@ -17,6 +17,12 @@ class HalDisplay {
     FAST_REFRESH   // Fast refresh using custom LUT
   };
 
+  // Semantic update type hint for HAL policy decisions.
+  enum UpdateType {
+    FAST_UI,       // Frequent small UI deltas (selection, cursor, button highlights)
+    SCENE_CHANGE,  // Major scene/state transitions (e.g. entering a screen)
+  };
+
   // Initialize the display hardware and driver
   void begin();
 
@@ -36,8 +42,10 @@ class HalDisplay {
   void drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                             bool fromProgmem = false) const;
 
-  void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
-  void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
+  void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false,
+                     UpdateType updateType = FAST_UI);
+  void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false,
+                      UpdateType updateType = FAST_UI);
 
   // Power management
   void deepSleep();
