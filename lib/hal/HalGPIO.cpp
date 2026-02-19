@@ -5,14 +5,45 @@
 // Global HalGPIO instance
 HalGPIO gpio;
 
+namespace {
+int readAveragedAdc(uint8_t pin, uint8_t samples = 8) {
+  long sum = 0;
+  for (uint8_t i = 0; i < samples; ++i) {
+    sum += analogRead(pin);
+    delayMicroseconds(200);
+  }
+  return static_cast<int>(sum / samples);
+}
+}  // namespace
+
 void HalGPIO::begin() {
   inputMgr.begin();
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
-  // X3 boards bias GPIO4 (EPD DC) around ~700 ADC counts at boot in our setup.
-  // X4 boards do not, and use GPIO0 for battery ADC.
-  _detectAdcValue = analogRead(4);
-  _deviceType = (_detectAdcValue > 500 && _detectAdcValue < 1200) ? DeviceType::X3 : DeviceType::X4;
+  // X3 routes battery sense on GPIO4, X4 routes battery sense on GPIO0.
+  // Read both channels and classify by relative dominance; this is more stable
+  // than using a single floating-channel threshold.
+  const int adc4 = readAveragedAdc(4);
+  const int adc0 = readAveragedAdc(BAT_GPIO0);
+  _detectAdcValue = adc4;
+
+  static constexpr int kDominanceMargin = 150;
+  static constexpr int kX3Min = 500;
+  static constexpr int kX3Max = 1500;
+  const bool adc4LooksX3Range = (adc4 >= kX3Min && adc4 <= kX3Max);
+  const bool adc4Dominant = (adc4 > adc0 + kDominanceMargin);
+  const bool adc0Dominant = (adc0 > adc4 + kDominanceMargin);
+
+  if (adc4LooksX3Range && adc4Dominant) {
+    _deviceType = DeviceType::X3;
+  } else if (adc0Dominant) {
+    _deviceType = DeviceType::X4;
+  } else {
+    // Conservative fallback: X4 avoids enabling X3-only display behavior on
+    // ambiguous reads, which is safer for refresh correctness.
+    _deviceType = DeviceType::X4;
+  }
+
   _batteryPin = deviceIsX3() ? 4 : BAT_GPIO0;
 
   pinMode(_batteryPin, INPUT);
