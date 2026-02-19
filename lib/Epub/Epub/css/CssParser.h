@@ -4,7 +4,6 @@
 
 #include <string>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 #include "CssStyle.h"
@@ -30,7 +29,7 @@
  */
 class CssParser {
  public:
-  explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
+  CssParser() = default;
   ~CssParser() = default;
 
   // Non-copyable
@@ -38,12 +37,19 @@ class CssParser {
   CssParser& operator=(const CssParser&) = delete;
 
   /**
-   * Load and parse CSS from a file stream.
-   * Can be called multiple times to accumulate rules from multiple stylesheets.
-   * @param source Open file handle to read from
+   * Load and parse CSS from a string.
+   * @param css The CSS content as a string
+   * @param fileSize Size of the CSS content (0 if unknown)
    * @return true if parsing completed (even if no rules found)
    */
-  bool loadFromStream(FsFile& source);
+  bool loadFromString(const std::string& css, size_t fileSize = 0);
+
+  /**
+   * Parse large CSS files in streaming mode to avoid memory issues.
+   * @param source Open stream to read from
+   * @return true if parsing completed successfully
+   */
+  bool parseStreaming(Stream& source);
 
   /**
    * Look up the style for an HTML element, considering tag name and class attributes.
@@ -78,34 +84,37 @@ class CssParser {
   void clear() { rulesBySelector_.clear(); }
 
   /**
-   * Check if CSS rules cache file exists
-   */
-  bool hasCache() const;
-
-  /**
    * Save parsed CSS rules to a cache file.
+   * @param file Open file handle to write to
    * @return true if cache was written successfully
    */
-  bool saveToCache() const;
+  bool saveToCache(FsFile& file) const;
 
   /**
    * Load CSS rules from a cache file.
    * Clears any existing rules before loading.
+   * @param file Open file handle to read from
    * @return true if cache was loaded successfully
    */
-  bool loadFromCache();
+  bool loadFromCache(FsFile& file);
 
  private:
   // Storage: maps normalized selector -> style properties
   std::unordered_map<std::string, CssStyle> rulesBySelector_;
 
-  std::string cachePath;
+  // Statistics for debugging
+  size_t totalRulesProcessed_ = 0;
+  size_t rulesAdded_ = 0;
+  size_t rulesIgnoredLowPriority_ = 0;
+  size_t rulesIgnoredNoProperties_ = 0;
+
+  // Performance optimization: track lowest priority rule
+  std::string lowestPrioritySelector_;
+  int lowestPriorityValue_ = INT_MAX;
 
   // Internal parsing helpers
-  void processRuleBlockWithStyle(const std::string& selectorGroup, const CssStyle& style);
+  void processRuleBlock(const std::string& selectorGroup, const std::string& declarations);
   static CssStyle parseDeclarations(const std::string& declBlock);
-  static void parseDeclarationIntoStyle(const std::string& decl, CssStyle& style, std::string& propNameBuf,
-                                        std::string& propValueBuf);
 
   // Individual property value parsers
   static CssTextAlign interpretAlignment(const std::string& val);
@@ -113,10 +122,19 @@ class CssParser {
   static CssFontWeight interpretFontWeight(const std::string& val);
   static CssTextDecoration interpretDecoration(const std::string& val);
   static CssLength interpretLength(const std::string& val);
+  static int8_t interpretSpacing(const std::string& val);
 
   // String utilities
   static std::string normalized(const std::string& s);
-  static void normalizedInto(const std::string& s, std::string& out);
   static std::vector<std::string> splitOnChar(const std::string& s, char delimiter);
   static std::vector<std::string> splitWhitespace(const std::string& s);
+
+  // Calculate priority score for a selector (higher = more important)
+  static int calculatePriority(const std::string& selector);
+
+  // Remove the lowest priority rule when at capacity
+  void removeLowestPriorityRule();
+
+  // Recalculate lowest priority tracking (expensive, call sparingly)
+  void updateLowestPriorityTracking();
 };
