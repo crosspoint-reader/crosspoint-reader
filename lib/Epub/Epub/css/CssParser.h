@@ -38,7 +38,6 @@ class CssParser {
 
   /**
    * Load and parse CSS from a string.
-   * @note fileSize is informational (0 if unknown). Caller should validate file size if necessary.
    * @param css The CSS content as a string
    * @param fileSize Size of the CSS content (0 if unknown)
    * @return true if parsing completed (even if no rules found)
