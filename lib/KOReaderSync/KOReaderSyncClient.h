@@ -30,7 +30,17 @@ struct KOReaderProgress {
  */
 class KOReaderSyncClient {
  public:
-  enum Error { OK = 0, NO_CREDENTIALS, NETWORK_ERROR, AUTH_FAILED, SERVER_ERROR, JSON_ERROR, NOT_FOUND, USER_EXISTS, REGISTRATION_DISABLED };
+  enum Error {
+    OK = 0,
+    NO_CREDENTIALS,
+    NETWORK_ERROR,
+    AUTH_FAILED,
+    SERVER_ERROR,
+    JSON_ERROR,
+    NOT_FOUND,
+    USER_EXISTS,
+    REGISTRATION_DISABLED
+  };
 
   /**
    * Register a new user account with the sync server.

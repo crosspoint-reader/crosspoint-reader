@@ -15,8 +15,7 @@ class KOReaderAuthActivity final : public ActivityWithSubactivity {
 
   explicit KOReaderAuthActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                 const std::function<void()>& onComplete, Mode startMode = Mode::PROMPT)
-      : ActivityWithSubactivity("KOReaderAuth", renderer, mappedInput), onComplete(onComplete),
-        mode(startMode) {}
+      : ActivityWithSubactivity("KOReaderAuth", renderer, mappedInput), onComplete(onComplete), mode(startMode) {}
 
   void onEnter() override;
   void onExit() override;

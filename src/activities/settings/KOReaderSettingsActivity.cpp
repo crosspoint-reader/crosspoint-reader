@@ -14,7 +14,7 @@
 
 namespace {
 constexpr int MENU_ITEMS = 6;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,     StrId::STR_SYNC_SERVER_URL,
                                      StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE, StrId::STR_REGISTER};
 }  // namespace
 
@@ -126,24 +126,26 @@ void KOReaderSettingsActivity::handleSelection() {
       return;
     }
     exitActivity();
-    enterNewActivity(new KOReaderAuthActivity(renderer, mappedInput,
-                                              [this] {
-                                                exitActivity();
-                                                requestUpdate();
-                                              },
-                                              KOReaderAuthActivity::Mode::LOGIN));
+    enterNewActivity(new KOReaderAuthActivity(
+        renderer, mappedInput,
+        [this] {
+          exitActivity();
+          requestUpdate();
+        },
+        KOReaderAuthActivity::Mode::LOGIN));
   } else if (selectedIndex == 5) {
     // Register
     if (!KOREADER_STORE.hasCredentials()) {
       return;
     }
     exitActivity();
-    enterNewActivity(new KOReaderAuthActivity(renderer, mappedInput,
-                                              [this] {
-                                                exitActivity();
-                                                requestUpdate();
-                                              },
-                                              KOReaderAuthActivity::Mode::REGISTER));
+    enterNewActivity(new KOReaderAuthActivity(
+        renderer, mappedInput,
+        [this] {
+          exitActivity();
+          requestUpdate();
+        },
+        KOReaderAuthActivity::Mode::REGISTER));
   }
 }
 
