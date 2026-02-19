@@ -70,7 +70,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           // Try to generate thumbnail image for Continue Reading card
           if (!showingLoading) {
             showingLoading = true;
-            popupRect = GUI.drawPopup(renderer, tr(STR_LOADING));
+            popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           }
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
           bool success = epub.generateThumbBmp(coverHeight);
@@ -88,7 +88,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             // Try to generate thumbnail image for Continue Reading card
             if (!showingLoading) {
               showingLoading = true;
-              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING));
+              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
             bool success = xtc.generateThumbBmp(coverHeight);
