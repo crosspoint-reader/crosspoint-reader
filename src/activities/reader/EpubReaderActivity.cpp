@@ -436,7 +436,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       pendingScreenshot = true;
       exitActivity();
-      updateRequired = true;
+      requestUpdate();
       xSemaphoreGive(renderingMutex);
       break;
     case EpubReaderMenuActivity::MenuAction::SYNC: {
