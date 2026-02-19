@@ -7,6 +7,14 @@ BINARY="$BUILD_DIR/HomeSelectorMemoryTest"
 
 mkdir -p "$BUILD_DIR"
 
+if [ -n "${CXX:-}" ]; then
+  CXX_BIN="$CXX"
+elif command -v g++ >/dev/null 2>&1; then
+  CXX_BIN="g++"
+else
+  CXX_BIN="c++"
+fi
+
 CXXFLAGS=(
   -std=c++20
   -O2
@@ -16,6 +24,6 @@ CXXFLAGS=(
   -I"$ROOT_DIR"
 )
 
-c++ "${CXXFLAGS[@]}" "$ROOT_DIR/test/home_selector_memory/HomeSelectorMemoryTest.cpp" -o "$BINARY"
+"$CXX_BIN" "${CXXFLAGS[@]}" "$ROOT_DIR/test/home_selector_memory/HomeSelectorMemoryTest.cpp" -o "$BINARY"
 
 "$BINARY"
