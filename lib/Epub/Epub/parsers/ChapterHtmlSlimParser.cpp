@@ -282,8 +282,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                                        ? static_cast<float>(self->viewportWidth) / displayWidth
                                        : 1.0f;
                     float scaleY = (displayHeight > self->viewportHeight)
-                                      ? static_cast<float>(self->viewportHeight) / displayHeight
-                                      : 1.0f;
+                                       ? static_cast<float>(self->viewportHeight) / displayHeight
+                                       : 1.0f;
                     float scale = (scaleX < scaleY) ? scaleX : scaleY;
                     displayWidth = static_cast<int>(displayWidth * scale + 0.5f);
                     displayHeight = static_cast<int>(displayHeight * scale + 0.5f);
