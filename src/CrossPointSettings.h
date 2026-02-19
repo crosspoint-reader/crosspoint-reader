@@ -114,7 +114,7 @@ class CrossPointSettings {
   };
 
   // Short power button press actions
-  enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, SHORT_PWRBTN_COUNT };
+  enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, CONFIRM_BACK = 3, SHORT_PWRBTN_COUNT };
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
@@ -181,6 +181,8 @@ class CrossPointSettings {
   static CrossPointSettings& getInstance() { return instance; }
 
   uint16_t getPowerButtonDuration() const {
+    // This duration is used for the global power-button long-press sleep behavior in `src/main.cpp`.
+    // Keep it short ONLY when short-click is configured to sleep.
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;

@@ -372,7 +372,7 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-  gpio.update();
+  mappedInputManager.update();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 

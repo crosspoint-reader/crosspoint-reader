@@ -54,9 +54,81 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
+void MappedInputManager::update() {
+  gpio.update();
 
-bool MappedInputManager::wasReleased(const Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
+  syntheticConfirmPress = false;
+  syntheticConfirmRelease = false;
+  syntheticBackPress = false;
+  syntheticBackRelease = false;
+
+  const bool confirmBackMode = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::CONFIRM_BACK;
+  if (!confirmBackMode) {
+    powerSinglePending = false;
+    powerFirstReleaseTime = 0;
+    ignoreNextPowerRelease = false;
+    return;
+  }
+
+  const unsigned long now = millis();
+
+  if (powerSinglePending && powerFirstReleaseTime > 0 && (now - powerFirstReleaseTime) >= DOUBLE_CLICK_MS) {
+    syntheticConfirmPress = true;
+    syntheticConfirmRelease = true;
+    powerSinglePending = false;
+    powerFirstReleaseTime = 0;
+  }
+
+  if (gpio.wasPressed(HalGPIO::BTN_POWER) && powerSinglePending && powerFirstReleaseTime > 0 &&
+      (now - powerFirstReleaseTime) < DOUBLE_CLICK_MS) {
+    syntheticBackPress = true;
+    syntheticBackRelease = true;
+    powerSinglePending = false;
+    powerFirstReleaseTime = 0;
+    ignoreNextPowerRelease = true;
+  }
+
+  if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
+    if (ignoreNextPowerRelease) {
+      ignoreNextPowerRelease = false;
+    } else {
+      powerSinglePending = true;
+      powerFirstReleaseTime = now;
+    }
+  }
+}
+
+bool MappedInputManager::wasPressed(const Button button) const {
+  const bool wasPressedRaw = mapButton(button, &HalGPIO::wasPressed);
+
+  if (SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::CONFIRM_BACK) {
+    return wasPressedRaw;
+  }
+
+  if (button == Button::Confirm) {
+    return wasPressedRaw || syntheticConfirmPress;
+  }
+  if (button == Button::Back) {
+    return wasPressedRaw || syntheticBackPress;
+  }
+  return wasPressedRaw;
+}
+
+bool MappedInputManager::wasReleased(const Button button) const {
+  const bool wasReleasedRaw = mapButton(button, &HalGPIO::wasReleased);
+
+  if (SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::CONFIRM_BACK) {
+    return wasReleasedRaw;
+  }
+
+  if (button == Button::Confirm) {
+    return wasReleasedRaw || syntheticConfirmRelease;
+  }
+  if (button == Button::Back) {
+    return wasReleasedRaw || syntheticBackRelease;
+  }
+  return wasReleasedRaw;
+}
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 
@@ -91,8 +163,6 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
 }
 
 int MappedInputManager::getPressedFrontButton() const {
-  // Scan the raw front buttons in hardware order.
-  // This bypasses remapping so the remap activity can capture physical presses.
   if (gpio.wasPressed(HalGPIO::BTN_BACK)) {
     return HalGPIO::BTN_BACK;
   }
