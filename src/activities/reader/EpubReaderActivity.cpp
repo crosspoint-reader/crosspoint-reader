@@ -635,16 +635,6 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     LOG_ERR("ERS", "Could not save progress!");
   }
 }
-void EpubReaderActivity::displayBuffer(const bool forceFullRefresh) {
-  if (forceFullRefresh || pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-    pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
-  } else {
-    renderer.displayBuffer();
-    pagesUntilFullRefresh--;
-  }
-}
-
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
@@ -652,25 +642,23 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // as grayscale tones require half refresh to display correctly
   bool forceFullRefresh = page->hasImages() && SETTINGS.textAntiAliasing;
 
-  const int uncachedImages = page->countUncachedImages();
-
-  if (uncachedImages > 0) {
-    // Phase 1: Render text + empty image placeholders + status bar → display immediately
+  if (page->countUncachedImages() > 0) {
+    // Show text + empty image placeholders immediately while images decode
     page->renderTextOnly(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     page->renderImagePlaceholders(renderer, orientedMarginLeft, orientedMarginTop);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
-    displayBuffer(forceFullRefresh);
-
-    // Phase 2: Render full page (decodes uncached images into cache) → clean display
-    renderer.clearScreen();
-    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
-    renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer();
+    renderer.clearScreen();
+  }
+
+  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+  renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+  if (forceFullRefresh || pagesUntilFullRefresh <= 1) {
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
-    // All images cached (or no images): existing single-pass path
-    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
-    renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
-    displayBuffer(forceFullRefresh);
+    renderer.displayBuffer();
+    pagesUntilFullRefresh--;
   }
 
   // Save bw buffer to reset buffer state after grayscale data sync
