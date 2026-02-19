@@ -13,12 +13,12 @@
 class TextBlock final : public Block {
  private:
   std::list<std::string> words;
-  std::list<uint16_t> wordXpos;
+  std::list<int16_t> wordXpos;  // Signed to support negative positions (hanging indent)
   std::list<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
 
  public:
-  explicit TextBlock(std::list<std::string> words, std::list<uint16_t> word_xpos,
+  explicit TextBlock(std::list<std::string> words, std::list<int16_t> word_xpos,
                      std::list<EpdFontFamily::Style> word_styles, const BlockStyle& blockStyle = BlockStyle())
       : words(std::move(words)),
         wordXpos(std::move(word_xpos)),

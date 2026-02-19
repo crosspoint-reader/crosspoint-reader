@@ -5,6 +5,8 @@
 #include <climits>
 #include <functional>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "../ParsedText.h"
 #include "../blocks/ImageBlock.h"
@@ -30,6 +32,16 @@ class ChapterHtmlSlimParser {
   int italicUntilDepth = INT_MAX;
   int underlineUntilDepth = INT_MAX;
   int listItemUntilDepth = INT_MAX;
+  std::string pendingListMarker;  // Bullet/number to prepend when content arrives
+  int16_t currentListItemMarkerWidth = 0;  // Measured width of current marker for consistent indent
+
+  // List context stack for tracking ol/ul nesting and item counters
+  struct ListContext {
+    bool isOrdered;  // true for <ol>, false for <ul>
+    int itemCount;   // current item number (1-based)
+    int depth;       // depth at which this list was opened
+  };
+  std::vector<ListContext> listStack;
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
@@ -68,6 +80,7 @@ class ChapterHtmlSlimParser {
   int tableColIndex = 0;
 
   void updateEffectiveInlineStyle();
+  void ensureTextBlock();  // Lazily creates a text block if none exists
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPartWordBuffer();
   void makePages();
