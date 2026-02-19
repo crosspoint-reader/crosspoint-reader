@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Utf8.h>
@@ -47,7 +48,7 @@ void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, i
 
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Left aligned: icon on left, percentage on right (reader mode)
-  const uint16_t percentage = gpio.getBatteryPercentage();
+  const uint16_t percentage = powerManager.getBatteryPercentage();
   const int y = rect.y + 6;
 
   if (showPercentage) {
@@ -62,7 +63,7 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
 void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Right aligned: percentage on left, icon on right (UI headers)
   // rect.x is already positioned for the icon (drawHeader calculated it)
-  const uint16_t percentage = gpio.getBatteryPercentage();
+  const uint16_t percentage = powerManager.getBatteryPercentage();
   const int y = rect.y + 6;
 
   if (showPercentage) {

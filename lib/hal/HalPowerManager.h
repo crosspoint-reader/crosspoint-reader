@@ -1,8 +1,10 @@
 #pragma once
 
 #include <Arduino.h>
+#include <BatteryMonitor.h>
 #include <InputManager.h>
 #include <Logging.h>
+#include <Wire.h>
 #include <freertos/semphr.h>
 
 #include <cassert>
@@ -15,6 +17,11 @@ extern HalPowerManager powerManager;  // Singleton
 class HalPowerManager {
   int normalFreq = 0;  // MHz
   bool isLowPower = false;
+
+  // I2C fuel gauge configuration for X3 battery monitoring
+  bool _batteryUseI2C = false;
+  uint8_t _batteryI2cAddr = 0;
+  uint8_t _batterySocRegister = 0;
 
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;

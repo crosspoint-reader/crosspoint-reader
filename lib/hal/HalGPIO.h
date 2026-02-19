@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Arduino.h>
-#include <BatteryMonitor.h>
 #include <InputManager.h>
 
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
@@ -30,10 +29,6 @@ class HalGPIO {
   DeviceType _deviceType = DeviceType::X4;
   int _detectAdcValue = 0;
   int _batteryPin = BAT_GPIO0;
-  // I2C fuel gauge configuration for X3 battery monitoring
-  bool _batteryUseI2C = false;      // Whether to use I2C fuel gauge (X3) vs ADC (X4)
-  uint8_t _batteryI2cAddr = 0;      // I2C address of fuel gauge chip
-  uint8_t _batterySocRegister = 0;  // Register address for state-of-charge
 
  public:
   HalGPIO() = default;
@@ -61,9 +56,6 @@ class HalGPIO {
   // If verification fails, enters deep sleep and does not return.
   // Should only be called when wakeup reason is PowerButton.
   void verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
-
-  // Get battery percentage (range 0-100)
-  int getBatteryPercentage() const;
 
   // Check if USB is connected
   bool isUsbConnected() const;
