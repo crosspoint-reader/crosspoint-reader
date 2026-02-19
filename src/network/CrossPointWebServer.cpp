@@ -159,6 +159,12 @@ void CrossPointWebServer::begin() {
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
+  // Collect WebDAV headers and create handler
+  const char* davHeaders[] = {"Depth", "Destination", "Overwrite", "If", "Lock-Token", "Timeout"};
+  server->collectHeaders(davHeaders, 6);
+  davHandler.reset(new WebDAVHandler(server.get()));
+  LOG_DBG("WEB", "WebDAV handler initialized");
+
   server->begin();
 
   // Start WebSocket server for fast binary uploads
@@ -212,6 +218,8 @@ void CrossPointWebServer::stop() {
     udp.stop();
     udpActive = false;
   }
+
+  davHandler.reset();
 
   // Brief delay to allow any in-flight handleClient() calls to complete
   delay(20);
@@ -304,6 +312,8 @@ void CrossPointWebServer::handleRoot() const {
 }
 
 void CrossPointWebServer::handleNotFound() const {
+  if (davHandler && davHandler->handleRequest()) return;
+
   String message = "404 Not Found\n\n";
   message += "URI: " + server->uri() + "\n";
   server->send(404, "text/plain", message);
