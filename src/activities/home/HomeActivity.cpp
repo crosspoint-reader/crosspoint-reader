@@ -8,6 +8,7 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -19,6 +20,11 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
+
+namespace {
+// Remember the last selected item on the home screen while the app is running.
+int lastHomeSelectorIndex = 0;
+}  // namespace
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // My Library, Recents, File transfer, Settings
@@ -115,16 +121,19 @@ void HomeActivity::onEnter() {
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
 
-  selectorIndex = 0;
-
   auto metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
+  const int maxSelectorIndex = getMenuItemCount() - 1;
+  selectorIndex = std::clamp(lastHomeSelectorIndex, 0, maxSelectorIndex);
 
   // Trigger first update
   requestUpdate();
 }
 
 void HomeActivity::onExit() {
+  const int maxSelectorIndex = getMenuItemCount() - 1;
+  lastHomeSelectorIndex = std::clamp(selectorIndex, 0, maxSelectorIndex);
+
   Activity::onExit();
 
   // Free the stored cover buffer if any
