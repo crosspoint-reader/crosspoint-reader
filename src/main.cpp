@@ -115,6 +115,10 @@ EpdFont opendyslexic14ItalicFont(&opendyslexic_14_italic);
 EpdFont opendyslexic14BoldItalicFont(&opendyslexic_14_bolditalic);
 EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic14BoldFont, &opendyslexic14ItalicFont,
                                        &opendyslexic14BoldItalicFont);
+
+EpdFont notosanscjk14RegularFont(&notosanscjk_14_regular);
+EpdFont notosanscjk14BoldFont(&notosanscjk_14_bold);
+EpdFontFamily notosanscjk14FontFamily(&notosanscjk14RegularFont, &notosanscjk14BoldFont);
 #endif  // OMIT_FONTS
 
 EpdFont smallFont(&notosans_8_regular);
@@ -280,6 +284,7 @@ void setupDisplayAndFonts() {
   renderer.insertFont(OPENDYSLEXIC_10_FONT_ID, opendyslexic10FontFamily);
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
   renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
+  renderer.insertFont(NOTOSANSCJK_14_FONT_ID, notosanscjk14FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);

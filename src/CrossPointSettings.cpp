@@ -308,6 +308,16 @@ float CrossPointSettings::getReaderLineCompression() const {
         case WIDE:
           return 1.0f;
       }
+    case NOTOSANSCJK:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.90f;
+        case NORMAL:
+        default:
+          return 0.95f;
+        case WIDE:
+          return 1.0f;
+      }
   }
 }
 
@@ -382,5 +392,7 @@ int CrossPointSettings::getReaderFontId() const {
         case EXTRA_LARGE:
           return OPENDYSLEXIC_14_FONT_ID;
       }
+    case NOTOSANSCJK:
+      return NOTOSANSCJK_14_FONT_ID;
   }
 }

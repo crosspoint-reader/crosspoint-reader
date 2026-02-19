@@ -54,6 +54,38 @@ done
 
 python fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf > ../builtinFonts/notosans_8_regular.h
 
+# CJK fonts (compressed, 2-bit, frequency-grouped)
+CJK_FONT="../builtinFonts/source/NotoSansCJK/NotoSansCJKsc-Regular.otf"
+CJK_BOLD="../builtinFonts/source/NotoSansCJK/NotoSansCJKsc-Bold.otf"
+CJK_FREQ="data/cjk_frequency.tsv"
+CJK_INTERVALS="0x3000,0x303F 0x3040,0x309F 0x30A0,0x30FF 0x4E00,0x9FFF 0xAC00,0xD7AF 0xFF00,0xFFEF"
+
+if [ -f "$CJK_FONT" ]; then
+  for size in 14; do
+    font_name="notosanscjk_${size}_regular"
+    output_path="../builtinFonts/${font_name}.h"
+    interval_args=""
+    for interval in $CJK_INTERVALS; do
+      interval_args="$interval_args --additional-intervals $interval"
+    done
+    python fontconvert.py $font_name $size "$CJK_FONT" --2bit --compress \
+      --frequency-table "$CJK_FREQ" --group-size 128 --pin-groups 3 \
+      --max-cjk-ideographs 4000 --max-hangul 2350 \
+      $interval_args > $output_path
+    echo "Generated $output_path"
+
+    font_name="notosanscjk_${size}_bold"
+    output_path="../builtinFonts/${font_name}.h"
+    python fontconvert.py $font_name $size "$CJK_BOLD" --2bit --compress \
+      --frequency-table "$CJK_FREQ" --group-size 128 --pin-groups 3 \
+      --max-cjk-ideographs 4000 --max-hangul 2350 \
+      $interval_args > $output_path
+    echo "Generated $output_path"
+  done
+else
+  echo "Skipping CJK fonts: $CJK_FONT not found"
+fi
+
 echo ""
 echo "Running compression verification..."
 python verify_compression.py ../builtinFonts/
