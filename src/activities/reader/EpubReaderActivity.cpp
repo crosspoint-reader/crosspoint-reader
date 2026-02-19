@@ -432,11 +432,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       pendingGoHome = true;
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::SCREENSHOT:
-      {
-        RenderLock lock(*this);
-        pendingScreenshot = true;
-      }
+    case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
+      RenderLock lock(*this);
+      pendingScreenshot = true;
+    }
       exitActivity();
       requestUpdate();
       break;
