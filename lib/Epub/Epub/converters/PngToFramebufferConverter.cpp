@@ -341,7 +341,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     delete png;
     return false;
   }
-  
+
   if (png->getBpp() != 8) {
     warnUnsupportedFeature("bit depth (" + std::to_string(png->getBpp()) + "bpp)", imagePath);
   }
