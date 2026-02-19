@@ -24,6 +24,7 @@
 #include "components/icons/text24.h"
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
+#include "components/icons/trmnl.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -75,6 +76,8 @@ const uint8_t* iconForName(UIIcon icon, int size) {
         return WifiIcon;
       case UIIcon::Hotspot:
         return HotspotIcon;
+      case UIIcon::Trmnl:
+        return TrmnlIcon;
       default:
         return nullptr;
     }
