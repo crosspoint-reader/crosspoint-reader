@@ -295,6 +295,12 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
       style.defined.paddingTop = style.defined.paddingRight = style.defined.paddingBottom = style.defined.paddingLeft =
           1;
     }
+  } else if (propNameBuf == "height") {
+    style.imageHeight = interpretLength(propValueBuf);
+    style.defined.imageHeight = 1;
+  } else if (propNameBuf == "width") {
+    style.imageWidth = interpretLength(propValueBuf);
+    style.defined.imageWidth = 1;
   }
 }
 
@@ -613,6 +619,8 @@ bool CssParser::saveToCache() const {
     writeLength(style.paddingBottom);
     writeLength(style.paddingLeft);
     writeLength(style.paddingRight);
+    writeLength(style.imageHeight);
+    writeLength(style.imageWidth);
 
     // Write defined flags as uint16_t
     uint16_t definedBits = 0;
@@ -629,6 +637,8 @@ bool CssParser::saveToCache() const {
     if (style.defined.paddingBottom) definedBits |= 1 << 10;
     if (style.defined.paddingLeft) definedBits |= 1 << 11;
     if (style.defined.paddingRight) definedBits |= 1 << 12;
+    if (style.defined.imageHeight) definedBits |= 1 << 13;
+    if (style.defined.imageWidth) definedBits |= 1 << 14;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -730,7 +740,8 @@ bool CssParser::loadFromCache() {
 
     if (!readLength(style.textIndent) || !readLength(style.marginTop) || !readLength(style.marginBottom) ||
         !readLength(style.marginLeft) || !readLength(style.marginRight) || !readLength(style.paddingTop) ||
-        !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight)) {
+        !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight) ||
+        !readLength(style.imageHeight) || !readLength(style.imageWidth)) {
       rulesBySelector_.clear();
       file.close();
       return false;
@@ -756,6 +767,8 @@ bool CssParser::loadFromCache() {
     style.defined.paddingBottom = (definedBits & 1 << 10) != 0;
     style.defined.paddingLeft = (definedBits & 1 << 11) != 0;
     style.defined.paddingRight = (definedBits & 1 << 12) != 0;
+    style.defined.imageHeight = (definedBits & 1 << 13) != 0;
+    style.defined.imageWidth = (definedBits & 1 << 14) != 0;
 
     rulesBySelector_[selector] = style;
   }

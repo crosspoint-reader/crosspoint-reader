@@ -257,18 +257,48 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               if (decoder && decoder->getDimensions(cachedImagePath, dims)) {
                 LOG_DBG("EHP", "Image dimensions: %dx%d", dims.width, dims.height);
 
-                // Scale to fit viewport while maintaining aspect ratio
-                int maxWidth = self->viewportWidth;
-                int maxHeight = self->viewportHeight;
-                float scaleX = (dims.width > maxWidth) ? (float)maxWidth / dims.width : 1.0f;
-                float scaleY = (dims.height > maxHeight) ? (float)maxHeight / dims.height : 1.0f;
-                float scale = (scaleX < scaleY) ? scaleX : scaleY;
-                if (scale > 1.0f) scale = 1.0f;
+                int displayWidth = 0;
+                int displayHeight = 0;
+                const float emSize =
+                    static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+                const CssStyle imgStyle =
+                    self->cssParser ? self->cssParser->resolveStyle("img", classAttr) : CssStyle{};
+                const bool hasCssHeight = imgStyle.hasImageHeight();
+                const bool hasCssWidth = imgStyle.hasImageWidth();
 
-                int displayWidth = (int)(dims.width * scale);
-                int displayHeight = (int)(dims.height * scale);
+                if (hasCssHeight && dims.height > 0) {
+                  // Use CSS height and derive width from image aspect ratio
+                  displayHeight = static_cast<int>(
+                      imgStyle.imageHeight.toPixels(emSize, static_cast<float>(self->viewportWidth)) + 0.5f);
+                  if (displayHeight < 1) displayHeight = 1;
+                  displayWidth = static_cast<int>(
+                      displayHeight * (static_cast<float>(dims.width) / dims.height) + 0.5f);
+                  if (displayWidth > self->viewportWidth) displayWidth = self->viewportWidth;
+                  if (displayWidth < 1) displayWidth = 1;
+                  LOG_DBG("EHP", "Display size from CSS height: %dx%d", displayWidth, displayHeight);
+                } else if (hasCssWidth && !hasCssHeight && dims.width > 0) {
+                  // Use CSS width and derive height from aspect ratio
+                  displayWidth = static_cast<int>(
+                      imgStyle.imageWidth.toPixels(emSize, static_cast<float>(self->viewportWidth)) + 0.5f);
+                  if (displayWidth > self->viewportWidth) displayWidth = self->viewportWidth;
+                  if (displayWidth < 1) displayWidth = 1;
+                  displayHeight = static_cast<int>(
+                      displayWidth * (static_cast<float>(dims.height) / dims.width) + 0.5f);
+                  if (displayHeight < 1) displayHeight = 1;
+                  LOG_DBG("EHP", "Display size from CSS width: %dx%d", displayWidth, displayHeight);
+                } else {
+                  // Scale to fit viewport while maintaining aspect ratio
+                  int maxWidth = self->viewportWidth;
+                  int maxHeight = self->viewportHeight;
+                  float scaleX = (dims.width > maxWidth) ? (float)maxWidth / dims.width : 1.0f;
+                  float scaleY = (dims.height > maxHeight) ? (float)maxHeight / dims.height : 1.0f;
+                  float scale = (scaleX < scaleY) ? scaleX : scaleY;
+                  if (scale > 1.0f) scale = 1.0f;
 
-                LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
+                  displayWidth = (int)(dims.width * scale);
+                  displayHeight = (int)(dims.height * scale);
+                  LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
+                }
 
                 // Create page for image - only break if image won't fit remaining space
                 if (self->currentPage && !self->currentPage->elements.empty() &&
