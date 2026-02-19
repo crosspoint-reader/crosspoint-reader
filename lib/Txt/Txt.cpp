@@ -97,10 +97,16 @@ std::string Txt::findCoverImage() const {
 
 std::string Txt::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
-bool Txt::generateCoverBmp() const {
-  // Already generated, return true
-  if (Storage.exists(getCoverBmpPath().c_str())) {
+bool Txt::generateCoverBmp(bool forceRegenerate) const {
+  const std::string coverMarkerPath = cachePath + "/cover_v2.marker";
+
+  // Already generated, return true unless force regeneration is requested.
+  if (!forceRegenerate && Storage.exists(getCoverBmpPath().c_str())) {
     return true;
+  }
+  if (forceRegenerate) {
+    Storage.remove(getCoverBmpPath().c_str());
+    Storage.remove(coverMarkerPath.c_str());
   }
 
   std::string coverImagePath = findCoverImage();
@@ -138,6 +144,13 @@ bool Txt::generateCoverBmp() const {
     src.close();
     dst.close();
     LOG_DBG("TXT", "Copied BMP cover to cache");
+
+    FsFile marker;
+    if (Storage.openFileForWrite("TXT", coverMarkerPath, marker)) {
+      marker.write('2');
+      marker.write('\n');
+      marker.close();
+    }
     return true;
   }
 
@@ -152,15 +165,26 @@ bool Txt::generateCoverBmp() const {
       coverJpg.close();
       return false;
     }
-    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
+    constexpr int kCoverTargetMaxWidth = 1200;
+    constexpr int kCoverTargetMaxHeight = 2000;
+    const bool success = JpegToBmpConverter::jpegFileToBmpStreamWithSize(coverJpg, coverBmp, kCoverTargetMaxWidth,
+                                                                         kCoverTargetMaxHeight);
     coverJpg.close();
     coverBmp.close();
 
     if (!success) {
       LOG_ERR("TXT", "Failed to generate BMP from JPG cover image");
       Storage.remove(getCoverBmpPath().c_str());
+      Storage.remove(coverMarkerPath.c_str());
     } else {
       LOG_DBG("TXT", "Generated BMP from JPG cover image");
+
+      FsFile marker;
+      if (Storage.openFileForWrite("TXT", coverMarkerPath, marker)) {
+        marker.write('2');
+        marker.write('\n');
+        marker.close();
+      }
     }
     return success;
   }
