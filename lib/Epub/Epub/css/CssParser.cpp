@@ -67,7 +67,7 @@ size_t skipAtRule(const std::string& css, const size_t start) {
       ++braceDepth;
     } else if (c == '}') {
       --braceDepth;
-      if (braceDepth == 0) {
+      if (braceDepth <= 0) {
         return pos + 1;
       }
     } else if (c == ';' && braceDepth == 0) {
@@ -576,9 +576,8 @@ bool CssParser::loadFromString(const std::string& css, size_t fileSize) {
   rulesIgnoredLowPriority_ = 0;
   rulesIgnoredNoProperties_ = 0;
 
-  // Reset lowest priority tracking
-  lowestPrioritySelector_.clear();
-  lowestPriorityValue_ = INT_MAX;
+  // Reset lowest priority tracking to reflect any rules already in the map
+  updateLowestPriorityTracking();
 
   // Strip comments from the CSS
   std::string cleanedCss = stripComments(css);
@@ -610,9 +609,8 @@ bool CssParser::parseStreaming(Stream& source) {
   rulesIgnoredLowPriority_ = 0;
   rulesIgnoredNoProperties_ = 0;
 
-  // Reset lowest priority tracking
-  lowestPrioritySelector_.clear();
-  lowestPriorityValue_ = INT_MAX;
+  // Reset lowest priority tracking to reflect any rules already in the map
+  updateLowestPriorityTracking();
 
   constexpr size_t STREAM_BUFFER_SIZE = 2048;  // Conservative size to prevent memory issues
   std::string buffer;
@@ -679,6 +677,16 @@ bool CssParser::parseStreaming(Stream& source) {
     // Remove processed part of buffer, but keep some overlap for incomplete rules
     if (parsePos > 0) {
       buffer.erase(0, parsePos);
+      // Adjust commentStart to account for the bytes just removed.
+      // If the opening /* was in the erased prefix, the inComment state is stale
+      // and must be cleared; otherwise shift the offset into the new buffer.
+      if (inComment) {
+        if (commentStart >= parsePos) {
+          commentStart -= parsePos;
+        } else {
+          inComment = false;
+        }
+      }
     }
 
     // If buffer is too large, stop processing to avoid memory issues
@@ -1002,9 +1010,8 @@ void CssParser::removeLowestPriorityRule() {
 
   if (!lowestPrioritySelector_.empty()) {
     rulesBySelector_.erase(lowestPrioritySelector_);
-    // Clear tracking - will be updated when next rule is added
-    lowestPrioritySelector_.clear();
-    lowestPriorityValue_ = INT_MAX;
+    // Recompute tracking from the remaining rules so eviction is always accurate
+    updateLowestPriorityTracking();
   }
 }
 
