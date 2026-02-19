@@ -14,7 +14,7 @@ void HalGPIO::begin() {
   // X4 boards do not, and use GPIO0 for battery ADC.
   _detectAdcValue = analogRead(4);
   _deviceType = (_detectAdcValue > 500 && _detectAdcValue < 1200) ? DeviceType::X3 : DeviceType::X4;
-  _batteryPin = (_deviceType == DeviceType::X3) ? 4 : BAT_GPIO0;
+  _batteryPin = deviceIsX3() ? 4 : BAT_GPIO0;
 
   pinMode(_batteryPin, INPUT);
   pinMode(UART0_RXD, INPUT);
@@ -22,7 +22,7 @@ void HalGPIO::begin() {
   // I2C init must come AFTER pinMode(UART0_RXD) because GPIO20 is shared
   // between USB detection (digital read) and I2C SDA. Wire.begin()
   // reconfigures the pin for I2C, so it must run last.
-  if (_deviceType == DeviceType::X3) {
+  if (deviceIsX3()) {
     Wire.begin(20, 0, 400000);
     _batteryUseI2C = true;
     _batteryI2cAddr = 0x55;
