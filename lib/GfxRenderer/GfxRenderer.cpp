@@ -747,7 +747,8 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
     return 0;
   }
 
-  return fontIt->second.getGlyph(' ', style)->advanceX;
+  const EpdGlyph* spaceGlyph = fontIt->second.getGlyph(' ', style);
+  return spaceGlyph ? spaceGlyph->advanceX : 0;
 }
 
 int GfxRenderer::getSpaceKernAdjust(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
@@ -781,7 +782,9 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     if (prevCp != 0) {
       width += font.getKerning(prevCp, cp, style);
     }
-    width += font.getGlyph(cp, style)->advanceX;
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) glyph = font.getGlyph(REPLACEMENT_GLYPH, style);
+    if (glyph) width += glyph->advanceX;width += font.getGlyph(cp, style)->advanceX;
     prevCp = cp;
   }
   return width;
