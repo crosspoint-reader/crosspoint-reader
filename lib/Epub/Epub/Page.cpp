@@ -57,7 +57,9 @@ void PageImage::renderPlaceholder(GfxRenderer& renderer, const int xOffset, cons
   int w = imageBlock->getWidth();
   int h = imageBlock->getHeight();
   renderer.fillRect(x, y, w, h, true);
-  renderer.fillRect(x + 1, y + 1, w - 2, h - 2, false);
+  if (w > 2 && h > 2) {
+    renderer.fillRect(x + 1, y + 1, w - 2, h - 2, false);
+  }
 }
 
 void Page::renderTextOnly(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
