@@ -293,14 +293,6 @@ void Epub::parseCssFiles() const {
         continue;
       }
 
-      // Limit CSS file size to prevent memory exhaustion (200KB should work)
-      const size_t MAX_CSS_SIZE = 200 * 1024;
-      if (cssSize > MAX_CSS_SIZE) {
-        LOG_ERR("EBP", "CSS file too large (%zu bytes > %zu max), skipping: %s", cssSize, MAX_CSS_SIZE,
-                cssPath.c_str());
-        continue;
-      }
-
       // Declare timing variables outside if-else
       uint32_t zipDuration = 0;
 
@@ -346,8 +338,9 @@ void Epub::parseCssFiles() const {
       } else {
         // Large file - use temp file approach
         // Extract CSS to temporary file
-        const auto cssTempPath = getCachePath() + "/.css_temp";
-        FsFile cssTempFile;
+        const float kbPerSec = parseDuration > 0 ? cssSize / (parseDuration / 1000.0) / 1024.0 : 0.0f;
+        LOG_DBG("EBP", "CSS parsing: %s took %lu ms (%zu bytes, %.1f KB/s)", cssPath.c_str(), parseDuration, cssSize,
+                kbPerSec);
         if (!Storage.openFileForWrite("EBP", cssTempPath, cssTempFile)) {
           LOG_ERR("EBP", "Could not create temp CSS file: %s", cssTempPath.c_str());
           continue;
