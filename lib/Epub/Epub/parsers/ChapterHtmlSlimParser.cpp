@@ -17,6 +17,7 @@ constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
+constexpr size_t PARSE_BUFFER_SIZE = 1024;
 
 const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
 constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
@@ -178,87 +179,89 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           // Resolve the image path relative to the HTML file
           std::string resolvedPath = FsHelpers::normalisePath(self->contentBase + src);
 
-          // Create a unique filename for the cached image
-          std::string ext;
-          size_t extPos = resolvedPath.rfind('.');
-          if (extPos != std::string::npos) {
-            ext = resolvedPath.substr(extPos);
-          }
-          std::string cachedImagePath = self->imageBasePath + std::to_string(self->imageCounter++) + ext;
-
-          // Extract image to cache file
-          FsFile cachedImageFile;
-          bool extractSuccess = false;
-          if (Storage.openFileForWrite("EHP", cachedImagePath, cachedImageFile)) {
-            extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
-            cachedImageFile.flush();
-            cachedImageFile.close();
-            delay(50);  // Give SD card time to sync
-          }
-
-          if (extractSuccess) {
-            // Get image dimensions
-            ImageDimensions dims = {0, 0};
-            ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(cachedImagePath);
-            if (decoder && decoder->getDimensions(cachedImagePath, dims)) {
-              LOG_DBG("EHP", "Image dimensions: %dx%d", dims.width, dims.height);
-
-              // Scale to fit viewport while maintaining aspect ratio
-              int maxWidth = self->viewportWidth;
-              int maxHeight = self->viewportHeight;
-              float scaleX = (dims.width > maxWidth) ? (float)maxWidth / dims.width : 1.0f;
-              float scaleY = (dims.height > maxHeight) ? (float)maxHeight / dims.height : 1.0f;
-              float scale = (scaleX < scaleY) ? scaleX : scaleY;
-              if (scale > 1.0f) scale = 1.0f;
-
-              int displayWidth = (int)(dims.width * scale);
-              int displayHeight = (int)(dims.height * scale);
-
-              LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
-
-              // Create page for image - only break if image won't fit remaining space
-              if (self->currentPage && !self->currentPage->elements.empty() &&
-                  (self->currentPageNextY + displayHeight > self->viewportHeight)) {
-                self->completePageFn(std::move(self->currentPage));
-                self->currentPage.reset(new Page());
-                if (!self->currentPage) {
-                  LOG_ERR("EHP", "Failed to create new page");
-                  return;
-                }
-                self->currentPageNextY = 0;
-              } else if (!self->currentPage) {
-                self->currentPage.reset(new Page());
-                if (!self->currentPage) {
-                  LOG_ERR("EHP", "Failed to create initial page");
-                  return;
-                }
-                self->currentPageNextY = 0;
-              }
-
-              // Create ImageBlock and add to page
-              auto imageBlock = std::make_shared<ImageBlock>(cachedImagePath, displayWidth, displayHeight);
-              if (!imageBlock) {
-                LOG_ERR("EHP", "Failed to create ImageBlock");
-                return;
-              }
-              int xPos = (self->viewportWidth - displayWidth) / 2;
-              auto pageImage = std::make_shared<PageImage>(imageBlock, xPos, self->currentPageNextY);
-              if (!pageImage) {
-                LOG_ERR("EHP", "Failed to create PageImage");
-                return;
-              }
-              self->currentPage->elements.push_back(pageImage);
-              self->currentPageNextY += displayHeight;
-
-              self->depth += 1;
-              return;
-            } else {
-              LOG_ERR("EHP", "Failed to get image dimensions");
-              Storage.remove(cachedImagePath.c_str());
+          if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
+            // Create a unique filename for the cached image
+            std::string ext;
+            size_t extPos = resolvedPath.rfind('.');
+            if (extPos != std::string::npos) {
+              ext = resolvedPath.substr(extPos);
             }
-          } else {
-            LOG_ERR("EHP", "Failed to extract image");
-          }
+            std::string cachedImagePath = self->imageBasePath + std::to_string(self->imageCounter++) + ext;
+
+            // Extract image to cache file
+            FsFile cachedImageFile;
+            bool extractSuccess = false;
+            if (Storage.openFileForWrite("EHP", cachedImagePath, cachedImageFile)) {
+              extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
+              cachedImageFile.flush();
+              cachedImageFile.close();
+              delay(50);  // Give SD card time to sync
+            }
+
+            if (extractSuccess) {
+              // Get image dimensions
+              ImageDimensions dims = {0, 0};
+              ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(cachedImagePath);
+              if (decoder && decoder->getDimensions(cachedImagePath, dims)) {
+                LOG_DBG("EHP", "Image dimensions: %dx%d", dims.width, dims.height);
+
+                // Scale to fit viewport while maintaining aspect ratio
+                int maxWidth = self->viewportWidth;
+                int maxHeight = self->viewportHeight;
+                float scaleX = (dims.width > maxWidth) ? (float)maxWidth / dims.width : 1.0f;
+                float scaleY = (dims.height > maxHeight) ? (float)maxHeight / dims.height : 1.0f;
+                float scale = (scaleX < scaleY) ? scaleX : scaleY;
+                if (scale > 1.0f) scale = 1.0f;
+
+                int displayWidth = (int)(dims.width * scale);
+                int displayHeight = (int)(dims.height * scale);
+
+                LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
+
+                // Create page for image - only break if image won't fit remaining space
+                if (self->currentPage && !self->currentPage->elements.empty() &&
+                    (self->currentPageNextY + displayHeight > self->viewportHeight)) {
+                  self->completePageFn(std::move(self->currentPage));
+                  self->currentPage.reset(new Page());
+                  if (!self->currentPage) {
+                    LOG_ERR("EHP", "Failed to create new page");
+                    return;
+                  }
+                  self->currentPageNextY = 0;
+                } else if (!self->currentPage) {
+                  self->currentPage.reset(new Page());
+                  if (!self->currentPage) {
+                    LOG_ERR("EHP", "Failed to create initial page");
+                    return;
+                  }
+                  self->currentPageNextY = 0;
+                }
+
+                // Create ImageBlock and add to page
+                auto imageBlock = std::make_shared<ImageBlock>(cachedImagePath, displayWidth, displayHeight);
+                if (!imageBlock) {
+                  LOG_ERR("EHP", "Failed to create ImageBlock");
+                  return;
+                }
+                int xPos = (self->viewportWidth - displayWidth) / 2;
+                auto pageImage = std::make_shared<PageImage>(imageBlock, xPos, self->currentPageNextY);
+                if (!pageImage) {
+                  LOG_ERR("EHP", "Failed to create PageImage");
+                  return;
+                }
+                self->currentPage->elements.push_back(pageImage);
+                self->currentPageNextY += displayHeight;
+
+                self->depth += 1;
+                return;
+              } else {
+                LOG_ERR("EHP", "Failed to get image dimensions");
+                Storage.remove(cachedImagePath.c_str());
+              }
+            } else {
+              LOG_ERR("EHP", "Failed to extract image");
+            }
+          }  // isFormatSupported
         }
       }
 
@@ -638,8 +641,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   XML_SetElementHandler(parser, startElement, endElement);
   XML_SetCharacterDataHandler(parser, characterData);
 
+  // Compute the time taken to parse and build pages
+  const uint32_t chapterStartTime = millis();
   do {
-    void* const buf = XML_GetBuffer(parser, 1024);
+    void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {
       LOG_ERR("EHP", "Couldn't allocate memory for buffer");
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
@@ -650,7 +655,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       return false;
     }
 
-    const size_t len = file.read(buf, 1024);
+    const size_t len = file.read(buf, PARSE_BUFFER_SIZE);
 
     if (len == 0 && file.available() > 0) {
       LOG_ERR("EHP", "File read error");
@@ -675,6 +680,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       return false;
     }
   } while (!done);
+  LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - chapterStartTime);
 
   XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
   XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks

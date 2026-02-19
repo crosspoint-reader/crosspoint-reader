@@ -1,7 +1,6 @@
 #pragma once
 
 #include <functional>
-#include <vector>
 
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"

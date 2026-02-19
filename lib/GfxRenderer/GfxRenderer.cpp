@@ -3,6 +3,18 @@
 #include <Logging.h>
 #include <Utf8.h>
 
+const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
+  if (fontData->groups != nullptr) {
+    if (!fontDecompressor) {
+      LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
+      return nullptr;
+    }
+    uint16_t glyphIndex = static_cast<uint16_t>(glyph - fontData->glyph);
+    return fontDecompressor->getBitmap(fontData, glyph, glyphIndex);
+  }
+  return &fontData->bitmap[glyph->dataOffset];
+}
+
 void GfxRenderer::begin() {
   frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
@@ -74,13 +86,14 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 }
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
-  if (fontMap.count(fontId) == 0) {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
   int w = 0, h = 0;
-  fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
+  fontIt->second.getTextDimensions(text, &w, &h, style);
   return w;
 }
 
@@ -100,11 +113,12 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
-  if (fontMap.count(fontId) == 0) {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+  const auto& font = fontIt->second;
 
   // no printable characters
   if (!font.hasPrintableChars(text, style)) {
@@ -708,53 +722,59 @@ int GfxRenderer::getScreenHeight() const {
   return HalDisplay::DISPLAY_WIDTH;
 }
 
-int GfxRenderer::getSpaceWidth(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
+int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
+  return fontIt->second.getGlyph(' ', style)->advanceX;
 }
 
-int GfxRenderer::getTextAdvanceX(const int fontId, const char* text) const {
-  if (fontMap.count(fontId) == 0) {
+int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
   uint32_t cp;
   int width = 0;
+  const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    width += fontMap.at(fontId).getGlyph(cp, EpdFontFamily::REGULAR)->advanceX;
+    width += font.getGlyph(cp, style)->advanceX;
   }
   return width;
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  return fontIt->second.getData(EpdFontFamily::REGULAR)->advanceY;
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {
-  if (fontMap.count(fontId) == 0) {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
@@ -764,11 +784,13 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     return;
   }
 
-  if (fontMap.count(fontId) == 0) {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+
+  const auto& font = fontIt->second;
 
   // No printable characters
   if (!font.hasPrintableChars(text, style)) {
@@ -791,14 +813,14 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       continue;
     }
 
-    const int is2Bit = font.getData(style)->is2Bit;
-    const uint32_t offset = glyph->dataOffset;
+    const EpdFontData* fontData = font.getData(style);
+    const int is2Bit = fontData->is2Bit;
     const uint8_t width = glyph->width;
     const uint8_t height = glyph->height;
     const int left = glyph->left;
     const int top = glyph->top;
 
-    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
+    const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
 
     if (bitmap != nullptr) {
       for (int glyphY = 0; glyphY < height; glyphY++) {
@@ -808,7 +830,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
           // 90° clockwise rotation transformation:
           // screenX = x + (ascender - top + glyphY)
           // screenY = yPos - (left + glyphX)
-          const int screenX = x + (font.getData(style)->ascender - top + glyphY);
+          const int screenX = x + (fontData->ascender - top + glyphY);
           const int screenY = yPos - left - glyphX;
 
           if (is2Bit) {
@@ -956,14 +978,13 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
     return;
   }
 
-  const int is2Bit = fontFamily.getData(style)->is2Bit;
-  const uint32_t offset = glyph->dataOffset;
+  const EpdFontData* fontData = fontFamily.getData(style);
+  const int is2Bit = fontData->is2Bit;
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
 
-  const uint8_t* bitmap = nullptr;
-  bitmap = &fontFamily.getData(style)->bitmap[offset];
+  const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
 
   if (bitmap != nullptr) {
     for (int glyphY = 0; glyphY < height; glyphY++) {

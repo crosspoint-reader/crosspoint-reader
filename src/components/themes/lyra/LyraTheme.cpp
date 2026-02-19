@@ -4,7 +4,6 @@
 #include <HalStorage.h>
 #include <I18n.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <string>
 
@@ -26,7 +25,6 @@
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 // Internal constants
 namespace {
@@ -34,6 +32,8 @@ constexpr int batteryPercentSpacing = 4;
 constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
+constexpr int popupMarginX = 16;
+constexpr int popupMarginY = 12;
 constexpr int maxSubtitleWidth = 100;
 constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
@@ -535,22 +535,40 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 }
 
 Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
-  constexpr int margin = 15;
-  constexpr int y = 60;
+  constexpr int y = 132;
+  constexpr int outline = 2;
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::REGULAR);
   const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int w = textWidth + margin * 2;
-  const int h = textHeight + margin * 2;
+  const int w = textWidth + popupMarginX * 2;
+  const int h = textHeight + popupMarginY * 2;
   const int x = (renderer.getScreenWidth() - w) / 2;
 
-  renderer.fillRect(x - 5, y - 5, w + 10, h + 10, false);
-  renderer.drawRect(x, y, w, h, true);
+  renderer.fillRoundedRect(x - outline, y - outline, w + outline * 2, h + outline * 2, cornerRadius + outline,
+                           Color::White);
+  renderer.fillRoundedRect(x, y, w, h, cornerRadius, Color::Black);
 
   const int textX = x + (w - textWidth) / 2;
-  const int textY = y + margin - 2;
-  renderer.drawText(UI_12_FONT_ID, textX, textY, message, true, EpdFontFamily::REGULAR);
+  const int textY = y + popupMarginY - 2;
+  renderer.drawText(UI_12_FONT_ID, textX, textY, message, false, EpdFontFamily::REGULAR);
   renderer.displayBuffer();
+
   return Rect{x, y, w, h};
+}
+
+void LyraTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
+  constexpr int barHeight = 4;
+
+  // Twice the margin in drawPopup to match text width
+  const int barWidth = layout.width - popupMarginX * 2;
+  const int barX = layout.x + (layout.width - barWidth) / 2;
+  // Center inside the margin of drawPopup. The - 1 is added to account for the - 2 in drawPopup.
+  const int barY = layout.y + layout.height - popupMarginY / 2 - barHeight / 2 - 1;
+
+  int fillWidth = barWidth * progress / 100;
+
+  renderer.fillRect(barX, barY, fillWidth, barHeight, false);
+
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
 void LyraTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {

@@ -6,12 +6,10 @@
 #include <cstdint>
 #include <string>
 
-#include "Battery.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 // Internal constants
 namespace {
@@ -70,10 +68,10 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         if (!hasCover) {
           // Render empty cover
           renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                            tileWidth - 2 * hPaddingInSelection, LyraMetrics::values.homeCoverHeight, true);
+                            tileWidth - 2 * hPaddingInSelection, Lyra3CoversMetrics::values.homeCoverHeight, true);
           renderer.fillRect(tileX + hPaddingInSelection,
-                            tileY + hPaddingInSelection + (LyraMetrics::values.homeCoverHeight / 3),
-                            tileWidth - 2 * hPaddingInSelection, 2 * LyraMetrics::values.homeCoverHeight / 3, true);
+                            tileY + hPaddingInSelection + (Lyra3CoversMetrics::values.homeCoverHeight / 3),
+                            tileWidth - 2 * hPaddingInSelection, 2 * Lyra3CoversMetrics::values.homeCoverHeight / 3, true);
           renderer.drawIcon(CoverIcon, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24, 32, 32);
         }
       }
