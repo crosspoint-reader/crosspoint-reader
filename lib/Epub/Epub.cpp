@@ -336,11 +336,10 @@ void Epub::parseCssFiles() const {
         // Free the buffer
         free(cssBuffer);
       } else {
-        // Large file - use temp file approach
-        // Extract CSS to temporary file
-        const float kbPerSec = parseDuration > 0 ? cssSize / (parseDuration / 1000.0) / 1024.0 : 0.0f;
-        LOG_DBG("EBP", "CSS parsing: %s took %lu ms (%zu bytes, %.1f KB/s)", cssPath.c_str(), parseDuration, cssSize,
-                kbPerSec);
+        // Large file - use temp file approach via a temporary file on storage
+        const std::string cssTempPath = getCachePath() + "/.css_stream.css";
+        FsFile cssTempFile;
+
         if (!Storage.openFileForWrite("EBP", cssTempPath, cssTempFile)) {
           LOG_ERR("EBP", "Could not create temp CSS file: %s", cssTempPath.c_str());
           continue;
