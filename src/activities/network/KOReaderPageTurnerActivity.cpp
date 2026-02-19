@@ -10,7 +10,6 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "WifiSelectionActivity.h"
-#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -20,6 +19,9 @@ void KOReaderPageTurnerActivity::onEnter() {
   state = WIFI_SELECTION;
   errorMessage.clear();
 
+  // Read address from settings (should already be set before launching)
+  deviceAddress = SETTINGS.koReaderPageTurnerAddress;
+
   // Turn on WiFi
   LOG_DBG("KPT", "Turning on WiFi...");
   WiFi.mode(WIFI_STA);
@@ -27,7 +29,8 @@ void KOReaderPageTurnerActivity::onEnter() {
   // Check if already connected
   if (WiFi.status() == WL_CONNECTED) {
     LOG_DBG("KPT", "Already connected to WiFi");
-    launchAddressEntry();
+    state = ACTIVE;
+    requestUpdate();
     return;
   }
 
@@ -56,53 +59,9 @@ void KOReaderPageTurnerActivity::onWifiSelectionComplete(const bool connected) {
     return;
   }
 
-  LOG_DBG("KPT", "WiFi connected, requesting IP address");
-  launchAddressEntry();
-}
-
-void KOReaderPageTurnerActivity::launchAddressEntry() {
-  state = IP_ENTRY;
-
-  // Use cached address or default to "192.168."
-  std::string initialText = "192.168.";
-  if (strlen(SETTINGS.koReaderPageTurnerAddress) > 0) {
-    initialText = SETTINGS.koReaderPageTurnerAddress;
-  }
-
-  enterNewActivity(new KeyboardEntryActivity(
-      renderer, mappedInput, tr(STR_KPT_ENTER_ADDRESS), initialText, 10, 63, false,
-      [this](const std::string& result) { onAddressEntered(result); },
-      [this]() {
-        exitActivity();
-        onGoBack();
-      }));
-}
-
-void KOReaderPageTurnerActivity::onAddressEntered(const std::string& address) {
-  exitActivity();
-
-  if (address.empty()) {
-    LOG_DBG("KPT", "Empty address entered; reopening entry");
-    launchAddressEntry();
-    return;
-  }
-
-  deviceAddress = address;
-
-  // Cache the address in settings
-  strncpy(SETTINGS.koReaderPageTurnerAddress, address.c_str(), sizeof(SETTINGS.koReaderPageTurnerAddress) - 1);
-  SETTINGS.koReaderPageTurnerAddress[sizeof(SETTINGS.koReaderPageTurnerAddress) - 1] = '\0';
-  SETTINGS.saveToFile();
-
-  LOG_DBG("KPT", "Address set: %s", deviceAddress.c_str());
-
+  LOG_DBG("KPT", "WiFi connected, entering active mode");
   state = ACTIVE;
-
-  // Force an immediate render since we're transitioning from a subactivity
-  {
-    RenderLock lock(*this);
-    render(std::move(lock));
-  }
+  requestUpdate();
 }
 
 bool KOReaderPageTurnerActivity::sendPageTurn(const int direction) {
@@ -146,12 +105,6 @@ void KOReaderPageTurnerActivity::loop() {
     // Back button exits
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onGoBack();
-      return;
-    }
-
-    // Confirm button allows changing the IP address
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      launchAddressEntry();
       return;
     }
 
@@ -229,7 +182,7 @@ void KOReaderPageTurnerActivity::render(Activity::RenderLock&&) {
   }
 
   // Button hints
-  const auto labels = mappedInput.mapLabels(tr(STR_EXIT), tr(STR_KPT_CHANGE_IP), "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
 

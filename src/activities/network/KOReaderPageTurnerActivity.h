@@ -9,13 +9,13 @@
  * Activity for using the CrossPoint as a page turner for KOReader.
  *
  * Sends HTTP GET requests to KOReader's HTTP inspector API to turn pages.
- * The user enters the Kindle's IP:port, and then uses the side buttons
- * to send page forward/back commands.
+ * The IP:port is configured in KOReader settings; this activity reads it
+ * from settings, connects to WiFi, and uses the side buttons to send
+ * page forward/back commands.
  *
  * Flow:
  * 1. Connect to WiFi
- * 2. Enter KOReader device IP:port
- * 3. Use side buttons to turn pages on the remote device
+ * 2. Use side buttons to turn pages on the remote device
  */
 class KOReaderPageTurnerActivity final : public ActivityWithSubactivity {
  public:
@@ -32,7 +32,6 @@ class KOReaderPageTurnerActivity final : public ActivityWithSubactivity {
  private:
   enum State {
     WIFI_SELECTION,
-    IP_ENTRY,
     ACTIVE,
   };
 
@@ -43,7 +42,5 @@ class KOReaderPageTurnerActivity final : public ActivityWithSubactivity {
   std::string errorMessage;
 
   void onWifiSelectionComplete(bool connected);
-  void onAddressEntered(const std::string& address);
-  void launchAddressEntry();
   bool sendPageTurn(int direction);
 };

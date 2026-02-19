@@ -16,10 +16,9 @@
 
 namespace {
 constexpr int MENU_ITEMS = 7;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,        StrId::STR_PASSWORD,
-                                     StrId::STR_SYNC_SERVER_URL, StrId::STR_DOCUMENT_MATCHING,
-                                     StrId::STR_AUTHENTICATE,    StrId::STR_KPT_ADDRESS,
-                                     StrId::STR_KOREADER_PAGE_TURNER};
+const StrId menuNames[MENU_ITEMS] = {
+    StrId::STR_USERNAME,     StrId::STR_PASSWORD,    StrId::STR_SYNC_SERVER_URL,     StrId::STR_DOCUMENT_MATCHING,
+    StrId::STR_AUTHENTICATE, StrId::STR_KPT_ADDRESS, StrId::STR_KOREADER_PAGE_TURNER};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
