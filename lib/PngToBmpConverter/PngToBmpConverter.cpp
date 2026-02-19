@@ -1,5 +1,6 @@
 #include "PngToBmpConverter.h"
 
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <miniz.h>
@@ -16,8 +17,10 @@ constexpr bool USE_8BIT_OUTPUT = false;
 constexpr bool USE_ATKINSON = true;
 constexpr bool USE_FLOYD_STEINBERG = false;
 constexpr bool USE_PRESCALE = true;
-constexpr int TARGET_MAX_WIDTH = 480;
-constexpr int TARGET_MAX_HEIGHT = 800;
+constexpr int X4_TARGET_MAX_WIDTH = 480;
+constexpr int X4_TARGET_MAX_HEIGHT = 800;
+constexpr int X3_TARGET_MAX_WIDTH = 528;
+constexpr int X3_TARGET_MAX_HEIGHT = 792;
 // ============================================================================
 
 // PNG constants
@@ -853,7 +856,9 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
 }
 
 bool PngToBmpConverter::pngFileToBmpStream(FsFile& pngFile, Print& bmpOut, bool crop) {
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT, false, crop);
+  const int targetWidth = gpio.deviceIsX3() ? X3_TARGET_MAX_WIDTH : X4_TARGET_MAX_WIDTH;
+  const int targetHeight = gpio.deviceIsX3() ? X3_TARGET_MAX_HEIGHT : X4_TARGET_MAX_HEIGHT;
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop);
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
