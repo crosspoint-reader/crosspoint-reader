@@ -653,7 +653,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // Phase 2: Show "Rendering" popup → decode images with progress bar
     auto popupRect = GUI.drawPopup(renderer, tr(STR_RENDERING));
     page->renderImagesWithProgress(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop,
-                                   [this, &popupRect](int current, int total) {
+                                   [this, popupRect](int current, int total) {
                                      int progress = (current * 100) / total;
                                      GUI.fillPopupProgress(renderer, popupRect, progress);
                                    });
