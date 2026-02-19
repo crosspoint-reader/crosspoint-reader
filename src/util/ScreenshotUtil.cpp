@@ -76,9 +76,15 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
   }
 
   const uint32_t rowSizePadded = (phyWidth + 31) / 32 * 4;
+  // Max row size for 480px width = 60 bytes; use fixed buffer to avoid VLA
+  constexpr size_t kMaxRowSize = 64;
+  if (rowSizePadded > kMaxRowSize) {
+    LOG_ERR("SCR", "Row size %u exceeds buffer capacity", rowSizePadded);
+    return false;
+  }
 
   // rotate the image 90d counter-clockwise on-the-fly while writing to save memory
-  uint8_t rowBuffer[rowSizePadded];
+  uint8_t rowBuffer[kMaxRowSize];
   memset(rowBuffer, 0, rowSizePadded);
 
   for (int outY = 0; outY < phyHeight; outY++) {

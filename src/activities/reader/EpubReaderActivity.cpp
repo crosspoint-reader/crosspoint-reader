@@ -433,12 +433,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
-      RenderLock lock(*this);
-      pendingScreenshot = true;
-    }
+      {
+        RenderLock lock(*this);
+        pendingScreenshot = true;
+      }
       exitActivity();
       requestUpdate();
       break;
+    }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : 0;
