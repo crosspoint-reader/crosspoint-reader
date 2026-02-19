@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -66,8 +67,12 @@ void EpubReaderFootnotesActivity::render(Activity::RenderLock&&) {
   const int screenWidth = renderer.getScreenWidth();
   constexpr int marginLeft = 20;
 
-  for (int i = 0; i < static_cast<int>(footnotes.size()); i++) {
-    const int y = startY + i * lineHeight;
+  const int visibleCount = std::max(1, (renderer.getScreenHeight() - startY) / lineHeight);
+  if (selectedIndex < scrollOffset) scrollOffset = selectedIndex;
+  if (selectedIndex >= scrollOffset + visibleCount) scrollOffset = selectedIndex - visibleCount + 1;
+
+  for (int i = scrollOffset; i < static_cast<int>(footnotes.size()) && i < scrollOffset + visibleCount; i++) {
+    const int y = startY + (i - scrollOffset) * lineHeight;
     const bool isSelected = (i == selectedIndex);
 
     if (isSelected) {

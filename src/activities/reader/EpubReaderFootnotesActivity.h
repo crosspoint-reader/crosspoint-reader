@@ -30,5 +30,6 @@ class EpubReaderFootnotesActivity final : public ActivityWithSubactivity {
   const std::function<void()> onGoBack;
   const std::function<void(const char*)> onSelectFootnote;
   int selectedIndex = 0;
+  int scrollOffset = 0;
   ButtonNavigator buttonNavigator;
 };
