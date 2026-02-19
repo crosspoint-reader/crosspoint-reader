@@ -79,13 +79,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 
   const EpdFontData* fontData = fontFamily.getData(style);
   const bool is2Bit = fontData->is2Bit;
-  const uint32_t offset = glyph->dataOffset;
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
   const int top = glyph->top;
 
-  const uint8_t* bitmap = &fontData->bitmap[offset];
+  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
 
   if (bitmap != nullptr) {
     // For Normal:  outer loop advances screenY, inner loop advances screenX
@@ -916,11 +915,6 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   const auto& font = fontIt->second;
 
-  // No printable characters
-  if (!font.hasPrintableChars(text, style)) {
-    return;
-  }
-
   int xPos = x;
   int yPos = y;
 
@@ -1026,8 +1020,8 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   }
 }
 
-void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, int* y, const bool pixelState,
-                             const EpdFontFamily::Style style) const {
+void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
+                             EpdFontFamily::Style style) const {
   renderCharImpl<TextRotation::None>(*this, renderMode, fontFamily, cp, x, y, pixelState, style);
 }
 
