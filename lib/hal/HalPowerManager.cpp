@@ -76,7 +76,7 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   esp_deep_sleep_start();
 }
 
-int HalPowerManager::getBatteryPercentage() const {
+uint16_t HalPowerManager::getBatteryPercentage() const {
   if (_batteryUseI2C) {
     const unsigned long now = millis();
     if (_batteryLastPollMs != 0 && (now - _batteryLastPollMs) < BATTERY_POLL_MS) {

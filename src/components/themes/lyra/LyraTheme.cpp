@@ -1,7 +1,6 @@
 #include "LyraTheme.h"
 
 #include <GfxRenderer.h>
-#include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
