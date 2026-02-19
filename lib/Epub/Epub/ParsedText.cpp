@@ -29,15 +29,17 @@ void stripSoftHyphensInPlace(std::string& word) {
   }
 }
 
-// Returns the rendered width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
+// Returns the advance width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
+// Uses advance width (sum of glyph advances) rather than bounding box width so that italic glyph overhangs
+// don't inflate inter-word spacing.
 uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
                           const EpdFontFamily::Style style, const bool appendHyphen = false) {
   if (word.size() == 1 && word[0] == ' ' && !appendHyphen) {
-    return renderer.getSpaceWidth(fontId);
+    return renderer.getSpaceWidth(fontId, style);
   }
   const bool hasSoftHyphen = containsSoftHyphen(word);
   if (!hasSoftHyphen && !appendHyphen) {
-    return renderer.getTextWidth(fontId, word.c_str(), style);
+    return renderer.getTextAdvanceX(fontId, word.c_str(), style);
   }
 
   std::string sanitized = word;
@@ -47,7 +49,7 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
   if (appendHyphen) {
     sanitized.push_back('-');
   }
-  return renderer.getTextWidth(fontId, sanitized.c_str(), style);
+  return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
 }
 
 }  // namespace
