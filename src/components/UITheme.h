@@ -2,7 +2,6 @@
 
 #include <functional>
 #include <memory>
-#include <vector>
 
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
@@ -22,6 +21,7 @@ class UITheme {
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
+  static UIIcon getFileIcon(std::string filename);
 
  private:
   const ThemeMetrics* currentMetrics;
