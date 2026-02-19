@@ -77,7 +77,9 @@ KOReaderSyncClient::Error KOReaderSyncClient::registerUser() {
   } else if (httpCode == 402) {
     // Both "user already exists" (error 2002) and "registration disabled" (error 2005)
     // return HTTP 402 on the original kosync server. Distinguish them by body text.
-    if (responseBody.indexOf("already") >= 0) {
+    String lowerBody = responseBody;
+    lowerBody.toLowerCase();
+    if (lowerBody.indexOf("already") >= 0) {
       return USER_EXISTS;
     }
     return REGISTRATION_DISABLED;
