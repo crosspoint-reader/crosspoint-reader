@@ -1,7 +1,9 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <Arduino.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <expat.h>
@@ -18,6 +20,8 @@ constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
+constexpr uint32_t MIN_HEAP_FOR_IMAGE_EXTRACTION = 110 * 1024;  // 110KB
+constexpr size_t MAX_INLINE_IMAGE_SRC_LEN = 1024;
 
 const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
 constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
@@ -225,6 +229,29 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
 
       if (!src.empty()) {
+        const uint32_t freeHeap = ESP.getFreeHeap();
+        const bool lowHeap = freeHeap < MIN_HEAP_FOR_IMAGE_EXTRACTION;
+        const bool inlineDataUri = src.rfind("data:", 0) == 0;
+        const bool srcTooLong = src.size() > MAX_INLINE_IMAGE_SRC_LEN;
+
+        // X3-only fallback for low memory / pathological src values:
+        // show image placeholder text instead of extracting/decoding image bytes.
+        if (gpio.deviceIsX3() && (lowHeap || inlineDataUri || srcTooLong)) {
+          if (alt.empty()) {
+            alt = "[Image]";
+          } else {
+            alt = "[Image: " + alt + "]";
+          }
+          LOG_ERR("EHP", "Skipping image extraction (heap=%u, dataUri=%d, srcLen=%u)", freeHeap,
+                  inlineDataUri ? 1 : 0, static_cast<unsigned>(src.size()));
+          self->startNewTextBlock(centeredBlockStyle);
+          self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
+          self->depth += 1;
+          self->characterData(userData, alt.c_str(), static_cast<int>(alt.length()));
+          self->skipUntilDepth = self->depth - 1;
+          return;
+        }
+
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
 
         {
