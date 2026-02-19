@@ -1,5 +1,6 @@
 #include "Page.h"
 
+#include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
 
