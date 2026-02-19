@@ -15,11 +15,12 @@ namespace {
 constexpr int MENU_ITEMS = 5;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_CHAPTER_PAGE_COUNT, StrId::STR_BOOK_PROGRESS_PERCENTAGE,
                                      StrId::STR_PROGRESS_BAR, StrId::STR_CHAPTER_TITLE, StrId::STR_BATTERY};
-}  // namespace
-
 constexpr int PROGRESS_BAR_ITEMS = 3;
-const StrId progressBarNames[PROGRESS_BAR_ITEMS] = {StrId::STR_SHOW_BOOK_PROGRESS, StrId::STR_SHOW_CHAPTER_PROGRESS,
-                                                    StrId::STR_HIDE};
+const StrId progressBarNames[PROGRESS_BAR_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE};
+
+const char* translatedShow = tr(STR_SHOW);
+const char* translatedHide = tr(STR_HIDE);
+}  // namespace
 
 void StatusBarSettingsActivity::onEnter() {
   Activity::onEnter();
@@ -93,40 +94,35 @@ void StatusBarSettingsActivity::handleSelection() {
 void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
+  auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
 
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_CUSTOMISE_STATUS_BAR), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CUSTOMISE_STATUS_BAR));
 
-  // Draw selection highlight
-  renderer.fillRect(0, 70 + selectedIndex * 30 - 2, pageWidth - 1, 30);
-
-  // Draw menu items
-  for (int i = 0; i < MENU_ITEMS; i++) {
-    const int settingY = 70 + i * 30;
-    const bool isSelected = (i == selectedIndex);
-
-    renderer.drawText(UI_10_FONT_ID, 20, settingY, I18N.get(menuNames[i]), !isSelected);
-
-    const char* translatedShow = tr(STR_SHOW);
-    const char* translatedHide = tr(STR_HIDE);
-
-    // Draw status for each setting
-    const char* status = translatedHide;
-    if (i == 0) {
-      status = SETTINGS.statusBarChapterPageCount ? translatedShow : translatedHide;
-    } else if (i == 1) {
-      status = SETTINGS.statusBarBookProgressPercentage ? translatedShow : translatedHide;
-    } else if (i == 2) {
-      status = I18N.get(progressBarNames[SETTINGS.statusBarProgressBar]);
-    } else if (i == 3) {
-      status = SETTINGS.statusBarChapterTitle ? translatedShow : translatedHide;
-    } else if (i == 4) {
-      status = SETTINGS.statusBarBattery ? translatedShow : translatedHide;
-    }
-    const auto width = renderer.getTextWidth(UI_10_FONT_ID, status);
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, settingY, status, !isSelected);
-  }
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
+      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
+      nullptr,
+      [this](int index) {
+        // Draw status for each setting
+        if (index == 0) {
+          return SETTINGS.statusBarChapterPageCount ? translatedShow : translatedHide;
+        } else if (index == 1) {
+          return SETTINGS.statusBarBookProgressPercentage ? translatedShow : translatedHide;
+        } else if (index == 2) {
+          return I18N.get(progressBarNames[SETTINGS.statusBarProgressBar]);
+        } else if (index == 3) {
+          return SETTINGS.statusBarChapterTitle ? translatedShow : translatedHide;
+        } else if (index == 4) {
+          return SETTINGS.statusBarBattery ? translatedShow : translatedHide;
+        } else {
+          return translatedHide;
+        }
+      },
+      true);
 
   // Draw button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
@@ -141,8 +137,6 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
   orientedMarginBottom += SETTINGS.screenMargin;
 
   int verticalPreviewPadding = 50;
-
-  auto metrics = UITheme::getInstance().getMetrics();
 
   // Add status bar margin
   const bool showProgressBar = SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
