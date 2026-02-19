@@ -664,14 +664,24 @@ bool CssParser::parseStreaming(Stream& source) {
       }
     }
 
-    // Try to extract complete rules from the buffer
+    // Try to extract complete rules from the buffer.
+    // If we're inside an unfinished comment, only parse the clean prefix
+    // (buffer[0..commentStart-1]); going further would treat comment text
+    // as CSS, potentially creating bogus rules from comment content.
+    const size_t safeParseEnd = inComment ? commentStart : buffer.size();
     size_t parsePos = 0;
     std::string selector, body;
-    while (extractNextRule(buffer, parsePos, selector, body)) {
+    while (true) {
+      const size_t savedPos = parsePos;
+      if (!extractNextRule(buffer, parsePos, selector, body)) break;
+      if (parsePos > safeParseEnd) {
+        // Extraction overstepped into the unfinished comment region; undo
+        parsePos = savedPos;
+        break;
+      }
       extractRuleCalls++;
       processRuleBlock(selector, body);
       processRuleCalls++;
-      // Continue processing - priority replacement will handle the limit
     }
 
     // Remove processed part of buffer, but keep some overlap for incomplete rules
@@ -951,6 +961,9 @@ bool CssParser::loadFromCache(FsFile& file) {
 
     rulesBySelector_[selector] = style;
   }
+
+  // Update priority tracking to reflect the rules just loaded from cache
+  updateLowestPriorityTracking();
 
   LOG_DBG("CSS", "Loaded %u rules from cache", ruleCount);
   return true;
