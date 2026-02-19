@@ -1,6 +1,5 @@
 #include "CssParser.h"
 
-#include <ESP.h>
 #include <Logging.h>
 
 #include <algorithm>
