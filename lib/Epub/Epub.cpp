@@ -38,12 +38,11 @@ class MemoryStream : public Stream {
 // Simple file stream for reading from FsFile
 class FileStream : public Stream {
  public:
-  FileStream(FsFile& file) : file_(file), position_(0) {}
+  FileStream(FsFile& file) : file_(file) {}
 
   int available() override { return file_.available(); }
   int read() override {
     if (!file_.available()) return -1;
-    position_++;
     return file_.read();
   }
   int peek() override {
@@ -56,7 +55,6 @@ class FileStream : public Stream {
 
  private:
   FsFile& file_;
-  size_t position_;
 };
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
@@ -338,8 +336,13 @@ void Epub::parseCssFiles() const {
         const uint32_t parseEndTime = millis();
         const uint32_t parseDuration = parseEndTime - parseStartTime;
 
+        // Guard against zero-duration (timer resolution) to avoid divide-by-zero; treat zero duration as 0 KB/s
+        double throughputKBs = 0.0;
+        if (parseDuration > 0) {
+          throughputKBs = cssSize / (parseDuration / 1000.0) / 1024.0;
+        }
         LOG_DBG("EBP", "CSS parsing: %s took %lu ms (%zu bytes, %.1f KB/s)", cssPath.c_str(), parseDuration, cssSize,
-                cssSize / (parseDuration / 1000.0) / 1024.0);
+                throughputKBs);
 
         // Free the buffer
         free(cssBuffer);
@@ -379,8 +382,13 @@ void Epub::parseCssFiles() const {
         const uint32_t parseEndTime = millis();
         const uint32_t parseDuration = parseEndTime - parseStartTime;
 
+        // Guard against zero-duration (timer resolution) to avoid divide-by-zero; treat zero duration as 0 KB/s
+        double throughputKBs = 0.0;
+        if (parseDuration > 0) {
+          throughputKBs = cssSize / (parseDuration / 1000.0) / 1024.0;
+        }
         LOG_DBG("EBP", "CSS parsing: %s took %lu ms (%zu bytes, %.1f KB/s)", cssPath.c_str(), parseDuration, cssSize,
-                cssSize / (parseDuration / 1000.0) / 1024.0);
+                throughputKBs);
 
         // Close and remove temp file
         cssTempFile.close();

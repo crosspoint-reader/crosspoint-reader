@@ -9,14 +9,8 @@
 
 namespace {
 
-// Buffer size for reading CSS files
-constexpr size_t READ_BUFFER_SIZE = 512;
-
 // Maximum number of CSS rules to prevent memory exhaustion
 constexpr size_t MAX_CSS_RULES = 300;
-
-// Maximum CSS file size to parse (200KB to match Epub.cpp limit)
-constexpr size_t MAX_CSS_FILE_SIZE = 200 * 1024;
 
 // Check if character is CSS whitespace
 bool isCssWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
@@ -557,18 +551,16 @@ void CssParser::processRuleBlock(const std::string& selectorGroup, const std::st
         lowestPriorityValue_ = priority;
         lowestPrioritySelector_ = selector;
       }
+      // Only increment when a new rule is inserted (avoid over-counting merged selectors)
+      rulesAdded_++;
     }
-    rulesAdded_++;
   }
 }
 
 // Main parsing entry point
 
 bool CssParser::loadFromString(const std::string& css, size_t fileSize) {
-  if (fileSize > MAX_CSS_FILE_SIZE) {
-    LOG_ERR("CSS", "CSS file too large (%zu bytes > %zu max), skipping", fileSize, MAX_CSS_FILE_SIZE);
-    return false;
-  }
+  // fileSize is informational (0 if unknown). Size validation is the responsibility of the caller (e.g. Epub.cpp).
 
   // Reset statistics counters
   totalRulesProcessed_ = 0;
