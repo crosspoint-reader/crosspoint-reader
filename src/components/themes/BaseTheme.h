@@ -90,9 +90,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
                                  .bookProgressBarHeight = 4,
-                                 .keyboardKeyWidth = 18,
-                                 .keyboardKeyHeight = 18,
-                                 .keyboardKeySpacing = 3,
+                                 .keyboardKeyWidth = 22,
+                                 .keyboardKeyHeight = 30,
+                                 .keyboardKeySpacing = 10,
                                  .keyboardBottomAligned = false,
                                  .keyboardCenteredText = false};
 }
