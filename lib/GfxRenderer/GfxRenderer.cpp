@@ -961,7 +961,7 @@ bool GfxRenderer::storeBwBuffer() {
  * Uses chunked restoration to match chunked storage.
  */
 void GfxRenderer::restoreBwBuffer() {
-  // Check if any all chunks are allocated
+  // Check if all chunks are allocated
   bool missingChunks = false;
   for (const auto& bwBufferChunk : bwBufferChunks) {
     if (!bwBufferChunk) {
@@ -976,13 +976,6 @@ void GfxRenderer::restoreBwBuffer() {
   }
 
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
-    // Check if chunk is missing
-    if (!bwBufferChunks[i]) {
-      LOG_ERR("GFX", "!! BW buffer chunks not stored - this is likely a bug");
-      freeBwBufferChunks();
-      return;
-    }
-
     const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
     memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
   }
@@ -1003,8 +996,8 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   }
 }
 
-void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, int* y,
-                             const bool pixelState, const EpdFontFamily::Style style) const {
+void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, int* y, const bool pixelState,
+                             const EpdFontFamily::Style style) const {
   renderCharImpl<TextRotation::None>(*this, renderMode, fontFamily, cp, x, y, pixelState, style);
 }
 
