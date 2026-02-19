@@ -91,8 +91,8 @@ struct CssPropertyFlags {
 
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
-           marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight ||
-           imageHeight || imageWidth;
+           marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
+           imageWidth;
   }
 
   void clearAll() {
@@ -122,7 +122,7 @@ struct CssStyle {
   CssLength paddingLeft;    // Padding left
   CssLength paddingRight;   // Padding right
   CssLength imageHeight;    // Height for img (e.g. 2em) – width derived from aspect ratio when only height set
-  CssLength imageWidth;    // Width for img when both or only width set
+  CssLength imageWidth;     // Width for img when both or only width set
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
