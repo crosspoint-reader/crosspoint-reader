@@ -16,9 +16,11 @@ void HalPowerManager::begin() {
     // I2C init must come AFTER gpio.begin() sets up UART0_RXD because GPIO20
     // is shared between USB detection (digital read) and I2C SDA.
     Wire.begin(20, 0, 400000);
+    Wire.setTimeOut(4);
     _batteryUseI2C = true;
     _batteryI2cAddr = 0x55;
-    _batterySocRegister = 0x1C;
+    // TI BQ27220: StateOfCharge() command code
+    _batterySocRegister = 0x2C;
   } else {
     pinMode(BAT_GPIO0, INPUT);
   }
@@ -76,20 +78,37 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 
 int HalPowerManager::getBatteryPercentage() const {
   if (_batteryUseI2C) {
+    const unsigned long now = millis();
+    if (_batteryLastPollMs != 0 && (now - _batteryLastPollMs) < BATTERY_POLL_MS) {
+      return _batteryCachedPercent;
+    }
+
     // Read SOC directly from I2C fuel gauge (16-bit LE register).
-    // Returns 0 on I2C error so the UI shows 0% rather than crashing.
+    // On I2C error, keep last known value to avoid UI jitter/slowdowns.
     Wire.beginTransmission(_batteryI2cAddr);
     Wire.write(_batterySocRegister);
-    if (Wire.endTransmission(false) != 0) return 0;
+    if (Wire.endTransmission(false) != 0) {
+      _batteryI2cFailCount++;
+      _batteryLastPollMs = now;
+      return _batteryCachedPercent;
+    }
     Wire.requestFrom(_batteryI2cAddr, (uint8_t)2);
-    if (Wire.available() < 2) return 0;
+    if (Wire.available() < 2) {
+      _batteryI2cFailCount++;
+      _batteryLastPollMs = now;
+      return _batteryCachedPercent;
+    }
     const uint8_t lo = Wire.read();
     const uint8_t hi = Wire.read();
     const uint16_t soc = (hi << 8) | lo;
-    return soc > 100 ? 100 : soc;
+    _batteryCachedPercent = soc > 100 ? 100 : soc;
+    _batteryLastPollMs = now;
+    _batteryI2cFailCount = 0;
+    return _batteryCachedPercent;
   }
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
-  return battery.readPercentage();
+  _batteryCachedPercent = battery.readPercentage();
+  return _batteryCachedPercent;
 }
 
 HalPowerManager::Lock::Lock() {

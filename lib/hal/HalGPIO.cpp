@@ -1,5 +1,6 @@
 #include <HalGPIO.h>
 #include <SPI.h>
+#include <Wire.h>
 #include <esp_sleep.h>
 
 // Global HalGPIO instance
@@ -14,37 +15,55 @@ int readAveragedAdc(uint8_t pin, uint8_t samples = 8) {
   }
   return static_cast<int>(sum / samples);
 }
+
+int readBiasedAdc(uint8_t pin) {
+  pinMode(pin, INPUT_PULLDOWN);
+  delay(2);
+  const int v = readAveragedAdc(pin, 12);
+  pinMode(pin, INPUT);
+  return v;
+}
+
+bool probeX3FuelGauge() {
+  // X3 fuel gauge is at 0x55 on SDA=GPIO20, SCL=GPIO0.
+  // Keep this probe minimal and release Wire immediately so we don't
+  // interfere with later battery polling in HalPowerManager.
+  bool found = false;
+  Wire.begin(20, 0, 100000);
+  Wire.setTimeOut(3);
+  for (uint8_t attempt = 0; attempt < 2; ++attempt) {
+    Wire.beginTransmission(0x55);
+    Wire.write(0x1C);
+    if (Wire.endTransmission(true) == 0) {
+      found = true;
+      break;
+    }
+    delay(1);
+  }
+  Wire.end();
+  pinMode(20, INPUT);
+  pinMode(0, INPUT);
+  return found;
+}
+
 }  // namespace
 
 void HalGPIO::begin() {
   inputMgr.begin();
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
-  // X3 routes battery sense on GPIO4, X4 routes battery sense on GPIO0.
-  // Read both channels and classify by relative dominance; this is more stable
-  // than using a single floating-channel threshold.
-  const int adc4 = readAveragedAdc(4);
-  const int adc0 = readAveragedAdc(BAT_GPIO0);
+  // Battery-pin detection (ADC-only): choose the stronger signal.
+  const int adc4 = readBiasedAdc(4);
+  const int adc0 = readBiasedAdc(BAT_GPIO0);
   _detectAdcValue = adc4;
+  _detectAdcValueGpio0 = adc0;
 
-  static constexpr int kDominanceMargin = 150;
-  static constexpr int kX3Min = 500;
-  static constexpr int kX3Max = 1500;
-  const bool adc4LooksX3Range = (adc4 >= kX3Min && adc4 <= kX3Max);
-  const bool adc4Dominant = (adc4 > adc0 + kDominanceMargin);
-  const bool adc0Dominant = (adc0 > adc4 + kDominanceMargin);
+  static constexpr int kPinLeadMargin = 120;
+  _batteryPin = (adc4 > adc0 + kPinLeadMargin) ? 4 : BAT_GPIO0;
 
-  if (adc4LooksX3Range && adc4Dominant) {
-    _deviceType = DeviceType::X3;
-  } else if (adc0Dominant) {
-    _deviceType = DeviceType::X4;
-  } else {
-    // Conservative fallback: X4 avoids enabling X3-only display behavior on
-    // ambiguous reads, which is safer for refresh correctness.
-    _deviceType = DeviceType::X4;
-  }
-
-  _batteryPin = deviceIsX3() ? 4 : BAT_GPIO0;
+  // Device-type detection (independent): probe X3 fuel gauge presence.
+  const bool x3FuelGaugePresent = probeX3FuelGauge();
+  _deviceType = x3FuelGaugePresent ? DeviceType::X3 : DeviceType::X4;
 
   pinMode(_batteryPin, INPUT);
   pinMode(UART0_RXD, INPUT);

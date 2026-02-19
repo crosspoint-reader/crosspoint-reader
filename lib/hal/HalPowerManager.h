@@ -22,6 +22,9 @@ class HalPowerManager {
   bool _batteryUseI2C = false;
   uint8_t _batteryI2cAddr = 0;
   uint8_t _batterySocRegister = 0;
+  mutable int _batteryCachedPercent = 0;
+  mutable unsigned long _batteryLastPollMs = 0;
+  mutable uint8_t _batteryI2cFailCount = 0;
 
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
@@ -30,6 +33,7 @@ class HalPowerManager {
  public:
   static constexpr int LOW_POWER_FREQ = 10;                    // MHz
   static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // ms
+  static constexpr unsigned long BATTERY_POLL_MS = 1500;       // ms
 
   void begin();
 

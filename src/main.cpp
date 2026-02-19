@@ -251,8 +251,8 @@ void setup() {
     }
   }
 
-  LOG_INF("MAIN", "Hardware detect: %s (adc4=%d, batteryPin=%d)", gpio.deviceIsX3() ? "X3" : "X4",
-          gpio.getDetectAdcValue(), gpio.getBatteryPin());
+  LOG_INF("MAIN", "Hardware detect: %s (adc4=%d, adc0=%d, batteryPin=%d)", gpio.deviceIsX3() ? "X3" : "X4",
+          gpio.getDetectAdcValue(), gpio.getDetectAdcValueGpio0(), gpio.getBatteryPin());
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter

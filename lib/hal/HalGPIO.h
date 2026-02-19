@@ -28,6 +28,7 @@ class HalGPIO {
  private:
   DeviceType _deviceType = DeviceType::X4;
   int _detectAdcValue = 0;
+  int _detectAdcValueGpio0 = 0;
   int _batteryPin = BAT_GPIO0;
 
  public:
@@ -63,6 +64,7 @@ class HalGPIO {
   // Device detection helpers
   DeviceType getDeviceType() const { return _deviceType; }
   int getDetectAdcValue() const { return _detectAdcValue; }
+  int getDetectAdcValueGpio0() const { return _detectAdcValueGpio0; }
   int getBatteryPin() const { return _batteryPin; }
 
   enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
