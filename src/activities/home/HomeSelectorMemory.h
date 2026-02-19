@@ -5,6 +5,8 @@
 // Stores and restores the last selected home item while the app is running.
 class HomeSelectorMemory {
  public:
+  int getStoredIndex() const { return std::max(0, lastSelectorIndex); }
+
   int restore(int menuItemCount) const {
     if (menuItemCount <= 0) {
       return 0;

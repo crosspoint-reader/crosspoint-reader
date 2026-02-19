@@ -36,6 +36,20 @@ int HomeActivity::getMenuItemCount() const {
   return count;
 }
 
+void HomeActivity::applyPendingSelectorRestore() {
+  if (!pendingSelectorRestore) {
+    return;
+  }
+
+  selectorIndex = homeSelectorMemory.restore(getMenuItemCount());
+
+  // Keep retrying the restore while recents may still be changing.
+  const int storedIndex = homeSelectorMemory.getStoredIndex();
+  if (storedIndex < getMenuItemCount() || recentsLoaded) {
+    pendingSelectorRestore = false;
+  }
+}
+
 void HomeActivity::loadRecentBooks(int maxBooks) {
   recentBooks.clear();
   const auto& books = RECENT_BOOKS.getBooks();
@@ -123,12 +137,14 @@ void HomeActivity::onEnter() {
   auto metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
   selectorIndex = homeSelectorMemory.restore(getMenuItemCount());
+  pendingSelectorRestore = true;
 
   // Trigger first update
   requestUpdate();
 }
 
 void HomeActivity::onExit() {
+  pendingSelectorRestore = false;
   homeSelectorMemory.store(selectorIndex, getMenuItemCount());
 
   Activity::onExit();
@@ -180,14 +196,18 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
+  applyPendingSelectorRestore();
+
   const int menuCount = getMenuItemCount();
 
   buttonNavigator.onNext([this, menuCount] {
+    pendingSelectorRestore = false;
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this, menuCount] {
+    pendingSelectorRestore = false;
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
     requestUpdate();
   });
@@ -219,6 +239,8 @@ void HomeActivity::loop() {
 }
 
 void HomeActivity::render(Activity::RenderLock&&) {
+  applyPendingSelectorRestore();
+
   auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();

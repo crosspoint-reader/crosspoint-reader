@@ -29,6 +29,7 @@ int main() {
     HomeSelectorMemory memory;
     memory.store(3, 5);
     failed += !expectEqual("Restores previously stored index", 3, memory.restore(5));
+    failed += !expectEqual("Exposes stored index for deferred restore", 3, memory.getStoredIndex());
   }
 
   {
