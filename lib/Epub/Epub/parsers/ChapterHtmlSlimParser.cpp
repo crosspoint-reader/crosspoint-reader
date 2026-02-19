@@ -511,13 +511,15 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   }
 
   // Collect footnote link display text (for the number label)
+  // Skip whitespace and brackets to normalize noterefs like "[1]" → "1"
   if (self->insideFootnoteLink) {
-    int remaining = sizeof(self->currentFootnoteLinkText) - 1 - self->currentFootnoteLinkTextLen;
-    if (remaining > 0) {
-      int toCopy = (len < remaining) ? len : remaining;
-      memcpy(self->currentFootnoteLinkText + self->currentFootnoteLinkTextLen, s, toCopy);
-      self->currentFootnoteLinkTextLen += toCopy;
-      self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen] = '\0';
+    for (int i = 0; i < len; i++) {
+      unsigned char c = static_cast<unsigned char>(s[i]);
+      if (isWhitespace(c) || c == '[' || c == ']') continue;
+      if (self->currentFootnoteLinkTextLen < static_cast<int>(sizeof(self->currentFootnoteLinkText)) - 1) {
+        self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen++] = c;
+        self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen] = '\0';
+      }
     }
   }
 
@@ -643,13 +645,15 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   // Closing a footnote link — create entry from collected text and href
   if (self->insideFootnoteLink && self->depth == self->footnoteLinkDepth) {
-    FootnoteEntry entry;
-    strncpy(entry.number, self->currentFootnoteLinkText, sizeof(entry.number) - 1);
-    entry.number[sizeof(entry.number) - 1] = '\0';
-    strncpy(entry.href, self->currentFootnoteLinkHref, sizeof(entry.href) - 1);
-    entry.href[sizeof(entry.href) - 1] = '\0';
-    int wordIndex = self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
-    self->pendingFootnotes.push_back({wordIndex, entry});
+    if (self->currentFootnoteLinkText[0] != '\0' && self->currentFootnoteLinkHref[0] != '\0') {
+      FootnoteEntry entry;
+      strncpy(entry.number, self->currentFootnoteLinkText, sizeof(entry.number) - 1);
+      entry.number[sizeof(entry.number) - 1] = '\0';
+      strncpy(entry.href, self->currentFootnoteLinkHref, sizeof(entry.href) - 1);
+      entry.href[sizeof(entry.href) - 1] = '\0';
+      int wordIndex = self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
+      self->pendingFootnotes.push_back({wordIndex, entry});
+    }
     self->insideFootnoteLink = false;
   }
 
