@@ -501,7 +501,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     for (auto& w : words) {
       if (titleLines.size() >= 3) {
         titleLines.back().append("...");
-        while (!titleLines.back().empty() &&
+        while (!titleLines.back().empty() && titleLines.back().size() > 3 &&
                renderer.getTextWidth(UI_12_FONT_ID, titleLines.back().c_str(), EpdFontFamily::BOLD) > maxLineWidth) {
           titleLines.back().resize(titleLines.back().size() - 3);
           utf8RemoveLastChar(titleLines.back());
@@ -519,6 +519,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
           break;
         }
       }
+      if (w.empty()) continue;  // Skip words that couldn't fit even truncated
       int newW = renderer.getTextAdvanceX(UI_12_FONT_ID, currentLine.c_str(), EpdFontFamily::BOLD);
       if (newW > 0) newW += spaceWidth;
       newW += renderer.getTextAdvanceX(UI_12_FONT_ID, w.c_str(), EpdFontFamily::BOLD);
