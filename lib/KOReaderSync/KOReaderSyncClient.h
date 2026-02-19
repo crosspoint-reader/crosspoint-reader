@@ -19,9 +19,10 @@ struct KOReaderProgress {
  * Base URL: https://sync.koreader.rocks:443/
  *
  * API Endpoints:
- *   GET /users/auth - Authenticate (validate credentials)
- *   GET /syncs/progress/:document - Get progress for a document
- *   PUT /syncs/progress - Update progress for a document
+ *   POST /users/create - Register a new user
+ *   GET  /users/auth  - Authenticate (validate credentials)
+ *   GET  /syncs/progress/:document - Get progress for a document
+ *   PUT  /syncs/progress - Update progress for a document
  *
  * Authentication:
  *   x-auth-user: username
@@ -29,7 +30,14 @@ struct KOReaderProgress {
  */
 class KOReaderSyncClient {
  public:
-  enum Error { OK = 0, NO_CREDENTIALS, NETWORK_ERROR, AUTH_FAILED, SERVER_ERROR, JSON_ERROR, NOT_FOUND };
+  enum Error { OK = 0, NO_CREDENTIALS, NETWORK_ERROR, AUTH_FAILED, SERVER_ERROR, JSON_ERROR, NOT_FOUND, USER_EXISTS, REGISTRATION_DISABLED };
+
+  /**
+   * Register a new user account with the sync server.
+   * Uses credentials already stored in KOReaderCredentialStore.
+   * @return OK on success, USER_EXISTS if taken, REGISTRATION_DISABLED if server disallows it
+   */
+  static Error registerUser();
 
   /**
    * Authenticate with the sync server (validate credentials).

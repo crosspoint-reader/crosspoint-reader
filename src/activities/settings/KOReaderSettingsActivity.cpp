@@ -13,9 +13,9 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 5;
+constexpr int MENU_ITEMS = 6;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE, StrId::STR_REGISTER};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -126,10 +126,24 @@ void KOReaderSettingsActivity::handleSelection() {
       return;
     }
     exitActivity();
-    enterNewActivity(new KOReaderAuthActivity(renderer, mappedInput, [this] {
-      exitActivity();
-      requestUpdate();
-    }));
+    enterNewActivity(new KOReaderAuthActivity(renderer, mappedInput,
+                                              [this] {
+                                                exitActivity();
+                                                requestUpdate();
+                                              },
+                                              KOReaderAuthActivity::Mode::LOGIN));
+  } else if (selectedIndex == 5) {
+    // Register
+    if (!KOREADER_STORE.hasCredentials()) {
+      return;
+    }
+    exitActivity();
+    enterNewActivity(new KOReaderAuthActivity(renderer, mappedInput,
+                                              [this] {
+                                                exitActivity();
+                                                requestUpdate();
+                                              },
+                                              KOReaderAuthActivity::Mode::REGISTER));
   }
 }
 
@@ -156,12 +170,14 @@ void KOReaderSettingsActivity::render(Activity::RenderLock&&) {
         } else if (index == 1) {
           return KOREADER_STORE.getPassword().empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
         } else if (index == 2) {
-          auto serverUrl = KOREADER_STORE.getServerUrl();
-          return serverUrl.empty() ? std::string(tr(STR_DEFAULT_VALUE)) : serverUrl;
+          // Show the effective URL (falls back to default when empty)
+          return KOREADER_STORE.getBaseUrl();
         } else if (index == 3) {
           return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? std::string(tr(STR_FILENAME))
                                                                                   : std::string(tr(STR_BINARY));
         } else if (index == 4) {
+          return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+        } else if (index == 5) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));
