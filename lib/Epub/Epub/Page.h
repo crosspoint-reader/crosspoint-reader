@@ -2,7 +2,6 @@
 #include <HalStorage.h>
 
 #include <algorithm>
-#include <functional>
 #include <utility>
 #include <vector>
 
@@ -50,6 +49,7 @@ class PageImage final : public PageElement {
   bool serialize(FsFile& file) override;
   PageElementTag getTag() const override { return TAG_PageImage; }
   bool isCached() const;
+  void renderPlaceholder(GfxRenderer& renderer, int xOffset, int yOffset) const;
   static std::unique_ptr<PageImage> deserialize(FsFile& file);
 };
 
@@ -69,6 +69,5 @@ class Page {
 
   void renderTextOnly(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   int countUncachedImages() const;
-  void renderImagesWithProgress(GfxRenderer& renderer, int fontId, int xOffset, int yOffset,
-                                const std::function<void(int, int)>& progressCallback) const;
+  void renderImagePlaceholders(GfxRenderer& renderer, int xOffset, int yOffset) const;
 };

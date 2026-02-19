@@ -50,6 +50,15 @@ std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
 
 bool PageImage::isCached() const { return imageBlock->isCached(); }
 
+void PageImage::renderPlaceholder(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
+  int x = xPos + xOffset;
+  int y = yPos + yOffset;
+  int w = imageBlock->getWidth();
+  int h = imageBlock->getHeight();
+  renderer.fillRect(x, y, w, h, true);
+  renderer.fillRect(x + 1, y + 1, w - 2, h - 2, false);
+}
+
 void Page::renderTextOnly(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
   for (auto& element : elements) {
     if (element->getTag() == TAG_PageLine) {
@@ -71,21 +80,11 @@ int Page::countUncachedImages() const {
   return count;
 }
 
-void Page::renderImagesWithProgress(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                                    const std::function<void(int, int)>& progressCallback) const {
-  int total = countUncachedImages();
-  int current = 0;
+void Page::renderImagePlaceholders(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
   for (auto& element : elements) {
     if (element->getTag() == TAG_PageImage) {
       auto* img = static_cast<PageImage*>(element.get());
-      bool wasCached = img->isCached();
-      element->render(renderer, fontId, xOffset, yOffset);
-      if (!wasCached) {
-        current++;
-        if (progressCallback) {
-          progressCallback(current, total);
-        }
-      }
+      img->renderPlaceholder(renderer, xOffset, yOffset);
     }
   }
 }
