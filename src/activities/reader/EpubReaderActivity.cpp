@@ -189,7 +189,7 @@ void EpubReaderActivity::loop() {
 
   // Short press BACK goes directly to home (or restores position if viewing footnote)
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
-    if (isViewingFootnote) {
+    if (footnoteDepth > 0) {
       restoreSavedPosition();
       return;
     }
@@ -816,12 +816,11 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
 void EpubReaderActivity::navigateToHref(const char* href, const bool savePosition) {
   if (!epub || !href) return;
 
-  // Save current position for Back button restore
-  if (savePosition && section) {
-    savedSpineIndex = currentSpineIndex;
-    savedPageNumber = section->currentPage;
-    isViewingFootnote = true;
-    LOG_DBG("ERS", "Saved position: spine %d, page %d", savedSpineIndex, savedPageNumber);
+  // Push current position onto saved stack
+  if (savePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
+    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
+    footnoteDepth++;
+    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, section->currentPage);
   }
 
   std::string hrefStr(href);
@@ -839,9 +838,7 @@ void EpubReaderActivity::navigateToHref(const char* href, const bool savePositio
 
   if (targetSpineIndex < 0) {
     LOG_DBG("ERS", "Could not resolve href: %s", href);
-    savedSpineIndex = -1;
-    savedPageNumber = -1;
-    isViewingFootnote = false;
+    if (savePosition && footnoteDepth > 0) footnoteDepth--;  // undo push
     return;
   }
 
@@ -856,18 +853,16 @@ void EpubReaderActivity::navigateToHref(const char* href, const bool savePositio
 }
 
 void EpubReaderActivity::restoreSavedPosition() {
-  if (savedSpineIndex < 0 || savedPageNumber < 0) return;
-  LOG_DBG("ERS", "Restoring position: spine %d, page %d", savedSpineIndex, savedPageNumber);
+  if (footnoteDepth <= 0) return;
+  footnoteDepth--;
+  const auto& pos = savedPositions[footnoteDepth];
+  LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
 
   {
     RenderLock lock(*this);
-    currentSpineIndex = savedSpineIndex;
-    nextPageNumber = savedPageNumber;
+    currentSpineIndex = pos.spineIndex;
+    nextPageNumber = pos.pageNumber;
     section.reset();
   }
-
-  savedSpineIndex = -1;
-  savedPageNumber = -1;
-  isViewingFootnote = false;
   requestUpdate();
 }

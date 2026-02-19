@@ -27,9 +27,13 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
-  int savedSpineIndex = -1;
-  int savedPageNumber = -1;
-  bool isViewingFootnote = false;
+  struct SavedPosition {
+    int spineIndex;
+    int pageNumber;
+  };
+  static constexpr int MAX_FOOTNOTE_DEPTH = 3;
+  SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
+  int footnoteDepth = 0;
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);

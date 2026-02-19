@@ -50,9 +50,6 @@ enum class StrId : uint16_t {
   STR_BOOKS,
   STR_NO_BOOKS_FOUND,
   STR_SELECT_CHAPTER,
-  STR_FOOTNOTES,
-  STR_NO_FOOTNOTES,
-  STR_LINK,
   STR_NO_CHAPTERS,
   STR_END_OF_BOOK,
   STR_EMPTY_CHAPTER,
@@ -354,6 +351,9 @@ enum class StrId : uint16_t {
   STR_BOOK_S_STYLE,
   STR_EMBEDDED_STYLE,
   STR_OPDS_SERVER_URL,
+  STR_FOOTNOTES,
+  STR_NO_FOOTNOTES,
+  STR_LINK,
   // Sentinel - must be last
   _COUNT
 };
