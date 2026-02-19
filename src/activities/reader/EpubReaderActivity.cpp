@@ -436,22 +436,22 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const std::string bookPath = epub->getPath();
       const std::string cachePath = epub->getCachePath();
 
-      std::string Heading = tr(STR_DELETE_BOOK) + std::string(": ");
+      std::string Heading = tr(STR_DELETE) + std::string("? ");
 
       auto doDelete = [this, bookPath, cachePath](bool confirmed) {
         if (confirmed) {
-          this->skipNextButtonCheck = true;
-          xSemaphoreTake(renderingMutex, portMAX_DELAY);
-          if (Storage.remove(bookPath.c_str())) {
-            APP_STATE.openEpubPath = "";
-            APP_STATE.saveToFile();
-            section.reset();
-            epub.reset();
-            RECENT_BOOKS.removeBook(bookPath);
-            RECENT_BOOKS.saveToFile();
-            Storage.removeDir(cachePath.c_str());
+          {
+            RenderLock lock(*this);
+            this->skipNextButtonCheck = true;
+            if (Storage.remove(bookPath.c_str())) {
+              APP_STATE.openEpubPath = "";
+              APP_STATE.saveToFile();
+              section.reset();
+              epub.reset();
+              RECENT_BOOKS.removeBook(bookPath);
+              Storage.removeDir(cachePath.c_str());
+            }
           }
-          xSemaphoreGive(renderingMutex);
           this->pendingGoHome = true;
         }
         this->pendingSubactivityExit = true;
