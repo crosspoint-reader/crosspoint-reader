@@ -44,7 +44,6 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   const auto progressFn = [this, &popupShown, &popupRect](int progress) {
     if (!popupShown) {
       popupShown = true;
-      renderer.clearScreen();
       popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
     }
     GUI.fillPopupProgress(renderer, popupRect, progress);
