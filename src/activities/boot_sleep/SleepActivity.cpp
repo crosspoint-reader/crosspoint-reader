@@ -157,30 +157,6 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     }
   }
 
-  // Match drawBitmap's integer crop + scale math exactly to avoid center drift.
-  const int cropPixX = std::floor(static_cast<float>(bitmap.getWidth()) * cropX / 2.0f);
-  const int cropPixY = std::floor(static_cast<float>(bitmap.getHeight()) * cropY / 2.0f);
-  const int effSrcW = std::max(1, bitmap.getWidth() - (2 * cropPixX));
-  const int effSrcH = std::max(1, bitmap.getHeight() - (2 * cropPixY));
-  const float croppedWidth = (1.0f - cropX) * static_cast<float>(bitmap.getWidth());
-  const float croppedHeight = (1.0f - cropY) * static_cast<float>(bitmap.getHeight());
-  bool isScaled = false;
-  float scale = 1.0f;
-  if (croppedWidth > 0.0f && croppedHeight > 0.0f) {
-    float fitScale = static_cast<float>(pageWidth) / croppedWidth;
-    fitScale = std::min(fitScale, static_cast<float>(pageHeight) / croppedHeight);
-    if (fitScale < 1.0f || (allowScaleUp && fitScale > 1.0f)) {
-      scale = fitScale;
-      isScaled = true;
-    }
-  }
-  if (isScaled) {
-    drawWidth = std::max(1, static_cast<int>(std::floor(static_cast<float>(effSrcW - 1) * scale)) + 1);
-    drawHeight = std::max(1, static_cast<int>(std::floor(static_cast<float>(effSrcH - 1) * scale)) + 1);
-  } else {
-    drawWidth = effSrcW;
-    drawHeight = effSrcH;
-  }
   x = (pageWidth - drawWidth) / 2;
   y = (pageHeight - drawHeight) / 2;
 
