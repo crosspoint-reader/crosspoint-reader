@@ -167,7 +167,6 @@ void MyLibraryActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
-
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
@@ -189,6 +188,14 @@ void MyLibraryActivity::loop() {
   });
 }
 
+std::string getFileName(std::string filename) {
+  if (filename.back() == '/') {
+    return filename.substr(0, filename.length() - 1);
+  }
+  const auto pos = filename.rfind('.');
+  return filename.substr(0, pos);
+}
+
 void MyLibraryActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
@@ -206,7 +213,8 @@ void MyLibraryActivity::render(Activity::RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return files[index]; }, nullptr, nullptr, nullptr);
+        [this](int index) { return getFileName(files[index]); }, nullptr,
+        [this](int index) { return UITheme::getFileIcon(files[index]); });
   }
 
   // Help text
