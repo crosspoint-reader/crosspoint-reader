@@ -67,10 +67,11 @@ bool Page::serialize(FsFile& file) const {
     }
   }
 
-  // Serialize footnotes
-  const uint16_t fnCount = footnotes.size();
+  // Serialize footnotes (clamp to 16 to match addFootnote/deserialize limits)
+  const uint16_t fnCount = std::min<uint16_t>(footnotes.size(), 16);
   serialization::writePod(file, fnCount);
-  for (const auto& fn : footnotes) {
+  for (uint16_t i = 0; i < fnCount; i++) {
+    const auto& fn = footnotes[i];
     if (file.write(fn.number, sizeof(fn.number)) != sizeof(fn.number) ||
         file.write(fn.href, sizeof(fn.href)) != sizeof(fn.href)) {
       LOG_ERR("PGE", "Failed to write footnote");

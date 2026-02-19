@@ -56,7 +56,7 @@ void EpubReaderFootnotesActivity::render(Activity::RenderLock&&) {
   renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_FOOTNOTES), true, EpdFontFamily::BOLD);
 
   if (footnotes.empty()) {
-    renderer.drawCenteredText(SMALL_FONT_ID, 90, "No footnotes on this page");
+    renderer.drawCenteredText(SMALL_FONT_ID, 90, tr(STR_NO_FOOTNOTES));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
@@ -83,7 +83,7 @@ void EpubReaderFootnotesActivity::render(Activity::RenderLock&&) {
     // Show footnote number and abbreviated href
     std::string label = footnotes[i].number;
     if (label.empty()) {
-      label = "[link]";
+      label = tr(STR_LINK);
     }
     renderer.drawText(UI_10_FONT_ID, marginLeft, y + 4, label.c_str(), !isSelected);
   }
