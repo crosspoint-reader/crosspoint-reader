@@ -67,6 +67,9 @@ void KOReaderAuthActivity::performRegistration() {
     if (result == KOReaderSyncClient::OK) {
       state = SUCCESS;
       statusMessage = tr(STR_REGISTER_SUCCESS);
+    } else if (result == KOReaderSyncClient::USER_EXISTS) {
+      state = USER_EXISTS;
+      errorMessage = KOReaderSyncClient::errorString(result);
     } else {
       state = FAILED;
       errorMessage = KOReaderSyncClient::errorString(result);
@@ -159,8 +162,14 @@ void KOReaderAuthActivity::render(Activity::RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, tr(STR_SYNC_READY));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  } else if (state == USER_EXISTS) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_USERNAME_TAKEN), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_AUTHENTICATE), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_FAILED), true, EpdFontFamily::BOLD);
+    const char* failedMsg = (mode == Mode::REGISTER) ? tr(STR_REGISTER_FAILED) : tr(STR_AUTH_FAILED);
+    renderer.drawCenteredText(UI_10_FONT_ID, top, failedMsg, true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -187,6 +196,18 @@ void KOReaderAuthActivity::loop() {
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       mode = Mode::REGISTER;
+      startWifi();
+      return;
+    }
+  }
+
+  if (state == USER_EXISTS) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      onComplete();
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      mode = Mode::LOGIN;
       startWifi();
       return;
     }

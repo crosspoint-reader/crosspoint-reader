@@ -61,7 +61,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::registerUser() {
   std::string body;
   serializeJson(doc, body);
 
-  LOG_DBG("KOSync", "Register request body: %s", body.c_str());
+  LOG_DBG("KOSync", "Register request body: <redacted credentials>");
 
   const int httpCode = http.POST(body.c_str());
   const String responseBody = http.getString();

@@ -24,7 +24,7 @@ class KOReaderAuthActivity final : public ActivityWithSubactivity {
   bool preventAutoSleep() override { return state == CONNECTING || state == AUTHENTICATING || state == REGISTERING; }
 
  private:
-  enum State { IDLE, WIFI_SELECTION, CONNECTING, AUTHENTICATING, REGISTERING, SUCCESS, FAILED };
+  enum State { IDLE, WIFI_SELECTION, CONNECTING, AUTHENTICATING, REGISTERING, SUCCESS, FAILED, USER_EXISTS };
 
   State state = IDLE;
   Mode mode = Mode::PROMPT;
