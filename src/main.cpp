@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
@@ -15,11 +14,19 @@
 #include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "activities/boot_sleep/BootActivity.h"
+#include "activities/boot_sleep/SleepActivity.h"
+#include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
+#include "util/ButtonNavigator.h"
+
+#ifndef RECOVERY
+#include <Epub.h>
+
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
-#include "activities/boot_sleep/BootActivity.h"
-#include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
 #include "activities/home/MyLibraryActivity.h"
@@ -27,10 +34,9 @@
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
-#include "activities/util/FullScreenMessageActivity.h"
-#include "components/UITheme.h"
-#include "fontIds.h"
-#include "util/ButtonNavigator.h"
+#else  // RECOVERY
+#include "activities/recovery/RecoveryActivity.h"
+#endif  // RECOVERY
 
 HalDisplay display;
 HalGPIO gpio;
@@ -39,12 +45,14 @@ GfxRenderer renderer(display);
 Activity* currentActivity;
 
 // Fonts
+#ifndef RECOVERY
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
 EpdFont bookerly14BoldFont(&bookerly_14_bold);
 EpdFont bookerly14ItalicFont(&bookerly_14_italic);
 EpdFont bookerly14BoldItalicFont(&bookerly_14_bolditalic);
 EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
                                    &bookerly14BoldItalicFont);
+#endif
 #ifndef OMIT_FONTS
 EpdFont bookerly12RegularFont(&bookerly_12_regular);
 EpdFont bookerly12BoldFont(&bookerly_12_bold);
@@ -210,6 +218,7 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
+#ifndef RECOVERY
 void onGoHome();
 void onGoToMyLibraryWithPath(const std::string& path);
 void onGoToRecentBooks();
@@ -254,12 +263,20 @@ void onGoHome() {
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
                                     onGoToSettings, onGoToFileTransfer, onGoToBrowser));
 }
+#else   // RECOVERY
+void onGoToRecovery() {
+  exitActivity();
+  enterNewActivity(new RecoveryActivity(renderer, mappedInputManager));
+}
+#endif  // RECOVERY
 
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();
   LOG_DBG("MAIN", "Display initialized");
+#ifndef RECOVERY
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
+#endif  // RECOVERY
 #ifndef OMIT_FONTS
   renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
   renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
@@ -308,7 +325,7 @@ void setup() {
 
   SETTINGS.loadFromFile();
   I18N.loadSettings();
-  KOREADER_STORE.loadFromFile();
+
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
@@ -338,6 +355,8 @@ void setup() {
   exitActivity();
   enterNewActivity(new BootActivity(renderer, mappedInputManager));
 
+#ifndef RECOVERY
+  KOREADER_STORE.loadFromFile();
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
@@ -354,6 +373,9 @@ void setup() {
     APP_STATE.saveToFile();
     onGoToReader(path);
   }
+#else   // RECOVERY
+  onGoToRecovery();
+#endif  // RECOVERY
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();

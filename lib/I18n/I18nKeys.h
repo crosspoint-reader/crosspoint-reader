@@ -350,6 +350,7 @@ enum class StrId : uint16_t {
   STR_BOOK_S_STYLE,
   STR_EMBEDDED_STYLE,
   STR_OPDS_SERVER_URL,
+  STR_ENTER_RECOVERY,
   // Sentinel - must be last
   _COUNT
 };

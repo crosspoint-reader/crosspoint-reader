@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 
+#include "../recovery/RecoveryUtils.h"
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
@@ -51,6 +52,7 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_ENTER_RECOVERY, SettingAction::EnterRecovery));
 
   // Reset selection to first category
   selectedCategoryIndex = 0;
@@ -198,6 +200,11 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Language:
         enterSubActivity(new LanguageSelectActivity(renderer, mappedInput, onComplete));
+        break;
+      case SettingAction::EnterRecovery:
+        GUI.drawPopup(renderer, "Rebooting...");
+        delay(200);  // Small delay to allow display to update before rebooting
+        Recovery::reboot(true);
         break;
       case SettingAction::None:
         // Do nothing
