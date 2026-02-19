@@ -343,6 +343,38 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
     std::string key = normalized(sel);
     if (key.empty()) continue;
 
+    // TODO: Consider adding support for sibling css selectors in the future
+    // Ensure no + in selector as we don't support adjacent CSS selectors for now
+    if (key.find('+') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for direct nested css selectors in the future
+    // Ensure no > in selector as we don't support nested CSS selectors for now
+    if (key.find('>') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for attribute css selectors in the future
+    // Ensure no [ in selector as we don't support attribute CSS selectors for now
+    if (key.find('[') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for pseudo selectors in the future
+    // Ensure no : in selector as we don't support pseudo CSS selectors for now
+    if (key.find(':') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Add support for more complex selectors in the future
+    // At the moment, we only ever check for `tag`, `tag.class1` or `.class1`
+    // If the selector has whitespace in it, then it's either a CSS selector for a descendant element (e.g. `tag1 tag2`)
+    // or some other slightly more advanced CSS selector which we don't support yet
+    if (key.find(' ') != std::string_view::npos) {
+      continue;
+    }
+
     // Skip if this would exceed the rule limit
     if (rulesBySelector_.size() >= MAX_RULES) {
       LOG_DBG("CSS", "Reached max rules limit, stopping selector processing");
@@ -528,6 +560,7 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
     result.applyOver(tagIt->second);
   }
 
+  // TODO: Support combinations of classes (e.g. style on .class1.class2)
   // 2. Apply class styles (medium priority)
   if (!classAttr.empty()) {
     const auto classes = splitWhitespace(classAttr);
@@ -541,6 +574,7 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
       }
     }
 
+    // TODO: Support combinations of classes (e.g. style on p.class1.class2)
     // 3. Apply element.class styles (higher priority)
     for (const auto& cls : classes) {
       std::string combinedKey = tag + "." + normalized(cls);
