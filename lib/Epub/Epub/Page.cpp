@@ -48,6 +48,48 @@ std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
   return std::unique_ptr<PageImage>(new PageImage(std::move(ib), xPos, yPos));
 }
 
+bool PageImage::isCached() const { return imageBlock->isCached(); }
+
+void Page::renderTextOnly(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  for (auto& element : elements) {
+    if (element->getTag() == TAG_PageLine) {
+      element->render(renderer, fontId, xOffset, yOffset);
+    }
+  }
+}
+
+int Page::countUncachedImages() const {
+  int count = 0;
+  for (auto& element : elements) {
+    if (element->getTag() == TAG_PageImage) {
+      auto* img = static_cast<PageImage*>(element.get());
+      if (!img->isCached()) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+void Page::renderImagesWithProgress(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
+                                    const std::function<void(int, int)>& progressCallback) const {
+  int total = countUncachedImages();
+  int current = 0;
+  for (auto& element : elements) {
+    if (element->getTag() == TAG_PageImage) {
+      auto* img = static_cast<PageImage*>(element.get());
+      bool wasCached = img->isCached();
+      element->render(renderer, fontId, xOffset, yOffset);
+      if (!wasCached) {
+        current++;
+        if (progressCallback) {
+          progressCallback(current, total);
+        }
+      }
+    }
+  }
+}
+
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
   for (auto& element : elements) {
     element->render(renderer, fontId, xOffset, yOffset);

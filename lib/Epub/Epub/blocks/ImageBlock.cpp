@@ -93,6 +93,11 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
 }  // namespace
 
+bool ImageBlock::isCached() const {
+  std::string cachePath = getCachePath(imagePath);
+  return Storage.exists(cachePath.c_str());
+}
+
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 

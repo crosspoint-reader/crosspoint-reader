@@ -642,14 +642,40 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // as grayscale tones require half refresh to display correctly
   bool forceFullRefresh = page->hasImages() && SETTINGS.textAntiAliasing;
 
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
-  renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
-  if (forceFullRefresh || pagesUntilFullRefresh <= 1) {
+  const int uncachedImages = page->countUncachedImages();
+
+  if (uncachedImages > 0) {
+    // Phase 1: Render text only + status bar → display immediately so user sees text
+    page->renderTextOnly(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    renderer.displayBuffer();
+
+    // Phase 2: Show "Rendering" popup → decode images with progress bar
+    auto popupRect = GUI.drawPopup(renderer, tr(STR_RENDERING));
+    page->renderImagesWithProgress(
+        renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop,
+        [this, &popupRect](int current, int total) {
+          int progress = (current * 100) / total;
+          GUI.fillPopupProgress(renderer, popupRect, progress);
+        });
+
+    // Phase 3: Clear screen → re-render full page from cache → clean display
+    renderer.clearScreen();
+    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
-    renderer.displayBuffer();
-    pagesUntilFullRefresh--;
+    // All images cached (or no images): existing single-pass path
+    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    if (forceFullRefresh || pagesUntilFullRefresh <= 1) {
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
+    } else {
+      renderer.displayBuffer();
+      pagesUntilFullRefresh--;
+    }
   }
 
   // Save bw buffer to reset buffer state after grayscale data sync
