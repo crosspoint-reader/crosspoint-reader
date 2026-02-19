@@ -2,7 +2,6 @@
 
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Txt.h>
@@ -184,13 +183,6 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   }
   x = (pageWidth - drawWidth) / 2;
   y = (pageHeight - drawHeight) / 2;
-
-  // X3 panel has a small effective origin bias in portrait during sleep-image draws.
-  // Apply a placement-only correction (no scaling change) to keep covers visually centered.
-  if (gpio.deviceIsX3()) {
-    constexpr int X3_SLEEP_X_BIAS = -7;
-    x += X3_SLEEP_X_BIAS;
-  }
 
   LOG_DBG("SLP", "drawing to %d x %d size %d x %d", x, y, drawWidth, drawHeight);
   renderer.clearScreen();
