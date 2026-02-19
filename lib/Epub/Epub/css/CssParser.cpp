@@ -225,6 +225,48 @@ CssLength CssParser::interpretLength(const std::string& val) {
 
   return CssLength{numericValue, unit};
 }
+
+bool CssParser::tryInterpretLength(const std::string& val, CssLength& out) {
+  const std::string v = normalized(val);
+  if (v.empty()) {
+    out = CssLength{};
+    return false;
+  }
+
+  size_t unitStart = v.size();
+  for (size_t i = 0; i < v.size(); ++i) {
+    const char c = v[i];
+    if (!std::isdigit(c) && c != '.' && c != '-' && c != '+') {
+      unitStart = i;
+      break;
+    }
+  }
+
+  const std::string numPart = v.substr(0, unitStart);
+  const std::string unitPart = v.substr(unitStart);
+
+  char* endPtr = nullptr;
+  const float numericValue = std::strtof(numPart.c_str(), &endPtr);
+  if (endPtr == numPart.c_str()) {
+    out = CssLength{};
+    return false;  // No number parsed (e.g. auto, inherit, initial)
+  }
+
+  auto unit = CssUnit::Pixels;
+  if (unitPart == "em") {
+    unit = CssUnit::Em;
+  } else if (unitPart == "rem") {
+    unit = CssUnit::Rem;
+  } else if (unitPart == "pt") {
+    unit = CssUnit::Points;
+  } else if (unitPart == "%") {
+    unit = CssUnit::Percent;
+  }
+
+  out = CssLength{numericValue, unit};
+  return true;
+}
+
 // Declaration parsing
 
 void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& style, std::string& propNameBuf,
@@ -296,11 +338,17 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
           1;
     }
   } else if (propNameBuf == "height") {
-    style.imageHeight = interpretLength(propValueBuf);
-    style.defined.imageHeight = 1;
+    CssLength len;
+    if (tryInterpretLength(propValueBuf, len)) {
+      style.imageHeight = len;
+      style.defined.imageHeight = 1;
+    }
   } else if (propNameBuf == "width") {
-    style.imageWidth = interpretLength(propValueBuf);
-    style.defined.imageWidth = 1;
+    CssLength len;
+    if (tryInterpretLength(propValueBuf, len)) {
+      style.imageWidth = len;
+      style.defined.imageWidth = 1;
+    }
   }
 }
 
@@ -568,7 +616,7 @@ CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return par
 // Cache serialization
 
 // Cache format version - increment when format changes
-constexpr uint8_t CSS_CACHE_VERSION = 2;
+constexpr uint8_t CSS_CACHE_VERSION = 3;
 constexpr char rulesCache[] = "/css_rules.cache";
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
