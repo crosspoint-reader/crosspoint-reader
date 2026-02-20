@@ -85,10 +85,12 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
 
   LOG_DBG("RBS", "Loading recent book: %s", path.c_str());
 
-  // If epub, try to load the metadata for title/author and cover
+  // If epub, try to load the metadata for title/author and cover.
+  // Use buildIfMissing=true so we build the metadata cache when missing (e.g. cache cleared);
+  // otherwise getTitle()/getAuthor() stay blank until the book is opened.
   if (StringUtils::checkFileExtension(lastBookFileName, ".epub")) {
     Epub epub(path, "/.crosspoint");
-    epub.load(false, true);
+    epub.load(true, true);
     return RecentBook{path, epub.getTitle(), epub.getAuthor(), epub.getThumbBmpPath()};
   } else if (StringUtils::checkFileExtension(lastBookFileName, ".xtch") ||
              StringUtils::checkFileExtension(lastBookFileName, ".xtc")) {
