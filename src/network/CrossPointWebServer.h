@@ -3,7 +3,7 @@
 #include <HalStorage.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
-#include <WiFiUdp.h>
+#include <NetworkUdp.h>
 
 #include <memory>
 #include <string>
@@ -75,7 +75,7 @@ class CrossPointWebServer {
   bool apMode = false;  // true when running in AP mode, false for STA mode
   uint16_t port = 80;
   uint16_t wsPort = 81;  // WebSocket port
-  WiFiUDP udp;
+  NetworkUDP udp;
   bool udpActive = false;
 
   // WebSocket upload state

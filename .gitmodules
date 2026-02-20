@@ -1,3 +1,4 @@
 [submodule "open-x4-sdk"]
 	path = open-x4-sdk
-	url = https://github.com/open-x4-epaper/community-sdk.git
+	url = https://github.com/dexif/community-sdk.git
+	branch = feat/arduino-core-3x-compat

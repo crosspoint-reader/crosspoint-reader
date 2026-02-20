@@ -502,7 +502,7 @@ void CrossPointWebServer::handleDownload() const {
   server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
   server->send(200, contentType.c_str(), "");
 
-  WiFiClient client = server->client();
+  NetworkClient client = server->client();
   client.write(file);
   file.close();
 }
