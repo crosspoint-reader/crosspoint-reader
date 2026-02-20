@@ -189,23 +189,6 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
   return HalGPIO::DeviceType::X4;
 }
 
-int readAveragedAdc(uint8_t pin, uint8_t samples = 8) {
-  long sum = 0;
-  for (uint8_t i = 0; i < samples; ++i) {
-    sum += analogRead(pin);
-    delayMicroseconds(200);
-  }
-  return static_cast<int>(sum / samples);
-}
-
-int readBiasedAdc(uint8_t pin) {
-  pinMode(pin, INPUT_PULLDOWN);
-  delay(2);
-  const int v = readAveragedAdc(pin, 12);
-  pinMode(pin, INPUT);
-  return v;
-}
-
 }  // namespace
 
 void HalGPIO::begin() {
@@ -213,20 +196,11 @@ void HalGPIO::begin() {
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
   _deviceType = detectDeviceTypeWithFingerprint();
-  _batteryPin = BAT_GPIO0;
 
   if (deviceIsX4()) {
-    // X4 battery monitor is fixed on GPIO0.
-    _detectAdcValue = 0;
-    _detectAdcValueGpio0 = readBiasedAdc(BAT_GPIO0);
-  } else {
-    // X3 uses BQ27220 via I2C, not ADC battery sensing.
-    _detectAdcValue = 0;
-    _detectAdcValueGpio0 = 0;
+    pinMode(BAT_GPIO0, INPUT);
+    pinMode(UART0_RXD, INPUT);
   }
-
-  pinMode(_batteryPin, INPUT);
-  pinMode(UART0_RXD, INPUT);
 }
 
 void HalGPIO::update() { inputMgr.update(); }
