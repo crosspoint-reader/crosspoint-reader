@@ -241,7 +241,7 @@ void EpubReaderActivity::loop() {
   if (prevTriggered) {
     if (section->currentPage > 0) {
       section->currentPage--;
-    } else {
+    } else if (currentSpineIndex > 0) {
       // We don't want to delete the section mid-render, so grab the semaphore
       {
         RenderLock lock(*this);
@@ -613,6 +613,7 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
+    renderer.clearFontCache();
   }
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
 }
@@ -637,13 +638,31 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
-  // Force full refresh for pages with images when anti-aliasing is on,
-  // as grayscale tones require half refresh to display correctly
-  bool forceFullRefresh = page->hasImages() && SETTINGS.textAntiAliasing;
+  // Force special handling for pages with images when anti-aliasing is on
+  bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
-  if (forceFullRefresh || pagesUntilFullRefresh <= 1) {
+  if (imagePageWithAA) {
+    // Double FAST_REFRESH with selective image blanking (pablohc's technique):
+    // HALF_REFRESH sets particles too firmly for the grayscale LUT to adjust.
+    // Instead, blank only the image area and do two fast refreshes.
+    // Step 1: Display page with image area blanked (text appears, image area white)
+    // Step 2: Re-render with images and display again (images appear clean)
+    int16_t imgX, imgY, imgW, imgH;
+    if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
+      renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+      // Re-render page content to restore images into the blanked area
+      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    } else {
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    }
+    // Double FAST_REFRESH handles ghosting for image pages; don't count toward full refresh cadence
+  } else if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
