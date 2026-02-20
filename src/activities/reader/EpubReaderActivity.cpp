@@ -239,7 +239,7 @@ void EpubReaderActivity::loop() {
   if (prevTriggered) {
     if (section->currentPage > 0) {
       section->currentPage--;
-    } else {
+    } else if (currentSpineIndex > 0) {
       // We don't want to delete the section mid-render, so grab the semaphore
       {
         RenderLock lock(*this);
@@ -611,6 +611,7 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
+    renderer.clearFontCache();
   }
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
 }

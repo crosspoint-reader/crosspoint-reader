@@ -1,8 +1,10 @@
 #include <Arduino.h>
 #include <Epub.h>
+#include <FontDecompressor.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -11,7 +13,6 @@
 
 #include <cstring>
 
-#include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -28,6 +29,7 @@ HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
+FontDecompressor fontDecompressor;
 
 // Fonts
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
@@ -162,7 +164,7 @@ void verifyPowerButtonDuration() {
   if (abort) {
     // Button released too early. Returning to sleep.
     // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    gpio.startDeepSleep();
+    powerManager.startDeepSleep(gpio);
   }
 }
 
@@ -185,13 +187,19 @@ void enterDeepSleep() {
   LOG_DBG("MAIN", "Power button press calibration value: %lu ms", t2 - t1);
   LOG_DBG("MAIN", "Entering deep sleep");
 
-  gpio.startDeepSleep();
+  powerManager.startDeepSleep(gpio);
 }
 
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();
   LOG_DBG("MAIN", "Display initialized");
+
+  // Initialize font decompressor for compressed reader fonts
+  if (!fontDecompressor.init()) {
+    LOG_ERR("MAIN", "Font decompressor init failed");
+  }
+  renderer.setFontDecompressor(&fontDecompressor);
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
   renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
@@ -217,6 +225,7 @@ void setup() {
   t1 = millis();
 
   gpio.begin();
+  powerManager.begin();
 
   // Only start serial if USB connected
   if (gpio.isUsbConnected()) {
@@ -255,7 +264,7 @@ void setup() {
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
       LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-      gpio.startDeepSleep();
+      powerManager.startDeepSleep(gpio);
       break;
     case HalGPIO::WakeupReason::AfterFlash:
       // After flashing, just proceed to boot
@@ -328,7 +337,8 @@ void loop() {
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep()) {
-    lastActivityTime = millis();  // Reset inactivity timer
+    lastActivityTime = millis();         // Reset inactivity timer
+    powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
@@ -361,11 +371,12 @@ void loop() {
   // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
   // Otherwise, use longer delay to save power
   if (activityManager.skipLoopDelay()) {
-    yield();  // Give FreeRTOS a chance to run tasks, but return immediately
+    powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
+    yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
-    static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // 3 seconds
-    if (millis() - lastActivityTime >= IDLE_POWER_SAVING_MS) {
+    if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
+      powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
       delay(50);
     } else {
       // Short delay to prevent tight loop while still being responsive

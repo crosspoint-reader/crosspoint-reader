@@ -1,6 +1,7 @@
 #include "Activity.h"
 
 #include "ActivityManager.h"
+#include <HalPowerManager.h>
 
 void Activity::renderTaskTrampoline(void* param) {
   auto* self = static_cast<Activity*>(param);
@@ -11,6 +12,7 @@ void Activity::renderTaskLoop() {
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     {
+      HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       RenderLock lock(*this);
       render(std::move(lock));
     }
