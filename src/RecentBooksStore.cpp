@@ -169,6 +169,7 @@ bool RecentBooksStore::loadFromFile() {
 
     recentBooks.clear();
     recentBooks.reserve(count);
+    bool metadataRefreshed = false;
 
     for (uint8_t i = 0; i < count; i++) {
       std::string path, title, author, coverBmpPath;
@@ -176,7 +177,26 @@ bool RecentBooksStore::loadFromFile() {
       serialization::readString(inputFile, title);
       serialization::readString(inputFile, author);
       serialization::readString(inputFile, coverBmpPath);
+
+      // If title is missing (e.g. file was saved before metadata was available), load from book
+      if (title.empty()) {
+        RecentBook fresh = getDataFromBook(path);
+        if (!fresh.title.empty() || !fresh.author.empty() || !fresh.coverBmpPath.empty()) {
+          title = fresh.title;
+          author = fresh.author;
+          coverBmpPath = fresh.coverBmpPath;
+          metadataRefreshed = true;
+        }
+      }
+
       recentBooks.push_back({path, title, author, coverBmpPath});
+    }
+
+    if (metadataRefreshed) {
+      inputFile.close();
+      saveToFile();
+      LOG_DBG("RBS", "Refreshed missing metadata for recent books");
+      return true;
     }
   }
 
