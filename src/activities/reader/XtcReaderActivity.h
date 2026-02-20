@@ -23,8 +23,7 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc)
-      : ActivityWithSubactivity("XtcReader", renderer, mappedInput),
-        xtc(std::move(xtc)) {}
+      : ActivityWithSubactivity("XtcReader", renderer, mappedInput), xtc(std::move(xtc)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

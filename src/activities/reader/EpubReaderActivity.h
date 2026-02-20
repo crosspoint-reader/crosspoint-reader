@@ -34,8 +34,7 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
-      : ActivityWithSubactivity("EpubReader", renderer, mappedInput),
-        epub(std::move(epub)) {}
+      : ActivityWithSubactivity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

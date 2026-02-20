@@ -22,10 +22,8 @@ class MyLibraryActivity final : public Activity {
   size_t findEntry(const std::string& name) const;
 
  public:
-  explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                             std::string initialPath = "/")
-      : Activity("MyLibrary", renderer, mappedInput),
-        basepath(initialPath.empty() ? "/" : std::move(initialPath)) {}
+  explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/")
+      : Activity("MyLibrary", renderer, mappedInput), basepath(initialPath.empty() ? "/" : std::move(initialPath)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

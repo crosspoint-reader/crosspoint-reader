@@ -19,6 +19,18 @@ void ActivityManager::exitActivity() {
   }
 }
 
+void ActivityManager::enterNewActivity(Activity* newActivity) {
+  if (currentActivity) {
+    // Defer launch if we're currently in an activity, to avoid deleting the current activity leading to the "delete
+    // this" problem
+    pendingActivity = newActivity;
+  } else {
+    // No current activity, safe to launch immediately
+    currentActivity = newActivity;
+    currentActivity->onEnter();
+  }
+}
+
 void ActivityManager::loop() {
   if (currentActivity) {
     currentActivity->loop();
@@ -26,63 +38,41 @@ void ActivityManager::loop() {
 
   if (pendingActivity) {
     // Current activity has requested a new activity to be launched
-    // Or, this is the first activity being launched (currentActivity is null)
-    if (currentActivity) {
-      exitActivity();
-    }
+    exitActivity();
     currentActivity = pendingActivity;
+    pendingActivity = nullptr;
     currentActivity->onEnter();
   }
 }
 
-void ActivityManager::goToFileTransfer() {
-  enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInput));
-}
+void ActivityManager::goToFileTransfer() { enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInput)); }
 
-void ActivityManager::goToSettings() {
-  enterNewActivity(new SettingsActivity(renderer, mappedInput));
-}
+void ActivityManager::goToSettings() { enterNewActivity(new SettingsActivity(renderer, mappedInput)); }
 
 void ActivityManager::goToMyLibrary(Intent&& intent) {
   enterNewActivity(new MyLibraryActivity(renderer, mappedInput, intent.path));
 }
 
-void ActivityManager::goToRecentBooks() {
-  enterNewActivity(new RecentBooksActivity(renderer, mappedInput));
-}
+void ActivityManager::goToRecentBooks() { enterNewActivity(new RecentBooksActivity(renderer, mappedInput)); }
 
-void ActivityManager::goToBrowser() {
-  enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInput));
-}
+void ActivityManager::goToBrowser() { enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInput)); }
 
 void ActivityManager::goToReader(Intent&& intent) {
   enterNewActivity(new ReaderActivity(renderer, mappedInput, intent.path));
 }
 
-void ActivityManager::goToSleep() {
-  enterNewActivity(new SleepActivity(renderer, mappedInput));
-}
+void ActivityManager::goToSleep() { enterNewActivity(new SleepActivity(renderer, mappedInput)); }
 
-void ActivityManager::goToBoot() {
-  enterNewActivity(new BootActivity(renderer, mappedInput));
-}
+void ActivityManager::goToBoot() { enterNewActivity(new BootActivity(renderer, mappedInput)); }
 
 void ActivityManager::goToFullScreenMessage(Intent&& intent) {
   enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, intent.message, intent.messageStyle));
 }
 
-void ActivityManager::goHome() {
-  enterNewActivity(new HomeActivity(renderer, mappedInput));
-}
+void ActivityManager::goHome() { enterNewActivity(new HomeActivity(renderer, mappedInput)); }
 
-bool ActivityManager::preventAutoSleep() const {
-  return currentActivity && currentActivity->preventAutoSleep();
-}
+bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }
 
-bool ActivityManager::isReaderActivity() const {
-  return currentActivity && currentActivity->isReaderActivity();
-}
+bool ActivityManager::isReaderActivity() const { return currentActivity && currentActivity->isReaderActivity(); }
 
-bool ActivityManager::skipLoopDelay() const {
-  return currentActivity && currentActivity->skipLoopDelay();
-}
+bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }

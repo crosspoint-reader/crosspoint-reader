@@ -15,7 +15,7 @@ struct Intent {
   EpdFontFamily::Style messageStyle;
 };
 
-class Activity; // forward declaration
+class Activity;  // forward declaration
 
 class ActivityManager {
  protected:
@@ -24,7 +24,7 @@ class ActivityManager {
   Activity* currentActivity = nullptr;
 
   void exitActivity();
-  void enterNewActivity(Activity* newActivity) { pendingActivity = newActivity; }
+  void enterNewActivity(Activity* newActivity);
 
   // Pending activity to be launched on next loop iteration
   Activity* pendingActivity = nullptr;
@@ -52,4 +52,4 @@ class ActivityManager {
   bool skipLoopDelay() const;
 };
 
-extern ActivityManager activityManager; // singleton, to be defined in main.cpp
+extern ActivityManager activityManager;  // singleton, to be defined in main.cpp

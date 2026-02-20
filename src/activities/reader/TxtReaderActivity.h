@@ -39,8 +39,7 @@ class TxtReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)
-      : ActivityWithSubactivity("TxtReader", renderer, mappedInput),
-        txt(std::move(txt)) {}
+      : ActivityWithSubactivity("TxtReader", renderer, mappedInput), txt(std::move(txt)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

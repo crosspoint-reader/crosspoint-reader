@@ -27,8 +27,7 @@ class ReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath)
-      : ActivityWithSubactivity("Reader", renderer, mappedInput),
-        initialBookPath(std::move(initialBookPath)) {}
+      : ActivityWithSubactivity("Reader", renderer, mappedInput), initialBookPath(std::move(initialBookPath)) {}
   void onEnter() override;
   bool isReaderActivity() const override { return true; }
 };

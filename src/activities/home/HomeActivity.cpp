@@ -262,22 +262,12 @@ void HomeActivity::onSelectBook(const std::string& path) {
   activityManager.goToReader(std::move(intent));
 }
 
-void HomeActivity::onMyLibraryOpen() {
-  activityManager.goToMyLibrary(Intent{});
-}
+void HomeActivity::onMyLibraryOpen() { activityManager.goToMyLibrary(Intent{}); }
 
-void HomeActivity::onRecentsOpen() {
-  activityManager.goToRecentBooks();
-}
+void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
 
-void HomeActivity::onSettingsOpen() {
-  activityManager.goToSettings();
-}
+void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
-void HomeActivity::onFileTransferOpen() {
-  activityManager.goToFileTransfer();
-}
+void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
-void HomeActivity::onOpdsBrowserOpen() {
-  activityManager.goToBrowser();
-}
+void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }

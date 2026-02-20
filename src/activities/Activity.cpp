@@ -1,4 +1,5 @@
 #include "Activity.h"
+
 #include "ActivityManager.h"
 
 void Activity::renderTaskTrampoline(void* param) {
@@ -50,9 +51,7 @@ void Activity::requestUpdateAndWait() {
   delay(100);
 }
 
-void Activity::onGoHome() {
-  activityManager.goHome();
-}
+void Activity::onGoHome() { activityManager.goHome(); }
 
 void Activity::onSelectBook(const std::string& path) {
   Intent intent;
