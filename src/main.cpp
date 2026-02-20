@@ -33,6 +33,10 @@
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 
+#ifdef ENABLE_PARSEDTEXT_BENCHMARK
+#include "ParsedTextBenchmark.h"
+#endif
+
 HalDisplay display;
 HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
@@ -362,6 +366,13 @@ void setup() {
     APP_STATE.saveToFile();
     onGoToReader(path);
   }
+
+#ifdef ENABLE_PARSEDTEXT_BENCHMARK
+  // Performance comparison: optimised ParsedText vs the legacy implementation.
+  // Enable by adding  -D ENABLE_PARSEDTEXT_BENCHMARK  to build_flags in platformio.ini.
+  // Requires a USB serial connection so the results are visible via the monitor.
+  runParsedTextBenchmark(renderer, BOOKERLY_14_FONT_ID);
+#endif
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
