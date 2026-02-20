@@ -26,4 +26,5 @@ git ls-files  --exclude-standard ${GIT_LS_FILES_FLAGS} \
     | grep -E '\.(c|cpp|h|hpp)$' \
     | grep -v -E '^lib/EpdFont/builtinFonts/' \
     | grep -v -E '^lib/Epub/Epub/hyphenation/generated/' \
+    | grep -v -E '^lib/uzlib/' \
     | xargs -r clang-format -style=file -i

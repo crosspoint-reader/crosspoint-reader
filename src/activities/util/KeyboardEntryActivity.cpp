@@ -42,7 +42,7 @@ int KeyboardEntryActivity::getRowLength(const int row) const {
     case 3:
       return 10;  // zxcvbnm,./
     case 4:
-      return 10;  // shift (2 wide), space (5 wide), backspace (2 wide), OK
+      return 11;  // shift (2 wide), space (5 wide), backspace (2 wide), OK (2 wide)
     default:
       return 0;
   }
@@ -191,17 +191,19 @@ void KeyboardEntryActivity::loop() {
 }
 
 void KeyboardEntryActivity::render(Activity::RenderLock&&) {
-  const auto pageWidth = renderer.getScreenWidth();
-
   renderer.clearScreen();
 
-  // Draw title
-  renderer.drawCenteredText(UI_10_FONT_ID, startY, title.c_str());
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  auto metrics = UITheme::getInstance().getMetrics();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title.c_str());
 
   // Draw input field
-  const int inputStartY = startY + 22;
-  int inputEndY = startY + 22;
-  renderer.drawText(UI_10_FONT_ID, 10, inputStartY, "[");
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int inputStartY =
+      metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.verticalSpacing * 4;
+  int inputHeight = 0;
 
   std::string displayText;
   if (isPassword) {
@@ -216,34 +218,43 @@ void KeyboardEntryActivity::render(Activity::RenderLock&&) {
   // Render input text across multiple lines
   int lineStartIdx = 0;
   int lineEndIdx = displayText.length();
+  int textWidth = 0;
   while (true) {
     std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
-    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, lineText.c_str());
-    if (textWidth <= pageWidth - 40) {
-      renderer.drawText(UI_10_FONT_ID, 20, inputEndY, lineText.c_str());
+    textWidth = renderer.getTextWidth(UI_12_FONT_ID, lineText.c_str());
+    if (textWidth <= pageWidth - 2 * metrics.contentSidePadding) {
+      if (metrics.keyboardCenteredText) {
+        renderer.drawCenteredText(UI_12_FONT_ID, inputStartY + inputHeight, lineText.c_str());
+      } else {
+        renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, inputStartY + inputHeight, lineText.c_str());
+      }
       if (lineEndIdx == displayText.length()) {
         break;
       }
 
-      inputEndY += renderer.getLineHeight(UI_10_FONT_ID);
+      inputHeight += lineHeight;
       lineStartIdx = lineEndIdx;
       lineEndIdx = displayText.length();
     } else {
       lineEndIdx -= 1;
     }
   }
-  renderer.drawText(UI_10_FONT_ID, pageWidth - 15, inputEndY, "]");
+
+  GUI.drawTextField(renderer, Rect{0, inputStartY, pageWidth, inputHeight}, textWidth);
 
   // Draw keyboard - use compact spacing to fit 5 rows on screen
-  const int keyboardStartY = inputEndY + 25;
-  constexpr int keyWidth = 18;
-  constexpr int keyHeight = 18;
-  constexpr int keySpacing = 3;
+  const int keyboardStartY = metrics.keyboardBottomAligned
+                                 ? pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing -
+                                       (metrics.keyboardKeyHeight + metrics.keyboardKeySpacing) * NUM_ROWS
+                                 : inputStartY + inputHeight + metrics.verticalSpacing * 4;
+  const int keyWidth = metrics.keyboardKeyWidth;
+  const int keyHeight = metrics.keyboardKeyHeight;
+  const int keySpacing = metrics.keyboardKeySpacing;
 
   const char* const* layout = shiftState ? keyboardShift : keyboard;
 
   // Calculate left margin to center the longest row (13 keys)
-  constexpr int maxRowWidth = KEYS_PER_ROW * (keyWidth + keySpacing);
+  const int maxRowWidth = KEYS_PER_ROW * (keyWidth + keySpacing);
   const int leftMargin = (pageWidth - maxRowWidth) / 2;
 
   for (int row = 0; row < NUM_ROWS; row++) {
@@ -253,45 +264,50 @@ void KeyboardEntryActivity::render(Activity::RenderLock&&) {
     const int startX = leftMargin;
 
     // Handle bottom row (row 4) specially with proper multi-column keys
-    if (row == 4) {
+    if (row == SPECIAL_ROW) {
       // Bottom row layout: SHIFT (2 cols) | SPACE (5 cols) | <- (2 cols) | OK (2 cols)
       // Total: 11 visual columns, but we use logical positions for selection
 
       int currentX = startX;
 
       // SHIFT key (logical col 0, spans 2 key widths)
-      const bool shiftSelected = (selectedRow == 4 && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
-      static constexpr StrId shiftIds[3] = {StrId::STR_KBD_SHIFT, StrId::STR_KBD_SHIFT_CAPS, StrId::STR_KBD_LOCK};
-      renderItemWithSelector(currentX + 2, rowY, I18N.get(shiftIds[shiftState]), shiftSelected);
-      currentX += 2 * (keyWidth + keySpacing);
+      const bool shiftSelected = (selectedRow == SPECIAL_ROW && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
+      const int shiftWidth = SPACE_COL - SHIFT_COL;
+      const int shiftXWidth = shiftWidth * (keyWidth + keySpacing);
+      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, shiftXWidth, keyHeight}, shiftString[shiftState],
+                          shiftSelected);
+      currentX += shiftXWidth;
 
       // Space bar (logical cols 2-6, spans 5 key widths)
-      const bool spaceSelected = (selectedRow == 4 && selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL);
-      const int spaceTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "_____");
-      const int spaceXWidth = 5 * (keyWidth + keySpacing);
-      const int spaceXPos = currentX + (spaceXWidth - spaceTextWidth) / 2;
-      renderItemWithSelector(spaceXPos, rowY, "_____", spaceSelected);
+      const bool spaceSelected =
+          (selectedRow == SPECIAL_ROW && selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL);
+      const int spaceWidth = BACKSPACE_COL - SPACE_COL;
+      const int spaceXWidth = spaceWidth * (keyWidth + keySpacing);
+      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, spaceXWidth, keyHeight}, "_____", spaceSelected);
       currentX += spaceXWidth;
 
       // Backspace key (logical col 7, spans 2 key widths)
-      const bool bsSelected = (selectedRow == 4 && selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL);
-      renderItemWithSelector(currentX + 2, rowY, "<-", bsSelected);
-      currentX += 2 * (keyWidth + keySpacing);
+      const bool bsSelected = (selectedRow == SPECIAL_ROW && selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL);
+      const int backspaceWidth = DONE_COL - BACKSPACE_COL;
+      const int backspaceXWidth = backspaceWidth * (keyWidth + keySpacing);
+      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, backspaceXWidth, keyHeight}, "<-", bsSelected);
+      currentX += backspaceXWidth;
 
       // OK button (logical col 9, spans 2 key widths)
-      const bool okSelected = (selectedRow == 4 && selectedCol >= DONE_COL);
-      renderItemWithSelector(currentX + 2, rowY, tr(STR_OK_BUTTON), okSelected);
+      const bool okSelected = (selectedRow == SPECIAL_ROW && selectedCol >= DONE_COL);
+      const int okWidth = getRowLength(row) - DONE_COL;
+      const int okXWidth = okWidth * (keyWidth + keySpacing);
+      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, okXWidth, keyHeight}, tr(STR_OK_BUTTON), okSelected);
     } else {
       // Regular rows: render each key individually
       for (int col = 0; col < getRowLength(row); col++) {
         // Get the character to display
         const char c = layout[row][col];
         std::string keyLabel(1, c);
-        const int charWidth = renderer.getTextWidth(UI_10_FONT_ID, keyLabel.c_str());
 
-        const int keyX = startX + col * (keyWidth + keySpacing) + (keyWidth - charWidth) / 2;
+        const int keyX = startX + col * (keyWidth + keySpacing);
         const bool isSelected = row == selectedRow && col == selectedCol;
-        renderItemWithSelector(keyX, rowY, keyLabel.c_str(), isSelected);
+        GUI.drawKeyboardKey(renderer, Rect{keyX, rowY, keyWidth, keyHeight}, keyLabel.c_str(), isSelected);
       }
     }
   }
@@ -301,17 +317,7 @@ void KeyboardEntryActivity::render(Activity::RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Draw side button hints for Up/Down navigation
-  GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  GUI.drawSideButtonHints(renderer, ">", "<");
 
   renderer.displayBuffer();
-}
-
-void KeyboardEntryActivity::renderItemWithSelector(const int x, const int y, const char* item,
-                                                   const bool isSelected) const {
-  if (isSelected) {
-    const int itemWidth = renderer.getTextWidth(UI_10_FONT_ID, item);
-    renderer.drawText(UI_10_FONT_ID, x - 6, y, "[");
-    renderer.drawText(UI_10_FONT_ID, x + itemWidth, y, "]");
-  }
-  renderer.drawText(UI_10_FONT_ID, x, y, item);
 }

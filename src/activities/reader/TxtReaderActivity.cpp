@@ -368,6 +368,7 @@ void TxtReaderActivity::render(Activity::RenderLock&&) {
 
   renderer.clearScreen();
   renderPage();
+  renderer.clearFontCache();
 
   // Save progress
   saveProgress();

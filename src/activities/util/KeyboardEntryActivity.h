@@ -31,20 +31,18 @@ class KeyboardEntryActivity : public Activity {
    * @param mappedInput Reference to MappedInputManager for handling input
    * @param title Title to display above the keyboard
    * @param initialText Initial text to show in the input field
-   * @param startY Y position to start rendering the keyboard
    * @param maxLength Maximum length of input text (0 for unlimited)
    * @param isPassword If true, display asterisks instead of actual characters
    * @param onComplete Callback invoked when input is complete
    * @param onCancel Callback invoked when input is cancelled
    */
   explicit KeyboardEntryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 std::string title = "Enter Text", std::string initialText = "", const int startY = 10,
+                                 std::string title = "Enter Text", std::string initialText = "",
                                  const size_t maxLength = 0, const bool isPassword = false,
                                  OnCompleteCallback onComplete = nullptr, OnCancelCallback onCancel = nullptr)
       : Activity("KeyboardEntry", renderer, mappedInput),
         title(std::move(title)),
         text(std::move(initialText)),
-        startY(startY),
         maxLength(maxLength),
         isPassword(isPassword),
         onComplete(std::move(onComplete)),
@@ -58,7 +56,6 @@ class KeyboardEntryActivity : public Activity {
 
  private:
   std::string title;
-  int startY;
   std::string text;
   size_t maxLength;
   bool isPassword;
@@ -91,5 +88,4 @@ class KeyboardEntryActivity : public Activity {
   char getSelectedChar() const;
   void handleKeyPress();
   int getRowLength(int row) const;
-  void renderItemWithSelector(int x, int y, const char* item, bool isSelected) const;
 };
