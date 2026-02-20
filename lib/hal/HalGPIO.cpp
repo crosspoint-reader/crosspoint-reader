@@ -4,7 +4,6 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <esp_sleep.h>
-#include <algorithm>
 
 // Global HalGPIO instance
 HalGPIO gpio;
@@ -261,55 +260,30 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
     // Fast path - no duration check needed
     return;
   }
+  // TODO: Intermittent edge case remains: a single tap followed by another single tap
+  // can still power on the device. Tighten wake debounce/state handling here.
 
   // Calibrate: subtract boot time already elapsed, assuming button held since boot
   const uint16_t calibration = millis();
-  uint16_t calibratedDuration = (calibration < requiredDurationMs) ? (requiredDurationMs - calibration) : 1;
+  const uint16_t calibratedDuration = (calibration < requiredDurationMs) ? (requiredDurationMs - calibration) : 1;
 
-  if (deviceIsX3()) {
-    // X3 boots faster with cached device detection, so reduce required hold time,
-    // but keep a floor to prevent accidental single-tap wake.
-    const uint16_t graceMs = std::min<uint16_t>(250, requiredDurationMs / 3);
-    calibratedDuration = (calibratedDuration > graceMs) ? (calibratedDuration - graceMs) : 1;
-    const uint16_t minHoldMs = std::max<uint16_t>(150, requiredDurationMs / 2);
-    if (calibratedDuration < minHoldMs) {
-      calibratedDuration = minHoldMs;
-    }
-  }
-
-  if (deviceIsX3()) {
-    // X3: Direct GPIO read (inputMgr not yet reliable at this point)
-    const uint8_t powerPin = InputManager::POWER_BUTTON_PIN;
-    if (digitalRead(powerPin) != LOW) {
-      startDeepSleep();
-    }
-    const unsigned long holdStart = millis();
-    while (millis() - holdStart < calibratedDuration) {
-      if (digitalRead(powerPin) != LOW) {
-        startDeepSleep();
-      }
-      delay(5);
-    }
-  } else {
-    // X4: Use inputMgr with wait window for it to stabilize
-    const auto start = millis();
+  const auto start = millis();
+  inputMgr.update();
+  // inputMgr.isPressed() may take up to ~500ms to return correct state
+  while (!inputMgr.isPressed(BTN_POWER) && millis() - start < 1000) {
+    delay(10);
     inputMgr.update();
-    // inputMgr.isPressed() may take up to ~500ms to return correct state
-    while (!inputMgr.isPressed(BTN_POWER) && millis() - start < 1000) {
+  }
+  if (inputMgr.isPressed(BTN_POWER)) {
+    do {
       delay(10);
       inputMgr.update();
-    }
-    if (inputMgr.isPressed(BTN_POWER)) {
-      do {
-        delay(10);
-        inputMgr.update();
-      } while (inputMgr.isPressed(BTN_POWER) && inputMgr.getHeldTime() < calibratedDuration);
-      if (inputMgr.getHeldTime() < calibratedDuration) {
-        startDeepSleep();
-      }
-    } else {
+    } while (inputMgr.isPressed(BTN_POWER) && inputMgr.getHeldTime() < calibratedDuration);
+    if (inputMgr.getHeldTime() < calibratedDuration) {
       startDeepSleep();
     }
+  } else {
+    startDeepSleep();
   }
 }
 
@@ -333,22 +307,6 @@ bool HalGPIO::isUsbConnected() const {
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
-
-  if (deviceIsX3()) {
-    // X3 wake classification uses fuel-gauge current for USB detection (not GPIO20).
-    const bool usbConnected = isUsbConnected();
-    if (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP) {
-      return WakeupReason::PowerButton;
-    }
-    if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN) {
-      return WakeupReason::AfterFlash;
-    }
-    // Cold power-on: distinguish USB power from physical power button.
-    if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) {
-      return usbConnected ? WakeupReason::AfterUSBPower : WakeupReason::PowerButton;
-    }
-    return WakeupReason::Other;
-  }
 
   const bool usbConnected = isUsbConnected();
 
