@@ -2,8 +2,6 @@
 #include <Arduino.h>
 #include <EInkDisplay.h>
 
-#include <vector>
-
 class HalDisplay {
  public:
   // Constructor with pin configuration
@@ -61,19 +59,6 @@ class HalDisplay {
   uint32_t getBufferSize() const;
 
  private:
-  static constexpr uint8_t X3_MAX_FAST_REFRESH_STREAK = 8;
-  static constexpr unsigned long X3_MIN_FAST_REFRESH_GAP_MS = 900;
-  static constexpr size_t X3_FRAME_SAMPLE_STRIDE = 128;
-  static constexpr uint8_t X3_LARGE_DELTA_PERCENT = 24;
-
-  RefreshMode applyX3RefreshPolicy(RefreshMode mode);
-  bool x3DetectLargeFrameDelta();
-  void x3CaptureFrameSample();
-
   EInkDisplay einkDisplay;
   bool lastBufferWasGray = false;
-  uint8_t x3FastRefreshStreak = 0;
-  unsigned long x3LastRefreshMs = 0;
-  std::vector<uint8_t> x3FrameSample;
-  bool x3FrameSampleValid = false;
 };
