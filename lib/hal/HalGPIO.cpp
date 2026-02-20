@@ -4,6 +4,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <esp_sleep.h>
+#include <algorithm>
 
 // Global HalGPIO instance
 HalGPIO gpio;
@@ -263,7 +264,18 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
 
   // Calibrate: subtract boot time already elapsed, assuming button held since boot
   const uint16_t calibration = millis();
-  const uint16_t calibratedDuration = (calibration < requiredDurationMs) ? (requiredDurationMs - calibration) : 1;
+  uint16_t calibratedDuration = (calibration < requiredDurationMs) ? (requiredDurationMs - calibration) : 1;
+
+  if (deviceIsX3()) {
+    // X3 boots faster with cached device detection, so reduce required hold time,
+    // but keep a floor to prevent accidental single-tap wake.
+    const uint16_t graceMs = std::min<uint16_t>(250, requiredDurationMs / 3);
+    calibratedDuration = (calibratedDuration > graceMs) ? (calibratedDuration - graceMs) : 1;
+    const uint16_t minHoldMs = std::max<uint16_t>(150, requiredDurationMs / 2);
+    if (calibratedDuration < minHoldMs) {
+      calibratedDuration = minHoldMs;
+    }
+  }
 
   if (deviceIsX3()) {
     // X3: Direct GPIO read (inputMgr not yet reliable at this point)
