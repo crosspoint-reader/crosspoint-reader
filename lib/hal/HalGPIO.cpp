@@ -158,7 +158,12 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
   }
 
   const NvsDeviceValue cachedValue = readNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::Unknown);
+  if (cachedValue == NvsDeviceValue::X3 || cachedValue == NvsDeviceValue::X4) {
+    LOG_INF("HW", "Using cached device type: %s", cachedValue == NvsDeviceValue::X3 ? "X3" : "X4");
+    return nvsToDeviceType(cachedValue);
+  }
 
+  // No cache yet: run active X3 fingerprint probe and persist result.
   const X3ProbeResult pass1 = runX3ProbePass();
   delay(2);
   const X3ProbeResult pass2 = runX3ProbePass();
@@ -178,13 +183,6 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
   if (x4Confirmed) {
     writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X4);
     return HalGPIO::DeviceType::X4;
-  }
-
-  // Inconclusive probe: use sticky cached identity if available.
-  if (cachedValue == NvsDeviceValue::X3 || cachedValue == NvsDeviceValue::X4) {
-    LOG_INF("HW", "X3 probe inconclusive, using cached device type: %s",
-            cachedValue == NvsDeviceValue::X3 ? "X3" : "X4");
-    return nvsToDeviceType(cachedValue);
   }
 
   // Conservative fallback for first boot with inconclusive probes.
