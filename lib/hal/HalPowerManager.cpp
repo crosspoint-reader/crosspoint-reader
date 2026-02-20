@@ -64,7 +64,7 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   esp_deep_sleep_start();
 }
 
-int HalPowerManager::getBatteryPercentage() const {
+uint16_t HalPowerManager::getBatteryPercentage() const {
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
   return battery.readPercentage();
 }
