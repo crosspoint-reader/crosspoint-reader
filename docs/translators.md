@@ -35,4 +35,4 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 - [dawiik](https://github.com/dawiik)
 
 ## Romanian
-- [ariel-lindemann](https:/github.com/ariel-lindemann)
+- [ariel-lindemann](https://github.com/ariel-lindemann)
