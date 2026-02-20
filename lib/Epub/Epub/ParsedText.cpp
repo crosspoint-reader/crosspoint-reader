@@ -365,11 +365,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   words.insert(words.begin() + wordIndex + 1, remainder);
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
 
-  // The remainder inherits whatever continuation status the original word had with the word after it.
-  const bool originalContinuedToNext = wordContinues[wordIndex];
-  // The original word (now prefix) does NOT continue to remainder (hyphen separates them)
-  wordContinues[wordIndex] = false;
-  wordContinues.insert(wordContinues.begin() + wordIndex + 1, originalContinuedToNext);
+  // The prefix keeps the original word's attachment to the previous word.
+  // The remainder does not attach to the prefix (the hyphen separates them).
+  wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
 
   // Update cached widths to reflect the new prefix/remainder pairing.
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
