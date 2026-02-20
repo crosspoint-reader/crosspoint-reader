@@ -140,16 +140,15 @@ void TxtReaderActivity::initializeReader() {
   orientedMarginRight += cachedScreenMargin;
   orientedMarginBottom += cachedScreenMargin;
 
-  auto metrics = UITheme::getInstance().getMetrics();
-
   // Add status bar margin
   const bool showStatusBar = SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
                              SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE ||
                              SETTINGS.statusBarBattery;
   const bool showProgressBar =
       SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  orientedMarginBottom += (showStatusBar ? (statusBarMargin - cachedScreenMargin) : 0) +
-                          (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
+  orientedMarginBottom +=
+      (showStatusBar ? (statusBarMargin - cachedScreenMargin) : 0) +
+      (showProgressBar ? ((SETTINGS.statusBarProgressBarThickness + 1) * 2 + progressBarMarginTop) : 0);
 
   viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;

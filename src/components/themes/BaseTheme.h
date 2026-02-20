@@ -52,7 +52,6 @@ struct ThemeMetrics {
   int sideButtonHintsWidth;
 
   int progressBarHeight;
-  int bookProgressBarHeight;
 
   int keyboardKeyWidth;
   int keyboardKeyHeight;
@@ -89,7 +88,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
-                                 .bookProgressBarHeight = 4,
                                  .keyboardKeyWidth = 22,
                                  .keyboardKeyHeight = 30,
                                  .keyboardKeySpacing = 10,

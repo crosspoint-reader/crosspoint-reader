@@ -525,8 +525,9 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
                              SETTINGS.statusBarBattery;
   const bool showProgressBar =
       SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  orientedMarginBottom += (showStatusBar ? (statusBarMargin - SETTINGS.screenMargin) : 0) +
-                          (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
+  orientedMarginBottom +=
+      (showStatusBar ? (statusBarMargin - SETTINGS.screenMargin) : 0) +
+      (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + progressBarMarginTop) : 0);
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;

@@ -727,9 +727,10 @@ void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t
 
   const int progressBarMaxWidth = renderer.getScreenWidth() - vieweableMarginLeft - vieweableMarginRight;
   const int progressBarY = renderer.getScreenHeight() - vieweableMarginBottom -
-                           BaseMetrics::values.bookProgressBarHeight - additionalYPadding;
+                           ((SETTINGS.statusBarProgressBarThickness + 1) * 2) - additionalYPadding;
   const int barWidth = progressBarMaxWidth * bookProgress / 100;
-  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, BaseMetrics::values.bookProgressBarHeight, true);
+  renderer.fillRect(vieweableMarginLeft, progressBarY, barWidth, ((SETTINGS.statusBarProgressBarThickness + 1) * 2),
+                    true);
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {

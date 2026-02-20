@@ -188,6 +188,7 @@ uint8_t CrossPointSettings::writeSettings(FsFile& file, bool count_only) const {
   writer.writeItem(file, statusBarProgressBar);
   writer.writeItem(file, statusBarTitle);
   writer.writeItem(file, statusBarBattery);
+  writer.writeItem(file, statusBarProgressBarThickness);
   // New fields need to be added at end for backward compatibility
 
   return writer.item_count;
@@ -326,6 +327,8 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, statusBarBattery);
     statusBarSettingsRead = true;
+    if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, statusBarProgressBarThickness, STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT);
     // New fields added at end for backward compatibility
   } while (false);
 
