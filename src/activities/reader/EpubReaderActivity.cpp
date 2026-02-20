@@ -1012,7 +1012,6 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     int titleWidth;
     if (tocIndex == -1) {
       title = tr(STR_UNNAMED);
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     } else {
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
