@@ -339,14 +339,22 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
-    if (!skipLoadingCss && !cssParser->hasCache()) {
-      LOG_DBG("EBP", "Warning: CSS rules cache not found, attempting to parse CSS files");
-      // to get CSS file list
-      if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
-        LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
-        // continue anyway - book will work without CSS and we'll still load any inline style CSS
+    if (!skipLoadingCss) {
+      // Rebuild CSS cache when missing or when cache version changed (loadFromCache removes stale file)
+      bool needCssRebuild = !cssParser->hasCache();
+      if (cssParser->hasCache() && !cssParser->loadFromCache()) {
+        needCssRebuild = true;
       }
-      parseCssFiles();
+      if (needCssRebuild) {
+        LOG_DBG("EBP", "CSS rules cache missing or stale, attempting to parse CSS files");
+        if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
+          LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
+          // continue anyway - book will work without CSS and we'll still load any inline style CSS
+        }
+        parseCssFiles();
+        // Invalidate section caches so they are rebuilt with the new CSS
+        Storage.removeDir((cachePath + "/sections").c_str());
+      }
     }
     LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
     return true;
@@ -447,6 +455,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   if (!skipLoadingCss) {
     // Parse CSS files after cache reload
     parseCssFiles();
+    Storage.removeDir((cachePath + "/sections").c_str());
   }
 
   LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());

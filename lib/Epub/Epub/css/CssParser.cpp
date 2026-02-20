@@ -615,8 +615,7 @@ CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return par
 
 // Cache serialization
 
-// Cache format version - increment when format changes
-constexpr uint8_t CSS_CACHE_VERSION = 3;
+// Cache file name (version is CssParser::CSS_CACHE_VERSION)
 constexpr char rulesCache[] = "/css_rules.cache";
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
@@ -632,7 +631,7 @@ bool CssParser::saveToCache() const {
   }
 
   // Write version
-  file.write(CSS_CACHE_VERSION);
+  file.write(CssParser::CSS_CACHE_VERSION);
 
   // Write rule count
   const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
@@ -710,9 +709,11 @@ bool CssParser::loadFromCache() {
 
   // Read and verify version
   uint8_t version = 0;
-  if (file.read(&version, 1) != 1 || version != CSS_CACHE_VERSION) {
-    LOG_DBG("CSS", "Cache version mismatch (got %u, expected %u)", version, CSS_CACHE_VERSION);
+  if (file.read(&version, 1) != 1 || version != CssParser::CSS_CACHE_VERSION) {
+    LOG_DBG("CSS", "Cache version mismatch (got %u, expected %u), removing stale cache for rebuild", version,
+            CssParser::CSS_CACHE_VERSION);
     file.close();
+    Storage.remove((cachePath + rulesCache).c_str());
     return false;
   }
 
