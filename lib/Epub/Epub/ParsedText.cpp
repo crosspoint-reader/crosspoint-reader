@@ -71,11 +71,11 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 // ---------------------------------------------------------------------------
 
 struct WordWidthCacheEntry {
-  char     word[24];  // NUL-terminated; 23 usable bytes + terminator
-  int      fontId;
+  char word[24];  // NUL-terminated; 23 usable bytes + terminator
+  int fontId;
   uint16_t width;
-  uint8_t  style;     // EpdFontFamily::Style narrowed to one byte
-  bool     valid;     // false = slot empty (BSS-initialised to 0)
+  uint8_t style;  // EpdFontFamily::Style narrowed to one byte
+  bool valid;     // false = slot empty (BSS-initialised to 0)
 };
 
 // Power-of-two size → slot selection via fast bitmask AND.
@@ -123,9 +123,9 @@ static uint16_t cachedMeasureWordWidth(const GfxRenderer& renderer, const int fo
   const uint16_t w = measureWordWidth(renderer, fontId, word, style);
   memcpy(e.word, wordCStr, len + 1);
   e.fontId = fontId;
-  e.width  = w;
-  e.style  = styleByte;
-  e.valid  = true;
+  e.width = w;
+  e.style = styleByte;
+  e.valid = true;
   return w;
 }
 
@@ -159,6 +159,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   const int spaceWidth = renderer.getSpaceWidth(fontId);
   auto wordWidths = calculateWordWidths(renderer, fontId);
 
+  // Build an indexed copy of wordContinues for O(1) random access during layout.
+  // (wordContinues stays as std::list so hyphenateWordAtIndex can splice in O(1).)
   std::vector<bool> continuesVec(wordContinues.begin(), wordContinues.end());
 
   std::vector<size_t> lineBreakIndices;
@@ -212,7 +214,8 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     // First word needs to fit in reduced width if there's an indent
     const int effectiveWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
     while (wordWidths[i] > effectiveWidth) {
-      if (!hyphenateWordAtIndex(i, effectiveWidth, renderer, fontId, wordWidths, /*allowFallbackBreaks=*/true, &continuesVec)) {
+      if (!hyphenateWordAtIndex(i, effectiveWidth, renderer, fontId, wordWidths, /*allowFallbackBreaks=*/true,
+                                &continuesVec)) {
         break;
       }
     }
@@ -544,7 +547,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   }
 
   // *** CRITICAL STEP: CONSUME WORD / STYLE DATA USING SPLICE (O(1)) ***
-  // Iterator arithmetic on std::list is O(n); use std::next to get the end-of-range iterator.
+  // Iterator arithmetic on std::list is O(n); advance each end iterator to the split point first.
   auto wordEndIt = std::next(words.begin(), lineWordCount);
   auto wordStyleEndIt = std::next(wordStyles.begin(), lineWordCount);
   auto wordContinuesEndIt = wordContinues.begin();
