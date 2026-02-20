@@ -308,6 +308,16 @@ std::string ClippingStore::loadClippingPreview(const std::string& bookPath, cons
   return text;
 }
 
+bool ClippingStore::hasClippingAtPage(const std::vector<ClippingEntry>& entries, uint16_t spineIndex,
+                                      uint16_t pageIndex) {
+  for (const auto& e : entries) {
+    if (e.spineIndex == spineIndex && pageIndex >= e.startPage && pageIndex <= e.endPage) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
   auto entries = loadIndex(bookPath);
 
@@ -340,10 +350,9 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
     if (Storage.openFileForRead(TAG, mdPath, origFile)) {
       // Find the minimum textOffset among remaining entries to determine header size
       uint32_t minOffset = origFile.size();
-      auto it = std::min_element(entries.begin(), entries.end(),
-                                 [](const ClippingEntry& a, const ClippingEntry& b) {
-                                   return a.textOffset < b.textOffset;
-                                 });
+      auto it = std::min_element(entries.begin(), entries.end(), [](const ClippingEntry& a, const ClippingEntry& b) {
+        return a.textOffset < b.textOffset;
+      });
       if (it != entries.end()) {
         minOffset = it->textOffset;
       }

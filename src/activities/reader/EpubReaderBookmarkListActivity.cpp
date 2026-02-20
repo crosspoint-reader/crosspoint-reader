@@ -35,9 +35,7 @@ void EpubReaderBookmarkListActivity::onEnter() {
   requestUpdate();
 }
 
-void EpubReaderBookmarkListActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-}
+void EpubReaderBookmarkListActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void EpubReaderBookmarkListActivity::loop() {
   if (subActivity) {
