@@ -86,6 +86,11 @@ class CssParser {
   bool hasCache() const;
 
   /**
+   * Delete CSS rules cache file exists
+   */
+  void deleteCache() const;
+
+  /**
    * Save parsed CSS rules to a cache file.
    * @return true if cache was written successfully
    */

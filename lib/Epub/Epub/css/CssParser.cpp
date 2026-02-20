@@ -640,6 +640,10 @@ constexpr char rulesCache[] = "/css_rules.cache";
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
 
+void CssParser::deleteCache() const {
+  if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
+}
+
 bool CssParser::saveToCache() const {
   if (cachePath.empty()) {
     return false;

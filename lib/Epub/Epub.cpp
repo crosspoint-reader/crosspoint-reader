@@ -268,64 +268,69 @@ void Epub::parseCssFiles() const {
     LOG_DBG("EBP", "No CSS files to parse, but CssParser created for inline styles");
   }
 
+  LOG_DBG("EBP", "CSS files to parse: %zu", cssFiles.size());
+
   // See if we have a cached version of the CSS rules
-  if (!cssParser->hasCache()) {
-    // No cache yet - parse CSS files
-    for (const auto& cssPath : cssFiles) {
-      LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
+  if (cssParser->hasCache()) {
+    LOG_DBG("EBP", "CSS cache exists, skipping parseCssFiles");
+    return;
+  }
 
-      // Check heap before parsing - CSS parsing allocates heavily
-      const uint32_t freeHeap = ESP.getFreeHeap();
-      if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
-        LOG_ERR("EBP", "Insufficient heap for CSS parsing (%u bytes free, need %zu), skipping: %s", freeHeap,
-                MIN_HEAP_FOR_CSS_PARSING, cssPath.c_str());
+  // No cache yet - parse CSS files
+  for (const auto& cssPath : cssFiles) {
+    LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
+
+    // Check heap before parsing - CSS parsing allocates heavily
+    const uint32_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
+      LOG_ERR("EBP", "Insufficient heap for CSS parsing (%u bytes free, need %zu), skipping: %s", freeHeap,
+              MIN_HEAP_FOR_CSS_PARSING, cssPath.c_str());
+      continue;
+    }
+
+    // Check CSS file size before decompressing - skip files that are too large
+    size_t cssFileSize = 0;
+    if (getItemSize(cssPath, &cssFileSize)) {
+      if (cssFileSize > MAX_CSS_FILE_SIZE) {
+        LOG_ERR("EBP", "CSS file too large (%zu bytes > %zu max), skipping: %s", cssFileSize, MAX_CSS_FILE_SIZE,
+                cssPath.c_str());
         continue;
       }
+    }
 
-      // Check CSS file size before decompressing - skip files that are too large
-      size_t cssFileSize = 0;
-      if (getItemSize(cssPath, &cssFileSize)) {
-        if (cssFileSize > MAX_CSS_FILE_SIZE) {
-          LOG_ERR("EBP", "CSS file too large (%zu bytes > %zu max), skipping: %s", cssFileSize, MAX_CSS_FILE_SIZE,
-                  cssPath.c_str());
-          continue;
-        }
-      }
-
-      // Extract CSS file to temp location
-      const auto tmpCssPath = getCachePath() + "/.tmp.css";
-      FsFile tempCssFile;
-      if (!Storage.openFileForWrite("EBP", tmpCssPath, tempCssFile)) {
-        LOG_ERR("EBP", "Could not create temp CSS file");
-        continue;
-      }
-      if (!readItemContentsToStream(cssPath, tempCssFile, 1024)) {
-        LOG_ERR("EBP", "Could not read CSS file: %s", cssPath.c_str());
-        tempCssFile.close();
-        Storage.remove(tmpCssPath.c_str());
-        continue;
-      }
-      tempCssFile.close();
-
-      // Parse the CSS file
-      if (!Storage.openFileForRead("EBP", tmpCssPath, tempCssFile)) {
-        LOG_ERR("EBP", "Could not open temp CSS file for reading");
-        Storage.remove(tmpCssPath.c_str());
-        continue;
-      }
-      cssParser->loadFromStream(tempCssFile);
+    // Extract CSS file to temp location
+    const auto tmpCssPath = getCachePath() + "/.tmp.css";
+    FsFile tempCssFile;
+    if (!Storage.openFileForWrite("EBP", tmpCssPath, tempCssFile)) {
+      LOG_ERR("EBP", "Could not create temp CSS file");
+      continue;
+    }
+    if (!readItemContentsToStream(cssPath, tempCssFile, 1024)) {
+      LOG_ERR("EBP", "Could not read CSS file: %s", cssPath.c_str());
       tempCssFile.close();
       Storage.remove(tmpCssPath.c_str());
+      continue;
     }
+    tempCssFile.close();
 
-    // Save to cache for next time
-    if (!cssParser->saveToCache()) {
-      LOG_ERR("EBP", "Failed to save CSS rules to cache");
+    // Parse the CSS file
+    if (!Storage.openFileForRead("EBP", tmpCssPath, tempCssFile)) {
+      LOG_ERR("EBP", "Could not open temp CSS file for reading");
+      Storage.remove(tmpCssPath.c_str());
+      continue;
     }
-    cssParser->clear();
-
-    LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files", cssParser->ruleCount(), cssFiles.size());
+    cssParser->loadFromStream(tempCssFile);
+    tempCssFile.close();
+    Storage.remove(tmpCssPath.c_str());
   }
+
+  // Save to cache for next time
+  if (!cssParser->saveToCache()) {
+    LOG_ERR("EBP", "Failed to save CSS rules to cache");
+  }
+  cssParser->clear();
+
+  LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files", cssParser->ruleCount(), cssFiles.size());
 }
 
 // load in the meta data for the epub file
@@ -341,12 +346,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   if (bookMetadataCache->load()) {
     if (!skipLoadingCss) {
       // Rebuild CSS cache when missing or when cache version changed (loadFromCache removes stale file)
-      bool needCssRebuild = !cssParser->hasCache();
-      if (cssParser->hasCache() && !cssParser->loadFromCache()) {
-        needCssRebuild = true;
-      }
-      if (needCssRebuild) {
+      if (!cssParser->hasCache() || !cssParser->loadFromCache()) {
         LOG_DBG("EBP", "CSS rules cache missing or stale, attempting to parse CSS files");
+        cssParser->deleteCache();
+
         if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
           LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
           // continue anyway - book will work without CSS and we'll still load any inline style CSS
