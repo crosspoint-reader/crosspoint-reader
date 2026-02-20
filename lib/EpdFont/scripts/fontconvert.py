@@ -273,6 +273,34 @@ for index, glyph in enumerate(all_glyphs):
 
 compress = args.compress
 
+
+def to_byte_aligned(packed, width, height):
+    """Convert packed 2-bit bitmap to byte-aligned format (rows padded to byte boundary).
+
+    In packed format, pixels flow continuously across row boundaries (4 pixels/byte).
+    In byte-aligned format, each row starts at a byte boundary, padding the last byte
+    of each row with zero bits if width % 4 != 0. This improves DEFLATE compression
+    because identical pixel rows produce identical byte patterns regardless of position.
+    """
+    if width == 0 or height == 0:
+        return b''
+    row_stride = (width + 3) // 4  # bytes per byte-aligned row
+    aligned = bytearray(row_stride * height)
+    for y in range(height):
+        for x in range(width):
+            # Read pixel from packed format (continuous bit stream)
+            packed_pos = y * width + x
+            packed_byte_idx = packed_pos // 4
+            packed_shift = (3 - (packed_pos % 4)) * 2
+            pixel = (packed[packed_byte_idx] >> packed_shift) & 0x3
+
+            # Write pixel to byte-aligned format (row-aligned)
+            aligned_byte_idx = y * row_stride + x // 4
+            aligned_shift = (3 - (x % 4)) * 2
+            aligned[aligned_byte_idx] |= (pixel << aligned_shift)
+    return bytes(aligned)
+
+
 # Build groups for compression
 if compress:
     # Script-based grouping: glyphs that co-occur in typical text rendering
@@ -328,11 +356,12 @@ if compress:
 
     for first_idx, count in groups:
         # Concatenate bitmap data for this group
-        group_data = b''
+        group_packed = b''
+        group_aligned = b''
         for gi in range(first_idx, first_idx + count):
             props, packed = all_glyphs[gi]
-            # Update glyph's dataOffset to be within-group offset
-            within_group_offset = len(group_data)
+            # Update glyph's dataOffset to be within-group offset (packed offset)
+            within_group_offset = len(group_packed)
             old_props = modified_glyph_props[gi]
             modified_glyph_props[gi] = GlyphProps(
                 width=old_props.width,
@@ -344,13 +373,14 @@ if compress:
                 data_offset=within_group_offset,
                 code_point=old_props.code_point,
             )
-            group_data += packed
+            group_packed += packed
+            group_aligned += to_byte_aligned(packed, old_props.width, old_props.height)
 
-        # Compress with raw DEFLATE (no zlib/gzip header)
+        # Compress byte-aligned data with raw DEFLATE (no zlib/gzip header)
         compressor = zlib.compressobj(level=9, wbits=-15)
-        compressed = compressor.compress(group_data) + compressor.flush()
+        compressed = compressor.compress(group_aligned) + compressor.flush()
 
-        compressed_groups.append((compressed, len(group_data), count, first_idx))
+        compressed_groups.append((compressed, len(group_aligned), count, first_idx))
         compressed_bitmap_data.extend(compressed)
         compressed_offset += len(compressed)
 
@@ -416,4 +446,6 @@ if compress:
 else:
     print(f"    nullptr,")
     print(f"    0,")
+# glyphToGroup (not used for script-grouped fonts)
+print(f"    nullptr,")
 print("};")

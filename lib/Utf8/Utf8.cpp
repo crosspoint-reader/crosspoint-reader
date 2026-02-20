@@ -13,13 +13,31 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
     return 0;
   }
 
-  const int bytes = utf8CodepointLen(**string);
+  const unsigned char lead = **string;
+  const int bytes = utf8CodepointLen(lead);
   const uint8_t* chr = *string;
-  *string += bytes;
+
+  // Invalid lead byte (stray continuation byte 0x80-0xBF, or 0xFE/0xFF)
+  if (bytes == 1 && lead >= 0x80) {
+    (*string)++;
+    return REPLACEMENT_GLYPH;
+  }
 
   if (bytes == 1) {
+    (*string)++;
     return chr[0];
   }
+
+  // Validate continuation bytes before consuming them
+  for (int i = 1; i < bytes; i++) {
+    if ((chr[i] & 0xC0) != 0x80) {
+      // Missing or invalid continuation byte — skip only the lead byte
+      (*string)++;
+      return REPLACEMENT_GLYPH;
+    }
+  }
+
+  *string += bytes;
 
   uint32_t cp = chr[0] & ((1 << (7 - bytes)) - 1);  // mask header bits
 

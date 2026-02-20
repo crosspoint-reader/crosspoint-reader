@@ -630,9 +630,41 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
     }
 
-    // If we're about to run out of space, then cut the word off and start a new one
+    // If we're about to run out of space, then cut the word off and start a new one.
+    // For CJK text (no spaces), this is the primary word-breaking mechanism.
+    // We must avoid splitting multi-byte UTF-8 sequences across word boundaries,
+    // otherwise the trailing bytes become orphaned continuation bytes that the
+    // decoder can't interpret.
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
-      self->flushPartWordBuffer();
+      // Walk back past continuation bytes (10xxxxxx) to find the lead byte
+      // of the last character in the buffer
+      int leadPos = self->partWordBufferIndex - 1;
+      while (leadPos > 0 && (static_cast<uint8_t>(self->partWordBuffer[leadPos]) & 0xC0) == 0x80) {
+        leadPos--;
+      }
+      // Check if the character starting at leadPos is incomplete
+      uint8_t lead = static_cast<uint8_t>(self->partWordBuffer[leadPos]);
+      int expectedLen = 1;
+      if ((lead & 0xE0) == 0xC0) expectedLen = 2;
+      else if ((lead & 0xF0) == 0xE0) expectedLen = 3;
+      else if ((lead & 0xF8) == 0xF0) expectedLen = 4;
+      int actualLen = self->partWordBufferIndex - leadPos;
+
+      if (actualLen < expectedLen && leadPos > 0) {
+        // Incomplete UTF-8 sequence at the end — save it before flushing
+        char saved[4];
+        for (int j = 0; j < actualLen; j++) {
+          saved[j] = self->partWordBuffer[leadPos + j];
+        }
+        self->partWordBufferIndex = leadPos;
+        self->flushPartWordBuffer();
+        for (int j = 0; j < actualLen; j++) {
+          self->partWordBuffer[j] = saved[j];
+        }
+        self->partWordBufferIndex = actualLen;
+      } else {
+        self->flushPartWordBuffer();
+      }
     }
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
