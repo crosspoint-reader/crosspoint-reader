@@ -28,7 +28,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
 
 ## 1. Hardware Overview
 
-The device utilises the standard buttons on the Xtink X4 (in the same layout as the manufacturer firmware, by default):
+The device utilises the standard buttons on the Xteink X4 (in the same layout as the manufacturer firmware, by default):
 
 ### Button Layout
 | Location        | Buttons                                              |
