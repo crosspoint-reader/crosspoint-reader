@@ -189,41 +189,9 @@ CssTextDecoration CssParser::interpretDecoration(const std::string& val) {
 }
 
 CssLength CssParser::interpretLength(const std::string& val) {
-  const std::string v = normalized(val);
-  if (v.empty()) return CssLength{};
-
-  // Find where the number ends
-  size_t unitStart = v.size();
-  for (size_t i = 0; i < v.size(); ++i) {
-    const char c = v[i];
-    if (!std::isdigit(c) && c != '.' && c != '-' && c != '+') {
-      unitStart = i;
-      break;
-    }
-  }
-
-  const std::string numPart = v.substr(0, unitStart);
-  const std::string unitPart = v.substr(unitStart);
-
-  // Parse numeric value
-  char* endPtr = nullptr;
-  const float numericValue = std::strtof(numPart.c_str(), &endPtr);
-  if (endPtr == numPart.c_str()) return CssLength{};  // No number parsed
-
-  // Determine unit type (preserve for deferred resolution)
-  auto unit = CssUnit::Pixels;
-  if (unitPart == "em") {
-    unit = CssUnit::Em;
-  } else if (unitPart == "rem") {
-    unit = CssUnit::Rem;
-  } else if (unitPart == "pt") {
-    unit = CssUnit::Points;
-  } else if (unitPart == "%") {
-    unit = CssUnit::Percent;
-  }
-  // px and unitless default to Pixels
-
-  return CssLength{numericValue, unit};
+  CssLength result;
+  tryInterpretLength(val, result);
+  return result;
 }
 
 bool CssParser::tryInterpretLength(const std::string& val, CssLength& out) {
