@@ -100,7 +100,9 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
 std::string Page::getPlainText() const {
   std::string result;
   for (const auto& element : elements) {
-    // Only PageLine exists currently (see Page::serialize)
+    if (element->getTag() != TAG_PageLine) {
+      continue;
+    }
     auto* pageLine = static_cast<PageLine*>(element.get());
     if (!result.empty()) {
       result += '\n';

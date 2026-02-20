@@ -28,7 +28,7 @@ The upstream `origin/master` has 48 new commits since our branch diverged. Key b
 
 4. **Other changes**: `HalStorage` replaces `SdMan`, `LOG_DBG/LOG_ERR` replaces `Serial.printf`, `I18n` system, `UITheme`, font compression, and more.
 
-### Task 0.1: Rebase and resolve conflicts
+## Task 0.1: Rebase and resolve conflicts
 
 **Files affected by conflicts:**
 - `src/activities/reader/EpubReaderActivity.h` — our additions (capture state, clipping includes) must merge into master's restructured header
@@ -177,7 +177,7 @@ git push --force-with-lease
 
 ## Part 1: Clipping sidebar indicator
 
-### Task 1.1: Add `hasClippingAtPage` query to ClippingStore
+## Task 1.1: Add `hasClippingAtPage` query to ClippingStore
 
 **Files:**
 - Modify: `src/ClippingStore.h`
@@ -220,7 +220,7 @@ git add src/ClippingStore.h src/ClippingStore.cpp
 git commit -m "feat: add hasClippingAtPage query to ClippingStore"
 ```
 
-### Task 1.2: Cache clipping index in EpubReaderActivity
+## Task 1.2: Cache clipping index in EpubReaderActivity
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderActivity.h`
@@ -265,7 +265,7 @@ git add src/activities/reader/EpubReaderActivity.h src/activities/reader/EpubRea
 git commit -m "feat: cache clipping index in reader for sidebar indicator"
 ```
 
-### Task 1.3: Draw sidebar line in render()
+## Task 1.3: Draw sidebar line in render()
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderActivity.cpp`
@@ -308,7 +308,7 @@ git add src/activities/reader/EpubReaderActivity.cpp
 git commit -m "feat: draw sidebar line on pages with saved clippings"
 ```
 
-### Task 1.4: Handle landscape orientation
+## Task 1.4: Handle landscape orientation
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderActivity.cpp`
@@ -334,7 +334,7 @@ git add src/activities/reader/EpubReaderActivity.cpp
 git commit -m "fix: adjust sidebar position for landscape orientations"
 ```
 
-### Task 1.5: Push and verify CI
+## Task 1.5: Push and verify CI
 
 **Step 1: Push**
 ```bash

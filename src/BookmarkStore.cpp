@@ -99,16 +99,17 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
     return true;
   }
 
+  // Reject when at limit
+  if (entries.size() >= 255) {
+    LOG_DBG(TAG, "Bookmark limit reached (255)");
+    return false;
+  }
+
   entries.push_back(entry);
 
   // Sort by bookPercent ascending
   std::sort(entries.begin(), entries.end(),
             [](const BookmarkEntry& a, const BookmarkEntry& b) { return a.bookPercent < b.bookPercent; });
-
-  // Enforce max 255 entries (uint8_t count)
-  if (entries.size() > 255) {
-    entries.resize(255);
-  }
 
   const bool ok = writeBookmarks(path, entries);
   if (ok) {

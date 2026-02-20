@@ -6,6 +6,22 @@
 #include <algorithm>
 #include <cstring>
 
+namespace {
+std::string escapeYamlString(const std::string& s) {
+  std::string result;
+  result.reserve(s.size());
+  for (char c : s) {
+    if (c == '"')
+      result += "\\\"";
+    else if (c == '\\')
+      result += "\\\\";
+    else
+      result += c;
+  }
+  return result;
+}
+}  // namespace
+
 std::string ClippingStore::getBasePath(const std::string& bookPath) {
   // FNV-1a hash of full book path (same algorithm as BookmarkStore)
   uint32_t hash = 2166136261u;
@@ -42,6 +58,11 @@ bool ClippingStore::writeIndex(const std::string& path, const std::vector<Clippi
   }
 
   // Write count as 2-byte LE
+  if (entries.size() > UINT16_MAX) {
+    LOG_ERR(TAG, "Too many clipping entries (%d)", static_cast<int>(entries.size()));
+    file.close();
+    return false;
+  }
   uint16_t count = static_cast<uint16_t>(entries.size());
   uint8_t countBytes[2] = {static_cast<uint8_t>(count & 0xFF), static_cast<uint8_t>((count >> 8) & 0xFF)};
   if (file.write(countBytes, 2) != 2) {
@@ -172,9 +193,9 @@ bool ClippingStore::saveClipping(const std::string& bookPath, const std::string&
   // Write header for new files
   if (isNew) {
     std::string header = "---\n";
-    header += "title: \"" + bookTitle + "\"\n";
+    header += "title: \"" + escapeYamlString(bookTitle) + "\"\n";
     if (!bookAuthor.empty()) {
-      header += "author: \"" + bookAuthor + "\"\n";
+      header += "author: \"" + escapeYamlString(bookAuthor) + "\"\n";
     }
     header += "---\n\n";
     header += "# " + bookTitle;
@@ -370,14 +391,22 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
 
   // Write header
   if (!header.empty()) {
-    mdFile.write(reinterpret_cast<const uint8_t*>(header.c_str()), header.size());
+    if (mdFile.write(reinterpret_cast<const uint8_t*>(header.c_str()), header.size()) != header.size()) {
+      LOG_ERR(TAG, "Failed to write header during delete");
+      mdFile.close();
+      return false;
+    }
   }
 
   // Write each remaining clipping and update offsets
   for (size_t i = 0; i < texts.size(); i++) {
     entries[i].textOffset = mdFile.size();
     entries[i].textLength = texts[i].size();
-    mdFile.write(reinterpret_cast<const uint8_t*>(texts[i].c_str()), texts[i].size());
+    if (mdFile.write(reinterpret_cast<const uint8_t*>(texts[i].c_str()), texts[i].size()) != texts[i].size()) {
+      LOG_ERR(TAG, "Failed to write clipping %d during delete", static_cast<int>(i));
+      mdFile.close();
+      return false;
+    }
   }
 
   mdFile.close();

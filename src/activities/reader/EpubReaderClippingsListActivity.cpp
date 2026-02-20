@@ -20,7 +20,12 @@ void EpubReaderClippingsListActivity::refreshPreviews() {
     // Read enough to skip markdown headers, but truncate to visible length for fast rendering
     std::string preview = ClippingStore::loadClippingPreview(bookPath, entry, 200);
     if (preview.size() > 55) {
-      preview.resize(52);
+      size_t limit = 52;
+      // Don't split UTF-8 multi-byte characters
+      while (limit > 0 && (preview[limit] & 0xC0) == 0x80) {
+        --limit;
+      }
+      preview.resize(limit);
       preview += "...";
     }
     previewCache.push_back(std::move(preview));

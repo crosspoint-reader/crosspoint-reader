@@ -195,11 +195,12 @@ void EpubReaderActivity::addBookmark() {
   }
   float chapterProgress;
   int bookPercent;
+  int currentPage;
   {
     RenderLock lock(*this);
-    chapterProgress = (section->pageCount > 0)
-                          ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
-                          : 0.0f;
+    currentPage = section->currentPage;
+    chapterProgress =
+        (section->pageCount > 0) ? static_cast<float>(currentPage) / static_cast<float>(section->pageCount) : 0.0f;
     bookPercent =
         clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
   }
@@ -210,10 +211,13 @@ void EpubReaderActivity::addBookmark() {
   entry.bookPercent = static_cast<uint8_t>(bookPercent);
   entry.chapterPercent = static_cast<uint8_t>(chapterPercent);
   entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
-  entry.pageIndex = static_cast<uint16_t>(section->currentPage);
+  entry.pageIndex = static_cast<uint16_t>(currentPage);
 
   const bool ok = BookmarkStore::addBookmark(epub->getPath(), entry);
-  statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
+  {
+    RenderLock lock(*this);
+    statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
+  }
   requestUpdate();
 }
 
@@ -329,6 +333,7 @@ void EpubReaderActivity::loop() {
 
   // Clear any status bar override on page turn (but not the capture marker)
   if (prevTriggered || nextTriggered) {
+    RenderLock lock(*this);
     statusBarOverride.clear();
   }
 

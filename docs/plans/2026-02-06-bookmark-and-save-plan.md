@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add POPUP_MENU state and popup members to header
+## Task 1: Add POPUP_MENU state and popup members to header
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderActivity.h:38-41`
@@ -46,7 +46,7 @@ git commit -m "feat: add POPUP_MENU state and popup members to EpubReaderActivit
 
 ---
 
-### Task 2: Implement renderPopupMenu()
+## Task 2: Implement renderPopupMenu()
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderActivity.cpp` (add new method)
@@ -108,7 +108,7 @@ git commit -m "feat: implement renderPopupMenu() for bookmark/save popup"
 
 ---
 
-### Task 3: Implement writeBookmark()
+## Task 3: Implement writeBookmark()
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderActivity.cpp` (add new method)
@@ -162,7 +162,7 @@ git commit -m "feat: implement writeBookmark() for single-page bookmarks"
 
 ---
 
-### Task 4: Wire up popup state machine in loop()
+## Task 4: Wire up popup state machine in loop()
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderActivity.cpp:253-265` (long-press handler)
@@ -284,7 +284,7 @@ git commit -m "feat: wire popup state machine into reader loop"
 
 ---
 
-### Task 5: Render popup in displayTaskLoop
+## Task 5: Render popup in displayTaskLoop
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderActivity.cpp:644-663` (inside `renderScreen()`)
@@ -324,7 +324,7 @@ git commit -m "feat: render popup overlay in display task"
 
 ---
 
-### Task 6: Rename menu item and update menu handler
+## Task 6: Rename menu item and update menu handler
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderMenuActivity.h:53`
@@ -392,7 +392,7 @@ git commit -m "feat: rename menu item to 'Bookmark & Save', trigger popup from m
 
 ---
 
-### Task 7: Update USER_GUIDE.md
+## Task 7: Update USER_GUIDE.md
 
 **Files:**
 - Modify: `USER_GUIDE.md:19-22` (table of contents)
@@ -464,7 +464,7 @@ git commit -m "docs: update user guide for bookmark & save feature"
 
 ---
 
-### Task 8: Format, build, flash, and final test
+## Task 8: Format, build, flash, and final test
 
 **Step 1: Run formatter**
 
