@@ -367,6 +367,24 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
       continue;
     }
 
+    // TODO: Consider adding support for ID css selectors in the future
+    // Ensure no # in selector as we don't support ID CSS selectors for now
+    if (key.find('#') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for general sibling combinator selectors in the future
+    // Ensure no ~ in selector as we don't support general sibling combinator CSS selectors for now
+    if (key.find('~') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for wildcard css selectors in the future
+    // Ensure no * in selector as we don't support wildcard CSS selectors for now
+    if (key.find('*') != std::string_view::npos) {
+      continue;
+    }
+
     // TODO: Add support for more complex selectors in the future
     // At the moment, we only ever check for `tag`, `tag.class1` or `.class1`
     // If the selector has whitespace in it, then it's either a CSS selector for a descendant element (e.g. `tag1 tag2`)
