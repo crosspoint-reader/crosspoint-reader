@@ -1,9 +1,12 @@
 #include "ActivityWithSubactivity.h"
 
+#include <HalPowerManager.h>
+
 void ActivityWithSubactivity::renderTaskLoop() {
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     {
+      HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       RenderLock lock(*this);
       if (!subActivity) {
         render(std::move(lock));
