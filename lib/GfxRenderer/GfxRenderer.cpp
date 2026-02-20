@@ -892,7 +892,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     const EpdGlyph* glyph = font.getGlyph(cp, style);
     if (!glyph) glyph = font.getGlyph(REPLACEMENT_GLYPH, style);
-    if (glyph) width += glyph->advanceX;width += font.getGlyph(cp, style)->advanceX;
+    if (glyph) width += glyph->advanceX;
     prevCp = cp;
   }
   return width;
