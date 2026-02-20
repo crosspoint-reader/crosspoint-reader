@@ -4,6 +4,17 @@
 
 #include <algorithm>
 
+namespace {
+
+bool isCombiningMark(const uint32_t cp) {
+  return (cp >= 0x0300 && cp <= 0x036F)      // Combining Diacritical Marks
+         || (cp >= 0x1DC0 && cp <= 0x1DFF)   // Combining Diacritical Marks Supplement
+         || (cp >= 0x20D0 && cp <= 0x20FF)   // Combining Diacritical Marks for Symbols
+         || (cp >= 0xFE20 && cp <= 0xFE2F);  // Combining Half Marks
+}
+
+}  // namespace
+
 void EpdFont::getTextBounds(const char* string, const int startX, const int startY, int* minX, int* minY, int* maxX,
                             int* maxY) const {
   *minX = startX;
@@ -35,7 +46,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       continue;
     }
 
-    const bool isCombining = utf8IsCombiningMark(cp);
+    const bool isCombining = isCombiningMark(cp);
     int raiseBy = 0;
     if (isCombining && hasBaseGlyph) {
       const int currentGap = glyph->top - glyph->height - lastBaseTop;
