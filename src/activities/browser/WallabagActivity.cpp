@@ -92,14 +92,11 @@ void enforceArticleLimit(int limit, int newCount) {
 void WallabagActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
-  state = State::CHECK_WIFI;
+  state = State::MENU;
   menuIndex = 0;
   errorMessage.clear();
-  statusMessage = tr(STR_CHECKING_WIFI);
   syncPending = false;
   requestUpdate();
-
-  checkAndConnectWifi();
 }
 
 void WallabagActivity::onExit() {
@@ -158,17 +155,14 @@ void WallabagActivity::loop() {
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (menuIndex == 0) {
-        // Download New Articles
-        state = State::SYNCING;
-        syncPending = true;
-        statusMessage = tr(STR_WALLABAG_SYNCING);
-        downloadedCount = 0;
-        totalToDownload = 0;
-        currentArticleNum = 0;
-        requestUpdate();
-      } else {
         // Go to Articles Folder
         onGoToArticles();
+      } else {
+        // Download New Articles — check WiFi first
+        state = State::CHECK_WIFI;
+        statusMessage = tr(STR_CHECKING_WIFI);
+        requestUpdate();
+        checkAndConnectWifi();
       }
       return;
     }
@@ -237,14 +231,14 @@ void WallabagActivity::render(Activity::RenderLock&&) {
   }
 
   // MENU state
-  const char* items[MENU_ITEM_COUNT] = {tr(STR_WALLABAG_DOWNLOAD), tr(STR_WALLABAG_GO_TO_FOLDER)};
+  const char* items[MENU_ITEM_COUNT] = {tr(STR_WALLABAG_GO_TO_FOLDER), tr(STR_WALLABAG_DOWNLOAD)};
   auto metrics = UITheme::getInstance().getMetrics();
   const int menuTop = 50;
   const int menuHeight = pageHeight - menuTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   GUI.drawButtonMenu(renderer, Rect{0, menuTop, pageWidth, menuHeight}, MENU_ITEM_COUNT, menuIndex,
                      [&items](int i) { return std::string(items[i]); },
-                     [](int) { return Library; });
+                     [](int i) -> UIIcon { return (i == 0) ? Folder : Sync; });
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -253,7 +247,12 @@ void WallabagActivity::render(Activity::RenderLock&&) {
 
 void WallabagActivity::checkAndConnectWifi() {
   if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
-    state = State::MENU;
+    state = State::SYNCING;
+    syncPending = true;
+    statusMessage = tr(STR_WALLABAG_SYNCING);
+    downloadedCount = 0;
+    totalToDownload = 0;
+    currentArticleNum = 0;
     requestUpdate();
     return;
   }
@@ -272,7 +271,12 @@ void WallabagActivity::onWifiSelectionComplete(bool connected) {
   exitActivity();
 
   if (connected) {
-    state = State::MENU;
+    state = State::SYNCING;
+    syncPending = true;
+    statusMessage = tr(STR_WALLABAG_SYNCING);
+    downloadedCount = 0;
+    totalToDownload = 0;
+    currentArticleNum = 0;
     requestUpdate();
   } else {
     WiFi.disconnect();

@@ -38,7 +38,7 @@ class WallabagActivity final : public ActivityWithSubactivity {
 
  private:
   ButtonNavigator buttonNavigator;
-  State state = State::CHECK_WIFI;
+  State state = State::MENU;
   int menuIndex = 0;
 
   std::string statusMessage;

@@ -250,7 +250,7 @@ void HomeActivity::render(Activity::RenderLock&&) {
     // Insert Wallabag after OPDS (or after My Library if OPDS not shown)
     const size_t insertPos = hasOpdsUrl ? 3 : 2;
     menuItems.insert(menuItems.begin() + insertPos, tr(STR_WALLABAG));
-    menuIcons.insert(menuIcons.begin() + insertPos, Library);
+    menuIcons.insert(menuIcons.begin() + insertPos, Newspaper);
   }
 
   GUI.drawButtonMenu(
