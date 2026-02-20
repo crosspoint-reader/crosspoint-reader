@@ -7,6 +7,93 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 
 HalDisplay::~HalDisplay() {}
 
+void HalDisplay::x3CaptureFrameSample() {
+  if (!gpio.deviceIsX3()) {
+    return;
+  }
+  const uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  const uint32_t bufferSize = einkDisplay.getBufferSize();
+  if (!frameBuffer || bufferSize == 0) {
+    x3FrameSample.clear();
+    x3FrameSampleValid = false;
+    return;
+  }
+
+  const size_t sampleCount = (bufferSize + X3_FRAME_SAMPLE_STRIDE - 1) / X3_FRAME_SAMPLE_STRIDE;
+  if (x3FrameSample.size() != sampleCount) {
+    x3FrameSample.assign(sampleCount, 0);
+  }
+
+  for (size_t i = 0; i < sampleCount; ++i) {
+    const size_t offset = i * X3_FRAME_SAMPLE_STRIDE;
+    x3FrameSample[i] = frameBuffer[offset < bufferSize ? offset : (bufferSize - 1)];
+  }
+  x3FrameSampleValid = true;
+}
+
+bool HalDisplay::x3DetectLargeFrameDelta() {
+  if (!gpio.deviceIsX3()) {
+    return false;
+  }
+  const uint8_t* frameBuffer = einkDisplay.getFrameBuffer();
+  const uint32_t bufferSize = einkDisplay.getBufferSize();
+  if (!frameBuffer || bufferSize == 0) {
+    x3FrameSampleValid = false;
+    return false;
+  }
+
+  const size_t sampleCount = (bufferSize + X3_FRAME_SAMPLE_STRIDE - 1) / X3_FRAME_SAMPLE_STRIDE;
+  if (!x3FrameSampleValid || x3FrameSample.size() != sampleCount) {
+    x3CaptureFrameSample();
+    return false;
+  }
+
+  size_t diffCount = 0;
+  for (size_t i = 0; i < sampleCount; ++i) {
+    const size_t offset = i * X3_FRAME_SAMPLE_STRIDE;
+    const uint8_t current = frameBuffer[offset < bufferSize ? offset : (bufferSize - 1)];
+    if (current != x3FrameSample[i]) {
+      diffCount++;
+    }
+  }
+
+  x3CaptureFrameSample();
+  const size_t diffPercent = (diffCount * 100U) / sampleCount;
+  return diffPercent >= X3_LARGE_DELTA_PERCENT;
+}
+
+HalDisplay::RefreshMode HalDisplay::applyX3RefreshPolicy(HalDisplay::RefreshMode mode) {
+  if (!gpio.deviceIsX3()) {
+    return mode;
+  }
+  const unsigned long now = millis();
+
+  if (mode == RefreshMode::FAST_REFRESH) {
+    if (x3DetectLargeFrameDelta()) {
+      x3FastRefreshStreak = 0;
+      x3LastRefreshMs = now;
+      return RefreshMode::HALF_REFRESH;
+    }
+
+    const bool spacedUpdate = (x3LastRefreshMs == 0) || ((now - x3LastRefreshMs) >= X3_MIN_FAST_REFRESH_GAP_MS);
+    if (spacedUpdate) {
+      x3FastRefreshStreak++;
+    }
+    x3LastRefreshMs = now;
+
+    if (x3FastRefreshStreak >= X3_MAX_FAST_REFRESH_STREAK) {
+      x3FastRefreshStreak = 0;
+      return RefreshMode::HALF_REFRESH;
+    }
+    return mode;
+  }
+
+  x3FastRefreshStreak = 0;
+  x3LastRefreshMs = now;
+  x3CaptureFrameSample();
+  return mode;
+}
+
 void HalDisplay::begin() {
   // Set X3-specific display dimensions before initializing
   static constexpr uint16_t X3_DISPLAY_WIDTH = 792;
@@ -23,6 +110,12 @@ void HalDisplay::begin() {
       wakeupReason == HalGPIO::WakeupReason::Other) {
     einkDisplay.requestResync();
   }
+
+  x3FastRefreshStreak = 0;
+  x3LastRefreshMs = 0;
+  x3FrameSample.clear();
+  x3FrameSampleValid = false;
+  x3CaptureFrameSample();
 }
 
 void HalDisplay::setDisplayDimensions(uint16_t width, uint16_t height) {
@@ -53,10 +146,8 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
-void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen, HalDisplay::UpdateType updateType) {
-  if (gpio.deviceIsX3() && updateType == UpdateType::SCENE_CHANGE && mode == RefreshMode::FAST_REFRESH) {
-    mode = RefreshMode::HALF_REFRESH;
-  }
+void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  mode = applyX3RefreshPolicy(mode);
 
   if (gpio.deviceIsX3() && (lastBufferWasGray || mode == RefreshMode::HALF_REFRESH)) {
     einkDisplay.requestResync(1);
@@ -66,10 +157,8 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen,
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 
-void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen, HalDisplay::UpdateType updateType) {
-  if (gpio.deviceIsX3() && updateType == UpdateType::SCENE_CHANGE && mode == RefreshMode::FAST_REFRESH) {
-    mode = RefreshMode::HALF_REFRESH;
-  }
+void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  mode = applyX3RefreshPolicy(mode);
 
   if (gpio.deviceIsX3() && (lastBufferWasGray || mode == RefreshMode::HALF_REFRESH)) {
     einkDisplay.requestResync(1);

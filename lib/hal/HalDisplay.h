@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <EInkDisplay.h>
 
+#include <vector>
+
 class HalDisplay {
  public:
   // Constructor with pin configuration
@@ -15,12 +17,6 @@ class HalDisplay {
     FULL_REFRESH,  // Full refresh with complete waveform
     HALF_REFRESH,  // Half refresh (1720ms) - balanced quality and speed
     FAST_REFRESH   // Fast refresh using custom LUT
-  };
-
-  // Semantic update type hint for HAL policy decisions.
-  enum UpdateType {
-    FAST_UI,       // Frequent small UI deltas (selection, cursor, button highlights)
-    SCENE_CHANGE,  // Major scene/state transitions (e.g. entering a screen)
   };
 
   // Initialize the display hardware and driver
@@ -42,10 +38,8 @@ class HalDisplay {
   void drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                             bool fromProgmem = false) const;
 
-  void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false,
-                     UpdateType updateType = FAST_UI);
-  void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false,
-                      UpdateType updateType = FAST_UI);
+  void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
+  void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Power management
   void deepSleep();
@@ -67,6 +61,19 @@ class HalDisplay {
   uint32_t getBufferSize() const;
 
  private:
+  static constexpr uint8_t X3_MAX_FAST_REFRESH_STREAK = 8;
+  static constexpr unsigned long X3_MIN_FAST_REFRESH_GAP_MS = 900;
+  static constexpr size_t X3_FRAME_SAMPLE_STRIDE = 128;
+  static constexpr uint8_t X3_LARGE_DELTA_PERCENT = 24;
+
+  RefreshMode applyX3RefreshPolicy(RefreshMode mode);
+  bool x3DetectLargeFrameDelta();
+  void x3CaptureFrameSample();
+
   EInkDisplay einkDisplay;
   bool lastBufferWasGray = false;
+  uint8_t x3FastRefreshStreak = 0;
+  unsigned long x3LastRefreshMs = 0;
+  std::vector<uint8_t> x3FrameSample;
+  bool x3FrameSampleValid = false;
 };
