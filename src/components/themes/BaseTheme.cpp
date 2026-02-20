@@ -341,13 +341,56 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
 void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                     const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                     bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
-  // --- Top "book" card for the current title (selectorIndex == 0) ---
-  const int bookWidth = rect.width / 2;
-  const int bookHeight = rect.height;
-  const int bookX = (rect.width - bookWidth) / 2;
-  const int bookY = rect.y;
   const bool hasContinueReading = !recentBooks.empty();
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
+
+  // --- Top "book" card for the current title (selectorIndex == 0) ---
+  // When there's no cover image, use fixed size (half screen)
+  // When there's cover image, adapt width to image aspect ratio, keep height fixed at 400px
+  const int baseHeight = rect.height;  // Fixed height (400px)
+
+  int bookWidth, bookX;
+  bool hasCoverImage = false;
+
+  if (hasContinueReading && !recentBooks[0].coverBmpPath.empty()) {
+    // Try to get actual image dimensions from BMP header
+    const std::string coverBmpPath =
+        UITheme::getCoverThumbPath(recentBooks[0].coverBmpPath, BaseMetrics::values.homeCoverHeight);
+
+    FsFile file;
+    if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
+      Bitmap bitmap(file);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+        hasCoverImage = true;
+        const int imgWidth = bitmap.getWidth();
+        const int imgHeight = bitmap.getHeight();
+
+        // Calculate width based on aspect ratio, maintaining baseHeight
+        if (imgWidth > 0 && imgHeight > 0) {
+          const float aspectRatio = static_cast<float>(imgWidth) / static_cast<float>(imgHeight);
+          bookWidth = static_cast<int>(baseHeight * aspectRatio);
+
+          // Ensure width doesn't exceed reasonable limits (max 90% of screen width)
+          const int maxWidth = static_cast<int>(rect.width * 0.9f);
+          if (bookWidth > maxWidth) {
+            bookWidth = maxWidth;
+          }
+        } else {
+          bookWidth = rect.width / 2;  // Fallback
+        }
+      }
+      file.close();
+    }
+  }
+
+  if (!hasCoverImage) {
+    // No cover: use half screen size
+    bookWidth = rect.width / 2;
+  }
+
+  bookX = rect.x + (rect.width - bookWidth) / 2;
+  const int bookY = rect.y;
+  const int bookHeight = baseHeight;
 
   // Bookmark dimensions (used in multiple places)
   const int bookmarkWidth = bookWidth / 8;
@@ -370,27 +413,9 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           LOG_DBG("THEME", "Rendering bmp");
-          // Calculate position to center image within the book card
-          int coverX, coverY;
 
-          if (bitmap.getWidth() > bookWidth || bitmap.getHeight() > bookHeight) {
-            const float imgRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
-            const float boxRatio = static_cast<float>(bookWidth) / static_cast<float>(bookHeight);
-
-            if (imgRatio > boxRatio) {
-              coverX = bookX;
-              coverY = bookY + (bookHeight - static_cast<int>(bookWidth / imgRatio)) / 2;
-            } else {
-              coverX = bookX + (bookWidth - static_cast<int>(bookHeight * imgRatio)) / 2;
-              coverY = bookY;
-            }
-          } else {
-            coverX = bookX + (bookWidth - bitmap.getWidth()) / 2;
-            coverY = bookY + (bookHeight - bitmap.getHeight()) / 2;
-          }
-
-          // Draw the cover image centered within the book card
-          renderer.drawBitmap(bitmap, coverX, coverY, bookWidth, bookHeight);
+          // Draw the cover image (bookWidth and bookHeight already match image aspect ratio)
+          renderer.drawBitmap(bitmap, bookX, bookY, bookWidth, bookHeight);
 
           // Draw border around the card
           renderer.drawRect(bookX, bookY, bookWidth, bookHeight);
@@ -573,7 +598,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
       const int boxWidth = maxTextWidth + boxPadding * 2;
       const int boxHeight = totalTextHeight + boxPadding * 2;
-      const int boxX = (rect.width - boxWidth) / 2;
+      const int boxX = rect.x + (rect.width - boxWidth) / 2;
       const int boxY = titleYStart - boxPadding;
 
       // Draw box (inverted when selected: black box instead of white)
@@ -616,7 +641,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       constexpr int continuePadding = 6;
       const int continueBoxWidth = continueTextWidth + continuePadding * 2;
       const int continueBoxHeight = renderer.getLineHeight(UI_10_FONT_ID) + continuePadding;
-      const int continueBoxX = (rect.width - continueBoxWidth) / 2;
+      const int continueBoxX = rect.x + (rect.width - continueBoxWidth) / 2;
       const int continueBoxY = continueY - continuePadding / 2;
       renderer.fillRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, bookSelected);
       renderer.drawRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, !bookSelected);
