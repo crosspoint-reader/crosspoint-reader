@@ -23,7 +23,6 @@ void HalDisplay::begin() {
       wakeupReason == HalGPIO::WakeupReason::Other) {
     einkDisplay.requestResync();
   }
-
 }
 
 void HalDisplay::setDisplayDimensions(uint16_t width, uint16_t height) {

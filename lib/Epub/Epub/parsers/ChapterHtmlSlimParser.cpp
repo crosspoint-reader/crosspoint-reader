@@ -242,8 +242,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           } else {
             alt = "[Image: " + alt + "]";
           }
-          LOG_ERR("EHP", "Skipping image extraction (heap=%u, dataUri=%d, srcLen=%u)", freeHeap,
-                  inlineDataUri ? 1 : 0, static_cast<unsigned>(src.size()));
+          LOG_ERR("EHP", "Skipping image extraction (heap=%u, dataUri=%d, srcLen=%u)", freeHeap, inlineDataUri ? 1 : 0,
+                  static_cast<unsigned>(src.size()));
           self->startNewTextBlock(centeredBlockStyle);
           self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
           self->depth += 1;

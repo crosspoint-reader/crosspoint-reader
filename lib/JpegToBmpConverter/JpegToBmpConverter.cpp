@@ -27,7 +27,7 @@ constexpr bool USE_ATKINSON = true;          // Atkinson dithering (cleaner than
 constexpr bool USE_FLOYD_STEINBERG = false;  // Floyd-Steinberg error diffusion (can cause "worm" artifacts)
 constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering (good for downsampling)
 // Pre-resize to target display size (CRITICAL: avoids dithering artifacts from post-downsampling)
-constexpr bool USE_PRESCALE = true;     // true: scale image to target size before dithering
+constexpr bool USE_PRESCALE = true;  // true: scale image to target size before dithering
 constexpr int X4_TARGET_MAX_WIDTH = 480;
 constexpr int X4_TARGET_MAX_HEIGHT = 800;
 constexpr int X3_TARGET_MAX_WIDTH = 528;

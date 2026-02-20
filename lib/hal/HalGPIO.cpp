@@ -27,7 +27,9 @@ struct X3ProbeResult {
   bool ds3231 = false;
   bool qmi8658 = false;
 
-  uint8_t score() const { return static_cast<uint8_t>(bq27220) + static_cast<uint8_t>(ds3231) + static_cast<uint8_t>(qmi8658); }
+  uint8_t score() const {
+    return static_cast<uint8_t>(bq27220) + static_cast<uint8_t>(ds3231) + static_cast<uint8_t>(qmi8658);
+  }
 };
 
 bool readI2CReg8(uint8_t addr, uint8_t reg, uint8_t* outValue) {
@@ -291,14 +293,34 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
 }
 
 bool HalGPIO::isUsbConnected() const {
+  if (deviceIsX3()) {
+    // X3 uses GPIO20 as I2C SDA; it is not a reliable USB detect signal.
+    return false;
+  }
   // U0RXD/GPIO20 reads HIGH when USB is connected
   return digitalRead(UART0_RXD) == HIGH;
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
-  const bool usbConnected = isUsbConnected();
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
+
+  if (deviceIsX3()) {
+    // X3 wake classification must not depend on GPIO20 level.
+    if (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP) {
+      return WakeupReason::PowerButton;
+    }
+    if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN) {
+      return WakeupReason::AfterFlash;
+    }
+    // Cold power-on on X3 is typically user power button.
+    if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) {
+      return WakeupReason::PowerButton;
+    }
+    return WakeupReason::Other;
+  }
+
+  const bool usbConnected = isUsbConnected();
 
   if ((wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) ||
       (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP && usbConnected)) {
