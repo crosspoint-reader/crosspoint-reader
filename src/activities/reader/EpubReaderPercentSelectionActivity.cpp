@@ -59,18 +59,23 @@ void EpubReaderPercentSelectionActivity::loop() {
 void EpubReaderPercentSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
+  // In inverted portrait, the button hints are drawn near the logical top.
+  // Reserve vertical space so list items do not collide with the hints.
+  const bool isPortraitInverted = renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
+
   // Title and numeric percent value.
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_GO_TO_PERCENT), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, hintGutterHeight + 15, tr(STR_GO_TO_PERCENT), true, EpdFontFamily::BOLD);
 
   const std::string percentText = std::to_string(percent) + "%";
-  renderer.drawCenteredText(UI_12_FONT_ID, 90, percentText.c_str(), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, hintGutterHeight + 90, percentText.c_str(), true, EpdFontFamily::BOLD);
 
   // Draw slider track.
   const int screenWidth = renderer.getScreenWidth();
   constexpr int barWidth = 360;
   constexpr int barHeight = 16;
   const int barX = (screenWidth - barWidth) / 2;
-  const int barY = 140;
+  const int barY = hintGutterHeight + 140;
 
   renderer.drawRect(barX, barY, barWidth, barHeight);
 
@@ -89,7 +94,7 @@ void EpubReaderPercentSelectionActivity::render(Activity::RenderLock&&) {
 
   // Button hints follow the current front button layout.
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
 
   renderer.displayBuffer();
 }

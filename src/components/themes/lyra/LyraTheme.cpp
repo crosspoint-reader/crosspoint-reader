@@ -338,34 +338,42 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
-                                const char* btn4) const {
+                                const char* btn4, const bool allowInvertedText) const {
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
-  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  const bool invertText = allowInvertedText && (orig_orientation == GfxRenderer::Orientation::PortraitInverted);
+
+  // The hints look bad if most of a menu is inverted but they aren't
+  if (invertText) {
+    renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+  } else {
+    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  }
 
   const int pageHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = 80;
   constexpr int smallButtonHeight = 15;
   constexpr int buttonHeight = LyraMetrics::values.buttonHintsHeight;
-  constexpr int buttonY = LyraMetrics::values.buttonHintsHeight;  // Distance from bottom
+  const int buttonY = invertText ? pageHeight : LyraMetrics::values.buttonHintsHeight; // Distance from bottom
   constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
   constexpr int buttonPositions[] = {58, 146, 254, 342};
   const char* labels[] = {btn1, btn2, btn3, btn4};
+  const bool roundCorner = !invertText; // If we invert text, need to invert which corners are rounded
 
   for (int i = 0; i < 4; i++) {
-    const int x = buttonPositions[i];
+    const int x = buttonPositions[invertText ? (3-i) : i];
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       // Draw the filled background and border for a FULL-sized button
       renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
-      renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, cornerRadius, true, true, false,
-                               false, true);
+      renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, cornerRadius, roundCorner, roundCorner,
+                               !roundCorner, !roundCorner, true);
       const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
       renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
     } else {
       // Draw the filled background and border for a SMALL-sized button
       renderer.fillRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, false);
-      renderer.drawRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, 1, cornerRadius, true,
-                               true, false, false, true);
+      renderer.drawRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, 1, cornerRadius, roundCorner,
+                               roundCorner, !roundCorner, !roundCorner, true);
     }
   }
 

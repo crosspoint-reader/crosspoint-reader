@@ -54,6 +54,14 @@ class CrossPointSettings {
     ORIENTATION_COUNT
   };
 
+  enum AUTO_BUTTON_ORIENTATION {
+    NO_BUTTONS = 0,
+    SIDE_BUTTONS_ONLY = 1,  //Rotate the side buttons when screen is rotated 90-180°
+    SIDE_AND_FRONT_NAV = 2, //also rotate the front nav buttons when screen is rotated 180-270°
+    SIDE_AND_FRONT_ALL = 3, //also rotate front button cluster when screen is rotated 180-270°
+    AUTO_BUTTON_ORIENTATION_COUNT
+  };
+
   // Front button layout options (legacy)
   // Default: Back, Confirm, Left, Right
   // Swapped: Left, Right, Back, Confirm
@@ -138,6 +146,7 @@ class CrossPointSettings {
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
+  uint8_t autoBtnOrientation = NO_BUTTONS;
   // Button layouts (front layout retained for migration only)
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
   uint8_t sideButtonLayout = PREV_NEXT;

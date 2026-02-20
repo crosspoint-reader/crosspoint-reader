@@ -353,6 +353,10 @@ enum class StrId : uint16_t {
   STR_BOOK_S_STYLE,
   STR_EMBEDDED_STYLE,
   STR_OPDS_SERVER_URL,
+  STR_AUTO_BUTTON_ORIENTATION,
+  STR_SIDE_ONLY,
+  STR_SIDE_FRONT_NAV,
+  STR_SIDE_FRONT_ALL,
   // Sentinel - must be last
   _COUNT
 };

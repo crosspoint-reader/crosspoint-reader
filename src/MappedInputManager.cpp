@@ -1,6 +1,8 @@
 #include "MappedInputManager.h"
 
 #include "CrossPointSettings.h"
+#include "activities/Activity.h"
+extern Activity* currentActivity;
 
 namespace {
 using ButtonIndex = uint8_t;
@@ -17,6 +19,52 @@ constexpr SideLayoutMap kSideLayouts[] = {
 };
 }  // namespace
 
+// Given a raw button index, find the corresponding "rotated" index,
+// considering display orientation and orientation support
+static uint8_t mapOrientation(uint8_t halButtonIndex)
+{
+  if (SETTINGS.autoBtnOrientation == CrossPointSettings::AUTO_BUTTON_ORIENTATION::NO_BUTTONS ||
+      !currentActivity->supportsOrientation()) {
+    return halButtonIndex;
+  }
+
+  // Following "right or down for next" and "left or up for previous"
+  bool rotateSide = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CW) ||
+    (SETTINGS.orientation == CrossPointSettings::ORIENTATION::INVERTED);
+  bool rotateFront = (SETTINGS.orientation == CrossPointSettings::ORIENTATION::INVERTED) ||
+    (SETTINGS.orientation == CrossPointSettings::ORIENTATION::LANDSCAPE_CCW);
+
+  if (rotateSide) {
+    if (halButtonIndex == HalGPIO::BTN_UP) return HalGPIO::BTN_DOWN;
+    if (halButtonIndex == HalGPIO::BTN_DOWN) return HalGPIO::BTN_UP;
+  }
+
+  if (!rotateFront) {
+    return halButtonIndex;
+  }
+
+  // Flip the entire front cluster
+  if (SETTINGS.autoBtnOrientation == CrossPointSettings::AUTO_BUTTON_ORIENTATION::SIDE_AND_FRONT_ALL)
+  {
+    switch (halButtonIndex) {
+      case HalGPIO::BTN_BACK: return HalGPIO::BTN_RIGHT;
+      case HalGPIO::BTN_CONFIRM: return HalGPIO::BTN_LEFT;
+      case HalGPIO::BTN_LEFT: return HalGPIO::BTN_CONFIRM;
+      case HalGPIO::BTN_RIGHT: return HalGPIO::BTN_BACK;
+    }
+  }
+
+  // Flip only whatever buttons have been configured for navigation,
+  // physical confirm and back remain fixed
+  if (SETTINGS.autoBtnOrientation == CrossPointSettings::AUTO_BUTTON_ORIENTATION::SIDE_AND_FRONT_NAV)
+  {
+    if (halButtonIndex == SETTINGS.frontButtonLeft) return SETTINGS.frontButtonRight;
+    if (halButtonIndex == SETTINGS.frontButtonRight) return SETTINGS.frontButtonLeft;
+  }
+
+  return halButtonIndex;
+}
+
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
   const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
   const auto& side = kSideLayouts[sideLayout];
@@ -24,31 +72,31 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   switch (button) {
     case Button::Back:
       // Logical Back maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonBack);
+      return (gpio.*fn)(mapOrientation(SETTINGS.frontButtonBack));
     case Button::Confirm:
       // Logical Confirm maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonConfirm);
+      return (gpio.*fn)(mapOrientation(SETTINGS.frontButtonConfirm));
     case Button::Left:
       // Logical Left maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonLeft);
+      return (gpio.*fn)(mapOrientation(SETTINGS.frontButtonLeft));
     case Button::Right:
       // Logical Right maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonRight);
+      return (gpio.*fn)(mapOrientation(SETTINGS.frontButtonRight));
     case Button::Up:
-      // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_UP);
+      // Side buttons remain fixed for Up/Down, except with auto button orientation
+      return (gpio.*fn)(mapOrientation(HalGPIO::BTN_UP));
     case Button::Down:
-      // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_DOWN);
+      // Side buttons remain fixed for Up/Down, except with auto button orientation
+      return (gpio.*fn)(mapOrientation(HalGPIO::BTN_DOWN));
     case Button::Power:
       // Power button bypasses remapping.
       return (gpio.*fn)(HalGPIO::BTN_POWER);
     case Button::PageBack:
       // Reader page navigation uses side buttons and can be swapped via settings.
-      return (gpio.*fn)(side.pageBack);
+      return (gpio.*fn)(mapOrientation(side.pageBack));
     case Button::PageForward:
       // Reader page navigation uses side buttons and can be swapped via settings.
-      return (gpio.*fn)(side.pageForward);
+      return (gpio.*fn)(mapOrientation(side.pageForward));
   }
 
   return false;
@@ -71,16 +119,16 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
   // Build the label order based on the configured hardware mapping.
   auto labelForHardware = [&](uint8_t hw) -> const char* {
     // Compare against configured logical roles and return the matching label.
-    if (hw == SETTINGS.frontButtonBack) {
+    if (hw == mapOrientation(SETTINGS.frontButtonBack)) {
       return back;
     }
-    if (hw == SETTINGS.frontButtonConfirm) {
+    if (hw == mapOrientation(SETTINGS.frontButtonConfirm)) {
       return confirm;
     }
-    if (hw == SETTINGS.frontButtonLeft) {
+    if (hw == mapOrientation(SETTINGS.frontButtonLeft)) {
       return previous;
     }
-    if (hw == SETTINGS.frontButtonRight) {
+    if (hw == mapOrientation(SETTINGS.frontButtonRight)) {
       return next;
     }
     return "";

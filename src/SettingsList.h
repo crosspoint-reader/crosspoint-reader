@@ -76,6 +76,10 @@ inline std::vector<SettingInfo> getSettingsList() {
       SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                         {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN}, "shortPwrBtn",
                         StrId::STR_CAT_CONTROLS),
+      SettingInfo::Enum(StrId::STR_AUTO_BUTTON_ORIENTATION, &CrossPointSettings::autoBtnOrientation,
+                        {StrId::STR_NONE_OPT, StrId::STR_SIDE_ONLY, StrId::STR_SIDE_FRONT_NAV,
+                        StrId::STR_SIDE_FRONT_ALL},
+                        "autoBtnOrientation", StrId::STR_CAT_CONTROLS),
 
       // --- System ---
       SettingInfo::Enum(StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
