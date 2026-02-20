@@ -2,7 +2,7 @@
 
 #include <HalStorage.h>
 
-#include "../util/BmpViewerActivity.h"
+#include "activities/util/BmpViewerActivity.h"
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
