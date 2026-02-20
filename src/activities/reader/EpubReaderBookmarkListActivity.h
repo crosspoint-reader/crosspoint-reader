@@ -1,8 +1,4 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
-
 #include <functional>
 #include <vector>
 
@@ -12,10 +8,7 @@
 class EpubReaderBookmarkListActivity final : public ActivityWithSubactivity {
   std::string bookPath;
   std::vector<BookmarkEntry> bookmarks;
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
   int selectorIndex = 0;
-  bool updateRequired = false;
   bool confirmingDelete = false;
 
   const std::function<std::string(uint16_t)> resolveChapterTitle;
@@ -25,9 +18,7 @@ class EpubReaderBookmarkListActivity final : public ActivityWithSubactivity {
   int getPageItems() const;
   int getTotalItems() const;
 
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void renderScreen();
+  void render(Activity::RenderLock&&) override;
 
  public:
   explicit EpubReaderBookmarkListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

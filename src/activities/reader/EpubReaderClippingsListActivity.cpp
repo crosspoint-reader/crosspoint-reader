@@ -38,36 +38,21 @@ int EpubReaderClippingsListActivity::getPageItems() const {
   return std::max(1, availableHeight / lineHeight);
 }
 
-void EpubReaderClippingsListActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderClippingsListActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void EpubReaderClippingsListActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   clippings = ClippingStore::loadIndex(bookPath);
   refreshPreviews();
-  renderingMutex = xSemaphoreCreateMutex();
 
   if (selectorIndex >= getTotalItems()) {
     selectorIndex = std::max(0, getTotalItems() - 1);
   }
 
-  updateRequired = true;
-  xTaskCreate(&EpubReaderClippingsListActivity::taskTrampoline, "ClippingsListTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
 void EpubReaderClippingsListActivity::onExit() {
   ActivityWithSubactivity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
 }
 
 void EpubReaderClippingsListActivity::loop() {
@@ -97,10 +82,10 @@ void EpubReaderClippingsListActivity::loop() {
         selectorIndex = std::max(0, getTotalItems() - 1);
       }
       confirmingDelete = false;
-      updateRequired = true;
+      requestUpdate();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       confirmingDelete = false;
-      updateRequired = true;
+      requestUpdate();
     }
     return;
   }
@@ -116,16 +101,14 @@ void EpubReaderClippingsListActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
       confirmingDelete = true;
-      updateRequired = true;
+      requestUpdate();
     } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
       const std::string text = ClippingStore::loadClippingText(bookPath, clippings[selectorIndex]);
       if (!text.empty()) {
-        xSemaphoreTake(renderingMutex, portMAX_DELAY);
         enterNewActivity(new ClippingTextViewerActivity(renderer, mappedInput, text, [this]() {
           exitActivity();
-          updateRequired = true;
+          requestUpdate();
         }));
-        xSemaphoreGive(renderingMutex);
       }
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -136,33 +119,18 @@ void EpubReaderClippingsListActivity::loop() {
     } else {
       selectorIndex = (selectorIndex + totalItems - 1) % totalItems;
     }
-    updateRequired = true;
+    requestUpdate();
   } else if (nextReleased) {
     if (skipPage) {
       selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % totalItems;
     } else {
       selectorIndex = (selectorIndex + 1) % totalItems;
     }
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void EpubReaderClippingsListActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      // cppcheck-suppress knownConditionTrueFalse
-      if (updateRequired && !subActivity) {
-        updateRequired = false;
-        renderScreen();
-      }
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void EpubReaderClippingsListActivity::renderScreen() {
+void EpubReaderClippingsListActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

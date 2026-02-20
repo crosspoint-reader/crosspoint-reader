@@ -1,8 +1,4 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
-
 #include <functional>
 #include <string>
 #include <vector>
@@ -14,17 +10,12 @@ class ClippingTextViewerActivity final : public ActivityWithSubactivity {
   std::vector<std::string> lines;  // text split into screen-width lines
   int scrollOffset = 0;            // first visible line index
   int linesPerPage = 0;
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-  bool updateRequired = false;
 
   const std::function<void()> onGoBack;
 
   void wrapText();  // Split text into lines that fit screen width
 
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void renderScreen();
+  void render(Activity::RenderLock&&) override;
 
  public:
   explicit ClippingTextViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string text,

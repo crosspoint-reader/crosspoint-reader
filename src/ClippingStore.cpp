@@ -1,6 +1,7 @@
 #include "ClippingStore.h"
 
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstring>
@@ -23,7 +24,7 @@ std::string ClippingStore::getMdPath(const std::string& bookPath) { return getBa
 
 bool ClippingStore::writeIndex(const std::string& path, const std::vector<ClippingEntry>& entries) {
   FsFile file;
-  if (!SdMan.openFileForWrite(TAG, path, file)) {
+  if (!Storage.openFileForWrite(TAG, path, file)) {
     return false;
   }
 
@@ -82,14 +83,14 @@ std::vector<ClippingEntry> ClippingStore::loadIndex(const std::string& bookPath)
   const std::string path = getIndexPath(bookPath);
 
   FsFile file;
-  if (!SdMan.openFileForRead(TAG, path, file)) {
+  if (!Storage.openFileForRead(TAG, path, file)) {
     return entries;
   }
 
   // Read and validate magic
   char magic[4];
   if (file.read(magic, 4) != 4 || memcmp(magic, INDEX_MAGIC, 4) != 0) {
-    Serial.printf("[%lu] [%s] Invalid index magic in %s\n", millis(), TAG, path.c_str());
+    LOG_ERR(TAG, "Invalid index magic in %s", path.c_str());
     file.close();
     return entries;
   }
@@ -97,8 +98,7 @@ std::vector<ClippingEntry> ClippingStore::loadIndex(const std::string& bookPath)
   // Read and validate version
   uint8_t version;
   if (file.read(&version, 1) != 1 || version != FORMAT_VERSION) {
-    Serial.printf("[%lu] [%s] Skipping index with version %d (expected %d): %s\n", millis(), TAG, version,
-                  FORMAT_VERSION, path.c_str());
+    LOG_DBG(TAG, "Skipping index with version %d (expected %d): %s", version, FORMAT_VERSION, path.c_str());
     file.close();
     return entries;
   }
@@ -140,7 +140,7 @@ bool ClippingStore::saveClipping(const std::string& bookPath, const std::string&
     return false;
   }
 
-  SdMan.mkdir(CLIPPINGS_DIR);
+  Storage.mkdir(CLIPPINGS_DIR);
 
   const std::string mdPath = getMdPath(bookPath);
   const std::string idxPath = getIndexPath(bookPath);
@@ -160,12 +160,12 @@ bool ClippingStore::saveClipping(const std::string& bookPath, const std::string&
   textBlock += "---\n";
 
   // Check if .md file is new (need to write header)
-  const bool isNew = !SdMan.exists(mdPath.c_str());
+  const bool isNew = !Storage.exists(mdPath.c_str());
 
   // Open .md in append mode
-  FsFile mdFile = SdMan.open(mdPath.c_str(), O_WRONLY | O_CREAT | O_APPEND);
+  FsFile mdFile = Storage.open(mdPath.c_str(), O_WRONLY | O_CREAT | O_APPEND);
   if (!mdFile) {
-    Serial.printf("[%lu] [%s] Failed to open md file: %s\n", millis(), TAG, mdPath.c_str());
+    LOG_ERR(TAG, "Failed to open md file: %s", mdPath.c_str());
     return false;
   }
 
@@ -183,7 +183,7 @@ bool ClippingStore::saveClipping(const std::string& bookPath, const std::string&
     }
     header += "\n";
     if (mdFile.write(reinterpret_cast<const uint8_t*>(header.c_str()), header.size()) != header.size()) {
-      Serial.printf("[%lu] [%s] Failed to write header\n", millis(), TAG);
+      LOG_ERR(TAG, "Failed to write header");
       mdFile.close();
       return false;
     }
@@ -195,7 +195,7 @@ bool ClippingStore::saveClipping(const std::string& bookPath, const std::string&
   // Write the text block
   uint32_t textLength = textBlock.size();
   if (mdFile.write(reinterpret_cast<const uint8_t*>(textBlock.c_str()), textLength) != textLength) {
-    Serial.printf("[%lu] [%s] Failed to write text block\n", millis(), TAG);
+    LOG_ERR(TAG, "Failed to write text block");
     mdFile.close();
     return false;
   }
@@ -218,8 +218,7 @@ bool ClippingStore::saveClipping(const std::string& bookPath, const std::string&
 
   const bool ok = writeIndex(idxPath, entries);
   if (ok) {
-    Serial.printf("[%lu] [%s] Clipping saved at %d%% (total: %d)\n", millis(), TAG, entry.bookPercent,
-                  static_cast<int>(entries.size()));
+    LOG_DBG(TAG, "Clipping saved at %d%% (total: %d)", entry.bookPercent, static_cast<int>(entries.size()));
   }
   return ok;
 }
@@ -228,7 +227,7 @@ std::string ClippingStore::loadClippingText(const std::string& bookPath, const C
   const std::string mdPath = getMdPath(bookPath);
 
   FsFile file;
-  if (!SdMan.openFileForRead(TAG, mdPath, file)) {
+  if (!Storage.openFileForRead(TAG, mdPath, file)) {
     return "";
   }
 
@@ -252,7 +251,7 @@ std::string ClippingStore::loadClippingPreview(const std::string& bookPath, cons
   const std::string mdPath = getMdPath(bookPath);
 
   FsFile file;
-  if (!SdMan.openFileForRead(TAG, mdPath, file)) {
+  if (!Storage.openFileForRead(TAG, mdPath, file)) {
     return "";
   }
 
@@ -325,7 +324,7 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
     if (i == index) continue;
     std::string text = loadClippingText(bookPath, entries[i]);
     if (text.empty()) {
-      Serial.printf("[%lu] [%s] Failed to read clipping %d during delete\n", millis(), TAG, i);
+      LOG_ERR(TAG, "Failed to read clipping %d during delete", i);
       return false;
     }
     texts.push_back(text);
@@ -338,14 +337,15 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
   std::string header;
   if (!entries.empty()) {
     FsFile origFile;
-    if (SdMan.openFileForRead(TAG, mdPath, origFile)) {
+    if (Storage.openFileForRead(TAG, mdPath, origFile)) {
       // Find the minimum textOffset among remaining entries to determine header size
       uint32_t minOffset = origFile.size();
-      for (const auto& e : entries) {
-        if (e.textOffset < minOffset) {
-          // cppcheck-suppress useStlAlgorithm
-          minOffset = e.textOffset;
-        }
+      auto it = std::min_element(entries.begin(), entries.end(),
+                                 [](const ClippingEntry& a, const ClippingEntry& b) {
+                                   return a.textOffset < b.textOffset;
+                                 });
+      if (it != entries.end()) {
+        minOffset = it->textOffset;
       }
       if (minOffset > 0) {
         header.resize(minOffset);
@@ -358,7 +358,7 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
 
   // Rewrite the .md file
   FsFile mdFile;
-  if (!SdMan.openFileForWrite(TAG, mdPath, mdFile)) {
+  if (!Storage.openFileForWrite(TAG, mdPath, mdFile)) {
     return false;
   }
 
@@ -379,7 +379,7 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
   // Rewrite the index
   const bool ok = writeIndex(idxPath, entries);
   if (ok) {
-    Serial.printf("[%lu] [%s] Clipping deleted (remaining: %d)\n", millis(), TAG, static_cast<int>(entries.size()));
+    LOG_DBG(TAG, "Clipping deleted (remaining: %d)", static_cast<int>(entries.size()));
   }
   return ok;
 }
