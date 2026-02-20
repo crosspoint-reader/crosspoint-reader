@@ -1,4 +1,6 @@
 #include <HalGPIO.h>
+#include <Logging.h>
+#include <Preferences.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <esp_sleep.h>
@@ -7,6 +9,177 @@
 HalGPIO gpio;
 
 namespace {
+constexpr uint8_t I2C_ADDR_BQ27220 = 0x55;
+constexpr uint8_t I2C_ADDR_DS3231 = 0x68;
+constexpr uint8_t I2C_ADDR_QMI8658 = 0x6B;
+constexpr uint8_t I2C_ADDR_QMI8658_ALT = 0x6A;
+constexpr uint8_t QMI8658_WHO_AM_I_REG = 0x00;
+constexpr uint8_t QMI8658_WHO_AM_I_VALUE = 0x05;
+
+constexpr char HW_NAMESPACE[] = "cphw";
+constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";  // 0=auto, 1=x4, 2=x3
+constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";    // 0=unknown, 1=x4, 2=x3
+
+enum class NvsDeviceValue : uint8_t { Unknown = 0, X4 = 1, X3 = 2 };
+
+struct X3ProbeResult {
+  bool bq27220 = false;
+  bool ds3231 = false;
+  bool qmi8658 = false;
+
+  uint8_t score() const { return static_cast<uint8_t>(bq27220) + static_cast<uint8_t>(ds3231) + static_cast<uint8_t>(qmi8658); }
+};
+
+bool readI2CReg8(uint8_t addr, uint8_t reg, uint8_t* outValue) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) {
+    return false;
+  }
+  if (Wire.requestFrom(addr, static_cast<uint8_t>(1), static_cast<uint8_t>(true)) < 1) {
+    return false;
+  }
+  *outValue = Wire.read();
+  return true;
+}
+
+bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) {
+    return false;
+  }
+  if (Wire.requestFrom(addr, static_cast<uint8_t>(2), static_cast<uint8_t>(true)) < 2) {
+    while (Wire.available()) {
+      Wire.read();
+    }
+    return false;
+  }
+  const uint8_t lo = Wire.read();
+  const uint8_t hi = Wire.read();
+  *outValue = (static_cast<uint16_t>(hi) << 8) | lo;
+  return true;
+}
+
+bool probeBQ27220Signature() {
+  uint16_t soc = 0;
+  uint16_t voltageMv = 0;
+  if (!readI2CReg16LE(I2C_ADDR_BQ27220, 0x2C, &soc)) {
+    return false;
+  }
+  if (soc > 100) {
+    return false;
+  }
+  if (!readI2CReg16LE(I2C_ADDR_BQ27220, 0x08, &voltageMv)) {
+    return false;
+  }
+  return voltageMv >= 2500 && voltageMv <= 5000;
+}
+
+bool probeDS3231Signature() {
+  uint8_t sec = 0;
+  if (!readI2CReg8(I2C_ADDR_DS3231, 0x00, &sec)) {
+    return false;
+  }
+  const uint8_t secBcd = sec & 0x7F;
+  return secBcd <= 0x59;
+}
+
+bool probeQMI8658Signature() {
+  uint8_t whoami = 0;
+  if (readI2CReg8(I2C_ADDR_QMI8658, QMI8658_WHO_AM_I_REG, &whoami) && whoami == QMI8658_WHO_AM_I_VALUE) {
+    return true;
+  }
+  if (readI2CReg8(I2C_ADDR_QMI8658_ALT, QMI8658_WHO_AM_I_REG, &whoami) && whoami == QMI8658_WHO_AM_I_VALUE) {
+    return true;
+  }
+  return false;
+}
+
+X3ProbeResult runX3ProbePass() {
+  X3ProbeResult result;
+  Wire.begin(20, 0, 400000);
+  Wire.setTimeOut(6);
+
+  result.bq27220 = probeBQ27220Signature();
+  result.ds3231 = probeDS3231Signature();
+  result.qmi8658 = probeQMI8658Signature();
+
+  Wire.end();
+  pinMode(20, INPUT);
+  pinMode(0, INPUT);
+  return result;
+}
+
+NvsDeviceValue readNvsDeviceValue(const char* key, NvsDeviceValue defaultValue) {
+  Preferences prefs;
+  if (!prefs.begin(HW_NAMESPACE, true)) {
+    return defaultValue;
+  }
+  const uint8_t raw = prefs.getUChar(key, static_cast<uint8_t>(defaultValue));
+  prefs.end();
+  if (raw > static_cast<uint8_t>(NvsDeviceValue::X3)) {
+    return defaultValue;
+  }
+  return static_cast<NvsDeviceValue>(raw);
+}
+
+void writeNvsDeviceValue(const char* key, NvsDeviceValue value) {
+  Preferences prefs;
+  if (!prefs.begin(HW_NAMESPACE, false)) {
+    return;
+  }
+  prefs.putUChar(key, static_cast<uint8_t>(value));
+  prefs.end();
+}
+
+HalGPIO::DeviceType nvsToDeviceType(NvsDeviceValue value) {
+  return value == NvsDeviceValue::X3 ? HalGPIO::DeviceType::X3 : HalGPIO::DeviceType::X4;
+}
+
+HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
+  // Explicit override for recovery/support:
+  // 0 = auto, 1 = force X4, 2 = force X3
+  const NvsDeviceValue overrideValue = readNvsDeviceValue(NVS_KEY_DEV_OVERRIDE, NvsDeviceValue::Unknown);
+  if (overrideValue == NvsDeviceValue::X3 || overrideValue == NvsDeviceValue::X4) {
+    LOG_INF("HW", "Device override active: %s", overrideValue == NvsDeviceValue::X3 ? "X3" : "X4");
+    return nvsToDeviceType(overrideValue);
+  }
+
+  const NvsDeviceValue cachedValue = readNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::Unknown);
+
+  const X3ProbeResult pass1 = runX3ProbePass();
+  delay(2);
+  const X3ProbeResult pass2 = runX3ProbePass();
+
+  const uint8_t score1 = pass1.score();
+  const uint8_t score2 = pass2.score();
+  LOG_INF("HW", "X3 probe scores: pass1=%u(bq=%d rtc=%d imu=%d) pass2=%u(bq=%d rtc=%d imu=%d)", score1, pass1.bq27220,
+          pass1.ds3231, pass1.qmi8658, score2, pass2.bq27220, pass2.ds3231, pass2.qmi8658);
+  const bool x3Confirmed = (score1 >= 2) && (score2 >= 2);
+  const bool x4Confirmed = (score1 == 0) && (score2 == 0);
+
+  if (x3Confirmed) {
+    writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X3);
+    return HalGPIO::DeviceType::X3;
+  }
+
+  if (x4Confirmed) {
+    writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X4);
+    return HalGPIO::DeviceType::X4;
+  }
+
+  // Inconclusive probe: use sticky cached identity if available.
+  if (cachedValue == NvsDeviceValue::X3 || cachedValue == NvsDeviceValue::X4) {
+    LOG_INF("HW", "X3 probe inconclusive, using cached device type: %s",
+            cachedValue == NvsDeviceValue::X3 ? "X3" : "X4");
+    return nvsToDeviceType(cachedValue);
+  }
+
+  // Conservative fallback for first boot with inconclusive probes.
+  return HalGPIO::DeviceType::X4;
+}
+
 int readAveragedAdc(uint8_t pin, uint8_t samples = 8) {
   long sum = 0;
   for (uint8_t i = 0; i < samples; ++i) {
@@ -24,28 +197,6 @@ int readBiasedAdc(uint8_t pin) {
   return v;
 }
 
-bool probeX3FuelGauge() {
-  // X3 fuel gauge is at 0x55 on SDA=GPIO20, SCL=GPIO0.
-  // Keep this probe minimal and release Wire immediately so we don't
-  // interfere with later battery polling in HalPowerManager.
-  bool found = false;
-  Wire.begin(20, 0, 100000);
-  Wire.setTimeOut(3);
-  for (uint8_t attempt = 0; attempt < 2; ++attempt) {
-    Wire.beginTransmission(0x55);
-    Wire.write(0x1C);
-    if (Wire.endTransmission(true) == 0) {
-      found = true;
-      break;
-    }
-    delay(1);
-  }
-  Wire.end();
-  pinMode(20, INPUT);
-  pinMode(0, INPUT);
-  return found;
-}
-
 }  // namespace
 
 void HalGPIO::begin() {
@@ -61,9 +212,7 @@ void HalGPIO::begin() {
   static constexpr int kPinLeadMargin = 120;
   _batteryPin = (adc4 > adc0 + kPinLeadMargin) ? 4 : BAT_GPIO0;
 
-  // Device-type detection (independent): probe X3 fuel gauge presence.
-  const bool x3FuelGaugePresent = probeX3FuelGauge();
-  _deviceType = x3FuelGaugePresent ? DeviceType::X3 : DeviceType::X4;
+  _deviceType = detectDeviceTypeWithFingerprint();
 
   pinMode(_batteryPin, INPUT);
   pinMode(UART0_RXD, INPUT);
