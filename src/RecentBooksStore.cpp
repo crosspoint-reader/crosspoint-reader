@@ -11,7 +11,7 @@
 #include "util/StringUtils.h"
 
 namespace {
-constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 3;
+constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 4;
 constexpr char RECENT_BOOKS_FILE[] = "/.crosspoint/recent.bin";
 constexpr int MAX_RECENT_BOOKS = 10;
 }  // namespace
@@ -135,6 +135,29 @@ bool RecentBooksStore::loadFromFile() {
           recentBooks.push_back(book);
         }
       }
+    } else if (version < RECENT_BOOKS_FILE_VERSION) {
+      // Cache outdated (e.g. metadata parsing changed); re-parse from books
+      uint8_t count;
+      serialization::readPod(inputFile, count);
+      recentBooks.clear();
+      recentBooks.reserve(count);
+      for (uint8_t i = 0; i < count; i++) {
+        std::string path, title, author, coverBmpPath;
+        serialization::readString(inputFile, path);
+        serialization::readString(inputFile, title);
+        serialization::readString(inputFile, author);
+        serialization::readString(inputFile, coverBmpPath);
+        RecentBook fresh = getDataFromBook(path);
+        if (!fresh.title.empty() || !fresh.author.empty() || !fresh.coverBmpPath.empty()) {
+          recentBooks.push_back(fresh);
+        } else {
+          recentBooks.push_back({path, title, author, coverBmpPath});
+        }
+      }
+      inputFile.close();
+      saveToFile();
+      LOG_DBG("RBS", "Migrated recent books from version %u, re-parsed %u entries", version, count);
+      return true;
     } else {
       LOG_ERR("RBS", "Deserialization failed: Unknown version %u", version);
       inputFile.close();
