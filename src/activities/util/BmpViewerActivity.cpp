@@ -20,7 +20,8 @@ void BmpViewerActivity::onEnter() {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-
+  Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
   // 1. Open the file
   if (Storage.openFileForRead("BMP", filePath, file)) {
     Bitmap bitmap(file, true);
@@ -48,6 +49,7 @@ void BmpViewerActivity::onEnter() {
 
       // 4. Prepare Rendering
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+      GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
       // Assuming drawBitmap defaults to 0,0 crop if omitted, or pass explicitly: drawBitmap(bitmap, x, y, pageWidth,
@@ -57,6 +59,7 @@ void BmpViewerActivity::onEnter() {
       // Draw UI hints on the base layer
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       // Single pass for non-grayscale images
+
       renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 
     } else {
