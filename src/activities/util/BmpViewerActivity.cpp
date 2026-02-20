@@ -14,44 +14,81 @@ BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& 
 
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
-  renderer.clearScreen();
+  // Removed the redundant initial renderer.clearScreen()
 
   FsFile file;
+  int x, y;
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  // 1. Open the file
   if (Storage.openFileForRead("BMP", filePath, file)) {
-    Bitmap bmp(file, true);
+    Bitmap bitmap(file, true);
 
-    if (bmp.parseHeaders() == BmpReaderError::Ok) {
-      int32_t bmpW = bmp.getWidth();
-      int32_t bmpH = bmp.getHeight();
+    // 2. Parse headers to get dimensions
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
+        float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+        const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
 
-      // Calculate centering
-      int32_t xOffset = (renderer.getScreenWidth() - bmpW) / 2;
-      int32_t yOffset = (renderer.getScreenHeight() - bmpH) / 2;
+        if (ratio > screenRatio) {
+          // Wider than screen
+          x = 0;
+          y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
+        } else {
+          // Taller than screen
+          x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
+          y = 0;
+        }
+      } else {
+        // Center small images
+        x = (pageWidth - bitmap.getWidth()) / 2;
+        y = (pageHeight - bitmap.getHeight()) / 2;
+      }
 
-      if (xOffset < 0) xOffset = 0;
-      if (yOffset < 0) yOffset = 0;
+      // 4. Prepare Rendering
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
 
-      renderer.drawBitmap(bmp, xOffset, yOffset, bmpW, bmpH);
+      renderer.clearScreen();
+      // Assuming drawBitmap defaults to 0,0 crop if omitted, or pass explicitly: drawBitmap(bitmap, x, y, pageWidth,
+      // pageHeight, 0, 0)
+      renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
+
+      // Draw UI hints on the base layer
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      // Single pass for non-grayscale images
+      renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 
     } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2, "Invalid BMP File");
+      // Handle file parsing error
+      renderer.clearScreen();
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Invalid BMP File");
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     }
+
     file.close();
   } else {
-    renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2, "Could not open file");
+    // Handle file open error
+    renderer.clearScreen();
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Could not open file");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
   }
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
 void BmpViewerActivity::onExit() {
   Activity::onExit();
   renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
 void BmpViewerActivity::loop() {
+  // Keep CPU awake/polling so 1st click works
+  Activity::loop();
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (onGoBack) onGoBack();
     return;
