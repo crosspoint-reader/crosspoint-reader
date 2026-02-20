@@ -49,16 +49,16 @@ bool WebDAVHandler::canRaw(WebServer &server, const String &uri) {
 void WebDAVHandler::raw(WebServer &server, const String &uri, HTTPRaw &raw) {
   (void)uri;
   if (raw.status == RAW_START) {
-    String path = getRequestPath(server);
-    if (isProtectedPath(path)) {
+    _putPath = getRequestPath(server);
+    if (isProtectedPath(_putPath)) {
       _putOk = false;
       return;
     }
 
     // Ensure parent directory exists
-    int lastSlash = path.lastIndexOf('/');
+    int lastSlash = _putPath.lastIndexOf('/');
     if (lastSlash > 0) {
-      String parentPath = path.substring(0, lastSlash);
+      String parentPath = _putPath.substring(0, lastSlash);
       if (!Storage.exists(parentPath.c_str())) {
         _putOk = false;
         return;
@@ -66,21 +66,23 @@ void WebDAVHandler::raw(WebServer &server, const String &uri, HTTPRaw &raw) {
     }
 
     if (_putFile) _putFile.close();
-    _putExisted = Storage.exists(path.c_str());
+    _putExisted = Storage.exists(_putPath.c_str());
 
     if (_putExisted) {
-      FsFile existing = Storage.open(path.c_str());
+      FsFile existing = Storage.open(_putPath.c_str());
       if (existing && existing.isDirectory()) {
         existing.close();
         _putOk = false;
         return;
       }
       if (existing) existing.close();
-      Storage.remove(path.c_str());
     }
 
-    _putOk = Storage.openFileForWrite("DAV", path, _putFile);
-    LOG_DBG("DAV", "PUT START: %s", path.c_str());
+    // Write to a temp file to avoid destroying the original on failed upload
+    String tempPath = _putPath + ".davtmp";
+    Storage.remove(tempPath.c_str());
+    _putOk = Storage.openFileForWrite("DAV", tempPath, _putFile);
+    LOG_DBG("DAV", "PUT START: %s", _putPath.c_str());
 
   } else if (raw.status == RAW_WRITE) {
     if (_putFile && _putOk) {
@@ -93,14 +95,24 @@ void WebDAVHandler::raw(WebServer &server, const String &uri, HTTPRaw &raw) {
 
   } else if (raw.status == RAW_END) {
     if (_putFile) _putFile.close();
+    if (_putOk) {
+      String tempPath = _putPath + ".davtmp";
+      if (_putExisted) Storage.remove(_putPath.c_str());
+      FsFile tmp = Storage.open(tempPath.c_str());
+      if (tmp) {
+        _putOk = tmp.rename(_putPath.c_str());
+        tmp.close();
+      } else {
+        _putOk = false;
+      }
+      if (!_putOk) Storage.remove(tempPath.c_str());
+    }
     LOG_DBG("DAV", "PUT END: %u bytes, ok=%d", raw.totalSize, _putOk);
 
   } else if (raw.status == RAW_ABORTED) {
-    if (_putFile) {
-      _putFile.close();
-      String path = getRequestPath(server);
-      Storage.remove(path.c_str());
-    }
+    if (_putFile) _putFile.close();
+    String tempPath = _putPath + ".davtmp";
+    Storage.remove(tempPath.c_str());
     _putOk = false;
   }
 }
@@ -471,6 +483,11 @@ void WebDAVHandler::handleMove(WebServer &s) {
     return;
   }
 
+  if (srcPath == dstPath) {
+    s.send(204);
+    return;
+  }
+
   if (!Storage.exists(srcPath.c_str())) {
     s.send(404, "text/plain", "Source not found");
     return;
@@ -529,6 +546,11 @@ void WebDAVHandler::handleCopy(WebServer &s) {
 
   if (dstPath.isEmpty()) {
     s.send(400, "text/plain", "Missing Destination header");
+    return;
+  }
+
+  if (srcPath == dstPath) {
+    s.send(204);
     return;
   }
 
