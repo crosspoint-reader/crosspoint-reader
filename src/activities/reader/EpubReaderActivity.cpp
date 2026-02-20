@@ -457,7 +457,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         this->pendingSubactivityExit = true;
       };
 
-      enterNewActivity(new ConfirmationActivity(renderer, mappedInput, Heading, bookPath, doDelete));
+      enterNewActivity(new ConfirmationActivity(renderer, mappedInput, heading, bookPath, doDelete));
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
