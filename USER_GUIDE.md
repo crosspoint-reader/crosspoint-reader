@@ -241,7 +241,7 @@ This feature can be disabled in the **[Controls Settings](#363-controls)** to he
 
 #### Bookmarks
 
-Hold **Confirm** for about 1 second to bookmark the current page. The status bar will briefly show "Bookmarked".
+Hold **Confirm** for about 1 second to bookmark the current page. The status bar will show "Bookmarked" until you turn the page.
 
 **Viewing bookmarks:** Press **Confirm** to open the reader menu → select **Bookmarks**. This opens a list of all bookmarks for the current book, showing the book percentage for each.
 

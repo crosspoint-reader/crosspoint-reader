@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add `getPlainText()` to TextBlock
+## Task 1: Add `getPlainText()` to TextBlock
 
 `TextBlock::words` is private. We need a public method to reconstruct the line's text.
 
@@ -52,7 +52,7 @@ git commit -m "feat: add getPlainText() to TextBlock for text extraction"
 
 ---
 
-### Task 2: Add `getPlainText()` to Page
+## Task 2: Add `getPlainText()` to Page
 
 `PageLine::block` is also private. Add a text extraction method that walks all elements.
 
@@ -113,7 +113,7 @@ git commit -m "feat: add getPlainText() to Page for full page text extraction"
 
 ---
 
-### Task 3: Create PageExporter utility
+## Task 3: Create PageExporter utility
 
 Handles filename sanitization, directory creation, file header, and append-mode text writing.
 
@@ -271,7 +271,7 @@ git commit -m "feat: add PageExporter utility for saving page text to SD card"
 
 ---
 
-### Task 4: Add status bar override to EpubReaderActivity
+## Task 4: Add status bar override to EpubReaderActivity
 
 Add a `statusBarOverride` string that, when non-empty, replaces the normal status bar content. Clears on next page turn.
 
@@ -331,7 +331,7 @@ git commit -m "feat: add temporary status bar override mechanism"
 
 ---
 
-### Task 5: Wire up Confirm long-press to export page text
+## Task 5: Wire up Confirm long-press to export page text
 
 Replace the current simple `wasReleased(Confirm)` check with a long-press/short-press split. Long-press (1000ms) triggers page export. Short-press (<1000ms) still opens the reader menu.
 
@@ -437,7 +437,7 @@ git commit -m "feat: wire up Confirm long-press to export page text"
 
 ---
 
-### Task 6: Final build and cleanup
+## Task 6: Final build and cleanup
 
 **Step 1: Full clean build**
 

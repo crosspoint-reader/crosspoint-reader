@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add "hold to delete" hint in bookmark list
+## Task 1: Add "hold to delete" hint in bookmark list
 
 **Files:**
 - Modify: `src/activities/reader/EpubReaderBookmarkListActivity.cpp:154-157`
@@ -44,7 +44,7 @@ git commit -m "feat: add hold-to-delete hint in bookmark list"
 
 ---
 
-### Task 2: Hash book path for bookmark filename
+## Task 2: Hash book path for bookmark filename
 
 **Files:**
 - Modify: `src/BookmarkStore.cpp:7-23` (replace `getBookmarkPath`)
@@ -94,7 +94,7 @@ git commit -m "fix: use path hash for bookmark filenames to avoid collisions"
 
 ---
 
-### Task 3: Reply to PR review comments
+## Task 3: Reply to PR review comments
 
 **After both code changes are pushed**, reply to the review threads:
 
