@@ -310,12 +310,9 @@ std::string ClippingStore::loadClippingPreview(const std::string& bookPath, cons
 
 bool ClippingStore::hasClippingAtPage(const std::vector<ClippingEntry>& entries, uint16_t spineIndex,
                                       uint16_t pageIndex) {
-  for (const auto& e : entries) {
-    if (e.spineIndex == spineIndex && pageIndex >= e.startPage && pageIndex <= e.endPage) {
-      return true;
-    }
-  }
-  return false;
+  return std::any_of(entries.begin(), entries.end(), [spineIndex, pageIndex](const ClippingEntry& e) {
+    return e.spineIndex == spineIndex && pageIndex >= e.startPage && pageIndex <= e.endPage;
+  });
 }
 
 bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
