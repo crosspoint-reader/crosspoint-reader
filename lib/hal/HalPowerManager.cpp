@@ -13,8 +13,7 @@ HalPowerManager powerManager;  // Singleton instance
 void HalPowerManager::begin() {
   if (gpio.deviceIsX3()) {
     // X3 uses an I2C fuel gauge for battery monitoring.
-    // I2C init must come AFTER gpio.begin() sets up UART0_RXD because GPIO20
-    // is shared between USB detection (digital read) and I2C SDA.
+    // I2C init must come AFTER gpio.begin() so early hardware detection/probes are finished.
     Wire.begin(20, 0, 400000);
     Wire.setTimeOut(4);
     _batteryUseI2C = true;

@@ -63,6 +63,15 @@ bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
   return true;
 }
 
+bool readBQ27220CurrentMA(int16_t* outCurrent) {
+  uint16_t raw = 0;
+  if (!readI2CReg16LE(I2C_ADDR_BQ27220, 0x0C, &raw)) {
+    return false;
+  }
+  *outCurrent = static_cast<int16_t>(raw);
+  return true;
+}
+
 bool probeBQ27220Signature() {
   uint16_t soc = 0;
   uint16_t voltageMv = 0;
@@ -205,16 +214,18 @@ void HalGPIO::begin() {
   inputMgr.begin();
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
-  // Battery-pin detection (ADC-only): choose the stronger signal.
-  const int adc4 = readBiasedAdc(4);
-  const int adc0 = readBiasedAdc(BAT_GPIO0);
-  _detectAdcValue = adc4;
-  _detectAdcValueGpio0 = adc0;
-
-  static constexpr int kPinLeadMargin = 120;
-  _batteryPin = (adc4 > adc0 + kPinLeadMargin) ? 4 : BAT_GPIO0;
-
   _deviceType = detectDeviceTypeWithFingerprint();
+  _batteryPin = BAT_GPIO0;
+
+  if (deviceIsX4()) {
+    // X4 battery monitor is fixed on GPIO0.
+    _detectAdcValue = 0;
+    _detectAdcValueGpio0 = readBiasedAdc(BAT_GPIO0);
+  } else {
+    // X3 uses BQ27220 via I2C, not ADC battery sensing.
+    _detectAdcValue = 0;
+    _detectAdcValueGpio0 = 0;
+  }
 
   pinMode(_batteryPin, INPUT);
   pinMode(UART0_RXD, INPUT);
@@ -294,7 +305,15 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
 
 bool HalGPIO::isUsbConnected() const {
   if (deviceIsX3()) {
-    // X3 uses GPIO20 as I2C SDA; it is not a reliable USB detect signal.
+    // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
+    // Positive current means charging.
+    for (uint8_t attempt = 0; attempt < 2; ++attempt) {
+      int16_t currentMa = 0;
+      if (readBQ27220CurrentMA(&currentMa)) {
+        return currentMa > 0;
+      }
+      delay(2);
+    }
     return false;
   }
   // U0RXD/GPIO20 reads HIGH when USB is connected
@@ -306,16 +325,17 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto resetReason = esp_reset_reason();
 
   if (deviceIsX3()) {
-    // X3 wake classification must not depend on GPIO20 level.
+    // X3 wake classification uses fuel-gauge current for USB detection (not GPIO20).
+    const bool usbConnected = isUsbConnected();
     if (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP) {
       return WakeupReason::PowerButton;
     }
     if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN) {
       return WakeupReason::AfterFlash;
     }
-    // Cold power-on on X3 is typically user power button.
+    // Cold power-on: distinguish USB power from physical power button.
     if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) {
-      return WakeupReason::PowerButton;
+      return usbConnected ? WakeupReason::AfterUSBPower : WakeupReason::PowerButton;
     }
     return WakeupReason::Other;
   }
