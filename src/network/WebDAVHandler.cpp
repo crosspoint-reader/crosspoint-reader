@@ -356,7 +356,8 @@ void WebDAVHandler::handlePut(WebServer &s) {
   }
 
   if (!_putOk) {
-    Storage.remove(path.c_str());
+    String tempPath = path + ".davtmp";
+    Storage.remove(tempPath.c_str());
     s.send(500, "text/plain", "Write failed - incomplete upload or disk full");
     return;
   }
