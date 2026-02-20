@@ -13,7 +13,7 @@ namespace {
 constexpr uint8_t SECTION_FILE_VERSION = 14;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(uint8_t) + sizeof(uint32_t);  // +cssCacheVersion
+                                 sizeof(uint32_t) + sizeof(uint32_t);  // pageCount, LUT offset
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
@@ -43,8 +43,8 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   }
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
                                    sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
-                                   sizeof(viewportHeight) + sizeof(pageCount) + sizeof(hyphenationEnabled) +
-                                   sizeof(embeddedStyle) + sizeof(uint8_t) + sizeof(uint32_t),
+                                   sizeof(viewportHeight) + sizeof(hyphenationEnabled) + sizeof(embeddedStyle) +
+                                   sizeof(pageCount) + sizeof(uint32_t),  // LUT offset
                 "Header size mismatch");
   serialization::writePod(file, SECTION_FILE_VERSION);
   serialization::writePod(file, fontId);
@@ -55,7 +55,6 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   serialization::writePod(file, viewportHeight);
   serialization::writePod(file, hyphenationEnabled);
   serialization::writePod(file, embeddedStyle);
-  serialization::writePod(file, CssParser::CSS_CACHE_VERSION);
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0 when written)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset
 }
@@ -94,16 +93,12 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     serialization::readPod(file, fileHyphenationEnabled);
     serialization::readPod(file, fileEmbeddedStyle);
 
-    uint8_t fileCssCacheVersion = 0;
-    serialization::readPod(file, fileCssCacheVersion);
-
     if (fontId != fileFontId || lineCompression != fileLineCompression ||
         extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
         viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight ||
-        hyphenationEnabled != fileHyphenationEnabled || embeddedStyle != fileEmbeddedStyle ||
-        fileCssCacheVersion != CssParser::CSS_CACHE_VERSION) {
+        hyphenationEnabled != fileHyphenationEnabled || embeddedStyle != fileEmbeddedStyle) {
       file.close();
-      LOG_ERR("SCT", "Deserialization failed: Parameters or CSS cache version do not match");
+      LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
       clearCache();
       return false;
     }
