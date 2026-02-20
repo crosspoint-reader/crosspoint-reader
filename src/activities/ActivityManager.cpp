@@ -61,7 +61,10 @@ void ActivityManager::goToReader(Intent&& intent) {
   enterNewActivity(new ReaderActivity(renderer, mappedInput, intent.path));
 }
 
-void ActivityManager::goToSleep() { enterNewActivity(new SleepActivity(renderer, mappedInput)); }
+void ActivityManager::goToSleep() {
+  enterNewActivity(new SleepActivity(renderer, mappedInput));
+  loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
+}
 
 void ActivityManager::goToBoot() { enterNewActivity(new BootActivity(renderer, mappedInput)); }
 

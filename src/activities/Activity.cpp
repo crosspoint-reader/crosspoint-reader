@@ -1,7 +1,8 @@
 #include "Activity.h"
 
-#include "ActivityManager.h"
 #include <HalPowerManager.h>
+
+#include "ActivityManager.h"
 
 void Activity::renderTaskTrampoline(void* param) {
   auto* self = static_cast<Activity*>(param);
