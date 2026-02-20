@@ -17,7 +17,7 @@ void BmpViewerActivity::onEnter() {
   // Removed the redundant initial renderer.clearScreen()
 
   FsFile file;
-  int x, y;
+
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
@@ -28,6 +28,8 @@ void BmpViewerActivity::onEnter() {
 
     // 2. Parse headers to get dimensions
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      int x, y;
+
       if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
         float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
         const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
