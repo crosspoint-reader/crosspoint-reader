@@ -32,7 +32,7 @@ class ChapterHtmlSlimParser {
   int italicUntilDepth = INT_MAX;
   int underlineUntilDepth = INT_MAX;
   int listItemUntilDepth = INT_MAX;
-  std::string pendingListMarker;  // Bullet/number to prepend when content arrives
+  std::string pendingListMarker;           // Bullet/number to prepend when content arrives
   int16_t currentListItemMarkerWidth = 0;  // Measured width of current marker for consistent indent
 
   // List context stack for tracking ol/ul nesting and item counters

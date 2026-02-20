@@ -129,8 +129,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   // Supports both positive (regular indent) and negative (hanging indent) values
   // Negative indent (hanging) always applies; positive indent skipped if extraParagraphSpacing
   const int firstLineIndent =
-      blockStyle.textIndentDefined &&
-              (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
+      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
@@ -257,8 +256,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   // Supports both positive (regular indent) and negative (hanging indent) values
   // Negative indent (hanging) always applies; positive indent skipped if extraParagraphSpacing
   const int firstLineIndent =
-      blockStyle.textIndentDefined &&
-              (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
+      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
@@ -421,8 +419,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Negative indent (hanging) always applies; positive indent skipped if extraParagraphSpacing
   const bool isFirstLine = breakIndex == 0;
   const int firstLineIndent =
-      isFirstLine && blockStyle.textIndentDefined &&
-              (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
+      isFirstLine && blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
