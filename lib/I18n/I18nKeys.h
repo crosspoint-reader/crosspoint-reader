@@ -211,6 +211,7 @@ enum class StrId : uint16_t {
   STR_BOOKERLY,
   STR_NOTO_SANS,
   STR_OPEN_DYSLEXIC,
+  STR_X_SMALL,
   STR_SMALL,
   STR_MEDIUM,
   STR_LARGE,

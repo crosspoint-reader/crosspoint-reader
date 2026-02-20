@@ -48,6 +48,12 @@ EpdFont bookerly14BoldItalicFont(&bookerly_14_bolditalic);
 EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
                                    &bookerly14BoldItalicFont);
 #ifndef OMIT_FONTS
+EpdFont bookerly10RegularFont(&bookerly_10_regular);
+EpdFont bookerly10BoldFont(&bookerly_10_bold);
+EpdFont bookerly10ItalicFont(&bookerly_10_italic);
+EpdFont bookerly10BoldItalicFont(&bookerly_10_bolditalic);
+EpdFontFamily bookerly10FontFamily(&bookerly10RegularFont, &bookerly10BoldFont, &bookerly10ItalicFont,
+                                   &bookerly10BoldItalicFont);
 EpdFont bookerly12RegularFont(&bookerly_12_regular);
 EpdFont bookerly12BoldFont(&bookerly_12_bold);
 EpdFont bookerly12ItalicFont(&bookerly_12_italic);
@@ -73,6 +79,12 @@ EpdFont notosans12ItalicFont(&notosans_12_italic);
 EpdFont notosans12BoldItalicFont(&notosans_12_bolditalic);
 EpdFontFamily notosans12FontFamily(&notosans12RegularFont, &notosans12BoldFont, &notosans12ItalicFont,
                                    &notosans12BoldItalicFont);
+EpdFont notosans10RegularFont(&notosans_10_regular);
+EpdFont notosans10BoldFont(&notosans_10_bold);
+EpdFont notosans10ItalicFont(&notosans_10_italic);
+EpdFont notosans10BoldItalicFont(&notosans_10_bolditalic);
+EpdFontFamily notosans10FontFamily(&notosans10RegularFont, &notosans10BoldFont, &notosans10ItalicFont,
+                                   &notosans10BoldItalicFont);
 EpdFont notosans14RegularFont(&notosans_14_regular);
 EpdFont notosans14BoldFont(&notosans_14_bold);
 EpdFont notosans14ItalicFont(&notosans_14_italic);
@@ -98,6 +110,12 @@ EpdFont opendyslexic8ItalicFont(&opendyslexic_8_italic);
 EpdFont opendyslexic8BoldItalicFont(&opendyslexic_8_bolditalic);
 EpdFontFamily opendyslexic8FontFamily(&opendyslexic8RegularFont, &opendyslexic8BoldFont, &opendyslexic8ItalicFont,
                                       &opendyslexic8BoldItalicFont);
+EpdFont opendyslexic6RegularFont(&opendyslexic_6_regular);
+EpdFont opendyslexic6BoldFont(&opendyslexic_6_bold);
+EpdFont opendyslexic6ItalicFont(&opendyslexic_6_italic);
+EpdFont opendyslexic6BoldItalicFont(&opendyslexic_6_bolditalic);
+EpdFontFamily opendyslexic6FontFamily(&opendyslexic6RegularFont, &opendyslexic6BoldFont, &opendyslexic6ItalicFont,
+                                      &opendyslexic6BoldItalicFont);
 EpdFont opendyslexic10RegularFont(&opendyslexic_10_regular);
 EpdFont opendyslexic10BoldFont(&opendyslexic_10_bold);
 EpdFont opendyslexic10ItalicFont(&opendyslexic_10_italic);
@@ -269,14 +287,17 @@ void setupDisplayAndFonts() {
   renderer.setFontDecompressor(&fontDecompressor);
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
+  renderer.insertFont(BOOKERLY_10_FONT_ID, bookerly10FontFamily);
   renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
   renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
   renderer.insertFont(BOOKERLY_18_FONT_ID, bookerly18FontFamily);
 
+  renderer.insertFont(NOTOSANS_10_FONT_ID, notosans10FontFamily);
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
+  renderer.insertFont(OPENDYSLEXIC_6_FONT_ID, opendyslexic6FontFamily);
   renderer.insertFont(OPENDYSLEXIC_8_FONT_ID, opendyslexic8FontFamily);
   renderer.insertFont(OPENDYSLEXIC_10_FONT_ID, opendyslexic10FontFamily);
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
