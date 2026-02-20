@@ -1,4 +1,5 @@
 #include "Activity.h"
+#include "ActivityManager.h"
 
 void Activity::renderTaskTrampoline(void* param) {
   auto* self = static_cast<Activity*>(param);
@@ -47,6 +48,16 @@ void Activity::requestUpdate() {
 void Activity::requestUpdateAndWait() {
   // FIXME @ngxson : properly implement this using freeRTOS notification
   delay(100);
+}
+
+void Activity::onGoHome() {
+  activityManager.goHome();
+}
+
+void Activity::onSelectBook(const std::string& path) {
+  Intent intent;
+  intent.path = path;
+  activityManager.goToReader(std::move(intent));
 }
 
 // RenderLock

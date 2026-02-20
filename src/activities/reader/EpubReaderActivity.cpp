@@ -132,9 +132,7 @@ void EpubReaderActivity::loop() {
     if (pendingGoHome) {
       pendingGoHome = false;
       exitActivity();
-      if (onGoHome) {
-        onGoHome();
-      }
+      onGoHome();
       return;  // Don't access 'this' after callback
     }
     return;
@@ -143,9 +141,7 @@ void EpubReaderActivity::loop() {
   // Handle pending go home when no subactivity (e.g., from long press back)
   if (pendingGoHome) {
     pendingGoHome = false;
-    if (onGoHome) {
-      onGoHome();
-    }
+    onGoHome();
     return;  // Don't access 'this' after callback
   }
 
@@ -182,7 +178,9 @@ void EpubReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    onGoBack();
+    Intent intent;
+    intent.path = epub ? epub->getPath() : "";
+    activityManager.goToMyLibrary(std::move(intent));
     return;
   }
 

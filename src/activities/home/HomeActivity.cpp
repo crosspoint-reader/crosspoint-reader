@@ -255,3 +255,29 @@ void HomeActivity::render(Activity::RenderLock&&) {
     loadRecentCovers(metrics.homeCoverHeight);
   }
 }
+
+void HomeActivity::onSelectBook(const std::string& path) {
+  Intent intent;
+  intent.path = path;
+  activityManager.goToReader(std::move(intent));
+}
+
+void HomeActivity::onMyLibraryOpen() {
+  activityManager.goToMyLibrary(Intent{});
+}
+
+void HomeActivity::onRecentsOpen() {
+  activityManager.goToRecentBooks();
+}
+
+void HomeActivity::onSettingsOpen() {
+  activityManager.goToSettings();
+}
+
+void HomeActivity::onFileTransferOpen() {
+  activityManager.goToFileTransfer();
+}
+
+void HomeActivity::onOpdsBrowserOpen() {
+  activityManager.goToBrowser();
+}

@@ -24,9 +24,8 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
     ERROR            // Error state with message
   };
 
-  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                   const std::function<void()>& onGoHome)
-      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome) {}
+  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
@@ -44,8 +43,6 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   std::string statusMessage;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
-
-  const std::function<void()> onGoHome;
 
   void checkAndConnectWifi();
   void launchWifiSelection();

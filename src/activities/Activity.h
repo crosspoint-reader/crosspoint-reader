@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "ActivityManager.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 
@@ -47,6 +48,11 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
+
+  // Convenience method to facilitate API transition to ActivityManager
+  // TODO: remove this in near future
+  void onGoHome();
+  void onSelectBook(const std::string& path);
 
   // RAII helper to lock rendering mutex for the duration of a scope.
   class RenderLock {

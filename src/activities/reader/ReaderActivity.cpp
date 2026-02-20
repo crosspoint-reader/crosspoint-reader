@@ -77,31 +77,30 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
 void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   // If coming from a book, start in that book's folder; otherwise start from root
   const auto initialPath = fromBookPath.empty() ? "/" : extractFolderPath(fromBookPath);
-  onGoToLibrary(initialPath);
+  Intent intent;
+  intent.path = initialPath;
+  activityManager.goToMyLibrary(std::move(intent));
 }
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   const auto epubPath = epub->getPath();
   currentBookPath = epubPath;
   exitActivity();
-  enterNewActivity(new EpubReaderActivity(
-      renderer, mappedInput, std::move(epub), [this, epubPath] { goToLibrary(epubPath); }, [this] { onGoBack(); }));
+  enterNewActivity(new EpubReaderActivity(renderer, mappedInput, std::move(epub)));
 }
 
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   const auto xtcPath = xtc->getPath();
   currentBookPath = xtcPath;
   exitActivity();
-  enterNewActivity(new XtcReaderActivity(
-      renderer, mappedInput, std::move(xtc), [this, xtcPath] { goToLibrary(xtcPath); }, [this] { onGoBack(); }));
+  enterNewActivity(new XtcReaderActivity(renderer, mappedInput, std::move(xtc)));
 }
 
 void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
   const auto txtPath = txt->getPath();
   currentBookPath = txtPath;
   exitActivity();
-  enterNewActivity(new TxtReaderActivity(
-      renderer, mappedInput, std::move(txt), [this, txtPath] { goToLibrary(txtPath); }, [this] { onGoBack(); }));
+  enterNewActivity(new TxtReaderActivity(renderer, mappedInput, std::move(txt)));
 }
 
 void ReaderActivity::onEnter() {
@@ -136,4 +135,8 @@ void ReaderActivity::onEnter() {
     }
     onGoToEpubReader(std::move(epub));
   }
+}
+
+void ReaderActivity::onGoBack() {
+  onGoHome();  // TODO: is this correct?
 }

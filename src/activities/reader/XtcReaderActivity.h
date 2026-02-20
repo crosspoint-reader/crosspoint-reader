@@ -17,20 +17,14 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
 
-  const std::function<void()> onGoBack;
-  const std::function<void()> onGoHome;
-
   void renderPage();
   void saveProgress() const;
   void loadProgress();
 
  public:
-  explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,
-                             const std::function<void()>& onGoBack, const std::function<void()>& onGoHome)
+  explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc)
       : ActivityWithSubactivity("XtcReader", renderer, mappedInput),
-        xtc(std::move(xtc)),
-        onGoBack(onGoBack),
-        onGoHome(onGoHome) {}
+        xtc(std::move(xtc)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

@@ -48,7 +48,7 @@ void CrossPointWebServerActivity::onEnter() {
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
   enterNewActivity(new NetworkModeSelectionActivity(
       renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
-      [this]() { onGoBack(); }  // Cancel goes back to home
+      [this]() { onGoHome(); }  // Cancel goes back to home
       ));
 }
 
@@ -115,7 +115,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
       state = WebServerActivityState::MODE_SELECTION;
       enterNewActivity(new NetworkModeSelectionActivity(
           renderer, mappedInput, [this](const NetworkMode nextMode) { onNetworkModeSelected(nextMode); },
-          [this]() { onGoBack(); }));
+          [this]() { onGoHome(); }));
     }));
     return;
   }
@@ -161,7 +161,7 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     state = WebServerActivityState::MODE_SELECTION;
     enterNewActivity(new NetworkModeSelectionActivity(
         renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
-        [this]() { onGoBack(); }));
+        [this]() { onGoHome(); }));
   }
 }
 
@@ -184,7 +184,7 @@ void CrossPointWebServerActivity::startAccessPoint() {
 
   if (!apStarted) {
     LOG_ERR("WEBACT", "ERROR: Failed to start Access Point!");
-    onGoBack();
+    onGoHome();
     return;
   }
 
@@ -243,7 +243,7 @@ void CrossPointWebServerActivity::startWebServer() {
     LOG_ERR("WEBACT", "ERROR: Failed to start web server!");
     webServer.reset();
     // Go back on error
-    onGoBack();
+    onGoHome();
   }
 }
 
@@ -320,7 +320,7 @@ void CrossPointWebServerActivity::loop() {
           mappedInput.update();
           // Check for exit button inside loop for responsiveness
           if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-            onGoBack();
+            onGoHome();
             return;
           }
         }
@@ -330,7 +330,7 @@ void CrossPointWebServerActivity::loop() {
 
     // Handle exit on Back button (also check outside loop)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onGoBack();
+      onGoHome();
       return;
     }
   }

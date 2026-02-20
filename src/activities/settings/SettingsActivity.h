@@ -147,8 +147,6 @@ class SettingsActivity final : public ActivityWithSubactivity {
   std::vector<SettingInfo> systemSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
 
-  const std::function<void()> onGoHome;
-
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];
 
@@ -156,9 +154,8 @@ class SettingsActivity final : public ActivityWithSubactivity {
   void toggleCurrentSetting();
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                            const std::function<void()>& onGoHome)
-      : ActivityWithSubactivity("Settings", renderer, mappedInput), onGoHome(onGoHome) {}
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : ActivityWithSubactivity("Settings", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
