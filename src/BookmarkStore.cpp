@@ -1,6 +1,7 @@
 #include "BookmarkStore.h"
 
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 
 #include <algorithm>
 
@@ -21,7 +22,7 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
   const std::string path = getBookmarkPath(bookPath);
 
   FsFile file;
-  if (!SdMan.openFileForRead(TAG, path, file)) {
+  if (!Storage.openFileForRead(TAG, path, file)) {
     return entries;
   }
 
@@ -32,8 +33,7 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
     return entries;
   }
   if (header[0] != FORMAT_VERSION) {
-    Serial.printf("[%lu] [%s] Skipping bookmark file with version %d (expected %d): %s\n", millis(), TAG, header[0],
-                  FORMAT_VERSION, path.c_str());
+    LOG_DBG(TAG, "Skipping bookmark file with version %d (expected %d): %s", header[0], FORMAT_VERSION, path.c_str());
     file.close();
     return entries;
   }
@@ -58,7 +58,7 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
 
 bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<BookmarkEntry>& entries) {
   FsFile file;
-  if (!SdMan.openFileForWrite(TAG, path, file)) {
+  if (!Storage.openFileForWrite(TAG, path, file)) {
     return false;
   }
   uint8_t header[2] = {FORMAT_VERSION, static_cast<uint8_t>(entries.size())};
@@ -86,7 +86,7 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
 }
 
 bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry& entry) {
-  SdMan.mkdir(BOOKMARKS_DIR);
+  Storage.mkdir(BOOKMARKS_DIR);
   const std::string path = getBookmarkPath(bookPath);
 
   auto entries = loadBookmarks(bookPath);
@@ -95,8 +95,7 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
   if (std::any_of(entries.begin(), entries.end(), [&entry](const BookmarkEntry& existing) {
         return existing.spineIndex == entry.spineIndex && existing.pageIndex == entry.pageIndex;
       })) {
-    Serial.printf("[%lu] [%s] Bookmark already exists at spine %d page %d\n", millis(), TAG, entry.spineIndex,
-                  entry.pageIndex);
+    LOG_DBG(TAG, "Bookmark already exists at spine %d page %d", entry.spineIndex, entry.pageIndex);
     return true;
   }
 
@@ -113,8 +112,7 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
 
   const bool ok = writeBookmarks(path, entries);
   if (ok) {
-    Serial.printf("[%lu] [%s] Bookmark added at %d%% (total: %d)\n", millis(), TAG, entry.bookPercent,
-                  static_cast<int>(entries.size()));
+    LOG_DBG(TAG, "Bookmark added at %d%% (total: %d)", entry.bookPercent, static_cast<int>(entries.size()));
   }
   return ok;
 }
@@ -131,8 +129,7 @@ bool BookmarkStore::deleteBookmark(const std::string& bookPath, int index) {
   entries.erase(entries.begin() + index);
   const bool ok = writeBookmarks(path, entries);
   if (ok) {
-    Serial.printf("[%lu] [%s] Bookmark deleted at %d%% (remaining: %d)\n", millis(), TAG, bookPercent,
-                  static_cast<int>(entries.size()));
+    LOG_DBG(TAG, "Bookmark deleted at %d%% (remaining: %d)", bookPercent, static_cast<int>(entries.size()));
   }
   return ok;
 }

@@ -23,35 +23,20 @@ int EpubReaderBookmarkListActivity::getPageItems() const {
   return std::max(1, availableHeight / lineHeight);
 }
 
-void EpubReaderBookmarkListActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderBookmarkListActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void EpubReaderBookmarkListActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   bookmarks = BookmarkStore::loadBookmarks(bookPath);
-  renderingMutex = xSemaphoreCreateMutex();
 
   if (selectorIndex >= getTotalItems()) {
     selectorIndex = std::max(0, getTotalItems() - 1);
   }
 
-  updateRequired = true;
-  xTaskCreate(&EpubReaderBookmarkListActivity::taskTrampoline, "BookmarkListTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
 void EpubReaderBookmarkListActivity::onExit() {
   ActivityWithSubactivity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
 }
 
 void EpubReaderBookmarkListActivity::loop() {
@@ -80,10 +65,10 @@ void EpubReaderBookmarkListActivity::loop() {
         selectorIndex = std::max(0, getTotalItems() - 1);
       }
       confirmingDelete = false;
-      updateRequired = true;
+      requestUpdate();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       confirmingDelete = false;
-      updateRequired = true;
+      requestUpdate();
     }
     return;
   }
@@ -99,7 +84,7 @@ void EpubReaderBookmarkListActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
       confirmingDelete = true;
-      updateRequired = true;
+      requestUpdate();
     } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
       const auto& bk = bookmarks[selectorIndex];
       onSelectBookmark(bk.spineIndex, bk.pageIndex);
@@ -112,30 +97,18 @@ void EpubReaderBookmarkListActivity::loop() {
     } else {
       selectorIndex = (selectorIndex + totalItems - 1) % totalItems;
     }
-    updateRequired = true;
+    requestUpdate();
   } else if (nextReleased) {
     if (skipPage) {
       selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % totalItems;
     } else {
       selectorIndex = (selectorIndex + 1) % totalItems;
     }
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void EpubReaderBookmarkListActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      renderScreen();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void EpubReaderBookmarkListActivity::renderScreen() {
+void EpubReaderBookmarkListActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
