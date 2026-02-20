@@ -316,6 +316,7 @@ void WebDAVHandler::handlePut() {
     return;
   }
 
+  bool writeOk = true;
   if (contentLength > 0) {
     uint8_t buf[4096];
     size_t remaining = contentLength;
@@ -323,13 +324,28 @@ void WebDAVHandler::handlePut() {
       esp_task_wdt_reset();
       size_t toRead = remaining < sizeof(buf) ? remaining : sizeof(buf);
       size_t bytesRead = client.readBytes(buf, toRead);
-      if (bytesRead == 0) break;
-      file.write(buf, bytesRead);
+      if (bytesRead == 0) {
+        writeOk = false;
+        break;
+      }
+      size_t written = file.write(buf, bytesRead);
+      if (written != bytesRead) {
+        writeOk = false;
+        break;
+      }
       remaining -= bytesRead;
     }
+    if (remaining > 0) writeOk = false;
   }
 
   file.close();
+
+  if (!writeOk) {
+    Storage.remove(path.c_str());
+    _server->send(500, "text/plain", "Write failed - incomplete upload or disk full");
+    return;
+  }
+
   clearEpubCacheIfNeeded(path);
 
   _server->send(existed ? 204 : 201);
@@ -695,18 +711,26 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) const {
-  // Extract the filename/dirname component
-  String name = path;
-  int lastSlash = path.lastIndexOf('/');
-  if (lastSlash >= 0) {
-    name = path.substring(lastSlash + 1);
-  }
-  if (name.isEmpty()) return false;
+  // Check every segment of the path, not just the last one.
+  // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
+  int start = 0;
+  while (start < (int)path.length()) {
+    if (path.charAt(start) == '/') {
+      start++;
+      continue;
+    }
+    int end = path.indexOf('/', start);
+    if (end == -1) end = path.length();
 
-  if (name.startsWith(".")) return true;
+    String segment = path.substring(start, end);
 
-  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-    if (name.equals(HIDDEN_ITEMS[i])) return true;
+    if (segment.startsWith(".")) return true;
+
+    for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+      if (segment.equals(HIDDEN_ITEMS[i])) return true;
+    }
+
+    start = end + 1;
   }
 
   return false;
