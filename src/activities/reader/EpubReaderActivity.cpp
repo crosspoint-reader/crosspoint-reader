@@ -521,8 +521,10 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
 
   // Add status bar margin
   const bool showStatusBar = SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
-                             SETTINGS.statusBarChapterTitle || SETTINGS.statusBarBattery;
-  const bool showProgressBar = SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
+                             SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE ||
+                             SETTINGS.statusBarBattery;
+  const bool showProgressBar =
+      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   orientedMarginBottom += (showStatusBar ? (statusBarMargin - SETTINGS.screenMargin) : 0) +
                           (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
 
@@ -704,11 +706,18 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
 
   const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
   std::string title;
-  if (tocIndex == -1) {
-    title = tr(STR_UNNAMED);
+
+  if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
+    if (tocIndex == -1) {
+      title = tr(STR_UNNAMED);
+    } else {
+      const auto tocItem = epub->getTocItem(tocIndex);
+      title = tocItem.title;
+    }
+  } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
+    title = epub->getTitle();
   } else {
-    const auto tocItem = epub->getTocItem(tocIndex);
-    title = tocItem.title;
+    title = "";
   }
 
   StatusBar::renderStatusBar(renderer, orientedMarginRight, orientedMarginBottom, orientedMarginLeft, bookProgress,

@@ -144,8 +144,10 @@ void TxtReaderActivity::initializeReader() {
 
   // Add status bar margin
   const bool showStatusBar = SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
-                             SETTINGS.statusBarChapterTitle || SETTINGS.statusBarBattery;
-  const bool showProgressBar = SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
+                             SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE ||
+                             SETTINGS.statusBarBattery;
+  const bool showProgressBar =
+      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   orientedMarginBottom += (showStatusBar ? (statusBarMargin - cachedScreenMargin) : 0) +
                           (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
 

@@ -52,7 +52,7 @@ void renderStatusBar(GfxRenderer& renderer, const int marginRight, const int mar
                         showBatteryPercentage);
   }
 
-  if (SETTINGS.statusBarChapterTitle) {
+  if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
     // Centered chapter title text
     // Page width minus existing content with 30px padding on each side
     const int rendererableScreenWidth = renderer.getScreenWidth() - marginLeft - marginRight;

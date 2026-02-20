@@ -82,44 +82,44 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
     case CrossPointSettings::NONE:
       settings.statusBarChapterPageCount = 0;
       settings.statusBarBookProgressPercentage = 0;
-      settings.statusBarProgressBar = CrossPointSettings::HIDE;
-      settings.statusBarChapterTitle = 0;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::HIDE_TITLE;
       settings.statusBarBattery = 0;
       break;
     case CrossPointSettings::NO_PROGRESS:
       settings.statusBarChapterPageCount = 0;
       settings.statusBarBookProgressPercentage = 0;
-      settings.statusBarProgressBar = CrossPointSettings::HIDE;
-      settings.statusBarChapterTitle = 1;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
       settings.statusBarBattery = 1;
       break;
     case CrossPointSettings::BOOK_PROGRESS_BAR:
       settings.statusBarChapterPageCount = 1;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
-      settings.statusBarChapterTitle = 1;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
       settings.statusBarBattery = 1;
       break;
     case CrossPointSettings::ONLY_BOOK_PROGRESS_BAR:
       settings.statusBarChapterPageCount = 1;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
-      settings.statusBarChapterTitle = 0;
+      settings.statusBarTitle = CrossPointSettings::HIDE_TITLE;
       settings.statusBarBattery = 0;
       break;
     case CrossPointSettings::CHAPTER_PROGRESS_BAR:
       settings.statusBarChapterPageCount = 0;
       settings.statusBarBookProgressPercentage = 1;
       settings.statusBarProgressBar = CrossPointSettings::CHAPTER_PROGRESS;
-      settings.statusBarChapterTitle = 1;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
       settings.statusBarBattery = 1;
       break;
     case CrossPointSettings::FULL:
     default:
       settings.statusBarChapterPageCount = 1;
       settings.statusBarBookProgressPercentage = 1;
-      settings.statusBarProgressBar = CrossPointSettings::HIDE;
-      settings.statusBarChapterTitle = 1;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
       settings.statusBarBattery = 1;
       break;
   }
@@ -186,7 +186,7 @@ uint8_t CrossPointSettings::writeSettings(FsFile& file, bool count_only) const {
   writer.writeItem(file, statusBarChapterPageCount);
   writer.writeItem(file, statusBarBookProgressPercentage);
   writer.writeItem(file, statusBarProgressBar);
-  writer.writeItem(file, statusBarChapterTitle);
+  writer.writeItem(file, statusBarTitle);
   writer.writeItem(file, statusBarBattery);
   // New fields need to be added at end for backward compatibility
 
@@ -322,7 +322,7 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, statusBarProgressBar, STATUS_BAR_PROGRESS_BAR_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, statusBarChapterTitle);
+    readAndValidate(inputFile, statusBarTitle, STATUS_BAR_TITLE_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, statusBarBattery);
     statusBarSettingsRead = true;

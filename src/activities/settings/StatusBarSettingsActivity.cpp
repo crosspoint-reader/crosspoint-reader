@@ -14,9 +14,12 @@
 namespace {
 constexpr int MENU_ITEMS = 5;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_CHAPTER_PAGE_COUNT, StrId::STR_BOOK_PROGRESS_PERCENTAGE,
-                                     StrId::STR_PROGRESS_BAR, StrId::STR_CHAPTER_TITLE, StrId::STR_BATTERY};
+                                     StrId::STR_PROGRESS_BAR, StrId::STR_TITLE, StrId::STR_BATTERY};
 constexpr int PROGRESS_BAR_ITEMS = 3;
 const StrId progressBarNames[PROGRESS_BAR_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE};
+
+constexpr int TITLE_ITEMS = 3;
+const StrId titleNames[TITLE_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE};
 
 const char* translatedShow = tr(STR_SHOW);
 const char* translatedHide = tr(STR_HIDE);
@@ -27,9 +30,13 @@ void StatusBarSettingsActivity::onEnter() {
 
   selectedIndex = 0;
 
-  // Clamp statusBarProgressBar in case of corrupt/migrated data
+  // Clamp statusBarProgressBar and statusBarTitle in case of corrupt/migrated data
   if (SETTINGS.statusBarProgressBar >= PROGRESS_BAR_ITEMS) {
-    SETTINGS.statusBarProgressBar = CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
+    SETTINGS.statusBarProgressBar = CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
+  }
+
+  if (SETTINGS.statusBarTitle >= TITLE_ITEMS) {
+    SETTINGS.statusBarTitle = CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE;
   }
 
   requestUpdate();
@@ -83,7 +90,7 @@ void StatusBarSettingsActivity::handleSelection() {
     SETTINGS.statusBarProgressBar = (SETTINGS.statusBarProgressBar + 1) % PROGRESS_BAR_ITEMS;
   } else if (selectedIndex == 3) {
     // Chapter Title
-    SETTINGS.statusBarChapterTitle = (SETTINGS.statusBarChapterTitle + 1) % 2;
+    SETTINGS.statusBarTitle = (SETTINGS.statusBarTitle + 1) % TITLE_ITEMS;
   } else if (selectedIndex == 4) {
     // Show Battery
     SETTINGS.statusBarBattery = (SETTINGS.statusBarBattery + 1) % 2;
@@ -115,7 +122,7 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
         } else if (index == 2) {
           return I18N.get(progressBarNames[SETTINGS.statusBarProgressBar]);
         } else if (index == 3) {
-          return SETTINGS.statusBarChapterTitle ? translatedShow : translatedHide;
+          return I18N.get(titleNames[SETTINGS.statusBarTitle]);
         } else if (index == 4) {
           return SETTINGS.statusBarBattery ? translatedShow : translatedHide;
         } else {
@@ -139,15 +146,24 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
   int verticalPreviewPadding = 50;
 
   // Add status bar margin
-  const bool showProgressBar = SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE;
+  const bool showProgressBar =
+      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   if (SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage || showProgressBar ||
-      SETTINGS.statusBarChapterTitle || SETTINGS.statusBarBattery) {
+      SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE || SETTINGS.statusBarBattery) {
     // Add additional margin for status bar if progress bar is shown
     orientedMarginBottom += 19 - SETTINGS.screenMargin + (showProgressBar ? (metrics.bookProgressBarHeight + 1) : 0);
   }
 
-  StatusBar::renderStatusBar(renderer, orientedMarginRight, orientedMarginBottom, orientedMarginLeft, 75, 8, 32,
-                             tr(STR_EXAMPLE_CHAPTER), verticalPreviewPadding);
+  std::string title;
+
+  if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
+    title = tr(STR_EXAMPLE_BOOK);
+  } else {
+    title = tr(STR_EXAMPLE_CHAPTER);
+  }
+
+  StatusBar::renderStatusBar(renderer, orientedMarginRight, orientedMarginBottom, orientedMarginLeft, 75, 8, 32, title,
+                             verticalPreviewPadding);
 
   renderer.drawText(UI_10_FONT_ID, orientedMarginLeft,
                     renderer.getScreenHeight() - orientedMarginBottom - 50 - 19 - 19 - 4, tr(STR_PREVIEW));
