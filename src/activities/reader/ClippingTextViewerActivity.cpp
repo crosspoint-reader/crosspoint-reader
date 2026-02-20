@@ -109,9 +109,7 @@ void ClippingTextViewerActivity::onEnter() {
   requestUpdate();
 }
 
-void ClippingTextViewerActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-}
+void ClippingTextViewerActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void ClippingTextViewerActivity::loop() {
   if (subActivity) {

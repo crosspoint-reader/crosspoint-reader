@@ -51,9 +51,7 @@ void EpubReaderClippingsListActivity::onEnter() {
   requestUpdate();
 }
 
-void EpubReaderClippingsListActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-}
+void EpubReaderClippingsListActivity::onExit() { ActivityWithSubactivity::onExit(); }
 
 void EpubReaderClippingsListActivity::loop() {
   if (subActivity) {

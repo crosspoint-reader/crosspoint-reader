@@ -31,7 +31,8 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   enum class CaptureState { IDLE, CAPTURING };
   CaptureState captureState = CaptureState::IDLE;
   std::vector<CapturedPage> captureBuffer;
-  bool pendingCaptureAfterRender = false;  // Capture deferred until section loads after boundary crossing
+  bool pendingCaptureAfterRender = false;      // Capture deferred until section loads after boundary crossing
+  std::vector<ClippingEntry> cachedClippings;  // Cached clipping index for sidebar indicator
 
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;

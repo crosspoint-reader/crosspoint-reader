@@ -105,6 +105,9 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  // Load clipping index for sidebar indicator
+  cachedClippings = ClippingStore::loadIndex(epub->getPath());
+
   // Trigger first update
   requestUpdate();
 }
@@ -166,6 +169,9 @@ void EpubReaderActivity::stopCapture() {
   }
   const bool ok = ClippingStore::saveClipping(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
   statusBarOverride = ok ? "Clipping saved" : "Save failed";
+  if (ok) {
+    cachedClippings = ClippingStore::loadIndex(epub->getPath());
+  }
   captureBuffer.clear();
   captureState = CaptureState::IDLE;
   requestUpdate();
@@ -524,6 +530,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       exitActivity();
       enterNewActivity(new EpubReaderClippingsListActivity(renderer, mappedInput, epub->getPath(), [this]() {
         exitActivity();
+        cachedClippings = ClippingStore::loadIndex(epub->getPath());
         requestUpdate();
       }));
       break;
@@ -789,6 +796,28 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
       // TODO: prevent infinite loop if the page keeps failing to load for some reason
       return;
     }
+    // Draw clipping sidebar indicator
+    if (!cachedClippings.empty() &&
+        ClippingStore::hasClippingAtPage(cachedClippings, static_cast<uint16_t>(currentSpineIndex),
+                                         static_cast<uint16_t>(section->currentPage))) {
+      constexpr int barWidth = 3;
+      constexpr int tickLen = 8;
+      constexpr int edgePad = 4;  // Space from screen edge so bracket is visible on dark bezels
+      const int screenWidth = renderer.getScreenWidth();
+      const int sidebarY = orientedMarginTop;
+      const int sidebarHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+      // Left bracket [
+      const int leftX = edgePad;
+      renderer.fillRect(leftX, sidebarY, barWidth, sidebarHeight, true);
+      renderer.fillRect(leftX + barWidth, sidebarY, tickLen, barWidth, true);
+      renderer.fillRect(leftX + barWidth, sidebarY + sidebarHeight - barWidth, tickLen, barWidth, true);
+      // Right bracket ]
+      const int rightX = screenWidth - edgePad - barWidth;
+      renderer.fillRect(rightX, sidebarY, barWidth, sidebarHeight, true);
+      renderer.fillRect(rightX - tickLen, sidebarY, tickLen, barWidth, true);
+      renderer.fillRect(rightX - tickLen, sidebarY + sidebarHeight - barWidth, tickLen, barWidth, true);
+    }
+
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
