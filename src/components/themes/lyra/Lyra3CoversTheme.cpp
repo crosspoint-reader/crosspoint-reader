@@ -65,8 +65,8 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
           }
         }
         // Draw either way
-        renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                            tileWidth - 2 * hPaddingInSelection, Lyra3CoversMetrics::values.homeCoverHeight, true);
+        renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection, tileWidth - 2 * hPaddingInSelection,
+                          Lyra3CoversMetrics::values.homeCoverHeight, true);
 
         if (!hasCover) {
           // Render empty cover
