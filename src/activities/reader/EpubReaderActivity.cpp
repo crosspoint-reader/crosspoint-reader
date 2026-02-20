@@ -436,7 +436,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const std::string bookPath = epub->getPath();
       const std::string cachePath = epub->getCachePath();
 
-      std::string Heading = tr(STR_DELETE) + std::string("? ");
+      std::string heading = tr(STR_DELETE) + std::string("? ");
 
       auto doDelete = [this, bookPath, cachePath](bool confirmed) {
         if (confirmed) {
