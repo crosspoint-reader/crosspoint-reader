@@ -211,7 +211,7 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
   int yPos = y + getFontAscenderSize(fontId);
-  int xpos = x;
+  int xPos = x;
 
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
@@ -230,9 +230,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     cp = font.applyLigatures(cp, text, style);
     if (prevCp != 0) {
-      xpos += font.getKerning(prevCp, cp, style);
+      xPos += font.getKerning(prevCp, cp, style);
     }
-    renderChar(font, cp, &xpos, &yPos, black, style);
+    renderChar(font, cp, &xPos, &yPos, black, style);
     prevCp = cp;
   }
 }
