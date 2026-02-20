@@ -3,6 +3,8 @@
 #include <Logging.h>
 #include <Utf8.h>
 
+#include <cstring>
+
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
   if (fontData->groups != nullptr) {
     if (!fontDecompressor) {
@@ -236,15 +238,34 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
     if (y2 < y1) {
       std::swap(y1, y2);
     }
-    for (int y = y1; y <= y2; y++) {
-      drawPixel(x1, y, state);
+    // In Portrait/PortraitInverted a logical vertical line maps to a physical horizontal span.
+    switch (orientation) {
+      case Portrait:
+        fillPhysicalHSpan(HalDisplay::DISPLAY_HEIGHT - 1 - x1, y1, y2, state);
+        return;
+      case PortraitInverted:
+        fillPhysicalHSpan(x1, HalDisplay::DISPLAY_WIDTH - 1 - y2, HalDisplay::DISPLAY_WIDTH - 1 - y1, state);
+        return;
+      default:
+        for (int y = y1; y <= y2; y++) drawPixel(x1, y, state);
+        return;
     }
   } else if (y1 == y2) {
     if (x2 < x1) {
       std::swap(x1, x2);
     }
-    for (int x = x1; x <= x2; x++) {
-      drawPixel(x, y1, state);
+    // In Landscape a logical horizontal line maps to a physical horizontal span.
+    switch (orientation) {
+      case LandscapeCounterClockwise:
+        fillPhysicalHSpan(y1, x1, x2, state);
+        return;
+      case LandscapeClockwise:
+        fillPhysicalHSpan(HalDisplay::DISPLAY_HEIGHT - 1 - y1, HalDisplay::DISPLAY_WIDTH - 1 - x2,
+                          HalDisplay::DISPLAY_WIDTH - 1 - x1, state);
+        return;
+      default:
+        for (int x = x1; x <= x2; x++) drawPixel(x, y1, state);
+        return;
     }
   } else {
     // Bresenham's line algorithm — integer arithmetic only
@@ -373,9 +394,88 @@ void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, con
   }
 }
 
+// Write a solid horizontal span directly into the physical framebuffer with byte-level operations.
+// Handles partial left/right bytes and fills the aligned middle with memset.
+// Bit layout: MSB-first (bit 7 = phyX=0, bit 0 = phyX=7); state=true clears bits (dark pixel).
+void GfxRenderer::fillPhysicalHSpan(const int phyY, const int phyX_start, const int phyX_end, const bool state) const {
+  const int cX0 = std::max(phyX_start, 0);
+  const int cX1 = std::min(phyX_end, (int)HalDisplay::DISPLAY_WIDTH - 1);
+  if (cX0 > cX1 || phyY < 0 || phyY >= (int)HalDisplay::DISPLAY_HEIGHT) return;
+
+  uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
+  const int startByte = cX0 >> 3;
+  const int endByte = cX1 >> 3;
+  const int leftBits = cX0 & 7;   // first bit index within startByte
+  const int rightBits = cX1 & 7;  // last bit index within endByte
+
+  if (startByte == endByte) {
+    // Both endpoints in the same byte
+    const uint8_t mask = (0xFF >> leftBits) & ~(0xFF >> (rightBits + 1));
+    if (state)
+      row[startByte] &= ~mask;
+    else
+      row[startByte] |= mask;
+    return;
+  }
+
+  // Left partial byte
+  if (leftBits != 0) {
+    const uint8_t mask = 0xFF >> leftBits;
+    if (state)
+      row[startByte] &= ~mask;
+    else
+      row[startByte] |= mask;
+  }
+
+  // Full bytes in the middle
+  const int fullStart = (leftBits == 0) ? startByte : startByte + 1;
+  const int fullEnd = (rightBits == 7) ? endByte : endByte - 1;
+  if (fullStart <= fullEnd) {
+    memset(row + fullStart, state ? 0x00 : 0xFF, fullEnd - fullStart + 1);
+  }
+
+  // Right partial byte
+  if (rightBits != 7) {
+    const uint8_t mask = ~(0xFF >> (rightBits + 1));
+    if (state)
+      row[endByte] &= ~mask;
+    else
+      row[endByte] |= mask;
+  }
+}
+
 void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
-  for (int fillY = y; fillY < y + height; fillY++) {
-    drawLine(x, fillY, x + width - 1, fillY, state);
+  if (width <= 0 || height <= 0) return;
+
+  // For each orientation, one logical dimension maps to a constant physical row, allowing the
+  // perpendicular dimension to be written as a byte-level span — eliminating per-pixel overhead.
+  switch (orientation) {
+    case Portrait:
+      // Logical column x → physical row (479-x); logical y range → physical x span
+      for (int lx = x; lx < x + width; lx++) {
+        fillPhysicalHSpan(HalDisplay::DISPLAY_HEIGHT - 1 - lx, y, y + height - 1, state);
+      }
+      return;
+    case PortraitInverted:
+      // Logical column x → physical row x; logical y range → physical x span (mirrored)
+      for (int lx = x; lx < x + width; lx++) {
+        fillPhysicalHSpan(lx, HalDisplay::DISPLAY_WIDTH - 1 - (y + height - 1), HalDisplay::DISPLAY_WIDTH - 1 - y,
+                          state);
+      }
+      return;
+    case LandscapeCounterClockwise:
+      // Logical row y → physical row y; logical x range → physical x span
+      for (int ly = y; ly < y + height; ly++) {
+        fillPhysicalHSpan(ly, x, x + width - 1, state);
+      }
+      return;
+    case LandscapeClockwise:
+      // Logical row y → physical row (479-y); logical x range → physical x span (mirrored)
+      for (int ly = y; ly < y + height; ly++) {
+        fillPhysicalHSpan(HalDisplay::DISPLAY_HEIGHT - 1 - ly, HalDisplay::DISPLAY_WIDTH - 1 - (x + width - 1),
+                          HalDisplay::DISPLAY_WIDTH - 1 - x, state);
+      }
+      return;
   }
 }
 

@@ -45,6 +45,9 @@ class GfxRenderer {
   void drawPixelDither(int x, int y) const;
   template <Color color>
   void fillArc(int maxRadius, int cx, int cy, int xDir, int yDir) const;
+  // Write a solid horizontal span directly to the physical framebuffer using byte-level operations.
+  // phyY: physical row; phyX_start/phyX_end: inclusive physical column range; state: true=dark.
+  void fillPhysicalHSpan(int phyY, int phyX_start, int phyX_end, bool state) const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
