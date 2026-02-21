@@ -36,15 +36,15 @@ void EpubReaderFootnotesActivity::loop() {
   }
 
   buttonNavigator.onNext([this] {
-    if (selectedIndex < static_cast<int>(footnotes.size()) - 1) {
-      selectedIndex++;
+    if (!footnotes.empty()) {
+      selectedIndex = (selectedIndex + 1) % footnotes.size();
       requestUpdate();
     }
   });
 
   buttonNavigator.onPrevious([this] {
-    if (selectedIndex > 0) {
-      selectedIndex--;
+    if (!footnotes.empty()) {
+      selectedIndex = (selectedIndex - 1 + footnotes.size()) % footnotes.size();
       requestUpdate();
     }
   });
