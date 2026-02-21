@@ -11,7 +11,18 @@
 HalPowerManager powerManager;  // Singleton instance
 
 void HalPowerManager::begin() {
-  pinMode(BAT_GPIO0, INPUT);
+  if (gpio.deviceIsX3()) {
+    // X3 uses an I2C fuel gauge for battery monitoring.
+    // I2C init must come AFTER gpio.begin() so early hardware detection/probes are finished.
+    Wire.begin(20, 0, 400000);
+    Wire.setTimeOut(4);
+    _batteryUseI2C = true;
+    _batteryI2cAddr = 0x55;
+    // TI BQ27220: StateOfCharge() command code
+    _batterySocRegister = 0x2C;
+  } else {
+    pinMode(BAT_GPIO0, INPUT);
+  }
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
   assert(modeMutex != nullptr);
@@ -65,8 +76,38 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {
+  if (_batteryUseI2C) {
+    const unsigned long now = millis();
+    if (_batteryLastPollMs != 0 && (now - _batteryLastPollMs) < BATTERY_POLL_MS) {
+      return _batteryCachedPercent;
+    }
+
+    // Read SOC directly from I2C fuel gauge (16-bit LE register).
+    // On I2C error, keep last known value to avoid UI jitter/slowdowns.
+    Wire.beginTransmission(_batteryI2cAddr);
+    Wire.write(_batterySocRegister);
+    if (Wire.endTransmission(false) != 0) {
+      _batteryI2cFailCount++;
+      _batteryLastPollMs = now;
+      return _batteryCachedPercent;
+    }
+    Wire.requestFrom(_batteryI2cAddr, (uint8_t)2);
+    if (Wire.available() < 2) {
+      _batteryI2cFailCount++;
+      _batteryLastPollMs = now;
+      return _batteryCachedPercent;
+    }
+    const uint8_t lo = Wire.read();
+    const uint8_t hi = Wire.read();
+    const uint16_t soc = (hi << 8) | lo;
+    _batteryCachedPercent = soc > 100 ? 100 : soc;
+    _batteryLastPollMs = now;
+    _batteryI2cFailCount = 0;
+    return _batteryCachedPercent;
+  }
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
-  return battery.readPercentage();
+  _batteryCachedPercent = battery.readPercentage();
+  return _batteryCachedPercent;
 }
 
 HalPowerManager::Lock::Lock() {

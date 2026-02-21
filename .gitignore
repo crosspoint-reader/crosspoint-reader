@@ -10,3 +10,4 @@ build
 **/__pycache__/
 /compile_commands.json
 /.cache
+/notes.md

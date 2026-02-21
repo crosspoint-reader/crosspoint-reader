@@ -1,5 +1,7 @@
 #include "PngToBmpConverter.h"
 
+#include <EInkDisplay.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <miniz.h>
@@ -16,8 +18,10 @@ constexpr bool USE_8BIT_OUTPUT = false;
 constexpr bool USE_ATKINSON = true;
 constexpr bool USE_FLOYD_STEINBERG = false;
 constexpr bool USE_PRESCALE = true;
-constexpr int TARGET_MAX_WIDTH = 480;
-constexpr int TARGET_MAX_HEIGHT = 800;
+constexpr int X4_TARGET_MAX_WIDTH = EInkDisplay::DISPLAY_HEIGHT;
+constexpr int X4_TARGET_MAX_HEIGHT = EInkDisplay::DISPLAY_WIDTH;
+constexpr int X3_TARGET_MAX_WIDTH = EInkDisplay::X3_DISPLAY_HEIGHT;
+constexpr int X3_TARGET_MAX_HEIGHT = EInkDisplay::X3_DISPLAY_WIDTH;
 // ============================================================================
 
 // PNG constants
@@ -853,7 +857,9 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
 }
 
 bool PngToBmpConverter::pngFileToBmpStream(FsFile& pngFile, Print& bmpOut, bool crop) {
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT, false, crop);
+  const int targetWidth = gpio.deviceIsX3() ? X3_TARGET_MAX_WIDTH : X4_TARGET_MAX_WIDTH;
+  const int targetHeight = gpio.deviceIsX3() ? X3_TARGET_MAX_HEIGHT : X4_TARGET_MAX_HEIGHT;
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop);
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,

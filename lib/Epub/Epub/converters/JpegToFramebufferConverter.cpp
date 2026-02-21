@@ -104,6 +104,20 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
+  const DitherMode ditherMode = config.ditherMode;
+  auto quantizePixel = [&](uint8_t gray, int x, int y) -> uint8_t {
+    switch (ditherMode) {
+      case DitherMode::Noise:
+        return applyNoiseDither4Level(gray, x, y);
+      case DitherMode::Bayer:
+        return applyBayerDither4Level(gray, x, y);
+      case DitherMode::Off:
+      default: {
+        uint8_t q = gray / 85;
+        return q > 3 ? 3 : q;
+      }
+    }
+  };
 
   // Allocate pixel cache if cachePath is provided
   PixelCache cache;
@@ -144,7 +158,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
             int destX = config.x + (int)(srcX * scale);
             if (destX >= screenWidth || destX >= config.x + destWidth) continue;
             uint8_t gray = imageInfo.m_pMCUBufR[row * 8 + col];
-            uint8_t dithered = config.useDithering ? applyBayerDither4Level(gray, destX, destY) : gray / 85;
+            uint8_t dithered = quantizePixel(gray, destX, destY);
             if (dithered > 3) dithered = 3;
             drawPixelWithRenderMode(renderer, destX, destY, dithered);
             if (caching) cache.setPixel(destX, destY, dithered);
@@ -165,7 +179,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
             uint8_t g = imageInfo.m_pMCUBufG[row * 8 + col];
             uint8_t b = imageInfo.m_pMCUBufB[row * 8 + col];
             uint8_t gray = (uint8_t)((r * 77 + g * 150 + b * 29) >> 8);
-            uint8_t dithered = config.useDithering ? applyBayerDither4Level(gray, destX, destY) : gray / 85;
+            uint8_t dithered = quantizePixel(gray, destX, destY);
             if (dithered > 3) dithered = 3;
             drawPixelWithRenderMode(renderer, destX, destY, dithered);
             if (caching) cache.setPixel(destX, destY, dithered);
@@ -188,7 +202,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
             uint8_t g = imageInfo.m_pMCUBufG[blockIndex * 64 + pixelIndex];
             uint8_t b = imageInfo.m_pMCUBufB[blockIndex * 64 + pixelIndex];
             uint8_t gray = (uint8_t)((r * 77 + g * 150 + b * 29) >> 8);
-            uint8_t dithered = config.useDithering ? applyBayerDither4Level(gray, destX, destY) : gray / 85;
+            uint8_t dithered = quantizePixel(gray, destX, destY);
             if (dithered > 3) dithered = 3;
             drawPixelWithRenderMode(renderer, destX, destY, dithered);
             if (caching) cache.setPixel(destX, destY, dithered);
@@ -211,7 +225,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
             uint8_t g = imageInfo.m_pMCUBufG[blockIndex * 128 + pixelIndex];
             uint8_t b = imageInfo.m_pMCUBufB[blockIndex * 128 + pixelIndex];
             uint8_t gray = (uint8_t)((r * 77 + g * 150 + b * 29) >> 8);
-            uint8_t dithered = config.useDithering ? applyBayerDither4Level(gray, destX, destY) : gray / 85;
+            uint8_t dithered = quantizePixel(gray, destX, destY);
             if (dithered > 3) dithered = 3;
             drawPixelWithRenderMode(renderer, destX, destY, dithered);
             if (caching) cache.setPixel(destX, destY, dithered);
@@ -237,7 +251,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
             uint8_t g = imageInfo.m_pMCUBufG[blockOffset + pixelIndex];
             uint8_t b = imageInfo.m_pMCUBufB[blockOffset + pixelIndex];
             uint8_t gray = (uint8_t)((r * 77 + g * 150 + b * 29) >> 8);
-            uint8_t dithered = config.useDithering ? applyBayerDither4Level(gray, destX, destY) : gray / 85;
+            uint8_t dithered = quantizePixel(gray, destX, destY);
             if (dithered > 3) dithered = 3;
             drawPixelWithRenderMode(renderer, destX, destY, dithered);
             if (caching) cache.setPixel(destX, destY, dithered);

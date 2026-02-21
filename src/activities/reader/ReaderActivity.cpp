@@ -1,5 +1,6 @@
 #include "ReaderActivity.h"
 
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 
 #include "CrossPointSettings.h"

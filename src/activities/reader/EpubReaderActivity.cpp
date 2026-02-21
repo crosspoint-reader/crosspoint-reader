@@ -3,6 +3,7 @@
 #include <Epub/Page.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -670,12 +671,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     pagesUntilFullRefresh--;
   }
 
-  // Save bw buffer to reset buffer state after grayscale data sync
-  renderer.storeBwBuffer();
+  const bool useGrayscaleAA = SETTINGS.textAntiAliasing;
+  if (useGrayscaleAA) {
+    // Save BW buffer only when we actually run grayscale passes.
+    renderer.storeBwBuffer();
 
-  // grayscale rendering
-  // TODO: Only do this if font supports it
-  if (SETTINGS.textAntiAliasing) {
+    // grayscale rendering
+    // TODO: Only do this if font supports it
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
@@ -690,10 +692,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // display grayscale part
     renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
-  }
 
-  // restore the bw data
-  renderer.restoreBwBuffer();
+    // restore the bw data
+    renderer.restoreBwBuffer();
+  }
 }
 
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,

@@ -11,11 +11,33 @@ inline const uint8_t bayer4x4[4][4] = {
     {15, 7, 13, 5},
 };
 
-// Apply Bayer dithering and quantize to 4 levels (0-3)
-// Stateless - works correctly with any pixel processing order
+// Apply Bayer dithering and quantize to 4 levels (0-3).
 inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
   int bayer = bayer4x4[y & 3][x & 3];
   int dither = (bayer - 8) * 5;  // Scale to +/-40 (half of quantization step 85)
+
+  int adjusted = gray + dither;
+  if (adjusted < 0) adjusted = 0;
+  if (adjusted > 255) adjusted = 255;
+
+  if (adjusted < 64) return 0;
+  if (adjusted < 128) return 1;
+  if (adjusted < 192) return 2;
+  return 3;
+}
+
+// Apply deterministic spatial-noise dithering and quantize to 4 levels (0-3).
+// This avoids the visible "grid" artifact of ordered Bayer dithering.
+inline uint8_t applyNoiseDither4Level(uint8_t gray, int x, int y) {
+  uint32_t h = static_cast<uint32_t>(x) * 374761393u;
+  h ^= static_cast<uint32_t>(y) * 668265263u;
+  h ^= (h >> 13);
+  h *= 1274126177u;
+  h ^= (h >> 16);
+
+  // Map low byte to [-32, +31], gentler than Bayer's +/-40.
+  int dither = static_cast<int>(h & 0xFFu) - 128;
+  dither >>= 2;
 
   int adjusted = gray + dither;
   if (adjusted < 0) adjusted = 0;

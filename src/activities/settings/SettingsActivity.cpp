@@ -1,6 +1,7 @@
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <Logging.h>
 
 #include "ButtonRemapActivity.h"

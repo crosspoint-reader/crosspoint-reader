@@ -1,5 +1,7 @@
 #include "JpegToBmpConverter.h"
 
+#include <EInkDisplay.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <picojpeg.h>
@@ -26,9 +28,11 @@ constexpr bool USE_ATKINSON = true;          // Atkinson dithering (cleaner than
 constexpr bool USE_FLOYD_STEINBERG = false;  // Floyd-Steinberg error diffusion (can cause "worm" artifacts)
 constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering (good for downsampling)
 // Pre-resize to target display size (CRITICAL: avoids dithering artifacts from post-downsampling)
-constexpr bool USE_PRESCALE = true;     // true: scale image to target size before dithering
-constexpr int TARGET_MAX_WIDTH = 480;   // Max width for cover images (portrait display width)
-constexpr int TARGET_MAX_HEIGHT = 800;  // Max height for cover images (portrait display height)
+constexpr bool USE_PRESCALE = true;  // true: scale image to target size before dithering
+constexpr int X4_TARGET_MAX_WIDTH = EInkDisplay::DISPLAY_HEIGHT;
+constexpr int X4_TARGET_MAX_HEIGHT = EInkDisplay::DISPLAY_WIDTH;
+constexpr int X3_TARGET_MAX_WIDTH = EInkDisplay::X3_DISPLAY_HEIGHT;
+constexpr int X3_TARGET_MAX_HEIGHT = EInkDisplay::X3_DISPLAY_WIDTH;
 // ============================================================================
 
 inline void write16(Print& out, const uint16_t value) {
@@ -559,7 +563,9 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
 // Core function: Convert JPEG file to 2-bit BMP (uses default target size)
 bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut, bool crop) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT, false, crop);
+  const int targetWidth = gpio.deviceIsX3() ? X3_TARGET_MAX_WIDTH : X4_TARGET_MAX_WIDTH;
+  const int targetHeight = gpio.deviceIsX3() ? X3_TARGET_MAX_HEIGHT : X4_TARGET_MAX_HEIGHT;
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, crop);
 }
 
 // Convert with custom target size (for thumbnails, 2-bit)
