@@ -5,9 +5,9 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 
-class TxtReaderActivity final : public ActivityWithSubactivity {
+class TxtReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;
@@ -39,9 +39,9 @@ class TxtReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)
-      : ActivityWithSubactivity("TxtReader", renderer, mappedInput), txt(std::move(txt)) {}
+      : Activity("TxtReader", renderer, mappedInput), txt(std::move(txt)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 };

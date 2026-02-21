@@ -2,19 +2,19 @@
 
 #include <functional>
 
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 
-class ClearCacheActivity final : public ActivityWithSubactivity {
+class ClearCacheActivity final : public Activity {
  public:
   explicit ClearCacheActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                               const std::function<void()>& goBack)
-      : ActivityWithSubactivity("ClearCache", renderer, mappedInput), goBack(goBack) {}
+      : Activity("ClearCache", renderer, mappedInput), goBack(goBack) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
   bool skipLoopDelay() override { return true; }  // Prevent power-saving mode
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   enum State { WARNING, CLEARING, SUCCESS, FAILED };

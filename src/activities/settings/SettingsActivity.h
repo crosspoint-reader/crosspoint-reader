@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 class CrossPointSettings;
@@ -133,7 +133,7 @@ struct SettingInfo {
   }
 };
 
-class SettingsActivity final : public ActivityWithSubactivity {
+class SettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   int selectedCategoryIndex = 0;  // Currently selected category
@@ -155,9 +155,9 @@ class SettingsActivity final : public ActivityWithSubactivity {
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : ActivityWithSubactivity("Settings", renderer, mappedInput) {}
+      : Activity("Settings", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 };

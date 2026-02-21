@@ -54,7 +54,7 @@ void NetworkModeSelectionActivity::loop() {
   });
 }
 
-void NetworkModeSelectionActivity::render(Activity::RenderLock&&) {
+void NetworkModeSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();
@@ -82,4 +82,17 @@ void NetworkModeSelectionActivity::render(Activity::RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
+}
+
+void NetworkModeSelectionActivity::onModeSelected(NetworkMode mode) {
+  ActivityResult result;
+  result.isCancelled = false;
+  result.selectedNetworkMode = mode;
+  activityManager.popActivityWithResult(result);
+}
+
+void NetworkModeSelectionActivity::onCancel() {
+  ActivityResult result;
+  result.isCancelled = true;
+  activityManager.popActivityWithResult(result);
 }

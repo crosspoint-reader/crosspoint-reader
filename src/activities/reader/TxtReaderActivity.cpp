@@ -25,7 +25,7 @@ constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format cha
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   if (!txt) {
     return;
@@ -63,7 +63,7 @@ void TxtReaderActivity::onEnter() {
 }
 
 void TxtReaderActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -76,11 +76,6 @@ void TxtReaderActivity::onExit() {
 }
 
 void TxtReaderActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
     Intent intent;
@@ -341,7 +336,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   return !outLines.empty();
 }
 
-void TxtReaderActivity::render(Activity::RenderLock&&) {
+void TxtReaderActivity::render(RenderLock&&) {
   if (!txt) {
     return;
   }

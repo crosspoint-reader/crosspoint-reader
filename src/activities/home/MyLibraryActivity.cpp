@@ -196,7 +196,7 @@ std::string getFileName(std::string filename) {
   return filename.substr(0, pos);
 }
 
-void MyLibraryActivity::render(Activity::RenderLock&&) {
+void MyLibraryActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

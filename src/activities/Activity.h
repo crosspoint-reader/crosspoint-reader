@@ -1,9 +1,5 @@
 #pragma once
-#include <HardwareSerial.h>
 #include <Logging.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <cassert>
 #include <string>
@@ -13,6 +9,9 @@
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 
+class ActivityResult;  // forward declaration
+class RenderLock;      // forward declaration
+
 class Activity {
  protected:
   std::string name;
@@ -20,7 +19,8 @@ class Activity {
   MappedInputManager& mappedInput;
 
  public:
-  using RenderLock = ActivityManager::RenderLock;
+  // Will be set by ActivityManager when pushActivityForResult is used
+  std::function<void(ActivityResult&)> resultHandler;
 
   explicit Activity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)
       : name(std::move(name)), renderer(renderer), mappedInput(mappedInput) {}
@@ -36,9 +36,6 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
-
-  // temporary before refactoring ActivityWithSubactivity
-  virtual void renderImpl(RenderLock&& lock) { render(std::move(lock)); }
 
   // Convenience method to facilitate API transition to ActivityManager
   // TODO: remove this in near future

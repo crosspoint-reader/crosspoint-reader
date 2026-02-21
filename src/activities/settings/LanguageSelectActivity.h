@@ -5,7 +5,7 @@
 
 #include <functional>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "components/UITheme.h"
 
 class MappedInputManager;
@@ -22,7 +22,7 @@ class LanguageSelectActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   void handleSelection();

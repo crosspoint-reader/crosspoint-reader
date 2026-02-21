@@ -21,7 +21,7 @@ constexpr int PAGE_ITEMS = 23;
 }  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   state = BrowserState::CHECK_WIFI;
   entries.clear();
@@ -37,7 +37,7 @@ void OpdsBookBrowserActivity::onEnter() {
 }
 
 void OpdsBookBrowserActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Turn off WiFi when exiting
   WiFi.mode(WIFI_OFF);
@@ -49,7 +49,7 @@ void OpdsBookBrowserActivity::onExit() {
 void OpdsBookBrowserActivity::loop() {
   // Handle WiFi selection subactivity
   if (state == BrowserState::WIFI_SELECTION) {
-    ActivityWithSubactivity::loop();
+    Activity::loop();
     return;
   }
 
@@ -136,7 +136,7 @@ void OpdsBookBrowserActivity::loop() {
   }
 }
 
-void OpdsBookBrowserActivity::render(Activity::RenderLock&&) {
+void OpdsBookBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -364,13 +364,12 @@ void OpdsBookBrowserActivity::launchWifiSelection() {
   state = BrowserState::WIFI_SELECTION;
   requestUpdate();
 
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  activityManager.pushActivityForResult(
+      new WifiSelectionActivity(renderer, mappedInput),
+      [this](ActivityResult& result) { onWifiSelectionComplete(result.wifiConnected); });
 }
 
 void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
-  exitActivity();
-
   if (connected) {
     LOG_DBG("OPDS", "WiFi connected via selection, fetching feed");
     state = BrowserState::LOADING;

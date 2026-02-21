@@ -34,7 +34,7 @@ void ActivityManager::renderTaskLoop() {
     if (currentActivity) {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       RenderLock lock;
-      currentActivity->renderImpl(std::move(lock));
+      currentActivity->render(std::move(lock));
     }
   }
 }
@@ -45,11 +45,42 @@ void ActivityManager::loop() {
     currentActivity->loop();
   }
 
-  if (pendingActivity) {
+  if (pendingAction == Pop) {
+    RenderLock lock;
+    if (stackActivities.empty()) {
+      goHome();
+    } else {
+      // Destroy the current activity
+      exitActivity();
+      currentActivity = stackActivities.back();
+      stackActivities.pop_back();
+      // Handle result if necessary
+      if (currentActivity->resultHandler) {
+        // Move the result handler out of the activity before calling it, to avoid potential issues if the handler tries
+        // to launch a new activity
+        auto handler = std::move(currentActivity->resultHandler);
+        currentActivity->resultHandler = nullptr;
+        handler(pendingResult);
+      }
+    }
+
+  } else if (pendingActivity) {
     // Current activity has requested a new activity to be launched
     RenderLock lock;
 
-    exitActivity();
+    if (pendingAction == Replace) {
+      // Destroy the current activity
+      exitActivity();
+      // Clear the stack
+      while (!stackActivities.empty()) {
+        stackActivities.back()->onExit();
+        delete stackActivities.back();
+        stackActivities.pop_back();
+      }
+    } else if (pendingAction == Push) {
+      // Move current activity to stack
+      stackActivities.push_back(currentActivity);
+    }
     currentActivity = pendingActivity;
     pendingActivity = nullptr;
     currentActivity->onEnter();
@@ -65,13 +96,13 @@ void ActivityManager::exitActivity() {
   }
 }
 
-void ActivityManager::enterNewActivity(Activity* newActivity) {
-  RenderLock lock;
-
+void ActivityManager::replaceActivity(Activity* newActivity) {
+  // Note: no lock here, this is usually called by loop() and we may run into deadlock
   if (currentActivity) {
     // Defer launch if we're currently in an activity, to avoid deleting the current activity leading to the "delete
     // this" problem
     pendingActivity = newActivity;
+    pendingAction = Replace;
   } else {
     // No current activity, safe to launch immediately
     currentActivity = newActivity;
@@ -79,34 +110,59 @@ void ActivityManager::enterNewActivity(Activity* newActivity) {
   }
 }
 
-void ActivityManager::goToFileTransfer() { enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInput)); }
+void ActivityManager::goToFileTransfer() { replaceActivity(new CrossPointWebServerActivity(renderer, mappedInput)); }
 
-void ActivityManager::goToSettings() { enterNewActivity(new SettingsActivity(renderer, mappedInput)); }
+void ActivityManager::goToSettings() { replaceActivity(new SettingsActivity(renderer, mappedInput)); }
 
 void ActivityManager::goToMyLibrary(Intent&& intent) {
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInput, intent.path));
+  replaceActivity(new MyLibraryActivity(renderer, mappedInput, intent.path));
 }
 
-void ActivityManager::goToRecentBooks() { enterNewActivity(new RecentBooksActivity(renderer, mappedInput)); }
+void ActivityManager::goToRecentBooks() { replaceActivity(new RecentBooksActivity(renderer, mappedInput)); }
 
-void ActivityManager::goToBrowser() { enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInput)); }
+void ActivityManager::goToBrowser() { replaceActivity(new OpdsBookBrowserActivity(renderer, mappedInput)); }
 
 void ActivityManager::goToReader(Intent&& intent) {
-  enterNewActivity(new ReaderActivity(renderer, mappedInput, intent.path));
+  replaceActivity(new ReaderActivity(renderer, mappedInput, intent.path));
 }
 
 void ActivityManager::goToSleep() {
-  enterNewActivity(new SleepActivity(renderer, mappedInput));
+  replaceActivity(new SleepActivity(renderer, mappedInput));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }
 
-void ActivityManager::goToBoot() { enterNewActivity(new BootActivity(renderer, mappedInput)); }
+void ActivityManager::goToBoot() { replaceActivity(new BootActivity(renderer, mappedInput)); }
 
 void ActivityManager::goToFullScreenMessage(Intent&& intent) {
-  enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, intent.message, intent.messageStyle));
+  replaceActivity(new FullScreenMessageActivity(renderer, mappedInput, intent.message, intent.messageStyle));
 }
 
-void ActivityManager::goHome() { enterNewActivity(new HomeActivity(renderer, mappedInput)); }
+void ActivityManager::goHome() { replaceActivity(new HomeActivity(renderer, mappedInput)); }
+
+void ActivityManager::pushActivity(Activity* activity) {
+  pendingActivity = activity;
+  pendingAction = Push;
+}
+
+void ActivityManager::pushActivityForResult(Activity* activity, std::function<void(ActivityResult&)> resultHandler) {
+  activity->resultHandler = std::move(resultHandler);
+  pushActivity(activity);
+}
+
+void ActivityManager::popActivity() {
+  if (pendingActivity) {
+    // Should never happen in practice
+    LOG_ERR("ACT", "pendingActivity while popActivity is not expected");
+    delete pendingActivity;
+    pendingActivity = nullptr;
+  }
+  pendingAction = Pop;
+}
+
+void ActivityManager::popActivityWithResult(ActivityResult& result) {
+  pendingResult = result;  // copy
+  popActivity();
+}
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }
 
@@ -124,10 +180,8 @@ void ActivityManager::requestUpdate() {
 
 // RenderLock
 
-ActivityManager::RenderLock::RenderLock() { xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY); }
+RenderLock::RenderLock() { xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY); }
 
-ActivityManager::RenderLock::RenderLock(Activity& /* unused */) {
-  xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
-}
+RenderLock::RenderLock(Activity& /* unused */) { xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY); }
 
-ActivityManager::RenderLock::~RenderLock() { xSemaphoreGive(activityManager.renderingMutex); }
+RenderLock::~RenderLock() { xSemaphoreGive(activityManager.renderingMutex); }

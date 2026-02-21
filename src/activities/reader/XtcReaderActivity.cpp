@@ -26,7 +26,7 @@ constexpr unsigned long goHomeMs = 1000;
 }  // namespace
 
 void XtcReaderActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   if (!xtc) {
     return;
@@ -47,7 +47,7 @@ void XtcReaderActivity::onEnter() {
 }
 
 void XtcReaderActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -55,27 +55,17 @@ void XtcReaderActivity::onExit() {
 }
 
 void XtcReaderActivity::loop() {
-  // Pass input responsibility to sub activity if exists
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   // Enter chapter selection activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
-      exitActivity();
-      enterNewActivity(new XtcReaderChapterSelectionActivity(
-          this->renderer, this->mappedInput, xtc, currentPage,
-          [this] {
-            exitActivity();
+      activityManager.pushActivityForResult(
+          new XtcReaderChapterSelectionActivity(renderer, mappedInput, xtc, currentPage),
+          [this](ActivityResult& result) {
+            if (!result.isCancelled) {
+              currentPage = result.selectedPage;
+            }
             requestUpdate();
-          },
-          [this](const uint32_t newPage) {
-            currentPage = newPage;
-            exitActivity();
-            requestUpdate();
-          }));
+          });
     }
   }
 
@@ -137,7 +127,7 @@ void XtcReaderActivity::loop() {
   }
 }
 
-void XtcReaderActivity::render(Activity::RenderLock&&) {
+void XtcReaderActivity::render(RenderLock&&) {
   if (!xtc) {
     return;
   }

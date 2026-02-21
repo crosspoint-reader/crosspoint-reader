@@ -12,24 +12,15 @@ class XtcReaderChapterSelectionActivity final : public Activity {
   uint32_t currentPage = 0;
   int selectorIndex = 0;
 
-  const std::function<void()> onGoBack;
-  const std::function<void(uint32_t newPage)> onSelectPage;
-
   int getPageItems() const;
   int findChapterIndexForPage(uint32_t page) const;
 
  public:
   explicit XtcReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             const std::shared_ptr<Xtc>& xtc, uint32_t currentPage,
-                                             const std::function<void()>& onGoBack,
-                                             const std::function<void(uint32_t newPage)>& onSelectPage)
-      : Activity("XtcReaderChapterSelection", renderer, mappedInput),
-        xtc(xtc),
-        currentPage(currentPage),
-        onGoBack(onGoBack),
-        onSelectPage(onSelectPage) {}
+                                             const std::shared_ptr<Xtc>& xtc, uint32_t currentPage)
+      : Activity("XtcReaderChapterSelection", renderer, mappedInput), xtc(xtc), currentPage(currentPage) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 };

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "util/ButtonNavigator.h"
 
 /**
@@ -13,7 +13,7 @@
  * Supports navigation through catalog hierarchy and downloading EPUBs.
  * When WiFi connection fails, launches WiFi selection to let user connect.
  */
-class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
+class OpdsBookBrowserActivity final : public Activity {
  public:
   enum class BrowserState {
     CHECK_WIFI,      // Checking WiFi connection
@@ -25,12 +25,12 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput) {}
+      : Activity("OpdsBookBrowser", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   ButtonNavigator buttonNavigator;

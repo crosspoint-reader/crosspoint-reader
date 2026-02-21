@@ -9,9 +9,9 @@
 
 #include <Xtc.h>
 
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 
-class XtcReaderActivity final : public ActivityWithSubactivity {
+class XtcReaderActivity final : public Activity {
   std::shared_ptr<Xtc> xtc;
 
   uint32_t currentPage = 0;
@@ -23,9 +23,9 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc)
-      : ActivityWithSubactivity("XtcReader", renderer, mappedInput), xtc(std::move(xtc)) {}
+      : Activity("XtcReader", renderer, mappedInput), xtc(std::move(xtc)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 };

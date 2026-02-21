@@ -51,7 +51,7 @@ void LanguageSelectActivity::handleSelection() {
   onBack();
 }
 
-void LanguageSelectActivity::render(Activity::RenderLock&&) {
+void LanguageSelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

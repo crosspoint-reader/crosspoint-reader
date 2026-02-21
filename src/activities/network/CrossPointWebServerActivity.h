@@ -5,7 +5,7 @@
 #include <string>
 
 #include "NetworkModeSelectionActivity.h"
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 #include "network/CrossPointWebServer.h"
 
 // Web server activity states
@@ -27,7 +27,7 @@ enum class WebServerActivityState {
  * - Handles client requests in its loop() function
  * - Cleans up the server and shuts down WiFi on exit
  */
-class CrossPointWebServerActivity final : public ActivityWithSubactivity {
+class CrossPointWebServerActivity final : public Activity {
   WebServerActivityState state = WebServerActivityState::MODE_SELECTION;
 
   // Network mode
@@ -54,11 +54,11 @@ class CrossPointWebServerActivity final : public ActivityWithSubactivity {
 
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : ActivityWithSubactivity("CrossPointWebServer", renderer, mappedInput) {}
+      : Activity("CrossPointWebServer", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
   bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
   bool preventAutoSleep() override { return webServer && webServer->isRunning(); }
 };

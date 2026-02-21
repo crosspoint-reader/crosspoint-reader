@@ -85,26 +85,23 @@ void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   const auto epubPath = epub->getPath();
   currentBookPath = epubPath;
-  exitActivity();
-  enterNewActivity(new EpubReaderActivity(renderer, mappedInput, std::move(epub)));
+  activityManager.replaceActivity(new EpubReaderActivity(renderer, mappedInput, std::move(epub)));
 }
 
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   const auto xtcPath = xtc->getPath();
   currentBookPath = xtcPath;
-  exitActivity();
-  enterNewActivity(new XtcReaderActivity(renderer, mappedInput, std::move(xtc)));
+  activityManager.replaceActivity(new XtcReaderActivity(renderer, mappedInput, std::move(xtc)));
 }
 
 void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
   const auto txtPath = txt->getPath();
   currentBookPath = txtPath;
-  exitActivity();
-  enterNewActivity(new TxtReaderActivity(renderer, mappedInput, std::move(txt)));
+  activityManager.replaceActivity(new TxtReaderActivity(renderer, mappedInput, std::move(txt)));
 }
 
 void ReaderActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   if (initialBookPath.empty()) {
     goToLibrary();  // Start from root when entering via Browse

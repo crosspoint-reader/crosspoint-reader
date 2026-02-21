@@ -10,15 +10,15 @@
 #include "fontIds.h"
 
 void ClearCacheActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   state = WARNING;
   requestUpdate();
 }
 
-void ClearCacheActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void ClearCacheActivity::onExit() { Activity::onExit(); }
 
-void ClearCacheActivity::render(Activity::RenderLock&&) {
+void ClearCacheActivity::render(RenderLock&&) {
   auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();

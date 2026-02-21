@@ -1,14 +1,14 @@
 #pragma once
 #include <memory>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "activities/home/MyLibraryActivity.h"
 
 class Epub;
 class Xtc;
 class Txt;
 
-class ReaderActivity final : public ActivityWithSubactivity {
+class ReaderActivity final : public Activity {
   std::string initialBookPath;
   std::string currentBookPath;  // Track current book path for navigation
   static std::unique_ptr<Epub> loadEpub(const std::string& path);
@@ -27,7 +27,7 @@ class ReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath)
-      : ActivityWithSubactivity("Reader", renderer, mappedInput), initialBookPath(std::move(initialBookPath)) {}
+      : Activity("Reader", renderer, mappedInput), initialBookPath(std::move(initialBookPath)) {}
   void onEnter() override;
   bool isReaderActivity() const override { return true; }
 };
