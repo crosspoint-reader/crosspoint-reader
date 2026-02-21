@@ -35,7 +35,7 @@ class CrossPointSettings {
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
 
-  // Status bar display type enum
+  // Status bar enum - legacy
   enum STATUS_BAR_MODE {
     NONE = 0,
     NO_PROGRESS = 1,
@@ -45,6 +45,19 @@ class CrossPointSettings {
     CHAPTER_PROGRESS_BAR = 5,
     STATUS_BAR_MODE_COUNT
   };
+  enum STATUS_BAR_PROGRESS_BAR {
+    BOOK_PROGRESS = 0,
+    CHAPTER_PROGRESS = 1,
+    HIDE_PROGRESS = 2,
+    STATUS_BAR_PROGRESS_BAR_COUNT
+  };
+  enum STATUS_BAR_PROGRESS_BAR_THICKNESS {
+    PROGRESS_BAR_THIN = 0,
+    PROGRESS_BAR_NORMAL = 1,
+    PROGRESS_BAR_THICK = 2,
+    STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT
+  };
+  enum STATUS_BAR_TITLE { BOOK_TITLE = 0, CHAPTER_TITLE = 1, HIDE_TITLE = 2, STATUS_BAR_TITLE_COUNT };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -128,8 +141,14 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
-  // Status bar settings
+  // Status bar settings (statusBar retained for migration only)
   uint8_t statusBar = FULL;
+  uint8_t statusBarChapterPageCount = 1;
+  uint8_t statusBarBookProgressPercentage = 1;
+  uint8_t statusBarProgressBar = HIDE_PROGRESS;
+  uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
+  uint8_t statusBarTitle = CHAPTER_TITLE;
+  uint8_t statusBarBattery = 1;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;

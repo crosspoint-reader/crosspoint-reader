@@ -29,9 +29,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .homeRecentBooksCount = 3,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
-                                 .progressBarHeight = 16,
-                                 .bookProgressBarHeight = 4};
-}
+                                 .progressBarHeight = 16};
+};
 
 class Lyra3CoversTheme : public LyraTheme {
  public:
