@@ -105,9 +105,12 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
           if (endPos != std::string::npos) {
             const auto ref = coverPageHtml.substr(pos, endPos - pos);
             // Check if it's an image file
-            if (ref.length() >= 4) {
-              const auto ext = ref.substr(ref.length() - 4);
-              if (ext == ".png" || ext == ".jpg" || ext == "jpeg" || ext == ".gif") {
+            const auto dotPos = ref.rfind('.');
+            if (dotPos != std::string::npos) {
+              std::string ext = ref.substr(dotPos);
+              for (char& c : ext)
+                if (c >= 'A' && c <= 'Z') c += 32;
+              if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif") {
                 imageRef = ref;
                 break;
               }
@@ -525,13 +528,13 @@ std::string Epub::getCoverBmpPath(bool cropped) const {
 }
 
 Epub::ImageFormat Epub::detectCoverFormat(const std::string& href) {
-  if ((href.length() >= 4 && href.substr(href.length() - 4) == ".jpg") ||
-      (href.length() >= 5 && href.substr(href.length() - 5) == ".jpeg")) {
-    return ImageFormat::JPEG;
-  }
-  if (href.length() >= 4 && href.substr(href.length() - 4) == ".png") {
-    return ImageFormat::PNG;
-  }
+  const auto dot = href.rfind('.');
+  if (dot == std::string::npos) return ImageFormat::UNKNOWN;
+  std::string ext = href.substr(dot);
+  for (char& c : ext)
+    if (c >= 'A' && c <= 'Z') c += 32;
+  if (ext == ".jpg" || ext == ".jpeg") return ImageFormat::JPEG;
+  if (ext == ".png") return ImageFormat::PNG;
   return ImageFormat::UNKNOWN;
 }
 
@@ -561,6 +564,12 @@ std::string Epub::resolveCoverHref() const {
       "OEBPS/cover.jpeg", "OEBPS/images/cover.jpeg", "OEBPS/Images/cover.jpeg",
       "cover.png",        "images/cover.png",        "Images/cover.png",
       "OEBPS/cover.png",  "OEBPS/images/cover.png",  "OEBPS/Images/cover.png",
+      "COVER.JPG",        "images/COVER.JPG",        "Images/COVER.JPG",
+      "OEBPS/COVER.JPG",  "OEBPS/images/COVER.JPG",  "OEBPS/Images/COVER.JPG",
+      "COVER.JPEG",       "images/COVER.JPEG",       "Images/COVER.JPEG",
+      "OEBPS/COVER.JPEG", "OEBPS/images/COVER.JPEG", "OEBPS/Images/COVER.JPEG",
+      "COVER.PNG",        "images/COVER.PNG",        "Images/COVER.PNG",
+      "OEBPS/COVER.PNG",  "OEBPS/images/COVER.PNG",  "OEBPS/Images/COVER.PNG",
   };
   for (const char* candidate : kCoverCandidates) {
     size_t candidateSize;
