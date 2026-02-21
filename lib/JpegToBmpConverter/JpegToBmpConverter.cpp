@@ -1,5 +1,6 @@
 #include "JpegToBmpConverter.h"
 
+#include <EInkDisplay.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -28,10 +29,10 @@ constexpr bool USE_FLOYD_STEINBERG = false;  // Floyd-Steinberg error diffusion 
 constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering (good for downsampling)
 // Pre-resize to target display size (CRITICAL: avoids dithering artifacts from post-downsampling)
 constexpr bool USE_PRESCALE = true;  // true: scale image to target size before dithering
-constexpr int X4_TARGET_MAX_WIDTH = 480;
-constexpr int X4_TARGET_MAX_HEIGHT = 800;
-constexpr int X3_TARGET_MAX_WIDTH = 528;
-constexpr int X3_TARGET_MAX_HEIGHT = 792;
+constexpr int X4_TARGET_MAX_WIDTH = EInkDisplay::DISPLAY_HEIGHT;
+constexpr int X4_TARGET_MAX_HEIGHT = EInkDisplay::DISPLAY_WIDTH;
+constexpr int X3_TARGET_MAX_WIDTH = EInkDisplay::X3_DISPLAY_HEIGHT;
+constexpr int X3_TARGET_MAX_HEIGHT = EInkDisplay::X3_DISPLAY_WIDTH;
 // ============================================================================
 
 inline void write16(Print& out, const uint16_t value) {

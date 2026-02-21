@@ -1,5 +1,6 @@
 #include "PngToBmpConverter.h"
 
+#include <EInkDisplay.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -17,10 +18,10 @@ constexpr bool USE_8BIT_OUTPUT = false;
 constexpr bool USE_ATKINSON = true;
 constexpr bool USE_FLOYD_STEINBERG = false;
 constexpr bool USE_PRESCALE = true;
-constexpr int X4_TARGET_MAX_WIDTH = 480;
-constexpr int X4_TARGET_MAX_HEIGHT = 800;
-constexpr int X3_TARGET_MAX_WIDTH = 528;
-constexpr int X3_TARGET_MAX_HEIGHT = 792;
+constexpr int X4_TARGET_MAX_WIDTH = EInkDisplay::DISPLAY_HEIGHT;
+constexpr int X4_TARGET_MAX_HEIGHT = EInkDisplay::DISPLAY_WIDTH;
+constexpr int X3_TARGET_MAX_WIDTH = EInkDisplay::X3_DISPLAY_HEIGHT;
+constexpr int X3_TARGET_MAX_HEIGHT = EInkDisplay::X3_DISPLAY_WIDTH;
 // ============================================================================
 
 // PNG constants
