@@ -18,7 +18,14 @@ void PageLine::countStyleChars(uint32_t counts[4]) const {
   auto sIt = block->getWordStyles().cbegin();
   while (wIt != block->getWords().cend() && sIt != block->getWordStyles().cend()) {
     const uint8_t s = static_cast<uint8_t>(*sIt);
-    if (s < 4) counts[s] += wIt->size();
+    if (s < 4) {
+      // Count UTF-8 codepoints (non-continuation bytes) to avoid overweighting multibyte scripts
+      uint32_t cpCount = 0;
+      for (unsigned char c : *wIt) {
+        if ((c & 0xC0) != 0x80) cpCount++;
+      }
+      counts[s] += cpCount;
+    }
     ++wIt;
     ++sIt;
   }

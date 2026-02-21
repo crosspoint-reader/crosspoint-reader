@@ -23,8 +23,8 @@ def parse_hex_array(text):
 
 
 def parse_uint8_array(text):
-    """Extract uint8 values from a C array string like '{ 0, 1, 2, ... }'"""
-    return [int(v) for v in re.findall(r'\b(\d+)\b', text)]
+    """Extract uint8/uint16 values from a C array string like '{ 0, 1, 0xFF, ... }'"""
+    return [int(v, 0) for v in re.findall(r'\b0x[0-9A-Fa-f]+\b|\b\d+\b', text)]
 
 
 def parse_groups(text):
@@ -172,6 +172,9 @@ def verify_font_file(filepath):
 
         # Get glyph indices for this group
         group_glyph_indices = get_group_glyph_indices(group, gi, glyphs, glyph_to_group)
+        if glyph_to_group is not None and len(group_glyph_indices) != group['glyphCount']:
+            return (font_name, False,
+                    f"group {gi}: glyphCount {group['glyphCount']} != mapping count {len(group_glyph_indices)}")
 
         # Walk through byte-aligned data, compact each glyph, and verify against packed format
         byte_aligned_offset = 0

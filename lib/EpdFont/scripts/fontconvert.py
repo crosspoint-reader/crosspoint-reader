@@ -302,6 +302,9 @@ def to_byte_aligned(packed, width, height):
 
 
 # Build groups for compression
+if compress and not is2Bit:
+    print("Error: --compress requires --2bit (byte-aligned compression only supports 2-bit format)", file=sys.stderr)
+    sys.exit(1)
 if compress:
     # Script-based grouping: glyphs that co-occur in typical text rendering
     # are grouped together for efficient LRU caching on the embedded target.
@@ -444,8 +447,8 @@ if compress:
     print(f"    {font_name}Groups,")
     print(f"    {len(compressed_groups)},")
 else:
-    print(f"    nullptr,")
-    print(f"    0,")
+    print("    nullptr,")
+    print("    0,")
 # glyphToGroup (not used for script-grouped fonts)
-print(f"    nullptr,")
+print("    nullptr,")
 print("};")
