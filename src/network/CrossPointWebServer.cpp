@@ -449,14 +449,10 @@ void CrossPointWebServer::handleDownload() const {
     server->send(400, "text/plain", "Missing path");
     return;
   }
-
-  String itemPath = server->arg("path");
+  String itemPath = normalizeWebPath(server->arg("path"));
   if (itemPath.isEmpty() || itemPath == "/") {
     server->send(400, "text/plain", "Invalid path");
     return;
-  }
-  if (!itemPath.startsWith("/")) {
-    itemPath = "/" + itemPath;
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
@@ -920,18 +916,13 @@ void CrossPointWebServer::handleDelete() const {
     return;
   }
 
-  String itemPath = server->arg("path");
+  String itemPath = normalizeWebPath(server->arg("path"));
   const String itemType = server->hasArg("type") ? server->arg("type") : "file";
 
   // Validate path
   if (itemPath.isEmpty() || itemPath == "/") {
     server->send(400, "text/plain", "Cannot delete root directory");
     return;
-  }
-
-  // Ensure path starts with /
-  if (!itemPath.startsWith("/")) {
-    itemPath = "/" + itemPath;
   }
 
   // Security check: prevent deletion of protected items
