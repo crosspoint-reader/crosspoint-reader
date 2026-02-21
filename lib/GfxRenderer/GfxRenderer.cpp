@@ -208,6 +208,36 @@ static inline void writeRowBits(uint8_t* const row, const int phyBitPos, const u
   }
 }
 
+// Gather up to 8×8 bits from a 1-bit packed glyph bitmap at tile (glyphX, glyphY)
+// into a contiguous uint64_t: byte 7 = first row, each byte MSB-aligned.
+// stride is the glyph's full pixel-row width (in bits).
+// reverseRows packs rows bottom-to-top (needed for PortraitInverted).
+static inline uint64_t extractGlyphBlock(const uint8_t* const bitmap, const int stride, const int glyphX,
+                                         const int glyphY, const int rowCount, const int colCount,
+                                         const bool reverseRows) {
+  uint64_t pack = 0;
+  int bitStart = glyphY * stride + glyphX;
+  for (int n = 0; n < rowCount; n++, bitStart += stride) {
+    const int slot = reverseRows ? (rowCount - 1 - n) : n;
+    pack |= static_cast<uint64_t>(bitmapExtract(bitmap, bitStart, colCount)) << (56 - 8 * slot);
+  }
+  return pack;
+}
+
+// Scatter colCount column-bytes of a transposed 8×8 block into framebuffer rows.
+// Physical Y for column k is: phyYBase + k * phyYStride (pass +1 or -1).
+static inline void scatterBlockToFrameBuffer(uint8_t* const frameBuffer, const uint64_t pack, const int colCount,
+                                             const int phyYBase, const int phyYStride, const int phyBitPos,
+                                             const bool pixelState) {
+  for (int k = 0; k < colCount; k++) {
+    const uint8_t cols_k = static_cast<uint8_t>(pack >> (56 - 8 * k));
+    if (cols_k == 0) continue;
+    const int phyY = phyYBase + k * phyYStride;
+    if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
+    writeRowBits(frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES, phyBitPos, cols_k, pixelState);
+  }
+}
+
 static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const bitmap, const int glyphWidth,
                               const int glyphHeight, const int screenXBase, const int screenYBase,
                               const bool pixelState, const GfxRenderer::Orientation orientation) {
@@ -257,19 +287,10 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
         if (phyBitPos + rowCount <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
         for (int glyphX = 0; glyphX < glyphWidth; glyphX += 8) {
           const int colCount = std::min(8, glyphWidth - glyphX);
-          uint64_t pack = 0;
-          int bitStart = glyphY * glyphWidth + glyphX;
-          for (int n = 0; n < rowCount; n++, bitStart += glyphWidth) {
-            pack |= static_cast<uint64_t>(bitmapExtract(bitmap, bitStart, colCount)) << (56 - 8 * n);
-          }
-          pack = transpose8x8(pack);
-          for (int k = 0; k < colCount; k++) {
-            const uint8_t cols_k = static_cast<uint8_t>(pack >> (56 - 8 * k));
-            if (cols_k == 0) continue;
-            const int phyY = HalDisplay::DISPLAY_HEIGHT - 1 - (screenXBase + glyphX + k);
-            if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
-            writeRowBits(frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES, phyBitPos, cols_k, pixelState);
-          }
+          const uint64_t pack =
+              transpose8x8(extractGlyphBlock(bitmap, glyphWidth, glyphX, glyphY, rowCount, colCount, false));
+          scatterBlockToFrameBuffer(frameBuffer, pack, colCount, HalDisplay::DISPLAY_HEIGHT - 1 - screenXBase - glyphX,
+                                    -1, phyBitPos, pixelState);
         }
       }
       break;
@@ -282,19 +303,9 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
         if (phyBitPos + rowCount <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
         for (int glyphX = 0; glyphX < glyphWidth; glyphX += 8) {
           const int colCount = std::min(8, glyphWidth - glyphX);
-          uint64_t pack = 0;
-          int bitStart = glyphY * glyphWidth + glyphX;
-          for (int n = 0; n < rowCount; n++, bitStart += glyphWidth) {
-            pack |= static_cast<uint64_t>(bitmapExtract(bitmap, bitStart, colCount)) << (56 - 8 * (rowCount - 1 - n));
-          }
-          pack = transpose8x8(pack);
-          for (int k = 0; k < colCount; k++) {
-            const uint8_t cols_k = static_cast<uint8_t>(pack >> (56 - 8 * k));
-            if (cols_k == 0) continue;
-            const int phyY = screenXBase + glyphX + k;
-            if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
-            writeRowBits(frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES, phyBitPos, cols_k, pixelState);
-          }
+          const uint64_t pack =
+              transpose8x8(extractGlyphBlock(bitmap, glyphWidth, glyphX, glyphY, rowCount, colCount, true));
+          scatterBlockToFrameBuffer(frameBuffer, pack, colCount, screenXBase + glyphX, 1, phyBitPos, pixelState);
         }
       }
       break;
