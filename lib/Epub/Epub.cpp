@@ -548,6 +548,30 @@ bool Epub::extractToTempFile(const std::string& href, const std::string& tempPat
   return ok;
 }
 
+std::string Epub::resolveCoverHref() const {
+  const std::string& metadataHref = bookMetadataCache->coreMetadata.coverItemHref;
+  if (!metadataHref.empty()) {
+    return metadataHref;
+  }
+  // Fallback: try well-known cover filenames. Array is constexpr → lives in flash, zero heap cost.
+  static constexpr const char* kCoverCandidates[] = {
+      "cover.jpg",        "images/cover.jpg",        "Images/cover.jpg",
+      "OEBPS/cover.jpg",  "OEBPS/images/cover.jpg",  "OEBPS/Images/cover.jpg",
+      "cover.jpeg",       "images/cover.jpeg",       "Images/cover.jpeg",
+      "OEBPS/cover.jpeg", "OEBPS/images/cover.jpeg", "OEBPS/Images/cover.jpeg",
+      "cover.png",        "images/cover.png",        "Images/cover.png",
+      "OEBPS/cover.png",  "OEBPS/images/cover.png",  "OEBPS/Images/cover.png",
+  };
+  for (const char* candidate : kCoverCandidates) {
+    size_t candidateSize;
+    if (getItemSize(candidate, &candidateSize)) {
+      LOG_DBG("EBP", "Found cover candidate by name: %s (%zu bytes)", candidate, candidateSize);
+      return candidate;
+    }
+  }
+  return {};
+}
+
 bool Epub::generateCoverBmp(bool cropped) const {
   if (Storage.exists(getCoverBmpPath(cropped).c_str())) {
     return true;
@@ -558,26 +582,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
     return false;
   }
 
-  auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
-  if (coverImageHref.empty()) {
-    // Fallback: try well-known cover filenames. Array is constexpr → lives in flash, zero heap cost.
-    static constexpr const char* kCoverCandidates[] = {
-        "cover.jpg",        "images/cover.jpg",        "Images/cover.jpg",
-        "OEBPS/cover.jpg",  "OEBPS/images/cover.jpg",  "OEBPS/Images/cover.jpg",
-        "cover.jpeg",       "images/cover.jpeg",       "Images/cover.jpeg",
-        "OEBPS/cover.jpeg", "OEBPS/images/cover.jpeg", "OEBPS/Images/cover.jpeg",
-        "cover.png",        "images/cover.png",        "Images/cover.png",
-        "OEBPS/cover.png",  "OEBPS/images/cover.png",  "OEBPS/Images/cover.png",
-    };
-    for (const char* candidate : kCoverCandidates) {
-      size_t candidateSize;
-      if (getItemSize(candidate, &candidateSize)) {
-        coverImageHref = candidate;
-        LOG_DBG("EBP", "Found cover candidate by name: %s (%zu bytes)", candidate, candidateSize);
-        break;
-      }
-    }
-  }
+  const auto coverImageHref = resolveCoverHref();
   if (coverImageHref.empty()) {
     LOG_ERR("EBP", "No known cover image");
     return false;
@@ -637,7 +642,7 @@ bool Epub::generateThumbBmp(int height) const {
     return false;
   }
 
-  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+  const auto coverImageHref = resolveCoverHref();
   const ImageFormat fmt = detectCoverFormat(coverImageHref);
 
   if (fmt == ImageFormat::UNKNOWN) {
