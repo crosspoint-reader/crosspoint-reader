@@ -8,11 +8,9 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 HalDisplay::~HalDisplay() {}
 
 void HalDisplay::begin() {
-  // Set X3-specific display dimensions before initializing
-  static constexpr uint16_t X3_DISPLAY_WIDTH = 792;
-  static constexpr uint16_t X3_DISPLAY_HEIGHT = 528;
+  // Set X3-specific panel mode before initializing.
   if (gpio.deviceIsX3()) {
-    einkDisplay.setDisplayDimensions(X3_DISPLAY_WIDTH, X3_DISPLAY_HEIGHT);
+    einkDisplay.setDisplayX3();
   }
 
   einkDisplay.begin();
@@ -23,10 +21,6 @@ void HalDisplay::begin() {
       wakeupReason == HalGPIO::WakeupReason::Other) {
     einkDisplay.requestResync();
   }
-}
-
-void HalDisplay::setDisplayDimensions(uint16_t width, uint16_t height) {
-  einkDisplay.setDisplayDimensions(width, height);
 }
 
 void HalDisplay::clearScreen(uint8_t color) const { einkDisplay.clearScreen(color); }
