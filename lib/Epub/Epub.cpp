@@ -104,16 +104,10 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
           const auto endPos = coverPageHtml.find('"', pos);
           if (endPos != std::string::npos) {
             const auto ref = coverPageHtml.substr(pos, endPos - pos);
-            // Check if it's an image file
-            const auto dotPos = ref.rfind('.');
-            if (dotPos != std::string::npos) {
-              std::string ext = ref.substr(dotPos);
-              for (char& c : ext)
-                if (c >= 'A' && c <= 'Z') c += 32;
-              if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif") {
-                imageRef = ref;
-                break;
-              }
+            // Only accept formats supported by detectCoverFormat (JPEG/PNG)
+            if (detectCoverFormat(ref) != ImageFormat::UNKNOWN) {
+              imageRef = ref;
+              break;
             }
           }
           pos = coverPageHtml.find(pattern, pos);
@@ -659,7 +653,10 @@ bool Epub::generateThumbBmp(int height) const {
     }
     // Write empty sentinel to avoid repeated generation attempts
     FsFile sentinel;
-    Storage.openFileForWrite("EBP", getThumbBmpPath(height), sentinel);
+    if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), sentinel)) {
+      LOG_ERR("EBP", "Failed to write sentinel for %s at %s", coverImageHref.c_str(), getThumbBmpPath(height).c_str());
+      return false;
+    }
     sentinel.close();
     return false;
   }
