@@ -55,6 +55,9 @@ find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
 3. Flash Persistence: Large constant data (UI strings, lookup tables) MUST be marked static const to stay in Flash (Instruction Bus), freeing DRAM.
 4. String Policy: Prohibit std::string and Arduino String in hot paths. Use std::string_view for read-only access and snprintf with fixed char[] buffers for construction.
 5. UI Strings: All user-facing text must use the `tr()` macro (e.g., `tr(STR_LOADING)`) for i18n support. Never hardcode UI strings directly. For the avoidance of doubt, logging messages (LOG_DBG/LOG_ERR) can be hardcoded, but user-facing text must use `tr()`.
+6. `constexpr` First: Compile-time constants and lookup tables must be `constexpr`, not just `static const`. This moves computation to compile time, enables dead-branch elimination, and guarantees flash placement. Use `static constexpr` for class-level constants.
+7. `std::vector` Pre-allocation: Always call `.reserve(N)` before any `push_back()` loop. Each growth event allocates a new block (2×), copies all elements, then frees the old one — three heap operations that fragment DRAM. When the final size is unknown, estimate conservatively.
+8. SPIFFS Write Throttling: Never write a settings file on every user interaction. Guard all writes with a value-change check (`if (newVal == _current) return;`). Progress saves during reading must be debounced — write on activity exit or every N page turns, not on every turn. SPIFFS sectors have a finite erase cycle limit.
 
 ---
 
@@ -165,6 +168,82 @@ if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
 ### Memory Safety and RAII
 * Smart Pointers: Prefer std::unique_ptr. Avoid std::shared_ptr (unnecessary atomic overhead for a single-core RISC-V).
 * RAII: Use destructors for cleanup, but call file.close() or vTaskDelete() explicitly for deterministic resource release.
+
+### ESP32-C3 Platform Pitfalls
+
+#### `std::string_view` and Null Termination
+`string_view` is *not* null-terminated. Passing `.data()` to any C-style API (`drawText`, `snprintf`, `strcmp`, SdFat file paths) is undefined behaviour when the view is a substring or a view of a non-null-terminated buffer.
+
+**Rule**: `string_view` is safe only when passing to C++ APIs that accept `string_view`. For any C API boundary, convert explicitly:
+```cpp
+// WRONG - undefined behaviour if view is a substring:
+renderer.drawText(font, x, y, myView.data(), true);
+
+// CORRECT - guaranteed null-terminated:
+renderer.drawText(font, x, y, std::string(myView).c_str(), true);
+
+// CORRECT - for short strings, use a stack buffer:
+char buf[64];
+snprintf(buf, sizeof(buf), "%.*s", (int)myView.size(), myView.data());
+```
+
+#### `IRAM_ATTR` and Flash Cache Safety
+All code runs from flash via the instruction cache. During SPI flash operations (OTA write, SPIFFS commit, NVS update) the cache is briefly suspended. Any code that can execute during this window — ISRs in particular — must reside in IRAM or it will crash silently.
+
+```cpp
+// ISR handler: must be in IRAM
+void IRAM_ATTR gpioISR() { ... }
+
+// Data accessed from IRAM_ATTR code: must be in DRAM, never a flash const
+static DRAM_ATTR uint32_t isrEventFlags = 0;
+```
+
+**Rules**:
+- All ISR handlers: `IRAM_ATTR`
+- Data read by `IRAM_ATTR` code: `DRAM_ATTR` (a flash-resident `static const` will fault)
+- Normal task code does **not** need `IRAM_ATTR`
+
+#### ISR vs Task Shared State
+`xSemaphoreTake()` (mutex) **cannot** be called from ISR context — it will crash. Use the correct primitive for each communication direction:
+
+| Direction | Correct primitive |
+|---|---|
+| ISR → task (data) | `xQueueSendFromISR()` + `portYIELD_FROM_ISR()` |
+| ISR → task (signal) | `xSemaphoreGiveFromISR()` + `portYIELD_FROM_ISR()` |
+| Task → task | `xSemaphoreTake()` / mutex |
+| Simple flag (single writer ISR) | `volatile bool` + `portENTER_CRITICAL_ISR()` |
+
+#### RISC-V Alignment
+ESP32-C3 faults on unaligned multi-byte loads. Never cast a `uint8_t*` buffer to a wider pointer type and dereference it directly. Use `memcpy` for any unaligned read:
+
+```cpp
+// WRONG — faults if buf is not 4-byte aligned:
+uint32_t val = *reinterpret_cast<const uint32_t*>(buf);
+
+// CORRECT:
+uint32_t val;
+memcpy(&val, buf, sizeof(val));
+```
+
+This applies to all cache deserialization code and any raw buffer-to-struct casting. `__attribute__((packed))` structs have the same hazard when accessed via member reference.
+
+#### Template and `std::function` Bloat
+Each template instantiation generates a separate binary copy. `std::function<void()>` adds ~2–4 KB per unique signature and heap-allocates its closure. Avoid both in library code and any path called from the render loop:
+
+```cpp
+// Avoid — heap-allocating, large binary footprint:
+std::function<void()> callback;
+
+// Prefer — zero overhead:
+void (*callback)() = nullptr;
+
+// For member function + context (common activity callback pattern):
+struct Callback { void* ctx; void (*fn)(void*); };
+```
+
+When a template is necessary, limit instantiations: use explicit template instantiation in a `.cpp` file to prevent the compiler from generating duplicates across translation units.
+
+---
 
 ### Error Handling Philosophy
 
