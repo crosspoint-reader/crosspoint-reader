@@ -27,6 +27,8 @@ class RecentBooksStore {
   void addBook(const std::string& path, const std::string& title, const std::string& author,
                const std::string& coverBmpPath);
 
+  void removeBook(const std::string& path);
+
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
 

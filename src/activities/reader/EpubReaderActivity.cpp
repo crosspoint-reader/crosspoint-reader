@@ -7,6 +7,7 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include "../util/ConfirmationActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -429,6 +430,34 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       // Defer go home to avoid race condition with display task
       pendingGoHome = true;
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DELETE_BOOK: {
+      const std::string bookPath = epub->getPath();
+      const std::string cachePath = epub->getCachePath();
+
+      std::string heading = tr(STR_DELETE) + std::string("? ");
+
+      auto doDelete = [this, bookPath, cachePath](bool confirmed) {
+        if (confirmed) {
+          {
+            RenderLock lock(*this);
+            this->skipNextButtonCheck = true;
+            if (Storage.remove(bookPath.c_str())) {
+              APP_STATE.openEpubPath = "";
+              APP_STATE.saveToFile();
+              section.reset();
+              epub.reset();
+              RECENT_BOOKS.removeBook(bookPath);
+              Storage.removeDir(cachePath.c_str());
+            }
+          }
+          this->pendingGoHome = true;
+        }
+        this->pendingSubactivityExit = true;
+      };
+
+      enterNewActivity(new ConfirmationActivity(renderer, mappedInput, heading, bookPath, doDelete));
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
