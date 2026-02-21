@@ -556,26 +556,23 @@ std::string Epub::resolveCoverHref() const {
   if (!metadataHref.empty()) {
     return metadataHref;
   }
-  // Fallback: try well-known cover filenames. Array is constexpr → lives in flash, zero heap cost.
-  static constexpr const char* kCoverCandidates[] = {
-      "cover.jpg",        "images/cover.jpg",        "Images/cover.jpg",
-      "OEBPS/cover.jpg",  "OEBPS/images/cover.jpg",  "OEBPS/Images/cover.jpg",
-      "cover.jpeg",       "images/cover.jpeg",       "Images/cover.jpeg",
-      "OEBPS/cover.jpeg", "OEBPS/images/cover.jpeg", "OEBPS/Images/cover.jpeg",
-      "cover.png",        "images/cover.png",        "Images/cover.png",
-      "OEBPS/cover.png",  "OEBPS/images/cover.png",  "OEBPS/Images/cover.png",
-      "COVER.JPG",        "images/COVER.JPG",        "Images/COVER.JPG",
-      "OEBPS/COVER.JPG",  "OEBPS/images/COVER.JPG",  "OEBPS/Images/COVER.JPG",
-      "COVER.JPEG",       "images/COVER.JPEG",       "Images/COVER.JPEG",
-      "OEBPS/COVER.JPEG", "OEBPS/images/COVER.JPEG", "OEBPS/Images/COVER.JPEG",
-      "COVER.PNG",        "images/COVER.PNG",        "Images/COVER.PNG",
-      "OEBPS/COVER.PNG",  "OEBPS/images/COVER.PNG",  "OEBPS/Images/COVER.PNG",
+  // Fallback: combine known directories with known filenames. All constexpr → flash only, zero heap cost.
+  static constexpr const char* kDirs[] = {
+      "", "images/", "Images/", "OEBPS/", "OEBPS/images/", "OEBPS/Images/", "OPS/", "OPS/images/", "OPS/Images/",
   };
-  for (const char* candidate : kCoverCandidates) {
-    size_t candidateSize;
-    if (getItemSize(candidate, &candidateSize)) {
-      LOG_DBG("EBP", "Found cover candidate by name: %s (%zu bytes)", candidate, candidateSize);
-      return candidate;
+  static constexpr const char* kNames[] = {
+      "cover.jpg", "cover.jpeg", "cover.png",  "COVER.JPG", "COVER.JPEG",
+      "COVER.PNG", "Cover.jpg",  "Cover.jpeg", "Cover.png",
+  };
+  char buf[40];
+  for (const char* dir : kDirs) {
+    for (const char* name : kNames) {
+      snprintf(buf, sizeof(buf), "%s%s", dir, name);
+      size_t candidateSize;
+      if (getItemSize(buf, &candidateSize)) {
+        LOG_DBG("EBP", "Found cover candidate by name: %s (%zu bytes)", buf, candidateSize);
+        return buf;
+      }
     }
   }
   return {};
