@@ -213,8 +213,6 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
                               const bool pixelState, const GfxRenderer::Orientation orientation) {
   switch (orientation) {
     case GfxRenderer::LandscapeCounterClockwise: {
-      // phyX = screenXBase+glyphX,  phyY = screenYBase+glyphY  (identity mapping)
-      // Each glyph row is a contiguous physical h-span — read and write 8 px at a time.
       for (int glyphY = 0; glyphY < glyphHeight; glyphY++) {
         const int phyY = screenYBase + glyphY;
         if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
@@ -233,9 +231,6 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
     }
 
     case GfxRenderer::LandscapeClockwise: {
-      // phyX = W-1-screenXBase-glyphX,  phyY = H-1-screenYBase-glyphY  (180° flip)
-      // glyphX=0 is rightmost; iterate glyph row right-to-left in 8-px chunks so each
-      // chunk writes a contiguous left-to-right physical h-span after bit-reversal.
       for (int glyphY = 0; glyphY < glyphHeight; glyphY++) {
         const int phyY = HalDisplay::DISPLAY_HEIGHT - 1 - (screenYBase + glyphY);
         if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
@@ -244,8 +239,6 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
         for (int chunkEnd = glyphWidth - 1; chunkEnd >= 0; chunkEnd -= 8) {
           const int chunkStart = std::max(0, chunkEnd - 7);
           const int count = chunkEnd - chunkStart + 1;
-          // Read chunk in glyph (left-to-right) order then reverse bits so MSB maps to
-          // glyphX=chunkEnd, which is the leftmost physical pixel of this chunk.
           const uint8_t gbyte_fwd = bitmapExtract(bitmap, rowBitStart + chunkStart, count);
           const uint8_t gbyte = reverseBits8(gbyte_fwd >> (8 - count));
           if (gbyte == 0) continue;
@@ -258,13 +251,9 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
     }
 
     case GfxRenderer::Portrait: {
-      // phyX = screenYBase+glyphY,  phyY = H-1-screenXBase-glyphX  (90° CW)
-      // A glyph column maps to a physical row.  Process in 8-row × 8-col blocks:
-      //   pack 8 glyph rows (sequential reads) into uint64_t → transpose8x8 →
-      //   each output byte is one glyph column's bits, MSB = row 0 = smallest phyX.
       for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
         const int rowCount = std::min(8, glyphHeight - glyphY);
-        const int phyBitPos = screenYBase + glyphY;  // leftmost phyX of this row-chunk
+        const int phyBitPos = screenYBase + glyphY;
         if (phyBitPos + rowCount <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
         for (int glyphX = 0; glyphX < glyphWidth; glyphX += 8) {
           const int colCount = std::min(8, glyphWidth - glyphX);
@@ -274,7 +263,6 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
             pack |= static_cast<uint64_t>(bitmapExtract(bitmap, bitStart, colCount)) << (56 - 8 * n);
           }
           pack = transpose8x8(pack);
-          // Byte k of pack = column (glyphX+k) bits, MSB = row 0 = leftmost phyX.
           for (int k = 0; k < colCount; k++) {
             const uint8_t cols_k = static_cast<uint8_t>(pack >> (56 - 8 * k));
             if (cols_k == 0) continue;
@@ -288,25 +276,18 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
     }
 
     case GfxRenderer::PortraitInverted: {
-      // phyX = W-1-screenYBase-glyphY,  phyY = screenXBase+glyphX  (90° CCW)
-      // Like Portrait but glyphY=0 is the rightmost physical pixel.  Pack rows in
-      // reverse order (last row at uint64_t MSB) so the transposed column bytes already
-      // have MSB = last row = leftmost phyX — no bit-reversal step needed.
       for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
         const int rowCount = std::min(8, glyphHeight - glyphY);
-        // Leftmost phyX = W-1-screenYBase-(glyphY+rowCount-1).
         const int phyBitPos = HalDisplay::DISPLAY_WIDTH - 1 - screenYBase - (glyphY + rowCount - 1);
         if (phyBitPos + rowCount <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
         for (int glyphX = 0; glyphX < glyphWidth; glyphX += 8) {
           const int colCount = std::min(8, glyphWidth - glyphX);
-          // Pack row (rowCount-1) at MSB down to row 0 at the lowest active byte.
           uint64_t pack = 0;
           int bitStart = glyphY * glyphWidth + glyphX;
           for (int n = 0; n < rowCount; n++, bitStart += glyphWidth) {
             pack |= static_cast<uint64_t>(bitmapExtract(bitmap, bitStart, colCount)) << (56 - 8 * (rowCount - 1 - n));
           }
           pack = transpose8x8(pack);
-          // Byte k = column (glyphX+k) bits, MSB = last row = leftmost phyX.
           for (int k = 0; k < colCount; k++) {
             const uint8_t cols_k = static_cast<uint8_t>(pack >> (56 - 8 * k));
             if (cols_k == 0) continue;
@@ -314,6 +295,128 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
             if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
             writeRowBits(frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES, phyBitPos, cols_k, pixelState);
           }
+        }
+      }
+      break;
+    }
+  }
+}
+
+static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int rowStartPixel,
+                                       const int glyphXStartOrEnd, const int count,
+                                       const bool reverseXInChunk, const GfxRenderer::RenderMode renderMode) {
+  // drawMask uses raw 2-bit glyph values directly from font bitmaps:
+  // raw 0=white, 1=light gray, 2=dark gray, 3=black.
+  // Bit N set means: draw/update when raw==N.
+  // This avoids per-pixel remap (bmpVal = 3 - raw) and branch chains in the hot loop.
+  const uint8_t drawMask =
+      (renderMode == GfxRenderer::BW) ? 0x0E : ((renderMode == GfxRenderer::GRAYSCALE_MSB) ? 0x06 : 0x04);
+
+  uint8_t mask = 0;
+  for (int i = 0; i < count; i++) {
+    const int logicalX = reverseXInChunk ? (glyphXStartOrEnd - i) : (glyphXStartOrEnd + i);
+    const int pixelPosition = rowStartPixel + logicalX;
+    const uint8_t byte = bitmap[pixelPosition >> 2];
+    const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
+    const uint8_t raw = static_cast<uint8_t>((byte >> bit_index) & 0x3);
+    if ((drawMask >> raw) & 0x01) mask |= static_cast<uint8_t>(1u << (7 - i));
+  }
+  return mask;
+}
+
+static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const bitmap, const int glyphWidth,
+                                const int glyphHeight, const int screenXBase, const int screenYBase,
+                                const bool pixelState, const GfxRenderer::Orientation orientation,
+                                const GfxRenderer::RenderMode renderMode) {
+  // Non-rotated text fast path for 2-bit glyphs. Writes compact masks directly to framebuffer rows.
+  // TextRotation::Rotated90CW keeps the legacy per-pixel fallback path for safety and readability.
+  const bool writeState = (renderMode == GfxRenderer::BW) ? pixelState : false;
+  const uint8_t drawMask =
+      (renderMode == GfxRenderer::BW) ? 0x0E : ((renderMode == GfxRenderer::GRAYSCALE_MSB) ? 0x06 : 0x04);
+
+  switch (orientation) {
+    case GfxRenderer::LandscapeCounterClockwise: {
+      for (int glyphY = 0; glyphY < glyphHeight; glyphY++) {
+        const int phyY = screenYBase + glyphY;
+        if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
+        uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
+        const int rowStartPixel = glyphY * glyphWidth;
+        for (int glyphX = 0; glyphX < glyphWidth; glyphX += 8) {
+          const int count = std::min(8, glyphWidth - glyphX);
+          const uint8_t mask = build2BitRowMask(bitmap, rowStartPixel, glyphX, count, false, renderMode);
+          if (mask == 0) continue;
+          const int phyBitPos = screenXBase + glyphX;
+          if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
+          writeRowBits(row, phyBitPos, mask, writeState);
+        }
+      }
+      break;
+    }
+
+    case GfxRenderer::LandscapeClockwise: {
+      for (int glyphY = 0; glyphY < glyphHeight; glyphY++) {
+        const int phyY = HalDisplay::DISPLAY_HEIGHT - 1 - (screenYBase + glyphY);
+        if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
+        uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
+        const int rowStartPixel = glyphY * glyphWidth;
+        for (int chunkEnd = glyphWidth - 1; chunkEnd >= 0; chunkEnd -= 8) {
+          const int chunkStart = std::max(0, chunkEnd - 7);
+          const int count = chunkEnd - chunkStart + 1;
+          const uint8_t mask = build2BitRowMask(bitmap, rowStartPixel, chunkEnd, count, true, renderMode);
+          if (mask == 0) continue;
+          const int phyBitPos = HalDisplay::DISPLAY_WIDTH - 1 - screenXBase - chunkEnd;
+          if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
+          writeRowBits(row, phyBitPos, mask, writeState);
+        }
+      }
+      break;
+    }
+
+    case GfxRenderer::Portrait: {
+      for (int glyphX = 0; glyphX < glyphWidth; glyphX++) {
+        const int phyY = HalDisplay::DISPLAY_HEIGHT - 1 - (screenXBase + glyphX);
+        if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
+        uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
+        for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
+          const int count = std::min(8, glyphHeight - glyphY);
+          uint8_t mask = 0;
+          for (int i = 0; i < count; i++) {
+            const int logicalY = glyphY + i;
+            const int pixelPosition = logicalY * glyphWidth + glyphX;
+            const uint8_t byte = bitmap[pixelPosition >> 2];
+            const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
+            const uint8_t raw = static_cast<uint8_t>((byte >> bit_index) & 0x3);
+            if ((drawMask >> raw) & 0x01) mask |= static_cast<uint8_t>(1u << (7 - i));
+          }
+          if (mask == 0) continue;
+          const int phyBitPos = screenYBase + glyphY;
+          if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
+          writeRowBits(row, phyBitPos, mask, writeState);
+        }
+      }
+      break;
+    }
+
+    case GfxRenderer::PortraitInverted: {
+      for (int glyphX = 0; glyphX < glyphWidth; glyphX++) {
+        const int phyY = screenXBase + glyphX;
+        if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
+        uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
+        for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
+          const int count = std::min(8, glyphHeight - glyphY);
+          uint8_t mask = 0;
+          for (int i = 0; i < count; i++) {
+            const int logicalY = glyphY + (count - 1 - i);
+            const int pixelPosition = logicalY * glyphWidth + glyphX;
+            const uint8_t byte = bitmap[pixelPosition >> 2];
+            const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
+            const uint8_t raw = static_cast<uint8_t>((byte >> bit_index) & 0x3);
+            if ((drawMask >> raw) & 0x01) mask |= static_cast<uint8_t>(1u << (7 - i));
+          }
+          if (mask == 0) continue;
+          const int phyBitPos = HalDisplay::DISPLAY_WIDTH - 1 - screenYBase - (glyphY + count - 1);
+          if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
+          writeRowBits(row, phyBitPos, mask, writeState);
         }
       }
       break;
@@ -359,6 +462,15 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     }
 
     if (is2Bit) {
+      if constexpr (rotation == TextRotation::None) {
+        // Fast path for normal text orientation. Handles all device orientations via renderGlyphFast2Bit.
+        renderGlyphFast2Bit(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase, pixelState,
+                            renderer.getOrientation(), renderMode);
+        *cursorX += glyph->advanceX;
+        return;
+      }
+
+      // Rotated text fallback: keep explicit per-pixel behavior.
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < height; glyphY++) {
         const int outerCoord = outerBase + glyphY;
