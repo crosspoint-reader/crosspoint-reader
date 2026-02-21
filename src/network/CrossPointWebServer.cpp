@@ -510,20 +510,20 @@ void CrossPointWebServer::handleDownload() const {
   while (file.available() && client.connected()) {
     size_t len = file.read(buf, sizeof(buf));
     if (len > 0) {
-    size_t written = client.write(buf, len);
+      size_t written = client.write(buf, len);
 
-    if (written == 0) {
-      LOG_ERR("WEB", "Download write failed (0/%d) — closing client", len);
-      client.stop();
-      break;  // client stalled/disconnected
+      if (written == 0) {
+        LOG_ERR("WEB", "Download write failed (0/%d) — closing client", len);
+        client.stop();
+        break;  // client stalled/disconnected
+      }
+      totalSent += written;
+      if (written != len) {
+        LOG_ERR("WEB", "Short write (%d/%d) — closing client", written, len);
+        client.stop();
+        break;  // short write; stop to avoid corrupting stream
+      }
     }
-    totalSent += written;
-    if (written != len) {
-      LOG_ERR("WEB", "Short write (%d/%d) — closing client", written, len);
-      client.stop();
-      break;  // short write; stop to avoid corrupting stream
-    }
-  }
     if (totalSent % (256 * 1024) < 2048) {
       LOG_DBG("WEB", "Sent: %d/%d bytes", totalSent, fileSize);
     }
