@@ -193,7 +193,7 @@ void EpubReaderActivity::loop() {
   }
 
   // When long-press behavior is disabled, turn pages on press instead of release.
-  const bool usePressForPageTurn = SETTINGS.longPressButtonBehavior == SETTINGS.OFF; 
+  const bool usePressForPageTurn = SETTINGS.longPressButtonBehavior == SETTINGS.OFF;
   const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
                                                     mappedInput.wasPressed(MappedInputManager::Button::Left))
                                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
@@ -233,14 +233,13 @@ void EpubReaderActivity::loop() {
   }
 
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
-    const uint8_t newOrientation = nextTriggered
-        ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT 
-        : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
+    const uint8_t newOrientation =
+        nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
+                      : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
     applyOrientation(newOrientation);
     requestUpdate();
     return;
   }
-
 
   // No current section, attempt to rerender the book
   if (!section) {
