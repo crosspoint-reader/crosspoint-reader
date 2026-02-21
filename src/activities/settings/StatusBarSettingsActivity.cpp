@@ -31,6 +31,10 @@ const StrId titleNames[TITLE_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrI
 
 const char* translatedShow = tr(STR_SHOW);
 const char* translatedHide = tr(STR_HIDE);
+
+const int widthMargin = 10;
+const int verticalPreviewPadding = 50;
+const int verticalPreviewTextPadding = 30;
 }  // namespace
 
 void StatusBarSettingsActivity::onEnter() {
@@ -156,22 +160,9 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
-  orientedMarginLeft += SETTINGS.screenMargin;
-  orientedMarginRight += SETTINGS.screenMargin;
-  orientedMarginBottom += SETTINGS.screenMargin;
-
-  int verticalPreviewPadding = 50;
-
-  // Add status bar margin
-  const bool showProgressBar =
-      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  if (SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage || showProgressBar ||
-      SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE || SETTINGS.statusBarBattery) {
-    // Add additional margin for status bar if progress bar is shown
-    orientedMarginBottom +=
-        19 - SETTINGS.screenMargin + (showProgressBar ? ((SETTINGS.statusBarProgressBarThickness + 1) * 2 + 1) : 0);
-  }
+  orientedMarginLeft += widthMargin;
+  orientedMarginRight += widthMargin;
+  orientedMarginBottom += StatusBar::getStatusBarHeight();
 
   std::string title;
   if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
@@ -183,8 +174,10 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
   StatusBar::renderStatusBar(renderer, orientedMarginRight, orientedMarginBottom, orientedMarginLeft, 75, 8, 32, title,
                              verticalPreviewPadding);
 
-  renderer.drawText(UI_10_FONT_ID, orientedMarginLeft, renderer.getScreenHeight() - orientedMarginBottom - 90,
-                    tr(STR_PREVIEW));
+  renderer.drawText(
+      UI_10_FONT_ID, orientedMarginLeft,
+      renderer.getScreenHeight() - orientedMarginBottom - verticalPreviewPadding - verticalPreviewTextPadding,
+      tr(STR_PREVIEW));
 
   renderer.displayBuffer();
 }

@@ -1,3 +1,4 @@
+#include "StatusBar.h"
 
 #include <GfxRenderer.h>
 
@@ -9,6 +10,17 @@
 #include "fontIds.h"
 
 namespace StatusBar {
+uint8_t getStatusBarHeight() {
+  // Add status bar margin
+  const bool showStatusBar = SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
+                             SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE ||
+                             SETTINGS.statusBarBattery;
+  const bool showProgressBar =
+      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
+  return (showStatusBar ? (statusBarMargin) : 0) +
+         (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + progressBarMarginTop) : 0);
+}
+
 void renderStatusBar(GfxRenderer& renderer, const int marginRight, const int marginBottom, const int marginLeft,
                      const float bookProgress, const int currentPage, const int pageCount, std::string title,
                      const int paddingBottom) {

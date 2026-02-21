@@ -23,8 +23,6 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
-constexpr int statusBarMargin = 19;
-constexpr int progressBarMarginTop = 1;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -515,19 +513,7 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
   orientedMarginRight += SETTINGS.screenMargin;
-  orientedMarginBottom += SETTINGS.screenMargin;
-
-  auto metrics = UITheme::getInstance().getMetrics();
-
-  // Add status bar margin
-  const bool showStatusBar = SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
-                             SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE ||
-                             SETTINGS.statusBarBattery;
-  const bool showProgressBar =
-      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  orientedMarginBottom +=
-      (showStatusBar ? (statusBarMargin - SETTINGS.screenMargin) : 0) +
-      (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + progressBarMarginTop) : 0);
+  orientedMarginBottom += std::max(SETTINGS.screenMargin, StatusBar::getStatusBarHeight());
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
