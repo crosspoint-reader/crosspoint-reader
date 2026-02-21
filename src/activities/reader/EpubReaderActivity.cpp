@@ -34,28 +34,6 @@ int clampPercent(int percent) {
   }
   return percent;
 }
-
-// Apply the logical reader orientation to the renderer.
-// This centralizes orientation mapping so we don't duplicate switch logic elsewhere.
-void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
-  switch (orientation) {
-    case CrossPointSettings::ORIENTATION::PORTRAIT:
-      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-      break;
-    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
-      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
-      break;
-    case CrossPointSettings::ORIENTATION::INVERTED:
-      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
-      break;
-    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
-      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
-      break;
-    default:
-      break;
-  }
-}
-
 }  // namespace
 
 void EpubReaderActivity::onEnter() {
@@ -67,7 +45,7 @@ void EpubReaderActivity::onEnter() {
 
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
-  applyReaderOrientation(renderer, SETTINGS.orientation);
+  renderer.setOrientation(static_cast<GfxRenderer::Orientation>(SETTINGS.orientation));
 
   epub->setupCacheDir();
 
@@ -189,6 +167,15 @@ void EpubReaderActivity::loop() {
   // Short press BACK goes directly to home
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
     onGoHome();
+    return;
+  }
+
+  // Short press power rotates the screen, if configured
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::ROTATE_ORIENTATION &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    applyOrientation(static_cast<uint8_t>(
+      (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION::ORIENTATION_COUNT));
+    updateRequired = true;
     return;
   }
 
@@ -464,6 +451,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   }
 
   // Preserve current reading position so we can restore after reflow.
+<<<<<<< HEAD
   {
     RenderLock lock(*this);
     if (section) {
@@ -477,7 +465,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     SETTINGS.saveToFile();
 
     // Update renderer orientation to match the new logical coordinate system.
-    applyReaderOrientation(renderer, SETTINGS.orientation);
+    renderer.setOrientation(static_cast<GfxRenderer::Orientation>(orientation));
 
     // Reset section to force re-layout in the new orientation.
     section.reset();

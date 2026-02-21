@@ -19,6 +19,16 @@
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 
+//Make it safe to static_cast between the orientation enums
+static_assert(static_cast<GfxRenderer::Orientation>(CrossPointSettings::ORIENTATION::PORTRAIT)
+  == GfxRenderer::Orientation::Portrait);
+static_assert(static_cast<GfxRenderer::Orientation>(CrossPointSettings::ORIENTATION::LANDSCAPE_CW)
+  == GfxRenderer::Orientation::LandscapeClockwise);
+static_assert(static_cast<GfxRenderer::Orientation>(CrossPointSettings::ORIENTATION::INVERTED)
+  == GfxRenderer::Orientation::PortraitInverted);
+static_assert(static_cast<GfxRenderer::Orientation>(CrossPointSettings::ORIENTATION::LANDSCAPE_CCW)
+  == GfxRenderer::Orientation::LandscapeCounterClockwise);
+
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
