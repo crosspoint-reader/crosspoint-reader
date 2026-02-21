@@ -158,12 +158,11 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    auto popCb = []() { activityManager.popActivity(); };
-    auto resultHandler = [this](ActivityResult&) { requestUpdate(); };
+    auto resultHandler = [this](const ActivityResult&) {};
 
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
-        startActivityForResult(new ButtonRemapActivity(renderer, mappedInput, popCb), resultHandler);
+        startActivityForResult(new ButtonRemapActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::KOReaderSync:
         startActivityForResult(new KOReaderSettingsActivity(renderer, mappedInput), resultHandler);
@@ -175,13 +174,13 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(new WifiSelectionActivity(renderer, mappedInput, false), resultHandler);
         break;
       case SettingAction::ClearCache:
-        startActivityForResult(new ClearCacheActivity(renderer, mappedInput, popCb), resultHandler);
+        startActivityForResult(new ClearCacheActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(new OtaUpdateActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Language:
-        startActivityForResult(new LanguageSelectActivity(renderer, mappedInput, popCb), resultHandler);
+        startActivityForResult(new LanguageSelectActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::None:
         // Do nothing

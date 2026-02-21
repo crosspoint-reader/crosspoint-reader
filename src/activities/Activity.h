@@ -42,7 +42,7 @@ class Activity {
   void startActivityForResult(Activity* activity, ActivityResultHandler resultHandler);
 
   // Set the result to be passed back to the previous activity when this activity finishes
-  void setResult(ActivityResult& result);
+  void setResult(const ActivityResult& result);
 
   // Finish this activity and return to the previous one on the stack (if any)
   void finish();

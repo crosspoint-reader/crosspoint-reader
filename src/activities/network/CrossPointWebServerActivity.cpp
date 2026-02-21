@@ -49,7 +49,7 @@ void CrossPointWebServerActivity::onEnter() {
   // Launch network mode selection subactivity
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
   startActivityForResult(new NetworkModeSelectionActivity(renderer, mappedInput),
-                         [this](ActivityResult& result) { onNetworkModeSelected(result.selectedNetworkMode); });
+                         [this](const ActivityResult& result) { onNetworkModeSelected(result.selectedNetworkMode); });
 }
 
 void CrossPointWebServerActivity::onExit() {
@@ -106,16 +106,17 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   isApMode = (mode == NetworkMode::CREATE_HOTSPOT);
 
   if (mode == NetworkMode::CONNECT_CALIBRE) {
-    startActivityForResult(new CalibreConnectActivity(renderer, mappedInput), [this](ActivityResult& result) {
+    startActivityForResult(new CalibreConnectActivity(renderer, mappedInput), [this](const ActivityResult& result) {
       state = WebServerActivityState::MODE_SELECTION;
 
-      startActivityForResult(new NetworkModeSelectionActivity(renderer, mappedInput), [this](ActivityResult& result) {
-        if (result.isCancelled) {
-          onGoHome();
-        } else {
-          onNetworkModeSelected(result.selectedNetworkMode);
-        }
-      });
+      startActivityForResult(new NetworkModeSelectionActivity(renderer, mappedInput),
+                             [this](const ActivityResult& result) {
+                               if (result.isCancelled) {
+                                 onGoHome();
+                               } else {
+                                 onNetworkModeSelected(result.selectedNetworkMode);
+                               }
+                             });
     });
     return;
   }
@@ -127,7 +128,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 
     state = WebServerActivityState::WIFI_SELECTION;
     LOG_DBG("WEBACT", "Launching WifiSelectionActivity...");
-    startActivityForResult(new WifiSelectionActivity(renderer, mappedInput), [this](ActivityResult& result) {
+    startActivityForResult(new WifiSelectionActivity(renderer, mappedInput), [this](const ActivityResult& result) {
       connectedIP = result.wifiIP;
       connectedSSID = result.wifiSSID;
       onWifiSelectionComplete(result.wifiConnected);
@@ -159,7 +160,7 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     state = WebServerActivityState::MODE_SELECTION;
 
     startActivityForResult(new NetworkModeSelectionActivity(renderer, mappedInput),
-                           [this](ActivityResult& result) { onNetworkModeSelected(result.selectedNetworkMode); });
+                           [this](const ActivityResult& result) { onNetworkModeSelected(result.selectedNetworkMode); });
   }
 }
 

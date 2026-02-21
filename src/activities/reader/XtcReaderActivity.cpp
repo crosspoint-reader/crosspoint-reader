@@ -59,7 +59,7 @@ void XtcReaderActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
       startActivityForResult(new XtcReaderChapterSelectionActivity(renderer, mappedInput, xtc, currentPage),
-                             [this](ActivityResult& result) {
+                             [this](const ActivityResult& result) {
                                if (!result.isCancelled) {
                                  currentPage = result.selectedPage;
                                }

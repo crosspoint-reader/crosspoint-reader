@@ -26,6 +26,6 @@ void Activity::startActivityForResult(Activity* activity, ActivityResultHandler 
   activityManager.pushActivity(activity);
 }
 
-void Activity::setResult(ActivityResult& result) { this->result = result; }
+void Activity::setResult(const ActivityResult& result) { this->result = result; }
 
 void Activity::finish() { activityManager.popActivity(); }

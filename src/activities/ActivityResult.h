@@ -1,13 +1,14 @@
 #pragma once
 
-#include <string>
 #include <functional>
+#include <string>
 
 // TODO: move this to the correct place
 enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };
 
 struct ActivityResult {
-  // Note: only include trivial copiable data here, do NOT pass a pointer or reference
+  // IMPORTANT: only include copiable data here, do NOT pass a pointer or reference
+
   bool isCancelled = false;
 
   // For NetworkModeSelectionActivity result
@@ -41,4 +42,4 @@ struct ActivityResult {
   int selectedPercent = 0;
 };
 
-using ActivityResultHandler = std::function<void(ActivityResult&)>;
+using ActivityResultHandler = std::function<void(const ActivityResult&)>;

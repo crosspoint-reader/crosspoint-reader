@@ -123,14 +123,19 @@ void EpubReaderActivity::loop() {
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
-    if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
+    if (!epub) {
+      // Should never happen
+      LOG_ERR("ERS", "No book loaded");
+      return;
+    }
+    if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
       const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     startActivityForResult(new EpubReaderMenuActivity(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
                                                       bookProgressPercent, SETTINGS.orientation),
-                           [this](ActivityResult& result) {
+                           [this](const ActivityResult& result) {
                              applyOrientation(result.selectedOrientation);
                              if (!result.isCancelled) {
                                onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(result.menuAction));
@@ -296,7 +301,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();
       startActivityForResult(new EpubReaderChapterSelectionActivity(renderer, mappedInput, epub, path, spineIdx),
-                             [this](ActivityResult& result) {
+                             [this](const ActivityResult& result) {
                                if (!result.isCancelled && currentSpineIndex != result.selectedSpineIndex) {
                                  currentSpineIndex = result.selectedSpineIndex;
                                  nextPageNumber = 0;
@@ -314,7 +319,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       const int initialPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
       startActivityForResult(new EpubReaderPercentSelectionActivity(renderer, mappedInput, initialPercent),
-                             [this](ActivityResult& result) {
+                             [this](const ActivityResult& result) {
                                if (!result.isCancelled) {
                                  jumpToPercent(result.selectedPercent);
                                }
@@ -348,7 +353,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         const int totalPages = section ? section->pageCount : 0;
         startActivityForResult(new KOReaderSyncActivity(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
                                                         currentPage, totalPages),
-                               [this](ActivityResult& result) {
+                               [this](const ActivityResult& result) {
                                  if (!result.isCancelled) {
                                    if (currentSpineIndex != result.syncedSpineIndex ||
                                        (section && section->currentPage != result.syncedPage)) {

@@ -6,9 +6,8 @@
 
 class ClearCacheActivity final : public Activity {
  public:
-  explicit ClearCacheActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                              const std::function<void()>& goBack)
-      : Activity("ClearCache", renderer, mappedInput), goBack(goBack) {}
+  explicit ClearCacheActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("ClearCache", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
@@ -21,7 +20,7 @@ class ClearCacheActivity final : public Activity {
 
   State state = WARNING;
 
-  const std::function<void()> goBack;
+  void goBack() { finish(); }
 
   int clearedCount = 0;
   int failedCount = 0;

@@ -31,7 +31,7 @@ void CalibreConnectActivity::onEnter() {
   exitRequested = false;
 
   if (WiFi.status() != WL_CONNECTED) {
-    startActivityForResult(new WifiSelectionActivity(renderer, mappedInput), [this](ActivityResult& result) {
+    startActivityForResult(new WifiSelectionActivity(renderer, mappedInput), [this](const ActivityResult& result) {
       connectedIP = result.wifiIP;
       connectedSSID = result.wifiSSID;
       onWifiSelectionComplete(result.wifiConnected);

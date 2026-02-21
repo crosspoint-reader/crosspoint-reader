@@ -13,12 +13,14 @@
 #include "MappedInputManager.h"
 
 struct Intent {
-  // Note: only include trivial copiable data here, do NOT pass a pointer or reference
+  // IMPORTANT: only include copiable data here, do NOT pass a pointer or reference
+
+  // For MyLibraryActivity and ReaderActivity
   std::string path;
 
-  // FullScreenMessage
+  // For FullScreenMessageActivity
   std::string message;
-  EpdFontFamily::Style messageStyle;
+  EpdFontFamily::Style messageStyle = EpdFontFamily::REGULAR;
 };
 
 class Activity;    // forward declaration

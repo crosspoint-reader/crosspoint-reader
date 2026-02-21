@@ -57,7 +57,7 @@ void KOReaderSettingsActivity::handleSelection() {
         new KeyboardEntryActivity(renderer, mappedInput, tr(STR_KOREADER_USERNAME), KOREADER_STORE.getUsername(),
                                   64,      // maxLength
                                   false),  // not password
-        [this](ActivityResult& result) {
+        [this](const ActivityResult& result) {
           if (!result.isCancelled) {
             KOREADER_STORE.setCredentials(result.inputText, KOREADER_STORE.getPassword());
             KOREADER_STORE.saveToFile();
@@ -70,7 +70,7 @@ void KOReaderSettingsActivity::handleSelection() {
         new KeyboardEntryActivity(renderer, mappedInput, tr(STR_KOREADER_PASSWORD), KOREADER_STORE.getPassword(),
                                   64,      // maxLength
                                   false),  // show characters
-        [this](ActivityResult& result) {
+        [this](const ActivityResult& result) {
           if (!result.isCancelled) {
             KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), result.inputText);
             KOREADER_STORE.saveToFile();
@@ -84,7 +84,7 @@ void KOReaderSettingsActivity::handleSelection() {
     startActivityForResult(new KeyboardEntryActivity(renderer, mappedInput, tr(STR_SYNC_SERVER_URL), prefillUrl,
                                                      128,     // maxLength - URLs can be long
                                                      false),  // not password
-                           [this](ActivityResult& result) {
+                           [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                // Clear if user just left the prefilled https://
                                const std::string urlToSave =
@@ -110,7 +110,7 @@ void KOReaderSettingsActivity::handleSelection() {
       return;
     }
     startActivityForResult(new KOReaderAuthActivity(renderer, mappedInput, [] { activityManager.popActivity(); }),
-                           [this](ActivityResult&) { requestUpdate(); });
+                           [this](const ActivityResult&) { requestUpdate(); });
   }
 }
 

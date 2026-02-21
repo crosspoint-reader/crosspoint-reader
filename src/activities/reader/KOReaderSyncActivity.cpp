@@ -223,7 +223,7 @@ void KOReaderSyncActivity::onEnter() {
   // Launch WiFi selection subactivity
   LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
   startActivityForResult(new WifiSelectionActivity(renderer, mappedInput),
-                         [this](ActivityResult& result) { onWifiSelectionComplete(result.wifiConnected); });
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(result.wifiConnected); });
 }
 
 void KOReaderSyncActivity::onExit() {

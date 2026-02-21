@@ -195,7 +195,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
                                                      64,    // Max password length
                                                      false  // Show password by default (hard keyboard to use)
                                                      ),
-                           [this](ActivityResult& result) {
+                           [this](const ActivityResult& result) {
                              if (result.isCancelled) {
                                state = WifiSelectionState::NETWORK_LIST;
                                requestUpdate();
