@@ -1,6 +1,7 @@
 #include "ImageBlock.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
@@ -27,6 +28,20 @@ std::string getCachePath(const std::string& imagePath) {
     return imagePath.substr(0, dotPos) + ".pxc";
   }
   return imagePath + ".pxc";
+}
+
+RenderConfig makeRenderConfig(int x, int y, int width, int height, const std::string& cachePath) {
+  RenderConfig config;
+  config.x = x;
+  config.y = y;
+  config.maxWidth = width;
+  config.maxHeight = height;
+  config.useGrayscale = true;
+  config.ditherMode = gpio.deviceIsX3() ? DitherMode::Noise : DitherMode::Bayer;
+  config.performanceMode = false;
+  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
+  config.cachePath = cachePath;      // Enable caching during decode
+  return config;
 }
 
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
@@ -129,16 +144,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   LOG_DBG("IMG", "Decoding and caching: %s", imagePath.c_str());
 
-  RenderConfig config;
-  config.x = x;
-  config.y = y;
-  config.maxWidth = width;
-  config.maxHeight = height;
-  config.useGrayscale = true;
-  config.useDithering = true;
-  config.performanceMode = false;
-  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
-  config.cachePath = cachePath;      // Enable caching during decode
+  RenderConfig config = makeRenderConfig(x, y, width, height, cachePath);
 
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
