@@ -81,7 +81,7 @@ bool TextBlock::serialize(FsFile& file) const {
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   uint16_t wc;
   std::list<std::string> words;
-  std::list<uint16_t> wordXpos;
+  std::list<int16_t> wordXpos;  // Signed to support negative positions (hanging indent)
   std::list<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
 

@@ -19,8 +19,11 @@ constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
 
-const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
+const char* BLOCK_TAGS[] = {"p", "div", "br", "blockquote"};
 constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
+
+// List item is a container, not a block content element - handled separately
+const char* LIST_ITEM_TAG = "li";
 
 const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr int NUM_BOLD_TAGS = sizeof(BOLD_TAGS) / sizeof(BOLD_TAGS[0]);
@@ -50,7 +53,8 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
 }
 
 bool isHeaderOrBlock(const char* name) {
-  return matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
+  return matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) ||
+         strcmp(name, LIST_ITEM_TAG) == 0;
 }
 
 bool isTableStructuralTag(const char* name) {
@@ -81,6 +85,9 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
 
 // flush the contents of partWordBuffer to currentTextBlock
 void ChapterHtmlSlimParser::flushPartWordBuffer() {
+  // Ensure we have a text block (handles inline text without explicit block elements)
+  ensureTextBlock();
+
   // Determine font style from depth-based tracking and CSS effective style
   const bool isBold = boldUntilDepth < depth || effectiveBold;
   const bool isItalic = italicUntilDepth < depth || effectiveItalic;
@@ -105,7 +112,46 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   nextWordContinues = false;
 }
 
+// Lazily create a text block with default style if none exists.
+// Used for inline text that isn't wrapped in an explicit block element.
+void ChapterHtmlSlimParser::ensureTextBlock() {
+  if (!currentTextBlock) {
+    BlockStyle defaultStyle;
+    defaultStyle.textAlignDefined = true;
+    defaultStyle.alignment = (paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                                 ? CssTextAlign::Justify
+                                 : static_cast<CssTextAlign>(paragraphAlignment);
+
+    // Apply list indentation if we're inside a list
+    // This block will receive the pending bullet, so use hanging indent
+    // Use measured marker width for pixel-perfect alignment
+    if (!listStack.empty() && currentListItemMarkerWidth > 0) {
+      const float emSize = static_cast<float>(renderer.getLineHeight(fontId)) * lineCompression;
+      const int listDepth = static_cast<int>(listStack.size());
+      const int16_t nestIndent = static_cast<int16_t>((listDepth - 1) * emSize * 1.0f);
+      defaultStyle.marginLeft = static_cast<int16_t>(nestIndent + currentListItemMarkerWidth);
+      // Only apply negative textIndent if there's a pending marker
+      if (!pendingListMarker.empty()) {
+        defaultStyle.textIndent = static_cast<int16_t>(-currentListItemMarkerWidth);
+        defaultStyle.textIndentDefined = true;
+      }
+    }
+
+    currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, defaultStyle));
+  }
+  // Consume pending list marker if set
+  if (!pendingListMarker.empty()) {
+    currentTextBlock->addWord(pendingListMarker.c_str(), EpdFontFamily::REGULAR);
+    pendingListMarker.clear();
+    // Mark next word as continuation so justified text doesn't add extra space after bullet
+    nextWordContinues = true;
+  }
+}
+
 // start a new text block if needed
+// Note: pendingListMarker is NOT consumed here - it's consumed when actual content arrives
+// (in ensureTextBlock/flushPartWordBuffer). This allows <li><p>...</p></li> to work correctly:
+// the <li> creates a block, <p> reuses it (empty), and the marker is added with the text.
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
   if (currentTextBlock) {
@@ -456,21 +502,82 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->startNewTextBlock(headerBlockStyle);
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "ol") == 0 || strcmp(name, "ul") == 0) {
+    // Push list context onto stack
+    ListContext ctx;
+    ctx.isOrdered = (strcmp(name, "ol") == 0);
+    ctx.itemCount = 0;
+    ctx.depth = self->depth;
+    self->listStack.push_back(ctx);
+  } else if (strcmp(name, LIST_ITEM_TAG) == 0) {
+    // List item creates a new block. The marker is set as pending and will be
+    // prepended when actual content arrives (text or nested block element).
+    self->currentCssStyle = cssStyle;
+
+    // Generate marker based on list context (include trailing space)
+    if (!self->listStack.empty()) {
+      ListContext& ctx = self->listStack.back();
+      ctx.itemCount++;
+      if (ctx.isOrdered) {
+        self->pendingListMarker = std::to_string(ctx.itemCount) + ". ";
+      } else {
+        self->pendingListMarker = "\xe2\x80\xa2 ";  // bullet: "• " (with space)
+      }
+    } else {
+      // Fallback if no list context (malformed HTML)
+      self->pendingListMarker = "\xe2\x80\xa2 ";
+    }
+
+    // Measure the actual marker width for pixel-perfect alignment
+    self->currentListItemMarkerWidth = static_cast<int16_t>(
+        self->renderer.getTextAdvanceX(self->fontId, self->pendingListMarker.c_str(), EpdFontFamily::REGULAR));
+
+    // Create block style with hanging indent for list item
+    // The bullet sits at the left edge, text is indented so wrapped lines align after the bullet
+    auto listItemBlockStyle = userAlignmentBlockStyle;
+    const int listDepth = static_cast<int>(self->listStack.size());
+    const int16_t nestIndent = static_cast<int16_t>((listDepth - 1) * emSize * 1.0f);  // Extra indent for nesting
+
+    // marginLeft positions where wrapped text goes; negative textIndent pulls bullet back
+    listItemBlockStyle.marginLeft =
+        static_cast<int16_t>(listItemBlockStyle.marginLeft + nestIndent + self->currentListItemMarkerWidth);
+    listItemBlockStyle.textIndent = static_cast<int16_t>(-self->currentListItemMarkerWidth);
+    listItemBlockStyle.textIndentDefined = true;
+
+    // Create a new block for this list item
+    self->startNewTextBlock(listItemBlockStyle);
+    self->updateEffectiveInlineStyle();
+    self->listItemUntilDepth = std::min(self->listItemUntilDepth, self->depth);
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
       if (self->partWordBufferIndex > 0) {
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
+      // For <br>, we need to ensure a block exists before getting its style
+      self->ensureTextBlock();
       self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
     } else {
+      // p, div, blockquote - all create new text blocks
       self->currentCssStyle = cssStyle;
-      self->startNewTextBlock(userAlignmentBlockStyle);
-      self->updateEffectiveInlineStyle();
+      auto blockStyle = userAlignmentBlockStyle;
 
-      if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+      // Apply list indentation only when creating a NEW block (not reusing <li>'s empty block)
+      // When reusing, <li> already set the correct marginLeft, and getCombinedBlockStyle would double it
+      if (!self->listStack.empty()) {
+        const bool willReuseBlock = self->currentTextBlock && self->currentTextBlock->isEmpty();
+        if (!willReuseBlock) {
+          // Creating new block - add indentation (no textIndent since no bullet)
+          // Use measured marker width for pixel-perfect alignment with bulleted paragraph
+          const int listDepth = static_cast<int>(self->listStack.size());
+          const int16_t nestIndent = static_cast<int16_t>((listDepth - 1) * emSize * 1.0f);
+          blockStyle.marginLeft =
+              static_cast<int16_t>(blockStyle.marginLeft + nestIndent + self->currentListItemMarkerWidth);
+        }
       }
+
+      self->startNewTextBlock(blockStyle);
+      self->updateEffectiveInlineStyle();
     }
   } else if (matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS)) {
     // Flush buffer before style change so preceding text gets current style
@@ -744,6 +851,23 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // Leaving underline tag
   if (self->underlineUntilDepth == self->depth) {
     self->underlineUntilDepth = INT_MAX;
+  }
+
+  // Leaving list (ol/ul) - pop list context
+  if (strcmp(name, "ol") == 0 || strcmp(name, "ul") == 0) {
+    if (!self->listStack.empty() && self->listStack.back().depth == self->depth) {
+      self->listStack.pop_back();
+    }
+  }
+
+  // Leaving list item
+  if (strcmp(name, "li") == 0) {
+    // Clear any unconsumed pending marker (e.g., empty <li></li>)
+    self->pendingListMarker.clear();
+    self->currentListItemMarkerWidth = 0;
+  }
+  if (self->listItemUntilDepth == self->depth) {
+    self->listItemUntilDepth = INT_MAX;
   }
 
   // Pop from inline style stack if we pushed an entry at this depth
