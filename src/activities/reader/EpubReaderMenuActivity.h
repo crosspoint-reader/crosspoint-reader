@@ -16,16 +16,9 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const std::function<void(uint8_t)>& onBack,
-                                  const std::function<void(MenuAction)>& onAction)
-      : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
-        title(title),
-        pendingOrientation(currentOrientation),
-        currentPage(currentPage),
-        totalPages(totalPages),
-        bookProgressPercent(bookProgressPercent),
-        onBack(onBack),
-        onAction(onAction) {}
+                                  const uint8_t currentOrientation, const bool hasFootnotes,
+                                  const std::function<void(uint8_t)>& onBack,
+                                  const std::function<void(MenuAction)>& onAction);
 
   void onEnter() override;
   void onExit() override;
@@ -38,12 +31,10 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
     StrId labelId;
   };
 
+  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes);
+
   // Fixed menu layout (order matters for up/down navigation).
-  const std::vector<MenuItem> menuItems = {
-      {MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER}, {MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES},
-      {MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION},     {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
-      {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},        {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
-      {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}};
+  const std::vector<MenuItem> menuItems;
 
   int selectedIndex = 0;
 
