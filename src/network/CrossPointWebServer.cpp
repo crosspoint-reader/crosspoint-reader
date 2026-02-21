@@ -510,10 +510,15 @@ void CrossPointWebServer::handleDownload() const {
   while (file.available() && client.connected()) {
     size_t len = file.read(buf, sizeof(buf));
     if (len > 0) {
-      client.write(buf, len);
-      totalSent += len;
+      size_t written = client.write(buf, len);
+      if (written == 0) {
+        break;  // client stalled/disconnected
+      }
+      totalSent += written;
+      if (written != len) {
+        break;  // short write; stop to avoid corrupting stream
+      }
     }
-
     if (totalSent % (256 * 1024) < 2048) {
       LOG_DBG("WEB", "Sent: %d/%d bytes", totalSent, fileSize);
     }
