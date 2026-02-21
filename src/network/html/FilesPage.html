@@ -802,7 +802,7 @@
       <button class="modal-close" onclick="closeUploadModal()">&times;</button>
     </div>
     <div class="upload-form">
-      <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
+      <p class="file-info" aria-label="fileInput">Select a file (or multiple files) to upload to <strong id="uploadPathDisplay"></strong></p>
       <form id="uploadForm" onsubmit="uploadFile(event)">
       <input type="file" id="fileInput" onchange="validateFile()" multiple required>
       <div id="progress-container">
@@ -933,8 +933,6 @@
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
   const FILE_EXTENSION_REGEX = /\.([0-9a-z]+)(?:[\?#]|$)/i;
-  const SIZES = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-  const k = 1024;
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -947,8 +945,10 @@
 
   function formatFileSize(bytes) {
     if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toLocaleString() + ' ' + SIZES[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toLocaleString() + ' ' + sizes[i];
   }
 
   async function hydrate() {
@@ -1293,7 +1293,6 @@ function uploadFile(event) {
     const onProgress = (loaded, total) => {
       const percent = Math.round((loaded / total) * 100);
       progressFill.style.width = percent + '%';
-      const speed = ''; // Could calculate speed here
       progressText.textContent = `Uploading ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${percent}%`;
     };
 
@@ -1483,8 +1482,13 @@ function retryAllFailedUploads() {
       alert('Please enter a new name.');
       return;
     }
-    if (newName.includes('/') || newName.includes('\\')) {
+    if (/[/\\]/.test(newName)) {
       alert('File name cannot include slashes.');
+      return;
+    }
+    const validName = /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(newName);
+    if (!validName) {
+      alert('File name cannot contain " * : < > ? / \\ | and must not be . or ..');
       return;
     }
 
