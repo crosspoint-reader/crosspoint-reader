@@ -302,6 +302,18 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
   }
 }
 
+static inline uint8_t drawMaskFor2BitMode(const GfxRenderer::RenderMode mode) {
+  switch (mode) {
+    case GfxRenderer::BW:
+      return 0x0E;  // draw raw {1,2,3}
+    case GfxRenderer::GRAYSCALE_MSB:
+      return 0x06;  // draw raw {1,2}
+    case GfxRenderer::GRAYSCALE_LSB:
+    default:
+      return 0x04;  // draw raw {2}
+  }
+}
+
 static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int rowStartPixel, const int glyphXStartOrEnd,
                                        const int count, const bool reverseXInChunk,
                                        const GfxRenderer::RenderMode renderMode) {
@@ -309,8 +321,7 @@ static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int ro
   // raw 0=white, 1=light gray, 2=dark gray, 3=black.
   // Bit N set means: draw/update when raw==N.
   // This avoids per-pixel remap (bmpVal = 3 - raw) and branch chains in the hot loop.
-  const uint8_t drawMask =
-      (renderMode == GfxRenderer::BW) ? 0x0E : ((renderMode == GfxRenderer::GRAYSCALE_MSB) ? 0x06 : 0x04);
+  const uint8_t drawMask = drawMaskFor2BitMode(renderMode);
 
   uint8_t mask = 0;
   for (int i = 0; i < count; i++) {
@@ -331,8 +342,7 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
   // Non-rotated text fast path for 2-bit glyphs. Writes compact masks directly to framebuffer rows.
   // TextRotation::Rotated90CW keeps the legacy per-pixel fallback path for safety and readability.
   const bool writeState = (renderMode == GfxRenderer::BW) ? pixelState : false;
-  const uint8_t drawMask =
-      (renderMode == GfxRenderer::BW) ? 0x0E : ((renderMode == GfxRenderer::GRAYSCALE_MSB) ? 0x06 : 0x04);
+  const uint8_t drawMask = drawMaskFor2BitMode(renderMode);
 
   switch (orientation) {
     case GfxRenderer::LandscapeCounterClockwise: {
