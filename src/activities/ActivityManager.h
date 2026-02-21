@@ -11,6 +11,7 @@
 #include "Activity.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "RenderLock.h"
 
 struct Intent {
   // IMPORTANT: only include copiable data here, do NOT pass a pointer or reference
@@ -102,19 +103,6 @@ class ActivityManager {
   bool skipLoopDelay() const;
 
   void requestUpdate();
-};
-
-// RAII helper to lock rendering mutex for the duration of a scope.
-class RenderLock {
-  bool isLocked = false;
-
- public:
-  explicit RenderLock();
-  explicit RenderLock(Activity&);  // unused for now, but keep for compatibility
-  RenderLock(const RenderLock&) = delete;
-  RenderLock& operator=(const RenderLock&) = delete;
-  ~RenderLock();
-  void unlock();
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp

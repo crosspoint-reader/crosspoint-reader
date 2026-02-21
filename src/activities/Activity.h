@@ -5,13 +5,11 @@
 #include <string>
 #include <utility>
 
-#include "ActivityManager.h"
+#include "ActivityManager.h"  // for using the ActivityManager singleton
 #include "ActivityResult.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
-
-class ActivityResult;  // forward declaration
-class RenderLock;      // forward declaration
+#include "RenderLock.h"
 
 class Activity {
  protected:
