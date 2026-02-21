@@ -508,7 +508,6 @@ void CrossPointWebServer::handleDownload() const {
   LOG_DBG("WEB", "Starting download: %s (%d bytes)", filename.c_str(), fileSize);
 
   while (file.available() && client.connected()) {
-
     size_t len = file.read(buf, sizeof(buf));
     if (len > 0) {
       client.write(buf, len);
