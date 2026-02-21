@@ -318,7 +318,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-void KeyboardEntryActivity::onComplete(const std::string& text) {
+void KeyboardEntryActivity::onComplete(std::string text) {
   // Pass entered text back to caller via ActivityResult
   ActivityResult result;
   result.isCancelled = false;

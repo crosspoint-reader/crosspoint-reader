@@ -48,8 +48,13 @@ void CrossPointWebServerActivity::onEnter() {
 
   // Launch network mode selection subactivity
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
-  startActivityForResult(new NetworkModeSelectionActivity(renderer, mappedInput),
-                         [this](const ActivityResult& result) { onNetworkModeSelected(result.selectedNetworkMode); });
+  startActivityForResult(new NetworkModeSelectionActivity(renderer, mappedInput), [this](const ActivityResult& result) {
+    if (result.isCancelled) {
+      onGoHome();
+    } else {
+      onNetworkModeSelected(result.selectedNetworkMode);
+    }
+  });
 }
 
 void CrossPointWebServerActivity::onExit() {
@@ -160,7 +165,13 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     state = WebServerActivityState::MODE_SELECTION;
 
     startActivityForResult(new NetworkModeSelectionActivity(renderer, mappedInput),
-                           [this](const ActivityResult& result) { onNetworkModeSelected(result.selectedNetworkMode); });
+                           [this](const ActivityResult& result) {
+                             if (result.isCancelled) {
+                               onGoHome();
+                             } else {
+                               onNetworkModeSelected(result.selectedNetworkMode);
+                             }
+                           });
   }
 }
 

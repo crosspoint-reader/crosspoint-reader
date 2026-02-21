@@ -31,9 +31,11 @@ void ActivityManager::renderTaskTrampoline(void* param) {
 void ActivityManager::renderTaskLoop() {
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    // Acquire the lock before reading currentActivity to avoid a TOCTOU race
+    // where the main task deletes the activity between the null-check and render().
+    RenderLock lock;
     if (currentActivity) {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
-      RenderLock lock;
       currentActivity->render(std::move(lock));
     }
   }
@@ -168,6 +170,12 @@ void ActivityManager::goToFullScreenMessage(Intent&& intent) {
 void ActivityManager::goHome() { replaceActivity(new HomeActivity(renderer, mappedInput)); }
 
 void ActivityManager::pushActivity(Activity* activity) {
+  if (pendingActivity) {
+    // Should never happen in practice
+    LOG_ERR("ACT", "pendingActivity while pushActivity is not expected");
+    delete pendingActivity;
+    pendingActivity = nullptr;
+  }
   pendingActivity = activity;
   pendingAction = Push;
 }

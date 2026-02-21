@@ -58,7 +58,7 @@ class KeyboardEntryActivity : public Activity {
   int shiftState = 0;  // 0 = lower case, 1 = upper case, 2 = shift lock)
 
   // Handlers
-  void onComplete(const std::string& text);
+  void onComplete(std::string text);
   void onCancel();
 
   // Keyboard layout
