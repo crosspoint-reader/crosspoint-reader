@@ -1,9 +1,9 @@
 #pragma once
 
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 #include "network/OtaUpdater.h"
 
-class OtaUpdateActivity : public ActivityWithSubactivity {
+class OtaUpdateActivity : public Activity {
   enum State {
     WIFI_SELECTION,
     CHECKING_FOR_UPDATE,
@@ -18,7 +18,6 @@ class OtaUpdateActivity : public ActivityWithSubactivity {
   // Can't initialize this to 0 or the first render doesn't happen
   static constexpr unsigned int UNINITIALIZED_PERCENTAGE = 111;
 
-  const std::function<void()> goBack;
   State state = WIFI_SELECTION;
   unsigned int lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
   OtaUpdater updater;
@@ -26,13 +25,12 @@ class OtaUpdateActivity : public ActivityWithSubactivity {
   void onWifiSelectionComplete(bool success);
 
  public:
-  explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                             const std::function<void()>& goBack)
-      : ActivityWithSubactivity("OtaUpdate", renderer, mappedInput), goBack(goBack), updater() {}
+  explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("OtaUpdate", renderer, mappedInput), updater() {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
   bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }
   bool skipLoopDelay() override { return true; }  // Prevent power-saving mode
 };

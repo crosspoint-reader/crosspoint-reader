@@ -65,16 +65,12 @@ void SettingsActivity::onEnter() {
 }
 
 void SettingsActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed
 }
 
 void SettingsActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
   bool hasChangedCategory = false;
 
   // Handle actions with early return
@@ -162,42 +158,29 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    auto enterSubActivity = [this](Activity* activity) {
-      exitActivity();
-      enterNewActivity(activity);
-    };
-
-    auto onComplete = [this] {
-      exitActivity();
-      requestUpdate();
-    };
-
-    auto onCompleteBool = [this](bool) {
-      exitActivity();
-      requestUpdate();
-    };
+    auto resultHandler = [this](const ActivityResult&) {};
 
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
-        enterSubActivity(new ButtonRemapActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(new ButtonRemapActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::KOReaderSync:
-        enterSubActivity(new KOReaderSettingsActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(new KOReaderSettingsActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::OPDSBrowser:
-        enterSubActivity(new CalibreSettingsActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(new CalibreSettingsActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Network:
-        enterSubActivity(new WifiSelectionActivity(renderer, mappedInput, onCompleteBool, false));
+        startActivityForResult(new WifiSelectionActivity(renderer, mappedInput, false), resultHandler);
         break;
       case SettingAction::ClearCache:
-        enterSubActivity(new ClearCacheActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(new ClearCacheActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CheckForUpdates:
-        enterSubActivity(new OtaUpdateActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(new OtaUpdateActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Language:
-        enterSubActivity(new LanguageSelectActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(new LanguageSelectActivity(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::None:
         // Do nothing
@@ -210,7 +193,7 @@ void SettingsActivity::toggleCurrentSetting() {
   SETTINGS.saveToFile();
 }
 
-void SettingsActivity::render(Activity::RenderLock&&) {
+void SettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

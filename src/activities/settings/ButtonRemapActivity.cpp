@@ -94,7 +94,7 @@ void ButtonRemapActivity::loop() {
   }
 }
 
-void ButtonRemapActivity::render(Activity::RenderLock&&) {
+void ButtonRemapActivity::render(RenderLock&&) {
   const auto labelForHardware = [&](uint8_t hardwareIndex) -> const char* {
     for (uint8_t i = 0; i < kRoleCount; i++) {
       if (tempMapping[i] == hardwareIndex) {

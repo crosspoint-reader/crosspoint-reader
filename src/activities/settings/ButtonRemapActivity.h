@@ -7,20 +7,17 @@
 
 class ButtonRemapActivity final : public Activity {
  public:
-  explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                               const std::function<void()>& onBack)
-      : Activity("ButtonRemap", renderer, mappedInput), onBack(onBack) {}
+  explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("ButtonRemap", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   // Rendering task state.
 
-  // Callback used to exit the remap flow back to the settings list.
-  const std::function<void()> onBack;
   // Index of the logical role currently awaiting input.
   uint8_t currentStep = 0;
   // Temporary mapping from logical role -> hardware button index.
@@ -36,4 +33,6 @@ class ButtonRemapActivity final : public Activity {
   // Labels for UI display.
   const char* getRoleName(uint8_t roleIndex) const;
   const char* getHardwareName(uint8_t buttonIndex) const;
+
+  void onBack() { finish(); }
 };

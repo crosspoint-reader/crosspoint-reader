@@ -5,7 +5,7 @@
 
 #include <functional>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "components/UITheme.h"
 
 class MappedInputManager;
@@ -15,19 +15,18 @@ class MappedInputManager;
  */
 class LanguageSelectActivity final : public Activity {
  public:
-  explicit LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                  const std::function<void()>& onBack)
-      : Activity("LanguageSelect", renderer, mappedInput), onBack(onBack) {}
+  explicit LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("LanguageSelect", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   void handleSelection();
 
-  std::function<void()> onBack;
+  void onBack() { finish(); }
   int selectedIndex = 0;
   int totalItems = 0;
 };

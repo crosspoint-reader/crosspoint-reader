@@ -5,17 +5,14 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 
-class TxtReaderActivity final : public ActivityWithSubactivity {
+class TxtReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;
   int totalPages = 1;
   int pagesUntilFullRefresh = 0;
-
-  const std::function<void()> onGoBack;
-  const std::function<void()> onGoHome;
 
   // Streaming text reader - stores file offsets for each page
   std::vector<size_t> pageOffsets;  // File offset for start of each page
@@ -41,14 +38,10 @@ class TxtReaderActivity final : public ActivityWithSubactivity {
   void loadProgress();
 
  public:
-  explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt,
-                             const std::function<void()>& onGoBack, const std::function<void()>& onGoHome)
-      : ActivityWithSubactivity("TxtReader", renderer, mappedInput),
-        txt(std::move(txt)),
-        onGoBack(onGoBack),
-        onGoHome(onGoHome) {}
+  explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)
+      : Activity("TxtReader", renderer, mappedInput), txt(std::move(txt)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 };

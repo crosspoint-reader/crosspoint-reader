@@ -42,11 +42,12 @@ void syncTimeWithNTP() {
 }  // namespace
 
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
-  exitActivity();
-
   if (!success) {
     LOG_DBG("KOSync", "WiFi connection failed, exiting");
-    onCancel();
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(result);
+    finish();
     return;
   }
 
@@ -181,7 +182,7 @@ void KOReaderSyncActivity::performUpload() {
 }
 
 void KOReaderSyncActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
@@ -221,12 +222,12 @@ void KOReaderSyncActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  startActivityForResult(new WifiSelectionActivity(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(result.wifiConnected); });
 }
 
 void KOReaderSyncActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Turn off wifi
   WiFi.disconnect(false);
@@ -235,11 +236,7 @@ void KOReaderSyncActivity::onExit() {
   delay(100);
 }
 
-void KOReaderSyncActivity::render(Activity::RenderLock&&) {
-  if (subActivity) {
-    return;
-  }
-
+void KOReaderSyncActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
@@ -354,14 +351,12 @@ void KOReaderSyncActivity::render(Activity::RenderLock&&) {
 }
 
 void KOReaderSyncActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onCancel();
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(result);
+      finish();
     }
     return;
   }
@@ -381,7 +376,11 @@ void KOReaderSyncActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (selectedOption == 0) {
         // Apply remote progress
-        onSyncComplete(remotePosition.spineIndex, remotePosition.pageNumber);
+        ActivityResult result;
+        result.syncedSpineIndex = remotePosition.spineIndex;
+        result.syncedPage = remotePosition.pageNumber;
+        setResult(result);
+        finish();
       } else if (selectedOption == 1) {
         // Upload local progress
         performUpload();
@@ -389,7 +388,10 @@ void KOReaderSyncActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onCancel();
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(result);
+      finish();
     }
     return;
   }
@@ -408,7 +410,10 @@ void KOReaderSyncActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onCancel();
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(result);
+      finish();
     }
     return;
   }

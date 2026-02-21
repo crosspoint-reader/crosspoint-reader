@@ -1,61 +1,31 @@
 #include "Activity.h"
 
-#include <HalPowerManager.h>
+#include "ActivityManager.h"
 
-void Activity::renderTaskTrampoline(void* param) {
-  auto* self = static_cast<Activity*>(param);
-  self->renderTaskLoop();
-}
+void Activity::onEnter() { LOG_DBG("ACT", "Entering activity: %s", name.c_str()); }
 
-void Activity::renderTaskLoop() {
-  while (true) {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    {
-      HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
-      RenderLock lock(*this);
-      render(std::move(lock));
-    }
-  }
-}
+void Activity::onExit() { LOG_DBG("ACT", "Exiting activity: %s", name.c_str()); }
 
-void Activity::onEnter() {
-  xTaskCreate(&renderTaskTrampoline, name.c_str(),
-              8192,              // Stack size
-              this,              // Parameters
-              1,                 // Priority
-              &renderTaskHandle  // Task handle
-  );
-  assert(renderTaskHandle != nullptr && "Failed to create render task");
-  LOG_DBG("ACT", "Entering activity: %s", name.c_str());
-}
-
-void Activity::onExit() {
-  RenderLock lock(*this);  // Ensure we don't delete the task while it's rendering
-  if (renderTaskHandle) {
-    vTaskDelete(renderTaskHandle);
-    renderTaskHandle = nullptr;
-  }
-
-  LOG_DBG("ACT", "Exiting activity: %s", name.c_str());
-}
-
-void Activity::requestUpdate() {
-  // Using direct notification to signal the render task to update
-  // Increment counter so multiple rapid calls won't be lost
-  if (renderTaskHandle) {
-    xTaskNotify(renderTaskHandle, 1, eIncrement);
-  }
-}
+void Activity::requestUpdate() { activityManager.requestUpdate(); }
 
 void Activity::requestUpdateAndWait() {
   // FIXME @ngxson : properly implement this using freeRTOS notification
   delay(100);
 }
 
-// RenderLock
+void Activity::onGoHome() { activityManager.goHome(); }
 
-Activity::RenderLock::RenderLock(Activity& activity) : activity(activity) {
-  xSemaphoreTake(activity.renderingMutex, portMAX_DELAY);
+void Activity::onSelectBook(const std::string& path) {
+  Intent intent;
+  intent.path = path;
+  activityManager.goToReader(std::move(intent));
 }
 
-Activity::RenderLock::~RenderLock() { xSemaphoreGive(activity.renderingMutex); }
+void Activity::startActivityForResult(Activity* activity, ActivityResultHandler resultHandler) {
+  this->resultHandler = std::move(resultHandler);
+  activityManager.pushActivity(activity);
+}
+
+void Activity::setResult(const ActivityResult& result) { this->result = result; }
+
+void Activity::finish() { activityManager.popActivity(); }

@@ -59,10 +59,16 @@ void XtcReaderChapterSelectionActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto& chapters = xtc->getChapters();
     if (!chapters.empty() && selectorIndex >= 0 && selectorIndex < static_cast<int>(chapters.size())) {
-      onSelectPage(chapters[selectorIndex].startPage);
+      ActivityResult result;
+      result.selectedPage = chapters[selectorIndex].startPage;
+      setResult(result);
+      finish();
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoBack();
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(result);
+    finish();
   }
 
   buttonNavigator.onNextRelease([this, totalItems] {
@@ -86,7 +92,7 @@ void XtcReaderChapterSelectionActivity::loop() {
   });
 }
 
-void XtcReaderChapterSelectionActivity::render(Activity::RenderLock&&) {
+void XtcReaderChapterSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

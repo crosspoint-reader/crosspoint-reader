@@ -211,7 +211,7 @@ void HomeActivity::loop() {
   }
 }
 
-void HomeActivity::render(Activity::RenderLock&&) {
+void HomeActivity::render(RenderLock&&) {
   auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -258,3 +258,19 @@ void HomeActivity::render(Activity::RenderLock&&) {
     loadRecentCovers(metrics.homeCoverHeight);
   }
 }
+
+void HomeActivity::onSelectBook(const std::string& path) {
+  Intent intent;
+  intent.path = path;
+  activityManager.goToReader(std::move(intent));
+}
+
+void HomeActivity::onMyLibraryOpen() { activityManager.goToMyLibrary(Intent{}); }
+
+void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
+
+void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
+
+void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
+
+void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
