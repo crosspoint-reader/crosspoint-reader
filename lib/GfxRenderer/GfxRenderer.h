@@ -62,8 +62,7 @@ class GfxRenderer {
   void insertFont(int fontId, EpdFontFamily font);
   void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
   void clearFontCache();
-  void prewarmFontCache(int fontId, const char* utf8Text,
-                        EpdFontFamily::Style style = EpdFontFamily::REGULAR);
+  void prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void logFontStats(const char* label = "render");
   void resetFontStats();
 

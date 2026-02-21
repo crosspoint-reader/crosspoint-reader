@@ -359,12 +359,12 @@ if compress:
 
     for first_idx, count in groups:
         # Concatenate bitmap data for this group
-        group_packed = b''
-        group_aligned = b''
+        packed_len = 0
+        group_aligned = bytearray()
         for gi in range(first_idx, first_idx + count):
             props, packed = all_glyphs[gi]
             # Update glyph's dataOffset to be within-group offset (packed offset)
-            within_group_offset = len(group_packed)
+            within_group_offset = packed_len
             old_props = modified_glyph_props[gi]
             modified_glyph_props[gi] = GlyphProps(
                 width=old_props.width,
@@ -376,12 +376,12 @@ if compress:
                 data_offset=within_group_offset,
                 code_point=old_props.code_point,
             )
-            group_packed += packed
-            group_aligned += to_byte_aligned(packed, old_props.width, old_props.height)
+            packed_len += len(packed)
+            group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height))
 
         # Compress byte-aligned data with raw DEFLATE (no zlib/gzip header)
         compressor = zlib.compressobj(level=9, wbits=-15)
-        compressed = compressor.compress(group_aligned) + compressor.flush()
+        compressed = compressor.compress(bytes(group_aligned)) + compressor.flush()
 
         compressed_groups.append((compressed, len(group_aligned), count, first_idx))
         compressed_bitmap_data.extend(compressed)

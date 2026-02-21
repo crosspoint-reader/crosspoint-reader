@@ -154,9 +154,12 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
     while (left <= right) {
       int mid = left + (right - left) / 2;
       if (pageGlyphs[mid].glyphIndex == glyphIndex) {
-        stats.cacheHits++;
-        stats.getBitmapTimeUs += micros() - tStart;
-        return &pageBuffer[pageGlyphs[mid].bufferOffset];
+        if (pageGlyphs[mid].bufferOffset != UINT32_MAX) {
+          stats.cacheHits++;
+          stats.getBitmapTimeUs += micros() - tStart;
+          return &pageBuffer[pageGlyphs[mid].bufferOffset];
+        }
+        break;  // Not extracted during prewarm; fall through to hot-group path
       }
       if (pageGlyphs[mid].glyphIndex < glyphIndex)
         left = mid + 1;
@@ -282,7 +285,7 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
         neededGlyphs[glyphCount++] = static_cast<uint32_t>(glyphIdx);
       } else if (!glyphCapWarned) {
         LOG_DBG("FDC", "Glyph cap (%u) reached during prewarm; excess glyphs will use hot-group fallback",
-                 MAX_PAGE_GLYPHS);
+                MAX_PAGE_GLYPHS);
         glyphCapWarned = true;
       }
     }
@@ -362,7 +365,10 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
       // Find this glyph's group position in neededGroups
       uint8_t gpPos = groupCount;
       for (uint8_t j = 0; j < groupCount; j++) {
-        if (neededGroups[j] == gi) { gpPos = j; break; }
+        if (neededGroups[j] == gi) {
+          gpPos = j;
+          break;
+        }
       }
       if (gpPos == groupCount) continue;  // not a needed group
 
@@ -376,8 +382,10 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
           pageGlyphs[mid].alignedOffset = groupAlignedTracker[gpPos];
           break;
         }
-        if (pageGlyphs[mid].glyphIndex < i) left = mid + 1;
-        else right = mid - 1;
+        if (pageGlyphs[mid].glyphIndex < i)
+          left = mid + 1;
+        else
+          right = mid - 1;
       }
 
       if (glyph.width > 0 && glyph.height > 0) {
@@ -400,8 +408,10 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
             pageGlyphs[mid].alignedOffset = alignedOff;
             break;
           }
-          if (pageGlyphs[mid].glyphIndex < glyphI) left = mid + 1;
-          else right = mid - 1;
+          if (pageGlyphs[mid].glyphIndex < glyphI)
+            left = mid + 1;
+          else
+            right = mid - 1;
         }
 
         if (glyph.width > 0 && glyph.height > 0) {
@@ -442,8 +452,7 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
       if (getGroupIndex(fontData, pageGlyphs[i].glyphIndex) != groupIdx) continue;
 
       const EpdGlyph& glyph = fontData->glyph[pageGlyphs[i].glyphIndex];
-      compactSingleGlyph(&tempBuf[pageGlyphs[i].alignedOffset], &pageBuffer[writeOffset],
-                         glyph.width, glyph.height);
+      compactSingleGlyph(&tempBuf[pageGlyphs[i].alignedOffset], &pageBuffer[writeOffset], glyph.width, glyph.height);
       pageGlyphs[i].bufferOffset = writeOffset;
       writeOffset += glyph.dataLength;
     }
@@ -465,13 +474,12 @@ void FontDecompressor::logStats(const char* label) {
   const uint32_t total = stats.cacheHits + stats.cacheMisses;
   LOG_DBG("FDC", "[%s] hits=%lu misses=%lu (%.1f%% hit rate)", label, stats.cacheHits, stats.cacheMisses,
           total > 0 ? 100.0f * stats.cacheHits / total : 0.0f);
-  LOG_DBG("FDC", "[%s] decompress=%lums groups_accessed=%u", label, stats.decompressTimeMs,
-          stats.uniqueGroupsAccessed);
-  LOG_DBG("FDC", "[%s] mem: pageBuf=%lu pageGlyphs=%lu hotGroup=%lu peakTemp=%lu", label,
-          stats.pageBufferBytes, stats.pageGlyphsBytes, stats.hotGroupBytes, stats.peakTempBytes);
+  LOG_DBG("FDC", "[%s] decompress=%lums groups_accessed=%u", label, stats.decompressTimeMs, stats.uniqueGroupsAccessed);
+  LOG_DBG("FDC", "[%s] mem: pageBuf=%lu pageGlyphs=%lu hotGroup=%lu peakTemp=%lu", label, stats.pageBufferBytes,
+          stats.pageGlyphsBytes, stats.hotGroupBytes, stats.peakTempBytes);
   if (stats.getBitmapCalls > 0) {
-    LOG_DBG("FDC", "[%s] getBitmap: %lu calls, %luus total, %luus/call avg", label,
-            stats.getBitmapCalls, stats.getBitmapTimeUs, stats.getBitmapTimeUs / stats.getBitmapCalls);
+    LOG_DBG("FDC", "[%s] getBitmap: %lu calls, %luus total, %luus/call avg", label, stats.getBitmapCalls,
+            stats.getBitmapTimeUs, stats.getBitmapTimeUs / stats.getBitmapCalls);
   }
   resetStats();
 }

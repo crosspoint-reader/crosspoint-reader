@@ -30,7 +30,7 @@ void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, EpdFontFami
   int missed = fontDecompressor->prewarmCache(data, utf8Text);
   if (missed > 0) {
     LOG_DBG("GFX", "prewarmFontCache: %d glyph(s) not cached for style %d; hot-group fallback in use", missed,
-             static_cast<int>(style));
+            static_cast<int>(style));
   }
 }
 

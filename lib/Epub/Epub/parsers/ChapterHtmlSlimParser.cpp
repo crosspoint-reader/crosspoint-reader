@@ -645,9 +645,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       // Check if the character starting at leadPos is incomplete
       uint8_t lead = static_cast<uint8_t>(self->partWordBuffer[leadPos]);
       int expectedLen = 1;
-      if ((lead & 0xE0) == 0xC0) expectedLen = 2;
-      else if ((lead & 0xF0) == 0xE0) expectedLen = 3;
-      else if ((lead & 0xF8) == 0xF0) expectedLen = 4;
+      if ((lead & 0xE0) == 0xC0)
+        expectedLen = 2;
+      else if ((lead & 0xF0) == 0xE0)
+        expectedLen = 3;
+      else if ((lead & 0xF8) == 0xF0)
+        expectedLen = 4;
       int actualLen = self->partWordBufferIndex - leadPos;
 
       if (actualLen < expectedLen && leadPos > 0) {

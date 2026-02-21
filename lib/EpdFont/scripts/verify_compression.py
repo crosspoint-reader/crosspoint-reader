@@ -188,6 +188,11 @@ def verify_font_file(filepath):
             height = glyph['height']
 
             if width == 0 or height == 0:
+                # Zero-size glyphs should have dataOffset == current packed_offset and dataLength == 0
+                if glyph['dataOffset'] != packed_offset:
+                    return (font_name, False, f"group {gi}, glyph {glyph_idx}: zero-size glyph dataOffset {glyph['dataOffset']} != expected packed offset {packed_offset}")
+                if glyph['dataLength'] != 0:
+                    return (font_name, False, f"group {gi}, glyph {glyph_idx}: zero-size glyph dataLength {glyph['dataLength']} != expected 0")
                 continue
 
             aligned_size = ((width + 3) // 4) * height

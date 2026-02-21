@@ -41,7 +41,7 @@ typedef struct {
   int ascender;                         ///< Maximal height of a glyph above the base line
   int descender;                        ///< Maximal height of a glyph below the base line
   bool is2Bit;
-  const EpdFontGroup* groups;      ///< NULL for uncompressed fonts
-  uint16_t groupCount;             ///< 0 for uncompressed fonts
-  const uint16_t* glyphToGroup;    ///< Per-glyph group ID (nullptr for contiguous-group fonts)
+  const EpdFontGroup* groups;    ///< NULL for uncompressed fonts
+  uint16_t groupCount;           ///< 0 for uncompressed fonts
+  const uint16_t* glyphToGroup;  ///< Per-glyph group ID (nullptr for contiguous-group fonts)
 } EpdFontData;
