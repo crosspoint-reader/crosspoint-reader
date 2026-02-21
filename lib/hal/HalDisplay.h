@@ -60,5 +60,4 @@ class HalDisplay {
 
  private:
   EInkDisplay einkDisplay;
-  bool lastBufferWasGray = false;
 };

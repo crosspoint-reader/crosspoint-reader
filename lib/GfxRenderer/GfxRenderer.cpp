@@ -1,5 +1,6 @@
 #include "GfxRenderer.h"
 
+#include <HalGPIO.h>
 #include <Logging.h>
 #include <Utf8.h>
 
@@ -970,6 +971,12 @@ void GfxRenderer::freeBwBufferChunks() {
  * Returns true if buffer was stored successfully, false if allocation failed.
  */
 bool GfxRenderer::storeBwBuffer() {
+  if (gpio.deviceIsX3()) {
+    // X3 AA pipeline keeps differential state coherent in EInkDisplay.
+    // No BW backup/restore chunking needed here.
+    return true;
+  }
+
   // Allocate and copy each chunk
   for (size_t i = 0; i < bwBufferChunks.size(); i++) {
     // Check if any chunks are already allocated
@@ -1003,6 +1010,10 @@ bool GfxRenderer::storeBwBuffer() {
  * Uses chunked restoration to match chunked storage.
  */
 void GfxRenderer::restoreBwBuffer() {
+  if (gpio.deviceIsX3()) {
+    return;
+  }
+
   // Check if all chunks are allocated
   bool missingChunks = false;
   for (const auto& bwBufferChunk : bwBufferChunks) {

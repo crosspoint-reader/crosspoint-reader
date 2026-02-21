@@ -30,7 +30,6 @@ void SettingsActivity::onEnter() {
   systemSettings.clear();
 
   for (auto& setting : getSettingsList()) {
-    if (gpio.deviceIsX3() && setting.nameId == StrId::STR_TEXT_AA) continue;
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(std::move(setting));

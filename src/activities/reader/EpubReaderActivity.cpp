@@ -671,7 +671,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     pagesUntilFullRefresh--;
   }
 
-  const bool useGrayscaleAA = SETTINGS.textAntiAliasing && !gpio.deviceIsX3();
+  const bool useGrayscaleAA = SETTINGS.textAntiAliasing;
   if (useGrayscaleAA) {
     // Save BW buffer only when we actually run grayscale passes.
     renderer.storeBwBuffer();
