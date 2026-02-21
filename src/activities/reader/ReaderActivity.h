@@ -18,12 +18,14 @@ class ReaderActivity final : public ActivityWithSubactivity {
   static std::unique_ptr<Txt> loadTxt(const std::string& path);
   static bool isXtcFile(const std::string& path);
   static bool isTxtFile(const std::string& path);
+  static bool isBmpFile(const std::string& path);
 
   static std::string extractFolderPath(const std::string& filePath);
   void goToLibrary(const std::string& fromBookPath = "");
   void onGoToEpubReader(std::unique_ptr<Epub> epub);
   void onGoToXtcReader(std::unique_ptr<Xtc> xtc);
   void onGoToTxtReader(std::unique_ptr<Txt> txt);
+  void onGoToBmpViewer(const std::string& path);
 
  public:
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath,
