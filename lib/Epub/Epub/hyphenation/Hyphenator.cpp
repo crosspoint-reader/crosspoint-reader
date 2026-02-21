@@ -35,12 +35,19 @@ size_t byteOffsetForIndex(const std::vector<CodepointInfo>& cps, const size_t in
 std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps) {
   std::vector<Hyphenator::BreakInfo> breaks;
 
-  // Scan every codepoint looking for explicit/soft hyphen markers that are surrounded by letters.
+  // Scan every codepoint looking for explicit/soft hyphen markers.
   for (size_t i = 1; i + 1 < cps.size(); ++i) {
     const uint32_t cp = cps[i].value;
-    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {
+    if (!isExplicitHyphen(cp)) {
       continue;
     }
+
+    // Standard rule: hyphens must be surrounded by letters (classic TeX-style).
+    // Exception: common URL separators ('/' and '-') can break even next to digits or other symbols.
+    if (cp != '/' && cp != '-' && (!isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value))) {
+      continue;
+    }
+
     // Offset points to the next codepoint so rendering starts after the hyphen marker.
     breaks.push_back({cps[i + 1].byteOffset, isSoftHyphen(cp)});
   }
