@@ -13,7 +13,6 @@
 
 #include <cstring>
 
-#include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -216,9 +215,9 @@ void onGoHome();
 void onGoToMyLibraryWithPath(const std::string& path);
 void onGoToRecentBooks();
 void onGoToReader(const std::string& initialEpubPath) {
+  const std::string bookPath = initialEpubPath;  // Copy before exitActivity() invalidates the reference
   exitActivity();
-  enterNewActivity(
-      new ReaderActivity(renderer, mappedInputManager, initialEpubPath, onGoHome, onGoToMyLibraryWithPath));
+  enterNewActivity(new ReaderActivity(renderer, mappedInputManager, bookPath, onGoHome, onGoToMyLibraryWithPath));
 }
 
 void onGoToFileTransfer() {
