@@ -302,9 +302,9 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
   }
 }
 
-static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int rowStartPixel,
-                                       const int glyphXStartOrEnd, const int count,
-                                       const bool reverseXInChunk, const GfxRenderer::RenderMode renderMode) {
+static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int rowStartPixel, const int glyphXStartOrEnd,
+                                       const int count, const bool reverseXInChunk,
+                                       const GfxRenderer::RenderMode renderMode) {
   // drawMask uses raw 2-bit glyph values directly from font bitmaps:
   // raw 0=white, 1=light gray, 2=dark gray, 3=black.
   // Bit N set means: draw/update when raw==N.
