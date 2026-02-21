@@ -498,9 +498,40 @@ void CrossPointWebServer::handleDownload() const {
   server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
   server->send(200, contentType.c_str(), "");
 
+  size_t fileSize = file.size();
+
   WiFiClient client = server->client();
-  client.write(file);
+  uint8_t buf[2048];  // 2KB buffer for efficiency
+  size_t totalSent = 0;
+  unsigned long startTime = millis();
+
+  LOG_DBG("WEB", "Starting download: %s (%d bytes)", filename.c_str(), fileSize);
+
+  while (file.available() && client.connected()) {
+
+    size_t len = file.read(buf, sizeof(buf));
+    if (len > 0) {
+      client.write(buf, len);
+      totalSent += len;
+    }
+
+    if (totalSent % (256 * 1024) < 2048) {
+      LOG_DBG("WEB", "Sent: %d/%d bytes", totalSent, fileSize);
+    }
+
+    yield();
+    esp_task_wdt_reset();
+  }
+
+  unsigned long duration = millis() - startTime;
   file.close();
+
+  if (totalSent == fileSize) {
+    LOG_DBG("WEB", "Download finished! Took %lu ms (Avg: %.2f KB/s)", duration,
+            (totalSent / 1024.0) / (duration / 1000.0 + 0.001));
+  } else {
+    LOG_ERR("WEB", "Download interrupted at %d/%d bytes", totalSent, fileSize);
+  }
 }
 
 // Diagnostic counters for upload performance analysis
