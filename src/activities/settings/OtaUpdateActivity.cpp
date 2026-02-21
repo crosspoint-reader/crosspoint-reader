@@ -32,7 +32,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
       RenderLock lock(*this);
       state = FAILED;
     }
-    requestUpdate();
     return;
   }
 
@@ -42,7 +41,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
       RenderLock lock(*this);
       state = NO_UPDATE;
     }
-    requestUpdate();
     return;
   }
 
@@ -50,7 +48,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     RenderLock lock(*this);
     state = WAITING_CONFIRMATION;
   }
-  requestUpdate();
 }
 
 void OtaUpdateActivity::onEnter() {

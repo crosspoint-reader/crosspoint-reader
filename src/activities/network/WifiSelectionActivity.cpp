@@ -198,7 +198,6 @@ void WifiSelectionActivity::selectNetwork(const int index) {
                            [this](const ActivityResult& result) {
                              if (result.isCancelled) {
                                state = WifiSelectionState::NETWORK_LIST;
-                               requestUpdate();
                              } else {
                                enteredPassword = result.inputText;
                              }
@@ -684,6 +683,7 @@ void WifiSelectionActivity::renderForgetPrompt() const {
 
 void WifiSelectionActivity::onComplete(const bool connected) {
   ActivityResult result;
+  result.isCancelled = !connected;
   result.wifiConnected = connected;
   if (connected) {
     result.wifiSSID = selectedSSID;

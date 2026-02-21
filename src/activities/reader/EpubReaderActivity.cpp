@@ -307,7 +307,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                  nextPageNumber = 0;
                                  section.reset();
                                }
-                               requestUpdate();
                              });
       break;
     }
@@ -323,7 +322,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                if (!result.isCancelled) {
                                  jumpToPercent(result.selectedPercent);
                                }
-                               requestUpdate();
                              });
       break;
     }
@@ -362,7 +360,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                      section.reset();
                                    }
                                  }
-                                 requestUpdate();
                                });
       }
       break;

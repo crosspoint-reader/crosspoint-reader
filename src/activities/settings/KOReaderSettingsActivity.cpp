@@ -62,7 +62,6 @@ void KOReaderSettingsActivity::handleSelection() {
             KOREADER_STORE.setCredentials(result.inputText, KOREADER_STORE.getPassword());
             KOREADER_STORE.saveToFile();
           }
-          requestUpdate();
         });
   } else if (selectedIndex == 1) {
     // Password
@@ -75,7 +74,6 @@ void KOReaderSettingsActivity::handleSelection() {
             KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), result.inputText);
             KOREADER_STORE.saveToFile();
           }
-          requestUpdate();
         });
   } else if (selectedIndex == 2) {
     // Sync Server URL - prefill with https:// if empty to save typing
@@ -93,7 +91,6 @@ void KOReaderSettingsActivity::handleSelection() {
                                KOREADER_STORE.setServerUrl(urlToSave);
                                KOREADER_STORE.saveToFile();
                              }
-                             requestUpdate();
                            });
   } else if (selectedIndex == 3) {
     // Document Matching - toggle between Filename and Binary
@@ -110,7 +107,7 @@ void KOReaderSettingsActivity::handleSelection() {
       return;
     }
     startActivityForResult(new KOReaderAuthActivity(renderer, mappedInput, [] { activityManager.popActivity(); }),
-                           [this](const ActivityResult&) { requestUpdate(); });
+                           [](const ActivityResult&) {});
   }
 }
 

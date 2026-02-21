@@ -18,7 +18,6 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
       state = FAILED;
       errorMessage = tr(STR_WIFI_CONN_FAILED);
     }
-    requestUpdate();
     return;
   }
 

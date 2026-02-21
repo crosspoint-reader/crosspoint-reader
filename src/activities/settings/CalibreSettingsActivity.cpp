@@ -59,7 +59,6 @@ void CalibreSettingsActivity::handleSelection() {
             SETTINGS.opdsServerUrl[sizeof(SETTINGS.opdsServerUrl) - 1] = '\0';
             SETTINGS.saveToFile();
           }
-          requestUpdate();
         });
   } else if (selectedIndex == 1) {
     // Username
@@ -71,7 +70,6 @@ void CalibreSettingsActivity::handleSelection() {
             SETTINGS.opdsUsername[sizeof(SETTINGS.opdsUsername) - 1] = '\0';
             SETTINGS.saveToFile();
           }
-          requestUpdate();
         });
   } else if (selectedIndex == 2) {
     // Password
@@ -83,7 +81,6 @@ void CalibreSettingsActivity::handleSelection() {
             SETTINGS.opdsPassword[sizeof(SETTINGS.opdsPassword) - 1] = '\0';
             SETTINGS.saveToFile();
           }
-          requestUpdate();
         });
   }
 }

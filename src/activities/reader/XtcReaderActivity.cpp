@@ -63,7 +63,6 @@ void XtcReaderActivity::loop() {
                                if (!result.isCancelled) {
                                  currentPage = result.selectedPage;
                                }
-                               requestUpdate();
                              });
     }
   }
