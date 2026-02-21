@@ -38,7 +38,7 @@ class RenderLock;  // forward declaration
  * wifi network, and get back the selected network when the user is done.
  *
  * Main differences from Android's ActivityManager:
- * - No concept of Bunble or Intent extras
+ * - No concept of Bundle or Intent extras
  * - No onPause/onResume, since we don't have a concept of background activities
  * - onActivityResult is implemented via a callback instead of a separate method, for simplicity
  */

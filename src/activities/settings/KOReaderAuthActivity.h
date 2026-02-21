@@ -10,9 +10,8 @@
  */
 class KOReaderAuthActivity final : public Activity {
  public:
-  explicit KOReaderAuthActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                const std::function<void()>& onComplete)
-      : Activity("KOReaderAuth", renderer, mappedInput), onComplete(onComplete) {}
+  explicit KOReaderAuthActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("KOReaderAuth", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
@@ -26,8 +25,6 @@ class KOReaderAuthActivity final : public Activity {
   State state = WIFI_SELECTION;
   std::string statusMessage;
   std::string errorMessage;
-
-  const std::function<void()> onComplete;
 
   void onWifiSelectionComplete(bool success);
   void performAuthentication();

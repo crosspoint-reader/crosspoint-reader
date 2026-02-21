@@ -106,8 +106,7 @@ void KOReaderSettingsActivity::handleSelection() {
       // Can't authenticate without credentials - just show message briefly
       return;
     }
-    startActivityForResult(new KOReaderAuthActivity(renderer, mappedInput, [] { activityManager.popActivity(); }),
-                           [](const ActivityResult&) {});
+    startActivityForResult(new KOReaderAuthActivity(renderer, mappedInput), [](const ActivityResult&) {});
   }
 }
 
