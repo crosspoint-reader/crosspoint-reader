@@ -107,6 +107,7 @@ bool isAsciiDigit(const uint32_t cp) { return cp >= '0' && cp <= '9'; }
 bool isExplicitHyphen(const uint32_t cp) {
   switch (cp) {
     case '-':
+    case '/':
     case 0x00AD:  // soft hyphen
     case 0x058A:  // Armenian hyphen
     case 0x2010:  // hyphen
