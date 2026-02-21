@@ -179,6 +179,12 @@ This is useful for organizing your library by genre, author, series or file type
 2. Enter a file name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
 3. Click **Rename** to permanently rename the file
 
+#### Downloading Files
+
+1. Click the **⬇️** (down arrow) icon next to any file to download it
+
+**Note:** You may need to verify the download in your browser if it is blocked
+
 ---
 
 ## Command Line File Management
