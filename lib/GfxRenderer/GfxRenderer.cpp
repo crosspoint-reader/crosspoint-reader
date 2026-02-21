@@ -178,17 +178,33 @@ static inline uint8_t bitmapExtract(const uint8_t* bitmap, const int bitPos, con
 
 // Write up to 8 foreground bits into a physical framebuffer row.
 //   bits      — MSB-aligned; bit 7 = pixel at phyBitPos, lower (8-count) bits are zero.
-//   phyBitPos — physical X of the MSB pixel; must be in [0, DISPLAY_WIDTH).
+//   phyBitPos — physical X of the MSB pixel; may be negative for left-edge partial chunks.
 //   pixelState true → black (clear bits to 0), false → white (set bits to 1).
 static inline void writeRowBits(uint8_t* const row, const int phyBitPos, const uint8_t bits, const bool pixelState) {
-  const int byteIdx = phyBitPos >> 3;
-  const int shift = phyBitPos & 7;
-  if (pixelState) {
-    row[byteIdx] &= ~(bits >> shift);
-    if (shift > 0 && byteIdx + 1 < HalDisplay::DISPLAY_WIDTH_BYTES) row[byteIdx + 1] &= ~(uint8_t)(bits << (8 - shift));
+  uint8_t effectiveBits = bits;
+  int byteIdx;
+  int shift;
+  if (phyBitPos < 0) {
+    // Chunk starts off-screen left: clip by shifting out the off-screen MSBs.
+    // bits is MSB-aligned, so (bits << neg) discards the neg off-screen pixels
+    // and leaves the on-screen pixels MSB-aligned starting at physical X=0.
+    const int neg = -phyBitPos;
+    if (neg >= 8) return;  // entire chunk is off-screen left
+    effectiveBits = bits << neg;
+    byteIdx = 0;
+    shift = 0;
   } else {
-    row[byteIdx] |= (bits >> shift);
-    if (shift > 0 && byteIdx + 1 < HalDisplay::DISPLAY_WIDTH_BYTES) row[byteIdx + 1] |= (uint8_t)(bits << (8 - shift));
+    byteIdx = phyBitPos >> 3;
+    shift = phyBitPos & 7;
+  }
+  if (pixelState) {
+    row[byteIdx] &= ~(effectiveBits >> shift);
+    if (shift > 0 && byteIdx + 1 < HalDisplay::DISPLAY_WIDTH_BYTES)
+      row[byteIdx + 1] &= ~(uint8_t)(effectiveBits << (8 - shift));
+  } else {
+    row[byteIdx] |= (effectiveBits >> shift);
+    if (shift > 0 && byteIdx + 1 < HalDisplay::DISPLAY_WIDTH_BYTES)
+      row[byteIdx + 1] |= (uint8_t)(effectiveBits << (8 - shift));
   }
 }
 
