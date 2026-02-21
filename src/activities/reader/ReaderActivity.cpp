@@ -142,6 +142,4 @@ void ReaderActivity::onEnter() {
   }
 }
 
-void ReaderActivity::onGoBack() {
-  onGoHome();  // TODO: is this correct?
-}
+void ReaderActivity::onGoBack() { finish(); }

@@ -56,6 +56,7 @@ void ActivityManager::loop() {
 
       if (stackActivities.empty()) {
         LOG_DBG("ACT", "No more activities on stack, going home");
+        lock.unlock();  // goHome may acquire its own lock
         goHome();
         continue;  // Will launch goHome immediately
 
