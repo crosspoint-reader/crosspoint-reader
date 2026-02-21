@@ -858,3 +858,30 @@ float Epub::calculateProgress(const int currentSpineIndex, const float currentSp
   const float totalProgress = static_cast<float>(prevChapterSize) + sectionProgSize;
   return totalProgress / static_cast<float>(bookSize);
 }
+
+int Epub::resolveHrefToSpineIndex(const std::string& href) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return -1;
+
+  // Extract filename (remove #anchor)
+  std::string target = href;
+  size_t hashPos = target.find('#');
+  if (hashPos != std::string::npos) target = target.substr(0, hashPos);
+
+  // Same-file reference (anchor-only)
+  if (target.empty()) return -1;
+
+  // Extract just the filename for comparison
+  size_t targetSlash = target.find_last_of('/');
+  std::string targetFilename = (targetSlash != std::string::npos) ? target.substr(targetSlash + 1) : target;
+
+  for (int i = 0; i < getSpineItemsCount(); i++) {
+    const auto& spineHref = getSpineItem(i).href;
+    // Try exact match first
+    if (spineHref == target) return i;
+    // Then filename-only match
+    size_t spineSlash = spineHref.find_last_of('/');
+    std::string spineFilename = (spineSlash != std::string::npos) ? spineHref.substr(spineSlash + 1) : spineHref;
+    if (spineFilename == targetFilename) return i;
+  }
+  return -1;
+}

@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "FootnoteEntry.h"
 #include "blocks/ImageBlock.h"
 #include "blocks/TextBlock.h"
 
@@ -56,6 +57,18 @@ class Page {
  public:
   // the list of block index and line numbers on this page
   std::vector<std::shared_ptr<PageElement>> elements;
+  std::vector<FootnoteEntry> footnotes;
+
+  void addFootnote(const char* number, const char* href) {
+    if (footnotes.size() >= 16) return;  // Cap per-page footnotes
+    FootnoteEntry entry;
+    strncpy(entry.number, number, sizeof(entry.number) - 1);
+    entry.number[sizeof(entry.number) - 1] = '\0';
+    strncpy(entry.href, href, sizeof(entry.href) - 1);
+    entry.href[sizeof(entry.href) - 1] = '\0';
+    footnotes.push_back(entry);
+  }
+
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(FsFile& file) const;
   static std::unique_ptr<Page> deserialize(FsFile& file);
