@@ -72,4 +72,9 @@ class Epub {
   size_t getBookSize() const;
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
   CssParser* getCssParser() const { return cssParser.get(); }
+
+ private:
+  enum class ImageFormat { JPEG, PNG, UNKNOWN };
+  static ImageFormat detectCoverFormat(const std::string& href);
+  bool extractToTempFile(const std::string& href, const std::string& tempPath) const;
 };
