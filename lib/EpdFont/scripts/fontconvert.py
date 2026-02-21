@@ -21,6 +21,7 @@ parser.add_argument("--group-size", dest="group_size", type=int, default=128, he
 parser.add_argument("--pin-groups", dest="pin_groups", type=int, default=0, help="Number of high-frequency groups to mark for pinning (default 0).")
 parser.add_argument("--max-cjk-ideographs", dest="max_cjk_ideographs", type=int, default=0, help="Limit CJK Unified Ideographs (U+4E00-U+9FFF) to top N by frequency. 0 = no limit.")
 parser.add_argument("--max-hangul", dest="max_hangul", type=int, default=0, help="Limit Hangul Syllables (U+AC00-U+D7AF) to top N by frequency. 0 = no limit.")
+parser.add_argument("--non-pinned-group-size", dest="non_pinned_group_size", type=int, default=0, help="Group size for non-pinned CJK groups sorted by codepoint. 0 = use --group-size for all.")
 args = parser.parse_args()
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
@@ -354,7 +355,7 @@ if compress:
         if current_group:
             latin_groups.append(current_group)
 
-        # Step 2: Build CJK groups (frequency-based)
+        # Step 2: Build CJK groups
         # Collect CJK glyph indices with their frequency ranks
         cjk_glyphs_with_rank = []
         for i, (props, packed) in enumerate(all_glyphs):
@@ -366,19 +367,33 @@ if compress:
         # Sort by frequency rank (most frequent first)
         cjk_glyphs_with_rank.sort(key=lambda x: x[1])
 
-        # Bucket into groups of group_size
-        cjk_groups = []
-        for bucket_start in range(0, len(cjk_glyphs_with_rank), group_size):
-            bucket = cjk_glyphs_with_rank[bucket_start:bucket_start + group_size]
-            # Sort within group by glyph index for consistent ordering in compressed data
+        # Two-tier grouping:
+        # - Pinned groups: frequency-sorted, group_size glyphs each
+        # - Non-pinned groups: codepoint-sorted (Kangxi radical order for better
+        #   compression), non_pinned_group_size glyphs each
+        non_pinned_size = args.non_pinned_group_size if args.non_pinned_group_size > 0 else group_size
+
+        # Build pinned groups (frequency-sorted, group_size each)
+        pinned_count = pin_groups * group_size
+        pinned_glyphs = cjk_glyphs_with_rank[:pinned_count]
+        remaining_glyphs = cjk_glyphs_with_rank[pinned_count:]
+
+        pinned_cjk_groups = []
+        for bucket_start in range(0, len(pinned_glyphs), group_size):
+            bucket = pinned_glyphs[bucket_start:bucket_start + group_size]
             group_indices = sorted([gi for gi, _ in bucket])
-            cjk_groups.append(group_indices)
+            pinned_cjk_groups.append(group_indices)
+
+        # Build non-pinned groups (kept in frequency order for cache locality)
+        remaining_cjk_groups = []
+        for bucket_start in range(0, len(remaining_glyphs), non_pinned_size):
+            bucket = remaining_glyphs[bucket_start:bucket_start + non_pinned_size]
+            group_indices = sorted([gi for gi, _ in bucket])
+            remaining_cjk_groups.append(group_indices)
 
         # Step 3: Combine groups: pinned CJK groups first, then Latin, then remaining CJK
         # Pinned groups go first so they get group indices 0..pin_groups-1
-        pinned_cjk = cjk_groups[:pin_groups]
-        remaining_cjk = cjk_groups[pin_groups:]
-        all_groups = pinned_cjk + latin_groups + remaining_cjk
+        all_groups = pinned_cjk_groups + latin_groups + remaining_cjk_groups
 
         # Build glyphToGroup mapping
         total_glyph_count = len(all_glyphs)
@@ -426,7 +441,7 @@ if compress:
 
         cjk_count = sum(1 for _, (p, _) in enumerate(all_glyphs) if p.code_point >= CJK_FREQUENCY_THRESHOLD)
         print(f"// Compression: {total_packed} packed -> {total_compressed} compressed ({100*total_compressed/total_packed:.1f}%)", file=sys.stderr)
-        print(f"// Groups: {len(all_groups)} ({len(pinned_cjk)} pinned CJK + {len(latin_groups)} Latin + {len(remaining_cjk)} CJK)", file=sys.stderr)
+        print(f"// Groups: {len(all_groups)} ({len(pinned_cjk_groups)} pinned CJK [{group_size}/grp] + {len(latin_groups)} Latin + {len(remaining_cjk_groups)} CJK [{non_pinned_size}/grp])", file=sys.stderr)
         print(f"// Glyphs: {len(all_glyphs)} total ({cjk_count} CJK, {len(all_glyphs) - cjk_count} Latin)", file=sys.stderr)
 
     else:

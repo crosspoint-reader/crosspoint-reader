@@ -5,9 +5,9 @@ set -e
 cd "$(dirname "$0")"
 
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
-BOOKERLY_FONT_SIZES=(12 14 16 18)
-NOTOSANS_FONT_SIZES=(12 14 16 18)
-OPENDYSLEXIC_FONT_SIZES=(8 10 12 14)
+BOOKERLY_FONT_SIZES=(12 14 16)
+NOTOSANS_FONT_SIZES=(12 14 16)
+
 
 for size in ${BOOKERLY_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
@@ -23,16 +23,6 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="notosans_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
-    output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
-    echo "Generated $output_path"
-  done
-done
-
-for size in ${OPENDYSLEXIC_FONT_SIZES[@]}; do
-  for style in ${READER_FONT_STYLES[@]}; do
-    font_name="opendyslexic_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
-    font_path="../builtinFonts/source/OpenDyslexic/OpenDyslexic-${style}.otf"
     output_path="../builtinFonts/${font_name}.h"
     python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
     echo "Generated $output_path"
@@ -56,7 +46,6 @@ python fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoS
 
 # CJK fonts (compressed, 2-bit, frequency-grouped)
 CJK_FONT="../builtinFonts/source/NotoSansCJK/NotoSansCJKsc-Regular.otf"
-CJK_BOLD="../builtinFonts/source/NotoSansCJK/NotoSansCJKsc-Bold.otf"
 CJK_FREQ="data/cjk_frequency.tsv"
 CJK_INTERVALS="0x3000,0x303F 0x3040,0x309F 0x30A0,0x30FF 0x4E00,0x9FFF 0xAC00,0xD7AF 0xFF00,0xFFEF"
 
@@ -69,16 +58,9 @@ if [ -f "$CJK_FONT" ]; then
       interval_args="$interval_args --additional-intervals $interval"
     done
     python fontconvert.py $font_name $size "$CJK_FONT" --2bit --compress \
-      --frequency-table "$CJK_FREQ" --group-size 128 --pin-groups 3 \
-      --max-cjk-ideographs 4000 --max-hangul 2350 \
-      $interval_args > $output_path
-    echo "Generated $output_path"
-
-    font_name="notosanscjk_${size}_bold"
-    output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size "$CJK_BOLD" --2bit --compress \
-      --frequency-table "$CJK_FREQ" --group-size 128 --pin-groups 3 \
-      --max-cjk-ideographs 4000 --max-hangul 2350 \
+      --frequency-table "$CJK_FREQ" --group-size 64 --pin-groups 0 \
+      --non-pinned-group-size 64 \
+      --max-cjk-ideographs 0 --max-hangul 2350 \
       $interval_args > $output_path
     echo "Generated $output_path"
   done

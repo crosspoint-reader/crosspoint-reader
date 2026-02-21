@@ -11,7 +11,7 @@ FontDecompressor::~FontDecompressor() { deinit(); }
 
 bool FontDecompressor::init() {
   clearCache();
-  memset(&decomp, 0, sizeof(decomp));
+  tinfl_init(&tinflDecomp);
   return true;
 }
 
@@ -67,18 +67,17 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
   const uint8_t* inputBuf = &fontData->bitmap[group.compressedOffset];
 
   const uint32_t tDecomp = millis();
-  uzlib_uncompress_init(&decomp, NULL, 0);
-  decomp.source = inputBuf;
-  decomp.source_limit = inputBuf + group.compressedSize;
-  decomp.dest_start = outBuf;
-  decomp.dest = outBuf;
-  decomp.dest_limit = outBuf + outSize;
-
-  int res = uzlib_uncompress(&decomp);
+  tinfl_init(&tinflDecomp);
+  size_t inSize = group.compressedSize;
+  size_t outSz = outSize;
+  tinfl_status res = tinfl_decompress(
+      &tinflDecomp, inputBuf, &inSize,
+      outBuf, outBuf, &outSz,
+      TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
   stats.decompressTimeMs += millis() - tDecomp;
 
-  if (res < 0 || decomp.dest != decomp.dest_limit) {
-    LOG_ERR("FDC", "Decompression failed for group %u (status %d)", groupIndex, res);
+  if (res != TINFL_STATUS_DONE || outSz != outSize) {
+    LOG_ERR("FDC", "Decompression failed for group %u (status %d)", groupIndex, (int)res);
     return false;
   }
   return true;

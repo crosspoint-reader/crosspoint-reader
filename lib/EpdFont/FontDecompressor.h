@@ -1,6 +1,6 @@
 #pragma once
 
-#include <uzlib.h>
+#include <esp32c3/rom/miniz.h>
 
 #include <cstdint>
 
@@ -46,7 +46,7 @@ class FontDecompressor {
 
  private:
   Stats stats;
-  struct uzlib_uncomp decomp = {};
+  tinfl_decompressor tinflDecomp = {};
 
   // Page buffer: flat array of prewarmed glyph bitmaps with sorted lookup
   struct PageGlyphEntry {
