@@ -176,7 +176,46 @@ static inline uint8_t bitmapExtract(const uint8_t* bitmap, const int bitPos, con
   return result;
 }
 
-// Write up to 8 foreground bits into a physical framebuffer row.
+// ---------------------------------------------------------------------------
+// Fast glyph render pipeline
+// ---------------------------------------------------------------------------
+// Both 1-bit (BW) and 2-bit (antialiased) paths share the same structure:
+//
+//   gather → [reindex] → scatter
+//
+// The glyph bitmap is a row-major 2D tensor [glyphHeight][glyphWidth].
+// The framebuffer is a row-major 2D tensor [DISPLAY_HEIGHT][DISPLAY_WIDTH_BYTES]
+// (1 bpp) with a fixed row stride of DISPLAY_WIDTH_BYTES bytes.
+//
+// Non-rotated (Landscape): glyph rows map 1-to-1 to framebuffer rows.
+// Reindex is a no-op; the pipeline is a tight per-row gather+scatter loop.
+//
+// Rotated 90° (Portrait): glyph rows become framebuffer columns.
+// A row↔column axis swap (reindex) is required before scattering.
+//
+// 1-bit pipeline
+//   gather  : extractGlyphBlock        reads an 8×8 glyph tile into a
+//                                      contiguous uint64_t block
+//                                      (≈ glyphTensor[tile].contiguous())
+//   reindex : transpose8x8             swaps row↔column axes in the uint64_t;
+//                                      pure index transform, no data movement
+//   scatter : scatterBlockToFrameBuffer → writeRowBits
+//                                      writes each column-byte to its row
+//
+// 2-bit pipeline (why it differs)
+//   The glyph stores 4 gray levels (0–3). Rendering reduces these to a 1-bit
+//   draw/skip decision via a render-mode threshold. That reduction is
+//   information-lossy, so gather and threshold cannot be separated — there is
+//   no contiguous 2-bit block to transpose. The two steps are fused:
+//
+//   gather+threshold : build2BitRowMask  Landscape — samples along glyph X
+//                      build2BitColMask  Portrait  — samples along glyph Y
+//                      both return a 1-bit mask ready for writeRowBits
+//   scatter          : writeRowBits      same atom as the 1-bit path
+// ---------------------------------------------------------------------------
+
+// Scatter atom: merges 8 MSB-aligned bits into the framebuffer row at physical bit offset phyBitPos.
+// Shared by both pipelines (1-bit: via scatterBlockToFrameBuffer; 2-bit: called directly).
 //   bits      — MSB-aligned; bit 7 = pixel at phyBitPos, lower (8-count) bits are zero.
 //   phyBitPos — physical X of the MSB pixel; may be negative for left-edge partial chunks.
 //   pixelState true → black (clear bits to 0), false → white (set bits to 1).
@@ -208,10 +247,12 @@ static inline void writeRowBits(uint8_t* const row, const int phyBitPos, const u
   }
 }
 
-// Gather up to 8×8 bits from a 1-bit packed glyph bitmap at tile (glyphX, glyphY)
-// into a contiguous uint64_t: byte 7 = first row, each byte MSB-aligned.
-// stride is the glyph's full pixel-row width (in bits).
-// reverseRows packs rows bottom-to-top (needed for PortraitInverted).
+// 1-bit pipeline step 1 — gather: reads an up-to-8×8 tile from the glyph tensor
+// ([glyphHeight][glyphWidth], 1 bpp, row stride = glyphWidth bits) into a contiguous uint64_t.
+// Equivalent to glyphTensor[glyphY:+rowCount, glyphX:+colCount].contiguous().
+// Byte 7 = first source row (MSB-aligned). reverseRows implements a negative-stride gather along Y
+// (reads rows bottom-to-top), needed for PortraitInverted.
+// Full pipeline: extractGlyphBlock (gather) → transpose8x8 (reindex) → scatterBlockToFrameBuffer (scatter).
 static inline uint64_t extractGlyphBlock(const uint8_t* const bitmap, const int stride, const int glyphX,
                                          const int glyphY, const int rowCount, const int colCount,
                                          const bool reverseRows) {
@@ -224,8 +265,10 @@ static inline uint64_t extractGlyphBlock(const uint8_t* const bitmap, const int 
   return pack;
 }
 
-// Scatter colCount column-bytes of a transposed 8×8 block into framebuffer rows.
-// Physical Y for column k is: phyYBase + k * phyYStride (pass +1 or -1).
+// 1-bit pipeline step 3 — scatter: writes column-bytes of the transposed block into framebuffer rows.
+// The framebuffer is a 2D tensor [DISPLAY_HEIGHT][DISPLAY_WIDTH_BYTES] with non-unit row stride;
+// phyYStride=±1 selects the traversal direction along Y (positive = top-to-bottom, negative = inverted).
+// Each column k maps to row (phyYBase + k*phyYStride) via writeRowBits.
 static inline void scatterBlockToFrameBuffer(uint8_t* const frameBuffer, const uint64_t pack, const int colCount,
                                              const int phyYBase, const int phyYStride, const int phyBitPos,
                                              const bool pixelState) {
@@ -313,6 +356,19 @@ static void renderGlyphFastBW(uint8_t* const frameBuffer, const uint8_t* const b
   }
 }
 
+// Read one pixel from a tightly-packed 2-bit-per-pixel glyph bitmap.
+// The bitmap is a row-major tensor [glyphHeight][glyphWidth] with no row padding;
+// its pixel-row stride equals glyphWidth.  pixelPosition = row * glyphWidth + col.
+// Returns the raw font value: 0=white, 1=light-gray, 2=dark-gray, 3=black.
+static inline uint8_t get2BitPixel(const uint8_t* const bitmap, const int pixelPosition) {
+  return (bitmap[pixelPosition >> 2] >> ((3 - (pixelPosition & 3)) * 2)) & 0x3;
+}
+
+// Convenience overload using explicit row/col/stride (tensor element access).
+static inline uint8_t get2BitPixel(const uint8_t* const bitmap, const int stride, const int row, const int col) {
+  return get2BitPixel(bitmap, row * stride + col);
+}
+
 static inline uint8_t drawMaskFor2BitMode(const GfxRenderer::RenderMode mode) {
   switch (mode) {
     case GfxRenderer::BW:
@@ -325,6 +381,10 @@ static inline uint8_t drawMaskFor2BitMode(const GfxRenderer::RenderMode mode) {
   }
 }
 
+// 2-bit pipeline — fused gather+threshold (X axis): the 2-bit analog of extractGlyphBlock, but
+// gather and threshold are collapsed into one pass. The threshold (2-bit raw value → 1-bit on/off)
+// is information-lossy, so no contiguous 2-bit intermediate block can be formed mid-pipeline.
+// The resulting 1-bit mask feeds writeRowBits directly (scatter). build2BitColMask is the Y-axis counterpart.
 static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int rowStartPixel, const int glyphXStartOrEnd,
                                        const int count, const bool reverseXInChunk,
                                        const GfxRenderer::RenderMode renderMode) {
@@ -337,10 +397,23 @@ static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int ro
   uint8_t mask = 0;
   for (int i = 0; i < count; i++) {
     const int logicalX = reverseXInChunk ? (glyphXStartOrEnd - i) : (glyphXStartOrEnd + i);
-    const int pixelPosition = rowStartPixel + logicalX;
-    const uint8_t byte = bitmap[pixelPosition >> 2];
-    const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
-    const uint8_t raw = static_cast<uint8_t>((byte >> bit_index) & 0x3);
+    const uint8_t raw = get2BitPixel(bitmap, rowStartPixel + logicalX);
+    if ((drawMask >> raw) & 0x01) mask |= static_cast<uint8_t>(1u << (7 - i));
+  }
+  return mask;
+}
+
+// 2-bit pipeline — fused gather+threshold (Y axis): column-direction counterpart to build2BitRowMask.
+// Samples count pixels down glyph column glyphX starting at row glyphYStart; reverseRows implements
+// a negative-stride view along Y (reads bottom-to-top), needed for PortraitInverted.
+static inline uint8_t build2BitColMask(const uint8_t* const bitmap, const int glyphWidth, const int glyphX,
+                                       const int glyphYStart, const int count, const bool reverseRows,
+                                       const GfxRenderer::RenderMode renderMode) {
+  const uint8_t drawMask = drawMaskFor2BitMode(renderMode);
+  uint8_t mask = 0;
+  for (int i = 0; i < count; i++) {
+    const int row = reverseRows ? (glyphYStart + count - 1 - i) : (glyphYStart + i);
+    const uint8_t raw = get2BitPixel(bitmap, glyphWidth, row, glyphX);
     if ((drawMask >> raw) & 0x01) mask |= static_cast<uint8_t>(1u << (7 - i));
   }
   return mask;
@@ -353,7 +426,6 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
   // Non-rotated text fast path for 2-bit glyphs. Writes compact masks directly to framebuffer rows.
   // TextRotation::Rotated90CW keeps the legacy per-pixel fallback path for safety and readability.
   const bool writeState = (renderMode == GfxRenderer::BW) ? pixelState : false;
-  const uint8_t drawMask = drawMaskFor2BitMode(renderMode);
 
   switch (orientation) {
     case GfxRenderer::LandscapeCounterClockwise: {
@@ -400,15 +472,7 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
         uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
         for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
           const int count = std::min(8, glyphHeight - glyphY);
-          uint8_t mask = 0;
-          for (int i = 0; i < count; i++) {
-            const int logicalY = glyphY + i;
-            const int pixelPosition = logicalY * glyphWidth + glyphX;
-            const uint8_t byte = bitmap[pixelPosition >> 2];
-            const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
-            const uint8_t raw = static_cast<uint8_t>((byte >> bit_index) & 0x3);
-            if ((drawMask >> raw) & 0x01) mask |= static_cast<uint8_t>(1u << (7 - i));
-          }
+          const uint8_t mask = build2BitColMask(bitmap, glyphWidth, glyphX, glyphY, count, false, renderMode);
           if (mask == 0) continue;
           const int phyBitPos = screenYBase + glyphY;
           if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
@@ -425,15 +489,7 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
         uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
         for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
           const int count = std::min(8, glyphHeight - glyphY);
-          uint8_t mask = 0;
-          for (int i = 0; i < count; i++) {
-            const int logicalY = glyphY + (count - 1 - i);
-            const int pixelPosition = logicalY * glyphWidth + glyphX;
-            const uint8_t byte = bitmap[pixelPosition >> 2];
-            const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
-            const uint8_t raw = static_cast<uint8_t>((byte >> bit_index) & 0x3);
-            if ((drawMask >> raw) & 0x01) mask |= static_cast<uint8_t>(1u << (7 - i));
-          }
+          const uint8_t mask = build2BitColMask(bitmap, glyphWidth, glyphX, glyphY, count, true, renderMode);
           if (mask == 0) continue;
           const int phyBitPos = HalDisplay::DISPLAY_WIDTH - 1 - screenYBase - (glyphY + count - 1);
           if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
