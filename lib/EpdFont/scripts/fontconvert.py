@@ -291,6 +291,7 @@ kernable_codepoints = set(cp for cp in all_codepoints
 KERN_WESTERN_CODEPOINTS = (
     frozenset(range(0x0020, 0x007F)) |  # Basic Latin (ASCII printable)
     frozenset(range(0x00A0, 0x0100)) |  # Latin-1 Supplement (Western European accented chars)
+    frozenset(range(0xFB00, 0xFB07)) |  # Alphabetic Presentation Forms (ligature codepoints)
     frozenset({0x2013, 0x2014,          # en dash, em dash
                0x2018, 0x2019,          # left/right single quote (apostrophe)
                0x201A,                  # single low-9 quotation mark
@@ -746,9 +747,14 @@ else:
         print ("    " + " ".join(f"0x{b:02X}," for b in c))
     print ("};\n");
 
+def cp_label(cp):
+    if cp == 0x5C:
+        return '<backslash>'
+    return chr(cp) if 0x20 < cp < 0x7F else f'U+{cp:04X}'
+
 print(f"static const EpdGlyph {font_name}Glyphs[] = {{")
 for i, g in enumerate(glyph_props):
-    print ("    { " + ", ".join([f"{a}" for a in list(g[:-1])]),"},", f"// {chr(g.code_point) if g.code_point != 92 else '<backslash>'}")
+    print ("    { " + ", ".join([f"{a}" for a in list(g[:-1])]),"},", f"// {cp_label(g.code_point)}")
 print ("};\n");
 
 print(f"static const EpdUnicodeInterval {font_name}Intervals[] = {{")
@@ -769,22 +775,13 @@ if compress:
 if kern_pairs:
     print(f"static const EpdKernPair {font_name}KernPairs[] = {{")
     for packed_pair, adjust in kern_pairs:
-        left_cp = packed_pair >> 16
-        right_cp = packed_pair & 0xFFFF
-        comment_l = chr(left_cp) if 0x20 < left_cp < 0x7F else f'U+{left_cp:04X}'
-        comment_r = chr(right_cp) if 0x20 < right_cp < 0x7F else f'U+{right_cp:04X}'
-        print(f"    {{ 0x{packed_pair:08X}, {adjust} }}, // {comment_l} {comment_r}")
+        print(f"    {{ 0x{packed_pair:08X}, {adjust} }}, // {cp_label(packed_pair >> 16)} {cp_label(packed_pair & 0xFFFF)}")
     print("};\n")
 
 if ligature_pairs:
     print(f"static const EpdLigaturePair {font_name}LigaturePairs[] = {{")
     for packed_pair, lig_cp in ligature_pairs:
-        left_cp = packed_pair >> 16
-        right_cp = packed_pair & 0xFFFF
-        comment_l = chr(left_cp) if 0x20 < left_cp < 0x7F else f'U+{left_cp:04X}'
-        comment_r = chr(right_cp) if 0x20 < right_cp < 0x7F else f'U+{right_cp:04X}'
-        comment_lig = chr(lig_cp) if 0x20 < lig_cp < 0x7F else f'U+{lig_cp:04X}'
-        print(f"    {{ 0x{packed_pair:08X}, 0x{lig_cp:04X} }}, // {comment_l} {comment_r} -> {comment_lig}")
+        print(f"    {{ 0x{packed_pair:08X}, 0x{lig_cp:04X} }}, // {cp_label(packed_pair >> 16)} {cp_label(packed_pair & 0xFFFF)} -> {cp_label(lig_cp)}")
     print("};\n")
 
 print(f"static const EpdFontData {font_name} = {{")
