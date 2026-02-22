@@ -163,13 +163,30 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 ### 3.6 Sleep Screen
 
-You can customize the sleep screen by placing custom images in specific locations on the SD card:
+The **Sleep Screen** setting controls what is displayed when the device goes to sleep:
 
-- **Single Image:** Place a file named `sleep.bmp` in the root directory.
-- **Multiple Images:** Create a `sleep` directory in the root of the SD card and place any number of `.bmp` images inside. If images are found in this directory, they will take priority over the `sleep.bmp` file, and one will be randomly selected each time the device sleeps.
+| Mode | Behavior |
+|------|----------|
+| **Dark** (default) | The CrossPoint logo on a dark background. |
+| **Light** | The CrossPoint logo on a white background. |
+| **Custom** | A custom image from the SD card (see below). Falls back to **Dark** if no custom image is found. |
+| **Cover** | The cover of the currently open book. Falls back to **Dark** if no book is open. |
+| **Cover + Custom** | The cover of the currently open book. Falls back to **Custom** behavior if no book is open. |
+| **None** | A blank screen. |
 
-> [!NOTE]
-> You'll need to set the **Sleep Screen** setting to **Custom** in order to use these images.
+#### Cover settings
+
+When using **Cover** or **Cover + Custom**, two additional settings apply:
+
+- **Sleep Screen Cover Mode**: **Fit** (scale to fit, white borders) or **Crop** (scale and crop to fill the screen).
+- **Sleep Screen Cover Filter**: **None** (grayscale), **Contrast** (black & white), or **Inverted** (inverted black & white).
+
+#### Custom images
+
+To use custom sleep images, set the sleep screen mode to **Custom** or **Cover + Custom**, then place images on the SD card:
+
+- **Multiple Images (recommended):** Create a `.sleep` directory in the root of the SD card and place any number of `.bmp` images inside. One will be randomly selected each time the device sleeps. (A directory named `sleep` is also accepted as a fallback.)
+- **Single Image:** Place a file named `sleep.bmp` in the root directory. This is used as a fallback if no valid images are found in the `.sleep`/`sleep` directory.
 
 > [!TIP]
 > For best results:
