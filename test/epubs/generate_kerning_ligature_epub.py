@@ -74,6 +74,27 @@ Ligature sequences in Latin Extended-A context:
   œ (U+0153): cœur, sœur, œuvre, bœuf, manœuvre
   ĳ (U+0133): ĳzer, vrĳ, bĳzonder, ĳverig
 
+Kerning pairs targeted (Latin Extended-B — U+0180–024F):
+  Ța, Țe, Țo, Țu (Romanian: T-comma overhang, like T)
+  Șa, Șe, Și (Romanian: S-comma descender)
+  Tș, Vș (Latin T/V followed by Romanian s-comma)
+  Tơ, Vơ, Tư, Vư (Vietnamese: horn diacritics under T/V overhangs)
+  Ƒa, Ƒo, Ƒe (African: F-hook pairs)
+  DŽ, Dž, LJ, Lj, NJ, Nj (Croatian digraph ligatures)
+  Tǎ, Tǒ, Tǔ (Pinyin: caron vowels under T overhang)
+  Tǖ, Tǘ, Tǚ, Tǜ (Pinyin: u-diaeresis with tone marks)
+
+Kerning pairs targeted (Greek & Coptic — U+0370–03FF):
+  Γα, Γε, Γο, Γυ, Γρ (Γ overhang, like Latin T / Cyrillic Г)
+  Τα, Τε, Το, Τυ, Τρ (Τ overhang, identical to Latin T)
+  Αυ, Αν, Ατ, Αδ (Α diagonal, like Latin A)
+  Υα, Υε, Υο (Υ diagonal, like Latin Y)
+  Ρα, Ρε, Ρο (Ρ bowl, like Latin P)
+  Φα, Φο, Φυ (Φ wide circular)
+  Δα, Δε, Δο (Δ triangular base)
+  Λα, Λε, Λο (Λ inverted-V)
+  «Γ, «Τ, ε», ο» (guillemets in Greek context)
+
 Kerning pairs targeted (Cyrillic — U+0400–04FF):
   Ге, Го, Гу, Га, Гр (Г has overhanging crossbar like T/F)
   Та, Те, То, Ту, Тр, Ті, Тя (Т = Latin T shape)
@@ -891,6 +912,318 @@ and smiled wearily. &#x201C;At least there are no Cyrillic ligatures.&#x201D;</p
 </html>
 """
 
+CHAPTER_9 = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head><title>Chapter 9 &#x2013; Latin Extended-B</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+<h1>Chapter 9<br/>Latin Extended-B</h1>
+
+<p>Months passed. Avery had just begun to relax when the telephone rang
+again. This time it was not Mrs. Thornton-Foxwell but her publisher,
+a harried man named Grigor, who explained that the calligraphy survey
+had attracted interest from scholars in Bucharest, Hanoi, and Lagos.
+&#x201C;We need Romanian, Vietnamese, and several West African
+languages,&#x201D; he said. &#x201C;Plus Croatian digraphs and Pinyin
+romanization. Latin Extended-B, the whole block.&#x201D;</p>
+
+<p>Avery looked at the Unicode chart for U+0180&#x2013;U+024F and sighed.
+It was a miscellany: characters from a dozen unrelated traditions,
+each with its own typographic demands.</p>
+
+<h2>Romanian</h2>
+
+<p>Romanian was the most urgent addition. The language required two
+characters that looked deceptively like their Latin-1 cousins but
+were typographically distinct: &#x218; (S with comma below, U+0218)
+and &#x21A; (T with comma below, U+021A). Avery set a test
+paragraph: <i>&#x21A;ara noastr&#x103; este frumoas&#x103;.
+&#x218;ase sute de &#x219;colari au venit la &#x21A;&#x103;r&#x103;ncu&#x21B;a.
+&#x21A;es&#x103;tura &#x21B;inutului este unic&#x103;.
+&#x218;eful sta&#x21B;iei &#x219;tia totul.</i></p>
+
+<p>The &#x21A;&#x103; pair in &#x201C;&#x21A;ara&#x201D; and
+&#x201C;&#x21A;&#x103;r&#x103;ncu&#x21B;a&#x201D; was the key test &#x2014;
+the comma descender on &#x21A; distinguished it from the cedilla-T
+(&#xDE;) found in Turkish, but the crossbar overhang was identical.
+&#x21A;e in &#x201C;&#x21A;es&#x103;tura&#x201D; and &#x21A;o demanded the same
+T-crossbar tucking as their ASCII equivalents. &#x218;a and &#x218;e in
+&#x201C;&#x218;ase&#x201D; and &#x201C;&#x218;eful&#x201D; needed the comma below to
+clear the baseline without colliding with descenders in the line
+below.</p>
+
+<p>&#x201C;The tricky part,&#x201D; Avery told Vera, &#x201C;is that Romanian also uses
+&#x103; (a-breve) and &#xEE; (i-circumflex) from Latin-1, and
+&#x21B; (t-comma) interacts with both. The pair &#x21B;&#x103; in
+&#x2018;&#x21A;&#x103;r&#x103;ncu&#x21B;a&#x2019; tests the comma-below
+against the breve-above &#x2014; a vertical sandwich of diacritics.&#x201D;</p>
+
+<h2>Vietnamese</h2>
+
+<p>Vietnamese typography brought the horn diacritic into play. The
+characters &#x1A0; (O with horn, U+01A0) and &#x1AF;
+(U with horn, U+01AF) appeared constantly in Vietnamese text. Avery
+set: <i>&#x1A0;i &#x21; Ng&#x1B0;&#x1A1;i Vi&#x1EC7;t Nam
+y&#xEA;u th&#x1B0;&#x1A1;ng &#x111;&#x1EA5;t n&#x1B0;&#x1EDB;c.
+V&#x1EEB;a &#x111;&#x1EB9;p v&#x1EEB;a hay. T&#x1B0;&#x1A1;i s&#xE1;ng
+r&#x1EE1;i.</i></p>
+
+<p>The horn on &#x1A0; and &#x1AF; extended to the upper right of the
+letter, creating potential collisions with the following character.
+T&#x1B0; and V&#x1B0; were particularly demanding: the T-crossbar or
+V-diagonal needed to accommodate the horn&#x2019;s extra width. Similarly,
+T&#x1A1; placed the T&#x2019;s crossbar over a horned lowercase o &#x2014; the
+horn could crash into the crossbar at small sizes.</p>
+
+<h2>Croatian Digraphs</h2>
+
+<p>Croatian contributed its titular digraph ligatures. The Unicode
+block included precomposed forms: D&#x17D; (U+01C4), D&#x17E; (U+01C5),
+d&#x17E; (U+01C6), LJ (U+01C7), Lj (U+01C8), lj (U+01C9),
+NJ (U+01CA), Nj (U+01CB), nj (U+01CC). These were single codepoints
+representing two-letter combinations, each with unique glyph widths.
+<i>D&#x17E;ep je velik. Ljeto je toplo. Njiva je zelena.
+D&#x17E;amija stoji na brdu.</i></p>
+
+<p>&#x201C;These digraphs are wider than normal letters,&#x201D; Avery observed.
+&#x201C;Kerning D&#x17E; against a following lowercase vowel is unlike
+kerning D or &#x17D; individually &#x2014; the combined glyph has its own
+sidebearings. Same for Lj and Nj.&#x201D;</p>
+
+<h2>Pinyin Tone Marks</h2>
+
+<p>Mandarin Chinese romanization &#x2014; Pinyin &#x2014; used Latin letters
+with caron and diaeresis-plus-tone combinations that fell squarely
+in Extended-B. <i>N&#x1D0; h&#x1CE;o! W&#x1D2; shi
+Zh&#x14D;nggu&#xF3; r&#xE9;n. L&#x1DA;shi zh&#x1D4;yi
+T&#x1D0;men de f&#x101;y&#x12B;n.</i></p>
+
+<p>The &#x1CE; (a with caron) under a T-crossbar in &#x201C;T&#x1CE;men&#x201D;
+presented the same challenge as Czech T&#x11B; &#x2014; but the Pinyin
+context meant it appeared in entirely different words. The diaeresis-
+plus-tone characters were uniquely demanding: &#x1D6; (u-diaeresis-
+macron), &#x1D8; (u-diaeresis-acute), &#x1DA; (u-diaeresis-caron),
+&#x1DC; (u-diaeresis-grave) each stacked two diacritical marks above
+the u, creating height that could collide with the preceding
+T-crossbar. <i>L&#x1DC;shi T&#x1D6; V&#x1D8;</i> &#x2014; Avery set each
+combination and winced at the vertical crowding.</p>
+
+<h2>African Languages</h2>
+
+<p>West African languages used hooked and barred variants of familiar
+Latin letters. <i>&#x181;ala &#x253;e &#x18A;ala &#x257;e.
+&#x191;arin kowa ya san. &#x190;di&#x272; &#x254;k&#x254; n&#x254;.</i>
+The &#x181; (B-hook) and &#x18A; (D-hook) had descending hooks that
+affected baseline spacing. &#x191; (F-hook) shared the overhang
+issues of a standard F but with an added complication: the hook at the
+bottom altered the letter&#x2019;s center of gravity. &#x191;a,
+&#x191;o, &#x191;e all needed individual attention &#x2014; the hook
+pulled the eye downward while the crossbar demanded tuck-over
+kerning above.</p>
+
+<p>&#x201C;And the open vowels,&#x201D; Avery added. &#x201C;&#x190;
+(open E, U+0190) and &#x254; (open O, U+0254) have wider apertures
+than their standard counterparts. Every consonant-to-open-vowel pair
+needs rechecking.&#x201D;</p>
+
+<h2>Extended-B Kerning Glossary</h2>
+
+<p>Avery appended to his catalogue:</p>
+
+<p><b>&#x21A;a</b> &#x2014; As in &#x21A;ara, &#x21B;ar&#x103;.<br/>
+<b>&#x21A;e</b> &#x2014; As in &#x21A;es&#x103;tura, &#x21B;esut.<br/>
+<b>&#x21A;o</b> &#x2014; As in &#x21A;oca, &#x21B;ocul.<br/>
+<b>&#x218;a</b> &#x2014; As in &#x218;ase, &#x219;arpe.<br/>
+<b>&#x218;e</b> &#x2014; As in &#x218;eful, &#x219;ed.<br/>
+<b>T&#x1A1;</b> &#x2014; As in T&#x1A1;i, t&#x1A1;i s&#xE1;ng.<br/>
+<b>T&#x1B0;</b> &#x2014; As in T&#x1B0;&#x1A1;i, t&#x1B0;&#x1A1;ng lai.<br/>
+<b>V&#x1A1;</b> &#x2014; As in V&#x1A1;i, v&#x1A1;.<br/>
+<b>V&#x1B0;</b> &#x2014; As in V&#x1EEB;a, v&#x1B0;&#x1A1;n.<br/>
+<b>T&#x1CE;</b> &#x2014; As in T&#x1CE;men (Pinyin).<br/>
+<b>T&#x1D6;</b> &#x2014; As in n&#x1D6; (Pinyin: female).<br/>
+<b>&#x191;a</b> &#x2014; As in &#x191;arin (Hausa).<br/>
+<b>&#x191;o</b> &#x2014; As in &#x191;oto (Hausa).</p>
+</body>
+</html>
+"""
+
+CHAPTER_10 = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head><title>Chapter 10 &#x2013; Greek &amp; Coptic</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+<h1>Chapter 10<br/>Greek &amp; Coptic</h1>
+
+<p>The final challenge arrived not by telephone but by post: a handwritten
+letter from a professor of classics at the University of Athens,
+requesting that the calligraphy survey include a chapter on the Greek
+alphabet. &#x201C;The birthplace of Western lettering,&#x201D; the professor
+wrote, &#x201C;deserves proper typographic treatment.&#x201D;</p>
+
+<p>Avery could hardly disagree. Greek was where it all began &#x2014; the
+ancestor of Latin, Cyrillic, and Coptic. And the Greek alphabet had
+its own kerning nightmares, many of them eerily familiar.</p>
+
+<h2>The Overhanging Letters</h2>
+
+<p>&#x393; (Gamma, U+0393) was the Greek counterpart of the Cyrillic
+&#x413; and a close relative of the Latin T. Its horizontal stroke
+extended rightward, creating the same tuck-over demands. Avery set:
+<i>&#x393;&#x3B1;&#x3BB;&#x3AE;&#x3BD;&#x3B7; &#x3B3;&#x3B1;&#x3BB;&#x3AC;&#x3B6;&#x3B9;&#x3B1;
+&#x393;&#x3B5;&#x3C9;&#x3C1;&#x3B3;&#x3AF;&#x3B1; &#x393;&#x3BF;&#x3C1;&#x3B3;&#x3CC;&#x3BD;&#x3B1;
+&#x393;&#x3C1;&#x3B1;&#x3BC;&#x3BC;&#x3B1;&#x3C4;&#x3B9;&#x3BA;&#x3AE;
+&#x393;&#x3C5;&#x3BC;&#x3BD;&#x3AC;&#x3C3;&#x3B9;&#x3BF;.</i></p>
+
+<p>The &#x393;&#x3B1; in &#x201C;&#x393;&#x3B1;&#x3BB;&#x3AE;&#x3BD;&#x3B7;&#x201D; and
+&#x201C;&#x3B3;&#x3B1;&#x3BB;&#x3AC;&#x3B6;&#x3B9;&#x3B1;&#x201D; needed tight
+kerning &#x2014; the horizontal bar of &#x393; had to reach over the
+&#x3B1; without crushing it. &#x393;&#x3B5; in
+&#x201C;&#x393;&#x3B5;&#x3C9;&#x3C1;&#x3B3;&#x3AF;&#x3B1;&#x201D; was equally
+sensitive. &#x393;&#x3BF; in &#x201C;&#x393;&#x3BF;&#x3C1;&#x3B3;&#x3CC;&#x3BD;&#x3B1;&#x201D;,
+&#x393;&#x3C1; in &#x201C;&#x393;&#x3C1;&#x3B1;&#x3BC;&#x3BC;&#x3B1;&#x3C4;&#x3B9;&#x3BA;&#x3AE;&#x201D;,
+and &#x393;&#x3C5; in &#x201C;&#x393;&#x3C5;&#x3BC;&#x3BD;&#x3AC;&#x3C3;&#x3B9;&#x3BF;&#x201D;
+completed the set of Gamma&#x2019;s right-side partners.</p>
+
+<p>&#x3A4; (Tau, U+03A4) was structurally identical to the Latin T.
+<i>&#x3A4;&#x3B1;&#x3BE;&#x3AF;&#x3B4;&#x3B9; &#x3C4;&#x3B1;&#x3C7;&#x3CD;
+&#x3A4;&#x3B5;&#x3C7;&#x3BD;&#x3BF;&#x3BB;&#x3BF;&#x3B3;&#x3AF;&#x3B1;
+&#x3A4;&#x3BF;&#x3C0;&#x3BF;&#x3B8;&#x3B5;&#x3C3;&#x3AF;&#x3B1;
+&#x3A4;&#x3C1;&#x3AF;&#x3B3;&#x3C9;&#x3BD;&#x3BF;
+&#x3A4;&#x3C5;&#x3C1;&#x3AF;.</i>
+Every pair &#x2014; &#x3A4;&#x3B1;, &#x3A4;&#x3B5;, &#x3A4;&#x3BF;,
+&#x3A4;&#x3C1;, &#x3A4;&#x3C5; &#x2014; demanded the crossbar to tuck over
+the following lowercase letter, just as in Latin.</p>
+
+<h2>The Diagonal Letters</h2>
+
+<p>&#x3A5; (Upsilon, U+03A5) mirrored the Latin Y&#x2019;s diagonal
+challenges. <i>&#x3A5;&#x3B3;&#x3B5;&#x3AF;&#x3B1;
+&#x3C5;&#x3C0;&#x3AC;&#x3C1;&#x3C7;&#x3B5;&#x3B9;
+&#x3A5;&#x3C0;&#x3BF;&#x3C5;&#x3C1;&#x3B3;&#x3CC;&#x3C2;
+&#x3A5;&#x3C0;&#x3BF;&#x3B8;&#x3AE;&#x3BA;&#x3B7;.</i>
+The &#x3A5;&#x3B3;, &#x3A5;&#x3C0; pairs showed the same open spacing
+that the Latin Y created against following lowercase letters.</p>
+
+<p>&#x391; (Alpha, U+0391) and &#x39B; (Lambda, U+039B) were the
+Greek equivalents of A and an inverted V. <i>&#x391;&#x3C5;&#x3C4;&#x3CC;&#x3C2;
+&#x391;&#x3BD;&#x3B1;&#x3C4;&#x3BF;&#x3BB;&#x3AE; &#x391;&#x3C4;&#x3BB;&#x3B1;&#x3BD;&#x3C4;&#x3B9;&#x3BA;&#x3CC;&#x3C2;
+&#x391;&#x3B4;&#x3B5;&#x3BB;&#x3C6;&#x3CC;&#x3C2;. &#x39B;&#x3B1;&#x3BC;&#x3C0;&#x3C1;&#x3AE;
+&#x39B;&#x3B5;&#x3C5;&#x3BA;&#x3AC;&#x3B4;&#x3B1; &#x39B;&#x3BF;&#x3BD;&#x3B4;&#x3AF;&#x3BD;&#x3BF;.</i>
+The &#x391;&#x3C5;, &#x391;&#x3BD;, &#x391;&#x3C4;, &#x391;&#x3B4; pairs
+followed the same diagonal-against-vertical pattern as Latin AV, AW,
+AT. &#x39B;&#x3B1;, &#x39B;&#x3B5;, &#x39B;&#x3BF; needed the inverted-V&#x2019;s
+right stroke to relate cleanly to the following round or vertical
+letter.</p>
+
+<h2>Round and Complex Letters</h2>
+
+<p>&#x3A1; (Rho, U+03A1) was the Greek P &#x2014; bowl overhanging the
+following character. <i>&#x3A1;&#x3B1;&#x3B4;&#x3B9;&#x3CC;&#x3C6;&#x3C9;&#x3BD;&#x3BF;
+&#x3A1;&#x3B5;&#x3CD;&#x3BC;&#x3B1; &#x3A1;&#x3BF;&#x3B4;&#x3CC;&#x3C2;
+&#x3C1;&#x3CC;&#x3B4;&#x3B1;.</i> The &#x3A1;&#x3B1;,
+&#x3A1;&#x3B5;, &#x3A1;&#x3BF; pairs echoed the Latin Pa, Pe, Po and
+Cyrillic &#x420;&#x430;, &#x420;&#x435;, &#x420;&#x43E; challenges.</p>
+
+<p>&#x3A6; (Phi, U+03A6) was one of the widest Greek letters &#x2014; a circle
+bisected by a vertical stem, like the Cyrillic &#x424;.
+<i>&#x3A6;&#x3B1;&#x3BD;&#x3C4;&#x3B1;&#x3C3;&#x3AF;&#x3B1;
+&#x3A6;&#x3BF;&#x3AF;&#x3BD;&#x3B9;&#x3BA;&#x3B1;&#x3C2;
+&#x3C6;&#x3C5;&#x3C3;&#x3B9;&#x3BA;&#x3AE;.</i> The &#x3A6;&#x3B1;,
+&#x3A6;&#x3BF;, &#x3A6;&#x3C5; pairs needed generous clearance for the
+circle&#x2019;s width.</p>
+
+<p>&#x394; (Delta, U+0394) had a triangular shape with a wide base,
+unlike anything in Latin. <i>&#x394;&#x3B1;&#x3C3;&#x3BA;&#x3AC;&#x3BB;&#x3B1;
+&#x394;&#x3B5;&#x3BB;&#x3C6;&#x3BF;&#x3AF; &#x394;&#x3BF;&#x3CD;&#x3BD;&#x3B1;&#x3B2;&#x3B7;&#x3C2;
+&#x3B4;&#x3B9;&#x3AC;&#x3B2;&#x3B1;&#x3C3;&#x3B7;.</i> The &#x394;&#x3B1;,
+&#x394;&#x3B5;, &#x394;&#x3BF; pairs needed the wide base to relate
+to the following letter without excessive gaps.</p>
+
+<h2>Greek with Guillemets and Polytonic</h2>
+
+<p>Modern Greek typography, like French and Russian, uses guillemets.
+&#xAB;&#x393;&#x3B5;&#x3B9;&#x3B1; &#x3C3;&#x3B1;&#x3C2;,&#xBB;
+&#x3B5;&#x3AF;&#x3C0;&#x3B5;. &#xAB;&#x3A4;&#x3B9;
+&#x3BA;&#x3AC;&#x3BD;&#x3B5;&#x3C4;&#x3B5;;&#xBB;
+&#xAB;&#x39A;&#x3B1;&#x3BB;&#x3AC;,&#xBB; &#x3B1;&#x3C0;&#x3AC;&#x3BD;&#x3C4;&#x3B7;&#x3C3;&#x3B5;.
+The &#xAB;&#x393; and &#xAB;&#x3A4; pairs tested the guillemet
+against overhanging capitals, while &#x3B5;&#xBB; and &#x3BF;&#xBB;
+tested closing spacing.</p>
+
+<p>Greek also carried a rich tradition of polytonic accents &#x2014; the
+acute (&#x384;), grave, circumflex, rough breathing, and smooth
+breathing marks that adorned classical and katharevousa texts.
+<i>&#x1F08;&#x3B8;&#x3AE;&#x3BD;&#x3B1; &#x1F10;&#x3C3;&#x3C4;&#x3AF;
+&#x3BC;&#x3B5;&#x3B3;&#x3AC;&#x3BB;&#x3B7; &#x3C0;&#x3CC;&#x3BB;&#x3B7;.
+&#x1F48; &#x3BA;&#x3CC;&#x3C3;&#x3BC;&#x3BF;&#x3C2;
+&#x3B5;&#x1F36;&#x3BD;&#x3B1;&#x3B9; &#x3C9;&#x3C1;&#x3B1;&#x1FD6;&#x3BF;&#x3C2;.</i>
+Though polytonic marks are handled by combining characters (from the
+U+0300 block), their visual interaction with kerning pairs
+remained &#x2014; a breathing mark over an Alpha could encroach on the
+preceding or following letter&#x2019;s space.</p>
+
+<h2>Greek in Scientific Text</h2>
+
+<p>Beyond natural language, Greek letters appeared constantly in
+scientific and mathematical prose. <i>The wavelength &#x3BB; is
+inversely proportional to frequency &#x3BD;. The ratio &#x3C0;/&#x3C6;
+appears in the golden angle. Angle &#x3B8; subtends arc &#x3B1;&#x3B2;,
+while &#x3A3; denotes summation and &#x394; denotes change.</i></p>
+
+<p>&#x201C;When Greek letters appear inline with Latin text,&#x201D; Avery
+explained, &#x201C;the kerning engine must handle cross-script pairs:
+Latin-T followed by Greek-&#x3B1;, or Greek-&#x3C3; followed by
+a Latin comma. These hybrid pairs are rare but they matter in
+any book that discusses physics, mathematics, or engineering.&#x201D;</p>
+
+<h2>Greek Kerning Glossary</h2>
+
+<p>Avery added the final appendix to his growing catalogue:</p>
+
+<p><b>&#x393;&#x3B1;</b> &#x2014; &#x393;&#x3B1;&#x3BB;&#x3AE;&#x3BD;&#x3B7;, &#x3B3;&#x3B1;&#x3BB;&#x3B1;&#x3BE;&#x3AF;&#x3B1;&#x3C2;.<br/>
+<b>&#x393;&#x3B5;</b> &#x2014; &#x393;&#x3B5;&#x3C9;&#x3C1;&#x3B3;&#x3AF;&#x3B1;, &#x3B3;&#x3B5;&#x3C1;&#x3CC;&#x3C2;.<br/>
+<b>&#x393;&#x3BF;</b> &#x2014; &#x393;&#x3BF;&#x3C1;&#x3B3;&#x3CC;&#x3BD;&#x3B1;, &#x3B3;&#x3BF;&#x3BD;&#x3B9;&#x3CC;&#x3C2;.<br/>
+<b>&#x393;&#x3C5;</b> &#x2014; &#x393;&#x3C5;&#x3BC;&#x3BD;&#x3AC;&#x3C3;&#x3B9;&#x3BF;, &#x3B3;&#x3CD;&#x3C1;&#x3BF;&#x3C2;.<br/>
+<b>&#x393;&#x3C1;</b> &#x2014; &#x393;&#x3C1;&#x3B1;&#x3BC;&#x3BC;&#x3B1;&#x3C4;&#x3B9;&#x3BA;&#x3AE;.<br/>
+<b>&#x3A4;&#x3B1;</b> &#x2014; &#x3A4;&#x3B1;&#x3BE;&#x3AF;&#x3B4;&#x3B9;, &#x3C4;&#x3B1;&#x3C7;&#x3CD;.<br/>
+<b>&#x3A4;&#x3B5;</b> &#x2014; &#x3A4;&#x3B5;&#x3C7;&#x3BD;&#x3BF;&#x3BB;&#x3BF;&#x3B3;&#x3AF;&#x3B1;.<br/>
+<b>&#x3A4;&#x3BF;</b> &#x2014; &#x3A4;&#x3BF;&#x3C0;&#x3BF;&#x3B8;&#x3B5;&#x3C3;&#x3AF;&#x3B1;.<br/>
+<b>&#x3A4;&#x3C5;</b> &#x2014; &#x3A4;&#x3C5;&#x3C1;&#x3AF;, &#x3C4;&#x3C5;&#x3C7;&#x3B5;&#x3C1;&#x3CC;&#x3C2;.<br/>
+<b>&#x391;&#x3C5;</b> &#x2014; &#x391;&#x3C5;&#x3C4;&#x3CC;&#x3C2;, &#x3B1;&#x3C5;&#x3BB;&#x3AE;.<br/>
+<b>&#x391;&#x3BD;</b> &#x2014; &#x391;&#x3BD;&#x3B1;&#x3C4;&#x3BF;&#x3BB;&#x3AE;.<br/>
+<b>&#x391;&#x3C4;</b> &#x2014; &#x391;&#x3C4;&#x3BB;&#x3B1;&#x3BD;&#x3C4;&#x3B9;&#x3BA;&#x3CC;&#x3C2;.<br/>
+<b>&#x391;&#x3B4;</b> &#x2014; &#x391;&#x3B4;&#x3B5;&#x3BB;&#x3C6;&#x3CC;&#x3C2;.<br/>
+<b>&#x3A5;&#x3B3;</b> &#x2014; &#x3A5;&#x3B3;&#x3B5;&#x3AF;&#x3B1;.<br/>
+<b>&#x3A5;&#x3C0;</b> &#x2014; &#x3A5;&#x3C0;&#x3BF;&#x3C5;&#x3C1;&#x3B3;&#x3CC;&#x3C2;.<br/>
+<b>&#x3A1;&#x3B1;</b> &#x2014; &#x3A1;&#x3B1;&#x3B4;&#x3B9;&#x3CC;&#x3C6;&#x3C9;&#x3BD;&#x3BF;.<br/>
+<b>&#x3A1;&#x3B5;</b> &#x2014; &#x3A1;&#x3B5;&#x3CD;&#x3BC;&#x3B1;.<br/>
+<b>&#x3A1;&#x3BF;</b> &#x2014; &#x3A1;&#x3BF;&#x3B4;&#x3CC;&#x3C2;.<br/>
+<b>&#x3A6;&#x3B1;</b> &#x2014; &#x3A6;&#x3B1;&#x3BD;&#x3C4;&#x3B1;&#x3C3;&#x3AF;&#x3B1;.<br/>
+<b>&#x3A6;&#x3BF;</b> &#x2014; &#x3A6;&#x3BF;&#x3AF;&#x3BD;&#x3B9;&#x3BA;&#x3B1;&#x3C2;.<br/>
+<b>&#x394;&#x3B1;</b> &#x2014; &#x394;&#x3B1;&#x3C3;&#x3BA;&#x3AC;&#x3BB;&#x3B1;.<br/>
+<b>&#x394;&#x3B5;</b> &#x2014; &#x394;&#x3B5;&#x3BB;&#x3C6;&#x3BF;&#x3AF;.<br/>
+<b>&#x39B;&#x3B1;</b> &#x2014; &#x39B;&#x3B1;&#x3BC;&#x3C0;&#x3C1;&#x3AE;.<br/>
+<b>&#x39B;&#x3B5;</b> &#x2014; &#x39B;&#x3B5;&#x3C5;&#x3BA;&#x3AC;&#x3B4;&#x3B1;.<br/>
+<b>&#x39B;&#x3BF;</b> &#x2014; &#x39B;&#x3BF;&#x3BD;&#x3B4;&#x3AF;&#x3BD;&#x3BF;.</p>
+
+<p>&#x201C;And with that,&#x201D; Avery said, setting down his pencil for the last
+time, &#x201C;we have covered every script from the Acropolis to the
+Urals, from the Rhine to the Mekong. If a typesetter can render
+every word in these ten chapters without a single miskerned pair,
+they have earned my respect.&#x201D;</p>
+
+<p>Vera closed her notebook and smiled. &#x201C;Shall I put the kettle on
+one last time?&#x201D;</p>
+
+<p>&#x201C;Please,&#x201D; said Avery. &#x201C;And make it strong.&#x201D;</p>
+</body>
+</html>
+"""
+
 COVER_XHTML = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
@@ -969,6 +1302,8 @@ CONTENT_OPF = f"""\
     <item id="ch6" href="chapter6.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch7" href="chapter7.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch8" href="chapter8.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch9" href="chapter9.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch10" href="chapter10.xhtml" media-type="application/xhtml+xml"/>
     <item id="toc" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>
   </manifest>
   <spine>
@@ -982,6 +1317,8 @@ CONTENT_OPF = f"""\
     <itemref idref="ch6"/>
     <itemref idref="ch7"/>
     <itemref idref="ch8"/>
+    <itemref idref="ch9"/>
+    <itemref idref="ch10"/>
   </spine>
 </package>
 """
@@ -1005,6 +1342,8 @@ TOC_XHTML = """\
     <li><a href="chapter6.xhtml">Chapter 6 &#x2013; Western European Accents</a></li>
     <li><a href="chapter7.xhtml">Chapter 7 &#x2013; Beyond the Western Alphabet</a></li>
     <li><a href="chapter8.xhtml">Chapter 8 &#x2013; The Cyrillic Challenge</a></li>
+    <li><a href="chapter9.xhtml">Chapter 9 &#x2013; Latin Extended-B</a></li>
+    <li><a href="chapter10.xhtml">Chapter 10 &#x2013; Greek &amp; Coptic</a></li>
   </ol>
 </nav>
 </body>
@@ -1033,6 +1372,8 @@ def build_epub(output_path: str):
         zf.writestr("OEBPS/chapter6.xhtml", CHAPTER_6)
         zf.writestr("OEBPS/chapter7.xhtml", CHAPTER_7)
         zf.writestr("OEBPS/chapter8.xhtml", CHAPTER_8)
+        zf.writestr("OEBPS/chapter9.xhtml", CHAPTER_9)
+        zf.writestr("OEBPS/chapter10.xhtml", CHAPTER_10)
     print(f"EPUB written to {output_path}")
 
 
