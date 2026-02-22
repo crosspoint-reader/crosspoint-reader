@@ -1,8 +1,9 @@
 #pragma once
 
 #include <EpdFontFamily.h>
-#include <FontDecompressor.h>
 #include <HalDisplay.h>
+
+class FontDecompressor;
 
 #include <map>
 
@@ -60,9 +61,10 @@ class GfxRenderer {
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
   void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
-  void clearFontCache() {
-    if (fontDecompressor) fontDecompressor->clearCache();
-  }
+  void clearFontCache();
+  void prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
+  void logFontStats(const char* label = "render");
+  void resetFontStats();
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }

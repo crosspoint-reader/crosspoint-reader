@@ -1,5 +1,6 @@
 #include "GfxRenderer.h"
 
+#include <FontDecompressor.h>
 #include <Logging.h>
 #include <Utf8.h>
 
@@ -9,10 +10,36 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
       LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
       return nullptr;
     }
-    uint16_t glyphIndex = static_cast<uint16_t>(glyph - fontData->glyph);
+    uint32_t glyphIndex = static_cast<uint32_t>(glyph - fontData->glyph);
+    // For page-buffer hits the pointer is stable for the page lifetime.
+    // For hot-group hits it is valid only until the next getBitmap() call — callers
+    // must consume it (draw the glyph) before requesting another bitmap.
     return fontDecompressor->getBitmap(fontData, glyph, glyphIndex);
   }
   return &fontData->bitmap[glyph->dataOffset];
+}
+
+void GfxRenderer::clearFontCache() {
+  if (fontDecompressor) fontDecompressor->clearCache();
+}
+
+void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style) {
+  if (!fontDecompressor || fontMap.count(fontId) == 0) return;
+  const EpdFontData* data = fontMap.at(fontId).getData(style);
+  if (!data || !data->groups) return;
+  int missed = fontDecompressor->prewarmCache(data, utf8Text);
+  if (missed > 0) {
+    LOG_DBG("GFX", "prewarmFontCache: %d glyph(s) not cached for style %d; hot-group fallback in use", missed,
+            static_cast<int>(style));
+  }
+}
+
+void GfxRenderer::logFontStats(const char* label) {
+  if (fontDecompressor) fontDecompressor->logStats(label);
+}
+
+void GfxRenderer::resetFontStats() {
+  if (fontDecompressor) fontDecompressor->resetStats();
 }
 
 void GfxRenderer::begin() {

@@ -31,6 +31,8 @@ class TextBlock final : public Block {
   // given a renderer works out where to break the words into lines
   void render(const GfxRenderer& renderer, int fontId, int x, int y) const;
   BlockType getType() override { return TEXT_BLOCK; }
+  const std::list<std::string>& getWords() const { return words; }
+  const std::list<EpdFontFamily::Style>& getWordStyles() const { return wordStyles; }
   bool serialize(FsFile& file) const;
   static std::unique_ptr<TextBlock> deserialize(FsFile& file);
 };
