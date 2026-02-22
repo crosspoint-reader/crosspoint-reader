@@ -1014,7 +1014,7 @@ TOC_XHTML = """\
 
 def build_epub(output_path: str):
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    cover_path = os.path.join(script_dir, "cover.jpg")
+    cover_path = os.path.join(script_dir, "kerning_ligature_test.jpg")
 
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # mimetype must be first, stored (not deflated), no extra field
