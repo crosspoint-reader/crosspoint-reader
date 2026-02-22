@@ -12,3 +12,4 @@ build
 /.cache
 .history/
 /.venv
+*.local*
