@@ -220,7 +220,7 @@ LANG_ABBREVIATIONS = {
     "العربية": "AR", "arabic": "AR",
     "עברית": "HE", "hebrew": "HE",
     "فارسی": "FA", "persian": "FA",
-    "čeština": "CZ",
+    "čeština": "CS",
 }
 
 
