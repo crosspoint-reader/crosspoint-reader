@@ -365,8 +365,26 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   words.insert(words.begin() + wordIndex + 1, remainder);
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
 
-  // The prefix keeps the original word's attachment to the previous word.
-  // The remainder does not attach to the prefix (the hyphen separates them).
+  // Continuation flag handling after splitting a word into prefix + remainder.
+  //
+  // The prefix keeps the original word's continuation flag so that no-break-space groups
+  // stay linked. The remainder always gets continues=false because it starts on the next
+  // line and is not attached to the prefix.
+  //
+  // Example: "200&#xA0;Quadratkilometer" produces tokens:
+  //   [0] "200"               continues=false
+  //   [1] " "                 continues=true
+  //   [2] "Quadratkilometer"  continues=true   <-- the word being split
+  //
+  // After splitting "Quadratkilometer" at "Quadrat-" / "kilometer":
+  //   [0] "200"         continues=false
+  //   [1] " "           continues=true
+  //   [2] "Quadrat-"    continues=true   (KEPT — still attached to the no-break group)
+  //   [3] "kilometer"   continues=false  (NEW — starts fresh on the next line)
+  //
+  // This lets the backtracking loop keep the entire prefix group ("200 Quadrat-") on one
+  // line, while "kilometer" moves to the next line.
+  // wordContinues[wordIndex] is intentionally left unchanged — the prefix keeps its original attachment.
   wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
 
   // Update cached widths to reflect the new prefix/remainder pairing.

@@ -594,25 +594,57 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
-    // Detect U+00A0 (non-breaking space): UTF-8 encoding is 0xC2 0xA0
-    // Render a visible space without allowing a line break around it.
+    // Detect U+00A0 (non-breaking space, UTF-8: 0xC2 0xA0) or
+    //        U+202F (narrow no-break space, UTF-8: 0xE2 0x80 0xAF).
+    //
+    // Both are rendered as a visible space but must never allow a line break around them.
+    // We split the no-break space into its own word token and link the surrounding words
+    // with continuation flags so the layout engine treats them as an indivisible group.
+    //
+    // Example: "200&#xA0;Quadratkilometer" or "200&#x202F;Quadratkilometer"
+    //   Input bytes:  "200\xC2\xA0Quadratkilometer"  (or 0xE2 0x80 0xAF for U+202F)
+    //   Tokens produced:
+    //     [0] "200"               continues=false
+    //     [1] " "                 continues=true   (attaches to "200", no gap)
+    //     [2] "Quadratkilometer"  continues=true   (attaches to " ", no gap)
+    //
+    //   The continuation flags prevent the line-breaker from inserting a line break
+    //   between "200" and "Quadratkilometer". However, "Quadratkilometer" is now a
+    //   standalone word for hyphenation purposes, so Liang patterns can produce
+    //   "200 Quadrat-" / "kilometer" instead of the unusable "200" / "Quadratkilometer".
     if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
-      // Flush any pending text so style is applied correctly.
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
       }
 
-      // Add a standalone space that attaches to the previous word.
       self->partWordBuffer[0] = ' ';
       self->partWordBuffer[1] = '\0';
       self->partWordBufferIndex = 1;
       self->nextWordContinues = true;  // Attach space to previous word (no break).
       self->flushPartWordBuffer();
 
-      // Ensure the next real word attaches to this space (no break).
-      self->nextWordContinues = true;
+      self->nextWordContinues = true;  // Next real word attaches to this space (no break).
 
       i++;  // Skip the second byte (0xA0)
+      continue;
+    }
+
+    // U+202F (narrow no-break space) — identical logic to U+00A0 above.
+    if (static_cast<uint8_t>(s[i]) == 0xE2 && i + 2 < len && static_cast<uint8_t>(s[i + 1]) == 0x80 &&
+        static_cast<uint8_t>(s[i + 2]) == 0xAF) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+
+      self->partWordBuffer[0] = ' ';
+      self->partWordBuffer[1] = '\0';
+      self->partWordBufferIndex = 1;
+      self->nextWordContinues = true;
+      self->flushPartWordBuffer();
+
+      self->nextWordContinues = true;
+
+      i += 2;  // Skip the remaining two bytes (0x80 0xAF)
       continue;
     }
 

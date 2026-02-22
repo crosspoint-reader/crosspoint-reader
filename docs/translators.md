@@ -30,6 +30,13 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 ## Spanish
 - [yeyeto2788](https://github.com/yeyeto2788)
 - [Skrzakk](https://github.com/Skrzakk)
+- [pablohc](https://github.com/pablohc)
 
 ## Swedish
 - [dawiik](https://github.com/dawiik)
+
+## Romanian
+- [ariel-lindemann](https://github.com/ariel-lindemann)
+
+## Catalan
+- [angeldenom](https://github.com/angeldenom)

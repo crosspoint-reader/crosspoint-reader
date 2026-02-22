@@ -13,6 +13,8 @@ extern const char* const STRINGS_CZ[];
 extern const char* const STRINGS_PO[];
 extern const char* const STRINGS_RU[];
 extern const char* const STRINGS_SV[];
+extern const char* const STRINGS_RO[];
+extern const char* const STRINGS_CA[];
 }  // namespace i18n_strings
 
 // Language enum
@@ -25,6 +27,8 @@ enum class Language : uint8_t {
   PORTUGUESE = 5,
   RUSSIAN = 6,
   SWEDISH = 7,
+  ROMANIAN = 8,
+  CATALAN = 9,
   _COUNT
 };
 
@@ -374,6 +378,10 @@ inline const char* const* getStringArray(Language lang) {
       return i18n_strings::STRINGS_RU;
     case Language::SWEDISH:
       return i18n_strings::STRINGS_SV;
+    case Language::ROMANIAN:
+      return i18n_strings::STRINGS_RO;
+    case Language::CATALAN:
+      return i18n_strings::STRINGS_CA;
     default:
       return i18n_strings::STRINGS_EN;
   }
