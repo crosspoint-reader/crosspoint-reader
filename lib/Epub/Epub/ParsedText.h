@@ -30,7 +30,8 @@ class ParsedText {
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks);
   void extractLine(size_t breakIndex, int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<size_t>& lineBreakIndices,
-                   const std::function<void(std::shared_ptr<TextBlock>)>& processLine);
+                   const std::function<void(std::shared_ptr<TextBlock>)>& processLine, const GfxRenderer& renderer,
+                   int fontId);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:

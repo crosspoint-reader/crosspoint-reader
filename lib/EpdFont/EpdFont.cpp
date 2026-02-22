@@ -23,7 +23,10 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   bool hasBaseGlyph = false;
   constexpr int MIN_COMBINING_GAP_PX = 1;
   uint32_t cp;
+  uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
+    cp = applyLigatures(cp, string);
+
     const EpdGlyph* glyph = getGlyph(cp);
 
     if (!glyph) {
@@ -32,6 +35,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
 
     if (!glyph) {
       // TODO: Better handle this?
+      prevCp = 0;
       continue;
     }
 
@@ -42,6 +46,10 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       if (currentGap < MIN_COMBINING_GAP_PX) {
         raiseBy = MIN_COMBINING_GAP_PX - currentGap;
       }
+    }
+
+    if (!isCombining && prevCp != 0) {
+      cursorX += getKerning(prevCp, cp);
     }
 
     const int glyphBaseX = (isCombining && hasBaseGlyph) ? (lastBaseX + lastBaseAdvance / 2) : cursorX;
@@ -58,6 +66,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       lastBaseTop = glyph->top;
       hasBaseGlyph = true;
       cursorX += glyph->advanceX;
+      prevCp = cp;
     }
   }
 }
@@ -69,6 +78,66 @@ void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
 
   *w = maxX - minX;
   *h = maxY - minY;
+}
+
+template <typename T>
+const T* binarySearchPairs(const T* pairs, const uint32_t pairCount, const uint32_t leftCp, const uint32_t rightCp) {
+  if (!pairs || pairCount == 0) {
+    return nullptr;
+  }
+  if (leftCp > 0xFFFF || rightCp > 0xFFFF) {
+    return nullptr;
+  }
+
+  const uint32_t key = (leftCp << 16) | rightCp;
+  int left = 0;
+  int right = static_cast<int>(pairCount) - 1;
+
+  while (left <= right) {
+    const int mid = left + (right - left) / 2;
+    const uint32_t midKey = pairs[mid].pair;
+    if (midKey == key) {
+      return &pairs[mid];
+    }
+    if (midKey < key) {
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+  return nullptr;
+}
+
+int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
+  if (const auto* found = binarySearchPairs(data->kernPairs, data->kernPairCount, leftCp, rightCp)) {
+    return found->adjust;
+  }
+  return 0;
+}
+
+uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) const {
+  if (const auto* found = binarySearchPairs(data->ligaturePairs, data->ligaturePairCount, leftCp, rightCp)) {
+    return found->ligatureCp;
+  }
+  return 0;
+}
+
+uint32_t EpdFont::applyLigatures(uint32_t cp, const char*& text) const {
+  if (!data->ligaturePairs || data->ligaturePairCount == 0) {
+    return cp;
+  }
+  while (true) {
+    const auto saved = reinterpret_cast<const uint8_t*>(text);
+    const uint32_t nextCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text));
+    if (nextCp == 0) break;
+    const uint32_t lig = getLigature(cp, nextCp);
+    if (lig == 0) {
+      text = reinterpret_cast<const char*>(saved);
+      break;
+    }
+    cp = lig;
+  }
+  return cp;
 }
 
 const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {

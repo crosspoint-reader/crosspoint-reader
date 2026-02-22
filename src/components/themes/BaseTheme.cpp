@@ -510,7 +510,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     std::string currentLine;
     // Extra padding inside the card so text doesn't hug the border
     const int maxLineWidth = bookWidth - 40;
-    const int spaceWidth = renderer.getSpaceWidth(UI_12_FONT_ID);
+    const int spaceWidth = renderer.getSpaceWidth(UI_12_FONT_ID, EpdFontFamily::REGULAR);
 
     for (auto& i : words) {
       // If we just hit the line limit (3), stop processing words

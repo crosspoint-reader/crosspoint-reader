@@ -26,4 +26,12 @@ const EpdFontData* EpdFontFamily::getData(const Style style) const { return getF
 
 const EpdGlyph* EpdFontFamily::getGlyph(const uint32_t cp, const Style style) const {
   return getFont(style)->getGlyph(cp);
-};
+}
+
+int8_t EpdFontFamily::getKerning(const uint32_t leftCp, const uint32_t rightCp, const Style style) const {
+  return getFont(style)->getKerning(leftCp, rightCp);
+}
+
+uint32_t EpdFontFamily::applyLigatures(const uint32_t cp, const char*& text, const Style style) const {
+  return getFont(style)->applyLigatures(cp, text);
+}

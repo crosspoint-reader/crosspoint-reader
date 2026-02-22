@@ -31,6 +31,20 @@ typedef struct {
   uint32_t offset;  ///< Index of the first code point into the glyph array
 } EpdUnicodeInterval;
 
+/// Kerning adjustment for a specific glyph pair, sorted by `pair` for binary search.
+/// `pair` encodes (leftCodepoint << 16 | rightCodepoint) for single-key lookup.
+typedef struct {
+  uint32_t pair;  ///< Packed codepoint pair (left << 16 | right)
+  int8_t adjust;  ///< Horizontal adjustment in pixels (typically negative)
+} __attribute__((packed)) EpdKernPair;
+
+/// Ligature substitution for a specific glyph pair, sorted by `pair` for binary search.
+/// `pair` encodes (leftCodepoint << 16 | rightCodepoint) for single-key lookup.
+typedef struct {
+  uint32_t pair;        ///< Packed codepoint pair (left << 16 | right)
+  uint32_t ligatureCp;  ///< Codepoint of the replacement ligature glyph
+} __attribute__((packed)) EpdLigaturePair;
+
 /// Data stored for FONT AS A WHOLE
 typedef struct {
   const uint8_t* bitmap;                ///< Glyph bitmaps, concatenated
@@ -41,6 +55,10 @@ typedef struct {
   int ascender;                         ///< Maximal height of a glyph above the base line
   int descender;                        ///< Maximal height of a glyph below the base line
   bool is2Bit;
-  const EpdFontGroup* groups;  ///< NULL for uncompressed fonts
-  uint16_t groupCount;         ///< 0 for uncompressed fonts
+  const EpdFontGroup* groups;            ///< NULL for uncompressed fonts
+  uint16_t groupCount;                   ///< 0 for uncompressed fonts
+  const EpdKernPair* kernPairs;          ///< Sorted kern pair table (nullptr if none)
+  uint32_t kernPairCount;                ///< Number of entries in kernPairs
+  const EpdLigaturePair* ligaturePairs;  ///< Sorted ligature pair table (nullptr if none)
+  uint32_t ligaturePairCount;            ///< Number of entries in ligaturePairs
 } EpdFontData;
