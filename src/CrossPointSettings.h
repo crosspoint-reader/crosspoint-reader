@@ -199,6 +199,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Invert colors while reading (1 = enabled, 0 = disabled)
+  uint8_t invertReaderScreen = 0;
 
   ~CrossPointSettings() = default;
 
@@ -209,9 +211,6 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
-
-  // If count_only is true, returns the number of settings items that would be written.
-  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
 
   bool saveToFile() const;
   bool loadFromFile();
