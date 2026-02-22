@@ -16,7 +16,7 @@ parser.add_argument("size", type=int, help="font size to use.")
 parser.add_argument("fontstack", action="store", nargs='+', help="list of font files, ordered by descending priority.")
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
-parser.add_argument("--kern-scope", dest="kern_scope", choices=["all", "latin", "western"], default="all", help="Restrict kerning extraction to a character subset. 'western' limits to Basic Latin + Latin-1 Supplement + typographic punctuation. 'latin' extends that with Latin Extended-A/B. Default: all.")
+parser.add_argument("--kern-scope", dest="kern_scope", default="all", help="Restrict kerning extraction to a character subset. Comma-separated list of: 'western' (Basic Latin + Latin-1 Supplement + General Punctuation + Currency Symbols + ligature codepoints), 'latin' (western + Latin Extended-A), 'cyrillic' (Cyrillic block). Use 'all' for no restriction. Example: --kern-scope western,cyrillic. Default: all.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 args = parser.parse_args()
 
@@ -287,25 +287,34 @@ all_codepoints = [g.code_point for g in glyph_props]
 kernable_codepoints = set(cp for cp in all_codepoints
                           if not (COMBINING_MARKS_START <= cp <= COMBINING_MARKS_END))
 
-KERN_WESTERN_CODEPOINTS = (
-    frozenset(range(0x0020, 0x007F)) |  # Basic Latin (ASCII printable)
-    frozenset(range(0x00A0, 0x0100)) |  # Latin-1 Supplement (Western European accented chars)
-    frozenset(range(0x2000, 0x2070)) |  # General Punctuation
-    frozenset(range(0x20A0, 0x20D0)) |  # Currency Symbols
-    frozenset(range(0xFB00, 0xFB07))    # Alphabetic Presentation Forms (ligature codepoints)
-)
+KERN_SCOPE_SETS = {
+    'western': (
+        frozenset(range(0x0020, 0x007F)) |  # Basic Latin (ASCII printable)
+        frozenset(range(0x00A0, 0x0100)) |  # Latin-1 Supplement (Western European accented chars)
+        frozenset(range(0x2000, 0x2070)) |  # General Punctuation
+        frozenset(range(0x20A0, 0x20D0)) |  # Currency Symbols
+        frozenset(range(0xFB00, 0xFB07))    # Alphabetic Presentation Forms (ligature codepoints)
+    ),
+    'latin': (
+        frozenset(range(0x0100, 0x0180))    # Latin Extended-A (Eastern European: Polish, Czech, etc.)
+    ),
+    'cyrillic': (
+        frozenset(range(0x0400, 0x0500))    # Cyrillic (Russian, Ukrainian, Bulgarian, etc.)
+    ),
+}
+# 'latin' is a superset of 'western'
+KERN_SCOPE_SETS['latin'] = KERN_SCOPE_SETS['western'] | KERN_SCOPE_SETS['latin']
 
-KERN_LATIN_CODEPOINTS = (
-    KERN_WESTERN_CODEPOINTS |
-    frozenset(range(0x0100, 0x0180))    # Latin Extended-A (Eastern European: Polish, Czech, etc.)
-)
-
-if args.kern_scope == 'western':
-    kernable_codepoints &= KERN_WESTERN_CODEPOINTS
-    print(f"kerning: scope limited to 'western' ({len(kernable_codepoints)} kernable codepoints)", file=sys.stderr)
-elif args.kern_scope == 'latin':
-    kernable_codepoints &= KERN_LATIN_CODEPOINTS
-    print(f"kerning: scope limited to 'latin' ({len(kernable_codepoints)} kernable codepoints)", file=sys.stderr)
+if args.kern_scope != 'all':
+    scopes = [s.strip() for s in args.kern_scope.split(',')]
+    unknown = [s for s in scopes if s not in KERN_SCOPE_SETS]
+    if unknown:
+        parser.error(f"unknown kern-scope values: {', '.join(unknown)}. Valid: {', '.join(KERN_SCOPE_SETS.keys())}, all")
+    kern_filter = frozenset()
+    for s in scopes:
+        kern_filter = kern_filter | KERN_SCOPE_SETS[s]
+    kernable_codepoints &= kern_filter
+    print(f"kerning: scope limited to '{args.kern_scope}' ({len(kernable_codepoints)} kernable codepoints)", file=sys.stderr)
 
 # Map each kernable codepoint to the font-stack index that serves it
 # (same priority logic as load_glyph).
