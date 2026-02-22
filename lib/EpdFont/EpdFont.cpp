@@ -17,6 +17,11 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
 
   int cursorX = startX;
   const int cursorY = startY;
+  int lastBaseX = startX;
+  int lastBaseAdvance = 0;
+  int lastBaseTop = 0;
+  bool hasBaseGlyph = false;
+  constexpr int MIN_COMBINING_GAP_PX = 1;
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
     const EpdGlyph* glyph = getGlyph(cp);
@@ -30,11 +35,30 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       continue;
     }
 
-    *minX = std::min(*minX, cursorX + glyph->left);
-    *maxX = std::max(*maxX, cursorX + glyph->left + glyph->width);
-    *minY = std::min(*minY, cursorY + glyph->top - glyph->height);
-    *maxY = std::max(*maxY, cursorY + glyph->top);
-    cursorX += glyph->advanceX;
+    const bool isCombining = utf8IsCombiningMark(cp);
+    int raiseBy = 0;
+    if (isCombining && hasBaseGlyph) {
+      const int currentGap = glyph->top - glyph->height - lastBaseTop;
+      if (currentGap < MIN_COMBINING_GAP_PX) {
+        raiseBy = MIN_COMBINING_GAP_PX - currentGap;
+      }
+    }
+
+    const int glyphBaseX = (isCombining && hasBaseGlyph) ? (lastBaseX + lastBaseAdvance / 2) : cursorX;
+    const int glyphBaseY = cursorY - raiseBy;
+
+    *minX = std::min(*minX, glyphBaseX + glyph->left);
+    *maxX = std::max(*maxX, glyphBaseX + glyph->left + glyph->width);
+    *minY = std::min(*minY, glyphBaseY + glyph->top - glyph->height);
+    *maxY = std::max(*maxY, glyphBaseY + glyph->top);
+
+    if (!isCombining) {
+      lastBaseX = cursorX;
+      lastBaseAdvance = glyph->advanceX;
+      lastBaseTop = glyph->top;
+      hasBaseGlyph = true;
+      cursorX += glyph->advanceX;
+    }
   }
 }
 
