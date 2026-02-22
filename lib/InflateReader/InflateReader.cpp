@@ -4,7 +4,7 @@
 #include <type_traits>
 
 namespace {
-size_t INFLATE_DICT_SIZE = 32768;
+constexpr size_t INFLATE_DICT_SIZE = 32768;
 }
 
 // Guarantee the cast pattern in the header comment is valid.
