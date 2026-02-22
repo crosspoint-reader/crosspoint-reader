@@ -182,7 +182,6 @@ void KeyboardEntryActivity::loop() {
   // Cancel
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onCancel();
-    requestUpdate();
   }
 }
 
