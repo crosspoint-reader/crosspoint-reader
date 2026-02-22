@@ -12,7 +12,17 @@
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  public:
   // Menu actions available from the reader menu.
-  enum class MenuAction { SELECT_CHAPTER, GO_TO_PERCENT, ROTATE_SCREEN, GO_HOME, SYNC, DELETE_CACHE };
+  enum class MenuAction {
+    SELECT_CHAPTER,
+    BOOKMARKS,
+    CLIPPINGS,
+    CAPTURE,
+    GO_TO_PERCENT,
+    ROTATE_SCREEN,
+    GO_HOME,
+    SYNC,
+    DELETE_CACHE
+  };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
@@ -39,12 +49,12 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   };
 
   // Fixed menu layout (order matters for up/down navigation).
-  const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
-                                           {MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION},
-                                           {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
-                                           {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},
-                                           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
-                                           {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}};
+  const std::vector<MenuItem> menuItems = {
+      {MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER}, {MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS},
+      {MenuAction::CLIPPINGS, StrId::STR_CLIPPINGS},           {MenuAction::CAPTURE, StrId::STR_CAPTURE},
+      {MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION},     {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
+      {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},        {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
+      {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}};
 
   int selectedIndex = 0;
 
