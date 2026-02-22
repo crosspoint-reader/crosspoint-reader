@@ -177,7 +177,8 @@ void EpubReaderActivity::loop() {
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
         this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-        SETTINGS.orientation, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
+        SETTINGS.orientation, SETTINGS.invertReaderScreen != 0,
+        [this](const uint8_t orientation, const bool invertScreen) { onReaderMenuBack(orientation, invertScreen); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
   }
 
@@ -268,11 +269,11 @@ void EpubReaderActivity::loop() {
   }
 }
 
-void EpubReaderActivity::onReaderMenuBack(const uint8_t orientation) {
+void EpubReaderActivity::onReaderMenuBack(const uint8_t orientation, const bool invertScreen) {
   exitActivity();
   // Apply the user-selected orientation when the menu is dismissed.
   // This ensures the menu can be navigated without immediately rotating the screen.
-  applyOrientation(orientation);
+  applyReaderDisplaySettings(orientation, invertScreen);
   requestUpdate();
 }
 
@@ -403,6 +404,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           }));
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::ROTATE_SCREEN: {
+      // Handled inside menu as a local toggle; applied on BACK.
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       // Defer go home to avoid race condition with display task
       pendingGoHome = true;
@@ -464,12 +469,19 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::INVERT_SCREEN: {
+      // Handled inside menu as a local toggle; applied on BACK.
+      break;
+    }
   }
 }
 
-void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
-  // No-op if the selected orientation matches current settings.
-  if (SETTINGS.orientation == orientation) {
+void EpubReaderActivity::applyReaderDisplaySettings(const uint8_t orientation, const bool invertScreen) {
+  const uint8_t invertValue = invertScreen ? 1 : 0;
+  const uint8_t aaValue = invertScreen ? 0 : SETTINGS.textAntiAliasing;
+  // No-op if the selected display settings match current settings.
+  if (SETTINGS.orientation == orientation && SETTINGS.invertReaderScreen == invertValue &&
+      SETTINGS.textAntiAliasing == aaValue) {
     return;
   }
 
@@ -484,6 +496,11 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 
     // Persist the selection so the reader keeps the new orientation on next launch.
     SETTINGS.orientation = orientation;
+    SETTINGS.invertReaderScreen = invertValue;
+    // Inverted display and text anti-aliasing produce poor visual results together.
+    if (invertScreen) {
+      SETTINGS.textAntiAliasing = 0;
+    }
     SETTINGS.saveToFile();
 
     // Update renderer orientation to match the new logical coordinate system.
@@ -513,6 +530,9 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
@@ -598,6 +618,9 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
     LOG_DBG("ERS", "No pages to render");
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
@@ -606,6 +629,9 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
     renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
@@ -667,20 +693,35 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     int16_t imgX, imgY, imgW, imgH;
     if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
       renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
+      if (SETTINGS.invertReaderScreen) {
+        renderer.invertScreen();
+      }
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
       page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
       renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+      if (SETTINGS.invertReaderScreen) {
+        renderer.invertScreen();
+      }
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
+      if (SETTINGS.invertReaderScreen) {
+        renderer.invertScreen();
+      }
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
     // Double FAST_REFRESH handles ghosting for image pages; don't count toward full refresh cadence
   } else if (pagesUntilFullRefresh <= 1) {
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     pagesUntilFullRefresh--;
   }
@@ -694,12 +735,18 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.copyGrayscaleLsbBuffers();
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.copyGrayscaleMsbBuffers();
 
     // display grayscale part

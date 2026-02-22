@@ -211,6 +211,9 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, embeddedStyle);
     if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, invertReaderScreen);
+    if (++settingsRead >= fileSettingsCount) break;
+    // New fields added at end for backward compatibility
   } while (false);
 
   if (frontButtonMappingRead) {

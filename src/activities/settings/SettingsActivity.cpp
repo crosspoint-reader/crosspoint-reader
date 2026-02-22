@@ -207,6 +207,11 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
+  // Enforce compatibility: inverted reader mode disables text anti-aliasing.
+  if (SETTINGS.invertReaderScreen && SETTINGS.textAntiAliasing) {
+    SETTINGS.textAntiAliasing = 0;
+  }
+
   SETTINGS.saveToFile();
 }
 
