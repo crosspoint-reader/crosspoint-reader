@@ -28,6 +28,7 @@ void CalibreConnectActivity::onEnter() {
   currentUploadName.clear();
   lastCompleteName.clear();
   lastCompleteAt = 0;
+  lastProcessedCompleteAt = 0;
   exitRequested = false;
 
   if (WiFi.status() != WL_CONNECTED) {
@@ -147,14 +148,18 @@ void CalibreConnectActivity::loop() {
       currentUploadName.clear();
       changed = true;
     }
-    if (status.lastCompleteAt != 0 && status.lastCompleteAt != lastCompleteAt) {
+    // Only update lastCompleteAt if the server has a NEW value (not one we already processed)
+    // This prevents restoring an old value after the 6s timeout clears it
+    if (status.lastCompleteAt != 0 && status.lastCompleteAt != lastProcessedCompleteAt) {
       lastCompleteAt = status.lastCompleteAt;
       lastCompleteName = status.lastCompleteName;
+      lastProcessedCompleteAt = status.lastCompleteAt;  // Mark this value as processed
       changed = true;
     }
     if (lastCompleteAt > 0 && (millis() - lastCompleteAt) >= 6000) {
       lastCompleteAt = 0;
       lastCompleteName.clear();
+      // Note: we DON'T reset lastProcessedCompleteAt here, so we won't re-process the old server value
       changed = true;
     }
     if (changed) {
