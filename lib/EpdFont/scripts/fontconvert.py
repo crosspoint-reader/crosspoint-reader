@@ -17,7 +17,6 @@ parser.add_argument("fontstack", action="store", nargs='+', help="list of font f
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--kern-scope", dest="kern_scope", choices=["all", "latin", "western"], default="all", help="Restrict kerning extraction to a character subset. 'western' limits to Basic Latin + Latin-1 Supplement + typographic punctuation. 'latin' extends that with Latin Extended-A/B. Default: all.")
-parser.add_argument("--ligature-scope", dest="ligature_scope", choices=["all", "latin", "western"], default="all", help="Restrict ligature extraction to a character subset. 'western' limits to Basic Latin + Latin-1 Supplement + typographic punctuation. 'latin' extends that with Latin Extended-A/B. Default: all.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 args = parser.parse_args()
 
@@ -445,23 +444,6 @@ print(f"kerning: {len(kern_pairs)} pairs extracted", file=sys.stderr)
 
 all_codepoints_set = set(all_codepoints)
 
-LIGATURE_WESTERN_CODEPOINTS = (
-    frozenset(range(0x0020, 0x007F)) |  # Basic Latin (ASCII printable)
-    frozenset(range(0x00A0, 0x0100)) |  # Latin-1 Supplement (Western European accented chars)
-    frozenset(range(0xFB00, 0xFB07)) |  # Alphabetic Presentation Forms (ligature codepoints)
-    frozenset({0x2013, 0x2014,          # en dash, em dash
-               0x2018, 0x2019,          # left/right single quote
-               0x201A,                  # single low-9 quotation mark
-               0x201C, 0x201D,          # left/right double quote
-               0x201E,                  # double low-9 quotation mark
-               0x2026})                 # horizontal ellipsis
-)
-
-LIGATURE_LATIN_CODEPOINTS = (
-    LIGATURE_WESTERN_CODEPOINTS |
-    frozenset(range(0x0100, 0x0180))    # Latin Extended-A (Eastern European: Polish, Czech, etc.)
-)
-
 # Standard Unicode ligature codepoints for known input sequences.
 # Used as a fallback when the GSUB substitute glyph has no cmap entry.
 STANDARD_LIGATURE_MAP = {
@@ -591,18 +573,8 @@ def extract_ligatures_fonttools(font_path, codepoints):
 
     return pairs
 
-# Build ligature codepoint set independently from kerning scope.
-# We need all codepoints in the glyph set (minus combining marks),
-# including ligature output codepoints (U+FB00-FB06).
 ligature_codepoints = set(cp for cp in all_codepoints
                           if not (COMBINING_MARKS_START <= cp <= COMBINING_MARKS_END))
-
-if args.ligature_scope == 'western':
-    ligature_codepoints &= LIGATURE_WESTERN_CODEPOINTS
-    print(f"ligatures: scope limited to 'western' ({len(ligature_codepoints)} codepoints)", file=sys.stderr)
-elif args.ligature_scope == 'latin':
-    ligature_codepoints &= LIGATURE_LATIN_CODEPOINTS
-    print(f"ligatures: scope limited to 'latin' ({len(ligature_codepoints)} codepoints)", file=sys.stderr)
 
 # Map ligature codepoints to the font-stack index that serves them
 lig_cp_to_face_idx = {}
