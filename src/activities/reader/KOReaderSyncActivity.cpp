@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <InflateReader.h>
 #include <Logging.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
@@ -238,6 +239,9 @@ void KOReaderSyncActivity::onExit() {
   delay(100);
   WiFi.mode(WIFI_OFF);
   delay(100);
+
+  // Reclaim inflate ring buffer immediately while heap is freshly defragmented
+  InflateReader::claimSharedBuffer();
 }
 
 void KOReaderSyncActivity::render(Activity::RenderLock&&) {
