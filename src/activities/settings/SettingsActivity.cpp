@@ -13,6 +13,7 @@
 #include "OtaUpdateActivity.h"
 #include "SettingsList.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include <esp_ota_ops.h>
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -50,6 +51,7 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_SWITCH_FIRMWARE, SettingAction::SwitchFirmware));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
 
   // Reset selection to first category
@@ -199,6 +201,27 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::Language:
         enterSubActivity(new LanguageSelectActivity(renderer, mappedInput, onComplete));
         break;
+      case SettingAction::SwitchFirmware: {
+        const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
+        if (next != nullptr) {
+          esp_app_desc_t desc;
+          const esp_err_t descErr = esp_ota_get_partition_description(next, &desc);
+          if (descErr != ESP_OK) {
+            LOG_ERR("Settings", "No valid app on partition %s: %s (0x%x)", next->label,
+                    esp_err_to_name(descErr), descErr);
+            break;
+          }
+          LOG_INF("Settings", "Switching to %s v%s on partition %s", desc.project_name, desc.version,
+                  next->label);
+          const esp_err_t err = esp_ota_set_boot_partition(next);
+          if (err == ESP_OK) {
+            esp_restart();
+          } else {
+            LOG_ERR("Settings", "esp_ota_set_boot_partition failed: %s (0x%x)", esp_err_to_name(err), err);
+          }
+        }
+        break;
+      }
       case SettingAction::None:
         // Do nothing
         break;
