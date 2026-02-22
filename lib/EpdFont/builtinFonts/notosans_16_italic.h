@@ -3,7 +3,7 @@
  * name: notosans_16_italic
  * size: 16
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py notosans_16_italic 16 ../builtinFonts/source/NotoSans/NotoSans-Italic.ttf --2bit --compress --kern-scope all
+ * Command used: fontconvert.py notosans_16_italic 16 ../builtinFonts/source/NotoSans/NotoSans-Italic.ttf --2bit --compress
  */
 #pragma once
 #include "EpdFontData.h"

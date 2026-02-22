@@ -3,7 +3,7 @@
  * name: opendyslexic_12_regular
  * size: 12
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py opendyslexic_12_regular 12 ../builtinFonts/source/OpenDyslexic/OpenDyslexic-Regular.otf --2bit --compress --kern-scope all
+ * Command used: fontconvert.py opendyslexic_12_regular 12 ../builtinFonts/source/OpenDyslexic/OpenDyslexic-Regular.otf --2bit --compress
  */
 #pragma once
 #include "EpdFontData.h"

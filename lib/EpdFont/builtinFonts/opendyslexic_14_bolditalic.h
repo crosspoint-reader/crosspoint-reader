@@ -3,7 +3,7 @@
  * name: opendyslexic_14_bolditalic
  * size: 14
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py opendyslexic_14_bolditalic 14 ../builtinFonts/source/OpenDyslexic/OpenDyslexic-BoldItalic.otf --2bit --compress --kern-scope all
+ * Command used: fontconvert.py opendyslexic_14_bolditalic 14 ../builtinFonts/source/OpenDyslexic/OpenDyslexic-BoldItalic.otf --2bit --compress
  */
 #pragma once
 #include "EpdFontData.h"

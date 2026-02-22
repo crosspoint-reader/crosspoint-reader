@@ -3,7 +3,7 @@
  * name: bookerly_18_regular
  * size: 18
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py bookerly_18_regular 18 ../builtinFonts/source/Bookerly/Bookerly-Regular.ttf --2bit --compress --kern-scope all
+ * Command used: fontconvert.py bookerly_18_regular 18 ../builtinFonts/source/Bookerly/Bookerly-Regular.ttf --2bit --compress
  */
 #pragma once
 #include "EpdFontData.h"

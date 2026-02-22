@@ -3,7 +3,7 @@
  * name: notosans_16_regular
  * size: 16
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py notosans_16_regular 16 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf --2bit --compress --kern-scope all
+ * Command used: fontconvert.py notosans_16_regular 16 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf --2bit --compress
  */
 #pragma once
 #include "EpdFontData.h"

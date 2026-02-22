@@ -3,7 +3,7 @@
  * name: bookerly_16_bold
  * size: 16
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py bookerly_16_bold 16 ../builtinFonts/source/Bookerly/Bookerly-Bold.ttf --2bit --compress --kern-scope all
+ * Command used: fontconvert.py bookerly_16_bold 16 ../builtinFonts/source/Bookerly/Bookerly-Bold.ttf --2bit --compress
  */
 #pragma once
 #include "EpdFontData.h"

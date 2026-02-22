@@ -3,7 +3,7 @@
  * name: notosans_18_bolditalic
  * size: 18
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py notosans_18_bolditalic 18 ../builtinFonts/source/NotoSans/NotoSans-BoldItalic.ttf --2bit --compress --kern-scope all
+ * Command used: fontconvert.py notosans_18_bolditalic 18 ../builtinFonts/source/NotoSans/NotoSans-BoldItalic.ttf --2bit --compress
  */
 #pragma once
 #include "EpdFontData.h"

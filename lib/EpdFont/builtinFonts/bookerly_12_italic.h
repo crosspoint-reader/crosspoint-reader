@@ -3,7 +3,7 @@
  * name: bookerly_12_italic
  * size: 12
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py bookerly_12_italic 12 ../builtinFonts/source/Bookerly/Bookerly-Italic.ttf --2bit --compress --kern-scope all
+ * Command used: fontconvert.py bookerly_12_italic 12 ../builtinFonts/source/Bookerly/Bookerly-Italic.ttf --2bit --compress
  */
 #pragma once
 #include "EpdFontData.h"
