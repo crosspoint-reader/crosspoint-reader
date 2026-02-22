@@ -74,6 +74,20 @@ Ligature sequences in Latin Extended-A context:
   œ (U+0153): cœur, sœur, œuvre, bœuf, manœuvre
   ĳ (U+0133): ĳzer, vrĳ, bĳzonder, ĳverig
 
+Kerning pairs targeted (Cyrillic — U+0400–04FF):
+  Ге, Го, Гу, Га, Гр (Г has overhanging crossbar like T/F)
+  Та, Те, То, Ту, Тр, Ті, Тя (Т = Latin T shape)
+  Ра, Ре, Ро, Ру (Р = Latin P shape)
+  Ау, Ав, Ат, Ад (А = Latin A shape)
+  Ув, Уд, Ук, Ум (У = Latin Y shape — diagonal)
+  Фа, Фо, Фу (Ф = wide circular letter)
+  Да, Де, До, Ду (Д has descending serifs)
+  Ла, Ле, Ло, Лу (Л = inverted V shape)
+  Ча, Чо, Чу (Ч has overhanging stroke)
+  «Г, «Т, «В, р», е» (guillemets in Cyrillic context)
+  Ukrainian: Її, Єв, Ґа
+  Bulgarian: Щу, Жа, Юл
+
 Also includes:
   Quotes around kerning-sensitive letters (e.g. "AWAY", "Typography")
   Numerals with kerning (10, 17, 74, 47)
@@ -693,6 +707,190 @@ This is going to be a long night.&#x201D;</p>
 </html>
 """
 
+CHAPTER_8 = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head><title>Chapter 8 &#x2013; The Cyrillic Challenge</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+<h1>Chapter 8<br/>The Cyrillic Challenge</h1>
+
+<p>The companion volume was barely off the press when Mrs. Thornton-Foxwell
+telephoned again. &#x201C;Avery, darling, I&#x2019;ve been in contact with
+a collector in Saint Petersburg. He wants the calligraphy survey
+extended to cover Cyrillic traditions &#x2014; Russian, Ukrainian, Bulgarian.
+The same standard.&#x201D;</p>
+
+<p>Avery set down his coffee. Cyrillic was an entirely new script, with its
+own letterforms and its own kerning nightmares. Several Cyrillic letters
+shared shapes with their Latin counterparts &#x2014; &#x410; resembled A,
+&#x420; resembled P, &#x422; resembled T &#x2014; but many others were
+unique. He would need to kern every pair from scratch.</p>
+
+<h2>The Overhanging Letters</h2>
+
+<p>The most troublesome Cyrillic letter was &#x413; (Ge). Its shape &#x2014;
+a horizontal crossbar extending rightward from a vertical stem, like a
+reversed L &#x2014; created an overhang that demanded tight kerning against
+every following letter. Avery set his first test: <i>&#x413;&#x435;&#x43D;&#x435;&#x440;&#x430;&#x43B;
+&#x413;&#x43E;&#x433;&#x43E;&#x43B;&#x44C; &#x433;&#x43E;&#x432;&#x43E;&#x440;&#x438;&#x43B; &#x43E; &#x413;&#x443;&#x441;&#x430;&#x440;&#x430;&#x445;.
+&#x413;&#x440;&#x430;&#x43C;&#x43E;&#x442;&#x430; &#x413;&#x430;&#x43B;&#x438;&#x43B;&#x435;&#x44F;
+&#x43F;&#x43E;&#x440;&#x430;&#x437;&#x438;&#x43B;&#x430; &#x413;&#x435;&#x440;&#x43C;&#x430;&#x43D;&#x438;&#x44E;.</i></p>
+
+<p>The &#x413;&#x435; in &#x201C;&#x413;&#x435;&#x43D;&#x435;&#x440;&#x430;&#x43B;&#x201D; was
+critical &#x2014; the crossbar of &#x413; needed to tuck over the
+lowercase &#x435; without crushing it. &#x413;&#x43E; in
+&#x201C;&#x413;&#x43E;&#x433;&#x43E;&#x43B;&#x44C;&#x201D; demanded similar attention, as did
+&#x413;&#x443; in &#x201C;&#x413;&#x443;&#x441;&#x430;&#x440;&#x430;&#x445;&#x201D; and &#x413;&#x440; in
+&#x201C;&#x413;&#x440;&#x430;&#x43C;&#x43E;&#x442;&#x430;.&#x201D; &#x413;&#x430; in
+&#x201C;&#x413;&#x430;&#x43B;&#x438;&#x43B;&#x435;&#x44F;&#x201D; rounded out the set.</p>
+
+<p>&#x422; (Te) presented the same challenge as its Latin twin T. <i>&#x422;&#x430;&#x43C;
+&#x422;&#x430;&#x442;&#x44C;&#x44F;&#x43D;&#x430; &#x442;&#x438;&#x445;&#x43E; &#x442;&#x43A;&#x430;&#x43B;&#x430;
+&#x442;&#x43A;&#x430;&#x43D;&#x44C;. &#x422;&#x435;&#x43F;&#x43B;&#x43E; &#x442;&#x435;&#x43A;&#x43B;&#x43E; &#x438;&#x437;
+&#x422;&#x443;&#x43B;&#x44C;&#x441;&#x43A;&#x43E;&#x433;&#x43E; &#x43A;&#x430;&#x43C;&#x438;&#x43D;&#x430;.
+&#x422;&#x440;&#x438; &#x442;&#x44B;&#x441;&#x44F;&#x447;&#x438; &#x442;&#x440;&#x443;&#x431;
+&#x43F;&#x435;&#x43B;&#x438; &#x432; &#x422;&#x44F;&#x43D;&#x44C;&#x446;&#x437;&#x438;&#x43D;&#x44C;.</i>
+Every pair &#x2014; &#x422;&#x430;, &#x422;&#x435;, &#x422;&#x443;, &#x422;&#x440;,
+&#x422;&#x438;, &#x422;&#x44F; &#x2014; required the T-crossbar to reach over the
+following lowercase letter.</p>
+
+<p>&#x427; (Che) had a subtler overhang. <i>&#x427;&#x430;&#x441;&#x44B;
+&#x43F;&#x440;&#x43E;&#x431;&#x438;&#x43B;&#x438; &#x447;&#x435;&#x442;&#x432;&#x435;&#x440;&#x442;&#x44C;
+&#x447;&#x435;&#x442;&#x432;&#x435;&#x440;&#x433;&#x430;. &#x427;&#x443;&#x434;&#x43E;!
+&#x427;&#x43E;&#x440;&#x43D;&#x43E;&#x435; &#x43C;&#x43E;&#x440;&#x435;.</i> The
+&#x427;&#x430;, &#x427;&#x443;, &#x427;&#x43E; pairs each had different spacing needs
+depending on the round or straight shape of the following vowel.</p>
+
+<h2>The Diagonal Letters</h2>
+
+<p>&#x423; (U) was the Cyrillic counterpart of the Latin Y &#x2014; a letter whose
+diagonals created open space against adjacent characters. <i>&#x423;&#x432;&#x435;&#x440;&#x435;&#x43D;&#x43D;&#x43E;&#x441;&#x442;&#x44C;
+&#x423;&#x434;&#x430;&#x43B;&#x43E;&#x441;&#x44C; &#x443;&#x43A;&#x440;&#x435;&#x43F;&#x438;&#x442;&#x44C;.
+&#x423;&#x43C; &#x443;&#x441;&#x442;&#x440;&#x435;&#x43C;&#x438;&#x43B;&#x441;&#x44F; &#x432;&#x43F;&#x435;&#x440;&#x451;&#x434;.</i>
+The &#x423;&#x432;, &#x423;&#x434;, &#x423;&#x43A;, &#x423;&#x43C; pairs all
+needed tighter kerning than the default sidebearings provided.</p>
+
+<p>&#x410; (A) and &#x41B; (El) were equally demanding. <i>&#x410;&#x443;&#x434;&#x438;&#x442;&#x43E;&#x440;&#x438;&#x44F;
+&#x410;&#x432;&#x438;&#x430;&#x442;&#x43E;&#x440; &#x410;&#x442;&#x43B;&#x430;&#x441;
+&#x410;&#x434;&#x440;&#x435;&#x441;&#x430;&#x442;. &#x41B;&#x430;&#x43C;&#x43F;&#x430;
+&#x41B;&#x435;&#x43D;&#x438;&#x43D;&#x433;&#x440;&#x430;&#x434; &#x41B;&#x43E;&#x43D;&#x434;&#x43E;&#x43D;
+&#x41B;&#x443;&#x43D;&#x430;.</i> The &#x410;&#x443;, &#x410;&#x432;, &#x410;&#x442;,
+&#x410;&#x434; pairs mirrored the Latin AV/AW/AT family. The &#x41B; (El),
+with its inverted-V left stroke, created unique spacing against
+&#x430;, &#x435;, &#x43E;, &#x443;.</p>
+
+<h2>Round and Complex Letters</h2>
+
+<p>&#x420; (Er) was the Cyrillic P &#x2014; a letter with a bowl that overhung
+the following character. <i>&#x420;&#x430;&#x431;&#x43E;&#x442;&#x430;
+&#x420;&#x435;&#x447;&#x438; &#x420;&#x43E;&#x441;&#x441;&#x438;&#x438;
+&#x420;&#x443;&#x441;&#x441;&#x43A;&#x438;&#x439;.</i> The &#x420;&#x430;,
+&#x420;&#x435;, &#x420;&#x43E;, &#x420;&#x443; pairs echoed the Latin Pa, Pe, Po
+challenge.</p>
+
+<p>&#x424; (Ef) was the widest Cyrillic letter &#x2014; a circle bisected by a
+vertical stem. <i>&#x424;&#x430;&#x43A;&#x443;&#x43B;&#x44C;&#x442;&#x435;&#x442;
+&#x424;&#x43E;&#x43D;&#x442;&#x430;&#x43D;&#x43A;&#x430; &#x424;&#x443;&#x440;&#x430;.</i>
+The &#x424;&#x430;, &#x424;&#x43E;, &#x424;&#x443; pairs needed generous clearance
+on both sides of the circle.</p>
+
+<p>&#x414; (De) had descending serifs that complicated baseline kerning.
+<i>&#x414;&#x430;&#x43B;&#x44C;&#x43D;&#x438;&#x439; &#x414;&#x435;&#x43D;&#x44C;
+&#x414;&#x43E;&#x43C;&#x430; &#x414;&#x443;&#x43C;&#x430;&#x442;&#x44C;.</i> The
+&#x414;&#x430;, &#x414;&#x435;, &#x414;&#x43E;, &#x414;&#x443; pairs were unique to
+Cyrillic &#x2014; no Latin letter had quite the same descending structure.</p>
+
+<h2>Ukrainian and Bulgarian</h2>
+
+<p>Ukrainian added its own characters. <i>&#x407;&#x457; &#x43C;&#x430;&#x442;&#x438;
+&#x43D;&#x435;&#x43C;&#x430;&#x454; &#x440;&#x456;&#x432;&#x43D;&#x438;&#x445;.
+&#x404;&#x432;&#x440;&#x43E;&#x43F;&#x430; &#x447;&#x435;&#x43A;&#x430;&#x454;.
+&#x490;&#x430;&#x43D;&#x43E;&#x43A; &#x432;&#x438;&#x440;&#x456;&#x441;
+&#x43D;&#x430; &#x490;&#x440;&#x443;&#x43D;&#x442;&#x456;.</i>
+The &#x407;&#x457; pair (Yi + yi) tested the double-dotted characters
+unique to Ukrainian. &#x404;&#x432; in &#x201C;&#x404;&#x432;&#x440;&#x43E;&#x43F;&#x430;&#x201D;
+tested the Ukrainian Ye against a following consonant. &#x490;&#x430; and
+&#x490;&#x440; in &#x201C;&#x490;&#x430;&#x43D;&#x43E;&#x43A;&#x201D; and
+&#x201C;&#x490;&#x440;&#x443;&#x43D;&#x442;&#x456;&#x201D; tested the upturn-Ge
+(&#x490;), a letter unique to Ukrainian.</p>
+
+<p>Bulgarian Cyrillic had its own typographic traditions. <i>&#x429;&#x443;&#x43A;&#x430;
+&#x449;&#x430;&#x441;&#x442;&#x43B;&#x438;&#x432;&#x430; &#x436;&#x435;&#x43D;&#x430;
+&#x436;&#x438;&#x432;&#x435;&#x435;&#x448;&#x435; &#x432; &#x416;&#x435;&#x43B;&#x435;&#x437;&#x43D;&#x438;&#x43A;.
+&#x42E;&#x43B;&#x438;&#x44F; &#x44E;&#x442;&#x438;&#x43B;&#x430;&#x441;&#x44C;.</i>
+The &#x429;&#x443; pair tested the complex Shcha with its descender
+against a round vowel. &#x416;&#x430; and &#x416;&#x435; tested the wide Zhe.
+&#x42E;&#x43B; in &#x201C;&#x42E;&#x43B;&#x438;&#x44F;&#x201D; placed the round Yu
+against the narrow El.</p>
+
+<h2>Cyrillic with Guillemets</h2>
+
+<p>Russian typography uses guillemets as quotation marks, just like French.
+&#xAB;&#x413;&#x43E;&#x432;&#x43E;&#x440;&#x438;&#x442;&#x435; &#x442;&#x438;&#x448;&#x435;,&#xBB;
+&#x2014; &#x441;&#x43A;&#x430;&#x437;&#x430;&#x43B;&#x430; &#x43E;&#x43D;&#x430;.
+&#xAB;&#x422;&#x438;&#x445;&#x43E;!&#xBB;
+&#xAB;&#x412;&#x441;&#x451; &#x431;&#x443;&#x434;&#x435;&#x442;
+&#x445;&#x43E;&#x440;&#x43E;&#x448;&#x43E;,&#xBB; &#x2014;
+&#x43E;&#x442;&#x432;&#x435;&#x442;&#x438;&#x43B; &#x43E;&#x43D;.
+The &#xAB;&#x413;, &#xAB;&#x422;, &#xAB;&#x412; pairs &#x2014; guillemet
+against the overhanging Ge, the crossbarred Te, and the round Ve &#x2014;
+each needed individual spacing. On the closing side, &#x440;&#xBB; and
+&#x435;&#xBB; presented the same challenges as their Latin counterparts.</p>
+
+<h2>Cyrillic Kerning Glossary</h2>
+
+<p>Avery appended the Cyrillic pairs to his growing catalogue:</p>
+
+<p><b>&#x413;&#x430;</b> &#x2014; &#x413;&#x430;&#x43B;&#x438;&#x43B;&#x435;&#x44F;, &#x433;&#x430;&#x437;&#x435;&#x442;&#x430;.<br/>
+<b>&#x413;&#x435;</b> &#x2014; &#x413;&#x435;&#x43D;&#x435;&#x440;&#x430;&#x43B;, &#x433;&#x435;&#x440;&#x43E;&#x439;.<br/>
+<b>&#x413;&#x43E;</b> &#x2014; &#x413;&#x43E;&#x433;&#x43E;&#x43B;&#x44C;, &#x433;&#x43E;&#x440;&#x43E;&#x434;.<br/>
+<b>&#x413;&#x443;</b> &#x2014; &#x413;&#x443;&#x441;&#x430;&#x440;&#x44B;, &#x433;&#x443;&#x431;&#x435;&#x440;&#x43D;&#x438;&#x44F;.<br/>
+<b>&#x413;&#x440;</b> &#x2014; &#x413;&#x440;&#x430;&#x43C;&#x43E;&#x442;&#x430;, &#x433;&#x440;&#x430;&#x43D;&#x438;&#x446;&#x430;.<br/>
+<b>&#x422;&#x430;</b> &#x2014; &#x422;&#x430;&#x43C;, &#x442;&#x430;&#x43A;&#x436;&#x435;, &#x442;&#x430;&#x43D;&#x435;&#x446;.<br/>
+<b>&#x422;&#x435;</b> &#x2014; &#x422;&#x435;&#x43F;&#x43B;&#x43E;, &#x442;&#x435;&#x43A;&#x441;&#x442;, &#x442;&#x435;&#x43B;&#x43E;.<br/>
+<b>&#x422;&#x43E;</b> &#x2014; &#x422;&#x43E;&#x43B;&#x44C;&#x43A;&#x43E;, &#x442;&#x43E;&#x432;&#x430;&#x440;.<br/>
+<b>&#x422;&#x443;</b> &#x2014; &#x422;&#x443;&#x43B;&#x44C;&#x441;&#x43A;&#x438;&#x439;, &#x442;&#x443;&#x447;&#x430;.<br/>
+<b>&#x422;&#x440;</b> &#x2014; &#x422;&#x440;&#x438;, &#x442;&#x440;&#x443;&#x431;&#x430;.<br/>
+<b>&#x422;&#x44F;</b> &#x2014; &#x422;&#x44F;&#x43D;&#x44C;&#x446;&#x437;&#x438;&#x43D;&#x44C;.<br/>
+<b>&#x420;&#x430;</b> &#x2014; &#x420;&#x430;&#x431;&#x43E;&#x442;&#x430;, &#x440;&#x430;&#x437;&#x443;&#x43C;.<br/>
+<b>&#x420;&#x435;</b> &#x2014; &#x420;&#x435;&#x447;&#x438;, &#x440;&#x435;&#x43A;&#x430;.<br/>
+<b>&#x420;&#x43E;</b> &#x2014; &#x420;&#x43E;&#x441;&#x441;&#x438;&#x44F;, &#x440;&#x43E;&#x434;.<br/>
+<b>&#x420;&#x443;</b> &#x2014; &#x420;&#x443;&#x441;&#x441;&#x43A;&#x438;&#x439;, &#x440;&#x443;&#x43A;&#x430;.<br/>
+<b>&#x410;&#x443;</b> &#x2014; &#x410;&#x443;&#x434;&#x438;&#x442;&#x43E;&#x440;&#x438;&#x44F;.<br/>
+<b>&#x410;&#x432;</b> &#x2014; &#x410;&#x432;&#x438;&#x430;&#x442;&#x43E;&#x440;.<br/>
+<b>&#x410;&#x442;</b> &#x2014; &#x410;&#x442;&#x43B;&#x430;&#x441;, &#x430;&#x442;&#x43E;&#x43C;.<br/>
+<b>&#x410;&#x434;</b> &#x2014; &#x410;&#x434;&#x440;&#x435;&#x441;&#x430;&#x442;.<br/>
+<b>&#x423;&#x432;</b> &#x2014; &#x423;&#x432;&#x435;&#x440;&#x435;&#x43D;&#x43D;&#x43E;&#x441;&#x442;&#x44C;.<br/>
+<b>&#x423;&#x434;</b> &#x2014; &#x423;&#x434;&#x430;&#x43B;&#x43E;&#x441;&#x44C;.<br/>
+<b>&#x423;&#x43A;</b> &#x2014; &#x423;&#x43A;&#x440;&#x435;&#x43F;&#x438;&#x442;&#x44C;.<br/>
+<b>&#x423;&#x43C;</b> &#x2014; &#x423;&#x43C;, &#x443;&#x43C;&#x43D;&#x438;&#x43A;.<br/>
+<b>&#x414;&#x430;</b> &#x2014; &#x414;&#x430;&#x43B;&#x44C;&#x43D;&#x438;&#x439;, &#x434;&#x430;&#x442;&#x430;.<br/>
+<b>&#x414;&#x435;</b> &#x2014; &#x414;&#x435;&#x43D;&#x44C;, &#x434;&#x435;&#x43B;&#x43E;.<br/>
+<b>&#x414;&#x43E;</b> &#x2014; &#x414;&#x43E;&#x43C;&#x430;, &#x434;&#x43E;&#x440;&#x43E;&#x433;&#x430;.<br/>
+<b>&#x41B;&#x430;</b> &#x2014; &#x41B;&#x430;&#x43C;&#x43F;&#x430;, &#x43B;&#x430;&#x432;&#x43A;&#x430;.<br/>
+<b>&#x41B;&#x435;</b> &#x2014; &#x41B;&#x435;&#x43D;&#x438;&#x43D;&#x433;&#x440;&#x430;&#x434;, &#x43B;&#x435;&#x441;.<br/>
+<b>&#x41B;&#x43E;</b> &#x2014; &#x41B;&#x43E;&#x43D;&#x434;&#x43E;&#x43D;, &#x43B;&#x43E;&#x434;&#x43A;&#x430;.<br/>
+<b>&#x427;&#x430;</b> &#x2014; &#x427;&#x430;&#x441;&#x44B;, &#x447;&#x430;&#x439;.<br/>
+<b>&#x427;&#x43E;</b> &#x2014; &#x427;&#x43E;&#x440;&#x43D;&#x43E;&#x435;, &#x447;&#x43E;&#x440;&#x442;.<br/>
+<b>&#x427;&#x443;</b> &#x2014; &#x427;&#x443;&#x434;&#x43E;, &#x447;&#x443;&#x432;&#x441;&#x442;&#x432;&#x43E;.<br/>
+<b>&#x424;&#x430;</b> &#x2014; &#x424;&#x430;&#x43A;&#x443;&#x43B;&#x44C;&#x442;&#x435;&#x442;.<br/>
+<b>&#x424;&#x43E;</b> &#x2014; &#x424;&#x43E;&#x43D;&#x442;&#x430;&#x43D;&#x43A;&#x430;.</p>
+
+<p>&#x201C;Cyrillic has fewer kerning traps than Latin,&#x201D; Avery reflected,
+&#x201C;but the ones it has are severe. &#x413; and &#x422; dominate every
+page of Russian text, and if they&#x2019;re not kerned properly, the whole
+paragraph looks like it&#x2019;s falling apart.&#x201D;</p>
+
+<p>Vera glanced at the stack of proofs &#x2014; now three volumes deep &#x2014;
+and smiled wearily. &#x201C;At least there are no Cyrillic ligatures.&#x201D;</p>
+
+<p>&#x201C;Yet,&#x201D; said Avery.</p>
+</body>
+</html>
+"""
+
 COVER_XHTML = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
@@ -770,6 +968,7 @@ CONTENT_OPF = f"""\
     <item id="ch5" href="chapter5.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch6" href="chapter6.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch7" href="chapter7.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch8" href="chapter8.xhtml" media-type="application/xhtml+xml"/>
     <item id="toc" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>
   </manifest>
   <spine>
@@ -782,6 +981,7 @@ CONTENT_OPF = f"""\
     <itemref idref="ch5"/>
     <itemref idref="ch6"/>
     <itemref idref="ch7"/>
+    <itemref idref="ch8"/>
   </spine>
 </package>
 """
@@ -804,6 +1004,7 @@ TOC_XHTML = """\
     <li><a href="chapter5.xhtml">Chapter 5 &#x2013; A Glossary of Troublesome Pairs</a></li>
     <li><a href="chapter6.xhtml">Chapter 6 &#x2013; Western European Accents</a></li>
     <li><a href="chapter7.xhtml">Chapter 7 &#x2013; Beyond the Western Alphabet</a></li>
+    <li><a href="chapter8.xhtml">Chapter 8 &#x2013; The Cyrillic Challenge</a></li>
   </ol>
 </nav>
 </body>
@@ -831,6 +1032,7 @@ def build_epub(output_path: str):
         zf.writestr("OEBPS/chapter5.xhtml", CHAPTER_5)
         zf.writestr("OEBPS/chapter6.xhtml", CHAPTER_6)
         zf.writestr("OEBPS/chapter7.xhtml", CHAPTER_7)
+        zf.writestr("OEBPS/chapter8.xhtml", CHAPTER_8)
     print(f"EPUB written to {output_path}")
 
 
