@@ -2,6 +2,9 @@
 #include <Epub.h>
 #include <Epub/Section.h>
 
+#include <string>
+
+#include "BookmarkStore.h"
 #include "EpubReaderMenuActivity.h"
 #include "activities/ActivityWithSubactivity.h"
 
@@ -21,6 +24,7 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingSubactivityExit = false;  // Defer subactivity exit to avoid use-after-free
   bool pendingGoHome = false;           // Defer go home to avoid race condition with display task
   bool skipNextButtonCheck = false;     // Skip button processing for one frame after subactivity exit
+  std::string statusBarOverride;        // Temporary override text (e.g. "Bookmarked"), cleared on page turn
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
@@ -33,6 +37,7 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void onReaderMenuBack(uint8_t orientation);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+  void addBookmark();
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
