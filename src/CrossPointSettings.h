@@ -4,6 +4,7 @@
 
 // Forward declarations
 class FsFile;
+class GfxRenderer;
 
 class CrossPointSettings {
  private:
@@ -52,6 +53,13 @@ class CrossPointSettings {
     INVERTED = 2,       // 480x800 logical coordinates, inverted
     LANDSCAPE_CCW = 3,  // 800x480 logical coordinates, native panel orientation
     ORIENTATION_COUNT
+  };
+
+  // UI orientation: only portrait and inverted (no landscape for UI)
+  enum UI_ORIENTATION {
+    UI_PORTRAIT = 0,
+    UI_INVERTED = 1,
+    UI_ORIENTATION_COUNT
   };
 
   // Front button layout options (legacy)
@@ -135,9 +143,11 @@ class CrossPointSettings {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
-  // EPUB reading orientation settings
+  // Reader orientation (used only in reader mode, all 4 options)
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
+  // UI orientation (applied to all non-reader screens, portrait or inverted only)
+  uint8_t uiOrientation = UI_PORTRAIT;
   // Button layouts (front layout retained for migration only)
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
   uint8_t sideButtonLayout = PREV_NEXT;
@@ -184,6 +194,11 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+
+  // Apply reader orientation setting to the renderer (all 4 directions).
+  static void applyOrientation(GfxRenderer& renderer, uint8_t orientation);
+  // Apply UI orientation setting to the renderer (portrait or inverted only).
+  static void applyUiOrientation(GfxRenderer& renderer, uint8_t uiOrientation);
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(FsFile& file, bool count_only = false) const;

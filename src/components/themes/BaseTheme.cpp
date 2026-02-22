@@ -120,11 +120,25 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const int x = buttonPositions[i];
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
-      renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
+      const int boxY = pageHeight - buttonY;
+      renderer.fillRect(x, boxY, buttonWidth, buttonHeight, false);
+      renderer.drawRect(x, boxY, buttonWidth, buttonHeight);
       const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+
+      switch (orig_orientation) {
+        case GfxRenderer::Orientation::PortraitInverted: {
+          const int textX = x + (buttonWidth + textWidth) / 2;
+          const int textY = boxY + buttonHeight - textYOffset;
+          renderer.drawTextRotated180(UI_10_FONT_ID, textX, textY, labels[i]);
+          break;
+        }
+        case GfxRenderer::Orientation::Portrait:
+        default: {
+          const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+          renderer.drawText(UI_10_FONT_ID, textX, boxY + textYOffset, labels[i]);
+          break;
+        }
+      }
     }
   }
 
@@ -254,18 +268,32 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
-  // Hide last battery draw
-  constexpr int maxBatteryWidth = 80;
-  renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
-                    BaseMetrics::values.batteryHeight + 10, false);
-
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
+  constexpr int maxBatteryWidth = 80;
   const int batteryX = rect.x + rect.width - 12 - BaseMetrics::values.batteryWidth;
-  drawBatteryRight(renderer,
-                   Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
-                   showBatteryPercentage);
+
+  if (renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted) {
+    // In inverted mode draw battery at logical bottom to avoid overlapping button hints.
+    // Subtract VIEWABLE_MARGIN_TOP because in PortraitInverted the logical bottom maps to the
+    // physical top edge of the panel, which has a 9px non-viewable margin.
+    // Subtract 11 = 6 (drawBatteryRight internal icon offset) + 5 (visual padding).
+    const int batteryY = renderer.getScreenHeight() - GfxRenderer::VIEWABLE_MARGIN_TOP -
+                         BaseMetrics::values.batteryHeight - 11;
+    renderer.fillRect(rect.x + rect.width - maxBatteryWidth, batteryY, maxBatteryWidth,
+                      BaseMetrics::values.batteryHeight + 12, false);
+    drawBatteryRight(renderer,
+                     Rect{batteryX, batteryY, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
+                     showBatteryPercentage);
+  } else {
+    // Hide last battery draw
+    renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
+                      BaseMetrics::values.batteryHeight + 10, false);
+    drawBatteryRight(renderer,
+                     Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
+                     showBatteryPercentage);
+  }
 
   if (title) {
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;

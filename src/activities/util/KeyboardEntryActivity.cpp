@@ -197,12 +197,13 @@ void KeyboardEntryActivity::render(Activity::RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   auto metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title.c_str());
+  const int topY = UITheme::getContentTopY(renderer);
+  GUI.drawHeader(renderer, Rect{0, topY, pageWidth, metrics.headerHeight}, title.c_str());
 
   // Draw input field
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int inputStartY =
-      metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.verticalSpacing * 4;
+      topY + metrics.headerHeight + metrics.verticalSpacing + metrics.verticalSpacing * 4;
   int inputHeight = 0;
 
   std::string displayText;
@@ -244,7 +245,7 @@ void KeyboardEntryActivity::render(Activity::RenderLock&&) {
 
   // Draw keyboard - use compact spacing to fit 5 rows on screen
   const int keyboardStartY = metrics.keyboardBottomAligned
-                                 ? pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing -
+                                 ? pageHeight - UITheme::getContentBottomMargin(renderer) - metrics.verticalSpacing -
                                        (metrics.keyboardKeyHeight + metrics.keyboardKeySpacing) * NUM_ROWS
                                  : inputStartY + inputHeight + metrics.verticalSpacing * 4;
   const int keyWidth = metrics.keyboardKeyWidth;

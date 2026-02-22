@@ -539,7 +539,20 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
-  display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
+  // Icon bitmaps are stored such that:
+  // - bitmap row r (0..width-1) maps to logical X = x + (width-1-r)  [X axis, reversed]
+  // - bitmap bit c (0..height-1) maps to logical Y = y + c            [Y axis, normal]
+  // - 0-bit = black pixel, 1-bit = transparent (same convention as drawImageTransparent)
+  const int bytesPerRow = (height + 7) / 8;
+  for (int r = 0; r < width; r++) {
+    for (int c = 0; c < height; c++) {
+      const int byteIndex = r * bytesPerRow + c / 8;
+      const int bitIndex = 7 - (c % 8);
+      if (!((bitmap[byteIndex] >> bitIndex) & 1)) {
+        drawPixel(x + (width - 1 - r), y + c);
+      }
+    }
+  }
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
@@ -921,6 +934,85 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, &xPos, &yPos, black, style);
+  }
+}
+
+void GfxRenderer::drawTextRotated180(const int fontId, const int x, const int y, const char* text, const bool black,
+                                     const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return;
+  }
+
+  const auto& font = fontIt->second;
+
+  // For 180° rotation:
+  // Original (glyphX, glyphY) -> Rotated (-glyphX, -glyphY)
+  // Text reads right to left; x is the right edge of the first character.
+
+  int xPos = x;  // Current X position (decreases as we draw characters)
+
+  const EpdFontData* fontData = font.getData(style);
+  const int is2Bit = fontData->is2Bit;
+
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      glyph = font.getGlyph(REPLACEMENT_GLYPH, style);
+    }
+    if (!glyph) {
+      continue;
+    }
+    const uint8_t width = glyph->width;
+    const uint8_t height = glyph->height;
+    const int left = glyph->left;
+    const int top = glyph->top;
+
+    const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
+
+    if (bitmap != nullptr) {
+      for (int glyphY = 0; glyphY < height; glyphY++) {
+        for (int glyphX = 0; glyphX < width; glyphX++) {
+          const int pixelPosition = glyphY * width + glyphX;
+
+          // 180° rotation transformation:
+          // screenX = xPos - left - glyphX
+          // screenY = y - (ascender - top + glyphY)
+          const int screenX = xPos - left - glyphX;
+          const int screenY = y - (fontData->ascender - top + glyphY);
+
+          if (is2Bit) {
+            const uint8_t byte = bitmap[pixelPosition / 4];
+            const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+            const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
+
+            if (renderMode == BW && bmpVal < 3) {
+              drawPixel(screenX, screenY, black);
+            } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+              drawPixel(screenX, screenY, false);
+            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+              drawPixel(screenX, screenY, false);
+            }
+          } else {
+            const uint8_t byte = bitmap[pixelPosition / 8];
+            const uint8_t bit_index = 7 - (pixelPosition % 8);
+
+            if ((byte >> bit_index) & 1) {
+              drawPixel(screenX, screenY, black);
+            }
+          }
+        }
+      }
+    }
+
+    // Move to next character position (going left, so decrease X)
+    xPos -= glyph->advanceX;
   }
 }
 

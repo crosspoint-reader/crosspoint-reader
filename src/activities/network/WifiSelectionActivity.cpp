@@ -478,9 +478,10 @@ void WifiSelectionActivity::render(Activity::RenderLock&&) {
   // Draw header
   char countStr[32];
   snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), networks.size());
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_WIFI_NETWORKS),
+  const int topY = UITheme::getContentTopY(renderer);
+  GUI.drawHeader(renderer, Rect{0, topY, pageWidth, metrics.headerHeight}, tr(STR_WIFI_NETWORKS),
                  countStr);
-  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+  GUI.drawSubHeader(renderer, Rect{0, topY + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
                     cachedMacAddress.c_str());
 
   switch (state) {
@@ -525,8 +526,8 @@ void WifiSelectionActivity::renderNetworkList() const {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_NETWORKS));
     renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, tr(STR_PRESS_OK_SCAN));
   } else {
-    int contentTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-    int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+    int contentTop = UITheme::getContentTopY(renderer) + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+    int contentHeight = pageHeight - contentTop - UITheme::getContentBottomMargin(renderer) - metrics.verticalSpacing * 2;
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(networks.size()),
         selectedNetworkIndex, [this](int index) { return networks[index].ssid; }, nullptr, nullptr,
@@ -538,7 +539,8 @@ void WifiSelectionActivity::renderNetworkList() const {
   }
 
   GUI.drawHelpText(renderer,
-                   Rect{0, pageHeight - metrics.buttonHintsHeight - metrics.contentSidePadding - 15, pageWidth, 20},
+                   Rect{0, pageHeight - UITheme::getContentBottomMargin(renderer) - metrics.contentSidePadding - 15,
+                        pageWidth, 20},
                    tr(STR_NETWORK_LEGEND));
 
   const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;

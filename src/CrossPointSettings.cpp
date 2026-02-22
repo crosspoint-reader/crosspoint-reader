@@ -1,5 +1,6 @@
 #include "CrossPointSettings.h"
 
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Serialization.h>
@@ -134,6 +135,7 @@ uint8_t CrossPointSettings::writeSettings(FsFile& file, bool count_only) const {
   writer.writeItem(file, frontButtonRight);
   writer.writeItem(file, fadingFix);
   writer.writeItem(file, embeddedStyle);
+  writer.writeItem(file, uiOrientation);
   // New fields need to be added at end for backward compatibility
 
   return writer.item_count;
@@ -261,6 +263,8 @@ bool CrossPointSettings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, embeddedStyle);
     if (++settingsRead >= fileSettingsCount) break;
+    readAndValidate(inputFile, uiOrientation, UI_ORIENTATION_COUNT);
+    if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
   } while (false);
 
@@ -340,6 +344,37 @@ int CrossPointSettings::getRefreshFrequency() const {
       return 15;
     case REFRESH_30:
       return 30;
+  }
+}
+
+void CrossPointSettings::applyOrientation(GfxRenderer& renderer, uint8_t orientation) {
+  switch (orientation) {
+    case PORTRAIT:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
+    case LANDSCAPE_CW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
+      break;
+    case INVERTED:
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+      break;
+    case LANDSCAPE_CCW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+      break;
+    default:
+      break;
+  }
+}
+
+void CrossPointSettings::applyUiOrientation(GfxRenderer& renderer, uint8_t uiOrientation) {
+  switch (uiOrientation) {
+    case UI_INVERTED:
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+      break;
+    case UI_PORTRAIT:
+    default:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
   }
 }
 

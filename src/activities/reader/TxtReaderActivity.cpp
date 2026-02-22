@@ -27,26 +27,11 @@ constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format cha
 void TxtReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
+  CrossPointSettings::applyOrientation(renderer, SETTINGS.orientation);
+  mappedInput.setButtonInversion(SETTINGS.orientation == CrossPointSettings::INVERTED);
+
   if (!txt) {
     return;
-  }
-
-  // Configure screen orientation based on settings
-  switch (SETTINGS.orientation) {
-    case CrossPointSettings::ORIENTATION::PORTRAIT:
-      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-      break;
-    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
-      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
-      break;
-    case CrossPointSettings::ORIENTATION::INVERTED:
-      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
-      break;
-    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
-      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
-      break;
-    default:
-      break;
   }
 
   txt->setupCacheDir();
@@ -65,8 +50,8 @@ void TxtReaderActivity::onEnter() {
 void TxtReaderActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
-  // Reset orientation back to portrait for the rest of the UI
-  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  CrossPointSettings::applyUiOrientation(renderer, SETTINGS.uiOrientation);
+  mappedInput.setButtonInversion(SETTINGS.uiOrientation == CrossPointSettings::UI_INVERTED);
 
   pageOffsets.clear();
   currentPageLines.clear();

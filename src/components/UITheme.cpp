@@ -48,10 +48,26 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
   }
 }
 
+int UITheme::getContentTopY(const GfxRenderer& renderer) {
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  if (renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted) {
+    return metrics.buttonHintsHeight;
+  }
+  return metrics.topPadding;
+}
+
+int UITheme::getContentBottomMargin(const GfxRenderer& renderer) {
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  if (renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted) {
+    return metrics.topPadding;
+  }
+  return metrics.buttonHintsHeight;
+}
+
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle) {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  int reservedHeight = metrics.topPadding;
+  int reservedHeight = getContentTopY(renderer);
   if (hasHeader) {
     reservedHeight += metrics.headerHeight + metrics.verticalSpacing;
   }
@@ -59,7 +75,7 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
     reservedHeight += metrics.tabBarHeight;
   }
   if (hasButtonHints) {
-    reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
+    reservedHeight += metrics.verticalSpacing + getContentBottomMargin(renderer);
   }
   const int availableHeight = renderer.getScreenHeight() - reservedHeight;
   int rowHeight = hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight;

@@ -110,12 +110,13 @@ void ButtonRemapActivity::render(Activity::RenderLock&&) {
 
   renderer.clearScreen();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_REMAP_FRONT_BUTTONS));
-  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+  const int topY = UITheme::getContentTopY(renderer);
+  GUI.drawHeader(renderer, Rect{0, topY, pageWidth, metrics.headerHeight}, tr(STR_REMAP_FRONT_BUTTONS));
+  GUI.drawSubHeader(renderer, Rect{0, topY + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
                     tr(STR_REMAP_PROMPT));
 
-  int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-  int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  int topOffset = topY + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  int contentHeight = pageHeight - topOffset - UITheme::getContentBottomMargin(renderer) - metrics.verticalSpacing;
   GUI.drawList(
       renderer, Rect{0, topOffset, pageWidth, contentHeight}, kRoleCount, currentStep,
       [&](int index) { return getRoleName(static_cast<uint8_t>(index)); }, nullptr, nullptr,
@@ -128,7 +129,8 @@ void ButtonRemapActivity::render(Activity::RenderLock&&) {
   // Temporary warning banner for duplicates.
   if (!errorMessage.empty()) {
     GUI.drawHelpText(renderer,
-                     Rect{0, pageHeight - metrics.buttonHintsHeight - metrics.contentSidePadding - 15, pageWidth, 20},
+                     Rect{0, pageHeight - UITheme::getContentBottomMargin(renderer) - metrics.contentSidePadding - 15,
+                          pageWidth, 20},
                      errorMessage.c_str());
   }
 

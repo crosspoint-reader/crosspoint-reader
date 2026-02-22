@@ -208,6 +208,12 @@ void SettingsActivity::toggleCurrentSetting() {
   }
 
   SETTINGS.saveToFile();
+
+  // Apply orientation immediately if it was changed
+  if (setting.valuePtr == &CrossPointSettings::uiOrientation) {
+    CrossPointSettings::applyUiOrientation(renderer, SETTINGS.uiOrientation);
+    mappedInput.setButtonInversion(SETTINGS.uiOrientation == CrossPointSettings::UI_INVERTED);
+  }
 }
 
 void SettingsActivity::render(Activity::RenderLock&&) {
@@ -218,7 +224,8 @@ void SettingsActivity::render(Activity::RenderLock&&) {
 
   auto metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
+  const int topY = UITheme::getContentTopY(renderer);
+  GUI.drawHeader(renderer, Rect{0, topY, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
                  CROSSPOINT_VERSION);
 
   std::vector<TabInfo> tabs;
@@ -226,14 +233,14 @@ void SettingsActivity::render(Activity::RenderLock&&) {
   for (int i = 0; i < categoryCount; i++) {
     tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
   }
-  GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
+  GUI.drawTabBar(renderer, Rect{0, topY + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
                  selectedSettingIndex == 0);
 
   const auto& settings = *currentSettings;
   GUI.drawList(
       renderer,
-      Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
+      Rect{0, topY + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
+           pageHeight - (topY + metrics.headerHeight + metrics.tabBarHeight + UITheme::getContentBottomMargin(renderer) +
                          metrics.verticalSpacing * 2)},
       settingsCount, selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,

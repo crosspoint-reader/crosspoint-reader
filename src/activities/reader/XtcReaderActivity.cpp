@@ -49,6 +49,9 @@ void XtcReaderActivity::onEnter() {
 void XtcReaderActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
+  CrossPointSettings::applyUiOrientation(renderer, SETTINGS.uiOrientation);
+  mappedInput.setButtonInversion(SETTINGS.uiOrientation == CrossPointSettings::UI_INVERTED);
+
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   xtc.reset();

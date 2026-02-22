@@ -21,25 +21,24 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
   const auto& side = kSideLayouts[sideLayout];
 
+  // When device is upside-down (inverted orientation): front buttons appear in reversed physical order.
+  // The 4 front buttons are indexed 0-3 left-to-right; mirroring gives (3 - index).
+  auto frontBtn = [this](uint8_t hw) -> uint8_t { return buttonInverted ? (3u - hw) : hw; };
+
   switch (button) {
     case Button::Back:
-      // Logical Back maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonBack);
+      return (gpio.*fn)(frontBtn(SETTINGS.frontButtonBack));
     case Button::Confirm:
-      // Logical Confirm maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonConfirm);
+      return (gpio.*fn)(frontBtn(SETTINGS.frontButtonConfirm));
     case Button::Left:
-      // Logical Left maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonLeft);
+      return (gpio.*fn)(frontBtn(SETTINGS.frontButtonLeft));
     case Button::Right:
-      // Logical Right maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonRight);
+      return (gpio.*fn)(frontBtn(SETTINGS.frontButtonRight));
     case Button::Up:
-      // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_UP);
+      // When device is upside-down, physical Up/Down are visually flipped.
+      return (gpio.*fn)(buttonInverted ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
     case Button::Down:
-      // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_DOWN);
+      return (gpio.*fn)(buttonInverted ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
     case Button::Power:
       // Power button bypasses remapping.
       return (gpio.*fn)(HalGPIO::BTN_POWER);
@@ -86,6 +85,11 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
     return "";
   };
 
+  // When device is upside-down the physical button order is visually reversed, so reverse the label order.
+  if (buttonInverted) {
+    return {labelForHardware(HalGPIO::BTN_RIGHT), labelForHardware(HalGPIO::BTN_LEFT),
+            labelForHardware(HalGPIO::BTN_CONFIRM), labelForHardware(HalGPIO::BTN_BACK)};
+  }
   return {labelForHardware(HalGPIO::BTN_BACK), labelForHardware(HalGPIO::BTN_CONFIRM),
           labelForHardware(HalGPIO::BTN_LEFT), labelForHardware(HalGPIO::BTN_RIGHT)};
 }

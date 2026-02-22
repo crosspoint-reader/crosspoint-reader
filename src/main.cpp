@@ -341,6 +341,8 @@ void setup() {
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
   setupDisplayAndFonts();
+  CrossPointSettings::applyUiOrientation(renderer, SETTINGS.uiOrientation);
+  mappedInputManager.setButtonInversion(SETTINGS.uiOrientation == CrossPointSettings::UI_INVERTED);
 
   exitActivity();
   enterNewActivity(new BootActivity(renderer, mappedInputManager));

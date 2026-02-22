@@ -169,9 +169,25 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
   const int batteryX = rect.x + rect.width - 12 - LyraMetrics::values.batteryWidth;
-  drawBatteryRight(renderer,
-                   Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
-                   showBatteryPercentage);
+
+  if (renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted) {
+    // In inverted mode draw battery at logical bottom to avoid overlapping button hints.
+    // Subtract VIEWABLE_MARGIN_TOP because in PortraitInverted the logical bottom maps to the
+    // physical top edge of the panel, which has a 9px non-viewable margin.
+    // Subtract 11 = 6 (drawBatteryRight internal icon offset) + 5 (visual padding).
+    const int batteryY = renderer.getScreenHeight() - GfxRenderer::VIEWABLE_MARGIN_TOP -
+                         LyraMetrics::values.batteryHeight - 11;
+    constexpr int maxBatteryWidth = 80;
+    renderer.fillRect(rect.x + rect.width - maxBatteryWidth, batteryY, maxBatteryWidth,
+                      LyraMetrics::values.batteryHeight + 12, false);
+    drawBatteryRight(renderer,
+                     Rect{batteryX, batteryY, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
+                     showBatteryPercentage);
+  } else {
+    drawBatteryRight(renderer,
+                     Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
+                     showBatteryPercentage);
+  }
 
   int maxTitleWidth =
       rect.width - LyraMetrics::values.contentSidePadding * 2 - (subtitle != nullptr ? maxSubtitleWidth : 0);
@@ -353,14 +369,27 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
 
   for (int i = 0; i < 4; i++) {
     const int x = buttonPositions[i];
+    const int boxY = pageHeight - buttonY;
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       // Draw the filled background and border for a FULL-sized button
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
-      renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, cornerRadius, true, true, false,
-                               false, true);
+      renderer.fillRect(x, boxY, buttonWidth, buttonHeight, false);
+      renderer.drawRoundedRect(x, boxY, buttonWidth, buttonHeight, 1, cornerRadius, true, true, false, false, true);
       const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+
+      switch (orig_orientation) {
+        case GfxRenderer::Orientation::PortraitInverted: {
+          const int textX = x + (buttonWidth + textWidth) / 2;
+          const int textY = boxY + buttonHeight - textYOffset;
+          renderer.drawTextRotated180(SMALL_FONT_ID, textX, textY, labels[i]);
+          break;
+        }
+        case GfxRenderer::Orientation::Portrait:
+        default: {
+          const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+          renderer.drawText(SMALL_FONT_ID, textX, boxY + textYOffset, labels[i]);
+          break;
+        }
+      }
     } else {
       // Draw the filled background and border for a SMALL-sized button
       renderer.fillRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, false);

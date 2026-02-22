@@ -26,8 +26,13 @@ class MappedInputManager {
   // Returns the raw front button index that was pressed this frame (or -1 if none).
   int getPressedFrontButton() const;
 
+  // Set whether physical buttons should be treated as inverted (upside-down device).
+  // UI screens call this based on uiOrientation; reader screens call it based on reader orientation.
+  void setButtonInversion(bool inverted) { buttonInverted = inverted; }
+
  private:
   HalGPIO& gpio;
+  bool buttonInverted = false;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
 };

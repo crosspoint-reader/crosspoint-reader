@@ -219,9 +219,15 @@ void HomeActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+  // In inverted mode button hints occupy the logical top (y=0..buttonHintsHeight).
+  // Ensure the cover starts below that area so it doesn't touch the button hints.
+  const int minCoverTop = metrics.buttonHintsHeight + metrics.verticalSpacing;
+  const bool isInverted = renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted;
+  const int coverTopY = (isInverted && metrics.homeTopPadding < minCoverTop) ? minCoverTop : metrics.homeTopPadding;
 
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, coverTopY}, nullptr);
+
+  GUI.drawRecentBookCover(renderer, Rect{0, coverTopY, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
@@ -238,8 +244,8 @@ void HomeActivity::render(Activity::RenderLock&&) {
 
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing * 2 +
+      Rect{0, coverTopY + metrics.homeCoverTileHeight + metrics.verticalSpacing, pageWidth,
+           pageHeight - (metrics.headerHeight + coverTopY + metrics.verticalSpacing * 2 +
                          metrics.buttonHintsHeight)},
       static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
