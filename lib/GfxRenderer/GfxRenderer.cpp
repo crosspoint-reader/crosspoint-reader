@@ -1,5 +1,6 @@
 #include "GfxRenderer.h"
 
+#include <FontDecompressor.h>
 #include <Logging.h>
 #include <Utf8.h>
 
@@ -9,10 +10,36 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
       LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
       return nullptr;
     }
-    uint16_t glyphIndex = static_cast<uint16_t>(glyph - fontData->glyph);
+    uint32_t glyphIndex = static_cast<uint32_t>(glyph - fontData->glyph);
+    // For page-buffer hits the pointer is stable for the page lifetime.
+    // For hot-group hits it is valid only until the next getBitmap() call — callers
+    // must consume it (draw the glyph) before requesting another bitmap.
     return fontDecompressor->getBitmap(fontData, glyph, glyphIndex);
   }
   return &fontData->bitmap[glyph->dataOffset];
+}
+
+void GfxRenderer::clearFontCache() {
+  if (fontDecompressor) fontDecompressor->clearCache();
+}
+
+void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style) {
+  if (!fontDecompressor || fontMap.count(fontId) == 0) return;
+  const EpdFontData* data = fontMap.at(fontId).getData(style);
+  if (!data || !data->groups) return;
+  int missed = fontDecompressor->prewarmCache(data, utf8Text);
+  if (missed > 0) {
+    LOG_DBG("GFX", "prewarmFontCache: %d glyph(s) not cached for style %d; hot-group fallback in use", missed,
+            static_cast<int>(style));
+  }
+}
+
+void GfxRenderer::logFontStats(const char* label) {
+  if (fontDecompressor) fontDecompressor->logStats(label);
+}
+
+void GfxRenderer::resetFontStats() {
+  if (fontDecompressor) fontDecompressor->resetStats();
 }
 
 void GfxRenderer::begin() {
@@ -98,7 +125,18 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
       innerBase = *cursorX + left;  // screenX = innerBase + glyphX
     }
 
+    // Synthetic bold: when bold is requested but the font family has no real bold variant,
+    // darken near-edge pixels by spreading from horizontal neighbors
+    const bool syntheticBold = is2Bit && (style & EpdFontFamily::BOLD) &&
+                               (fontFamily.getData(EpdFontFamily::BOLD) == fontFamily.getData(EpdFontFamily::REGULAR));
+
     if (is2Bit) {
+      // Lambda to read a raw 2-bit pixel value from the packed bitmap
+      auto readRawPixel = [&](int pos) -> uint8_t {
+        if (pos < 0 || pos >= width * height) return 0;
+        return (bitmap[pos >> 2] >> ((3 - (pos & 3)) * 2)) & 0x3;
+      };
+
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < height; glyphY++) {
         const int outerCoord = outerBase + glyphY;
@@ -112,12 +150,17 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
             screenY = outerCoord;
           }
 
-          const uint8_t byte = bitmap[pixelPosition >> 2];
-          const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
+          uint8_t rawVal = readRawPixel(pixelPosition);
+          if (syntheticBold && glyphX > 0 && glyphX < width - 1) {
+            uint8_t rawLeft = readRawPixel(pixelPosition - 1);
+            uint8_t rawRight = readRawPixel(pixelPosition + 1);
+            uint8_t spread = std::max(rawLeft, rawRight);
+            rawVal = std::min<uint8_t>(3, rawVal + (spread >> 1));
+          }
           // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
           // we swap this to better match the way images and screen think about colors:
           // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
-          const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
+          const uint8_t bmpVal = 3 - rawVal;
 
           if (renderMode == GfxRenderer::BW && bmpVal < 3) {
             // Black (also paints over the grays in BW mode)

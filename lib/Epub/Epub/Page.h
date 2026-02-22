@@ -2,6 +2,7 @@
 #include <HalStorage.h>
 
 #include <algorithm>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -21,6 +22,8 @@ class PageElement {
   explicit PageElement(const int16_t xPos, const int16_t yPos) : xPos(xPos), yPos(yPos) {}
   virtual ~PageElement() = default;
   virtual void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) = 0;
+  virtual void collectText(std::string& /* out */) const {}
+  virtual void countStyleChars(uint32_t /* counts */[4]) const {}
   virtual bool serialize(FsFile& file) = 0;
   virtual PageElementTag getTag() const = 0;  // Add type identification
 };
@@ -33,6 +36,8 @@ class PageLine final : public PageElement {
   PageLine(std::shared_ptr<TextBlock> block, const int16_t xPos, const int16_t yPos)
       : PageElement(xPos, yPos), block(std::move(block)) {}
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  void collectText(std::string& out) const override;
+  void countStyleChars(uint32_t counts[4]) const override;
   bool serialize(FsFile& file) override;
   PageElementTag getTag() const override { return TAG_PageLine; }
   static std::unique_ptr<PageLine> deserialize(FsFile& file);
@@ -57,6 +62,10 @@ class Page {
   // the list of block index and line numbers on this page
   std::vector<std::shared_ptr<PageElement>> elements;
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
+  void collectText(std::string& out) const;
+  // Returns the font style with the most rendered characters on this page.
+  // Used to select which style to prewarm; other styles fall back to the hot-group path.
+  EpdFontFamily::Style getDominantStyle() const;
   bool serialize(FsFile& file) const;
   static std::unique_ptr<Page> deserialize(FsFile& file);
 

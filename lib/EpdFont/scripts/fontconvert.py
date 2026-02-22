@@ -16,6 +16,12 @@ parser.add_argument("fontstack", action="store", nargs='+', help="list of font f
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
+parser.add_argument("--frequency-table", dest="frequency_table", help="TSV file with codepoint<TAB>rank for frequency-based CJK grouping.")
+parser.add_argument("--group-size", dest="group_size", type=int, default=128, help="Glyphs per frequency group (default 128).")
+parser.add_argument("--pin-groups", dest="pin_groups", type=int, default=0, help="Number of high-frequency groups to mark for pinning (default 0).")
+parser.add_argument("--max-cjk-ideographs", dest="max_cjk_ideographs", type=int, default=0, help="Limit CJK Unified Ideographs (U+4E00-U+9FFF) to top N by frequency. 0 = no limit.")
+parser.add_argument("--max-hangul", dest="max_hangul", type=int, default=0, help="Limit Hangul Syllables (U+AC00-U+D7AF) to top N by frequency. 0 = no limit.")
+parser.add_argument("--non-pinned-group-size", dest="non_pinned_group_size", type=int, default=0, help="Group size for non-pinned CJK groups sorted by codepoint. 0 = use --group-size for all.")
 args = parser.parse_args()
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
@@ -25,12 +31,42 @@ is2Bit = args.is2Bit
 size = args.size
 font_name = args.name
 
+# Load frequency table if provided
+frequency_map = {}  # codepoint -> rank
+if args.frequency_table:
+    with open(args.frequency_table, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split('\t')
+            if len(parts) >= 2:
+                cp = int(parts[0], 0)
+                rank = int(parts[1])
+                frequency_map[cp] = rank
+
+# Build allowed codepoint sets for CJK/Hangul filtering
+allowed_cjk_ideographs = None
+if args.max_cjk_ideographs > 0 and frequency_map:
+    # Collect CJK Unified Ideographs from frequency table, sorted by rank
+    cjk_entries = [(cp, rank) for cp, rank in frequency_map.items() if 0x4E00 <= cp <= 0x9FFF]
+    cjk_entries.sort(key=lambda x: x[1])
+    allowed_cjk_ideographs = set(cp for cp, _ in cjk_entries[:args.max_cjk_ideographs])
+    print(f"// CJK ideograph limit: {args.max_cjk_ideographs} (from {len(cjk_entries)} in frequency table)", file=sys.stderr)
+
+allowed_hangul = None
+if args.max_hangul > 0 and frequency_map:
+    hangul_entries = [(cp, rank) for cp, rank in frequency_map.items() if 0xAC00 <= cp <= 0xD7AF]
+    hangul_entries.sort(key=lambda x: x[1])
+    allowed_hangul = set(cp for cp, _ in hangul_entries[:args.max_hangul])
+    print(f"// Hangul syllable limit: {args.max_hangul} (from {len(hangul_entries)} in frequency table)", file=sys.stderr)
+
 # inclusive unicode code point intervals
 # must not overlap and be in ascending order
 intervals = [
     ### Basic Latin ###
     # ASCII letters, digits, punctuation, control characters
-    (0x0000, 0x007F),
+    (0x0020, 0x007F),
     ### Latin-1 Supplement ###
     # Accented characters for Western European languages
     (0x0080, 0x00FF),
@@ -63,45 +99,6 @@ intervals = [
     (0x2200, 0x22FF),
     # Arrows
     (0x2190, 0x21FF),
-    ### CJK ###
-    # Core Unified Ideographs
-    # (0x4E00, 0x9FFF),
-    # # Extension A
-    # (0x3400, 0x4DBF),
-    # # Extension B
-    # (0x20000, 0x2A6DF),
-    # # Extension C–F
-    # (0x2A700, 0x2EBEF),
-    # # Extension G
-    # (0x30000, 0x3134F),
-    # # Hiragana
-    # (0x3040, 0x309F),
-    # # Katakana
-    # (0x30A0, 0x30FF),
-    # # Katakana Phonetic Extensions
-    # (0x31F0, 0x31FF),
-    # # Halfwidth Katakana
-    # (0xFF60, 0xFF9F),
-    # # Hangul Syllables
-    # (0xAC00, 0xD7AF),
-    # # Hangul Jamo
-    # (0x1100, 0x11FF),
-    # # Hangul Compatibility Jamo
-    # (0x3130, 0x318F),
-    # # Hangul Jamo Extended-A
-    # (0xA960, 0xA97F),
-    # # Hangul Jamo Extended-B
-    # (0xD7B0, 0xD7FF),
-    # # CJK Radicals Supplement
-    # (0x2E80, 0x2EFF),
-    # # Kangxi Radicals
-    # (0x2F00, 0x2FDF),
-    # # CJK Symbols and Punctuation
-    # (0x3000, 0x303F),
-    # # CJK Compatibility Forms
-    # (0xFE30, 0xFE4F),
-    # # CJK Compatibility Ideographs
-    # (0xF900, 0xFAFF),
     ### Specials
     # Replacement Character
     (0xFFFD, 0xFFFD),
@@ -120,6 +117,20 @@ def norm_ceil(val):
 def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
+
+def is_cjk_ideograph(cp):
+    return 0x4E00 <= cp <= 0x9FFF
+
+def is_hangul_syllable(cp):
+    return 0xAC00 <= cp <= 0xD7AF
+
+def should_include_codepoint(code_point):
+    """Check if a codepoint should be included based on frequency filters."""
+    if allowed_cjk_ideographs is not None and is_cjk_ideograph(code_point):
+        return code_point in allowed_cjk_ideographs
+    if allowed_hangul is not None and is_hangul_syllable(code_point):
+        return code_point in allowed_hangul
+    return True
 
 def load_glyph(code_point):
     face_index = 0
@@ -145,6 +156,11 @@ for i_start, i_end in unmerged_intervals:
 for i_start, i_end in unvalidated_intervals:
     start = i_start
     for code_point in range(i_start, i_end + 1):
+        if not should_include_codepoint(code_point):
+            if start < code_point:
+                intervals.append((start, code_point - 1))
+            start = code_point + 1
+            continue
         face = load_glyph(code_point)
         if face is None:
             if start < code_point:
@@ -206,16 +222,6 @@ for i_start, i_end in intervals:
             if (bitmap.width * bitmap.rows) % 4 != 0:
                 px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
                 pixels2b.append(px)
-
-            # for y in range(bitmap.rows):
-            #     line = ''
-            #     for x in range(bitmap.width):
-            #         pixelPosition = y * bitmap.width + x
-            #         byte = pixels2b[pixelPosition // 4]
-            #         bit_index = (3 - (pixelPosition % 4)) * 2
-            #         line += '#' if ((byte >> bit_index) & 3) > 0 else '.'
-            #     print(line)
-            # print('')
         else:
             # Downsample to 1-bit bitmap - treat any 2+ as black
             pixelsbw = []
@@ -233,16 +239,6 @@ for i_start, i_end in intervals:
             if (bitmap.width * bitmap.rows) % 8 != 0:
                 px = px << (8 - (bitmap.width * bitmap.rows) % 8)
                 pixelsbw.append(px)
-
-            # for y in range(bitmap.rows):
-            #     line = ''
-            #     for x in range(bitmap.width):
-            #         pixelPosition = y * bitmap.width + x
-            #         byte = pixelsbw[pixelPosition // 8]
-            #         bit_index = 7 - (pixelPosition % 8)
-            #         line += '#' if (byte >> bit_index) & 1 else '.'
-            #     print(line)
-            # print('')
 
         pixels = pixels2b if is2Bit else pixelsbw
 
@@ -272,13 +268,45 @@ for index, glyph in enumerate(all_glyphs):
     glyph_props.append(props)
 
 compress = args.compress
+use_frequency_grouping = compress and bool(args.frequency_table) and bool(frequency_map)
+
+
+def to_byte_aligned(packed, width, height):
+    """Convert packed 2-bit bitmap to byte-aligned format (rows padded to byte boundary).
+
+    In packed format, pixels flow continuously across row boundaries (4 pixels/byte).
+    In byte-aligned format, each row starts at a byte boundary, padding the last byte
+    of each row with zero bits if width % 4 != 0. This improves DEFLATE compression
+    because identical pixel rows produce identical byte patterns regardless of position.
+    """
+    if width == 0 or height == 0:
+        return b''
+    row_stride = (width + 3) // 4  # bytes per byte-aligned row
+    aligned = bytearray(row_stride * height)
+    for y in range(height):
+        for x in range(width):
+            # Read pixel from packed format (continuous bit stream)
+            packed_pos = y * width + x
+            packed_byte_idx = packed_pos // 4
+            packed_shift = (3 - (packed_pos % 4)) * 2
+            pixel = (packed[packed_byte_idx] >> packed_shift) & 0x3
+
+            # Write pixel to byte-aligned format (row-aligned)
+            aligned_byte_idx = y * row_stride + x // 4
+            aligned_shift = (3 - (x % 4)) * 2
+            aligned[aligned_byte_idx] |= (pixel << aligned_shift)
+    return bytes(aligned)
+
 
 # Build groups for compression
+if compress and not is2Bit:
+    print("Error: --compress requires --2bit (byte-aligned compression only supports 2-bit format)", file=sys.stderr)
+    sys.exit(1)
+glyphToGroup = None  # Will be set for frequency-grouped fonts
+
 if compress:
     # Script-based grouping: glyphs that co-occur in typical text rendering
     # are grouped together for efficient LRU caching on the embedded target.
-    # Since glyphs are in codepoint order, glyphs in the same Unicode block
-    # are contiguous in the array and form natural groups.
     SCRIPT_GROUP_RANGES = [
         (0x0000, 0x007F),   # ASCII
         (0x0080, 0x00FF),   # Latin-1 Supplement
@@ -293,71 +321,188 @@ if compress:
         (0xFFFD, 0xFFFD),   # Replacement Character
     ]
 
+    # Threshold: codepoints >= this use frequency grouping (when enabled)
+    CJK_FREQUENCY_THRESHOLD = 0x3000
+
     def get_script_group(code_point):
         for i, (start, end) in enumerate(SCRIPT_GROUP_RANGES):
             if start <= code_point <= end:
                 return i
         return -1
 
-    groups = []  # list of (first_glyph_index, glyph_count)
-    current_group_id = None
-    group_start = 0
-    group_count = 0
+    if use_frequency_grouping:
+        # Hybrid grouping: Latin uses script-based, CJK uses frequency-based
+        group_size = args.group_size
+        pin_groups = args.pin_groups
 
-    for i, (props, packed) in enumerate(all_glyphs):
-        sg = get_script_group(props.code_point)
-        if sg != current_group_id:
-            if group_count > 0:
-                groups.append((group_start, group_count))
-            current_group_id = sg
-            group_start = i
-            group_count = 1
-        else:
-            group_count += 1
+        # Step 1: Build Latin groups (script-based, for codepoints < CJK_FREQUENCY_THRESHOLD)
+        latin_groups = []  # list of lists of glyph indices
+        current_group_id = None
+        current_group = []
 
-    if group_count > 0:
-        groups.append((group_start, group_count))
+        for i, (props, packed) in enumerate(all_glyphs):
+            if props.code_point >= CJK_FREQUENCY_THRESHOLD:
+                continue
+            sg = get_script_group(props.code_point)
+            if sg != current_group_id:
+                if current_group:
+                    latin_groups.append(current_group)
+                current_group_id = sg
+                current_group = [i]
+            else:
+                current_group.append(i)
 
-    # Compress each group
-    compressed_groups = []  # list of (compressed_bytes, uncompressed_size, glyph_count, first_glyph_index)
-    compressed_bitmap_data = []
-    compressed_offset = 0
+        if current_group:
+            latin_groups.append(current_group)
 
-    # Also build modified glyph props with within-group offsets
-    modified_glyph_props = list(glyph_props)
+        # Step 2: Build CJK groups
+        # Collect CJK glyph indices with their frequency ranks
+        cjk_glyphs_with_rank = []
+        for i, (props, packed) in enumerate(all_glyphs):
+            if props.code_point < CJK_FREQUENCY_THRESHOLD:
+                continue
+            rank = frequency_map.get(props.code_point, 999999)
+            cjk_glyphs_with_rank.append((i, rank))
 
-    for first_idx, count in groups:
-        # Concatenate bitmap data for this group
-        group_data = b''
-        for gi in range(first_idx, first_idx + count):
-            props, packed = all_glyphs[gi]
-            # Update glyph's dataOffset to be within-group offset
-            within_group_offset = len(group_data)
-            old_props = modified_glyph_props[gi]
-            modified_glyph_props[gi] = GlyphProps(
-                width=old_props.width,
-                height=old_props.height,
-                advance_x=old_props.advance_x,
-                left=old_props.left,
-                top=old_props.top,
-                data_length=old_props.data_length,
-                data_offset=within_group_offset,
-                code_point=old_props.code_point,
-            )
-            group_data += packed
+        # Sort by frequency rank (most frequent first)
+        cjk_glyphs_with_rank.sort(key=lambda x: x[1])
 
-        # Compress with raw DEFLATE (no zlib/gzip header)
-        compressor = zlib.compressobj(level=9, wbits=-15)
-        compressed = compressor.compress(group_data) + compressor.flush()
+        # Two-tier grouping:
+        # - Pinned groups: frequency-sorted, group_size glyphs each
+        # - Non-pinned groups: codepoint-sorted (Kangxi radical order for better
+        #   compression), non_pinned_group_size glyphs each
+        non_pinned_size = args.non_pinned_group_size if args.non_pinned_group_size > 0 else group_size
 
-        compressed_groups.append((compressed, len(group_data), count, first_idx))
-        compressed_bitmap_data.extend(compressed)
-        compressed_offset += len(compressed)
+        # Build pinned groups (frequency-sorted, group_size each)
+        pinned_count = pin_groups * group_size
+        pinned_glyphs = cjk_glyphs_with_rank[:pinned_count]
+        remaining_glyphs = cjk_glyphs_with_rank[pinned_count:]
 
-    glyph_props = modified_glyph_props
-    total_compressed = len(compressed_bitmap_data)
-    total_uncompressed = len(glyph_data)
-    print(f"// Compression: {total_uncompressed} -> {total_compressed} bytes ({100*total_compressed/total_uncompressed:.1f}%), {len(groups)} groups", file=sys.stderr)
+        pinned_cjk_groups = []
+        for bucket_start in range(0, len(pinned_glyphs), group_size):
+            bucket = pinned_glyphs[bucket_start:bucket_start + group_size]
+            group_indices = sorted([gi for gi, _ in bucket])
+            pinned_cjk_groups.append(group_indices)
+
+        # Build non-pinned groups (kept in frequency order for cache locality)
+        remaining_cjk_groups = []
+        for bucket_start in range(0, len(remaining_glyphs), non_pinned_size):
+            bucket = remaining_glyphs[bucket_start:bucket_start + non_pinned_size]
+            group_indices = sorted([gi for gi, _ in bucket])
+            remaining_cjk_groups.append(group_indices)
+
+        # Step 3: Combine groups: pinned CJK groups first, then Latin, then remaining CJK
+        # Pinned groups go first so they get group indices 0..pin_groups-1
+        all_groups = pinned_cjk_groups + latin_groups + remaining_cjk_groups
+
+        # Build glyphToGroup mapping
+        total_glyph_count = len(all_glyphs)
+        glyphToGroup = [0] * total_glyph_count
+        for group_idx, glyph_indices in enumerate(all_groups):
+            for gi in glyph_indices:
+                glyphToGroup[gi] = group_idx
+
+        # Build compressed data for each group
+        compressed_groups = []
+        compressed_bitmap_data = []
+        modified_glyph_props = list(glyph_props)
+
+        for group_idx, glyph_indices in enumerate(all_groups):
+            group_packed = b''
+            group_aligned = b''
+            for gi in glyph_indices:
+                props, packed = all_glyphs[gi]
+                within_group_offset = len(group_packed)
+                old_props = modified_glyph_props[gi]
+                modified_glyph_props[gi] = GlyphProps(
+                    width=old_props.width,
+                    height=old_props.height,
+                    advance_x=old_props.advance_x,
+                    left=old_props.left,
+                    top=old_props.top,
+                    data_length=old_props.data_length,
+                    data_offset=within_group_offset,
+                    code_point=old_props.code_point,
+                )
+                group_packed += packed
+                group_aligned += to_byte_aligned(packed, old_props.width, old_props.height)
+
+            compressor = zlib.compressobj(level=9, wbits=-15)
+            compressed = compressor.compress(group_aligned) + compressor.flush()
+
+            # For frequency-grouped fonts, firstGlyphIndex is set to the first member for informational purposes
+            first_glyph_in_group = glyph_indices[0] if glyph_indices else 0
+            compressed_groups.append((compressed, len(group_aligned), len(glyph_indices), first_glyph_in_group))
+            compressed_bitmap_data.extend(compressed)
+
+        glyph_props = modified_glyph_props
+        total_compressed = len(compressed_bitmap_data)
+        total_packed = len(glyph_data)
+
+        cjk_count = sum(1 for _, (p, _) in enumerate(all_glyphs) if p.code_point >= CJK_FREQUENCY_THRESHOLD)
+        print(f"// Compression: {total_packed} packed -> {total_compressed} compressed ({100*total_compressed/total_packed:.1f}%)", file=sys.stderr)
+        print(f"// Groups: {len(all_groups)} ({len(pinned_cjk_groups)} pinned CJK [{group_size}/grp] + {len(latin_groups)} Latin + {len(remaining_cjk_groups)} CJK [{non_pinned_size}/grp])", file=sys.stderr)
+        print(f"// Glyphs: {len(all_glyphs)} total ({cjk_count} CJK, {len(all_glyphs) - cjk_count} Latin)", file=sys.stderr)
+
+    else:
+        # Pure script-based grouping (no frequency table)
+        groups = []  # list of (first_glyph_index, glyph_count)
+        current_group_id = None
+        group_start = 0
+        group_count = 0
+
+        for i, (props, packed) in enumerate(all_glyphs):
+            sg = get_script_group(props.code_point)
+            if sg != current_group_id:
+                if group_count > 0:
+                    groups.append((group_start, group_count))
+                current_group_id = sg
+                group_start = i
+                group_count = 1
+            else:
+                group_count += 1
+
+        if group_count > 0:
+            groups.append((group_start, group_count))
+
+        # Compress each group
+        compressed_groups = []
+        compressed_bitmap_data = []
+        compressed_offset = 0
+
+        modified_glyph_props = list(glyph_props)
+
+        for first_idx, count in groups:
+            group_packed = b''
+            group_aligned = b''
+            for gi in range(first_idx, first_idx + count):
+                props, packed = all_glyphs[gi]
+                within_group_offset = len(group_packed)
+                old_props = modified_glyph_props[gi]
+                modified_glyph_props[gi] = GlyphProps(
+                    width=old_props.width,
+                    height=old_props.height,
+                    advance_x=old_props.advance_x,
+                    left=old_props.left,
+                    top=old_props.top,
+                    data_length=old_props.data_length,
+                    data_offset=within_group_offset,
+                    code_point=old_props.code_point,
+                )
+                group_packed += packed
+                group_aligned += to_byte_aligned(packed, old_props.width, old_props.height)
+
+            compressor = zlib.compressobj(level=9, wbits=-15)
+            compressed = compressor.compress(group_aligned) + compressor.flush()
+
+            compressed_groups.append((compressed, len(group_aligned), count, first_idx))
+            compressed_bitmap_data.extend(compressed)
+            compressed_offset += len(compressed)
+
+        glyph_props = modified_glyph_props
+        total_compressed = len(compressed_bitmap_data)
+        total_packed = len(glyph_data)
+        print(f"// Compression: {total_packed} packed -> {total_compressed} compressed ({100*total_compressed/total_packed:.1f}%), {len(groups)} groups", file=sys.stderr)
 
 print(f"""/**
  * generated by fontconvert.py
@@ -401,6 +546,13 @@ if compress:
         compressed_offset += len(compressed)
     print("};\n")
 
+# Emit glyphToGroup array for frequency-grouped fonts
+if glyphToGroup is not None:
+    print(f"static const uint16_t {font_name}GlyphToGroup[] = {{")
+    for c in chunks(glyphToGroup, 32):
+        print("    " + " ".join(f"{v}," for v in c))
+    print("};\n")
+
 print(f"static const EpdFontData {font_name} = {{")
 print(f"    {font_name}Bitmaps,")
 print(f"    {font_name}Glyphs,")
@@ -414,6 +566,11 @@ if compress:
     print(f"    {font_name}Groups,")
     print(f"    {len(compressed_groups)},")
 else:
-    print(f"    nullptr,")
-    print(f"    0,")
+    print("    nullptr,")
+    print("    0,")
+# glyphToGroup
+if glyphToGroup is not None:
+    print(f"    {font_name}GlyphToGroup,")
+else:
+    print("    nullptr,")
 print("};")

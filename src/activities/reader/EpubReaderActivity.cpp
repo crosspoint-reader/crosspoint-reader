@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <esp_system.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -611,9 +612,9 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
       return;
     }
     const auto start = millis();
+    renderer.clearFontCache();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
-    renderer.clearFontCache();
   }
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
 }
@@ -638,11 +639,29 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
+  const auto t0 = millis();
+  renderer.resetFontStats();
+
+  // Pre-scan page text to warm the font cache with needed glyph groups
+  const uint32_t heapBefore = esp_get_free_heap_size();
+  std::string pageText;
+  page->collectText(pageText);
+  renderer.prewarmFontCache(SETTINGS.getReaderFontId(), pageText.c_str(), page->getDominantStyle());
+  const uint32_t heapAfter = esp_get_free_heap_size();
+  renderer.logFontStats("prewarm");
+  const auto tPrewarm = millis();
+
+  LOG_DBG("ERS", "Heap: before=%lu after=%lu delta=%ld", heapBefore, heapAfter,
+          (int32_t)heapAfter - (int32_t)heapBefore);
+
   // Force special handling for pages with images when anti-aliasing is on
   bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+  renderer.logFontStats("bw_render");
+  const auto tBwRender = millis();
+
   if (imagePageWithAA) {
     // Double FAST_REFRESH with selective image blanking (pablohc's technique):
     // HALF_REFRESH sets particles too firmly for the grayscale LUT to adjust.
@@ -669,9 +688,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.displayBuffer();
     pagesUntilFullRefresh--;
   }
+  const auto tDisplay = millis();
 
   // Save bw buffer to reset buffer state after grayscale data sync
   renderer.storeBwBuffer();
+  const auto tBwStore = millis();
 
   // grayscale rendering
   // TODO: Only do this if font supports it
@@ -680,20 +701,42 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleLsbBuffers();
+    const auto tGrayLsb = millis();
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleMsbBuffers();
+    const auto tGrayMsb = millis();
 
     // display grayscale part
     renderer.displayGrayBuffer();
+    const auto tGrayDisplay = millis();
     renderer.setRenderMode(GfxRenderer::BW);
-  }
+    renderer.logFontStats("gray");
 
-  // restore the bw data
-  renderer.restoreBwBuffer();
+    // restore the bw data
+    renderer.restoreBwBuffer();
+    const auto tBwRestore = millis();
+
+    const auto tEnd = millis();
+    LOG_DBG("ERS",
+            "Page render: prewarm=%lums bw_render=%lums display=%lums bw_store=%lums "
+            "gray_lsb=%lums gray_msb=%lums gray_display=%lums bw_restore=%lums total=%lums",
+            tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, tGrayLsb - tBwStore,
+            tGrayMsb - tGrayLsb, tGrayDisplay - tGrayMsb, tBwRestore - tGrayDisplay, tEnd - t0);
+  } else {
+    // restore the bw data
+    renderer.restoreBwBuffer();
+    const auto tBwRestore = millis();
+
+    const auto tEnd = millis();
+    LOG_DBG("ERS",
+            "Page render: prewarm=%lums bw_render=%lums display=%lums bw_store=%lums bw_restore=%lums total=%lums",
+            tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, tBwRestore - tBwStore,
+            tEnd - t0);
+  }
 }
 
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,

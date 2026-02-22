@@ -367,8 +367,13 @@ void TxtReaderActivity::render(Activity::RenderLock&&) {
   loadPageAtOffset(offset, currentPageLines, nextOffset);
 
   renderer.clearScreen();
-  renderPage();
   renderer.clearFontCache();
+  std::string pageText;
+  for (const auto& line : currentPageLines) {
+    pageText += line;
+  }
+  renderer.prewarmFontCache(cachedFontId, pageText.c_str());
+  renderPage();
 
   // Save progress
   saveProgress();
