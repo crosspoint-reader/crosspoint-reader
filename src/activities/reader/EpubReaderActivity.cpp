@@ -198,6 +198,12 @@ void EpubReaderActivity::loop() {
                                                     mappedInput.wasPressed(MappedInputManager::Button::Left))
                                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                                                     mappedInput.wasReleased(MappedInputManager::Button::Left));
+  const bool powerSync = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS &&
+                         mappedInput.wasReleased(MappedInputManager::Button::Power);
+  if (powerSync) {
+    onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::SYNC);
+    return;
+  }
   const bool powerPageTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                              mappedInput.wasReleased(MappedInputManager::Button::Power);
   const bool nextTriggered = usePressForPageTurn
