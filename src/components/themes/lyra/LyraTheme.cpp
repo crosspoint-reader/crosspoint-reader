@@ -486,13 +486,13 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     const std::string& lastBookTitle = book.title;
     std::vector<std::string> words;
     words.reserve(8);
-    size_t pos = 0;
-    while (pos < lastBookTitle.size()) {
-      while (pos < lastBookTitle.size() && lastBookTitle[pos] == ' ') ++pos;
-      if (pos >= lastBookTitle.size()) break;
-      const size_t start = pos;
-      while (pos < lastBookTitle.size() && lastBookTitle[pos] != ' ') ++pos;
-      words.emplace_back(lastBookTitle.substr(start, pos - start));
+    std::string::size_type wordStart = 0;
+    std::string::size_type wordEnd = 0;
+    // find_first_not_of skips leading/interstitial spaces
+    while ((wordStart = lastBookTitle.find_first_not_of(' ', wordEnd)) != std::string::npos) {
+      wordEnd = lastBookTitle.find(' ', wordStart);
+      if (wordEnd == std::string::npos) wordEnd = lastBookTitle.size();
+      words.emplace_back(lastBookTitle.substr(wordStart, wordEnd - wordStart));
     }
     const int maxLineWidth = textWidth;
     const int spaceWidth = renderer.getSpaceWidth(UI_12_FONT_ID, EpdFontFamily::BOLD);
