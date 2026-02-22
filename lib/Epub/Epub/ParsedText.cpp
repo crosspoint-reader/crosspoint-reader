@@ -378,20 +378,35 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   words.insert(insertWordIt, remainder);
   wordStyles.insert(insertStyleIt, style);
 
-  // The remainder inherits whatever continuation status the original word had with the word after it.
-  // Find the continues entry for the original word and insert the remainder's entry after it.
+  // Continuation flag handling after splitting a word into prefix + remainder.
+  //
+  // The prefix keeps the original word's continuation flag so that no-break-space groups
+  // stay linked. The remainder always gets continues=false because it starts on the next
+  // line and is not attached to the prefix.
+  //
+  // Example: "200&#xA0;Quadratkilometer" produces tokens:
+  //   [0] "200"               continues=false
+  //   [1] " "                 continues=true
+  //   [2] "Quadratkilometer"  continues=true   <-- the word being split
+  //
+  // After splitting "Quadratkilometer" at "Quadrat-" / "kilometer":
+  //   [0] "200"         continues=false
+  //   [1] " "           continues=true
+  //   [2] "Quadrat-"    continues=true   (KEPT — still attached to the no-break group)
+  //   [3] "kilometer"   continues=false  (NEW — starts fresh on the next line)
+  //
+  // This lets the backtracking loop keep the entire prefix group ("200 Quadrat-") on one
+  // line, while "kilometer" moves to the next line.
   auto continuesIt = wordContinues.begin();
   std::advance(continuesIt, wordIndex);
-  const bool originalContinuedToNext = *continuesIt;
-  // The original word (now prefix) does NOT continue to remainder (hyphen separates them)
-  *continuesIt = false;
+  // *continuesIt is intentionally left unchanged — the prefix keeps its original attachment.
   const auto insertContinuesIt = std::next(continuesIt);
-  wordContinues.insert(insertContinuesIt, originalContinuedToNext);
+  wordContinues.insert(insertContinuesIt, false);
 
-  // Keep the indexed vector in sync if provided
+  // Keep the indexed vector in sync if provided.
   if (continuesVec) {
-    (*continuesVec)[wordIndex] = false;
-    continuesVec->insert(continuesVec->begin() + wordIndex + 1, originalContinuedToNext);
+    // (*continuesVec)[wordIndex] stays unchanged — prefix keeps its attachment.
+    continuesVec->insert(continuesVec->begin() + wordIndex + 1, false);
   }
 
   // Update cached widths to reflect the new prefix/remainder pairing.
