@@ -55,8 +55,8 @@ typedef struct {
   int ascender;                         ///< Maximal height of a glyph above the base line
   int descender;                        ///< Maximal height of a glyph below the base line
   bool is2Bit;
-  const EpdFontGroup* groups;            ///< NULL for uncompressed fonts
-  uint16_t groupCount;                   ///< 0 for uncompressed fonts
+  const EpdFontGroup* groups;                 ///< NULL for uncompressed fonts
+  uint16_t groupCount;                        ///< 0 for uncompressed fonts
   const EpdKernClassEntry* kernLeftClasses;   ///< Sorted left-side class map (nullptr if none)
   const EpdKernClassEntry* kernRightClasses;  ///< Sorted right-side class map (nullptr if none)
   const int8_t* kernMatrix;                   ///< Flat leftClassCount x rightClassCount matrix
@@ -64,6 +64,6 @@ typedef struct {
   uint16_t kernRightEntryCount;               ///< Entries in kernRightClasses
   uint8_t kernLeftClassCount;                 ///< Number of distinct left classes (matrix rows)
   uint8_t kernRightClassCount;                ///< Number of distinct right classes (matrix cols)
-  const EpdLigaturePair* ligaturePairs;  ///< Sorted ligature pair table (nullptr if none)
-  uint32_t ligaturePairCount;            ///< Number of entries in ligaturePairs
+  const EpdLigaturePair* ligaturePairs;       ///< Sorted ligature pair table (nullptr if none)
+  uint32_t ligaturePairCount;                 ///< Number of entries in ligaturePairs
 } EpdFontData;
