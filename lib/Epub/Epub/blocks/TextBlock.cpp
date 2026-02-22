@@ -12,16 +12,13 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     return;
   }
 
-  auto wordIt = words.begin();
-  auto wordStylesIt = wordStyles.begin();
-  auto wordXposIt = wordXpos.begin();
   for (size_t i = 0; i < words.size(); i++) {
-    const int wordX = *wordXposIt + x;
-    const EpdFontFamily::Style currentStyle = *wordStylesIt;
-    renderer.drawText(fontId, wordX, y, wordIt->c_str(), true, currentStyle);
+    const int wordX = wordXpos[i] + x;
+    const EpdFontFamily::Style currentStyle = wordStyles[i];
+    renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle);
 
     if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
-      const std::string& w = *wordIt;
+      const std::string& w = words[i];
       const int fullWordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle);
       // y is the top of the text line; add ascender to reach baseline, then offset 2px below
       const int underlineY = y + renderer.getFontAscenderSize(fontId) + 2;
@@ -41,10 +38,6 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
       renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, true);
     }
-
-    std::advance(wordIt, 1);
-    std::advance(wordStylesIt, 1);
-    std::advance(wordXposIt, 1);
   }
 }
 
@@ -80,15 +73,15 @@ bool TextBlock::serialize(FsFile& file) const {
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   uint16_t wc;
-  std::list<std::string> words;
-  std::list<uint16_t> wordXpos;
-  std::list<EpdFontFamily::Style> wordStyles;
+  std::vector<std::string> words;
+  std::vector<uint16_t> wordXpos;
+  std::vector<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
 
   // Word count
   serialization::readPod(file, wc);
 
-  // Sanity check: prevent allocation of unreasonably large lists (max 10000 words per block)
+  // Sanity check: prevent allocation of unreasonably large vectors (max 10000 words per block)
   if (wc > 10000) {
     LOG_ERR("TXB", "Deserialization failed: word count %u exceeds maximum", wc);
     return nullptr;
