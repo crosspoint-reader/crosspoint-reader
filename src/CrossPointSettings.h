@@ -2,6 +2,9 @@
 #include <cstdint>
 #include <iosfwd>
 
+// Forward declarations
+class FsFile;
+
 class CrossPointSettings {
  private:
   // Private constructor for singleton
@@ -15,7 +18,15 @@ class CrossPointSettings {
   CrossPointSettings(const CrossPointSettings&) = delete;
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
-  enum SLEEP_SCREEN_MODE { DARK = 0, LIGHT = 1, CUSTOM = 2, COVER = 3, BLANK = 4, SLEEP_SCREEN_MODE_COUNT };
+  enum SLEEP_SCREEN_MODE {
+    DARK = 0,
+    LIGHT = 1,
+    CUSTOM = 2,
+    COVER = 3,
+    BLANK = 4,
+    COVER_CUSTOM = 5,
+    SLEEP_SCREEN_MODE_COUNT
+  };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
@@ -29,8 +40,9 @@ class CrossPointSettings {
     NONE = 0,
     NO_PROGRESS = 1,
     FULL = 2,
-    FULL_WITH_PROGRESS_BAR = 3,
-    ONLY_PROGRESS_BAR = 4,
+    BOOK_PROGRESS_BAR = 3,
+    ONLY_BOOK_PROGRESS_BAR = 4,
+    CHAPTER_PROGRESS_BAR = 5,
     STATUS_BAR_MODE_COUNT
   };
 
@@ -42,7 +54,7 @@ class CrossPointSettings {
     ORIENTATION_COUNT
   };
 
-  // Front button layout options
+  // Front button layout options (legacy)
   // Default: Back, Confirm, Left, Right
   // Swapped: Left, Right, Back, Confirm
   enum FRONT_BUTTON_LAYOUT {
@@ -51,6 +63,15 @@ class CrossPointSettings {
     LEFT_BACK_CONFIRM_RIGHT = 2,
     BACK_CONFIRM_RIGHT_LEFT = 3,
     FRONT_BUTTON_LAYOUT_COUNT
+  };
+
+  // Front button hardware identifiers (for remapping)
+  enum FRONT_BUTTON_HARDWARE {
+    FRONT_HW_BACK = 0,
+    FRONT_HW_CONFIRM = 1,
+    FRONT_HW_LEFT = 2,
+    FRONT_HW_RIGHT = 3,
+    FRONT_BUTTON_HARDWARE_COUNT
   };
 
   // Side button layout options
@@ -68,6 +89,7 @@ class CrossPointSettings {
     LEFT_ALIGN = 1,
     CENTER_ALIGN = 2,
     RIGHT_ALIGN = 3,
+    BOOK_STYLE = 4,
     PARAGRAPH_ALIGNMENT_COUNT
   };
 
@@ -97,6 +119,9 @@ class CrossPointSettings {
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
 
+  // UI Theme
+  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2 };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -113,9 +138,15 @@ class CrossPointSettings {
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
-  // Button layouts
+  // Button layouts (front layout retained for migration only)
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
   uint8_t sideButtonLayout = PREV_NEXT;
+  // Front button remap (logical -> hardware)
+  // Used by MappedInputManager to translate logical buttons into physical front buttons.
+  uint8_t frontButtonBack = FRONT_HW_BACK;
+  uint8_t frontButtonConfirm = FRONT_HW_CONFIRM;
+  uint8_t frontButtonLeft = FRONT_HW_LEFT;
+  uint8_t frontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
   uint8_t fontFamily = BOOKERLY;
   uint8_t fontSize = MEDIUM;
@@ -137,6 +168,12 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
+  // UI Theme
+  uint8_t uiTheme = LYRA;
+  // Sunlight fading compensation
+  uint8_t fadingFix = 0;
+  // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
+  uint8_t embeddedStyle = 1;
 
   ~CrossPointSettings() = default;
 
@@ -147,6 +184,9 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+
+  // If count_only is true, returns the number of settings items that would be written.
+  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
 
   bool saveToFile() const;
   bool loadFromFile();

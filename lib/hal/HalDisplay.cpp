@@ -16,6 +16,11 @@ void HalDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uin
   einkDisplay.drawImage(imageData, x, y, w, h, fromProgmem);
 }
 
+void HalDisplay::drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                      bool fromProgmem) const {
+  einkDisplay.drawImageTransparent(imageData, x, y, w, h, fromProgmem);
+}
+
 EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   switch (mode) {
     case HalDisplay::FULL_REFRESH:
@@ -28,7 +33,9 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
-void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode) { einkDisplay.displayBuffer(convertRefreshMode(mode)); }
+void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
+}
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
@@ -48,4 +55,4 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
-void HalDisplay::displayGrayBuffer() { einkDisplay.displayGrayBuffer(); }
+void HalDisplay::displayGrayBuffer(bool turnOffScreen) { einkDisplay.displayGrayBuffer(turnOffScreen); }

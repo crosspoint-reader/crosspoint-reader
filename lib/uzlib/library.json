@@ -1,0 +1,15 @@
+{
+  "name": "uzlib",
+  "version": "2.9.8",
+  "description": "Micro deflate/inflate library (uzlib)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pfalcon/uzlib.git"
+  },
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

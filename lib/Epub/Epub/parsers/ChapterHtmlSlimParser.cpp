@@ -1,17 +1,23 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
-#include <SDCardManager.h>
+#include <HalStorage.h>
+#include <Logging.h>
 #include <expat.h>
 
+#include "../../Epub.h"
 #include "../Page.h"
+#include "../converters/ImageDecoderFactory.h"
+#include "../converters/ImageToFramebufferDecoder.h"
+#include "../htmlEntities.h"
 
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
-constexpr size_t MIN_SIZE_FOR_POPUP = 50 * 1024;  // 50KB
+constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
+constexpr size_t PARSE_BUFFER_SIZE = 1024;
 
 const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
 constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
@@ -21,6 +27,9 @@ constexpr int NUM_BOLD_TAGS = sizeof(BOLD_TAGS) / sizeof(BOLD_TAGS[0]);
 
 const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
+
+const char* UNDERLINE_TAGS[] = {"u", "ins"};
+constexpr int NUM_UNDERLINE_TAGS = sizeof(UNDERLINE_TAGS) / sizeof(UNDERLINE_TAGS[0]);
 
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
@@ -40,35 +49,78 @@ bool matches(const char* tag_name, const char* possible_tags[], const int possib
   return false;
 }
 
+bool isHeaderOrBlock(const char* name) {
+  return matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
+}
+
+bool isTableStructuralTag(const char* name) {
+  return strcmp(name, "table") == 0 || strcmp(name, "tr") == 0 || strcmp(name, "td") == 0 || strcmp(name, "th") == 0;
+}
+
+// Update effective bold/italic/underline based on block style and inline style stack
+void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
+  // Start with block-level styles
+  effectiveBold = currentCssStyle.hasFontWeight() && currentCssStyle.fontWeight == CssFontWeight::Bold;
+  effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
+  effectiveUnderline =
+      currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::Underline;
+
+  // Apply inline style stack in order
+  for (const auto& entry : inlineStyleStack) {
+    if (entry.hasBold) {
+      effectiveBold = entry.bold;
+    }
+    if (entry.hasItalic) {
+      effectiveItalic = entry.italic;
+    }
+    if (entry.hasUnderline) {
+      effectiveUnderline = entry.underline;
+    }
+  }
+}
+
 // flush the contents of partWordBuffer to currentTextBlock
 void ChapterHtmlSlimParser::flushPartWordBuffer() {
-  // determine font style
+  // Determine font style from depth-based tracking and CSS effective style
+  const bool isBold = boldUntilDepth < depth || effectiveBold;
+  const bool isItalic = italicUntilDepth < depth || effectiveItalic;
+  const bool isUnderline = underlineUntilDepth < depth || effectiveUnderline;
+
+  // Combine style flags using bitwise OR
   EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
-  if (boldUntilDepth < depth && italicUntilDepth < depth) {
-    fontStyle = EpdFontFamily::BOLD_ITALIC;
-  } else if (boldUntilDepth < depth) {
-    fontStyle = EpdFontFamily::BOLD;
-  } else if (italicUntilDepth < depth) {
-    fontStyle = EpdFontFamily::ITALIC;
+  if (isBold) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::BOLD);
   }
+  if (isItalic) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::ITALIC);
+  }
+  if (isUnderline) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::UNDERLINE);
+  }
+
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
-  currentTextBlock->addWord(partWordBuffer, fontStyle);
+  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
   partWordBufferIndex = 0;
+  nextWordContinues = false;
 }
 
 // start a new text block if needed
-void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::Style style) {
+void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
+  nextWordContinues = false;  // New block = new paragraph, no continuation
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
-      currentTextBlock->setStyle(style);
+      // Merge with existing block style to accumulate CSS styling from parent block elements.
+      // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
+      // div's margin should be preserved, even though it has no direct text content.
+      currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
       return;
     }
 
     makePages();
   }
-  currentTextBlock.reset(new ParsedText(style, extraParagraphSpacing, hyphenationEnabled));
+  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -80,46 +132,283 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Special handling for tables - show placeholder text instead of dropping silently
+  // Extract class and style attributes for CSS processing
+  std::string classAttr;
+  std::string styleAttr;
+  if (atts != nullptr) {
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "class") == 0) {
+        classAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "style") == 0) {
+        styleAttr = atts[i + 1];
+      }
+    }
+  }
+
+  auto centeredBlockStyle = BlockStyle();
+  centeredBlockStyle.textAlignDefined = true;
+  centeredBlockStyle.alignment = CssTextAlign::Center;
+
+  // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
   if (strcmp(name, "table") == 0) {
-    // Add placeholder text
-    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+    // skip nested tables
+    if (self->tableDepth > 0) {
+      self->tableDepth += 1;
+      return;
+    }
 
-    self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
-    // Advance depth before processing character data (like you would for a element with text)
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    self->tableDepth += 1;
+    self->tableRowIndex = 0;
+    self->tableColIndex = 0;
     self->depth += 1;
-    self->characterData(userData, "[Table omitted]", strlen("[Table omitted]"));
+    return;
+  }
 
-    // Skip table contents (skip until parent as we pre-advanced depth above)
-    self->skipUntilDepth = self->depth - 1;
+  if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
+    self->tableRowIndex += 1;
+    self->tableColIndex = 0;
+    self->depth += 1;
+    return;
+  }
+
+  if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    self->tableColIndex += 1;
+
+    auto tableCellBlockStyle = BlockStyle();
+    tableCellBlockStyle.textAlignDefined = true;
+    const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                           ? CssTextAlign::Justify
+                           : static_cast<CssTextAlign>(self->paragraphAlignment);
+    tableCellBlockStyle.alignment = align;
+    self->startNewTextBlock(tableCellBlockStyle);
+
+    const std::string headerText =
+        "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
+    StyleStackEntry headerStyle;
+    headerStyle.depth = self->depth;
+    headerStyle.hasBold = true;
+    headerStyle.bold = false;
+    headerStyle.hasItalic = true;
+    headerStyle.italic = true;
+    headerStyle.hasUnderline = true;
+    headerStyle.underline = false;
+    self->inlineStyleStack.push_back(headerStyle);
+    self->updateEffectiveInlineStyle();
+    self->characterData(userData, headerText.c_str(), static_cast<int>(headerText.length()));
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    self->nextWordContinues = false;
+    self->inlineStyleStack.pop_back();
+    self->updateEffectiveInlineStyle();
+
+    self->depth += 1;
     return;
   }
 
   if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
-    // TODO: Start processing image tags
-    std::string alt = "[Image]";
+    std::string src;
+    std::string alt;
     if (atts != nullptr) {
       for (int i = 0; atts[i]; i += 2) {
-        if (strcmp(atts[i], "alt") == 0) {
-          if (strlen(atts[i + 1]) > 0) {
-            alt = "[Image: " + std::string(atts[i + 1]) + "]";
-          }
-          break;
+        if (strcmp(atts[i], "src") == 0) {
+          src = atts[i + 1];
+        } else if (strcmp(atts[i], "alt") == 0) {
+          alt = atts[i + 1];
         }
       }
+
+      if (!src.empty()) {
+        LOG_DBG("EHP", "Found image: src=%s", src.c_str());
+
+        {
+          // Resolve the image path relative to the HTML file
+          std::string resolvedPath = FsHelpers::normalisePath(self->contentBase + src);
+
+          if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
+            // Create a unique filename for the cached image
+            std::string ext;
+            size_t extPos = resolvedPath.rfind('.');
+            if (extPos != std::string::npos) {
+              ext = resolvedPath.substr(extPos);
+            }
+            std::string cachedImagePath = self->imageBasePath + std::to_string(self->imageCounter++) + ext;
+
+            // Extract image to cache file
+            FsFile cachedImageFile;
+            bool extractSuccess = false;
+            if (Storage.openFileForWrite("EHP", cachedImagePath, cachedImageFile)) {
+              extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
+              cachedImageFile.flush();
+              cachedImageFile.close();
+              delay(50);  // Give SD card time to sync
+            }
+
+            if (extractSuccess) {
+              // Get image dimensions
+              ImageDimensions dims = {0, 0};
+              ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(cachedImagePath);
+              if (decoder && decoder->getDimensions(cachedImagePath, dims)) {
+                LOG_DBG("EHP", "Image dimensions: %dx%d", dims.width, dims.height);
+
+                int displayWidth = 0;
+                int displayHeight = 0;
+                const float emSize =
+                    static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+                CssStyle imgStyle = self->cssParser ? self->cssParser->resolveStyle("img", classAttr) : CssStyle{};
+                // Merge inline style (e.g. style="height: 2em") so it overrides stylesheet rules
+                if (!styleAttr.empty()) {
+                  imgStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
+                }
+                const bool hasCssHeight = imgStyle.hasImageHeight();
+                const bool hasCssWidth = imgStyle.hasImageWidth();
+
+                if (hasCssHeight && hasCssWidth && dims.width > 0 && dims.height > 0) {
+                  // Both CSS height and width set: resolve both, then clamp to viewport preserving requested ratio
+                  displayHeight = static_cast<int>(
+                      imgStyle.imageHeight.toPixels(emSize, static_cast<float>(self->viewportHeight)) + 0.5f);
+                  displayWidth = static_cast<int>(
+                      imgStyle.imageWidth.toPixels(emSize, static_cast<float>(self->viewportWidth)) + 0.5f);
+                  if (displayHeight < 1) displayHeight = 1;
+                  if (displayWidth < 1) displayWidth = 1;
+                  if (displayWidth > self->viewportWidth || displayHeight > self->viewportHeight) {
+                    float scaleX = (displayWidth > self->viewportWidth)
+                                       ? static_cast<float>(self->viewportWidth) / displayWidth
+                                       : 1.0f;
+                    float scaleY = (displayHeight > self->viewportHeight)
+                                       ? static_cast<float>(self->viewportHeight) / displayHeight
+                                       : 1.0f;
+                    float scale = (scaleX < scaleY) ? scaleX : scaleY;
+                    displayWidth = static_cast<int>(displayWidth * scale + 0.5f);
+                    displayHeight = static_cast<int>(displayHeight * scale + 0.5f);
+                    if (displayWidth < 1) displayWidth = 1;
+                    if (displayHeight < 1) displayHeight = 1;
+                  }
+                  LOG_DBG("EHP", "Display size from CSS height+width: %dx%d", displayWidth, displayHeight);
+                } else if (hasCssHeight && !hasCssWidth && dims.width > 0 && dims.height > 0) {
+                  // Use CSS height (resolve % against viewport height) and derive width from aspect ratio
+                  displayHeight = static_cast<int>(
+                      imgStyle.imageHeight.toPixels(emSize, static_cast<float>(self->viewportHeight)) + 0.5f);
+                  if (displayHeight < 1) displayHeight = 1;
+                  displayWidth =
+                      static_cast<int>(displayHeight * (static_cast<float>(dims.width) / dims.height) + 0.5f);
+                  if (displayHeight > self->viewportHeight) {
+                    displayHeight = self->viewportHeight;
+                    // Rescale width to preserve aspect ratio when height is clamped
+                    displayWidth =
+                        static_cast<int>(displayHeight * (static_cast<float>(dims.width) / dims.height) + 0.5f);
+                    if (displayWidth < 1) displayWidth = 1;
+                  }
+                  if (displayWidth > self->viewportWidth) {
+                    displayWidth = self->viewportWidth;
+                    // Rescale height to preserve aspect ratio when width is clamped
+                    displayHeight =
+                        static_cast<int>(displayWidth * (static_cast<float>(dims.height) / dims.width) + 0.5f);
+                    if (displayHeight < 1) displayHeight = 1;
+                  }
+                  if (displayWidth < 1) displayWidth = 1;
+                  LOG_DBG("EHP", "Display size from CSS height: %dx%d", displayWidth, displayHeight);
+                } else if (hasCssWidth && !hasCssHeight && dims.width > 0 && dims.height > 0) {
+                  // Use CSS width (resolve % against viewport width) and derive height from aspect ratio
+                  displayWidth = static_cast<int>(
+                      imgStyle.imageWidth.toPixels(emSize, static_cast<float>(self->viewportWidth)) + 0.5f);
+                  if (displayWidth > self->viewportWidth) displayWidth = self->viewportWidth;
+                  if (displayWidth < 1) displayWidth = 1;
+                  displayHeight =
+                      static_cast<int>(displayWidth * (static_cast<float>(dims.height) / dims.width) + 0.5f);
+                  if (displayHeight > self->viewportHeight) {
+                    displayHeight = self->viewportHeight;
+                    // Rescale width to preserve aspect ratio when height is clamped
+                    displayWidth =
+                        static_cast<int>(displayHeight * (static_cast<float>(dims.width) / dims.height) + 0.5f);
+                    if (displayWidth < 1) displayWidth = 1;
+                  }
+                  if (displayHeight < 1) displayHeight = 1;
+                  LOG_DBG("EHP", "Display size from CSS width: %dx%d", displayWidth, displayHeight);
+                } else {
+                  // Scale to fit viewport while maintaining aspect ratio
+                  int maxWidth = self->viewportWidth;
+                  int maxHeight = self->viewportHeight;
+                  float scaleX = (dims.width > maxWidth) ? (float)maxWidth / dims.width : 1.0f;
+                  float scaleY = (dims.height > maxHeight) ? (float)maxHeight / dims.height : 1.0f;
+                  float scale = (scaleX < scaleY) ? scaleX : scaleY;
+                  if (scale > 1.0f) scale = 1.0f;
+
+                  displayWidth = (int)(dims.width * scale);
+                  displayHeight = (int)(dims.height * scale);
+                  LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
+                }
+
+                // Create page for image - only break if image won't fit remaining space
+                if (self->currentPage && !self->currentPage->elements.empty() &&
+                    (self->currentPageNextY + displayHeight > self->viewportHeight)) {
+                  self->completePageFn(std::move(self->currentPage));
+                  self->currentPage.reset(new Page());
+                  if (!self->currentPage) {
+                    LOG_ERR("EHP", "Failed to create new page");
+                    return;
+                  }
+                  self->currentPageNextY = 0;
+                } else if (!self->currentPage) {
+                  self->currentPage.reset(new Page());
+                  if (!self->currentPage) {
+                    LOG_ERR("EHP", "Failed to create initial page");
+                    return;
+                  }
+                  self->currentPageNextY = 0;
+                }
+
+                // Create ImageBlock and add to page
+                auto imageBlock = std::make_shared<ImageBlock>(cachedImagePath, displayWidth, displayHeight);
+                if (!imageBlock) {
+                  LOG_ERR("EHP", "Failed to create ImageBlock");
+                  return;
+                }
+                int xPos = (self->viewportWidth - displayWidth) / 2;
+                auto pageImage = std::make_shared<PageImage>(imageBlock, xPos, self->currentPageNextY);
+                if (!pageImage) {
+                  LOG_ERR("EHP", "Failed to create PageImage");
+                  return;
+                }
+                self->currentPage->elements.push_back(pageImage);
+                self->currentPageNextY += displayHeight;
+
+                self->depth += 1;
+                return;
+              } else {
+                LOG_ERR("EHP", "Failed to get image dimensions");
+                Storage.remove(cachedImagePath.c_str());
+              }
+            } else {
+              LOG_ERR("EHP", "Failed to extract image");
+            }
+          }  // isFormatSupported
+        }
+      }
+
+      // Fallback to alt text if image processing fails
+      if (!alt.empty()) {
+        alt = "[Image: " + alt + "]";
+        self->startNewTextBlock(centeredBlockStyle);
+        self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
+        self->depth += 1;
+        self->characterData(userData, alt.c_str(), alt.length());
+        // Skip any child content (skip until parent as we pre-advanced depth above)
+        self->skipUntilDepth = self->depth - 1;
+        return;
+      }
+
+      // No alt text, skip
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
     }
-
-    Serial.printf("[%lu] [EHP] Image alt: %s\n", millis(), alt.c_str());
-
-    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
-    self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
-    // Advance depth before processing character data (like you would for a element with text)
-    self->depth += 1;
-    self->characterData(userData, alt.c_str(), alt.length());
-
-    // Skip table contents (skip until parent as we pre-advanced depth above)
-    self->skipUntilDepth = self->depth - 1;
-    return;
   }
 
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {
@@ -141,43 +430,139 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
-  if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
-    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
-    self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
-    self->depth += 1;
-    return;
+  // Compute CSS style for this element
+  CssStyle cssStyle;
+  if (self->cssParser) {
+    // Get combined tag + class styles
+    cssStyle = self->cssParser->resolveStyle(name, classAttr);
+    // Merge inline style (highest priority)
+    if (!styleAttr.empty()) {
+      CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
+      cssStyle.applyOver(inlineStyle);
+    }
   }
 
-  if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
+  const float emSize = static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+  const auto userAlignmentBlockStyle = BlockStyle::fromCssStyle(
+      cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
+
+  if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
+    self->currentCssStyle = cssStyle;
+    auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
+    headerBlockStyle.textAlignDefined = true;
+    if (self->embeddedStyle && cssStyle.hasTextAlign()) {
+      headerBlockStyle.alignment = cssStyle.textAlign;
+    }
+    self->startNewTextBlock(headerBlockStyle);
+    self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
+    self->updateEffectiveInlineStyle();
+  } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
       if (self->partWordBufferIndex > 0) {
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
-      self->startNewTextBlock(self->currentTextBlock->getStyle());
-      self->depth += 1;
-      return;
+      self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
+    } else {
+      self->currentCssStyle = cssStyle;
+      self->startNewTextBlock(userAlignmentBlockStyle);
+      self->updateEffectiveInlineStyle();
+
+      if (strcmp(name, "li") == 0) {
+        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+      }
     }
-
-    self->startNewTextBlock(static_cast<TextBlock::Style>(self->paragraphAlignment));
-    if (strcmp(name, "li") == 0) {
-      self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+  } else if (matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS)) {
+    // Flush buffer before style change so preceding text gets current style
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
     }
-
-    self->depth += 1;
-    return;
-  }
-
-  if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
+    self->underlineUntilDepth = std::min(self->underlineUntilDepth, self->depth);
+    // Push inline style entry for underline tag
+    StyleStackEntry entry;
+    entry.depth = self->depth;  // Track depth for matching pop
+    entry.hasUnderline = true;
+    entry.underline = true;
+    if (cssStyle.hasFontWeight()) {
+      entry.hasBold = true;
+      entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+    }
+    if (cssStyle.hasFontStyle()) {
+      entry.hasItalic = true;
+      entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
+  } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
+    // Flush buffer before style change so preceding text gets current style
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
-    self->depth += 1;
-    return;
-  }
-
-  if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
+    // Push inline style entry for bold tag
+    StyleStackEntry entry;
+    entry.depth = self->depth;  // Track depth for matching pop
+    entry.hasBold = true;
+    entry.bold = true;
+    if (cssStyle.hasFontStyle()) {
+      entry.hasItalic = true;
+      entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+    }
+    if (cssStyle.hasTextDecoration()) {
+      entry.hasUnderline = true;
+      entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
+  } else if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
+    // Flush buffer before style change so preceding text gets current style
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
     self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
-    self->depth += 1;
-    return;
+    // Push inline style entry for italic tag
+    StyleStackEntry entry;
+    entry.depth = self->depth;  // Track depth for matching pop
+    entry.hasItalic = true;
+    entry.italic = true;
+    if (cssStyle.hasFontWeight()) {
+      entry.hasBold = true;
+      entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+    }
+    if (cssStyle.hasTextDecoration()) {
+      entry.hasUnderline = true;
+      entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
+    // Handle span and other inline elements for CSS styling
+    if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration()) {
+      // Flush buffer before style change so preceding text gets current style
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+        self->nextWordContinues = true;
+      }
+      StyleStackEntry entry;
+      entry.depth = self->depth;  // Track depth for matching pop
+      if (cssStyle.hasFontWeight()) {
+        entry.hasBold = true;
+        entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+      }
+      if (cssStyle.hasFontStyle()) {
+        entry.hasItalic = true;
+        entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+      }
+      if (cssStyle.hasTextDecoration()) {
+        entry.hasUnderline = true;
+        entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+      }
+      self->inlineStyleStack.push_back(entry);
+      self->updateEffectiveInlineStyle();
+    }
   }
 
   // Unprocessed tag, just increasing depth and continue forward
@@ -186,6 +571,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
 void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+
+  // Skip content of nested table
+  if (self->tableDepth > 1) {
+    return;
+  }
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
@@ -198,7 +588,63 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
       }
+      // Whitespace is a real word boundary — reset continuation state
+      self->nextWordContinues = false;
       // Skip the whitespace char
+      continue;
+    }
+
+    // Detect U+00A0 (non-breaking space, UTF-8: 0xC2 0xA0) or
+    //        U+202F (narrow no-break space, UTF-8: 0xE2 0x80 0xAF).
+    //
+    // Both are rendered as a visible space but must never allow a line break around them.
+    // We split the no-break space into its own word token and link the surrounding words
+    // with continuation flags so the layout engine treats them as an indivisible group.
+    //
+    // Example: "200&#xA0;Quadratkilometer" or "200&#x202F;Quadratkilometer"
+    //   Input bytes:  "200\xC2\xA0Quadratkilometer"  (or 0xE2 0x80 0xAF for U+202F)
+    //   Tokens produced:
+    //     [0] "200"               continues=false
+    //     [1] " "                 continues=true   (attaches to "200", no gap)
+    //     [2] "Quadratkilometer"  continues=true   (attaches to " ", no gap)
+    //
+    //   The continuation flags prevent the line-breaker from inserting a line break
+    //   between "200" and "Quadratkilometer". However, "Quadratkilometer" is now a
+    //   standalone word for hyphenation purposes, so Liang patterns can produce
+    //   "200 Quadrat-" / "kilometer" instead of the unusable "200" / "Quadratkilometer".
+    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+
+      self->partWordBuffer[0] = ' ';
+      self->partWordBuffer[1] = '\0';
+      self->partWordBufferIndex = 1;
+      self->nextWordContinues = true;  // Attach space to previous word (no break).
+      self->flushPartWordBuffer();
+
+      self->nextWordContinues = true;  // Next real word attaches to this space (no break).
+
+      i++;  // Skip the second byte (0xA0)
+      continue;
+    }
+
+    // U+202F (narrow no-break space) — identical logic to U+00A0 above.
+    if (static_cast<uint8_t>(s[i]) == 0xE2 && i + 2 < len && static_cast<uint8_t>(s[i + 1]) == 0x80 &&
+        static_cast<uint8_t>(s[i + 2]) == 0xAF) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+
+      self->partWordBuffer[0] = ' ';
+      self->partWordBuffer[1] = '\0';
+      self->partWordBufferIndex = 1;
+      self->nextWordContinues = true;
+      self->flushPartWordBuffer();
+
+      self->nextWordContinues = true;
+
+      i += 2;  // Skip the remaining two bytes (0x80 0xAF)
       continue;
     }
 
@@ -229,28 +675,69 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // memory.
   // Spotted when reading Intermezzo, there are some really long text blocks in there.
   if (self->currentTextBlock->size() > 750) {
-    Serial.printf("[%lu] [EHP] Text block too long, splitting into multiple pages\n", millis());
+    LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, self->viewportWidth,
         [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
   }
 }
 
+void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const XML_Char* s, const int len) {
+  // Check if this looks like an entity reference (&...;)
+  if (len >= 3 && s[0] == '&' && s[len - 1] == ';') {
+    const char* utf8Value = lookupHtmlEntity(s, len);
+    if (utf8Value != nullptr) {
+      // Known entity: expand to its UTF-8 value
+      characterData(userData, utf8Value, strlen(utf8Value));
+      return;
+    }
+    // Unknown entity: preserve original &...; sequence
+    characterData(userData, s, len);
+    return;
+  }
+  // Not an entity we recognize - skip it
+}
+
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
-  if (self->partWordBufferIndex > 0) {
-    // Only flush out part word buffer if we're closing a block tag or are at the top of the HTML file.
-    // We don't want to flush out content when closing inline tags like <span>.
-    // Currently this also flushes out on closing <b> and <i> tags, but they are line tags so that shouldn't happen,
-    // text styling needs to be overhauled to fix it.
-    const bool shouldBreakText =
-        matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || matches(name, HEADER_TAGS, NUM_HEADER_TAGS) ||
-        matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) ||
-        strcmp(name, "table") == 0 || matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) || self->depth == 1;
+  // Check if any style state will change after we decrement depth
+  // If so, we MUST flush the partWordBuffer with the CURRENT style first
+  // Note: depth hasn't been decremented yet, so we check against (depth - 1)
+  const bool willPopStyleStack =
+      !self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth - 1;
+  const bool willClearBold = self->boldUntilDepth == self->depth - 1;
+  const bool willClearItalic = self->italicUntilDepth == self->depth - 1;
+  const bool willClearUnderline = self->underlineUntilDepth == self->depth - 1;
 
-    if (shouldBreakText) {
+  const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic || willClearUnderline;
+  const bool headerOrBlockTag = isHeaderOrBlock(name);
+  const bool tableStructuralTag = isTableStructuralTag(name);
+
+  if (self->tableDepth > 1 && strcmp(name, "table") == 0) {
+    // get rid of all text inside the nested table
+    self->partWordBufferIndex = 0;
+    self->tableDepth -= 1;
+    LOG_DBG("EHP", "nested table detected, get rid of its content");
+    return;
+  }
+
+  // Flush buffer with current style BEFORE any style changes
+  if (self->partWordBufferIndex > 0) {
+    // Flush if style will change OR if we're closing a block/structural element
+    const bool isInlineTag =
+        !headerOrBlockTag && !tableStructuralTag && !matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) && self->depth != 1;
+    const bool shouldFlush = styleWillChange || headerOrBlockTag || matches(name, BOLD_TAGS, NUM_BOLD_TAGS) ||
+                             matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) ||
+                             matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS) || tableStructuralTag ||
+                             matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) || self->depth == 1;
+
+    if (shouldFlush) {
       self->flushPartWordBuffer();
+      // If closing an inline element, the next word fragment continues the same visual word
+      if (isInlineTag) {
+        self->nextWordContinues = true;
+      }
     }
   }
 
@@ -261,30 +748,74 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->skipUntilDepth = INT_MAX;
   }
 
-  // Leaving bold
+  if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+    self->nextWordContinues = false;
+  }
+
+  if (self->tableDepth == 1 && (strcmp(name, "tr") == 0)) {
+    self->nextWordContinues = false;
+  }
+
+  if (self->tableDepth == 1 && strcmp(name, "table") == 0) {
+    self->tableDepth -= 1;
+    self->tableRowIndex = 0;
+    self->tableColIndex = 0;
+    self->nextWordContinues = false;
+  }
+
+  // Leaving bold tag
   if (self->boldUntilDepth == self->depth) {
     self->boldUntilDepth = INT_MAX;
   }
 
-  // Leaving italic
+  // Leaving italic tag
   if (self->italicUntilDepth == self->depth) {
     self->italicUntilDepth = INT_MAX;
+  }
+
+  // Leaving underline tag
+  if (self->underlineUntilDepth == self->depth) {
+    self->underlineUntilDepth = INT_MAX;
+  }
+
+  // Pop from inline style stack if we pushed an entry at this depth
+  // This handles all inline elements: b, i, u, span, etc.
+  if (!self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth) {
+    self->inlineStyleStack.pop_back();
+    self->updateEffectiveInlineStyle();
+  }
+
+  // Clear block style when leaving header or block elements
+  if (headerOrBlockTag) {
+    self->currentCssStyle.reset();
+    self->updateEffectiveInlineStyle();
   }
 }
 
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
-  startNewTextBlock((TextBlock::Style)this->paragraphAlignment);
+  auto paragraphAlignmentBlockStyle = BlockStyle();
+  paragraphAlignmentBlockStyle.textAlignDefined = true;
+  // Resolve None sentinel to Justify for initial block (no CSS context yet)
+  const auto align = (this->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                         ? CssTextAlign::Justify
+                         : static_cast<CssTextAlign>(this->paragraphAlignment);
+  paragraphAlignmentBlockStyle.alignment = align;
+  startNewTextBlock(paragraphAlignmentBlockStyle);
 
   const XML_Parser parser = XML_ParserCreate(nullptr);
   int done;
 
   if (!parser) {
-    Serial.printf("[%lu] [EHP] Couldn't allocate memory for parser\n", millis());
+    LOG_ERR("EHP", "Couldn't allocate memory for parser");
     return false;
   }
 
+  // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD
+  // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE
+  XML_SetDefaultHandlerExpand(parser, defaultHandlerExpand);
+
   FsFile file;
-  if (!SdMan.openFileForRead("EHP", filepath, file)) {
+  if (!Storage.openFileForRead("EHP", filepath, file)) {
     XML_ParserFree(parser);
     return false;
   }
@@ -298,10 +829,12 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   XML_SetElementHandler(parser, startElement, endElement);
   XML_SetCharacterDataHandler(parser, characterData);
 
+  // Compute the time taken to parse and build pages
+  const uint32_t chapterStartTime = millis();
   do {
-    void* const buf = XML_GetBuffer(parser, 1024);
+    void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {
-      Serial.printf("[%lu] [EHP] Couldn't allocate memory for buffer\n", millis());
+      LOG_ERR("EHP", "Couldn't allocate memory for buffer");
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -310,10 +843,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       return false;
     }
 
-    const size_t len = file.read(buf, 1024);
+    const size_t len = file.read(buf, PARSE_BUFFER_SIZE);
 
     if (len == 0 && file.available() > 0) {
-      Serial.printf("[%lu] [EHP] File read error\n", millis());
+      LOG_ERR("EHP", "File read error");
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -325,8 +858,8 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     done = file.available() == 0;
 
     if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [EHP] Parse error at line %lu:\n%s\n", millis(), XML_GetCurrentLineNumber(parser),
-                    XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
+              XML_ErrorString(XML_GetErrorCode(parser)));
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -335,6 +868,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       return false;
     }
   } while (!done);
+  LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - chapterStartTime);
 
   XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
   XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
@@ -362,13 +896,15 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
-  currentPage->elements.push_back(std::make_shared<PageLine>(line, 0, currentPageNextY));
+  // Apply horizontal left inset (margin + padding) as x position offset
+  const int16_t xOffset = line->getBlockStyle().leftInset();
+  currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
   currentPageNextY += lineHeight;
 }
 
 void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock) {
-    Serial.printf("[%lu] [EHP] !! No text block to make pages for !!\n", millis());
+    LOG_ERR("EHP", "!! No text block to make pages for !!");
     return;
   }
 
@@ -378,10 +914,34 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+
+  // Apply top spacing before the paragraph (stored in pixels)
+  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
+  if (blockStyle.marginTop > 0) {
+    currentPageNextY += blockStyle.marginTop;
+  }
+  if (blockStyle.paddingTop > 0) {
+    currentPageNextY += blockStyle.paddingTop;
+  }
+
+  // Calculate effective width accounting for horizontal margins/padding
+  const int horizontalInset = blockStyle.totalHorizontalInset();
+  const uint16_t effectiveWidth =
+      (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
+
   currentTextBlock->layoutAndExtractLines(
-      renderer, fontId, viewportWidth,
+      renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
-  // Extra paragraph spacing if enabled
+
+  // Apply bottom spacing after the paragraph (stored in pixels)
+  if (blockStyle.marginBottom > 0) {
+    currentPageNextY += blockStyle.marginBottom;
+  }
+  if (blockStyle.paddingBottom > 0) {
+    currentPageNextY += blockStyle.paddingBottom;
+  }
+
+  // Extra paragraph spacing if enabled (default behavior)
   if (extraParagraphSpacing) {
     currentPageNextY += lineHeight / 2;
   }

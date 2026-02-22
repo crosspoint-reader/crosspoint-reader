@@ -1,8 +1,31 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# Check if clang-format is available and pick the preferred binary.
+if command -v clang-format-21 >/dev/null 2>&1; then
+  CLANG_FORMAT_BIN="clang-format-21"
+elif command -v clang-format >/dev/null 2>&1; then
+  CLANG_FORMAT_BIN="clang-format"
+else
+  printf "'clang-format' not found in current environment\n"
+  printf "Install clang-format-21 (recommended), clang, clang-tools, or clang-format depending on your distro/os and tooling requirements\n"
+  exit 1
+fi
+
+set -euo pipefail
 
 GIT_LS_FILES_FLAGS=""
-if [[ "$1" == "-g" ]]; then
+if [[ "${1:-}" == "-g" ]]; then
   GIT_LS_FILES_FLAGS="--modified"
+fi
+
+CLANG_FORMAT_VERSION_RAW="$(${CLANG_FORMAT_BIN} --version)"
+CLANG_FORMAT_MAJOR="$(printf '%s\n' "${CLANG_FORMAT_VERSION_RAW}" | grep -oE '[0-9]+' | head -n1)"
+
+if [[ -z "${CLANG_FORMAT_MAJOR}" || "${CLANG_FORMAT_MAJOR}" -lt 21 ]]; then
+  echo "Error: ${CLANG_FORMAT_BIN} is too old: ${CLANG_FORMAT_VERSION_RAW}"
+  echo "This repository's .clang-format requires clang-format 21 or newer."
+  echo "Install clang-format-21 and rerun ./bin/clang-format-fix"
+  exit 1
 fi
 
 # --- Main Logic ---
@@ -13,7 +36,10 @@ fi
 # --modified: files tracked by git that have been modified (staged or unstaged)
 # --exclude-standard: ignores files in .gitignore
 # Additionally exclude files in 'lib/EpdFont/builtinFonts/' as they are script-generated.
+# Also exclude files in 'lib/Epub/Epub/hyphenation/generated/' as they are script-generated.
 git ls-files  --exclude-standard ${GIT_LS_FILES_FLAGS} \
     | grep -E '\.(c|cpp|h|hpp)$' \
     | grep -v -E '^lib/EpdFont/builtinFonts/' \
-    | xargs -r clang-format -style=file -i
+    | grep -v -E '^lib/Epub/Epub/hyphenation/generated/' \
+    | grep -v -E '^lib/uzlib/' \
+    | xargs -r "${CLANG_FORMAT_BIN}" -style=file -i

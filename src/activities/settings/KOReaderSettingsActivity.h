@@ -1,11 +1,9 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <functional>
 
 #include "activities/ActivityWithSubactivity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Submenu for KOReader Sync settings.
@@ -20,17 +18,13 @@ class KOReaderSettingsActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
 
  private:
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-  bool updateRequired = false;
+  ButtonNavigator buttonNavigator;
 
-  int selectedIndex = 0;
+  size_t selectedIndex = 0;
   const std::function<void()> onBack;
 
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render();
   void handleSelection();
 };

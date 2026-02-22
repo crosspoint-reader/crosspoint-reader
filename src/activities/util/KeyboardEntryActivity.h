@@ -1,14 +1,12 @@
 #pragma once
 #include <GfxRenderer.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <functional>
 #include <string>
 #include <utility>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 
 /**
  * Reusable keyboard entry activity for text input.
@@ -33,20 +31,18 @@ class KeyboardEntryActivity : public Activity {
    * @param mappedInput Reference to MappedInputManager for handling input
    * @param title Title to display above the keyboard
    * @param initialText Initial text to show in the input field
-   * @param startY Y position to start rendering the keyboard
    * @param maxLength Maximum length of input text (0 for unlimited)
    * @param isPassword If true, display asterisks instead of actual characters
    * @param onComplete Callback invoked when input is complete
    * @param onCancel Callback invoked when input is cancelled
    */
   explicit KeyboardEntryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 std::string title = "Enter Text", std::string initialText = "", const int startY = 10,
+                                 std::string title = "Enter Text", std::string initialText = "",
                                  const size_t maxLength = 0, const bool isPassword = false,
                                  OnCompleteCallback onComplete = nullptr, OnCancelCallback onCancel = nullptr)
       : Activity("KeyboardEntry", renderer, mappedInput),
         title(std::move(title)),
         text(std::move(initialText)),
-        startY(startY),
         maxLength(maxLength),
         isPassword(isPassword),
         onComplete(std::move(onComplete)),
@@ -56,21 +52,20 @@ class KeyboardEntryActivity : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
 
  private:
   std::string title;
-  int startY;
   std::string text;
   size_t maxLength;
   bool isPassword;
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-  bool updateRequired = false;
+
+  ButtonNavigator buttonNavigator;
 
   // Keyboard state
   int selectedRow = 0;
   int selectedCol = 0;
-  bool shiftActive = false;
+  int shiftState = 0;  // 0 = lower case, 1 = upper case, 2 = shift lock)
 
   // Callbacks
   OnCompleteCallback onComplete;
@@ -81,6 +76,7 @@ class KeyboardEntryActivity : public Activity {
   static constexpr int KEYS_PER_ROW = 13;  // Max keys per row (rows 0 and 1 have 13 keys)
   static const char* const keyboard[NUM_ROWS];
   static const char* const keyboardShift[NUM_ROWS];
+  static const char* const shiftString[3];
 
   // Special key positions (bottom row)
   static constexpr int SPECIAL_ROW = 4;
@@ -89,11 +85,7 @@ class KeyboardEntryActivity : public Activity {
   static constexpr int BACKSPACE_COL = 7;
   static constexpr int DONE_COL = 9;
 
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
   char getSelectedChar() const;
   void handleKeyPress();
   int getRowLength(int row) const;
-  void render() const;
-  void renderItemWithSelector(int x, int y, const char* item, bool isSelected) const;
 };
