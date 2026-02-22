@@ -14,12 +14,9 @@ void HalPowerManager::begin() {
   if (gpio.deviceIsX3()) {
     // X3 uses an I2C fuel gauge for battery monitoring.
     // I2C init must come AFTER gpio.begin() so early hardware detection/probes are finished.
-    Wire.begin(20, 0, 400000);
+    Wire.begin(X3_I2C_SDA, X3_I2C_SCL, X3_I2C_FREQ);
     Wire.setTimeOut(4);
     _batteryUseI2C = true;
-    _batteryI2cAddr = 0x55;
-    // TI BQ27220: StateOfCharge() command code
-    _batterySocRegister = 0x2C;
   } else {
     pinMode(BAT_GPIO0, INPUT);
   }
@@ -84,14 +81,14 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
 
     // Read SOC directly from I2C fuel gauge (16-bit LE register).
     // On I2C error, keep last known value to avoid UI jitter/slowdowns.
-    Wire.beginTransmission(_batteryI2cAddr);
-    Wire.write(_batterySocRegister);
+    Wire.beginTransmission(I2C_ADDR_BQ27220);
+    Wire.write(BQ27220_SOC_REG);
     if (Wire.endTransmission(false) != 0) {
       _batteryI2cFailCount++;
       _batteryLastPollMs = now;
       return _batteryCachedPercent;
     }
-    Wire.requestFrom(_batteryI2cAddr, (uint8_t)2);
+    Wire.requestFrom(I2C_ADDR_BQ27220, (uint8_t)2);
     if (Wire.available() < 2) {
       _batteryI2cFailCount++;
       _batteryLastPollMs = now;

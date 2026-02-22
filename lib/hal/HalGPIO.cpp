@@ -9,13 +9,6 @@
 HalGPIO gpio;
 
 namespace {
-constexpr uint8_t I2C_ADDR_BQ27220 = 0x55;
-constexpr uint8_t I2C_ADDR_DS3231 = 0x68;
-constexpr uint8_t I2C_ADDR_QMI8658 = 0x6B;
-constexpr uint8_t I2C_ADDR_QMI8658_ALT = 0x6A;
-constexpr uint8_t QMI8658_WHO_AM_I_REG = 0x00;
-constexpr uint8_t QMI8658_WHO_AM_I_VALUE = 0x05;
-
 constexpr char HW_NAMESPACE[] = "cphw";
 constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";  // 0=auto, 1=x4, 2=x3
 constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";    // 0=unknown, 1=x4, 2=x3
@@ -65,7 +58,7 @@ bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
 
 bool readBQ27220CurrentMA(int16_t* outCurrent) {
   uint16_t raw = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, 0x0C, &raw)) {
+  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_CUR_REG, &raw)) {
     return false;
   }
   *outCurrent = static_cast<int16_t>(raw);
@@ -75,13 +68,13 @@ bool readBQ27220CurrentMA(int16_t* outCurrent) {
 bool probeBQ27220Signature() {
   uint16_t soc = 0;
   uint16_t voltageMv = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, 0x2C, &soc)) {
+  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_SOC_REG, &soc)) {
     return false;
   }
   if (soc > 100) {
     return false;
   }
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, 0x08, &voltageMv)) {
+  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_VOLT_REG, &voltageMv)) {
     return false;
   }
   return voltageMv >= 2500 && voltageMv <= 5000;
@@ -89,11 +82,13 @@ bool probeBQ27220Signature() {
 
 bool probeDS3231Signature() {
   uint8_t sec = 0;
-  if (!readI2CReg8(I2C_ADDR_DS3231, 0x00, &sec)) {
+  if (!readI2CReg8(I2C_ADDR_DS3231, DS3231_SEC_REG, &sec)) {
     return false;
   }
-  const uint8_t secBcd = sec & 0x7F;
-  return secBcd <= 0x59;
+  const uint8_t tensDigit = (sec >> 4) & 0x07;
+  const uint8_t onesDigit = sec & 0x0F;
+
+  return (tensDigit > 5 || onesDigit > 9) ? false : true;
 }
 
 bool probeQMI8658Signature() {
@@ -109,7 +104,7 @@ bool probeQMI8658Signature() {
 
 X3ProbeResult runX3ProbePass() {
   X3ProbeResult result;
-  Wire.begin(20, 0, 400000);
+  Wire.begin(X3_I2C_SDA, X3_I2C_SCL, X3_I2C_FREQ);
   Wire.setTimeOut(6);
 
   result.bq27220 = probeBQ27220Signature();

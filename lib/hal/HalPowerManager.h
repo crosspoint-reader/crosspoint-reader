@@ -20,8 +20,6 @@ class HalPowerManager {
 
   // I2C fuel gauge configuration for X3 battery monitoring
   bool _batteryUseI2C = false;
-  uint8_t _batteryI2cAddr = 0;
-  uint8_t _batterySocRegister = 0;
   mutable int _batteryCachedPercent = 0;
   mutable unsigned long _batteryLastPollMs = 0;
   mutable uint8_t _batteryI2cFailCount = 0;
