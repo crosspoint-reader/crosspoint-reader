@@ -228,6 +228,11 @@ void KOReaderSyncActivity::onEnter() {
 void KOReaderSyncActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
+  // Stop SNTP before turning off WiFi
+  if (esp_sntp_enabled()) {
+    esp_sntp_stop();
+  }
+
   // Turn off wifi
   WiFi.disconnect(false);
   delay(100);
