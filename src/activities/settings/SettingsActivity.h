@@ -39,6 +39,8 @@ struct SettingInfo {
 
   const char* key = nullptr;             // JSON API key (nullptr for ACTION types)
   StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
+  uint8_t defaultValue = 0;              // Fallback when JSON key is absent on load
+  bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   char* stringPtr = nullptr;
@@ -49,6 +51,15 @@ struct SettingInfo {
   std::function<void(uint8_t)> valueSetter;
   std::function<std::string()> stringGetter;
   std::function<void(const std::string&)> stringSetter;
+
+  SettingInfo& withDefault(uint8_t v) {
+    defaultValue = v;
+    return *this;
+  }
+  SettingInfo& withObfuscated() {
+    obfuscated = true;
+    return *this;
+  }
 
   static SettingInfo Toggle(StrId nameId, uint8_t CrossPointSettings::* ptr, const char* key = nullptr,
                             StrId category = StrId::STR_NONE_OPT) {

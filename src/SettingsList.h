@@ -27,17 +27,20 @@ inline std::vector<SettingInfo> getSettingsList() {
           StrId::STR_STATUS_BAR, &CrossPointSettings::statusBar,
           {StrId::STR_NONE_OPT, StrId::STR_NO_PROGRESS, StrId::STR_STATUS_BAR_FULL_PERCENT,
            StrId::STR_STATUS_BAR_FULL_BOOK, StrId::STR_STATUS_BAR_BOOK_ONLY, StrId::STR_STATUS_BAR_FULL_CHAPTER},
-          "statusBar", StrId::STR_CAT_DISPLAY),
+          "statusBar", StrId::STR_CAT_DISPLAY)
+          .withDefault(CrossPointSettings::FULL),
       SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                         {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                         StrId::STR_CAT_DISPLAY),
       SettingInfo::Enum(
           StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
-          "refreshFrequency", StrId::STR_CAT_DISPLAY),
+          "refreshFrequency", StrId::STR_CAT_DISPLAY)
+          .withDefault(CrossPointSettings::REFRESH_15),
       SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
                         {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED}, "uiTheme",
-                        StrId::STR_CAT_DISPLAY),
+                        StrId::STR_CAT_DISPLAY)
+          .withDefault(CrossPointSettings::LYRA),
       SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                           StrId::STR_CAT_DISPLAY),
 
@@ -47,32 +50,39 @@ inline std::vector<SettingInfo> getSettingsList() {
                         StrId::STR_CAT_READER),
       SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
                         {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE}, "fontSize",
-                        StrId::STR_CAT_READER),
+                        StrId::STR_CAT_READER)
+          .withDefault(CrossPointSettings::MEDIUM),
       SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,
-                        {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE}, "lineSpacing", StrId::STR_CAT_READER),
+                        {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE}, "lineSpacing", StrId::STR_CAT_READER)
+          .withDefault(CrossPointSettings::NORMAL),
       SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin",
-                         StrId::STR_CAT_READER),
+                         StrId::STR_CAT_READER)
+          .withDefault(5),
       SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
                         {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                          StrId::STR_BOOK_S_STYLE},
                         "paragraphAlignment", StrId::STR_CAT_READER),
       SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
-                          StrId::STR_CAT_READER),
+                          StrId::STR_CAT_READER)
+          .withDefault(1),
       SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled, "hyphenationEnabled",
                           StrId::STR_CAT_READER),
       SettingInfo::Enum(StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
                         {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED, StrId::STR_LANDSCAPE_CCW},
                         "orientation", StrId::STR_CAT_READER),
       SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing, "extraParagraphSpacing",
-                          StrId::STR_CAT_READER),
+                          StrId::STR_CAT_READER)
+          .withDefault(1),
       SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
-                          StrId::STR_CAT_READER),
+                          StrId::STR_CAT_READER)
+          .withDefault(1),
 
       // --- Controls ---
       SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                         {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV}, "sideButtonLayout", StrId::STR_CAT_CONTROLS),
       SettingInfo::Toggle(StrId::STR_LONG_PRESS_SKIP, &CrossPointSettings::longPressChapterSkip, "longPressChapterSkip",
-                          StrId::STR_CAT_CONTROLS),
+                          StrId::STR_CAT_CONTROLS)
+          .withDefault(1),
       SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                         {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN}, "shortPwrBtn",
                         StrId::STR_CAT_CONTROLS),
@@ -80,7 +90,8 @@ inline std::vector<SettingInfo> getSettingsList() {
       // --- System ---
       SettingInfo::Enum(StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
                         {StrId::STR_MIN_1, StrId::STR_MIN_5, StrId::STR_MIN_10, StrId::STR_MIN_15, StrId::STR_MIN_30},
-                        "sleepTimeout", StrId::STR_CAT_SYSTEM),
+                        "sleepTimeout", StrId::STR_CAT_SYSTEM)
+          .withDefault(CrossPointSettings::SLEEP_10_MIN),
 
       // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
       SettingInfo::DynamicString(
@@ -119,6 +130,7 @@ inline std::vector<SettingInfo> getSettingsList() {
       SettingInfo::String(StrId::STR_USERNAME, SETTINGS.opdsUsername, sizeof(SETTINGS.opdsUsername), "opdsUsername",
                           StrId::STR_OPDS_BROWSER),
       SettingInfo::String(StrId::STR_PASSWORD, SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword), "opdsPassword",
-                          StrId::STR_OPDS_BROWSER),
+                          StrId::STR_OPDS_BROWSER)
+          .withObfuscated(),
   };
 }
