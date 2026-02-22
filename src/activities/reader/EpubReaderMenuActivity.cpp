@@ -40,6 +40,11 @@ void EpubReaderMenuActivity::loop() {
       requestUpdate();
       return;
     }
+    if (selectedAction == MenuAction::INVERT_SCREEN) {
+      pendingInvertScreen = !pendingInvertScreen;
+      requestUpdate();
+      return;
+    }
 
     // 1. Capture the callback and action locally
     auto actionCallback = onAction;
@@ -51,7 +56,7 @@ void EpubReaderMenuActivity::loop() {
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     // Return the pending orientation to the parent so it can apply on exit.
-    onBack(pendingOrientation);
+    onBack(pendingOrientation, pendingInvertScreen);
     return;  // Also return here just in case
   }
 }
@@ -111,12 +116,20 @@ void EpubReaderMenuActivity::render(Activity::RenderLock&&) {
       const char* value = I18N.get(orientationLabels[pendingOrientation]);
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
       renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+    } else if (menuItems[i].action == MenuAction::INVERT_SCREEN) {
+      const char* value = pendingInvertScreen ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
     }
   }
 
   // Footer / Hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (pendingInvertScreen) {
+    renderer.invertScreen();
+  }
 
   renderer.displayBuffer();
 }
