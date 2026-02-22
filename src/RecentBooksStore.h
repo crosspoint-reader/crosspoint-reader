@@ -11,11 +11,18 @@ struct RecentBook {
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
 
+class RecentBooksStore;
+namespace JsonSettingsIO {
+bool loadRecentBooks(RecentBooksStore& store, const char* json);
+}  // namespace JsonSettingsIO
+
 class RecentBooksStore {
   // Static instance
   static RecentBooksStore instance;
 
   std::vector<RecentBook> recentBooks;
+
+  friend bool JsonSettingsIO::loadRecentBooks(RecentBooksStore&, const char*);
 
  public:
   ~RecentBooksStore() = default;
@@ -40,6 +47,9 @@ class RecentBooksStore {
 
   bool loadFromFile();
   RecentBook getDataFromBook(std::string path) const;
+
+ private:
+  bool loadFromBinaryFile();
 };
 
 // Helper macro to access recent books store
