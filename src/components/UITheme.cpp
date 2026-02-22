@@ -59,9 +59,8 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
   if (hasTabBar) {
     reservedHeight += metrics.tabBarHeight;
   }
-  if (hasButtonHints && 
-    orientation != GfxRenderer::Orientation::LandscapeClockwise && 
-    orientation != GfxRenderer::Orientation::LandscapeCounterClockwise) {
+  if (hasButtonHints && orientation != GfxRenderer::Orientation::LandscapeClockwise &&
+      orientation != GfxRenderer::Orientation::LandscapeCounterClockwise) {
     reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
   }
   const int availableHeight = renderer.getScreenHeight() - reservedHeight;
@@ -69,7 +68,7 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
   return availableHeight / rowHeight;
 }
 
-// Screen area excluding the button hints 
+// Screen area excluding the button hints
 Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints, bool hasSideButtonHints) {
   auto orientation = renderer.getOrientation();
   const int screenWidth = renderer.getScreenWidth();
@@ -128,8 +127,8 @@ UIIcon UITheme::getFileIcon(std::string filename) {
 }
 
 // Centered text implementation that takes the safe area into account
-void UITheme::drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text, bool black,
-                        EpdFontFamily::Style style) {
+void UITheme::drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
+                               bool black, EpdFontFamily::Style style) {
   const int x = screen.x + (screen.width - renderer.getTextWidth(fontId, text, style)) / 2;
   renderer.drawText(fontId, x, screen.y + y, text, black, style);
 }

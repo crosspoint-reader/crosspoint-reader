@@ -1,8 +1,9 @@
 #pragma once
 
+#include <EpdFontFamily.h>
+
 #include <functional>
 #include <memory>
-#include <EpdFontFamily.h>
 
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
@@ -17,9 +18,10 @@ class UITheme {
 
   const ThemeMetrics& getMetrics() { return *currentMetrics; }
   const BaseTheme& getTheme() { return *currentTheme; }
-  Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false, bool hasSideButtonHints = false);
-  void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text, bool black = true,
-                        EpdFontFamily::Style style = EpdFontFamily::REGULAR);
+  Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
+                         bool hasSideButtonHints = false);
+  void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
+                        bool black = true, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void reload();
   void setTheme(CrossPointSettings::UI_THEME type);
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,

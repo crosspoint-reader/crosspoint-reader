@@ -58,15 +58,16 @@ void EpubReaderPercentSelectionActivity::loop() {
 
 void EpubReaderPercentSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
-  
+
   auto& theme = UITheme::getInstance();
   auto metrics = theme.getMetrics();
   Rect screen = theme.getScreenSafeArea(renderer, true, false);
-  
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight}, tr(STR_GO_TO_PERCENT));
-  
+
+  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
+                 tr(STR_GO_TO_PERCENT));
+
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
-  
+
   const std::string percentText = std::to_string(percent) + "%";
   theme.drawCenteredText(renderer, screen, UI_12_FONT_ID, contentTop, percentText.c_str(), true, EpdFontFamily::BOLD);
 

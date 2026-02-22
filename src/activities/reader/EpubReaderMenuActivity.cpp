@@ -79,8 +79,9 @@ void EpubReaderMenuActivity::render(Activity::RenderLock&&) {
   auto metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight}, title.c_str());
-  
+  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
+                 title.c_str());
+
   // Progress summary
   std::string progressLine;
   if (totalPages > 0) {
@@ -88,24 +89,27 @@ void EpubReaderMenuActivity::render(Activity::RenderLock&&) {
                    std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  GUI.drawSubHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width,
-                             metrics.tabBarHeight}, progressLine.c_str());
+  GUI.drawSubHeader(
+      renderer,
+      Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
+      progressLine.c_str());
 
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  const int contentTop =
+      screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
 
   GUI.drawList(
       renderer, Rect{screen.x, screen.y + contentTop, screen.width, contentHeight}, menuItems.size(), selectedIndex,
-      [this](int index) { return I18N.get(menuItems[index].labelId); }, 
-      nullptr, nullptr,
-      [this](int index) { 
+      [this](int index) { return I18N.get(menuItems[index].labelId); }, nullptr, nullptr,
+      [this](int index) {
         if (menuItems[index].action == MenuAction::ROTATE_SCREEN) {
           // Render current orientation value on the right edge of the content area.
           return I18N.get(orientationLabels[pendingOrientation]);
         } else {
-          return ""; 
+          return "";
         }
-       }, true);
+      },
+      true);
 
   // Footer / Hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
