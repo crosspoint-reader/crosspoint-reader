@@ -1004,6 +1004,7 @@ void CrossPointWebServer::handleDelete() const {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
       success = Storage.remove(itemPath.c_str());
+      clearEpubCacheIfNeeded(itemPath);
     }
 
     if (!success) {
