@@ -2,12 +2,14 @@
 
 #include <HalStorage.h>
 
+#include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
+#include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "util/StringUtils.h"
 
@@ -28,24 +30,26 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
          StringUtils::checkFileExtension(path, ".md");  // Treat .md as txt files (until we have a markdown reader)
 }
 
+bool ReaderActivity::isBmpFile(const std::string& path) { return StringUtils::checkFileExtension(path, ".bmp"); }
+
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
-    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
   }
 
   auto epub = std::unique_ptr<Epub>(new Epub(path, "/.crosspoint"));
-  if (epub->load()) {
+  if (epub->load(true, SETTINGS.embeddedStyle == 0)) {
     return epub;
   }
 
-  Serial.printf("[%lu] [   ] Failed to load epub\n", millis());
+  LOG_ERR("READER", "Failed to load epub");
   return nullptr;
 }
 
 std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
-    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
   }
 
@@ -54,13 +58,13 @@ std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
     return xtc;
   }
 
-  Serial.printf("[%lu] [   ] Failed to load XTC\n", millis());
+  LOG_ERR("READER", "Failed to load XTC");
   return nullptr;
 }
 
 std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
-    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
   }
 
@@ -69,7 +73,7 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
     return txt;
   }
 
-  Serial.printf("[%lu] [   ] Failed to load TXT\n", millis());
+  LOG_ERR("READER", "Failed to load TXT");
   return nullptr;
 }
 
@@ -85,6 +89,11 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   exitActivity();
   enterNewActivity(new EpubReaderActivity(
       renderer, mappedInput, std::move(epub), [this, epubPath] { goToLibrary(epubPath); }, [this] { onGoBack(); }));
+}
+
+void ReaderActivity::onGoToBmpViewer(const std::string& path) {
+  exitActivity();
+  enterNewActivity(new BmpViewerActivity(renderer, mappedInput, path, [this, path] { goToLibrary(path); }));
 }
 
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
@@ -112,8 +121,9 @@ void ReaderActivity::onEnter() {
   }
 
   currentBookPath = initialBookPath;
-
-  if (isXtcFile(initialBookPath)) {
+  if (isBmpFile(initialBookPath)) {
+    onGoToBmpViewer(initialBookPath);
+  } else if (isXtcFile(initialBookPath)) {
     auto xtc = loadXtc(initialBookPath);
     if (!xtc) {
       onGoBack();

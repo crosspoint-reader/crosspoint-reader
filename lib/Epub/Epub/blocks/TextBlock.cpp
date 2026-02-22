@@ -1,26 +1,24 @@
 #include "TextBlock.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <Serialization.h>
 
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
   // Validate iterator bounds before rendering
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
-    Serial.printf("[%lu] [TXB] Render skipped: size mismatch (words=%u, xpos=%u, styles=%u)\n", millis(),
-                  (uint32_t)words.size(), (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size());
+    LOG_ERR("TXB", "Render skipped: size mismatch (words=%u, xpos=%u, styles=%u)\n", (uint32_t)words.size(),
+            (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size());
     return;
   }
 
-  auto wordIt = words.begin();
-  auto wordStylesIt = wordStyles.begin();
-  auto wordXposIt = wordXpos.begin();
   for (size_t i = 0; i < words.size(); i++) {
-    const int wordX = *wordXposIt + x;
-    const EpdFontFamily::Style currentStyle = *wordStylesIt;
-    renderer.drawText(fontId, wordX, y, wordIt->c_str(), true, currentStyle);
+    const int wordX = wordXpos[i] + x;
+    const EpdFontFamily::Style currentStyle = wordStyles[i];
+    renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle);
 
     if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
-      const std::string& w = *wordIt;
+      const std::string& w = words[i];
       const int fullWordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle);
       // y is the top of the text line; add ascender to reach baseline, then offset 2px below
       const int underlineY = y + renderer.getFontAscenderSize(fontId) + 2;
@@ -32,7 +30,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       if (w.size() >= 3 && static_cast<uint8_t>(w[0]) == 0xE2 && static_cast<uint8_t>(w[1]) == 0x80 &&
           static_cast<uint8_t>(w[2]) == 0x83) {
         const char* visiblePtr = w.c_str() + 3;
-        const int prefixWidth = renderer.getTextAdvanceX(fontId, std::string("\xe2\x80\x83").c_str());
+        const int prefixWidth = renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
         const int visibleWidth = renderer.getTextWidth(fontId, visiblePtr, currentStyle);
         startX = wordX + prefixWidth;
         underlineWidth = visibleWidth;
@@ -40,17 +38,13 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
       renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, true);
     }
-
-    std::advance(wordIt, 1);
-    std::advance(wordStylesIt, 1);
-    std::advance(wordXposIt, 1);
   }
 }
 
 bool TextBlock::serialize(FsFile& file) const {
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
-    Serial.printf("[%lu] [TXB] Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", millis(),
-                  words.size(), wordXpos.size(), wordStyles.size());
+    LOG_ERR("TXB", "Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", words.size(),
+            wordXpos.size(), wordStyles.size());
     return false;
   }
 
@@ -79,17 +73,17 @@ bool TextBlock::serialize(FsFile& file) const {
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   uint16_t wc;
-  std::list<std::string> words;
-  std::list<uint16_t> wordXpos;
-  std::list<EpdFontFamily::Style> wordStyles;
+  std::vector<std::string> words;
+  std::vector<uint16_t> wordXpos;
+  std::vector<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
 
   // Word count
   serialization::readPod(file, wc);
 
-  // Sanity check: prevent allocation of unreasonably large lists (max 10000 words per block)
+  // Sanity check: prevent allocation of unreasonably large vectors (max 10000 words per block)
   if (wc > 10000) {
-    Serial.printf("[%lu] [TXB] Deserialization failed: word count %u exceeds maximum\n", millis(), wc);
+    LOG_ERR("TXB", "Deserialization failed: word count %u exceeds maximum", wc);
     return nullptr;
   }
 

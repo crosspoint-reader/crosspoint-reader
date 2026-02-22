@@ -1,11 +1,11 @@
 #include "ContainerParser.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 
 bool ContainerParser::setup() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
-    Serial.printf("[%lu] [CTR] Couldn't allocate memory for parser\n", millis());
+    LOG_ERR("CTR", "Couldn't allocate memory for parser");
     return false;
   }
 
@@ -34,7 +34,7 @@ size_t ContainerParser::write(const uint8_t* buffer, const size_t size) {
   while (remainingInBuffer > 0) {
     void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
-      Serial.printf("[%lu] [CTR] Couldn't allocate buffer\n", millis());
+      LOG_DBG("CTR", "Couldn't allocate buffer");
       return 0;
     }
 
@@ -42,7 +42,7 @@ size_t ContainerParser::write(const uint8_t* buffer, const size_t size) {
     memcpy(buf, currentBufferPos, toRead);
 
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [CTR] Parse error: %s\n", millis(), XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_ERR("CTR", "Parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
       return 0;
     }
 

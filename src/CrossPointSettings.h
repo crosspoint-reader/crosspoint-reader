@@ -2,6 +2,9 @@
 #include <cstdint>
 #include <iosfwd>
 
+// Forward declarations
+class FsFile;
+
 class CrossPointSettings {
  private:
   // Private constructor for singleton
@@ -117,7 +120,7 @@ class CrossPointSettings {
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
 
   // UI Theme
-  enum UI_THEME { CLASSIC = 0, LYRA = 1 };
+  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2 };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
@@ -182,9 +185,18 @@ class CrossPointSettings {
   }
   int getReaderFontId() const;
 
+  // If count_only is true, returns the number of settings items that would be written.
+  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
+
   bool saveToFile() const;
   bool loadFromFile();
 
+  static void validateFrontButtonMapping(CrossPointSettings& settings);
+
+ private:
+  bool loadFromBinaryFile();
+
+ public:
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
