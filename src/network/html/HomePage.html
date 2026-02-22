@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -27,6 +27,15 @@
         }
       }
       body {
+        --font-color: #333;
+        --background: #f5f5f5;
+        --title-color: #2c3e50;
+        --card-background: white;
+        --label-color: #7f8c8d;
+        --border-color: #eee;
+        --accent-color: rgb(110, 154, 130);
+        --accent-color-highlight: #5a8c73;
+
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           Oxygen, Ubuntu, sans-serif;
         max-width: 800px;
@@ -40,9 +49,19 @@
         border-bottom: 2px solid var(--accent-color);
         padding-bottom: 10px;
       }
+      h1 .logo {
+        background-color: #6e9a82;
+        padding: 0 4px;
+        border-radius: 4px;
+      }
+      h1 .logo svg {
+        width: 18px;
+        height: 18px;
+      }
       h2 {
         color: var(--title-color);
         margin-top: 0;
+        font-size: 20px;
       }
       .card {
         background: var(--card-bg);
@@ -60,6 +79,7 @@
       }
       .info-row:last-child {
         border-bottom: none;
+        padding-bottom: 0;
       }
       .label {
         font-weight: 600;
@@ -70,7 +90,7 @@
       }
       .status {
         display: inline-block;
-        padding: 4px 12px;
+        padding: 4px 10px;
         border-radius: 12px;
         background-color: #27ae60;
         color: white;
@@ -98,7 +118,15 @@
     </style>
   </head>
   <body>
-    <h1>📚 CrossPoint Reader</h1>
+    <h1>
+      <span class="logo">
+        <svg viewBox="0 0 162 180" xmlns="http://www.w3.org/2000/svg">
+          <path d="M141.133 1.93774C150.102 -3.44192 161.517 3.01665 161.521 13.4749V166.526C161.517 176.984 150.102 183.442 141.133 178.063L80.7588 141.837L20.3867 178.063C11.4176 183.442 0.00328866 176.984 0 166.526V13.4749C0.00337257 3.01685 11.4176 -3.44137 20.3867 1.93774L80.7598 38.1614L141.133 1.93774ZM121.275 117.524L92.3848 134.864L147.281 167.811C148.277 168.408 149.542 167.685 149.545 166.526V100.567L121.275 117.524ZM14.2393 12.1897C13.2438 11.5924 11.979 12.3152 11.9756 13.4749V86.6125L74.7725 124.29V48.51L14.2393 12.1897Z" fill="black"/>
+          <path d="m 121.2754,117.524 -28.8902,17.34 54.8962,32.947 c 0.996,0.597 2.261,-0.126 2.264,-1.285 V 100.567 Z M 14.2397,12.1897 c -0.9955,-0.5973 -2.2603,0.1255 -2.2637,1.2852 V 86.6125 L 74.7729,124.29 V 48.51 Z" fill="white"/>
+        </svg>
+      </span>
+      CrossPoint Reader
+    </h1>
 
     <div class="nav-links">
       <a href="/" class="active">Home</a>
@@ -126,11 +154,16 @@
       </div>
     </div>
 
-    <div class="card">
-      <p style="text-align: center; color: #95a5a6; margin: 0">
-        CrossPoint E-Reader • Open Source
-      </p>
-    </div>
+    <footer>
+      <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="currentColor" d="M12,2A10,10,0,0,0,8.84,21.5c.5.08.66-.23.66-.5V19.31C6.73,19.91,6.14,18,6.14,18A2.69,2.69,0,0,0,5,16.5c-.91-.62.07-.6.07-.6a2.1,2.1,0,0,1,1.53,1,2.15,2.15,0,0,0,2.91.83,2.16,2.16,0,0,1,.63-1.34C8,16.17,5.62,15.31,5.62,11.5a3.87,3.87,0,0,1,1-2.71,3.58,3.58,0,0,1,.1-2.64s.84-.27,2.75,1a9.63,9.63,0,0,1,5,0c1.91-1.29,2.75-1,2.75-1a3.58,3.58,0,0,1,.1,2.64,3.87,3.87,0,0,1,1,2.71c0,3.82-2.34,4.66-4.57,4.91a2.39,2.39,0,0,1,.69,1.85V21c0,.27.16.59.67.5A10,10,0,0,0,12,2Z"></path>
+      </svg>
+      <a
+        href="https://github.com/crosspoint-reader/crosspoint-reader"
+        target="_blank"
+        >CrossPoint E-Reader • Open Source</a
+      >
+    </footer>
   <script>
     async function fetchStatus() {
       try {

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -28,6 +28,16 @@
       }
     }
     body {
+      --font-color: #333;
+      --background: #f5f5f5;
+      --title-color: #2c3e50;
+      --card-background: white;
+      --border-color: #eee;
+      --accent-color-rgb: 110, 154, 130;
+      --accent-color: rgb(var(--accent-color-rgb));
+      --accent-color-10: rgba(var(--accent-color-rgb), .1);
+      --accent-color-highlight: #5a8c73;
+
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       Oxygen, Ubuntu, sans-serif;
       max-width: 800px;
@@ -43,6 +53,7 @@
     h2 {
       color: var(--title-color);
       margin-top: 0;
+      font-size: 20px;
     }
     .card {
       background: var(--card-bg);
@@ -50,6 +61,14 @@
       padding: 20px;
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .card h3 {
+      margin: 0;
+      color: var(--title-color);
+      font-size: 18px;
+    }
+    .contents-card {
+      margin-top: 6px;
     }
     .page-header {
       display: flex;
@@ -64,8 +83,12 @@
     .page-header-left {
       display: flex;
       align-items: baseline;
+      flex-direction: column;
       gap: 12px;
       flex-wrap: wrap;
+    }
+    .page-header-left h2 {
+      margin: 0;
     }
     .breadcrumb-inline {
       color: var(--label-color);
@@ -81,6 +104,9 @@
     .breadcrumb-inline .sep {
       margin: 0 6px;
       color: var(--border-color);
+    }
+    .breadcrumb-inline .sep:first-child {
+      margin-inline-start: 0;
     }
     .breadcrumb-inline .current {
       color: var(--title-color);
@@ -110,29 +136,41 @@
       display: flex;
       gap: 10px;
     }
-    .action-btn {
+    .btn {
       color: white;
-      padding: 10px 16px;
+      padding: 8px 10px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
       display: flex;
       align-items: center;
       gap: 6px;
+      font-size: 16px;
     }
-    .upload-action-btn {
-      background-color: #27ae60;
+    .btn-sm {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+      border-radius: 0.25rem;
     }
-    .upload-action-btn:hover {
-      background-color: #219a52;
+    .btn-primary {
+      background-color: var(--accent-color);
     }
-    .folder-action-btn {
-      background-color: #f39c12;
+    .btn-primary:hover {
+      background-color: var(--accent-color-highlight);
     }
-    .folder-action-btn:hover {
-      background-color: #d68910;
+    .btn-secondary {
+      background-color: #6c757d;
+    }
+    .btn-secondary:hover {
+      background-color: #5a6268;
+    }
+    .btn-icon:hover {
+      background: var(--accent-color);
+      color: #FFF;
+    }
+    .btn-icon.btn-danger:hover {
+      background: tomato;
+      color: #FFF;
     }
     /* Upload modal */
     .modal-overlay {
@@ -158,6 +196,13 @@
       width: 90%;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 1.5em;
+   }
     .modal h3 {
       margin: 0 0 15px 0;
       color: var(--title-color);
@@ -177,6 +222,10 @@
     .file-table {
       width: 100%;
       border-collapse: collapse;
+      font-size: .9em;
+    }
+    .file-table th {
+      text-align: start;
     }
     .file-table th,
     .file-table td {
@@ -200,17 +249,12 @@
       font-size: 0.75em;
       margin-left: 8px;
     }
-    .folder-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      background-color: #f39c12;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.75em;
-      margin-left: 8px;
+    .file-table tr:last-child td {
+      border-bottom: none;
     }
-    .file-icon {
-      margin-right: 8px;
+    .file-table tr td:first-child {
+      width: 1px;
+      padding-inline-end: 0;
     }
     .folder-link {
       color: var(--accent-color);
@@ -228,20 +272,7 @@
       margin: 10px 0;
       width: 100%;
     }
-    .upload-btn {
-      background-color: #27ae60;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .upload-btn:hover {
-      background-color: #219a52;
-    }
-    .upload-btn:disabled {
+    .btn-primary:disabled {
       background-color: #95a5a6;
       cursor: not-allowed;
     }
@@ -315,25 +346,11 @@
     }
     .folder-input {
       width: 100%;
-      padding: 10px;
+      padding: 6px;
       border: 1px solid #ddd;
       border-radius: 4px;
-      font-size: 1em;
       margin-bottom: 10px;
       box-sizing: border-box;
-    }
-    .folder-btn {
-      background-color: #f39c12;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .folder-btn:hover {
-      background-color: #d68910;
     }
     /* Action button styles */
     .delete-btn,
@@ -342,48 +359,27 @@
       background: none;
       border: none;
       cursor: pointer;
-      font-size: 1.1em;
-      padding: 4px 8px;
+      padding: 2px 3px;
       border-radius: 4px;
       transition: all 0.15s;
+      color: var(--accent-color)
     }
     .delete-btn {
-      color: #95a5a6;
+      color: tomato;
     }
     .delete-btn:hover {
-      background-color: #fee;
-      color: #e74c3c;
-    }
-    .rename-btn {
-      color: #2980b9;
-    }
-    .rename-btn:hover {
-      background-color: #e8f4fd;
-    }
-    .move-btn {
-      color: #16a085;
-    }
-    .move-btn:hover {
-      background-color: #e6f7f4;
-    }
-    .actions-col {
-      width: 140px;
-      text-align: center;
+      background-color: tomato;
+      color: #eee;
     }
     .action-icon-group {
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 6px;
+      justify-content: end;
     }
     /* Failed uploads banner */
     .failed-uploads-banner {
-      background-color: #fff3cd;
-      border: 1px solid #ffc107;
-      border-radius: 4px;
-      padding: 15px;
-      margin-bottom: 15px;
       display: none;
+      margin: 16px 0;
     }
     .failed-uploads-banner.show {
       display: block;
@@ -396,27 +392,30 @@
     }
     .failed-uploads-title {
       font-weight: 600;
-      color: #856404;
       margin: 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .failed-uploads-title .icon {
+      width: 24px;
+      height: 24px;
     }
     .dismiss-btn {
       background: none;
       border: none;
       font-size: 1.2em;
       cursor: pointer;
-      color: #856404;
       padding: 0;
       line-height: 1;
-    }
-    .dismiss-btn:hover {
-      color: #533f03;
+      color: var(--alert-link-color);
     }
     .failed-file-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 8px 0;
-      border-bottom: 1px solid #ffe69c;
+      border-bottom: 1px solid var(--alert-border-color);
     }
     .failed-file-item:last-child {
       border-bottom: none;
@@ -425,23 +424,19 @@
       flex: 1;
     }
     .failed-file-name {
-      font-weight: 500;
-      color: #856404;
+      display: flex;
+      gap: 4px;
+      align-items: center;
     }
     .failed-file-error {
       font-size: 0.85em;
-      color: #856404;
       opacity: 0.8;
+      margin-inline-start: 20px;
     }
     .retry-btn {
       background-color: #ffc107;
       color: #533f03;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 4px;
       cursor: pointer;
-      font-size: 0.9em;
-      font-weight: 600;
     }
     .retry-btn:hover {
       background-color: #e0a800;
@@ -449,12 +444,7 @@
     .retry-all-btn {
       background-color: #ffc107;
       color: #533f03;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
       cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
       margin-top: 10px;
     }
     .retry-all-btn:hover {
@@ -474,55 +464,34 @@
     .delete-btn-confirm {
       background-color: #e74c3c;
       color: white;
-      padding: 10px 20px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      width: 100%;
     }
     .delete-btn-confirm:hover {
       background-color: #c0392b;
     }
     .delete-btn-cancel {
-      background-color: #95a5a6;
+      background-color: #7f8c8d;
       color: white;
-      padding: 10px 20px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-      margin-top: 10px;
     }
     .delete-btn-cancel:hover {
       background-color: var(--label-color);
     }
     .rename-btn-confirm {
-      background-color: #3498db;
       color: white;
-      padding: 10px 20px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .rename-btn-confirm:hover {
-      background-color: #2e86c1;
     }
     .move-btn-confirm {
-      background-color: #16a085;
       color: white;
-      padding: 10px 20px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .move-btn-confirm:hover {
-      background-color: #138d75;
     }
     .loader-container {
       display: flex;
@@ -540,6 +509,23 @@
       box-sizing: border-box;
       animation: rotation 1s linear infinite;
     }
+    tr.epub-file td:first-child svg.icon,
+    svg.icon-epub {
+      color: #86b918;
+    }
+    .alert svg.icon-epub {
+      color: var(--alert-color);
+    }
+    footer {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: .85em;
+    }
+    footer .icon {
+      height: 20px;
+      width: 20px;
+    }
     @keyframes rotation {
       from {
         transform: rotate(0deg);
@@ -554,6 +540,9 @@
         padding: 10px;
         font-size: 14px;
       }
+      h1 {
+        justify-content: center;
+      }
       .card {
         padding: 12px;
         margin: 10px 0;
@@ -566,9 +555,6 @@
       .page-header-left {
         gap: 8px;
       }
-      h1 {
-        font-size: 1.3em;
-      }
       .breadcrumb-inline {
         font-size: 0.95em;
       }
@@ -576,6 +562,8 @@
         padding: 8px 12px;
         margin-right: 6px;
         font-size: 0.9em;
+        flex: 1;
+        text-align: center;
       }
       .action-buttons {
         gap: 6px;
@@ -584,16 +572,40 @@
         padding: 8px 10px;
         font-size: 0.85em;
       }
-      .file-table th,
+      .file-table thead {
+        display: none;
+      }
       .file-table td {
-        padding: 8px 6px;
+        padding: 6px;
         font-size: 0.9em;
+        border-bottom: none;
       }
-      .file-table th {
-        font-size: 0.85em;
+      .file-table tbody tr {
+        display: grid;
+        grid-template-columns: 24px min-content 25% auto;
       }
-      .file-icon {
-        margin-right: 4px;
+      .file-table tbody tr td:first-child {
+        grid-row: 1;
+        grid-column: 1;
+        width: 20px;
+      }
+      .file-table tbody tr td:nth-child(2) {
+        grid-row: 1;
+        grid-column: 2/5;
+        font-size: 14px;
+      }
+      .file-table tbody tr td:nth-child(3) {
+        grid-row: 2;
+        grid-column: 2;
+      }
+      .file-table tbody tr td:nth-child(4) {
+        grid-row: 2;
+        grid-column: 3;
+        text-align: start;
+      }
+      .file-table tbody tr td:nth-child(5) {
+        grid-row: 2;
+        grid-column: 4;
       }
       .epub-badge,
       .folder-badge {
@@ -606,9 +618,6 @@
         flex-wrap: wrap;
         gap: 4px;
       }
-      .contents-title {
-        font-size: 1em;
-      }
       .summary-inline {
         font-size: 0.8em;
       }
@@ -617,9 +626,6 @@
       }
       .modal h3 {
         font-size: 1.1em;
-      }
-      .actions-col {
-        width: 120px;
       }
       .delete-btn,
       .rename-btn,
@@ -634,10 +640,22 @@
         padding: 20px;
         font-size: 0.9em;
       }
+      footer {
+        justify-content: center;
+      }
     }
   </style>
 </head>
 <body>
+<h1>
+  <span class="logo">
+    <svg viewBox="0 0 162 180" xmlns="http://www.w3.org/2000/svg">
+      <path d="M141.133 1.93774C150.102 -3.44192 161.517 3.01665 161.521 13.4749V166.526C161.517 176.984 150.102 183.442 141.133 178.063L80.7588 141.837L20.3867 178.063C11.4176 183.442 0.00328866 176.984 0 166.526V13.4749C0.00337257 3.01685 11.4176 -3.44137 20.3867 1.93774L80.7598 38.1614L141.133 1.93774ZM121.275 117.524L92.3848 134.864L147.281 167.811C148.277 168.408 149.542 167.685 149.545 166.526V100.567L121.275 117.524ZM14.2393 12.1897C13.2438 11.5924 11.979 12.3152 11.9756 13.4749V86.6125L74.7725 124.29V48.51L14.2393 12.1897Z" fill="black"/>
+      <path d="m 121.2754,117.524 -28.8902,17.34 54.8962,32.947 c 0.996,0.597 2.261,-0.126 2.264,-1.285 V 100.567 Z M 14.2397,12.1897 c -0.9955,-0.5973 -2.2603,0.1255 -2.2637,1.2852 V 86.6125 L 74.7729,124.29 V 48.51 Z" fill="white"/>
+    </svg>
+  </span>
+  CrossPoint Reader
+</h1>
 <div class="nav-links">
   <a href="/">Home</a>
   <a href="/files" class="active">File Manager</a>
@@ -646,8 +664,7 @@
 
 <div class="page-header">
   <div class="page-header-left">
-    <h1>📁 File Manager</h1>
-    <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
+    <h2>File Manager</h2>
   </div>
 
   <div class="action-buttons">
@@ -657,19 +674,21 @@
   </div>
 </div>
 
+<div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
+
 <!-- Failed Uploads Banner -->
-<div class="failed-uploads-banner" id="failedUploadsBanner">
+<div class="alert alert-warning failed-uploads-banner" id="failedUploadsBanner">
   <div class="failed-uploads-header">
-    <h3 class="failed-uploads-title">⚠️ Some files failed to upload</h3>
+    <h3 class="failed-uploads-title"><svg class="icon" aria-hidden="true"><use href="#icon-warning"></use></svg> Some files failed to upload</h3>
     <button class="dismiss-btn" onclick="dismissFailedUploads()" title="Dismiss">&times;</button>
   </div>
   <div id="failedFilesList"></div>
-  <button class="retry-all-btn" onclick="retryAllFailedUploads()">Retry All Failed Uploads</button>
+  <button class="btn btn-warning btn-sm retry-all-btn" onclick="retryAllFailedUploads()">Retry All Failed Uploads</button>
 </div>
 
-<div class="card">
+<div class="card contents-card">
   <div class="contents-header">
-    <h2 class="contents-title">Contents</h2>
+    <h3>Contents</h3>
     <span class="summary-inline" id="folder-summary"></span>
   </div>
 
@@ -680,25 +699,36 @@
   </div>
 </div>
 
-<div class="card">
-  <p style="text-align: center; color: #95a5a6; margin: 0;">
-    CrossPoint E-Reader • Open Source
-  </p>
-</div>
+<footer>
+  <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path fill="currentColor" d="M12,2A10,10,0,0,0,8.84,21.5c.5.08.66-.23.66-.5V19.31C6.73,19.91,6.14,18,6.14,18A2.69,2.69,0,0,0,5,16.5c-.91-.62.07-.6.07-.6a2.1,2.1,0,0,1,1.53,1,2.15,2.15,0,0,0,2.91.83,2.16,2.16,0,0,1,.63-1.34C8,16.17,5.62,15.31,5.62,11.5a3.87,3.87,0,0,1,1-2.71,3.58,3.58,0,0,1,.1-2.64s.84-.27,2.75,1a9.63,9.63,0,0,1,5,0c1.91-1.29,2.75-1,2.75-1a3.58,3.58,0,0,1,.1,2.64,3.87,3.87,0,0,1,1,2.71c0,3.82-2.34,4.66-4.57,4.91a2.39,2.39,0,0,1,.69,1.85V21c0,.27.16.59.67.5A10,10,0,0,0,12,2Z"></path>
+  </svg>
+  <a
+    href="https://github.com/crosspoint-reader/crosspoint-reader"
+    target="_blank"
+    >CrossPoint E-Reader • Open Source</a
+  >
+</footer>
 
 <!-- Upload Modal -->
 <div class="modal-overlay" id="uploadModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeUploadModal()">&times;</button>
-    <h3>📤 Upload file</h3>
+    <div class="modal-header">
+      <h3><svg class="icon" aria-hidden="true"><use href="#icon-upload"></use></svg> Upload file</h3>
+      <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+    </div>
     <div class="upload-form">
-      <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
-      <input type="file" id="fileInput" onchange="validateFile()" multiple>
-      <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
+      <p class="file-info" aria-label="fileInput">Select a file (or multiple files) to upload to <strong id="uploadPathDisplay"></strong></p>
+      <form id="uploadForm" onsubmit="uploadFile(event)">
+      <input type="file" id="fileInput" onchange="validateFile()" multiple required>
       <div id="progress-container">
         <div id="progress-bar"><div id="progress-fill"></div></div>
         <div id="progress-text"></div>
       </div>
+      <div class="modal-footer">
+        <button id="uploadBtn" class="btn btn-primary upload-btn" type="submit">Upload</button>
+      </div>
+    </form>
     </div>
   </div>
 </div>
@@ -706,12 +736,18 @@
 <!-- New Folder Modal -->
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeFolderModal()">&times;</button>
-    <h3>📁 New Folder</h3>
+    <div class="modal-header">
+      <h3><svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg> New Folder</h3>
+      <button class="modal-close" onclick="closeFolderModal()">&times;</button>
+    </div>
     <div class="folder-form">
       <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
-      <input type="text" id="folderName" class="folder-input" placeholder="Folder name...">
-      <button class="folder-btn" onclick="createFolder()">Create Folder</button>
+      <form onsubmit="createFolder(event)">
+        <input type="text" id="folderName" class="folder-input" placeholder="Folder name..." required/>
+        <div class="modal-footer">
+          <button class="btn btn-primary folder-btn" type="submit">Create Folder</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -734,14 +770,18 @@
 <!-- Rename Modal -->
 <div class="modal-overlay" id="renameModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3>✏️ Rename File</h3>
+    <div class="modal-header">
+      <h3><svg class="icon" aria-hidden="true"><use href="#icon-edit"></use></svg> Rename File</h3>
+      <button class="modal-close" onclick="closeRenameModal()">&times;</button>
+    </div>
     <div class="folder-form">
-      <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
+      <p>Renaming <span id="renameItemName" class="file-name-badge"></span></p>
       <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
       <input type="hidden" id="renameItemPath">
-      <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
-      <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
+        <button class="btn btn-primary rename-btn-confirm" onclick="confirmRename()">Rename</button>
+      </div>
     </div>
   </div>
 </div>
@@ -749,22 +789,62 @@
 <!-- Move Modal -->
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3>📂 Move File</h3>
+    <div class="modal-header">
+      <h3><svg class="icon" aria-hidden="true"><use href="#icon-move-file"></use></svg> Move File</h3>
+      <button class="modal-close" onclick="closeMoveModal()">&times;</button>
+    </div>
     <div class="folder-form">
-      <p class="file-info">Moving <strong id="moveItemName"></strong></p>
+      <p>Moving <span id="moveItemName" class="file-name-badge"></span></p>
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
       <datalist id="moveFolderOptions"></datalist>
       <input type="hidden" id="moveItemPath">
-      <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
-      <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
+        <button class="btn btn-primary move-btn-confirm" onclick="confirmMove()">Move</button>
+      </div>
     </div>
   </div>
 </div>
 
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none">
+  <symbol viewBox="260 205 27 32" id="icon-trash">
+    <path fill="currentColor" d="M268,220 C268,219.448 268.448,219 269,219 C269.552,219 270,219.448 270,220 L270,232 C270,232.553 269.552,233 269,233 C268.448,233 268,232.553 268,232 L268,220 L268,220 Z M273,220 C273,219.448 273.448,219 274,219 C274.552,219 275,219.448 275,220 L275,232 C275,232.553 274.552,233 274,233 C273.448,233 273,232.553 273,232 L273,220 L273,220 Z M278,220 C278,219.448 278.448,219 279,219 C279.552,219 280,219.448 280,220 L280,232 C280,232.553 279.552,233 279,233 C278.448,233 278,232.553 278,232 L278,220 L278,220 Z M263,233 C263,235.209 264.791,237 267,237 L281,237 C283.209,237 285,235.209 285,233 L285,217 L263,217 L263,233 L263,233 Z M277,209 L271,209 L271,208 C271,207.447 271.448,207 272,207 L276,207 C276.552,207 277,207.447 277,208 L277,209 L277,209 Z M285,209 L279,209 L279,207 C279,205.896 278.104,205 277,205 L271,205 C269.896,205 269,205.896 269,207 L269,209 L263,209 C261.896,209 261,209.896 261,211 L261,213 C261,214.104 261.895,214.999 262.999,215 L285.002,215 C286.105,214.999 287,214.104 287,213 L287,211 C287,209.896 286.104,209 285,209 L285,209 Z"></path>
+  </symbol>
+  <symbol viewBox="0 0 24 24" id="icon-edit">
+    <path fill="currentColor" d="M12 21C12 20.4477 12.4477 20 13 20H21C21.5523 20 22 20.4477 22 21C22 21.5523 21.5523 22 21 22H13C12.4477 22 12 21.5523 12 21Z"></path>
+    <path fill="currentColor" d="M20.7736 8.09994C22.3834 6.48381 22.315 4.36152 21.113 3.06183C20.5268 2.4281 19.6926 2.0233 18.7477 2.00098C17.7993 1.97858 16.8167 2.34127 15.91 3.09985C15.8868 3.11925 15.8645 3.13969 15.8432 3.16111L2.87446 16.1816C2.31443 16.7438 2 17.5051 2 18.2987V19.9922C2 21.0937 2.89197 22 4.00383 22H5.68265C6.48037 22 7.24524 21.6823 7.80819 21.1171L20.7736 8.09994ZM17.2071 5.79295C16.8166 5.40243 16.1834 5.40243 15.7929 5.79295C15.4024 6.18348 15.4024 6.81664 15.7929 7.20717L16.7929 8.20717C17.1834 8.59769 17.8166 8.59769 18.2071 8.20717C18.5976 7.81664 18.5976 7.18348 18.2071 6.79295L17.2071 5.79295Z"></path>
+  </symbol>
+  <symbol viewBox="0 0 24 24" id="icon-folder">
+    <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M1 5C1 3.34315 2.34315 2 4 2H8.55848C9.84977 2 10.9962 2.82629 11.4045 4.05132L11.7208 5H20C21.1046 5 22 5.89543 22 7V9.00961C23.1475 9.12163 23.9808 10.196 23.7695 11.3578L22.1332 20.3578C21.9603 21.3087 21.132 22 20.1654 22H3C1.89543 22 1 21.1046 1 20V5ZM20 9V7H11.7208C10.8599 7 10.0956 6.44914 9.82339 5.63246L9.50716 4.68377C9.37105 4.27543 8.98891 4 8.55848 4H4C3.44772 4 3 4.44772 3 5V12.2709L3.35429 10.588C3.54913 9.66249 4.36562 9 5.31139 9H20ZM3.36634 20C3.41777 19.9109 3.4562 19.8122 3.47855 19.706L5.31139 11L21 11H21.8018L20.1654 20L3.36634 20Z"></path>
+  </symbol>
+  <symbol viewBox="-10 -5 1034 1034" id="icon-epub">
+    <path fill="currentColor" d="M500 227q-19 0 -32 13l-355 354q-13 14 -13 33t13 32l355 354q13 14 32 14t32 -14l355 -354q13 -13 13 -32t-13 -33l-52 -51l-335 335l-251 -251l251 -252l84 84l-168 168l84 83l251 -251l-219 -219q-13 -13 -32 -13z"></path>
+  </symbol>
+
+  <symbol viewBox="0 0 24 24" id="icon-file">
+    <path fill="transparent" d="M9 17H15M9 13H15M9 9H10M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+  </symbol>
+  <symbol viewBox="0 0 24 24" id="icon-move-file">
+    <path fill="transparent" d="M15 17H21M21 17L19 19M21 17L19 15M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19M19 9V11.0228" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+  </symbol>
+  <symbol viewBox="0 0 24 24" id="icon-upload">
+    <path fill="transparent" d="M17 17H17.01M15.6 14H18C18.9319 14 19.3978 14 19.7654 14.1522C20.2554 14.3552 20.6448 14.7446 20.8478 15.2346C21 15.6022 21 16.0681 21 17C21 17.9319 21 18.3978 20.8478 18.7654C20.6448 19.2554 20.2554 19.6448 19.7654 19.8478C19.3978 20 18.9319 20 18 20H6C5.06812 20 4.60218 20 4.23463 19.8478C3.74458 19.6448 3.35523 19.2554 3.15224 18.7654C3 18.3978 3 17.9319 3 17C3 16.0681 3 15.6022 3.15224 15.2346C3.35523 14.7446 3.74458 14.3552 4.23463 14.1522C4.60218 14 5.06812 14 6 14H8.4M12 15V4M12 4L15 7M12 4L9 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+  </symbol>
+  <symbol viewBox="0 0 64 64" id="icon-home">
+    <path fill="currentColor" d="M56.87 25.981L50.27 21.031L47.27 18.781L35.57 10.001C34.4423 9.16327 33.0748 8.71094 31.67 8.71094C30.2652 8.71094 28.8977 9.16327 27.77 10.001L21.67 14.581V14.371C21.6684 13.8411 21.4572 13.3333 21.0825 12.9586C20.7077 12.5838 20.1999 12.3726 19.67 12.371H12.47C11.9396 12.371 11.4309 12.5817 11.0558 12.9568C10.6807 13.3319 10.47 13.8406 10.47 14.371V23.161L6.44002 26.291C6.23227 26.4524 6.05838 26.6531 5.92833 26.8817C5.79827 27.1103 5.71459 27.3624 5.68208 27.6234C5.64957 27.8844 5.66888 28.1493 5.73887 28.4028C5.80887 28.6564 5.92819 28.8936 6.09001 29.101C6.276 29.3427 6.51546 29.538 6.7896 29.6716C7.06373 29.8052 7.36505 29.8734 7.67 29.871C8.11211 29.8709 8.54152 29.7231 8.89 29.451L10.47 28.231V48.281C10.4716 50.0044 11.1569 51.6568 12.3756 52.8755C13.5942 54.0941 15.2466 54.7794 16.97 54.781H25.6C25.9594 54.7808 26.3121 54.6831 26.6203 54.4981C26.9285 54.3132 27.1807 54.0481 27.35 53.731C27.5142 53.4413 27.6003 53.114 27.6 52.781C27.6017 52.7109 27.5983 52.6407 27.59 52.571V46.851C27.5916 45.7703 28.0223 44.7345 28.7874 43.9713C29.5525 43.2081 30.5893 42.7799 31.67 42.781C32.7491 42.7821 33.7837 43.2112 34.5468 43.9742C35.3098 44.7373 35.7389 45.7719 35.74 46.851V52.781C35.7397 53.114 35.8259 53.4413 35.99 53.731C36.1624 54.0477 36.4167 54.3122 36.7263 54.4969C37.0359 54.6816 37.3895 54.7797 37.75 54.781H46.37C48.0929 54.7776 49.7442 54.0917 50.9624 52.8734C52.1807 51.6552 52.8666 50.0039 52.87 48.281V27.981L54.47 29.181C54.8129 29.4398 55.2305 29.5801 55.66 29.581C55.9718 29.5802 56.2792 29.5076 56.5584 29.3689C56.8376 29.2301 57.081 29.029 57.27 28.781C57.5883 28.3567 57.7249 27.8233 57.6499 27.2982C57.5749 26.7731 57.2944 26.2993 56.87 25.981Z"></path>
+  </symbol>
+  <symbol viewBox="0 0 24 24" id="icon-warning">
+    <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M11 13C11 13.5523 11.4477 14 12 14C12.5523 14 13 13.5523 13 13V10C13 9.44772 12.5523 9 12 9C11.4477 9 11 9.44772 11 10V13ZM13 15.9888C13 15.4365 12.5523 14.9888 12 14.9888C11.4477 14.9888 11 15.4365 11 15.9888V16C11 16.5523 11.4477 17 12 17C12.5523 17 13 16.5523 13 16V15.9888ZM9.37735 4.66136C10.5204 2.60393 13.4793 2.60393 14.6223 4.66136L21.2233 16.5431C22.3341 18.5427 20.8882 21 18.6008 21H5.39885C3.11139 21 1.66549 18.5427 2.77637 16.5431L9.37735 4.66136Z"></path>
+  </symbol>
+  <symbol viewBox="0 0 24 24" id="icon-info">
+    <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12ZM12 17.75C12.4142 17.75 12.75 17.4142 12.75 17V11C12.75 10.5858 12.4142 10.25 12 10.25C11.5858 10.25 11.25 10.5858 11.25 11V17C11.25 17.4142 11.5858 17.75 12 17.75ZM12 7C12.5523 7 13 7.44772 13 8C13 8.55228 12.5523 9 12 9C11.4477 9 11 8.55228 11 8C11 7.44772 11.4477 7 12 7Z"></path>
+  </symbol>
+</svg>
+
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  const FILE_EXTENSION_REGEX = /\.([0-9a-z]+)(?:[\?#]|$)/i;
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -798,9 +878,9 @@
 
     let breadcrumbContent = '<span class="sep">/</span>';
     if (currentPath === '/') {
-      breadcrumbContent += '<span class="current">🏠</span>';
+      breadcrumbContent += '<span class="current"><svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg></span>';
     } else {
-      breadcrumbContent += '<a href="/files">🏠</a>';
+      breadcrumbContent += '<a href="/files"><svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg></a>';
       const pathSegments = currentPath.split('/');
       pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
         breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
@@ -818,7 +898,6 @@
       }
       files = await response.json();
     } catch (e) {
-      console.error(e);
       fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
       return;
     }
@@ -861,8 +940,8 @@
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
           fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a><span class="folder-badge">FOLDER</span></td>`;
           fileTableContent += '<td>Folder</td>';
-          fileTableContent += '<td>-</td>';
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
+          fileTableContent += '<td class="size-col text-nowrap text-end">&ndash;</td>';
+          fileTableContent += `<td class="text-end"><div class="action-icon-group"><button class="btn btn-icon btn-danger delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder"><svg class="icon icon-trash" aria-hidden="true"><use href="#icon-trash"></use></svg></button></div></td>`;
           fileTableContent += '</tr>';
         } else {
           let filePath = currentPath;
@@ -875,17 +954,18 @@
           fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>${escapeHtml(file.name)}`;
           if (file.isEpub) fileTableContent += '<span class="epub-badge">EPUB</span>';
           fileTableContent += '</td>';
-          fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
-          fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
-          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
-          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
+          fileTableContent += `<td>${fileExtension}</td>`;
+          fileTableContent += `<td class="size-col text-nowrap text-end"><code>${formatFileSize(file.size)}</code></td>`;
+          fileTableContent += `<td class="text-end"><div class="action-icon-group">`;
+          fileTableContent += `<button class="btn btn-icon move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', ${file.isEpub})" title="Move file"><svg class="icon icon-move-file" aria-hidden="true"><use href="#icon-move-file"></use></svg></button>`;
+          fileTableContent += `<button class="btn btn-icon rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', ${file.isEpub})" title="Rename file"><svg class="icon icon-edit" aria-hidden="true"><use href="#icon-edit"></use></svg></button>`;
+          fileTableContent += `<button class="btn btn-icon btn-danger delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false, ${file.isEpub})" title="Delete file"><svg class="icon icon-trash" aria-hidden="true"><use href="#icon-trash"></use></svg></button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         }
       });
 
+      fileTableContent += '</tbody>';
       fileTableContent += '</table>';
       fileTable.innerHTML = fileTableContent;
     }
@@ -893,7 +973,7 @@
 
   // Modal functions
   function openUploadModal() {
-    document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    document.getElementById('uploadPathDisplay').innerHTML = currentPath === '/' ? '/ <svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg>' : escapeHtml(currentPath);
     document.getElementById('uploadModal').classList.add('open');
   }
 
@@ -907,9 +987,10 @@
   }
 
   function openFolderModal() {
-    document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    document.getElementById('folderPathDisplay').innerHTML = currentPath === '/' ? '/ <svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg>' : escapeHtml(currentPath);
     document.getElementById('folderModal').classList.add('open');
     document.getElementById('folderName').value = '';
+    document.getElementById('folderName').focus();
   }
 
   function closeFolderModal() {
@@ -1156,7 +1237,8 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
   });
 }
 
-function uploadFile() {
+function uploadFile(event) {
+  event.preventDefault();
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
 
@@ -1210,7 +1292,6 @@ function uploadFile() {
     const onProgress = (loaded, total) => {
       const percent = Math.round((loaded / total) * 100);
       progressFill.style.width = percent + '%';
-      const speed = ''; // Could calculate speed here
       progressText.textContent = `Uploading ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${percent}%`;
     };
 
@@ -1262,14 +1343,18 @@ function showFailedUploadsBanner() {
   filesList.innerHTML = '';
   
   failedUploadsGlobal.forEach((failedFile, index) => {
+    const match = failedFile.name.match(FILE_EXTENSION_REGEX);
+    const fileExtension = match ? match[1].toUpperCase() : '';
+    const icon = fileExtension === 'EPUB' ? 'epub' : 'file';
+
     const item = document.createElement('div');
     item.className = 'failed-file-item';
     item.innerHTML = `
       <div class="failed-file-info">
-        <div class="failed-file-name">📄 ${escapeHtml(failedFile.name)}</div>
+        <div class="failed-file-name"><svg class="icon icon-${icon}" aria-hidden="true"><use href="#icon-${icon}"></use></svg> ${escapeHtml(failedFile.name)}</div>
         <div class="failed-file-error">Error: ${escapeHtml(failedFile.error)}</div>
       </div>
-      <button class="retry-btn" onclick="retrySingleUpload(${index})">Retry</button>
+      <button class="btn btn-sm retry-btn" onclick="retrySingleUpload(${index})">Retry</button>
     `;
     filesList.appendChild(item);
   });
@@ -1332,7 +1417,8 @@ function retryAllFailedUploads() {
   validateFile();
 }
 
-  function createFolder() {
+  function createFolder(event) {
+    event.preventDefault();
     const folderName = document.getElementById('folderName').value.trim();
 
     if (!folderName) {
@@ -1370,8 +1456,9 @@ function retryAllFailedUploads() {
   }
 
   // Rename functions
-  function openRenameModal(name, path) {
-    document.getElementById('renameItemName').textContent = '📄 ' + name;
+  function openRenameModal(name, path, isEpub = false) {
+    const icon = isEpub ? 'epub' : 'file';
+    document.getElementById('renameItemName').innerHTML = `<svg class="icon icon-${icon}" aria-hidden="true"><use href="#icon-${icon}"></use></svg> ${escapeHtml(name)}`;
     document.getElementById('renameItemPath').value = path;
     document.getElementById('renameNewName').value = name;
     document.getElementById('renameModal').classList.add('open');
@@ -1394,8 +1481,13 @@ function retryAllFailedUploads() {
       alert('Please enter a new name.');
       return;
     }
-    if (newName.includes('/') || newName.includes('\\')) {
+    if (/[/\\]/.test(newName)) {
       alert('File name cannot include slashes.');
+      return;
+    }
+    const validName = /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(newName);
+    if (!validName) {
+      alert('File name cannot contain " * : < > ? / \\ | and must not be . or ..');
       return;
     }
 
@@ -1485,8 +1577,9 @@ function retryAllFailedUploads() {
     });
   }
 
-  function openMoveModal(name, path) {
-    document.getElementById('moveItemName').textContent = '📄 ' + name;
+  function openMoveModal(name, path, isEpub = false) {
+    const iconType = isEpub ? 'epub' : 'file';
+    document.getElementById('moveItemName').innerHTML = `<svg class="icon icon-${iconType}" aria-hidden="true"><use href="#icon-${iconType}"></use></svg> ${escapeHtml(name)}`;
     document.getElementById('moveItemPath').value = path;
     document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
     document.getElementById('moveModal').classList.add('open');

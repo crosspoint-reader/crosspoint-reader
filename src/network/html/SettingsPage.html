@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -29,6 +29,18 @@
       }
     }
     body {
+      --font-color: #333;
+      --background: #f5f5f5;
+      --title-color: #2c3e50;
+      --card-background: white;
+      --muted-color: #95a5a6;
+      --border-color: #eee;
+      --accent-color-rgb: 110, 154, 130;
+      --accent-color: rgb(var(--accent-color-rgb));
+      --accent-color-50: rgba(var(--accent-color-rgb), .5);
+      --accent-color-highlight: #5a8c73;
+      --toggle-bg: #ccc;
+
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         Oxygen, Ubuntu, sans-serif;
       max-width: 800px;
@@ -42,9 +54,19 @@
       border-bottom: 2px solid var(--accent-color);
       padding-bottom: 10px;
     }
+    h1 .logo {
+      background-color: #6e9a82;
+      padding: 0 4px;
+      border-radius: 4px;
+    }
+    h1 .logo svg {
+      width: 18px;
+      height: 18px;
+    }
     h2 {
       color: var(--title-color);
       margin-top: 0;
+      font-size: 20px;
     }
     .card {
       background: var(--card-bg);
@@ -52,6 +74,12 @@
       padding: 20px;
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .card h3 {
+      margin: 0;
+      color: var(--title-color);
+      font-size: 18px;
+      padding-bottom: 8px;
     }
     .nav-links {
       margin: 20px 0;
@@ -74,6 +102,7 @@
     }
     .setting-row {
       display: flex;
+      gap: 6px;
       justify-content: space-between;
       align-items: center;
       padding: 10px 0;
@@ -97,7 +126,6 @@
     .setting-control input[type="text"],
     .setting-control input[type="password"] {
       padding: 6px 10px;
-      border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 0.95em;
       background: var(--card-bg);
@@ -150,8 +178,9 @@
       transform: translateX(22px);
     }
     .save-container {
-      text-align: center;
-      margin: 20px 0;
+      display: flex;
+      justify-content: center;
+      margin: 20px 0 30px;
     }
     .save-btn {
       background-color: #27ae60;
@@ -170,22 +199,31 @@
       background-color: #95a5a6;
       cursor: not-allowed;
     }
-    .message {
+    .toast {
       padding: 12px;
       border-radius: 4px;
-      margin: 15px 0;
-      text-align: center;
       display: none;
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      min-width: 200px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      z-index: 1000;
     }
-    .message.success {
+    .toast-success {
       background-color: #d4edda;
       color: #155724;
       border: 1px solid #c3e6cb;
     }
-    .message.error {
+    .toast-error {
       background-color: #f8d7da;
       color: #721c24;
       border: 1px solid #f5c6cb;
+    }
+    .toast-info {
+      background-color: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
     }
     .loader-container {
       display: flex;
@@ -203,6 +241,50 @@
       box-sizing: border-box;
       animation: rotation 1s linear infinite;
     }
+    .btn {
+      color: white;
+      padding: 8px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .btn-lg {
+      padding: 0.5rem 1rem;
+      font-size: 1.25rem;
+      border-radius: 0.5rem;
+    }
+    .btn-primary {
+      background-color: var(--accent-color);
+    }
+    .btn-primary:hover {
+      background-color: var(--accent-color-highlight);
+    }
+    .btn-primary:disabled {
+      background-color: var(--accent-color-50);
+      cursor: not-allowed;
+      color: var(--muted-color)
+    }
+    .btn-secondary {
+      background-color: #6c757d;
+    }
+    .btn-secondary:hover {
+      background-color: #5a6268;
+    }
+    footer {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: .85em;
+    }
+    footer .icon {
+      height: 20px;
+      width: 20px;
+    }
     @keyframes rotation {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
@@ -211,6 +293,11 @@
       body {
         padding: 10px;
         font-size: 14px;
+      }
+      .toast {
+        left: 10px;
+        bottom: 10px;
+        right: 10px;
       }
       .card {
         padding: 12px;
@@ -224,20 +311,34 @@
         font-size: 0.9em;
       }
       .setting-row {
-        flex-wrap: wrap;
-        gap: 6px;
+        padding: 4px 0;
+        border: none;
       }
-      .setting-control select,
-      .setting-control input[type="text"],
-      .setting-control input[type="password"] {
+      .setting-control select {
         min-width: 0;
         width: unset;
+      }
+
+      .setting-control input[type="text"],
+      .setting-control input[type="password"] {
+        width: 100px;
+      }
+      footer {
+        justify-content: center;
       }
     }
   </style>
 </head>
 <body>
-  <h1>⚙️ Settings</h1>
+  <h1>
+    <span class="logo">
+      <svg viewBox="0 0 162 180" xmlns="http://www.w3.org/2000/svg">
+        <path d="M141.133 1.93774C150.102 -3.44192 161.517 3.01665 161.521 13.4749V166.526C161.517 176.984 150.102 183.442 141.133 178.063L80.7588 141.837L20.3867 178.063C11.4176 183.442 0.00328866 176.984 0 166.526V13.4749C0.00337257 3.01685 11.4176 -3.44137 20.3867 1.93774L80.7598 38.1614L141.133 1.93774ZM121.275 117.524L92.3848 134.864L147.281 167.811C148.277 168.408 149.542 167.685 149.545 166.526V100.567L121.275 117.524ZM14.2393 12.1897C13.2438 11.5924 11.979 12.3152 11.9756 13.4749V86.6125L74.7725 124.29V48.51L14.2393 12.1897Z" fill="black"/>
+        <path d="m 121.2754,117.524 -28.8902,17.34 54.8962,32.947 c 0.996,0.597 2.261,-0.126 2.264,-1.285 V 100.567 Z M 14.2397,12.1897 c -0.9955,-0.5973 -2.2603,0.1255 -2.2637,1.2852 V 86.6125 L 74.7729,124.29 V 48.51 Z" fill="white"/>
+      </svg>
+    </span>
+    CrossPoint Reader
+  </h1>
 
   <div class="nav-links">
     <a href="/">Home</a>
@@ -245,7 +346,9 @@
     <a href="/settings" class="active">Settings</a>
   </div>
 
-  <div id="message" class="message"></div>
+  <h2>Settings</h2>
+
+  <div id="toast" class="toast toast-info"></div>
 
   <div id="settings-container">
     <div class="loader-container">
@@ -254,18 +357,25 @@
   </div>
 
   <div class="save-container" id="save-container" style="display:none;">
-    <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
+    <button class="btn btn-lg btn-primary" id="saveBtn" onclick="saveSettings(event)">Save Settings</button>
   </div>
 
-  <div class="card">
-    <p style="text-align: center; color: #95a5a6; margin: 0;">
-      CrossPoint E-Reader • Open Source
-    </p>
-  </div>
+  <footer>
+    <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path fill="currentColor" d="M12,2A10,10,0,0,0,8.84,21.5c.5.08.66-.23.66-.5V19.31C6.73,19.91,6.14,18,6.14,18A2.69,2.69,0,0,0,5,16.5c-.91-.62.07-.6.07-.6a2.1,2.1,0,0,1,1.53,1,2.15,2.15,0,0,0,2.91.83,2.16,2.16,0,0,1,.63-1.34C8,16.17,5.62,15.31,5.62,11.5a3.87,3.87,0,0,1,1-2.71,3.58,3.58,0,0,1,.1-2.64s.84-.27,2.75,1a9.63,9.63,0,0,1,5,0c1.91-1.29,2.75-1,2.75-1a3.58,3.58,0,0,1,.1,2.64,3.87,3.87,0,0,1,1,2.71c0,3.82-2.34,4.66-4.57,4.91a2.39,2.39,0,0,1,.69,1.85V21c0,.27.16.59.67.5A10,10,0,0,0,12,2Z"></path>
+    </svg>
+    <a
+      href="https://github.com/crosspoint-reader/crosspoint-reader"
+      target="_blank"
+      >CrossPoint E-Reader • Open Source</a
+    >
+  </footer>
 
 <script>
   let allSettings = [];
   let originalValues = {};
+  const VALID_SETTING_TYPES = ['toggle', 'enum', 'value', 'string'];
+  let toastTimeout = null;
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -276,12 +386,13 @@
       .replaceAll("'", "&#039;");
   }
 
-  function showMessage(text, isError) {
-    const msg = document.getElementById('message');
-    msg.textContent = text;
-    msg.className = 'message ' + (isError ? 'error' : 'success');
-    msg.style.display = 'block';
-    setTimeout(function() { msg.style.display = 'none'; }, 4000);
+  function showToast(text, type = "info") {
+    if (toastTimeout) clearTimeout(toastTimeout);
+    const toast = document.getElementById('toast');
+    toast.textContent = text;
+    toast.className = 'toast toast-' + type;
+    toast.style.display = 'block';
+    toastTimeout = setTimeout(() => toast.style.display = 'none', 4000);
   }
 
   function renderControl(setting) {
@@ -316,27 +427,22 @@
       return '<input type="' + inputType + '" id="' + id + '" value="' + escapeHtml(val) + '"' +
         ' oninput="markChanged()">';
     }
-
-    return '';
   }
 
   function getValue(setting) {
     const el = document.getElementById('setting-' + setting.key);
     if (!el) return undefined;
 
-    if (setting.type === 'toggle') {
-      return el.checked ? 1 : 0;
+    switch (setting.type) {
+      case 'toggle':
+        return el.checked ? 1 : 0;
+      case 'enum': case 'value':
+        return parseInt(el.value, 10);
+      case 'string':
+        return el.value;
+      default:
+        return undefined;
     }
-    if (setting.type === 'enum') {
-      return parseInt(el.value, 10);
-    }
-    if (setting.type === 'value') {
-      return parseInt(el.value, 10);
-    }
-    if (setting.type === 'string') {
-      return el.value;
-    }
-    return undefined;
   }
 
   function markChanged() {
@@ -368,8 +474,10 @@
       let html = '';
 
       for (const category in groups) {
-        html += '<div class="card"><h2>' + escapeHtml(category) + '</h2>';
+        html += '<div class="card"><h3>' + escapeHtml(category) + '</h3>';
         groups[category].forEach(function(s) {
+          if (!VALID_SETTING_TYPES.includes(s.type)) return;
+
           html += '<div class="setting-row">' +
             '<span class="setting-name">' + escapeHtml(s.name) + '</span>' +
             '<span class="setting-control">' + renderControl(s) + '</span>' +
@@ -388,8 +496,8 @@
     }
   }
 
-  async function saveSettings() {
-    const btn = document.getElementById('saveBtn');
+  async function saveSettings(event) {
+    const btn = event.target;
     btn.disabled = true;
     btn.textContent = 'Saving...';
 
@@ -403,7 +511,7 @@
     });
 
     if (Object.keys(changes).length === 0) {
-      showMessage('No changes to save.', false);
+      showToast('No changes to save.');
       btn.textContent = 'Save Settings';
       return;
     }
@@ -425,10 +533,10 @@
         originalValues[key] = changes[key];
       }
 
-      showMessage('Settings saved successfully!', false);
+      showToast('Settings saved successfully!', "success");
     } catch (e) {
       console.error(e);
-      showMessage('Error: ' + e.message, true);
+      showToast('Error: ' + e.message, "error");
     }
 
     btn.textContent = 'Save Settings';
