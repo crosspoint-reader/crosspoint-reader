@@ -25,6 +25,7 @@ Example:
 import sys
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import List, Dict, Tuple
 
@@ -440,11 +441,22 @@ def generate_keys_header(
     )
     lines.append("")
 
-    # Sorted language indices for alphabetical display order (English always first)
+    # Sorted language indices for display order 
+    # (English first, then alphabetically)
+
+    def _strip_diacritics(s: str) -> str:
+        """Remove diacritics so e.g. 'Č' sorts like 'C'."""
+        nfkd = unicodedata.normalize("NFD", s)
+        return "".join(ch for ch in nfkd if unicodedata.category(ch) != "Mn")
+
+    def _display_sort_key(idx: int) -> tuple:
+        name = language_names[idx]
+        return (0, _strip_diacritics(name).lower())
+
     english_idx = languages.index("ENGLISH")
     rest = sorted(
         (i for i in range(len(language_names)) if i != english_idx),
-        key=lambda i: language_names[i],
+        key=_display_sort_key,
     )
     sorted_indices = [english_idx] + rest
     comment_names = ", ".join(language_names[i] for i in sorted_indices)
