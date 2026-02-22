@@ -109,8 +109,7 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
       for (auto& w : words) {
         if (titleLines.size() >= 3) {
-          if (titleLines.back().size() < 3 ||
-              titleLines.back().compare(titleLines.back().size() - 3, 3, "...") != 0) {
+          if (titleLines.back().size() < 3 || titleLines.back().compare(titleLines.back().size() - 3, 3, "...") != 0) {
             titleLines.back().append("...");
           }
           while (!titleLines.back().empty() && titleLines.back().size() > 3 &&
