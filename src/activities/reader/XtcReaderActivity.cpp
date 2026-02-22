@@ -91,8 +91,8 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  // When long-press chapter skip is disabled, turn pages on press instead of release.
-  const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
+  // When long-press behavior is disabled, turn pages on press instead of release.
+  const bool usePressForPageTurn = SETTINGS.longPressButtonBehavior == SETTINGS.OFF;
   const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
                                                     mappedInput.wasPressed(MappedInputManager::Button::Left))
                                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
@@ -116,7 +116,7 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipPageMs;
+  const bool skipPages = !usePressForPageTurn && mappedInput.getHeldTime() > skipPageMs;
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {

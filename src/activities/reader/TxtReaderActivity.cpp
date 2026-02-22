@@ -93,8 +93,8 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  // When long-press chapter skip is disabled, turn pages on press instead of release.
-  const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
+  // When long-press behavior is disabled, turn pages on press instead of release.
+  const bool usePressForPageTurn = SETTINGS.longPressButtonBehavior == SETTINGS.OFF;
   const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
                                                     mappedInput.wasPressed(MappedInputManager::Button::Left))
                                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
