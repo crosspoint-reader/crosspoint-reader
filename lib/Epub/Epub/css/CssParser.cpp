@@ -74,7 +74,7 @@ std::string CssParser::normalized(const std::string& s) {
   }
 
   // Remove trailing space
-  if (!result.empty() && result.back() == ' ') {
+  while (!result.empty() && (result.back() == ' ' || result.back() == '\n')) {
     result.pop_back();
   }
   return result;
@@ -189,10 +189,18 @@ CssTextDecoration CssParser::interpretDecoration(const std::string& val) {
 }
 
 CssLength CssParser::interpretLength(const std::string& val) {
-  const std::string v = normalized(val);
-  if (v.empty()) return CssLength{};
+  CssLength result;
+  tryInterpretLength(val, result);
+  return result;
+}
 
-  // Find where the number ends
+bool CssParser::tryInterpretLength(const std::string& val, CssLength& out) {
+  const std::string v = normalized(val);
+  if (v.empty()) {
+    out = CssLength{};
+    return false;
+  }
+
   size_t unitStart = v.size();
   for (size_t i = 0; i < v.size(); ++i) {
     const char c = v[i];
@@ -205,12 +213,13 @@ CssLength CssParser::interpretLength(const std::string& val) {
   const std::string numPart = v.substr(0, unitStart);
   const std::string unitPart = v.substr(unitStart);
 
-  // Parse numeric value
   char* endPtr = nullptr;
   const float numericValue = std::strtof(numPart.c_str(), &endPtr);
-  if (endPtr == numPart.c_str()) return CssLength{};  // No number parsed
+  if (endPtr == numPart.c_str()) {
+    out = CssLength{};
+    return false;  // No number parsed (e.g. auto, inherit, initial)
+  }
 
-  // Determine unit type (preserve for deferred resolution)
   auto unit = CssUnit::Pixels;
   if (unitPart == "em") {
     unit = CssUnit::Em;
@@ -221,10 +230,11 @@ CssLength CssParser::interpretLength(const std::string& val) {
   } else if (unitPart == "%") {
     unit = CssUnit::Percent;
   }
-  // px and unitless default to Pixels
 
-  return CssLength{numericValue, unit};
+  out = CssLength{numericValue, unit};
+  return true;
 }
+
 // Declaration parsing
 
 void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& style, std::string& propNameBuf,
@@ -295,6 +305,18 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
       style.defined.paddingTop = style.defined.paddingRight = style.defined.paddingBottom = style.defined.paddingLeft =
           1;
     }
+  } else if (propNameBuf == "height") {
+    CssLength len;
+    if (tryInterpretLength(propValueBuf, len)) {
+      style.imageHeight = len;
+      style.defined.imageHeight = 1;
+    }
+  } else if (propNameBuf == "width") {
+    CssLength len;
+    if (tryInterpretLength(propValueBuf, len)) {
+      style.imageWidth = len;
+      style.defined.imageWidth = 1;
+    }
   }
 }
 
@@ -342,6 +364,56 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
     // Normalize the selector
     std::string key = normalized(sel);
     if (key.empty()) continue;
+
+    // TODO: Consider adding support for sibling css selectors in the future
+    // Ensure no + in selector as we don't support adjacent CSS selectors for now
+    if (key.find('+') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for direct nested css selectors in the future
+    // Ensure no > in selector as we don't support nested CSS selectors for now
+    if (key.find('>') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for attribute css selectors in the future
+    // Ensure no [ in selector as we don't support attribute CSS selectors for now
+    if (key.find('[') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for pseudo selectors in the future
+    // Ensure no : in selector as we don't support pseudo CSS selectors for now
+    if (key.find(':') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for ID css selectors in the future
+    // Ensure no # in selector as we don't support ID CSS selectors for now
+    if (key.find('#') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for general sibling combinator selectors in the future
+    // Ensure no ~ in selector as we don't support general sibling combinator CSS selectors for now
+    if (key.find('~') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Consider adding support for wildcard css selectors in the future
+    // Ensure no * in selector as we don't support wildcard CSS selectors for now
+    if (key.find('*') != std::string_view::npos) {
+      continue;
+    }
+
+    // TODO: Add support for more complex selectors in the future
+    // At the moment, we only ever check for `tag`, `tag.class1` or `.class1`
+    // If the selector has whitespace in it, then it's either a CSS selector for a descendant element (e.g. `tag1 tag2`)
+    // or some other slightly more advanced CSS selector which we don't support yet
+    if (key.find(' ') != std::string_view::npos) {
+      continue;
+    }
 
     // Skip if this would exceed the rule limit
     if (rulesBySelector_.size() >= MAX_RULES) {
@@ -528,6 +600,7 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
     result.applyOver(tagIt->second);
   }
 
+  // TODO: Support combinations of classes (e.g. style on .class1.class2)
   // 2. Apply class styles (medium priority)
   if (!classAttr.empty()) {
     const auto classes = splitWhitespace(classAttr);
@@ -541,6 +614,7 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
       }
     }
 
+    // TODO: Support combinations of classes (e.g. style on p.class1.class2)
     // 3. Apply element.class styles (higher priority)
     for (const auto& cls : classes) {
       std::string combinedKey = tag + "." + normalized(cls);
@@ -561,11 +635,14 @@ CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return par
 
 // Cache serialization
 
-// Cache format version - increment when format changes
-constexpr uint8_t CSS_CACHE_VERSION = 2;
+// Cache file name (version is CssParser::CSS_CACHE_VERSION)
 constexpr char rulesCache[] = "/css_rules.cache";
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
+
+void CssParser::deleteCache() const {
+  if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
+}
 
 bool CssParser::saveToCache() const {
   if (cachePath.empty()) {
@@ -578,7 +655,7 @@ bool CssParser::saveToCache() const {
   }
 
   // Write version
-  file.write(CSS_CACHE_VERSION);
+  file.write(CssParser::CSS_CACHE_VERSION);
 
   // Write rule count
   const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
@@ -613,6 +690,8 @@ bool CssParser::saveToCache() const {
     writeLength(style.paddingBottom);
     writeLength(style.paddingLeft);
     writeLength(style.paddingRight);
+    writeLength(style.imageHeight);
+    writeLength(style.imageWidth);
 
     // Write defined flags as uint16_t
     uint16_t definedBits = 0;
@@ -629,6 +708,8 @@ bool CssParser::saveToCache() const {
     if (style.defined.paddingBottom) definedBits |= 1 << 10;
     if (style.defined.paddingLeft) definedBits |= 1 << 11;
     if (style.defined.paddingRight) definedBits |= 1 << 12;
+    if (style.defined.imageHeight) definedBits |= 1 << 13;
+    if (style.defined.imageWidth) definedBits |= 1 << 14;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -652,9 +733,11 @@ bool CssParser::loadFromCache() {
 
   // Read and verify version
   uint8_t version = 0;
-  if (file.read(&version, 1) != 1 || version != CSS_CACHE_VERSION) {
-    LOG_DBG("CSS", "Cache version mismatch (got %u, expected %u)", version, CSS_CACHE_VERSION);
+  if (file.read(&version, 1) != 1 || version != CssParser::CSS_CACHE_VERSION) {
+    LOG_DBG("CSS", "Cache version mismatch (got %u, expected %u), removing stale cache for rebuild", version,
+            CssParser::CSS_CACHE_VERSION);
     file.close();
+    Storage.remove((cachePath + rulesCache).c_str());
     return false;
   }
 
@@ -730,7 +813,8 @@ bool CssParser::loadFromCache() {
 
     if (!readLength(style.textIndent) || !readLength(style.marginTop) || !readLength(style.marginBottom) ||
         !readLength(style.marginLeft) || !readLength(style.marginRight) || !readLength(style.paddingTop) ||
-        !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight)) {
+        !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight) ||
+        !readLength(style.imageHeight) || !readLength(style.imageWidth)) {
       rulesBySelector_.clear();
       file.close();
       return false;
@@ -756,6 +840,8 @@ bool CssParser::loadFromCache() {
     style.defined.paddingBottom = (definedBits & 1 << 10) != 0;
     style.defined.paddingLeft = (definedBits & 1 << 11) != 0;
     style.defined.paddingRight = (definedBits & 1 << 12) != 0;
+    style.defined.imageHeight = (definedBits & 1 << 13) != 0;
+    style.defined.imageWidth = (definedBits & 1 << 14) != 0;
 
     rulesBySelector_[selector] = style;
   }

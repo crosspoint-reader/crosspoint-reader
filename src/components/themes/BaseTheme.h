@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <vector>
 
 class GfxRenderer;
@@ -82,7 +83,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .tabBarHeight = 50,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
-                                 .homeTopPadding = 20,
+                                 .homeTopPadding = 40,
                                  .homeCoverHeight = 400,
                                  .homeCoverTileHeight = 400,
                                  .homeRecentBooksCount = 1,
@@ -90,9 +91,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
                                  .bookProgressBarHeight = 4,
-                                 .keyboardKeyWidth = 18,
-                                 .keyboardKeyHeight = 18,
-                                 .keyboardKeySpacing = 3,
+                                 .keyboardKeyWidth = 22,
+                                 .keyboardKeyHeight = 30,
+                                 .keyboardKeySpacing = 10,
                                  .keyboardBottomAligned = false,
                                  .keyboardCenteredText = false};
 }

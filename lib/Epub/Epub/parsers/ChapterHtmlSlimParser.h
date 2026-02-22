@@ -64,6 +64,9 @@ class ChapterHtmlSlimParser {
   bool effectiveBold = false;
   bool effectiveItalic = false;
   bool effectiveUnderline = false;
+  int tableDepth = 0;
+  int tableRowIndex = 0;
+  int tableColIndex = 0;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;

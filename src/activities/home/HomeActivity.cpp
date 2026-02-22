@@ -11,7 +11,6 @@
 #include <cstring>
 #include <vector>
 
-#include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
