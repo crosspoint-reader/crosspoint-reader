@@ -139,7 +139,7 @@ void TxtReaderActivity::initializeReader() {
   orientedMarginRight += cachedScreenMargin;
   orientedMarginBottom += cachedScreenMargin;
 
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
   // Add status bar margin
   if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
@@ -476,7 +476,7 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
 
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto screenHeight = renderer.getScreenHeight();
   // Adjust text position upward when progress bar is shown to avoid overlap
   const auto textY = screenHeight - orientedMarginBottom - 4;
