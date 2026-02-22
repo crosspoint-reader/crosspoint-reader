@@ -221,7 +221,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   // Draw selection
   int contentWidth = rect.width - 5;
   if (selectedIndex >= 0) {
-    renderer.fillRect(0, rect.y + selectedIndex % pageItems * rowHeight - 2, rect.width, rowHeight);
+    renderer.fillRect(rect.x, rect.y + selectedIndex % pageItems * rowHeight - 2, rect.width, rowHeight);
   }
   // Draw all items
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
