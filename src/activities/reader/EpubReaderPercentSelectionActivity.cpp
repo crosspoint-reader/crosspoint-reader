@@ -58,19 +58,24 @@ void EpubReaderPercentSelectionActivity::loop() {
 
 void EpubReaderPercentSelectionActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
-
-  // Title and numeric percent value.
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_GO_TO_PERCENT), true, EpdFontFamily::BOLD);
-
+  
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  auto metrics = UITheme::getInstance().getMetrics();
+  
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_GO_TO_PERCENT));
+  
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
+  
   const std::string percentText = std::to_string(percent) + "%";
-  renderer.drawCenteredText(UI_12_FONT_ID, 90, percentText.c_str(), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, contentTop, percentText.c_str(), true, EpdFontFamily::BOLD);
 
   // Draw slider track.
   const int screenWidth = renderer.getScreenWidth();
   constexpr int barWidth = 360;
   constexpr int barHeight = 16;
   const int barX = (screenWidth - barWidth) / 2;
-  const int barY = 140;
+  const int barY = contentTop + metrics.verticalSpacing * 2;
 
   renderer.drawRect(barX, barY, barWidth, barHeight);
 
