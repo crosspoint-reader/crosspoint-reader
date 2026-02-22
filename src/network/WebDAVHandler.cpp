@@ -20,7 +20,7 @@ const char* FIXED_DATE = "Thu, 01 Jan 2024 00:00:00 GMT";
 
 // ── RequestHandler interface ─────────────────────────────────────────────────
 
-bool WebDAVHandler::canHandle(WebServer &server, HTTPMethod method, const String &uri) {
+bool WebDAVHandler::canHandle(WebServer& server, HTTPMethod method, const String& uri) {
   (void)server;
   (void)uri;
   switch (method) {
@@ -41,12 +41,12 @@ bool WebDAVHandler::canHandle(WebServer &server, HTTPMethod method, const String
   }
 }
 
-bool WebDAVHandler::canRaw(WebServer &server, const String &uri) {
+bool WebDAVHandler::canRaw(WebServer& server, const String& uri) {
   (void)uri;
   return server.method() == HTTP_PUT;
 }
 
-void WebDAVHandler::raw(WebServer &server, const String &uri, HTTPRaw &raw) {
+void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   (void)uri;
   if (raw.status == RAW_START) {
     _putPath = getRequestPath(server);
@@ -117,27 +117,50 @@ void WebDAVHandler::raw(WebServer &server, const String &uri, HTTPRaw &raw) {
   }
 }
 
-bool WebDAVHandler::handle(WebServer &server, HTTPMethod method, const String &uri) {
+bool WebDAVHandler::handle(WebServer& server, HTTPMethod method, const String& uri) {
   (void)uri;
   switch (method) {
-    case HTTP_OPTIONS:  handleOptions(server);  return true;
-    case HTTP_PROPFIND: handlePropfind(server); return true;
-    case HTTP_GET:      handleGet(server);      return true;
-    case HTTP_HEAD:     handleHead(server);     return true;
-    case HTTP_PUT:      handlePut(server);      return true;
-    case HTTP_DELETE:   handleDelete(server);   return true;
-    case HTTP_MKCOL:    handleMkcol(server);    return true;
-    case HTTP_MOVE:     handleMove(server);     return true;
-    case HTTP_COPY:     handleCopy(server);     return true;
-    case HTTP_LOCK:     handleLock(server);     return true;
-    case HTTP_UNLOCK:   handleUnlock(server);   return true;
-    default:            return false;
+    case HTTP_OPTIONS:
+      handleOptions(server);
+      return true;
+    case HTTP_PROPFIND:
+      handlePropfind(server);
+      return true;
+    case HTTP_GET:
+      handleGet(server);
+      return true;
+    case HTTP_HEAD:
+      handleHead(server);
+      return true;
+    case HTTP_PUT:
+      handlePut(server);
+      return true;
+    case HTTP_DELETE:
+      handleDelete(server);
+      return true;
+    case HTTP_MKCOL:
+      handleMkcol(server);
+      return true;
+    case HTTP_MOVE:
+      handleMove(server);
+      return true;
+    case HTTP_COPY:
+      handleCopy(server);
+      return true;
+    case HTTP_LOCK:
+      handleLock(server);
+      return true;
+    case HTTP_UNLOCK:
+      handleUnlock(server);
+      return true;
+    default:
+      return false;
   }
 }
 
 // ── OPTIONS ──────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handleOptions(WebServer &s) {
+void WebDAVHandler::handleOptions(WebServer& s) {
   s.sendHeader("DAV", "1");
   s.sendHeader("Allow",
                "OPTIONS, GET, HEAD, PUT, DELETE, "
@@ -149,7 +172,7 @@ void WebDAVHandler::handleOptions(WebServer &s) {
 
 // ── PROPFIND ─────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handlePropfind(WebServer &s) {
+void WebDAVHandler::handlePropfind(WebServer& s) {
   String path = getRequestPath(s);
   int depth = getDepth(s);
 
@@ -167,8 +190,9 @@ void WebDAVHandler::handlePropfind(WebServer &s) {
       // Root should always work — send minimal response
       s.setContentLength(CONTENT_LENGTH_UNKNOWN);
       s.send(207, "application/xml; charset=\"utf-8\"", "");
-      s.sendContent("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-                    "<D:multistatus xmlns:D=\"DAV:\">\n");
+      s.sendContent(
+          "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+          "<D:multistatus xmlns:D=\"DAV:\">\n");
       sendPropEntry(s, "/", true, 0, FIXED_DATE);
       s.sendContent("</D:multistatus>\n");
       s.sendContent("");
@@ -182,8 +206,9 @@ void WebDAVHandler::handlePropfind(WebServer &s) {
 
   s.setContentLength(CONTENT_LENGTH_UNKNOWN);
   s.send(207, "application/xml; charset=\"utf-8\"", "");
-  s.sendContent("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-                "<D:multistatus xmlns:D=\"DAV:\">\n");
+  s.sendContent(
+      "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+      "<D:multistatus xmlns:D=\"DAV:\">\n");
 
   // Entry for the resource itself
   if (isDir) {
@@ -239,8 +264,8 @@ void WebDAVHandler::handlePropfind(WebServer &s) {
   s.sendContent("");
 }
 
-void WebDAVHandler::sendPropEntry(WebServer &s, const String &path, bool isDir, size_t size,
-                                  const String &lastModified) const {
+void WebDAVHandler::sendPropEntry(WebServer& s, const String& path, bool isDir, size_t size,
+                                  const String& lastModified) const {
   String href;
   urlEncodePath(path, href);
   // Ensure directory hrefs end with /
@@ -274,7 +299,7 @@ void WebDAVHandler::sendPropEntry(WebServer &s, const String &path, bool isDir, 
 
 // ── GET ──────────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handleGet(WebServer &s) {
+void WebDAVHandler::handleGet(WebServer& s) {
   String path = getRequestPath(s);
   LOG_DBG("DAV", "GET %s", path.c_str());
 
@@ -311,7 +336,7 @@ void WebDAVHandler::handleGet(WebServer &s) {
 
 // ── HEAD ─────────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handleHead(WebServer &s) {
+void WebDAVHandler::handleHead(WebServer& s) {
   String path = getRequestPath(s);
   LOG_DBG("DAV", "HEAD %s", path.c_str());
 
@@ -345,7 +370,7 @@ void WebDAVHandler::handleHead(WebServer &s) {
 
 // ── PUT ──────────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handlePut(WebServer &s) {
+void WebDAVHandler::handlePut(WebServer& s) {
   // Body was already received via canRaw/raw callbacks
   String path = getRequestPath(s);
   LOG_DBG("DAV", "PUT %s", path.c_str());
@@ -369,7 +394,7 @@ void WebDAVHandler::handlePut(WebServer &s) {
 
 // ── DELETE ───────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handleDelete(WebServer &s) {
+void WebDAVHandler::handleDelete(WebServer& s) {
   String path = getRequestPath(s);
   LOG_DBG("DAV", "DELETE %s", path.c_str());
 
@@ -422,7 +447,7 @@ void WebDAVHandler::handleDelete(WebServer &s) {
 
 // ── MKCOL ────────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handleMkcol(WebServer &s) {
+void WebDAVHandler::handleMkcol(WebServer& s) {
   String path = getRequestPath(s);
   LOG_DBG("DAV", "MKCOL %s", path.c_str());
 
@@ -462,7 +487,7 @@ void WebDAVHandler::handleMkcol(WebServer &s) {
 
 // ── MOVE ─────────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handleMove(WebServer &s) {
+void WebDAVHandler::handleMove(WebServer& s) {
   String srcPath = getRequestPath(s);
   String dstPath = getDestinationPath(s);
   bool overwrite = getOverwrite(s);
@@ -533,7 +558,7 @@ void WebDAVHandler::handleMove(WebServer &s) {
 
 // ── COPY ─────────────────────────────────────────────────────────────────────
 
-void WebDAVHandler::handleCopy(WebServer &s) {
+void WebDAVHandler::handleCopy(WebServer& s) {
   String srcPath = getRequestPath(s);
   String dstPath = getDestinationPath(s);
   bool overwrite = getOverwrite(s);
@@ -628,7 +653,7 @@ void WebDAVHandler::handleCopy(WebServer &s) {
 
 // ── LOCK / UNLOCK (dummy for client compatibility) ───────────────────────────
 
-void WebDAVHandler::handleLock(WebServer &s) {
+void WebDAVHandler::handleLock(WebServer& s) {
   String path = getRequestPath(s);
   LOG_DBG("DAV", "LOCK %s (dummy)", path.c_str());
 
@@ -651,14 +676,14 @@ void WebDAVHandler::handleLock(WebServer &s) {
   s.send(200, "application/xml; charset=\"utf-8\"", xml);
 }
 
-void WebDAVHandler::handleUnlock(WebServer &s) {
+void WebDAVHandler::handleUnlock(WebServer& s) {
   LOG_DBG("DAV", "UNLOCK %s (dummy)", s.uri().c_str());
   s.send(204);
 }
 
 // ── Utility functions ────────────────────────────────────────────────────────
 
-String WebDAVHandler::getRequestPath(WebServer &s) const {
+String WebDAVHandler::getRequestPath(WebServer& s) const {
   String uri = s.uri();
   String decoded = WebServer::urlDecode(uri);
 
@@ -677,7 +702,7 @@ String WebDAVHandler::getRequestPath(WebServer &s) const {
   return result;
 }
 
-String WebDAVHandler::getDestinationPath(WebServer &s) const {
+String WebDAVHandler::getDestinationPath(WebServer& s) const {
   String dest = s.header("Destination");
   if (dest.isEmpty()) return "";
 
@@ -708,7 +733,7 @@ String WebDAVHandler::getDestinationPath(WebServer &s) const {
   return result;
 }
 
-void WebDAVHandler::urlEncodePath(const String &path, String &out) const {
+void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
   out = "";
   for (unsigned int i = 0; i < path.length(); i++) {
     char c = path.charAt(i);
@@ -735,7 +760,7 @@ void WebDAVHandler::urlEncodePath(const String &path, String &out) const {
   }
 }
 
-bool WebDAVHandler::isProtectedPath(const String &path) const {
+bool WebDAVHandler::isProtectedPath(const String& path) const {
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;
@@ -761,7 +786,7 @@ bool WebDAVHandler::isProtectedPath(const String &path) const {
   return false;
 }
 
-int WebDAVHandler::getDepth(WebServer &s) const {
+int WebDAVHandler::getDepth(WebServer& s) const {
   String depth = s.header("Depth");
   if (depth == "0") return 0;
   if (depth == "1") return 1;
@@ -769,20 +794,20 @@ int WebDAVHandler::getDepth(WebServer &s) const {
   return 1;
 }
 
-bool WebDAVHandler::getOverwrite(WebServer &s) const {
+bool WebDAVHandler::getOverwrite(WebServer& s) const {
   String ow = s.header("Overwrite");
   if (ow == "F" || ow == "f") return false;
   return true;  // Default is T
 }
 
-void WebDAVHandler::clearEpubCacheIfNeeded(const String &path) const {
+void WebDAVHandler::clearEpubCacheIfNeeded(const String& path) const {
   if (StringUtils::checkFileExtension(path, ".epub")) {
     Epub(path.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("DAV", "Cleared epub cache for: %s", path.c_str());
   }
 }
 
-String WebDAVHandler::getMimeType(const String &path) const {
+String WebDAVHandler::getMimeType(const String& path) const {
   if (StringUtils::checkFileExtension(path, ".epub")) return "application/epub+zip";
   if (StringUtils::checkFileExtension(path, ".pdf")) return "application/pdf";
   if (StringUtils::checkFileExtension(path, ".txt")) return "text/plain";

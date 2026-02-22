@@ -2,9 +2,9 @@
 
 #include <HTTPClient.h>
 #include <Logging.h>
-#include <StreamString.h>
 #include <NetworkClient.h>
 #include <NetworkClientSecure.h>
+#include <StreamString.h>
 #include <base64.h>
 
 #include <cstring>
