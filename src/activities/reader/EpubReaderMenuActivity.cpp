@@ -41,6 +41,12 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
+    if (selectedAction == MenuAction::AUTO_PAGE_TURN) {
+      selectedPageTurnOption = (selectedPageTurnOption + 1) % pageTurnLabels.size();
+      requestUpdate();
+      return;
+    }
+
     // 1. Capture the callback and action locally
     auto actionCallback = onAction;
 
@@ -51,7 +57,7 @@ void EpubReaderMenuActivity::loop() {
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     // Return the pending orientation to the parent so it can apply on exit.
-    onBack(pendingOrientation);
+    onBack(pendingOrientation, selectedPageTurnOption);
     return;  // Also return here just in case
   }
 }
@@ -109,6 +115,13 @@ void EpubReaderMenuActivity::render(Activity::RenderLock&&) {
     if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
       // Render current orientation value on the right edge of the content area.
       const char* value = I18N.get(orientationLabels[pendingOrientation]);
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+    }
+
+    if (menuItems[i].action == MenuAction::AUTO_PAGE_TURN) {
+      // Render current page turn value on the right edge of the content area.
+      const auto value = pageTurnLabels[selectedPageTurnOption];
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
       renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
     }

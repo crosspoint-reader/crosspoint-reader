@@ -355,6 +355,8 @@ enum class StrId : uint16_t {
   STR_BOOK_S_STYLE,
   STR_EMBEDDED_STYLE,
   STR_OPDS_SERVER_URL,
+  STR_AUTO_TURN_ENABLED,
+  STR_AUTO_TURN_PAGES_PER_MIN,
   // Sentinel - must be last
   _COUNT
 };
