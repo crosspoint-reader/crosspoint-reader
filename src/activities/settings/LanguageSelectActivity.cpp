@@ -30,15 +30,16 @@ void LanguageSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedIndex = (selectedIndex + totalItems - 1) % totalItems;
+  // Handle navigation
+  buttonNavigator.onNextRelease([this] {
+    selectedIndex = ButtonNavigator::nextIndex(static_cast<int>(selectedIndex), totalItems);
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    selectedIndex = (selectedIndex + 1) % totalItems;
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    selectedIndex = ButtonNavigator::previousIndex(static_cast<int>(selectedIndex), totalItems);
     requestUpdate();
-  }
+  });
 }
 
 void LanguageSelectActivity::handleSelection() {
@@ -55,36 +56,18 @@ void LanguageSelectActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  constexpr int rowHeight = 30;
+  const auto pageHeight = renderer.getScreenHeight();
+  auto metrics = UITheme::getInstance().getMetrics();
 
-  // Title
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_LANGUAGE), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LANGUAGE));
 
-  // Current language marker
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
   const int currentLang = static_cast<int>(I18N.getLanguage());
-
-  // Draw options
-  for (int i = 0; i < totalItems; i++) {
-    const int itemY = 60 + i * rowHeight;
-    const bool isSelected = (i == selectedIndex);
-    const bool isCurrent = (i == currentLang);
-
-    // Draw selection highlight
-    if (isSelected) {
-      renderer.fillRect(0, itemY - 2, pageWidth - 1, rowHeight);
-    }
-
-    // Draw language name - get it from i18n system
-    const char* langName = I18N.getLanguageName(static_cast<Language>(i));
-    renderer.drawText(UI_10_FONT_ID, 20, itemY, langName, !isSelected);
-
-    // Draw current selection marker
-    if (isCurrent) {
-      const char* marker = tr(STR_ON_MARKER);
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, marker);
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, itemY, marker, !isSelected);
-    }
-  }
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
+      [this](int index) { return I18N.getLanguageName(static_cast<Language>(index)); }, nullptr, nullptr,
+      [this, currentLang](int index) { return index == currentLang ? tr(STR_SET) : ""; }, true);
 
   // Button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
