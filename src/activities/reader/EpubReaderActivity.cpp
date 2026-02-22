@@ -524,19 +524,26 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
   orientedMarginRight += SETTINGS.screenMargin;
-  orientedMarginBottom += SETTINGS.screenMargin;
 
   auto metrics = UITheme::getInstance().getMetrics();
 
-  // Add status bar margin
+  // Calculate bottom margin based on status bar settings
+  uint8_t bottomMargin = 0;
   if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
-    // Add additional margin for status bar if progress bar is shown
+    if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR) {
+      // Add margin for status bar
+      bottomMargin += statusBarMargin;
+    }
     const bool showProgressBar = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR ||
                                  SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
-    orientedMarginBottom += statusBarMargin - SETTINGS.screenMargin +
-                            (showProgressBar ? (metrics.bookProgressBarHeight + progressBarMarginTop) : 0);
+    if (showProgressBar) {
+      // Add margin for progress bar
+      bottomMargin += metrics.bookProgressBarHeight + progressBarMarginTop;
+    }
   }
+
+  orientedMarginBottom += std::max(SETTINGS.screenMargin, bottomMargin);
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
