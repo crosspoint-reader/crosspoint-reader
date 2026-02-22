@@ -15,7 +15,6 @@
 namespace {
 constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
-int coverWidth = 0;
 }  // namespace
 
 void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
