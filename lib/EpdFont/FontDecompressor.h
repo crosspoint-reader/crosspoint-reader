@@ -1,8 +1,6 @@
 #pragma once
 
-#include <uzlib.h>
-
-#include <cstdint>
+#include <InflateReader.h>
 
 #include "EpdFontData.h"
 
@@ -30,7 +28,7 @@ class FontDecompressor {
     bool valid = false;
   };
 
-  struct uzlib_uncomp decomp = {};
+  InflateReader inflateReader;
   CacheEntry cache[CACHE_SLOTS] = {};
   uint32_t accessCounter = 0;
 

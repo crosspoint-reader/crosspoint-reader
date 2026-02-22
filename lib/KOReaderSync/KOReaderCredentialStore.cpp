@@ -3,73 +3,81 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <MD5Builder.h>
+#include <ObfuscationUtils.h>
 #include <Serialization.h>
+
+#include "../../src/JsonSettingsIO.h"
 
 // Initialize the static instance
 KOReaderCredentialStore KOReaderCredentialStore::instance;
 
 namespace {
-// File format version
+// File format version (for binary migration)
 constexpr uint8_t KOREADER_FILE_VERSION = 1;
 
-// KOReader credentials file path
-constexpr char KOREADER_FILE[] = "/.crosspoint/koreader.bin";
+// File paths
+constexpr char KOREADER_FILE_BIN[] = "/.crosspoint/koreader.bin";
+constexpr char KOREADER_FILE_JSON[] = "/.crosspoint/koreader.json";
+constexpr char KOREADER_FILE_BAK[] = "/.crosspoint/koreader.bin.bak";
 
 // Default sync server URL
 constexpr char DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
 
-// Obfuscation key - "KOReader" in ASCII
-// This is NOT cryptographic security, just prevents casual file reading
-constexpr uint8_t OBFUSCATION_KEY[] = {0x4B, 0x4F, 0x52, 0x65, 0x61, 0x64, 0x65, 0x72};
-constexpr size_t KEY_LENGTH = sizeof(OBFUSCATION_KEY);
-}  // namespace
+// Legacy obfuscation key - "KOReader" in ASCII (only used for binary migration)
+constexpr uint8_t LEGACY_OBFUSCATION_KEY[] = {0x4B, 0x4F, 0x52, 0x65, 0x61, 0x64, 0x65, 0x72};
+constexpr size_t LEGACY_KEY_LENGTH = sizeof(LEGACY_OBFUSCATION_KEY);
 
-void KOReaderCredentialStore::obfuscate(std::string& data) const {
+void legacyDeobfuscate(std::string& data) {
   for (size_t i = 0; i < data.size(); i++) {
-    data[i] ^= OBFUSCATION_KEY[i % KEY_LENGTH];
+    data[i] ^= LEGACY_OBFUSCATION_KEY[i % LEGACY_KEY_LENGTH];
   }
 }
+}  // namespace
 
 bool KOReaderCredentialStore::saveToFile() const {
-  // Make sure the directory exists
   Storage.mkdir("/.crosspoint");
-
-  FsFile file;
-  if (!Storage.openFileForWrite("KRS", KOREADER_FILE, file)) {
-    return false;
-  }
-
-  // Write header
-  serialization::writePod(file, KOREADER_FILE_VERSION);
-
-  // Write username (plaintext - not particularly sensitive)
-  serialization::writeString(file, username);
-  LOG_DBG("KRS", "Saving username: %s", username.c_str());
-
-  // Write password (obfuscated)
-  std::string obfuscatedPwd = password;
-  obfuscate(obfuscatedPwd);
-  serialization::writeString(file, obfuscatedPwd);
-
-  // Write server URL
-  serialization::writeString(file, serverUrl);
-
-  // Write match method
-  serialization::writePod(file, static_cast<uint8_t>(matchMethod));
-
-  file.close();
-  LOG_DBG("KRS", "Saved KOReader credentials to file");
-  return true;
+  return JsonSettingsIO::saveKOReader(*this, KOREADER_FILE_JSON);
 }
 
 bool KOReaderCredentialStore::loadFromFile() {
+  // Try JSON first
+  if (Storage.exists(KOREADER_FILE_JSON)) {
+    String json = Storage.readFile(KOREADER_FILE_JSON);
+    if (!json.isEmpty()) {
+      bool resave = false;
+      bool result = JsonSettingsIO::loadKOReader(*this, json.c_str(), &resave);
+      if (result && resave) {
+        saveToFile();
+        LOG_DBG("KRS", "Resaved KOReader credentials to update format");
+      }
+      return result;
+    }
+  }
+
+  // Fall back to binary migration
+  if (Storage.exists(KOREADER_FILE_BIN)) {
+    if (loadFromBinaryFile()) {
+      if (saveToFile()) {
+        Storage.rename(KOREADER_FILE_BIN, KOREADER_FILE_BAK);
+        LOG_DBG("KRS", "Migrated koreader.bin to koreader.json");
+        return true;
+      } else {
+        LOG_ERR("KRS", "Failed to save KOReader credentials during migration");
+        return false;
+      }
+    }
+  }
+
+  LOG_DBG("KRS", "No credentials file found");
+  return false;
+}
+
+bool KOReaderCredentialStore::loadFromBinaryFile() {
   FsFile file;
-  if (!Storage.openFileForRead("KRS", KOREADER_FILE, file)) {
-    LOG_DBG("KRS", "No credentials file found");
+  if (!Storage.openFileForRead("KRS", KOREADER_FILE_BIN, file)) {
     return false;
   }
 
-  // Read and verify version
   uint8_t version;
   serialization::readPod(file, version);
   if (version != KOREADER_FILE_VERSION) {
@@ -78,29 +86,25 @@ bool KOReaderCredentialStore::loadFromFile() {
     return false;
   }
 
-  // Read username
   if (file.available()) {
     serialization::readString(file, username);
   } else {
     username.clear();
   }
 
-  // Read and deobfuscate password
   if (file.available()) {
     serialization::readString(file, password);
-    obfuscate(password);  // XOR is symmetric, so same function deobfuscates
+    legacyDeobfuscate(password);
   } else {
     password.clear();
   }
 
-  // Read server URL
   if (file.available()) {
     serialization::readString(file, serverUrl);
   } else {
     serverUrl.clear();
   }
 
-  // Read match method
   if (file.available()) {
     uint8_t method;
     serialization::readPod(file, method);
@@ -110,7 +114,7 @@ bool KOReaderCredentialStore::loadFromFile() {
   }
 
   file.close();
-  LOG_DBG("KRS", "Loaded KOReader credentials for user: %s", username.c_str());
+  LOG_DBG("KRS", "Loaded KOReader credentials from binary for user: %s", username.c_str());
   return true;
 }
 

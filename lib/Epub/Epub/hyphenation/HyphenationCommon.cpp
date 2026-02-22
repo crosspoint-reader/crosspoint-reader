@@ -174,6 +174,213 @@ std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
   while (*ptr != 0) {
     const unsigned char* current = ptr;
     const uint32_t cp = utf8NextCodepoint(&ptr);
+    // If this is a combining diacritic (e.g., U+0301 = acute) and there's
+    // a previous base character that can be composed into a single
+    // precomposed Unicode scalar (Latin-1 / Latin-Extended), do that
+    // composition here. This provides lightweight NFC-like behavior for
+    // common Western European diacritics (acute, grave, circumflex, tilde,
+    // diaeresis, cedilla) without pulling in a full Unicode normalization
+    // library.
+    if (!cps.empty()) {
+      uint32_t prev = cps.back().value;
+      uint32_t composed = 0;
+      switch (cp) {
+        case 0x0300:  // grave
+          switch (prev) {
+            case 0x0041:
+              composed = 0x00C0;
+              break;  // A -> À
+            case 0x0061:
+              composed = 0x00E0;
+              break;  // a -> à
+            case 0x0045:
+              composed = 0x00C8;
+              break;  // E -> È
+            case 0x0065:
+              composed = 0x00E8;
+              break;  // e -> è
+            case 0x0049:
+              composed = 0x00CC;
+              break;  // I -> Ì
+            case 0x0069:
+              composed = 0x00EC;
+              break;  // i -> ì
+            case 0x004F:
+              composed = 0x00D2;
+              break;  // O -> Ò
+            case 0x006F:
+              composed = 0x00F2;
+              break;  // o -> ò
+            case 0x0055:
+              composed = 0x00D9;
+              break;  // U -> Ù
+            case 0x0075:
+              composed = 0x00F9;
+              break;  // u -> ù
+            default:
+              break;
+          }
+          break;
+        case 0x0301:  // acute
+          switch (prev) {
+            case 0x0041:
+              composed = 0x00C1;
+              break;  // A -> Á
+            case 0x0061:
+              composed = 0x00E1;
+              break;  // a -> á
+            case 0x0045:
+              composed = 0x00C9;
+              break;  // E -> É
+            case 0x0065:
+              composed = 0x00E9;
+              break;  // e -> é
+            case 0x0049:
+              composed = 0x00CD;
+              break;  // I -> Í
+            case 0x0069:
+              composed = 0x00ED;
+              break;  // i -> í
+            case 0x004F:
+              composed = 0x00D3;
+              break;  // O -> Ó
+            case 0x006F:
+              composed = 0x00F3;
+              break;  // o -> ó
+            case 0x0055:
+              composed = 0x00DA;
+              break;  // U -> Ú
+            case 0x0075:
+              composed = 0x00FA;
+              break;  // u -> ú
+            case 0x0059:
+              composed = 0x00DD;
+              break;  // Y -> Ý
+            case 0x0079:
+              composed = 0x00FD;
+              break;  // y -> ý
+            default:
+              break;
+          }
+          break;
+        case 0x0302:  // circumflex
+          switch (prev) {
+            case 0x0041:
+              composed = 0x00C2;
+              break;  // A -> Â
+            case 0x0061:
+              composed = 0x00E2;
+              break;  // a -> â
+            case 0x0045:
+              composed = 0x00CA;
+              break;  // E -> Ê
+            case 0x0065:
+              composed = 0x00EA;
+              break;  // e -> ê
+            case 0x0049:
+              composed = 0x00CE;
+              break;  // I -> Î
+            case 0x0069:
+              composed = 0x00EE;
+              break;  // i -> î
+            case 0x004F:
+              composed = 0x00D4;
+              break;  // O -> Ô
+            case 0x006F:
+              composed = 0x00F4;
+              break;  // o -> ô
+            case 0x0055:
+              composed = 0x00DB;
+              break;  // U -> Û
+            case 0x0075:
+              composed = 0x00FB;
+              break;  // u -> û
+            default:
+              break;
+          }
+          break;
+        case 0x0303:  // tilde
+          switch (prev) {
+            case 0x0041:
+              composed = 0x00C3;
+              break;  // A -> Ã
+            case 0x0061:
+              composed = 0x00E3;
+              break;  // a -> ã
+            case 0x004E:
+              composed = 0x00D1;
+              break;  // N -> Ñ
+            case 0x006E:
+              composed = 0x00F1;
+              break;  // n -> ñ
+            default:
+              break;
+          }
+          break;
+        case 0x0308:  // diaeresis/umlaut
+          switch (prev) {
+            case 0x0041:
+              composed = 0x00C4;
+              break;  // A -> Ä
+            case 0x0061:
+              composed = 0x00E4;
+              break;  // a -> ä
+            case 0x0045:
+              composed = 0x00CB;
+              break;  // E -> Ë
+            case 0x0065:
+              composed = 0x00EB;
+              break;  // e -> ë
+            case 0x0049:
+              composed = 0x00CF;
+              break;  // I -> Ï
+            case 0x0069:
+              composed = 0x00EF;
+              break;  // i -> ï
+            case 0x004F:
+              composed = 0x00D6;
+              break;  // O -> Ö
+            case 0x006F:
+              composed = 0x00F6;
+              break;  // o -> ö
+            case 0x0055:
+              composed = 0x00DC;
+              break;  // U -> Ü
+            case 0x0075:
+              composed = 0x00FC;
+              break;  // u -> ü
+            case 0x0059:
+              composed = 0x0178;
+              break;  // Y -> Ÿ
+            case 0x0079:
+              composed = 0x00FF;
+              break;  // y -> ÿ
+            default:
+              break;
+          }
+          break;
+        case 0x0327:  // cedilla
+          switch (prev) {
+            case 0x0043:
+              composed = 0x00C7;
+              break;  // C -> Ç
+            case 0x0063:
+              composed = 0x00E7;
+              break;  // c -> ç
+            default:
+              break;
+          }
+          break;
+        default:
+          break;
+      }
+
+      if (composed != 0) {
+        cps.back().value = composed;
+        continue;  // skip pushing the combining mark itself
+      }
+    }
+
     cps.push_back({cp, static_cast<size_t>(current - base)});
   }
 
