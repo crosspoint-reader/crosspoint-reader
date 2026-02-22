@@ -5,6 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CrossPoint Reader</title>
     <style>
+      :root {
+        --font-color: #333;
+        --bg: #f5f5f5;
+        --title-color: #2c3e50;
+        --card-bg: #FFF;
+        --label-color: #7f8c8d;
+        --border-color: #eee;
+        --accent-color: rgb(110, 154, 130);
+        --accent-hover-color: #5a8c73;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --font-color: #f5f5f5;
+          --bg: #333;
+          --title-color: #ecf0f1;
+          --card-bg: #444;
+          --label-color: #bdc3c7;
+          --border-color: #555;
+          color-scheme: dark;
+        }
+      }
       body {
         --font-color: #333;
         --background: #f5f5f5;
@@ -20,29 +41,12 @@
         max-width: 800px;
         margin: 0 auto;
         padding: 20px;
-        background-color: var(--background);
+        background-color: var(--bg);
         color: var(--font-color);
-        font-size: 16px;
-      }
-      @media (prefers-color-scheme: dark) {
-        body {
-          --font-color: #f5f5f5;
-          --background: #333;
-          --title-color: #ecf0f1;
-          --card-background: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-
-          color-scheme: dark;
-        }
       }
       h1 {
-        margin-top: 0;
         color: var(--title-color);
-        display: flex;
-        gap: 8px;
-        font-size: 24px;
-        align-items: center;
+        border-bottom: 2px solid var(--accent-color);
         padding-bottom: 10px;
       }
       h1 .logo {
@@ -60,9 +64,9 @@
         font-size: 20px;
       }
       .card {
-        background: var(--card-background);
-        border-radius: 4px;
-        padding: 15px;
+        background: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
         margin: 15px 0;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
@@ -70,7 +74,6 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        min-height: 25px;
         padding: 8px 0;
         border-bottom: 1px solid var(--border-color);
       }
@@ -79,6 +82,7 @@
         padding-bottom: 0;
       }
       .label {
+        font-weight: 600;
         color: var(--label-color);
       }
       .value {
@@ -93,71 +97,23 @@
         font-size: 0.9em;
       }
       .nav-links {
-      margin: 20px 0 15px;
-      border-bottom: solid 2px var(--border-color);
-      display: flex;
-      gap: 8px;
-      padding-bottom: 8px;
-    }
-    .nav-links a {
-      padding: 8px 15px;
-      font-size: 0.85em;
-      color: var(--font-color);
-      text-decoration: none;
-      border-radius: 4px;
-    }
-    .nav-links a.active {
-      color: #FFF;
-      text-decoration: none;
-      background: var(--accent-color);
-    }
-    .nav-links a:hover {
-      color: var(--font-color);
-      text-decoration: none;
-      background: var(--border-color);
-    }
-    .nav-links a.active:hover {
-      background: var(--accent-color-highlight);
-    }
-    a {
-      color: var(--accent-color);
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-      footer {
+        margin: 20px 0;
         display: flex;
-        gap: 6px;
-        align-items: center;
-        font-size: .85em;
+        gap: 10px;
       }
-      footer .icon {
-        height: 20px;
-        width: 20px;
+      .nav-links a {
+        padding: 10px 20px;
+        color: var(--font-color);
+        text-decoration: none;
+        border-radius: 4px;
       }
-      @media (max-width: 600px) {
-        body {
-          padding: 10px;
-          font-size: 14px;
-        }
-        h1 {
-          justify-content: center;
-        }
-        .card {
-          padding: 12px;
-          margin: 10px 0;
-        }
-        .nav-links a {
-          padding: 8px 12px;
-          margin-right: 6px;
-          font-size: 0.9em;
-          flex: 1;
-          text-align: center;
-        }
-        footer {
-          justify-content: center;
-        }
+      .nav-links a.active {
+        background-color: var(--accent-color);
+        color: white;
+      }
+      .nav-links a:not(.active):hover {
+        background-color: var(--accent-hover-color);
+        color: white;
       }
     </style>
   </head>

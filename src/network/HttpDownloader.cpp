@@ -1,10 +1,10 @@
 #include "HttpDownloader.h"
 
 #include <HTTPClient.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
+#include <NetworkClient.h>
+#include <NetworkClientSecure.h>
 #include <StreamString.h>
-#include <WiFiClient.h>
-#include <WiFiClientSecure.h>
 #include <base64.h>
 
 #include <cstring>
@@ -14,18 +14,18 @@
 #include "util/UrlUtils.h"
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
-  // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
-  std::unique_ptr<WiFiClient> client;
+  // Use NetworkClientSecure for HTTPS, regular NetworkClient for HTTP
+  std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new WiFiClientSecure();
+    auto* secureClient = new NetworkClientSecure();
     secureClient->setInsecure();
     client.reset(secureClient);
   } else {
-    client.reset(new WiFiClient());
+    client.reset(new NetworkClient());
   }
   HTTPClient http;
 
-  Serial.printf("[%lu] [HTTP] Fetching: %s\n", millis(), url.c_str());
+  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
@@ -40,7 +40,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
 
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK) {
-    Serial.printf("[%lu] [HTTP] Fetch failed: %d\n", millis(), httpCode);
+    LOG_ERR("HTTP", "Fetch failed: %d", httpCode);
     http.end();
     return false;
   }
@@ -49,7 +49,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
 
   http.end();
 
-  Serial.printf("[%lu] [HTTP] Fetch success\n", millis());
+  LOG_DBG("HTTP", "Fetch success");
   return true;
 }
 
@@ -64,19 +64,19 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress) {
-  // Use WiFiClientSecure for HTTPS, regular WiFiClient for HTTP
-  std::unique_ptr<WiFiClient> client;
+  // Use NetworkClientSecure for HTTPS, regular NetworkClient for HTTP
+  std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new WiFiClientSecure();
+    auto* secureClient = new NetworkClientSecure();
     secureClient->setInsecure();
     client.reset(secureClient);
   } else {
-    client.reset(new WiFiClient());
+    client.reset(new NetworkClient());
   }
   HTTPClient http;
 
-  Serial.printf("[%lu] [HTTP] Downloading: %s\n", millis(), url.c_str());
-  Serial.printf("[%lu] [HTTP] Destination: %s\n", millis(), destPath.c_str());
+  LOG_DBG("HTTP", "Downloading: %s", url.c_str());
+  LOG_DBG("HTTP", "Destination: %s", destPath.c_str());
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
@@ -91,13 +91,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK) {
-    Serial.printf("[%lu] [HTTP] Download failed: %d\n", millis(), httpCode);
+    LOG_ERR("HTTP", "Download failed: %d", httpCode);
     http.end();
     return HTTP_ERROR;
   }
 
   const size_t contentLength = http.getSize();
-  Serial.printf("[%lu] [HTTP] Content-Length: %zu\n", millis(), contentLength);
+  LOG_DBG("HTTP", "Content-Length: %zu", contentLength);
 
   // Remove existing file if present
   if (Storage.exists(destPath.c_str())) {
@@ -107,15 +107,15 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Open file for writing
   FsFile file;
   if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
-    Serial.printf("[%lu] [HTTP] Failed to open file for writing\n", millis());
+    LOG_ERR("HTTP", "Failed to open file for writing");
     http.end();
     return FILE_ERROR;
   }
 
   // Get the stream for chunked reading
-  WiFiClient* stream = http.getStreamPtr();
+  NetworkClient* stream = http.getStreamPtr();
   if (!stream) {
-    Serial.printf("[%lu] [HTTP] Failed to get stream\n", millis());
+    LOG_ERR("HTTP", "Failed to get stream");
     file.close();
     Storage.remove(destPath.c_str());
     http.end();
@@ -143,7 +143,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
     const size_t written = file.write(buffer, bytesRead);
     if (written != bytesRead) {
-      Serial.printf("[%lu] [HTTP] Write failed: wrote %zu of %zu bytes\n", millis(), written, bytesRead);
+      LOG_ERR("HTTP", "Write failed: wrote %zu of %zu bytes", written, bytesRead);
       file.close();
       Storage.remove(destPath.c_str());
       http.end();
@@ -160,11 +160,11 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   file.close();
   http.end();
 
-  Serial.printf("[%lu] [HTTP] Downloaded %zu bytes\n", millis(), downloaded);
+  LOG_DBG("HTTP", "Downloaded %zu bytes", downloaded);
 
   // Verify download size if known
   if (contentLength > 0 && downloaded != contentLength) {
-    Serial.printf("[%lu] [HTTP] Size mismatch: got %zu, expected %zu\n", millis(), downloaded, contentLength);
+    LOG_ERR("HTTP", "Size mismatch: got %zu, expected %zu", downloaded, contentLength);
     Storage.remove(destPath.c_str());
     return HTTP_ERROR;
   }

@@ -1,8 +1,10 @@
 #include "Hyphenator.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "HyphenationCommon.h"
+#include "LanguageHyphenator.h"
 #include "LanguageRegistry.h"
 
 const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
@@ -32,10 +34,19 @@ size_t byteOffsetForIndex(const std::vector<CodepointInfo>& cps, const size_t in
 }
 
 // Builds a vector of break information from explicit hyphen markers in the given codepoints.
+// Only hyphens that appear between two alphabetic characters are considered valid breaks.
+//
+// Example: "US-Satellitensystems" (cps: U, S, -, S, a, t, ...)
+//   -> finds '-' at index 2 with alphabetic neighbors 'S' and 'S'
+//   -> returns one BreakInfo at the byte offset of 'S' (the char after '-'),
+//      with requiresInsertedHyphen=false because '-' is already visible.
+//
+// Example: "Satel\u00ADliten" (soft-hyphen between 'l' and 'l')
+//   -> returns one BreakInfo with requiresInsertedHyphen=true (soft-hyphen
+//      is invisible and needs a visible '-' when the break is used).
 std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps) {
   std::vector<Hyphenator::BreakInfo> breaks;
 
-  // Scan every codepoint looking for explicit/soft hyphen markers that are surrounded by letters.
   for (size_t i = 1; i + 1 < cps.size(); ++i) {
     const uint32_t cp = cps[i].value;
     if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {
@@ -63,6 +74,43 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   // Explicit hyphen markers (soft or hard) take precedence over language breaks.
   auto explicitBreakInfos = buildExplicitBreakInfos(cps);
   if (!explicitBreakInfos.empty()) {
+    // When a word contains explicit hyphens we also run Liang patterns on each alphabetic
+    // segment between them. Without this, "US-Satellitensystems" would only offer one split
+    // point (after "US-"), making it impossible to break mid-"Satellitensystems" even when
+    // "US-Satelliten-" would fit on the line.
+    //
+    // Example: "US-Satellitensystems"
+    //   Segments: ["US", "Satellitensystems"]
+    //   Explicit break: after "US-"           -> @3  (no inserted hyphen)
+    //   Pattern breaks on "Satellitensystems" -> @5  Sa|tel  (+hyphen)
+    //                                            @8  Satel|li  (+hyphen)
+    //                                            @10 Satelli|ten  (+hyphen)
+    //                                            @13 Satelliten|sys  (+hyphen)
+    //                                            @16 Satellitensys|tems  (+hyphen)
+    //   Result: 6 sorted break points; the line-breaker picks the widest prefix that fits.
+    if (hyphenator) {
+      size_t segStart = 0;
+      for (size_t i = 0; i <= cps.size(); ++i) {
+        const bool atEnd = (i == cps.size());
+        const bool atHyphen = !atEnd && isExplicitHyphen(cps[i].value);
+        if (atEnd || atHyphen) {
+          if (i > segStart) {
+            std::vector<CodepointInfo> segment(cps.begin() + segStart, cps.begin() + i);
+            auto segIndexes = hyphenator->breakIndexes(segment);
+            for (const size_t idx : segIndexes) {
+              const size_t cpIdx = segStart + idx;
+              if (cpIdx < cps.size()) {
+                explicitBreakInfos.push_back({cps[cpIdx].byteOffset, true});
+              }
+            }
+          }
+          segStart = i + 1;
+        }
+      }
+      // Merge explicit and pattern breaks into ascending byte-offset order.
+      std::sort(explicitBreakInfos.begin(), explicitBreakInfos.end(),
+                [](const BreakInfo& a, const BreakInfo& b) { return a.byteOffset < b.byteOffset; });
+    }
     return explicitBreakInfos;
   }
 

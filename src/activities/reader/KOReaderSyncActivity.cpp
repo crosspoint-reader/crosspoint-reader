@@ -1,6 +1,8 @@
 #include "KOReaderSyncActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
+#include <Logging.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
 
@@ -32,42 +34,39 @@ void syncTimeWithNTP() {
   }
 
   if (retry < maxRetries) {
-    Serial.printf("[%lu] [KOSync] NTP time synced\n", millis());
+    LOG_DBG("KOSync", "NTP time synced");
   } else {
-    Serial.printf("[%lu] [KOSync] NTP sync timeout, using fallback\n", millis());
+    LOG_DBG("KOSync", "NTP sync timeout, using fallback");
   }
 }
 }  // namespace
-
-void KOReaderSyncActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<KOReaderSyncActivity*>(param);
-  self->displayTaskLoop();
-}
 
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();
 
   if (!success) {
-    Serial.printf("[%lu] [KOSync] WiFi connection failed, exiting\n", millis());
+    LOG_DBG("KOSync", "WiFi connection failed, exiting");
     onCancel();
     return;
   }
 
-  Serial.printf("[%lu] [KOSync] WiFi connected, starting sync\n", millis());
+  LOG_DBG("KOSync", "WiFi connected, starting sync");
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = SYNCING;
-  statusMessage = "Syncing time...";
-  xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  {
+    RenderLock lock(*this);
+    state = SYNCING;
+    statusMessage = tr(STR_SYNCING_TIME);
+  }
+  requestUpdate();
 
   // Sync time with NTP before making API requests
   syncTimeWithNTP();
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  statusMessage = "Calculating document hash...";
-  xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  {
+    RenderLock lock(*this);
+    statusMessage = tr(STR_CALC_HASH);
+  }
+  requestUpdate();
 
   performSync();
 }
@@ -80,67 +79,78 @@ void KOReaderSyncActivity::performSync() {
     documentHash = KOReaderDocumentId::calculate(epubPath);
   }
   if (documentHash.empty()) {
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    state = SYNC_FAILED;
-    statusMessage = "Failed to calculate document hash";
-    xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    {
+      RenderLock lock(*this);
+      state = SYNC_FAILED;
+      statusMessage = tr(STR_HASH_FAILED);
+    }
+    requestUpdate();
     return;
   }
 
-  Serial.printf("[%lu] [KOSync] Document hash: %s\n", millis(), documentHash.c_str());
+  LOG_DBG("KOSync", "Document hash: %s", documentHash.c_str());
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  statusMessage = "Fetching remote progress...";
-  xSemaphoreGive(renderingMutex);
-  updateRequired = true;
-  vTaskDelay(10 / portTICK_PERIOD_MS);
+  {
+    RenderLock lock(*this);
+    statusMessage = tr(STR_FETCH_PROGRESS);
+  }
+  requestUpdateAndWait();
 
   // Fetch remote progress
   const auto result = KOReaderSyncClient::getProgress(documentHash, remoteProgress);
 
   if (result == KOReaderSyncClient::NOT_FOUND) {
     // No remote progress - offer to upload
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    state = NO_REMOTE_PROGRESS;
-    hasRemoteProgress = false;
-    xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    {
+      RenderLock lock(*this);
+      state = NO_REMOTE_PROGRESS;
+      hasRemoteProgress = false;
+    }
+    requestUpdate();
     return;
   }
 
   if (result != KOReaderSyncClient::OK) {
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    state = SYNC_FAILED;
-    statusMessage = KOReaderSyncClient::errorString(result);
-    xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    {
+      RenderLock lock(*this);
+      state = SYNC_FAILED;
+      statusMessage = KOReaderSyncClient::errorString(result);
+    }
+    requestUpdate();
     return;
   }
 
   // Convert remote progress to CrossPoint position
   hasRemoteProgress = true;
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
-  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, totalPagesInSpine);
+  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
 
   // Calculate local progress in KOReader format (for display)
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
   localProgress = ProgressMapper::toKOReader(epub, localPos);
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = SHOWING_RESULT;
-  selectedOption = 0;  // Default to "Apply"
-  xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  {
+    RenderLock lock(*this);
+    state = SHOWING_RESULT;
+
+    // Default to the option that corresponds to the furthest progress
+    if (localProgress.percentage > remoteProgress.percentage) {
+      selectedOption = 1;  // Upload local progress
+    } else {
+      selectedOption = 0;  // Apply remote progress
+    }
+  }
+  requestUpdate();
 }
 
 void KOReaderSyncActivity::performUpload() {
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = UPLOADING;
-  statusMessage = "Uploading progress...";
-  xSemaphoreGive(renderingMutex);
-  updateRequired = true;
-  vTaskDelay(10 / portTICK_PERIOD_MS);
+  {
+    RenderLock lock(*this);
+    state = UPLOADING;
+    statusMessage = tr(STR_UPLOAD_PROGRESS);
+  }
+  requestUpdate();
+  requestUpdateAndWait();
 
   // Convert current position to KOReader format
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
@@ -154,49 +164,42 @@ void KOReaderSyncActivity::performUpload() {
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   if (result != KOReaderSyncClient::OK) {
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    state = SYNC_FAILED;
-    statusMessage = KOReaderSyncClient::errorString(result);
-    xSemaphoreGive(renderingMutex);
-    updateRequired = true;
+    {
+      RenderLock lock(*this);
+      state = SYNC_FAILED;
+      statusMessage = KOReaderSyncClient::errorString(result);
+    }
+    requestUpdate();
     return;
   }
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = UPLOAD_COMPLETE;
-  xSemaphoreGive(renderingMutex);
-  updateRequired = true;
+  {
+    RenderLock lock(*this);
+    state = UPLOAD_COMPLETE;
+  }
+  requestUpdate();
 }
 
 void KOReaderSyncActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
-
-  xTaskCreate(&KOReaderSyncActivity::taskTrampoline, "KOSyncTask",
-              4096,               // Stack size (larger for network operations)
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
-
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
     state = NO_CREDENTIALS;
-    updateRequired = true;
+    requestUpdate();
     return;
   }
 
   // Turn on WiFi
-  Serial.printf("[%lu] [KOSync] Turning on WiFi...\n", millis());
+  LOG_DBG("KOSync", "Turning on WiFi...");
   WiFi.mode(WIFI_STA);
 
   // Check if already connected
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("[%lu] [KOSync] Already connected to WiFi\n", millis());
+    LOG_DBG("KOSync", "Already connected to WiFi");
     state = SYNCING;
-    statusMessage = "Syncing time...";
-    updateRequired = true;
+    statusMessage = tr(STR_SYNCING_TIME);
+    requestUpdate();
 
     // Perform sync directly (will be handled in loop)
     xTaskCreate(
@@ -204,10 +207,11 @@ void KOReaderSyncActivity::onEnter() {
           auto* self = static_cast<KOReaderSyncActivity*>(param);
           // Sync time first
           syncTimeWithNTP();
-          xSemaphoreTake(self->renderingMutex, portMAX_DELAY);
-          self->statusMessage = "Calculating document hash...";
-          xSemaphoreGive(self->renderingMutex);
-          self->updateRequired = true;
+          {
+            RenderLock lock(*self);
+            self->statusMessage = tr(STR_CALC_HASH);
+          }
+          self->requestUpdate();
           self->performSync();
           vTaskDelete(nullptr);
         },
@@ -216,7 +220,7 @@ void KOReaderSyncActivity::onEnter() {
   }
 
   // Launch WiFi selection subactivity
-  Serial.printf("[%lu] [KOSync] Launching WifiSelectionActivity...\n", millis());
+  LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
   enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
                                              [this](const bool connected) { onWifiSelectionComplete(connected); }));
 }
@@ -229,30 +233,9 @@ void KOReaderSyncActivity::onExit() {
   delay(100);
   WiFi.mode(WIFI_OFF);
   delay(100);
-
-  // Wait until not rendering to delete task
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
 }
 
-void KOReaderSyncActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void KOReaderSyncActivity::render() {
+void KOReaderSyncActivity::render(Activity::RenderLock&&) {
   if (subActivity) {
     return;
   }
@@ -260,13 +243,13 @@ void KOReaderSyncActivity::render() {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Sync", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_KOREADER_SYNC), true, EpdFontFamily::BOLD);
 
   if (state == NO_CREDENTIALS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "No credentials configured", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, "Set up KOReader account in Settings");
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, tr(STR_NO_CREDENTIALS_MSG), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 320, tr(STR_KOREADER_SETUP_HINT));
 
-    const auto labels = mappedInput.mapLabels("Back", "", "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -280,40 +263,41 @@ void KOReaderSyncActivity::render() {
 
   if (state == SHOWING_RESULT) {
     // Show comparison
-    renderer.drawCenteredText(UI_10_FONT_ID, 120, "Progress found!", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 120, tr(STR_PROGRESS_FOUND), true, EpdFontFamily::BOLD);
 
     // Get chapter names from TOC
     const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
     const int localTocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-    const std::string remoteChapter = (remoteTocIndex >= 0)
-                                          ? epub->getTocItem(remoteTocIndex).title
-                                          : ("Section " + std::to_string(remotePosition.spineIndex + 1));
-    const std::string localChapter = (localTocIndex >= 0) ? epub->getTocItem(localTocIndex).title
-                                                          : ("Section " + std::to_string(currentSpineIndex + 1));
+    const std::string remoteChapter =
+        (remoteTocIndex >= 0) ? epub->getTocItem(remoteTocIndex).title
+                              : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(remotePosition.spineIndex + 1));
+    const std::string localChapter =
+        (localTocIndex >= 0) ? epub->getTocItem(localTocIndex).title
+                             : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(currentSpineIndex + 1));
 
     // Remote progress - chapter and page
-    renderer.drawText(UI_10_FONT_ID, 20, 160, "Remote:", true);
+    renderer.drawText(UI_10_FONT_ID, 20, 160, tr(STR_REMOTE_LABEL), true);
     char remoteChapterStr[128];
     snprintf(remoteChapterStr, sizeof(remoteChapterStr), "  %s", remoteChapter.c_str());
     renderer.drawText(UI_10_FONT_ID, 20, 185, remoteChapterStr);
     char remotePageStr[64];
-    snprintf(remotePageStr, sizeof(remotePageStr), "  Page %d, %.2f%% overall", remotePosition.pageNumber + 1,
+    snprintf(remotePageStr, sizeof(remotePageStr), tr(STR_PAGE_OVERALL_FORMAT), remotePosition.pageNumber + 1,
              remoteProgress.percentage * 100);
     renderer.drawText(UI_10_FONT_ID, 20, 210, remotePageStr);
 
     if (!remoteProgress.device.empty()) {
       char deviceStr[64];
-      snprintf(deviceStr, sizeof(deviceStr), "  From: %s", remoteProgress.device.c_str());
+      snprintf(deviceStr, sizeof(deviceStr), tr(STR_DEVICE_FROM_FORMAT), remoteProgress.device.c_str());
       renderer.drawText(UI_10_FONT_ID, 20, 235, deviceStr);
     }
 
     // Local progress - chapter and page
-    renderer.drawText(UI_10_FONT_ID, 20, 270, "Local:", true);
+    renderer.drawText(UI_10_FONT_ID, 20, 270, tr(STR_LOCAL_LABEL), true);
     char localChapterStr[128];
     snprintf(localChapterStr, sizeof(localChapterStr), "  %s", localChapter.c_str());
     renderer.drawText(UI_10_FONT_ID, 20, 295, localChapterStr);
     char localPageStr[64];
-    snprintf(localPageStr, sizeof(localPageStr), "  Page %d/%d, %.2f%% overall", currentPage + 1, totalPagesInSpine,
+    snprintf(localPageStr, sizeof(localPageStr), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), currentPage + 1, totalPagesInSpine,
              localProgress.percentage * 100);
     renderer.drawText(UI_10_FONT_ID, 20, 320, localPageStr);
 
@@ -324,45 +308,45 @@ void KOReaderSyncActivity::render() {
     if (selectedOption == 0) {
       renderer.fillRect(0, optionY - 2, pageWidth - 1, optionHeight);
     }
-    renderer.drawText(UI_10_FONT_ID, 20, optionY, "Apply remote progress", selectedOption != 0);
+    renderer.drawText(UI_10_FONT_ID, 20, optionY, tr(STR_APPLY_REMOTE), selectedOption != 0);
 
     // Upload option
     if (selectedOption == 1) {
       renderer.fillRect(0, optionY + optionHeight - 2, pageWidth - 1, optionHeight);
     }
-    renderer.drawText(UI_10_FONT_ID, 20, optionY + optionHeight, "Upload local progress", selectedOption != 1);
+    renderer.drawText(UI_10_FONT_ID, 20, optionY + optionHeight, tr(STR_UPLOAD_LOCAL), selectedOption != 1);
 
-    // Bottom button hints: show Back and Select
-    const auto labels = mappedInput.mapLabels("Back", "Select", "", "");
+    // Bottom button hints
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == NO_REMOTE_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "No remote progress found", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, "Upload current position?");
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, tr(STR_NO_REMOTE_MSG), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 320, tr(STR_UPLOAD_PROMPT));
 
-    const auto labels = mappedInput.mapLabels("Back", "Upload", "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_UPLOAD), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == UPLOAD_COMPLETE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "Progress uploaded!", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_UPLOAD_SUCCESS), true, EpdFontFamily::BOLD);
 
-    const auto labels = mappedInput.mapLabels("Back", "", "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   if (state == SYNC_FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Sync failed", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, 280, tr(STR_SYNC_FAILED_MSG), true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, 320, statusMessage.c_str());
 
-    const auto labels = mappedInput.mapLabels("Back", "", "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -387,11 +371,11 @@ void KOReaderSyncActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
-      updateRequired = true;
+      requestUpdate();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
                mappedInput.wasPressed(MappedInputManager::Button::Right)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
-      updateRequired = true;
+      requestUpdate();
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {

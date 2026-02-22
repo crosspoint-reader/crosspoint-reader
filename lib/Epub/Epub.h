@@ -35,8 +35,6 @@ class Epub {
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void parseCssFiles() const;
-  std::string getCssRulesCache() const;
-  bool loadCssRulesFromCache() const;
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
@@ -73,5 +71,5 @@ class Epub {
 
   size_t getBookSize() const;
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
-  const CssParser* getCssParser() const { return cssParser.get(); }
+  CssParser* getCssParser() const { return cssParser.get(); }
 };
