@@ -922,14 +922,14 @@ void CrossPointWebServer::handleDelete() const {
 
   // Parse paths
   String pathsArg = server->arg("paths");
-  DynamicJsonDocument doc(2048);
+  JsonDocument doc;
   DeserializationError error = deserializeJson(doc, pathsArg);
   if (error) {
     server->send(400, "text/plain", "Invalid paths format");
     return;
   }
 
-  JsonArray paths = doc.as<JsonArray>();
+  auto paths = doc.as<JsonArray>();
   if (paths.isNull() || paths.size() == 0) {
     server->send(400, "text/plain", "No paths provided");
     return;
@@ -940,7 +940,7 @@ void CrossPointWebServer::handleDelete() const {
   String failedItems;
 
   for (const auto& p : paths) {
-    String itemPath = p.as<String>();
+    auto itemPath = p.as<String>();
 
     // Validate path
     if (itemPath.isEmpty() || itemPath == "/") {
