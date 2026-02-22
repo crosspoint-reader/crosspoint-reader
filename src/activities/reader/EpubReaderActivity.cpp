@@ -354,7 +354,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         RenderLock lock(*this);
         pendingScreenshot = true;
       }
-      exitActivity();
       requestUpdate();
       break;
     }

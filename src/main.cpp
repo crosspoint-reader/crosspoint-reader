@@ -342,8 +342,8 @@ void loop() {
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
-      if (currentActivity) {
-        Activity::RenderLock lock(*currentActivity);
+      {
+        RenderLock lock;
         ScreenshotUtil::takeScreenshot(renderer);
       }
     }
