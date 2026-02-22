@@ -3734,8 +3734,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x002C00FF, -2 }, // , U+00FF
     { 0x002C2018, -4 }, // , U+2018
     { 0x002C2019, -4 }, // , U+2019
+    { 0x002C201B, -4 }, // , U+201B
     { 0x002C201C, -4 }, // , U+201C
     { 0x002C201D, -4 }, // , U+201D
+    { 0x002C2039, -2 }, // , U+2039
     { 0x002CFB00, 1 }, // , U+FB00
     { 0x002CFB01, 1 }, // , U+FB01
     { 0x002CFB02, 1 }, // , U+FB02
@@ -3811,8 +3813,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x002E00FF, -2 }, // . U+00FF
     { 0x002E2018, -4 }, // . U+2018
     { 0x002E2019, -4 }, // . U+2019
+    { 0x002E201B, -4 }, // . U+201B
     { 0x002E201C, -4 }, // . U+201C
     { 0x002E201D, -4 }, // . U+201D
+    { 0x002E2039, -2 }, // . U+2039
     { 0x002EFB00, 1 }, // . U+FB00
     { 0x002EFB01, 1 }, // . U+FB01
     { 0x002EFB02, 1 }, // . U+FB02
@@ -3961,8 +3965,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004100FF, -3 }, // A U+00FF
     { 0x00412018, -4 }, // A U+2018
     { 0x00412019, -3 }, // A U+2019
+    { 0x0041201B, -4 }, // A U+201B
     { 0x0041201C, -4 }, // A U+201C
     { 0x0041201D, -3 }, // A U+201D
+    { 0x00412039, -2 }, // A U+2039
+    { 0x00412047, -2 }, // A U+2047
+    { 0x00412048, -2 }, // A U+2048
     { 0x0042002C, -2 }, // B ,
     { 0x0042002E, -2 }, // B .
     { 0x0042003A, -2 }, // B :
@@ -3999,6 +4007,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x0042201A, -2 }, // B U+201A
     { 0x0042201D, -1 }, // B U+201D
     { 0x0042201E, -2 }, // B U+201E
+    { 0x00422025, -2 }, // B U+2025
     { 0x00422026, -2 }, // B U+2026
     { 0x0043003A, -2 }, // C :
     { 0x0043003B, -2 }, // C ;
@@ -4092,6 +4101,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004400DF, -1 }, // D U+00DF
     { 0x0044201A, -2 }, // D U+201A
     { 0x0044201E, -2 }, // D U+201E
+    { 0x00442025, -2 }, // D U+2025
     { 0x00442026, -2 }, // D U+2026
     { 0x0045002A, 1 }, // E *
     { 0x0045003A, -2 }, // E :
@@ -4191,7 +4201,9 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x0046201A, -3 }, // F U+201A
     { 0x0046201D, 1 }, // F U+201D
     { 0x0046201E, -3 }, // F U+201E
+    { 0x00462025, -3 }, // F U+2025
     { 0x00462026, -3 }, // F U+2026
+    { 0x00462039, -1 }, // F U+2039
     { 0x0046FB00, -1 }, // F U+FB00
     { 0x0046FB01, -1 }, // F U+FB01
     { 0x0046FB02, -1 }, // F U+FB02
@@ -4221,8 +4233,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004700DD, -1 }, // G U+00DD
     { 0x00472018, -2 }, // G U+2018
     { 0x0047201A, -2 }, // G U+201A
+    { 0x0047201B, -2 }, // G U+201B
     { 0x0047201C, -2 }, // G U+201C
     { 0x0047201E, -2 }, // G U+201E
+    { 0x00472025, -2 }, // G U+2025
     { 0x00472026, -2 }, // G U+2026
     { 0x0048002C, -2 }, // H ,
     { 0x0048002E, -2 }, // H .
@@ -4293,7 +4307,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004800FE, 1 }, // H U+00FE
     { 0x0048201A, -2 }, // H U+201A
     { 0x0048201E, -2 }, // H U+201E
+    { 0x00482025, -2 }, // H U+2025
     { 0x00482026, -2 }, // H U+2026
+    { 0x00482039, -2 }, // H U+2039
+    { 0x0048203A, -1 }, // H U+203A
     { 0x0048FB06, -1 }, // H U+FB06
     { 0x0049002C, -2 }, // I ,
     { 0x0049002E, -2 }, // I .
@@ -4364,7 +4381,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004900FE, 1 }, // I U+00FE
     { 0x0049201A, -2 }, // I U+201A
     { 0x0049201E, -2 }, // I U+201E
+    { 0x00492025, -2 }, // I U+2025
     { 0x00492026, -2 }, // I U+2026
+    { 0x00492039, -2 }, // I U+2039
+    { 0x0049203A, -1 }, // I U+203A
     { 0x0049FB06, -1 }, // I U+FB06
     { 0x004A002A, 1 }, // J *
     { 0x004A002C, -3 }, // J ,
@@ -4425,6 +4445,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004A00FE, 1 }, // J U+00FE
     { 0x004A201A, -3 }, // J U+201A
     { 0x004A201E, -3 }, // J U+201E
+    { 0x004A2025, -3 }, // J U+2025
     { 0x004A2026, -3 }, // J U+2026
     { 0x004B002A, 1 }, // K *
     { 0x004B002D, -2 }, // K -
@@ -4498,8 +4519,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004B00FD, -1 }, // K U+00FD
     { 0x004B00FE, 1 }, // K U+00FE
     { 0x004B00FF, -1 }, // K U+00FF
+    { 0x004B2010, -2 }, // K U+2010
+    { 0x004B2011, -2 }, // K U+2011
     { 0x004B2013, -2 }, // K U+2013
     { 0x004B2014, -2 }, // K U+2014
+    { 0x004B2015, -2 }, // K U+2015
+    { 0x004B2039, -2 }, // K U+2039
     { 0x004BFB06, -1 }, // K U+FB06
     { 0x004C002A, -3 }, // L *
     { 0x004C0054, -2 }, // L T
@@ -4521,6 +4546,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004C00FF, -1 }, // L U+00FF
     { 0x004C2018, -3 }, // L U+2018
     { 0x004C2019, -1 }, // L U+2019
+    { 0x004C201B, -3 }, // L U+201B
     { 0x004C201C, -3 }, // L U+201C
     { 0x004C201D, -1 }, // L U+201D
     { 0x004D0043, -1 }, // M C
@@ -4554,7 +4580,9 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004D00FD, -1 }, // M U+00FD
     { 0x004D00FF, -1 }, // M U+00FF
     { 0x004D2018, -2 }, // M U+2018
+    { 0x004D201B, -2 }, // M U+201B
     { 0x004D201C, -2 }, // M U+201C
+    { 0x004D2039, -1 }, // M U+2039
     { 0x004E002C, -2 }, // N ,
     { 0x004E002E, -2 }, // N .
     { 0x004E002F, -3 }, // N /
@@ -4616,7 +4644,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004E00FC, -1 }, // N U+00FC
     { 0x004E201A, -2 }, // N U+201A
     { 0x004E201E, -2 }, // N U+201E
+    { 0x004E2025, -2 }, // N U+2025
     { 0x004E2026, -2 }, // N U+2026
+    { 0x004E2039, -1 }, // N U+2039
+    { 0x004E203A, -1 }, // N U+203A
     { 0x004EFB06, -1 }, // N U+FB06
     { 0x004F002C, -2 }, // O ,
     { 0x004F002E, -2 }, // O .
@@ -4665,6 +4696,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x004F00DF, -1 }, // O U+00DF
     { 0x004F201A, -2 }, // O U+201A
     { 0x004F201E, -2 }, // O U+201E
+    { 0x004F2025, -2 }, // O U+2025
     { 0x004F2026, -2 }, // O U+2026
     { 0x0050002C, -3 }, // P ,
     { 0x0050002E, -3 }, // P .
@@ -4748,6 +4780,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005000FE, -1 }, // P U+00FE
     { 0x0050201A, -3 }, // P U+201A
     { 0x0050201E, -3 }, // P U+201E
+    { 0x00502025, -3 }, // P U+2025
     { 0x00502026, -3 }, // P U+2026
     { 0x0050FB06, -1 }, // P U+FB06
     { 0x00510029, 7 }, // Q )
@@ -4802,6 +4835,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005100DF, -1 }, // Q U+00DF
     { 0x0051201A, -2 }, // Q U+201A
     { 0x0051201E, -2 }, // Q U+201E
+    { 0x00512025, -2 }, // Q U+2025
     { 0x00512026, -2 }, // Q U+2026
     { 0x0052002A, -2 }, // R *
     { 0x0052002D, -2 }, // R -
@@ -4880,12 +4914,17 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005200FC, -1 }, // R U+00FC
     { 0x005200FD, -1 }, // R U+00FD
     { 0x005200FF, -1 }, // R U+00FF
+    { 0x00522010, -2 }, // R U+2010
+    { 0x00522011, -2 }, // R U+2011
     { 0x00522013, -2 }, // R U+2013
     { 0x00522014, -2 }, // R U+2014
+    { 0x00522015, -2 }, // R U+2015
     { 0x00522018, -3 }, // R U+2018
     { 0x00522019, -2 }, // R U+2019
+    { 0x0052201B, -3 }, // R U+201B
     { 0x0052201C, -3 }, // R U+201C
     { 0x0052201D, -2 }, // R U+201D
+    { 0x00522039, -2 }, // R U+2039
     { 0x0052FB00, -1 }, // R U+FB00
     { 0x0052FB01, -1 }, // R U+FB01
     { 0x0052FB02, -1 }, // R U+FB02
@@ -4907,6 +4946,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005300DC, -1 }, // S U+00DC
     { 0x0053201A, -2 }, // S U+201A
     { 0x0053201E, -2 }, // S U+201E
+    { 0x00532025, -2 }, // S U+2025
     { 0x00532026, -2 }, // S U+2026
     { 0x0054002A, 3 }, // T *
     { 0x0054002C, -4 }, // T ,
@@ -4959,10 +4999,13 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00542018, 1 }, // T U+2018
     { 0x00542019, 1 }, // T U+2019
     { 0x0054201A, -4 }, // T U+201A
+    { 0x0054201B, 1 }, // T U+201B
     { 0x0054201C, 1 }, // T U+201C
     { 0x0054201D, 1 }, // T U+201D
     { 0x0054201E, -4 }, // T U+201E
+    { 0x00542025, -4 }, // T U+2025
     { 0x00542026, -4 }, // T U+2026
+    { 0x00542039, -2 }, // T U+2039
     { 0x0054FB06, -2 }, // T U+FB06
     { 0x0055002C, -3 }, // U ,
     { 0x0055002E, -3 }, // U .
@@ -5028,6 +5071,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005500FE, 1 }, // U U+00FE
     { 0x0055201A, -3 }, // U U+201A
     { 0x0055201E, -3 }, // U U+201E
+    { 0x00552025, -3 }, // U U+2025
     { 0x00552026, -3 }, // U U+2026
     { 0x0055FB06, -2 }, // U U+FB06
     { 0x0056002C, -5 }, // V ,
@@ -5106,11 +5150,17 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005600FB, -1 }, // V U+00FB
     { 0x005600FC, -1 }, // V U+00FC
     { 0x005600FE, 1 }, // V U+00FE
+    { 0x00562010, -2 }, // V U+2010
+    { 0x00562011, -2 }, // V U+2011
     { 0x00562013, -2 }, // V U+2013
     { 0x00562014, -2 }, // V U+2014
+    { 0x00562015, -2 }, // V U+2015
     { 0x0056201A, -5 }, // V U+201A
     { 0x0056201E, -5 }, // V U+201E
+    { 0x00562025, -5 }, // V U+2025
     { 0x00562026, -5 }, // V U+2026
+    { 0x00562039, -2 }, // V U+2039
+    { 0x0056203A, -2 }, // V U+203A
     { 0x0056FB06, -2 }, // V U+FB06
     { 0x0057002C, -5 }, // W ,
     { 0x0057002D, -2 }, // W -
@@ -5190,11 +5240,17 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005700FB, -1 }, // W U+00FB
     { 0x005700FC, -1 }, // W U+00FC
     { 0x005700FE, 1 }, // W U+00FE
+    { 0x00572010, -2 }, // W U+2010
+    { 0x00572011, -2 }, // W U+2011
     { 0x00572013, -2 }, // W U+2013
     { 0x00572014, -2 }, // W U+2014
+    { 0x00572015, -2 }, // W U+2015
     { 0x0057201A, -5 }, // W U+201A
     { 0x0057201E, -5 }, // W U+201E
+    { 0x00572025, -5 }, // W U+2025
     { 0x00572026, -5 }, // W U+2026
+    { 0x00572039, -2 }, // W U+2039
+    { 0x0057203A, -2 }, // W U+203A
     { 0x0057FB06, -2 }, // W U+FB06
     { 0x0058002A, 1 }, // X *
     { 0x0058002C, -2 }, // X ,
@@ -5267,7 +5323,9 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005800FF, -1 }, // X U+00FF
     { 0x0058201A, -2 }, // X U+201A
     { 0x0058201E, -2 }, // X U+201E
+    { 0x00582025, -2 }, // X U+2025
     { 0x00582026, -2 }, // X U+2026
+    { 0x00582039, -1 }, // X U+2039
     { 0x0059002A, 2 }, // Y *
     { 0x0059002C, -4 }, // Y ,
     { 0x0059002D, -2 }, // Y -
@@ -5354,11 +5412,17 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x005900FB, -1 }, // Y U+00FB
     { 0x005900FC, -1 }, // Y U+00FC
     { 0x005900FE, 1 }, // Y U+00FE
+    { 0x00592010, -2 }, // Y U+2010
+    { 0x00592011, -2 }, // Y U+2011
     { 0x00592013, -2 }, // Y U+2013
     { 0x00592014, -2 }, // Y U+2014
+    { 0x00592015, -2 }, // Y U+2015
     { 0x0059201A, -4 }, // Y U+201A
     { 0x0059201E, -4 }, // Y U+201E
+    { 0x00592025, -4 }, // Y U+2025
     { 0x00592026, -4 }, // Y U+2026
+    { 0x00592039, -2 }, // Y U+2039
+    { 0x0059203A, -2 }, // Y U+203A
     { 0x0059FB00, -1 }, // Y U+FB00
     { 0x0059FB01, -1 }, // Y U+FB01
     { 0x0059FB02, -1 }, // Y U+FB02
@@ -5472,6 +5536,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x0061002F, 1 }, // a /
     { 0x0061005C, -3 }, // a <backslash>
     { 0x00612018, -2 }, // a U+2018
+    { 0x0061201B, -2 }, // a U+201B
     { 0x0061201C, -2 }, // a U+201C
     { 0x0062002A, -2 }, // b *
     { 0x0062002C, -2 }, // b ,
@@ -5482,8 +5547,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00620078, -1 }, // b x
     { 0x00622018, -2 }, // b U+2018
     { 0x0062201A, -2 }, // b U+201A
+    { 0x0062201B, -2 }, // b U+201B
     { 0x0062201C, -2 }, // b U+201C
     { 0x0062201E, -2 }, // b U+201E
+    { 0x00622025, -2 }, // b U+2025
     { 0x00622026, -2 }, // b U+2026
     { 0x0063005C, -2 }, // c <backslash>
     { 0x00630061, -1 }, // c a
@@ -5596,10 +5663,14 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00662018, 1 }, // f U+2018
     { 0x00662019, 2 }, // f U+2019
     { 0x0066201A, -3 }, // f U+201A
+    { 0x0066201B, 1 }, // f U+201B
     { 0x0066201C, 1 }, // f U+201C
     { 0x0066201D, 2 }, // f U+201D
     { 0x0066201E, -3 }, // f U+201E
+    { 0x00662025, -3 }, // f U+2025
     { 0x00662026, -3 }, // f U+2026
+    { 0x00662047, 1 }, // f U+2047
+    { 0x00662048, 1 }, // f U+2048
     { 0x0066FB06, -1 }, // f U+FB06
     { 0x00670022, 1 }, // g "
     { 0x00670027, 1 }, // g '
@@ -5635,9 +5706,11 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00672018, 1 }, // g U+2018
     { 0x00672019, 2 }, // g U+2019
     { 0x0067201A, -2 }, // g U+201A
+    { 0x0067201B, 1 }, // g U+201B
     { 0x0067201C, 1 }, // g U+201C
     { 0x0067201D, 2 }, // g U+201D
     { 0x0067201E, -2 }, // g U+201E
+    { 0x00672025, -2 }, // g U+2025
     { 0x00672026, -2 }, // g U+2026
     { 0x0067FB00, 3 }, // g U+FB00
     { 0x0067FB01, 3 }, // g U+FB01
@@ -5653,6 +5726,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x006800FD, -1 }, // h U+00FD
     { 0x006800FF, -1 }, // h U+00FF
     { 0x00682018, -2 }, // h U+2018
+    { 0x0068201B, -2 }, // h U+201B
     { 0x0068201C, -2 }, // h U+201C
     { 0x0069005C, 1 }, // i <backslash>
     { 0x006A003A, -1 }, // j :
@@ -5670,6 +5744,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x006D00FD, -1 }, // m U+00FD
     { 0x006D00FF, -1 }, // m U+00FF
     { 0x006D2018, -2 }, // m U+2018
+    { 0x006D201B, -2 }, // m U+201B
     { 0x006D201C, -2 }, // m U+201C
     { 0x006E002A, -2 }, // n *
     { 0x006E005C, -4 }, // n <backslash>
@@ -5679,6 +5754,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x006E00FD, -1 }, // n U+00FD
     { 0x006E00FF, -1 }, // n U+00FF
     { 0x006E2018, -2 }, // n U+2018
+    { 0x006E201B, -2 }, // n U+201B
     { 0x006E201C, -2 }, // n U+201C
     { 0x006F002A, -2 }, // o *
     { 0x006F002C, -2 }, // o ,
@@ -5689,8 +5765,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x006F0078, -1 }, // o x
     { 0x006F2018, -2 }, // o U+2018
     { 0x006F201A, -2 }, // o U+201A
+    { 0x006F201B, -2 }, // o U+201B
     { 0x006F201C, -2 }, // o U+201C
     { 0x006F201E, -2 }, // o U+201E
+    { 0x006F2025, -2 }, // o U+2025
     { 0x006F2026, -2 }, // o U+2026
     { 0x0070002A, -2 }, // p *
     { 0x0070002C, -2 }, // p ,
@@ -5701,8 +5779,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00700078, -1 }, // p x
     { 0x00702018, -2 }, // p U+2018
     { 0x0070201A, -2 }, // p U+201A
+    { 0x0070201B, -2 }, // p U+201B
     { 0x0070201C, -2 }, // p U+201C
     { 0x0070201E, -2 }, // p U+201E
+    { 0x00702025, -2 }, // p U+2025
     { 0x00702026, -2 }, // p U+2026
     { 0x00710029, 2 }, // q )
     { 0x0071002C, -2 }, // q ,
@@ -5715,6 +5795,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00710079, 1 }, // q y
     { 0x0071201A, -2 }, // q U+201A
     { 0x0071201E, -2 }, // q U+201E
+    { 0x00712025, -2 }, // q U+2025
     { 0x00712026, -2 }, // q U+2026
     { 0x0071FB00, 3 }, // q U+FB00
     { 0x0071FB01, 3 }, // q U+FB01
@@ -5763,6 +5844,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x0072201A, -3 }, // r U+201A
     { 0x0072201D, 1 }, // r U+201D
     { 0x0072201E, -3 }, // r U+201E
+    { 0x00722025, -3 }, // r U+2025
     { 0x00722026, -3 }, // r U+2026
     { 0x0072FB06, -1 }, // r U+FB06
     { 0x0073002C, -1 }, // s ,
@@ -5772,6 +5854,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x0073005C, -2 }, // s <backslash>
     { 0x0073201A, -1 }, // s U+201A
     { 0x0073201E, -1 }, // s U+201E
+    { 0x00732025, -1 }, // s U+2025
     { 0x00732026, -1 }, // s U+2026
     { 0x0074003A, -1 }, // t :
     { 0x0074003B, -1 }, // t ;
@@ -5780,6 +5863,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x0075002F, 1 }, // u /
     { 0x0075005C, -3 }, // u <backslash>
     { 0x00752018, -2 }, // u U+2018
+    { 0x0075201B, -2 }, // u U+201B
     { 0x0075201C, -2 }, // u U+201C
     { 0x0076002C, -3 }, // v ,
     { 0x0076002E, -3 }, // v .
@@ -5816,6 +5900,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x007600F8, -1 }, // v U+00F8
     { 0x0076201A, -3 }, // v U+201A
     { 0x0076201E, -3 }, // v U+201E
+    { 0x00762025, -3 }, // v U+2025
     { 0x00762026, -3 }, // v U+2026
     { 0x0076FB06, -1 }, // v U+FB06
     { 0x0077002C, -3 }, // w ,
@@ -5853,6 +5938,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x007700F8, -1 }, // w U+00F8
     { 0x0077201A, -3 }, // w U+201A
     { 0x0077201E, -3 }, // w U+201E
+    { 0x00772025, -3 }, // w U+2025
     { 0x00772026, -3 }, // w U+2026
     { 0x0077FB06, -1 }, // w U+FB06
     { 0x0078005C, -3 }, // x <backslash>
@@ -5899,6 +5985,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x007900F8, -1 }, // y U+00F8
     { 0x0079201A, -3 }, // y U+201A
     { 0x0079201E, -3 }, // y U+201E
+    { 0x00792025, -3 }, // y U+2025
     { 0x00792026, -3 }, // y U+2026
     { 0x0079FB06, -1 }, // y U+FB06
     { 0x007A0029, -2 }, // z )
@@ -5978,6 +6065,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00BB00DD, -1 }, // U+00BB U+00DD
     { 0x00BB201A, -2 }, // U+00BB U+201A
     { 0x00BB201E, -2 }, // U+00BB U+201E
+    { 0x00BB2025, -2 }, // U+00BB U+2025
     { 0x00BB2026, -2 }, // U+00BB U+2026
     { 0x00BF004A, 4 }, // U+00BF J
     { 0x00BF0055, -2 }, // U+00BF U
@@ -6087,8 +6175,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00C000FF, -3 }, // U+00C0 U+00FF
     { 0x00C02018, -4 }, // U+00C0 U+2018
     { 0x00C02019, -3 }, // U+00C0 U+2019
+    { 0x00C0201B, -4 }, // U+00C0 U+201B
     { 0x00C0201C, -4 }, // U+00C0 U+201C
     { 0x00C0201D, -3 }, // U+00C0 U+201D
+    { 0x00C02039, -2 }, // U+00C0 U+2039
+    { 0x00C02047, -2 }, // U+00C0 U+2047
+    { 0x00C02048, -2 }, // U+00C0 U+2048
     { 0x00C1002A, -2 }, // U+00C1 *
     { 0x00C1003F, -2 }, // U+00C1 ?
     { 0x00C10041, 1 }, // U+00C1 A
@@ -6148,8 +6240,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00C100FF, -3 }, // U+00C1 U+00FF
     { 0x00C12018, -4 }, // U+00C1 U+2018
     { 0x00C12019, -3 }, // U+00C1 U+2019
+    { 0x00C1201B, -4 }, // U+00C1 U+201B
     { 0x00C1201C, -4 }, // U+00C1 U+201C
     { 0x00C1201D, -3 }, // U+00C1 U+201D
+    { 0x00C12039, -2 }, // U+00C1 U+2039
+    { 0x00C12047, -2 }, // U+00C1 U+2047
+    { 0x00C12048, -2 }, // U+00C1 U+2048
     { 0x00C2002A, -2 }, // U+00C2 *
     { 0x00C2003F, -2 }, // U+00C2 ?
     { 0x00C20041, 1 }, // U+00C2 A
@@ -6209,8 +6305,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00C200FF, -3 }, // U+00C2 U+00FF
     { 0x00C22018, -4 }, // U+00C2 U+2018
     { 0x00C22019, -3 }, // U+00C2 U+2019
+    { 0x00C2201B, -4 }, // U+00C2 U+201B
     { 0x00C2201C, -4 }, // U+00C2 U+201C
     { 0x00C2201D, -3 }, // U+00C2 U+201D
+    { 0x00C22039, -2 }, // U+00C2 U+2039
+    { 0x00C22047, -2 }, // U+00C2 U+2047
+    { 0x00C22048, -2 }, // U+00C2 U+2048
     { 0x00C3002A, -2 }, // U+00C3 *
     { 0x00C3003F, -2 }, // U+00C3 ?
     { 0x00C30041, 1 }, // U+00C3 A
@@ -6270,8 +6370,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00C300FF, -3 }, // U+00C3 U+00FF
     { 0x00C32018, -4 }, // U+00C3 U+2018
     { 0x00C32019, -3 }, // U+00C3 U+2019
+    { 0x00C3201B, -4 }, // U+00C3 U+201B
     { 0x00C3201C, -4 }, // U+00C3 U+201C
     { 0x00C3201D, -3 }, // U+00C3 U+201D
+    { 0x00C32039, -2 }, // U+00C3 U+2039
+    { 0x00C32047, -2 }, // U+00C3 U+2047
+    { 0x00C32048, -2 }, // U+00C3 U+2048
     { 0x00C4002A, -2 }, // U+00C4 *
     { 0x00C4003F, -2 }, // U+00C4 ?
     { 0x00C40041, 1 }, // U+00C4 A
@@ -6331,8 +6435,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00C400FF, -3 }, // U+00C4 U+00FF
     { 0x00C42018, -4 }, // U+00C4 U+2018
     { 0x00C42019, -3 }, // U+00C4 U+2019
+    { 0x00C4201B, -4 }, // U+00C4 U+201B
     { 0x00C4201C, -4 }, // U+00C4 U+201C
     { 0x00C4201D, -3 }, // U+00C4 U+201D
+    { 0x00C42039, -2 }, // U+00C4 U+2039
+    { 0x00C42047, -2 }, // U+00C4 U+2047
+    { 0x00C42048, -2 }, // U+00C4 U+2048
     { 0x00C5002A, -2 }, // U+00C5 *
     { 0x00C5003F, -2 }, // U+00C5 ?
     { 0x00C50041, 1 }, // U+00C5 A
@@ -6392,8 +6500,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00C500FF, -3 }, // U+00C5 U+00FF
     { 0x00C52018, -4 }, // U+00C5 U+2018
     { 0x00C52019, -3 }, // U+00C5 U+2019
+    { 0x00C5201B, -4 }, // U+00C5 U+201B
     { 0x00C5201C, -4 }, // U+00C5 U+201C
     { 0x00C5201D, -3 }, // U+00C5 U+201D
+    { 0x00C52039, -2 }, // U+00C5 U+2039
+    { 0x00C52047, -2 }, // U+00C5 U+2047
+    { 0x00C52048, -2 }, // U+00C5 U+2048
     { 0x00C6002A, 1 }, // U+00C6 *
     { 0x00C6003A, -2 }, // U+00C6 :
     { 0x00C6003B, -2 }, // U+00C6 ;
@@ -6763,7 +6875,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00CC00FE, 1 }, // U+00CC U+00FE
     { 0x00CC201A, -2 }, // U+00CC U+201A
     { 0x00CC201E, -2 }, // U+00CC U+201E
+    { 0x00CC2025, -2 }, // U+00CC U+2025
     { 0x00CC2026, -2 }, // U+00CC U+2026
+    { 0x00CC2039, -2 }, // U+00CC U+2039
+    { 0x00CC203A, -1 }, // U+00CC U+203A
     { 0x00CCFB06, -1 }, // U+00CC U+FB06
     { 0x00CD002C, -2 }, // U+00CD ,
     { 0x00CD002E, -2 }, // U+00CD .
@@ -6834,7 +6949,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00CD00FE, 1 }, // U+00CD U+00FE
     { 0x00CD201A, -2 }, // U+00CD U+201A
     { 0x00CD201E, -2 }, // U+00CD U+201E
+    { 0x00CD2025, -2 }, // U+00CD U+2025
     { 0x00CD2026, -2 }, // U+00CD U+2026
+    { 0x00CD2039, -2 }, // U+00CD U+2039
+    { 0x00CD203A, -1 }, // U+00CD U+203A
     { 0x00CDFB06, -1 }, // U+00CD U+FB06
     { 0x00CE002C, -2 }, // U+00CE ,
     { 0x00CE002E, -2 }, // U+00CE .
@@ -6905,7 +7023,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00CE00FE, 1 }, // U+00CE U+00FE
     { 0x00CE201A, -2 }, // U+00CE U+201A
     { 0x00CE201E, -2 }, // U+00CE U+201E
+    { 0x00CE2025, -2 }, // U+00CE U+2025
     { 0x00CE2026, -2 }, // U+00CE U+2026
+    { 0x00CE2039, -2 }, // U+00CE U+2039
+    { 0x00CE203A, -1 }, // U+00CE U+203A
     { 0x00CEFB06, -1 }, // U+00CE U+FB06
     { 0x00CF002C, -2 }, // U+00CF ,
     { 0x00CF002E, -2 }, // U+00CF .
@@ -6976,7 +7097,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00CF00FE, 1 }, // U+00CF U+00FE
     { 0x00CF201A, -2 }, // U+00CF U+201A
     { 0x00CF201E, -2 }, // U+00CF U+201E
+    { 0x00CF2025, -2 }, // U+00CF U+2025
     { 0x00CF2026, -2 }, // U+00CF U+2026
+    { 0x00CF2039, -2 }, // U+00CF U+2039
+    { 0x00CF203A, -1 }, // U+00CF U+203A
     { 0x00CFFB06, -1 }, // U+00CF U+FB06
     { 0x00D0002C, -2 }, // U+00D0 ,
     { 0x00D0002E, -2 }, // U+00D0 .
@@ -7025,6 +7149,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D000DF, -1 }, // U+00D0 U+00DF
     { 0x00D0201A, -2 }, // U+00D0 U+201A
     { 0x00D0201E, -2 }, // U+00D0 U+201E
+    { 0x00D02025, -2 }, // U+00D0 U+2025
     { 0x00D02026, -2 }, // U+00D0 U+2026
     { 0x00D1002C, -2 }, // U+00D1 ,
     { 0x00D1002E, -2 }, // U+00D1 .
@@ -7087,7 +7212,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D100FC, -1 }, // U+00D1 U+00FC
     { 0x00D1201A, -2 }, // U+00D1 U+201A
     { 0x00D1201E, -2 }, // U+00D1 U+201E
+    { 0x00D12025, -2 }, // U+00D1 U+2025
     { 0x00D12026, -2 }, // U+00D1 U+2026
+    { 0x00D12039, -1 }, // U+00D1 U+2039
+    { 0x00D1203A, -1 }, // U+00D1 U+203A
     { 0x00D1FB06, -1 }, // U+00D1 U+FB06
     { 0x00D2002C, -2 }, // U+00D2 ,
     { 0x00D2002E, -2 }, // U+00D2 .
@@ -7136,6 +7264,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D200DF, -1 }, // U+00D2 U+00DF
     { 0x00D2201A, -2 }, // U+00D2 U+201A
     { 0x00D2201E, -2 }, // U+00D2 U+201E
+    { 0x00D22025, -2 }, // U+00D2 U+2025
     { 0x00D22026, -2 }, // U+00D2 U+2026
     { 0x00D3002C, -2 }, // U+00D3 ,
     { 0x00D3002E, -2 }, // U+00D3 .
@@ -7184,6 +7313,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D300DF, -1 }, // U+00D3 U+00DF
     { 0x00D3201A, -2 }, // U+00D3 U+201A
     { 0x00D3201E, -2 }, // U+00D3 U+201E
+    { 0x00D32025, -2 }, // U+00D3 U+2025
     { 0x00D32026, -2 }, // U+00D3 U+2026
     { 0x00D4002C, -2 }, // U+00D4 ,
     { 0x00D4002E, -2 }, // U+00D4 .
@@ -7232,6 +7362,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D400DF, -1 }, // U+00D4 U+00DF
     { 0x00D4201A, -2 }, // U+00D4 U+201A
     { 0x00D4201E, -2 }, // U+00D4 U+201E
+    { 0x00D42025, -2 }, // U+00D4 U+2025
     { 0x00D42026, -2 }, // U+00D4 U+2026
     { 0x00D5002C, -2 }, // U+00D5 ,
     { 0x00D5002E, -2 }, // U+00D5 .
@@ -7280,6 +7411,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D500DF, -1 }, // U+00D5 U+00DF
     { 0x00D5201A, -2 }, // U+00D5 U+201A
     { 0x00D5201E, -2 }, // U+00D5 U+201E
+    { 0x00D52025, -2 }, // U+00D5 U+2025
     { 0x00D52026, -2 }, // U+00D5 U+2026
     { 0x00D6002C, -2 }, // U+00D6 ,
     { 0x00D6002E, -2 }, // U+00D6 .
@@ -7328,6 +7460,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D600DF, -1 }, // U+00D6 U+00DF
     { 0x00D6201A, -2 }, // U+00D6 U+201A
     { 0x00D6201E, -2 }, // U+00D6 U+201E
+    { 0x00D62025, -2 }, // U+00D6 U+2025
     { 0x00D62026, -2 }, // U+00D6 U+2026
     { 0x00D8002C, -2 }, // U+00D8 ,
     { 0x00D8002E, -2 }, // U+00D8 .
@@ -7376,6 +7509,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D800DF, -1 }, // U+00D8 U+00DF
     { 0x00D8201A, -2 }, // U+00D8 U+201A
     { 0x00D8201E, -2 }, // U+00D8 U+201E
+    { 0x00D82025, -2 }, // U+00D8 U+2025
     { 0x00D82026, -2 }, // U+00D8 U+2026
     { 0x00D9002C, -3 }, // U+00D9 ,
     { 0x00D9002E, -3 }, // U+00D9 .
@@ -7441,6 +7575,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00D900FE, 1 }, // U+00D9 U+00FE
     { 0x00D9201A, -3 }, // U+00D9 U+201A
     { 0x00D9201E, -3 }, // U+00D9 U+201E
+    { 0x00D92025, -3 }, // U+00D9 U+2025
     { 0x00D92026, -3 }, // U+00D9 U+2026
     { 0x00D9FB06, -2 }, // U+00D9 U+FB06
     { 0x00DA002C, -3 }, // U+00DA ,
@@ -7507,6 +7642,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00DA00FE, 1 }, // U+00DA U+00FE
     { 0x00DA201A, -3 }, // U+00DA U+201A
     { 0x00DA201E, -3 }, // U+00DA U+201E
+    { 0x00DA2025, -3 }, // U+00DA U+2025
     { 0x00DA2026, -3 }, // U+00DA U+2026
     { 0x00DAFB06, -2 }, // U+00DA U+FB06
     { 0x00DB002C, -3 }, // U+00DB ,
@@ -7573,6 +7709,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00DB00FE, 1 }, // U+00DB U+00FE
     { 0x00DB201A, -3 }, // U+00DB U+201A
     { 0x00DB201E, -3 }, // U+00DB U+201E
+    { 0x00DB2025, -3 }, // U+00DB U+2025
     { 0x00DB2026, -3 }, // U+00DB U+2026
     { 0x00DBFB06, -2 }, // U+00DB U+FB06
     { 0x00DC002C, -3 }, // U+00DC ,
@@ -7639,6 +7776,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00DC00FE, 1 }, // U+00DC U+00FE
     { 0x00DC201A, -3 }, // U+00DC U+201A
     { 0x00DC201E, -3 }, // U+00DC U+201E
+    { 0x00DC2025, -3 }, // U+00DC U+2025
     { 0x00DC2026, -3 }, // U+00DC U+2026
     { 0x00DCFB06, -2 }, // U+00DC U+FB06
     { 0x00DD002A, 2 }, // U+00DD *
@@ -7727,11 +7865,17 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00DD00FB, -1 }, // U+00DD U+00FB
     { 0x00DD00FC, -1 }, // U+00DD U+00FC
     { 0x00DD00FE, 1 }, // U+00DD U+00FE
+    { 0x00DD2010, -2 }, // U+00DD U+2010
+    { 0x00DD2011, -2 }, // U+00DD U+2011
     { 0x00DD2013, -2 }, // U+00DD U+2013
     { 0x00DD2014, -2 }, // U+00DD U+2014
+    { 0x00DD2015, -2 }, // U+00DD U+2015
     { 0x00DD201A, -4 }, // U+00DD U+201A
     { 0x00DD201E, -4 }, // U+00DD U+201E
+    { 0x00DD2025, -4 }, // U+00DD U+2025
     { 0x00DD2026, -4 }, // U+00DD U+2026
+    { 0x00DD2039, -2 }, // U+00DD U+2039
+    { 0x00DD203A, -2 }, // U+00DD U+203A
     { 0x00DDFB00, -1 }, // U+00DD U+FB00
     { 0x00DDFB01, -1 }, // U+00DD U+FB01
     { 0x00DDFB02, -1 }, // U+00DD U+FB02
@@ -7789,38 +7933,46 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00DE00DE, -2 }, // U+00DE U+00DE
     { 0x00DE201A, -3 }, // U+00DE U+201A
     { 0x00DE201E, -3 }, // U+00DE U+201E
+    { 0x00DE2025, -3 }, // U+00DE U+2025
     { 0x00DE2026, -3 }, // U+00DE U+2026
     { 0x00DF2018, -2 }, // U+00DF U+2018
+    { 0x00DF201B, -2 }, // U+00DF U+201B
     { 0x00DF201C, -2 }, // U+00DF U+201C
     { 0x00E0002A, -2 }, // U+00E0 *
     { 0x00E0002F, 1 }, // U+00E0 /
     { 0x00E0005C, -3 }, // U+00E0 <backslash>
     { 0x00E02018, -2 }, // U+00E0 U+2018
+    { 0x00E0201B, -2 }, // U+00E0 U+201B
     { 0x00E0201C, -2 }, // U+00E0 U+201C
     { 0x00E1002A, -2 }, // U+00E1 *
     { 0x00E1002F, 1 }, // U+00E1 /
     { 0x00E1005C, -3 }, // U+00E1 <backslash>
     { 0x00E12018, -2 }, // U+00E1 U+2018
+    { 0x00E1201B, -2 }, // U+00E1 U+201B
     { 0x00E1201C, -2 }, // U+00E1 U+201C
     { 0x00E2002A, -2 }, // U+00E2 *
     { 0x00E2002F, 1 }, // U+00E2 /
     { 0x00E2005C, -3 }, // U+00E2 <backslash>
     { 0x00E22018, -2 }, // U+00E2 U+2018
+    { 0x00E2201B, -2 }, // U+00E2 U+201B
     { 0x00E2201C, -2 }, // U+00E2 U+201C
     { 0x00E3002A, -2 }, // U+00E3 *
     { 0x00E3002F, 1 }, // U+00E3 /
     { 0x00E3005C, -3 }, // U+00E3 <backslash>
     { 0x00E32018, -2 }, // U+00E3 U+2018
+    { 0x00E3201B, -2 }, // U+00E3 U+201B
     { 0x00E3201C, -2 }, // U+00E3 U+201C
     { 0x00E4002A, -2 }, // U+00E4 *
     { 0x00E4002F, 1 }, // U+00E4 /
     { 0x00E4005C, -3 }, // U+00E4 <backslash>
     { 0x00E42018, -2 }, // U+00E4 U+2018
+    { 0x00E4201B, -2 }, // U+00E4 U+201B
     { 0x00E4201C, -2 }, // U+00E4 U+201C
     { 0x00E5002A, -2 }, // U+00E5 *
     { 0x00E5002F, 1 }, // U+00E5 /
     { 0x00E5005C, -3 }, // U+00E5 <backslash>
     { 0x00E52018, -2 }, // U+00E5 U+2018
+    { 0x00E5201B, -2 }, // U+00E5 U+201B
     { 0x00E5201C, -2 }, // U+00E5 U+201C
     { 0x00E6005C, -3 }, // U+00E6 <backslash>
     { 0x00E60061, -1 }, // U+00E6 a
@@ -8037,6 +8189,8 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00EE00FE, 3 }, // U+00EE U+00FE
     { 0x00EE2019, 1 }, // U+00EE U+2019
     { 0x00EE201D, 1 }, // U+00EE U+201D
+    { 0x00EE2047, 1 }, // U+00EE U+2047
+    { 0x00EE2048, 1 }, // U+00EE U+2048
     { 0x00EF0029, 1 }, // U+00EF )
     { 0x00EF002A, 2 }, // U+00EF *
     { 0x00EF003F, 1 }, // U+00EF ?
@@ -8051,6 +8205,8 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00EF00FE, 3 }, // U+00EF U+00FE
     { 0x00EF2019, 1 }, // U+00EF U+2019
     { 0x00EF201D, 1 }, // U+00EF U+201D
+    { 0x00EF2047, 1 }, // U+00EF U+2047
+    { 0x00EF2048, 1 }, // U+00EF U+2048
     { 0x00F0002A, -2 }, // U+00F0 *
     { 0x00F0002C, -2 }, // U+00F0 ,
     { 0x00F0002E, -2 }, // U+00F0 .
@@ -8060,8 +8216,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00F00078, -1 }, // U+00F0 x
     { 0x00F02018, -2 }, // U+00F0 U+2018
     { 0x00F0201A, -2 }, // U+00F0 U+201A
+    { 0x00F0201B, -2 }, // U+00F0 U+201B
     { 0x00F0201C, -2 }, // U+00F0 U+201C
     { 0x00F0201E, -2 }, // U+00F0 U+201E
+    { 0x00F02025, -2 }, // U+00F0 U+2025
     { 0x00F02026, -2 }, // U+00F0 U+2026
     { 0x00F1002A, -2 }, // U+00F1 *
     { 0x00F1005C, -4 }, // U+00F1 <backslash>
@@ -8071,6 +8229,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00F100FD, -1 }, // U+00F1 U+00FD
     { 0x00F100FF, -1 }, // U+00F1 U+00FF
     { 0x00F12018, -2 }, // U+00F1 U+2018
+    { 0x00F1201B, -2 }, // U+00F1 U+201B
     { 0x00F1201C, -2 }, // U+00F1 U+201C
     { 0x00F2002A, -2 }, // U+00F2 *
     { 0x00F2002C, -2 }, // U+00F2 ,
@@ -8081,8 +8240,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00F20078, -1 }, // U+00F2 x
     { 0x00F22018, -2 }, // U+00F2 U+2018
     { 0x00F2201A, -2 }, // U+00F2 U+201A
+    { 0x00F2201B, -2 }, // U+00F2 U+201B
     { 0x00F2201C, -2 }, // U+00F2 U+201C
     { 0x00F2201E, -2 }, // U+00F2 U+201E
+    { 0x00F22025, -2 }, // U+00F2 U+2025
     { 0x00F22026, -2 }, // U+00F2 U+2026
     { 0x00F3002A, -2 }, // U+00F3 *
     { 0x00F3002C, -2 }, // U+00F3 ,
@@ -8093,8 +8254,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00F30078, -1 }, // U+00F3 x
     { 0x00F32018, -2 }, // U+00F3 U+2018
     { 0x00F3201A, -2 }, // U+00F3 U+201A
+    { 0x00F3201B, -2 }, // U+00F3 U+201B
     { 0x00F3201C, -2 }, // U+00F3 U+201C
     { 0x00F3201E, -2 }, // U+00F3 U+201E
+    { 0x00F32025, -2 }, // U+00F3 U+2025
     { 0x00F32026, -2 }, // U+00F3 U+2026
     { 0x00F4002A, -2 }, // U+00F4 *
     { 0x00F4002C, -2 }, // U+00F4 ,
@@ -8105,8 +8268,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00F40078, -1 }, // U+00F4 x
     { 0x00F42018, -2 }, // U+00F4 U+2018
     { 0x00F4201A, -2 }, // U+00F4 U+201A
+    { 0x00F4201B, -2 }, // U+00F4 U+201B
     { 0x00F4201C, -2 }, // U+00F4 U+201C
     { 0x00F4201E, -2 }, // U+00F4 U+201E
+    { 0x00F42025, -2 }, // U+00F4 U+2025
     { 0x00F42026, -2 }, // U+00F4 U+2026
     { 0x00F5002A, -2 }, // U+00F5 *
     { 0x00F5002C, -2 }, // U+00F5 ,
@@ -8117,8 +8282,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00F50078, -1 }, // U+00F5 x
     { 0x00F52018, -2 }, // U+00F5 U+2018
     { 0x00F5201A, -2 }, // U+00F5 U+201A
+    { 0x00F5201B, -2 }, // U+00F5 U+201B
     { 0x00F5201C, -2 }, // U+00F5 U+201C
     { 0x00F5201E, -2 }, // U+00F5 U+201E
+    { 0x00F52025, -2 }, // U+00F5 U+2025
     { 0x00F52026, -2 }, // U+00F5 U+2026
     { 0x00F6002A, -2 }, // U+00F6 *
     { 0x00F6002C, -2 }, // U+00F6 ,
@@ -8129,8 +8296,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00F60078, -1 }, // U+00F6 x
     { 0x00F62018, -2 }, // U+00F6 U+2018
     { 0x00F6201A, -2 }, // U+00F6 U+201A
+    { 0x00F6201B, -2 }, // U+00F6 U+201B
     { 0x00F6201C, -2 }, // U+00F6 U+201C
     { 0x00F6201E, -2 }, // U+00F6 U+201E
+    { 0x00F62025, -2 }, // U+00F6 U+2025
     { 0x00F62026, -2 }, // U+00F6 U+2026
     { 0x00F8002A, -2 }, // U+00F8 *
     { 0x00F8002C, -2 }, // U+00F8 ,
@@ -8156,28 +8325,34 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00F800FF, 1 }, // U+00F8 U+00FF
     { 0x00F82018, -2 }, // U+00F8 U+2018
     { 0x00F8201A, -2 }, // U+00F8 U+201A
+    { 0x00F8201B, -2 }, // U+00F8 U+201B
     { 0x00F8201C, -2 }, // U+00F8 U+201C
     { 0x00F8201E, -2 }, // U+00F8 U+201E
+    { 0x00F82025, -2 }, // U+00F8 U+2025
     { 0x00F82026, -2 }, // U+00F8 U+2026
     { 0x00F9002A, -2 }, // U+00F9 *
     { 0x00F9002F, 1 }, // U+00F9 /
     { 0x00F9005C, -3 }, // U+00F9 <backslash>
     { 0x00F92018, -2 }, // U+00F9 U+2018
+    { 0x00F9201B, -2 }, // U+00F9 U+201B
     { 0x00F9201C, -2 }, // U+00F9 U+201C
     { 0x00FA002A, -2 }, // U+00FA *
     { 0x00FA002F, 1 }, // U+00FA /
     { 0x00FA005C, -3 }, // U+00FA <backslash>
     { 0x00FA2018, -2 }, // U+00FA U+2018
+    { 0x00FA201B, -2 }, // U+00FA U+201B
     { 0x00FA201C, -2 }, // U+00FA U+201C
     { 0x00FB002A, -2 }, // U+00FB *
     { 0x00FB002F, 1 }, // U+00FB /
     { 0x00FB005C, -3 }, // U+00FB <backslash>
     { 0x00FB2018, -2 }, // U+00FB U+2018
+    { 0x00FB201B, -2 }, // U+00FB U+201B
     { 0x00FB201C, -2 }, // U+00FB U+201C
     { 0x00FC002A, -2 }, // U+00FC *
     { 0x00FC002F, 1 }, // U+00FC /
     { 0x00FC005C, -3 }, // U+00FC <backslash>
     { 0x00FC2018, -2 }, // U+00FC U+2018
+    { 0x00FC201B, -2 }, // U+00FC U+201B
     { 0x00FC201C, -2 }, // U+00FC U+201C
     { 0x00FD002C, -3 }, // U+00FD ,
     { 0x00FD002E, -3 }, // U+00FD .
@@ -8214,6 +8389,7 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00FD00F8, -1 }, // U+00FD U+00F8
     { 0x00FD201A, -3 }, // U+00FD U+201A
     { 0x00FD201E, -3 }, // U+00FD U+201E
+    { 0x00FD2025, -3 }, // U+00FD U+2025
     { 0x00FD2026, -3 }, // U+00FD U+2026
     { 0x00FDFB06, -1 }, // U+00FD U+FB06
     { 0x00FE002A, -2 }, // U+00FE *
@@ -8225,8 +8401,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00FE0078, -1 }, // U+00FE x
     { 0x00FE2018, -2 }, // U+00FE U+2018
     { 0x00FE201A, -2 }, // U+00FE U+201A
+    { 0x00FE201B, -2 }, // U+00FE U+201B
     { 0x00FE201C, -2 }, // U+00FE U+201C
     { 0x00FE201E, -2 }, // U+00FE U+201E
+    { 0x00FE2025, -2 }, // U+00FE U+2025
     { 0x00FE2026, -2 }, // U+00FE U+2026
     { 0x00FF002C, -3 }, // U+00FF ,
     { 0x00FF002E, -3 }, // U+00FF .
@@ -8263,12 +8441,19 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x00FF00F8, -1 }, // U+00FF U+00F8
     { 0x00FF201A, -3 }, // U+00FF U+201A
     { 0x00FF201E, -3 }, // U+00FF U+201E
+    { 0x00FF2025, -3 }, // U+00FF U+2025
     { 0x00FF2026, -3 }, // U+00FF U+2026
     { 0x00FFFB06, -1 }, // U+00FF U+FB06
+    { 0x20100059, -2 }, // U+2010 Y
+    { 0x201000DD, -2 }, // U+2010 U+00DD
+    { 0x20110059, -2 }, // U+2011 Y
+    { 0x201100DD, -2 }, // U+2011 U+00DD
     { 0x20130059, -2 }, // U+2013 Y
     { 0x201300DD, -2 }, // U+2013 U+00DD
     { 0x20140059, -2 }, // U+2014 Y
     { 0x201400DD, -2 }, // U+2014 U+00DD
+    { 0x20150059, -2 }, // U+2015 Y
+    { 0x201500DD, -2 }, // U+2015 U+00DD
     { 0x20180021, -1 }, // U+2018 !
     { 0x2018002C, -4 }, // U+2018 ,
     { 0x2018002E, -4 }, // U+2018 .
@@ -8356,7 +8541,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x201800F8, -3 }, // U+2018 U+00F8
     { 0x2018201A, -4 }, // U+2018 U+201A
     { 0x2018201E, -4 }, // U+2018 U+201E
+    { 0x20182025, -4 }, // U+2018 U+2025
     { 0x20182026, -4 }, // U+2018 U+2026
+    { 0x2018203C, -1 }, // U+2018 U+203C
+    { 0x20182049, -1 }, // U+2018 U+2049
     { 0x2018FB00, -2 }, // U+2018 U+FB00
     { 0x2018FB01, -2 }, // U+2018 U+FB01
     { 0x2018FB02, -2 }, // U+2018 U+FB02
@@ -8469,7 +8657,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x201900FE, -1 }, // U+2019 U+00FE
     { 0x2019201A, -7 }, // U+2019 U+201A
     { 0x2019201E, -7 }, // U+2019 U+201E
+    { 0x20192025, -7 }, // U+2019 U+2025
     { 0x20192026, -7 }, // U+2019 U+2026
+    { 0x2019203C, -2 }, // U+2019 U+203C
+    { 0x20192047, -2 }, // U+2019 U+2047
+    { 0x20192048, -2 }, // U+2019 U+2048
+    { 0x20192049, -2 }, // U+2019 U+2049
     { 0x2019FB00, -2 }, // U+2019 U+FB00
     { 0x2019FB01, -2 }, // U+2019 U+FB01
     { 0x2019FB02, -2 }, // U+2019 U+FB02
@@ -8544,14 +8737,114 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x201A00FF, -2 }, // U+201A U+00FF
     { 0x201A2018, -4 }, // U+201A U+2018
     { 0x201A2019, -4 }, // U+201A U+2019
+    { 0x201A201B, -4 }, // U+201A U+201B
     { 0x201A201C, -4 }, // U+201A U+201C
     { 0x201A201D, -4 }, // U+201A U+201D
+    { 0x201A2039, -2 }, // U+201A U+2039
     { 0x201AFB00, 3 }, // U+201A U+FB00
     { 0x201AFB01, 3 }, // U+201A U+FB01
     { 0x201AFB02, 3 }, // U+201A U+FB02
     { 0x201AFB03, 3 }, // U+201A U+FB03
     { 0x201AFB04, 3 }, // U+201A U+FB04
     { 0x201AFB05, 3 }, // U+201A U+FB05
+    { 0x201B0021, -1 }, // U+201B !
+    { 0x201B002C, -4 }, // U+201B ,
+    { 0x201B002E, -4 }, // U+201B .
+    { 0x201B0041, -5 }, // U+201B A
+    { 0x201B0043, -1 }, // U+201B C
+    { 0x201B0045, -2 }, // U+201B E
+    { 0x201B0046, -2 }, // U+201B F
+    { 0x201B0047, -1 }, // U+201B G
+    { 0x201B0048, -2 }, // U+201B H
+    { 0x201B0049, -2 }, // U+201B I
+    { 0x201B004B, -2 }, // U+201B K
+    { 0x201B004C, -2 }, // U+201B L
+    { 0x201B004D, -2 }, // U+201B M
+    { 0x201B004E, -2 }, // U+201B N
+    { 0x201B004F, -1 }, // U+201B O
+    { 0x201B0051, -1 }, // U+201B Q
+    { 0x201B0053, -2 }, // U+201B S
+    { 0x201B0055, -2 }, // U+201B U
+    { 0x201B0056, -2 }, // U+201B V
+    { 0x201B0057, -2 }, // U+201B W
+    { 0x201B0061, -3 }, // U+201B a
+    { 0x201B0063, -3 }, // U+201B c
+    { 0x201B0064, -3 }, // U+201B d
+    { 0x201B0065, -3 }, // U+201B e
+    { 0x201B0066, -2 }, // U+201B f
+    { 0x201B0067, -4 }, // U+201B g
+    { 0x201B006D, -1 }, // U+201B m
+    { 0x201B006E, -1 }, // U+201B n
+    { 0x201B006F, -3 }, // U+201B o
+    { 0x201B0070, -1 }, // U+201B p
+    { 0x201B0071, -3 }, // U+201B q
+    { 0x201B0072, -1 }, // U+201B r
+    { 0x201B0073, -3 }, // U+201B s
+    { 0x201B0078, -1 }, // U+201B x
+    { 0x201B007A, -2 }, // U+201B z
+    { 0x201B00A1, -2 }, // U+201B U+00A1
+    { 0x201B00BF, -4 }, // U+201B U+00BF
+    { 0x201B00C0, -5 }, // U+201B U+00C0
+    { 0x201B00C1, -5 }, // U+201B U+00C1
+    { 0x201B00C2, -5 }, // U+201B U+00C2
+    { 0x201B00C3, -5 }, // U+201B U+00C3
+    { 0x201B00C4, -5 }, // U+201B U+00C4
+    { 0x201B00C5, -5 }, // U+201B U+00C5
+    { 0x201B00C6, -5 }, // U+201B U+00C6
+    { 0x201B00C7, -1 }, // U+201B U+00C7
+    { 0x201B00C8, -2 }, // U+201B U+00C8
+    { 0x201B00C9, -2 }, // U+201B U+00C9
+    { 0x201B00CA, -2 }, // U+201B U+00CA
+    { 0x201B00CB, -2 }, // U+201B U+00CB
+    { 0x201B00CC, -2 }, // U+201B U+00CC
+    { 0x201B00CD, -2 }, // U+201B U+00CD
+    { 0x201B00CE, -2 }, // U+201B U+00CE
+    { 0x201B00CF, -2 }, // U+201B U+00CF
+    { 0x201B00D1, -2 }, // U+201B U+00D1
+    { 0x201B00D2, -1 }, // U+201B U+00D2
+    { 0x201B00D3, -1 }, // U+201B U+00D3
+    { 0x201B00D4, -1 }, // U+201B U+00D4
+    { 0x201B00D5, -1 }, // U+201B U+00D5
+    { 0x201B00D6, -1 }, // U+201B U+00D6
+    { 0x201B00D8, -1 }, // U+201B U+00D8
+    { 0x201B00D9, -2 }, // U+201B U+00D9
+    { 0x201B00DA, -2 }, // U+201B U+00DA
+    { 0x201B00DB, -2 }, // U+201B U+00DB
+    { 0x201B00DC, -2 }, // U+201B U+00DC
+    { 0x201B00DE, -2 }, // U+201B U+00DE
+    { 0x201B00E0, -3 }, // U+201B U+00E0
+    { 0x201B00E1, -3 }, // U+201B U+00E1
+    { 0x201B00E2, -3 }, // U+201B U+00E2
+    { 0x201B00E3, -3 }, // U+201B U+00E3
+    { 0x201B00E4, -3 }, // U+201B U+00E4
+    { 0x201B00E5, -3 }, // U+201B U+00E5
+    { 0x201B00E6, -3 }, // U+201B U+00E6
+    { 0x201B00E7, -3 }, // U+201B U+00E7
+    { 0x201B00E8, -3 }, // U+201B U+00E8
+    { 0x201B00E9, -3 }, // U+201B U+00E9
+    { 0x201B00EA, -3 }, // U+201B U+00EA
+    { 0x201B00EB, -3 }, // U+201B U+00EB
+    { 0x201B00F0, -3 }, // U+201B U+00F0
+    { 0x201B00F1, -1 }, // U+201B U+00F1
+    { 0x201B00F2, -3 }, // U+201B U+00F2
+    { 0x201B00F3, -3 }, // U+201B U+00F3
+    { 0x201B00F4, -3 }, // U+201B U+00F4
+    { 0x201B00F5, -3 }, // U+201B U+00F5
+    { 0x201B00F6, -3 }, // U+201B U+00F6
+    { 0x201B00F8, -3 }, // U+201B U+00F8
+    { 0x201B201A, -4 }, // U+201B U+201A
+    { 0x201B201E, -4 }, // U+201B U+201E
+    { 0x201B2025, -4 }, // U+201B U+2025
+    { 0x201B2026, -4 }, // U+201B U+2026
+    { 0x201B203C, -1 }, // U+201B U+203C
+    { 0x201B2049, -1 }, // U+201B U+2049
+    { 0x201BFB00, -2 }, // U+201B U+FB00
+    { 0x201BFB01, -2 }, // U+201B U+FB01
+    { 0x201BFB02, -2 }, // U+201B U+FB02
+    { 0x201BFB03, -2 }, // U+201B U+FB03
+    { 0x201BFB04, -2 }, // U+201B U+FB04
+    { 0x201BFB05, -2 }, // U+201B U+FB05
+    { 0x201BFB06, -3 }, // U+201B U+FB06
     { 0x201C0021, -1 }, // U+201C !
     { 0x201C002C, -4 }, // U+201C ,
     { 0x201C002E, -4 }, // U+201C .
@@ -8639,7 +8932,10 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x201C00F8, -3 }, // U+201C U+00F8
     { 0x201C201A, -4 }, // U+201C U+201A
     { 0x201C201E, -4 }, // U+201C U+201E
+    { 0x201C2025, -4 }, // U+201C U+2025
     { 0x201C2026, -4 }, // U+201C U+2026
+    { 0x201C203C, -1 }, // U+201C U+203C
+    { 0x201C2049, -1 }, // U+201C U+2049
     { 0x201CFB00, -2 }, // U+201C U+FB00
     { 0x201CFB01, -2 }, // U+201C U+FB01
     { 0x201CFB02, -2 }, // U+201C U+FB02
@@ -8752,7 +9048,12 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x201D00FE, -1 }, // U+201D U+00FE
     { 0x201D201A, -7 }, // U+201D U+201A
     { 0x201D201E, -7 }, // U+201D U+201E
+    { 0x201D2025, -7 }, // U+201D U+2025
     { 0x201D2026, -7 }, // U+201D U+2026
+    { 0x201D203C, -2 }, // U+201D U+203C
+    { 0x201D2047, -2 }, // U+201D U+2047
+    { 0x201D2048, -2 }, // U+201D U+2048
+    { 0x201D2049, -2 }, // U+201D U+2049
     { 0x201DFB00, -2 }, // U+201D U+FB00
     { 0x201DFB01, -2 }, // U+201D U+FB01
     { 0x201DFB02, -2 }, // U+201D U+FB02
@@ -8827,14 +9128,93 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x201E00FF, -2 }, // U+201E U+00FF
     { 0x201E2018, -4 }, // U+201E U+2018
     { 0x201E2019, -4 }, // U+201E U+2019
+    { 0x201E201B, -4 }, // U+201E U+201B
     { 0x201E201C, -4 }, // U+201E U+201C
     { 0x201E201D, -4 }, // U+201E U+201D
+    { 0x201E2039, -2 }, // U+201E U+2039
     { 0x201EFB00, 1 }, // U+201E U+FB00
     { 0x201EFB01, 1 }, // U+201E U+FB01
     { 0x201EFB02, 1 }, // U+201E U+FB02
     { 0x201EFB03, 1 }, // U+201E U+FB03
     { 0x201EFB04, 1 }, // U+201E U+FB04
     { 0x201EFB05, 1 }, // U+201E U+FB05
+    { 0x20250041, 1 }, // U+2025 A
+    { 0x20250043, -2 }, // U+2025 C
+    { 0x20250045, 1 }, // U+2025 E
+    { 0x20250046, 1 }, // U+2025 F
+    { 0x20250047, -2 }, // U+2025 G
+    { 0x20250048, 1 }, // U+2025 H
+    { 0x20250049, 1 }, // U+2025 I
+    { 0x2025004A, 4 }, // U+2025 J
+    { 0x2025004B, 1 }, // U+2025 K
+    { 0x2025004C, 1 }, // U+2025 L
+    { 0x2025004E, 1 }, // U+2025 N
+    { 0x2025004F, -2 }, // U+2025 O
+    { 0x20250051, -2 }, // U+2025 Q
+    { 0x20250054, -2 }, // U+2025 T
+    { 0x20250055, -2 }, // U+2025 U
+    { 0x20250056, -4 }, // U+2025 V
+    { 0x20250057, -4 }, // U+2025 W
+    { 0x20250058, 1 }, // U+2025 X
+    { 0x20250059, -3 }, // U+2025 Y
+    { 0x20250066, 1 }, // U+2025 f
+    { 0x20250069, -1 }, // U+2025 i
+    { 0x2025006A, 3 }, // U+2025 j
+    { 0x20250074, -1 }, // U+2025 t
+    { 0x20250075, -1 }, // U+2025 u
+    { 0x20250076, -2 }, // U+2025 v
+    { 0x20250077, -2 }, // U+2025 w
+    { 0x20250079, -2 }, // U+2025 y
+    { 0x202500AB, -2 }, // U+2025 U+00AB
+    { 0x202500C0, 1 }, // U+2025 U+00C0
+    { 0x202500C1, 1 }, // U+2025 U+00C1
+    { 0x202500C2, 1 }, // U+2025 U+00C2
+    { 0x202500C3, 1 }, // U+2025 U+00C3
+    { 0x202500C4, 1 }, // U+2025 U+00C4
+    { 0x202500C5, 1 }, // U+2025 U+00C5
+    { 0x202500C6, 1 }, // U+2025 U+00C6
+    { 0x202500C7, -2 }, // U+2025 U+00C7
+    { 0x202500C8, 1 }, // U+2025 U+00C8
+    { 0x202500C9, 1 }, // U+2025 U+00C9
+    { 0x202500CA, 1 }, // U+2025 U+00CA
+    { 0x202500CB, 1 }, // U+2025 U+00CB
+    { 0x202500CC, 1 }, // U+2025 U+00CC
+    { 0x202500CD, 1 }, // U+2025 U+00CD
+    { 0x202500CE, 1 }, // U+2025 U+00CE
+    { 0x202500CF, 1 }, // U+2025 U+00CF
+    { 0x202500D1, 1 }, // U+2025 U+00D1
+    { 0x202500D2, -2 }, // U+2025 U+00D2
+    { 0x202500D3, -2 }, // U+2025 U+00D3
+    { 0x202500D4, -2 }, // U+2025 U+00D4
+    { 0x202500D5, -2 }, // U+2025 U+00D5
+    { 0x202500D6, -2 }, // U+2025 U+00D6
+    { 0x202500D8, -2 }, // U+2025 U+00D8
+    { 0x202500D9, -2 }, // U+2025 U+00D9
+    { 0x202500DA, -2 }, // U+2025 U+00DA
+    { 0x202500DB, -2 }, // U+2025 U+00DB
+    { 0x202500DC, -2 }, // U+2025 U+00DC
+    { 0x202500DD, -3 }, // U+2025 U+00DD
+    { 0x202500DE, 1 }, // U+2025 U+00DE
+    { 0x202500EC, -1 }, // U+2025 U+00EC
+    { 0x202500ED, -1 }, // U+2025 U+00ED
+    { 0x202500F9, -1 }, // U+2025 U+00F9
+    { 0x202500FA, -1 }, // U+2025 U+00FA
+    { 0x202500FB, -1 }, // U+2025 U+00FB
+    { 0x202500FC, -1 }, // U+2025 U+00FC
+    { 0x202500FD, -2 }, // U+2025 U+00FD
+    { 0x202500FF, -2 }, // U+2025 U+00FF
+    { 0x20252018, -4 }, // U+2025 U+2018
+    { 0x20252019, -4 }, // U+2025 U+2019
+    { 0x2025201B, -4 }, // U+2025 U+201B
+    { 0x2025201C, -4 }, // U+2025 U+201C
+    { 0x2025201D, -4 }, // U+2025 U+201D
+    { 0x20252039, -2 }, // U+2025 U+2039
+    { 0x2025FB00, 1 }, // U+2025 U+FB00
+    { 0x2025FB01, 1 }, // U+2025 U+FB01
+    { 0x2025FB02, 1 }, // U+2025 U+FB02
+    { 0x2025FB03, 1 }, // U+2025 U+FB03
+    { 0x2025FB04, 1 }, // U+2025 U+FB04
+    { 0x2025FB05, 1 }, // U+2025 U+FB05
     { 0x20260041, 1 }, // U+2026 A
     { 0x20260043, -2 }, // U+2026 C
     { 0x20260045, 1 }, // U+2026 E
@@ -8902,14 +9282,27 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0x202600FF, -2 }, // U+2026 U+00FF
     { 0x20262018, -4 }, // U+2026 U+2018
     { 0x20262019, -4 }, // U+2026 U+2019
+    { 0x2026201B, -4 }, // U+2026 U+201B
     { 0x2026201C, -4 }, // U+2026 U+201C
     { 0x2026201D, -4 }, // U+2026 U+201D
+    { 0x20262039, -2 }, // U+2026 U+2039
     { 0x2026FB00, 1 }, // U+2026 U+FB00
     { 0x2026FB01, 1 }, // U+2026 U+FB01
     { 0x2026FB02, 1 }, // U+2026 U+FB02
     { 0x2026FB03, 1 }, // U+2026 U+FB03
     { 0x2026FB04, 1 }, // U+2026 U+FB04
     { 0x2026FB05, 1 }, // U+2026 U+FB05
+    { 0x203A002C, -2 }, // U+203A ,
+    { 0x203A002E, -2 }, // U+203A .
+    { 0x203A0054, -2 }, // U+203A T
+    { 0x203A0056, -1 }, // U+203A V
+    { 0x203A0057, -1 }, // U+203A W
+    { 0x203A0059, -1 }, // U+203A Y
+    { 0x203A00DD, -1 }, // U+203A U+00DD
+    { 0x203A201A, -2 }, // U+203A U+201A
+    { 0x203A201E, -2 }, // U+203A U+201E
+    { 0x203A2025, -2 }, // U+203A U+2025
+    { 0x203A2026, -2 }, // U+203A U+2026
     { 0xFB000029, 1 }, // U+FB00 )
     { 0xFB00002A, 3 }, // U+FB00 *
     { 0xFB00002C, -3 }, // U+FB00 ,
@@ -8962,10 +9355,14 @@ static const EpdKernPair bookerly_18_bolditalicKernPairs[] = {
     { 0xFB002018, 1 }, // U+FB00 U+2018
     { 0xFB002019, 2 }, // U+FB00 U+2019
     { 0xFB00201A, -3 }, // U+FB00 U+201A
+    { 0xFB00201B, 1 }, // U+FB00 U+201B
     { 0xFB00201C, 1 }, // U+FB00 U+201C
     { 0xFB00201D, 2 }, // U+FB00 U+201D
     { 0xFB00201E, -3 }, // U+FB00 U+201E
+    { 0xFB002025, -3 }, // U+FB00 U+2025
     { 0xFB002026, -3 }, // U+FB00 U+2026
+    { 0xFB002047, 1 }, // U+FB00 U+2047
+    { 0xFB002048, 1 }, // U+FB00 U+2048
     { 0xFB00FB06, -1 }, // U+FB00 U+FB06
     { 0xFB01005C, 1 }, // U+FB01 <backslash>
     { 0xFB03005C, 1 }, // U+FB03 <backslash>
@@ -8997,7 +9394,7 @@ static const EpdFontData bookerly_18_bolditalic = {
     bookerly_18_bolditalicGroups,
     12,
     bookerly_18_bolditalicKernPairs,
-    5367,
+    5764,
     bookerly_18_bolditalicLigaturePairs,
     5,
 };

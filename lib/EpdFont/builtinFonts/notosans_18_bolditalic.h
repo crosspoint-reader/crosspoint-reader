@@ -4037,6 +4037,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x004300D5, -1 }, // C U+00D5
     { 0x004300D6, -1 }, // C U+00D6
     { 0x004300D8, -1 }, // C U+00D8
+    { 0x00432039, -1 }, // C U+2039
     { 0x0044002C, -2 }, // D ,
     { 0x0044002E, -2 }, // D .
     { 0x00440041, -1 }, // D A
@@ -4081,6 +4082,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x004B00D5, -1 }, // K U+00D5
     { 0x004B00D6, -1 }, // K U+00D6
     { 0x004B00D8, -1 }, // K U+00D8
+    { 0x004B2039, -1 }, // K U+2039
     { 0x004C0022, -3 }, // L "
     { 0x004C0027, -3 }, // L '
     { 0x004C0043, -1 }, // L C
@@ -4107,6 +4109,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x004C00DD, -2 }, // L U+00DD
     { 0x004C2019, -3 }, // L U+2019
     { 0x004C201D, -3 }, // L U+201D
+    { 0x004C2039, -2 }, // L U+2039
     { 0x004F002C, -2 }, // O ,
     { 0x004F002E, -2 }, // O .
     { 0x004F0041, -1 }, // O A
@@ -4142,6 +4145,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x0050201A, -5 }, // P U+201A
     { 0x0050201E, -5 }, // P U+201E
     { 0x00502026, -5 }, // P U+2026
+    { 0x00502039, -1 }, // P U+2039
     { 0x0051002C, -2 }, // Q ,
     { 0x0051002E, -2 }, // Q .
     { 0x00510041, -1 }, // Q A
@@ -4162,6 +4166,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x0051201E, -2 }, // Q U+201E
     { 0x00512026, -2 }, // Q U+2026
     { 0x005200AB, -1 }, // R U+00AB
+    { 0x00522039, -1 }, // R U+2039
     { 0x00540026, -1 }, // T &
     { 0x0054002C, -3 }, // T ,
     { 0x0054002D, -2 }, // T -
@@ -4230,9 +4235,12 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x005400FF, -1 }, // T U+00FF
     { 0x00542013, -2 }, // T U+2013
     { 0x00542014, -2 }, // T U+2014
+    { 0x00542015, -2 }, // T U+2015
     { 0x0054201A, -3 }, // T U+201A
     { 0x0054201E, -3 }, // T U+201E
     { 0x00542026, -3 }, // T U+2026
+    { 0x00542039, -3 }, // T U+2039
+    { 0x0054203A, -2 }, // T U+203A
     { 0x0055002C, -1 }, // U ,
     { 0x0055002E, -1 }, // U .
     { 0x00550041, -1 }, // U A
@@ -4307,6 +4315,8 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x0056201A, -2 }, // V U+201A
     { 0x0056201E, -2 }, // V U+201E
     { 0x00562026, -2 }, // V U+2026
+    { 0x00562039, -2 }, // V U+2039
+    { 0x0056203A, -1 }, // V U+203A
     { 0x00570026, -1 }, // W &
     { 0x0057002C, -2 }, // W ,
     { 0x0057002E, -2 }, // W .
@@ -4369,6 +4379,8 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x0057201A, -2 }, // W U+201A
     { 0x0057201E, -2 }, // W U+201E
     { 0x00572026, -2 }, // W U+2026
+    { 0x00572039, -2 }, // W U+2039
+    { 0x0057203A, -1 }, // W U+203A
     { 0x00580043, -1 }, // X C
     { 0x00580047, -1 }, // X G
     { 0x0058004F, -1 }, // X O
@@ -4381,6 +4393,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x005800D5, -1 }, // X U+00D5
     { 0x005800D6, -1 }, // X U+00D6
     { 0x005800D8, -1 }, // X U+00D8
+    { 0x00582039, -1 }, // X U+2039
     { 0x00590026, -2 }, // Y &
     { 0x0059002C, -3 }, // Y ,
     { 0x0059002E, -3 }, // Y .
@@ -4445,6 +4458,8 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x0059201A, -3 }, // Y U+201A
     { 0x0059201E, -3 }, // Y U+201E
     { 0x00592026, -3 }, // Y U+2026
+    { 0x00592039, -2 }, // Y U+2039
+    { 0x0059203A, -2 }, // Y U+203A
     { 0x005A0026, -1 }, // Z &
     { 0x005A0043, -1 }, // Z C
     { 0x005A0047, -1 }, // Z G
@@ -4458,6 +4473,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x005A00D5, -1 }, // Z U+00D5
     { 0x005A00D6, -1 }, // Z U+00D6
     { 0x005A00D8, -1 }, // Z U+00D8
+    { 0x005A2039, -1 }, // Z U+2039
     { 0x005B004A, 3 }, // [ J
     { 0x005B0066, 1 }, // [ f
     { 0x005B006A, 1 }, // [ j
@@ -4775,6 +4791,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x00C700D5, -1 }, // U+00C7 U+00D5
     { 0x00C700D6, -1 }, // U+00C7 U+00D6
     { 0x00C700D8, -1 }, // U+00C7 U+00D8
+    { 0x00C72039, -1 }, // U+00C7 U+2039
     { 0x00C8004A, 2 }, // U+00C8 J
     { 0x00C9004A, 2 }, // U+00C9 J
     { 0x00CA004A, 2 }, // U+00CA J
@@ -5024,6 +5041,8 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x00DD201A, -3 }, // U+00DD U+201A
     { 0x00DD201E, -3 }, // U+00DD U+201E
     { 0x00DD2026, -3 }, // U+00DD U+2026
+    { 0x00DD2039, -2 }, // U+00DD U+2039
+    { 0x00DD203A, -2 }, // U+00DD U+203A
     { 0x00DE0026, -1 }, // U+00DE &
     { 0x00DE002C, -5 }, // U+00DE ,
     { 0x00DE002E, -5 }, // U+00DE .
@@ -5040,6 +5059,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x00DE201A, -5 }, // U+00DE U+201A
     { 0x00DE201E, -5 }, // U+00DE U+201E
     { 0x00DE2026, -5 }, // U+00DE U+2026
+    { 0x00DE2039, -1 }, // U+00DE U+2039
     { 0x00E00022, -1 }, // U+00E0 "
     { 0x00E00027, -1 }, // U+00E0 '
     { 0x00E02019, -1 }, // U+00E0 U+2019
@@ -5217,6 +5237,7 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x00FF2026, -2 }, // U+00FF U+2026
     { 0x20130054, -2 }, // U+2013 T
     { 0x20140054, -2 }, // U+2014 T
+    { 0x20150054, -2 }, // U+2015 T
     { 0x20180041, -3 }, // U+2018 A
     { 0x20180061, -2 }, // U+2018 a
     { 0x20180063, -3 }, // U+2018 c
@@ -5431,6 +5452,16 @@ static const EpdKernPair notosans_18_bolditalicKernPairs[] = {
     { 0x201E00DB, -1 }, // U+201E U+00DB
     { 0x201E00DC, -1 }, // U+201E U+00DC
     { 0x201E00DD, -3 }, // U+201E U+00DD
+    { 0x20390054, -2 }, // U+2039 T
+    { 0x20390056, -1 }, // U+2039 V
+    { 0x20390057, -1 }, // U+2039 W
+    { 0x20390059, -2 }, // U+2039 Y
+    { 0x203900DD, -2 }, // U+2039 U+00DD
+    { 0x203A0054, -3 }, // U+203A T
+    { 0x203A0056, -2 }, // U+203A V
+    { 0x203A0057, -2 }, // U+203A W
+    { 0x203A0059, -2 }, // U+203A Y
+    { 0x203A00DD, -2 }, // U+203A U+00DD
     { 0xFB000022, 2 }, // U+FB00 "
     { 0xFB000027, 2 }, // U+FB00 '
     { 0xFB000029, 1 }, // U+FB00 )
@@ -5460,7 +5491,7 @@ static const EpdFontData notosans_18_bolditalic = {
     notosans_18_bolditalicGroups,
     11,
     notosans_18_bolditalicKernPairs,
-    1579,
+    1610,
     notosans_18_bolditalicLigaturePairs,
     5,
 };

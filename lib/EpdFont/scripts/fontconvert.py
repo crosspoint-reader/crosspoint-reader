@@ -291,13 +291,9 @@ kernable_codepoints = set(cp for cp in all_codepoints
 KERN_WESTERN_CODEPOINTS = (
     frozenset(range(0x0020, 0x007F)) |  # Basic Latin (ASCII printable)
     frozenset(range(0x00A0, 0x0100)) |  # Latin-1 Supplement (Western European accented chars)
-    frozenset(range(0xFB00, 0xFB07)) |  # Alphabetic Presentation Forms (ligature codepoints)
-    frozenset({0x2013, 0x2014,          # en dash, em dash
-               0x2018, 0x2019,          # left/right single quote (apostrophe)
-               0x201A,                  # single low-9 quotation mark
-               0x201C, 0x201D,          # left/right double quote
-               0x201E,                  # double low-9 quotation mark
-               0x2026})                 # horizontal ellipsis
+    frozenset(range(0x2000, 0x2070)) |  # General Punctuation
+    frozenset(range(0x20A0, 0x20D0)) |  # Currency Symbols
+    frozenset(range(0xFB00, 0xFB07))    # Alphabetic Presentation Forms (ligature codepoints)
 )
 
 KERN_LATIN_CODEPOINTS = (

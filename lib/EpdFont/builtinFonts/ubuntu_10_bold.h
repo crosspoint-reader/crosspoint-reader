@@ -1987,6 +1987,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00412019, -2 }, // A U+2019
     { 0x0041201C, -2 }, // A U+201C
     { 0x0041201D, -2 }, // A U+201D
+    { 0x00412039, -1 }, // A U+2039
     { 0x00420029, -1 }, // B )
     { 0x0042002A, -1 }, // B *
     { 0x0042002F, -1 }, // B /
@@ -2054,6 +2055,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x004300FC, -1 }, // C U+00FC
     { 0x00432013, -1 }, // C U+2013
     { 0x00432014, -1 }, // C U+2014
+    { 0x00432039, -1 }, // C U+2039
     { 0x00440029, -1 }, // D )
     { 0x0044002C, -1 }, // D ,
     { 0x0044002E, -1 }, // D .
@@ -2184,6 +2186,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x0046201A, -2 }, // F U+201A
     { 0x0046201E, -2 }, // F U+201E
     { 0x00462026, -2 }, // F U+2026
+    { 0x0046203A, -1 }, // F U+203A
     { 0x0047002A, -1 }, // G *
     { 0x00470054, -1 }, // G T
     { 0x00470056, -1 }, // G V
@@ -2265,6 +2268,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x004B00FF, -1 }, // K U+00FF
     { 0x004B2013, -2 }, // K U+2013
     { 0x004B2014, -2 }, // K U+2014
+    { 0x004B2039, -2 }, // K U+2039
     { 0x004C0022, -3 }, // L "
     { 0x004C0027, -3 }, // L '
     { 0x004C002A, -3 }, // L *
@@ -2307,6 +2311,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x004C2019, -2 }, // L U+2019
     { 0x004C201C, -2 }, // L U+201C
     { 0x004C201D, -2 }, // L U+201D
+    { 0x004C2039, -1 }, // L U+2039
     { 0x004D002A, -1 }, // M *
     { 0x004D002F, -1 }, // M /
     { 0x004D003F, -1 }, // M ?
@@ -2396,6 +2401,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x0050201A, -2 }, // P U+201A
     { 0x0050201E, -2 }, // P U+201E
     { 0x00502026, -3 }, // P U+2026
+    { 0x00502039, -1 }, // P U+2039
     { 0x00510029, -1 }, // Q )
     { 0x0051002C, -1 }, // Q ,
     { 0x0051002E, -1 }, // Q .
@@ -2482,6 +2488,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x005200FC, -1 }, // R U+00FC
     { 0x00522013, -1 }, // R U+2013
     { 0x00522014, -1 }, // R U+2014
+    { 0x00522039, -1 }, // R U+2039
     { 0x00530029, -1 }, // S )
     { 0x0053002A, -1 }, // S *
     { 0x0053002F, -1 }, // S /
@@ -2583,6 +2590,8 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x0054201A, -2 }, // T U+201A
     { 0x0054201E, -2 }, // T U+201E
     { 0x00542026, -2 }, // T U+2026
+    { 0x00542039, -2 }, // T U+2039
+    { 0x0054203A, -2 }, // T U+203A
     { 0x0055002C, -1 }, // U ,
     { 0x0055002E, -1 }, // U .
     { 0x0055002F, -2 }, // U /
@@ -2672,6 +2681,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x0056201A, -2 }, // V U+201A
     { 0x0056201E, -2 }, // V U+201E
     { 0x00562026, -2 }, // V U+2026
+    { 0x00562039, -1 }, // V U+2039
     { 0x00570026, -1 }, // W &
     { 0x00570028, -1 }, // W (
     { 0x0057002C, -1 }, // W ,
@@ -2740,6 +2750,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x0057201A, -1 }, // W U+201A
     { 0x0057201E, -1 }, // W U+201E
     { 0x00572026, -1 }, // W U+2026
+    { 0x00572039, -1 }, // W U+2039
     { 0x00580026, -1 }, // X &
     { 0x00580028, -1 }, // X (
     { 0x0058002A, -1 }, // X *
@@ -2796,6 +2807,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x005800FF, -1 }, // X U+00FF
     { 0x00582013, -1 }, // X U+2013
     { 0x00582014, -1 }, // X U+2014
+    { 0x00582039, -1 }, // X U+2039
     { 0x00590026, -2 }, // Y &
     { 0x00590028, -1 }, // Y (
     { 0x0059002A, -1 }, // Y *
@@ -2880,6 +2892,8 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x0059201A, -2 }, // Y U+201A
     { 0x0059201E, -2 }, // Y U+201E
     { 0x00592026, -2 }, // Y U+2026
+    { 0x00592039, -2 }, // Y U+2039
+    { 0x0059203A, -1 }, // Y U+203A
     { 0x005A0026, -1 }, // Z &
     { 0x005A002D, -1 }, // Z -
     { 0x005A0040, -1 }, // Z @
@@ -2914,6 +2928,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x005A00F8, -1 }, // Z U+00F8
     { 0x005A2013, -1 }, // Z U+2013
     { 0x005A2014, -1 }, // Z U+2014
+    { 0x005A2039, -1 }, // Z U+2039
     { 0x005B0041, -1 }, // [ A
     { 0x005B0043, -1 }, // [ C
     { 0x005B0047, -1 }, // [ G
@@ -3131,6 +3146,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x006300F8, -1 }, // c U+00F8
     { 0x00632013, -1 }, // c U+2013
     { 0x00632014, -1 }, // c U+2014
+    { 0x00632039, -1 }, // c U+2039
     { 0x00640029, -1 }, // d )
     { 0x0064002A, -1 }, // d *
     { 0x0064003F, -1 }, // d ?
@@ -3180,6 +3196,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x0066201D, 1 }, // f U+201D
     { 0x0066201E, -2 }, // f U+201E
     { 0x00662026, -2 }, // f U+2026
+    { 0x00662039, -1 }, // f U+2039
     { 0x00670029, -1 }, // g )
     { 0x0067002A, -1 }, // g *
     { 0x0067003F, -1 }, // g ?
@@ -3277,6 +3294,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x006B00FC, -1 }, // k U+00FC
     { 0x006B2013, -1 }, // k U+2013
     { 0x006B2014, -1 }, // k U+2014
+    { 0x006B2039, -1 }, // k U+2039
     { 0x006C0029, -1 }, // l )
     { 0x006C002A, -1 }, // l *
     { 0x006C003F, -1 }, // l ?
@@ -3292,6 +3310,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x006C2019, -1 }, // l U+2019
     { 0x006C201C, -1 }, // l U+201C
     { 0x006C201D, -1 }, // l U+201D
+    { 0x006C2039, -1 }, // l U+2039
     { 0x006D0022, -1 }, // m "
     { 0x006D0027, -1 }, // m '
     { 0x006D0029, -1 }, // m )
@@ -3423,6 +3442,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x0072201D, 1 }, // r U+201D
     { 0x0072201E, -2 }, // r U+201E
     { 0x00722026, -2 }, // r U+2026
+    { 0x00722039, -1 }, // r U+2039
     { 0x00730029, -1 }, // s )
     { 0x0073002A, -1 }, // s *
     { 0x0073002F, -1 }, // s /
@@ -3464,6 +3484,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x007400F8, -1 }, // t U+00F8
     { 0x00742013, -1 }, // t U+2013
     { 0x00742014, -1 }, // t U+2014
+    { 0x00742039, -1 }, // t U+2039
     { 0x00750029, -1 }, // u )
     { 0x0075002A, -1 }, // u *
     { 0x0075003F, -1 }, // u ?
@@ -3581,6 +3602,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x007800F8, -1 }, // x U+00F8
     { 0x00782013, -1 }, // x U+2013
     { 0x00782014, -1 }, // x U+2014
+    { 0x00782039, -1 }, // x U+2039
     { 0x00790026, -1 }, // y &
     { 0x0079002C, -2 }, // y ,
     { 0x0079002E, -2 }, // y .
@@ -3644,6 +3666,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x007A00F5, -1 }, // z U+00F5
     { 0x007A00F6, -1 }, // z U+00F6
     { 0x007A00F8, -1 }, // z U+00F8
+    { 0x007A2039, -1 }, // z U+2039
     { 0x007B0043, -1 }, // { C
     { 0x007B0047, -1 }, // { G
     { 0x007B004F, -1 }, // { O
@@ -3870,6 +3893,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00C02019, -2 }, // U+00C0 U+2019
     { 0x00C0201C, -2 }, // U+00C0 U+201C
     { 0x00C0201D, -2 }, // U+00C0 U+201D
+    { 0x00C02039, -1 }, // U+00C0 U+2039
     { 0x00C10022, -2 }, // U+00C1 "
     { 0x00C10027, -2 }, // U+00C1 '
     { 0x00C10028, -1 }, // U+00C1 (
@@ -3935,6 +3959,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00C12019, -2 }, // U+00C1 U+2019
     { 0x00C1201C, -2 }, // U+00C1 U+201C
     { 0x00C1201D, -2 }, // U+00C1 U+201D
+    { 0x00C12039, -1 }, // U+00C1 U+2039
     { 0x00C20022, -2 }, // U+00C2 "
     { 0x00C20027, -2 }, // U+00C2 '
     { 0x00C20028, -1 }, // U+00C2 (
@@ -4000,6 +4025,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00C22019, -2 }, // U+00C2 U+2019
     { 0x00C2201C, -2 }, // U+00C2 U+201C
     { 0x00C2201D, -2 }, // U+00C2 U+201D
+    { 0x00C22039, -1 }, // U+00C2 U+2039
     { 0x00C30022, -2 }, // U+00C3 "
     { 0x00C30027, -2 }, // U+00C3 '
     { 0x00C30028, -1 }, // U+00C3 (
@@ -4065,6 +4091,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00C32019, -2 }, // U+00C3 U+2019
     { 0x00C3201C, -2 }, // U+00C3 U+201C
     { 0x00C3201D, -2 }, // U+00C3 U+201D
+    { 0x00C32039, -1 }, // U+00C3 U+2039
     { 0x00C40022, -2 }, // U+00C4 "
     { 0x00C40027, -2 }, // U+00C4 '
     { 0x00C40028, -1 }, // U+00C4 (
@@ -4130,6 +4157,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00C42019, -2 }, // U+00C4 U+2019
     { 0x00C4201C, -2 }, // U+00C4 U+201C
     { 0x00C4201D, -2 }, // U+00C4 U+201D
+    { 0x00C42039, -1 }, // U+00C4 U+2039
     { 0x00C50022, -2 }, // U+00C5 "
     { 0x00C50027, -2 }, // U+00C5 '
     { 0x00C50028, -1 }, // U+00C5 (
@@ -4195,6 +4223,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00C52019, -2 }, // U+00C5 U+2019
     { 0x00C5201C, -2 }, // U+00C5 U+201C
     { 0x00C5201D, -2 }, // U+00C5 U+201D
+    { 0x00C52039, -1 }, // U+00C5 U+2039
     { 0x00C6004F, -1 }, // U+00C6 O
     { 0x00C60051, -1 }, // U+00C6 Q
     { 0x00C60061, -1 }, // U+00C6 a
@@ -4269,6 +4298,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00C700FC, -1 }, // U+00C7 U+00FC
     { 0x00C72013, -1 }, // U+00C7 U+2013
     { 0x00C72014, -1 }, // U+00C7 U+2014
+    { 0x00C72039, -1 }, // U+00C7 U+2039
     { 0x00C8004F, -1 }, // U+00C8 O
     { 0x00C80051, -1 }, // U+00C8 Q
     { 0x00C80061, -1 }, // U+00C8 a
@@ -4728,6 +4758,8 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00DD201A, -2 }, // U+00DD U+201A
     { 0x00DD201E, -2 }, // U+00DD U+201E
     { 0x00DD2026, -2 }, // U+00DD U+2026
+    { 0x00DD2039, -2 }, // U+00DD U+2039
+    { 0x00DD203A, -1 }, // U+00DD U+203A
     { 0x00DE0029, -1 }, // U+00DE )
     { 0x00DE002C, -2 }, // U+00DE ,
     { 0x00DE002E, -2 }, // U+00DE .
@@ -4915,6 +4947,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x00E700F8, -1 }, // U+00E7 U+00F8
     { 0x00E72013, -1 }, // U+00E7 U+2013
     { 0x00E72014, -1 }, // U+00E7 U+2014
+    { 0x00E72039, -1 }, // U+00E7 U+2039
     { 0x00EC002A, -1 }, // U+00EC *
     { 0x00EC003F, -1 }, // U+00EC ?
     { 0x00EC005C, -2 }, // U+00EC <backslash>
@@ -5645,6 +5678,29 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0x202600F8, -1 }, // U+2026 U+00F8
     { 0x202600FD, -2 }, // U+2026 U+00FD
     { 0x202600FF, -2 }, // U+2026 U+00FF
+    { 0x20390054, -2 }, // U+2039 T
+    { 0x20390056, -1 }, // U+2039 V
+    { 0x20390059, -1 }, // U+2039 Y
+    { 0x203900DD, -1 }, // U+2039 U+00DD
+    { 0x203A0041, -1 }, // U+203A A
+    { 0x203A004A, -1 }, // U+203A J
+    { 0x203A0053, -1 }, // U+203A S
+    { 0x203A0054, -2 }, // U+203A T
+    { 0x203A0056, -1 }, // U+203A V
+    { 0x203A0057, -1 }, // U+203A W
+    { 0x203A0058, -1 }, // U+203A X
+    { 0x203A0059, -2 }, // U+203A Y
+    { 0x203A005A, -1 }, // U+203A Z
+    { 0x203A0078, -1 }, // U+203A x
+    { 0x203A007A, -1 }, // U+203A z
+    { 0x203A00C0, -1 }, // U+203A U+00C0
+    { 0x203A00C1, -1 }, // U+203A U+00C1
+    { 0x203A00C2, -1 }, // U+203A U+00C2
+    { 0x203A00C3, -1 }, // U+203A U+00C3
+    { 0x203A00C4, -1 }, // U+203A U+00C4
+    { 0x203A00C5, -1 }, // U+203A U+00C5
+    { 0x203A00C6, -1 }, // U+203A U+00C6
+    { 0x203A00DD, -2 }, // U+203A U+00DD
     { 0xFB000029, 1 }, // U+FB00 )
     { 0xFB00002C, -2 }, // U+FB00 ,
     { 0xFB00002E, -2 }, // U+FB00 .
@@ -5684,6 +5740,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0xFB00201D, 1 }, // U+FB00 U+201D
     { 0xFB00201E, -2 }, // U+FB00 U+201E
     { 0xFB002026, -2 }, // U+FB00 U+2026
+    { 0xFB002039, -1 }, // U+FB00 U+2039
     { 0xFB01002A, -1 }, // U+FB01 *
     { 0xFB01003F, -1 }, // U+FB01 ?
     { 0xFB01005C, -2 }, // U+FB01 <backslash>
@@ -5712,6 +5769,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0xFB022019, -1 }, // U+FB02 U+2019
     { 0xFB02201C, -1 }, // U+FB02 U+201C
     { 0xFB02201D, -1 }, // U+FB02 U+201D
+    { 0xFB022039, -1 }, // U+FB02 U+2039
     { 0xFB03002A, -1 }, // U+FB03 *
     { 0xFB03003F, -1 }, // U+FB03 ?
     { 0xFB03005C, -2 }, // U+FB03 <backslash>
@@ -5740,6 +5798,7 @@ static const EpdKernPair ubuntu_10_boldKernPairs[] = {
     { 0xFB042019, -1 }, // U+FB04 U+2019
     { 0xFB04201C, -1 }, // U+FB04 U+201C
     { 0xFB04201D, -1 }, // U+FB04 U+201D
+    { 0xFB042039, -1 }, // U+FB04 U+2039
 };
 
 static const EpdLigaturePair ubuntu_10_boldLigaturePairs[] = {
@@ -5762,7 +5821,7 @@ static const EpdFontData ubuntu_10_bold = {
     nullptr,
     0,
     ubuntu_10_boldKernPairs,
-    4209,
+    4268,
     ubuntu_10_boldLigaturePairs,
     5,
 };
