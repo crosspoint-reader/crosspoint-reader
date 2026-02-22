@@ -110,6 +110,13 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       uint8_t v = doc[info.key] | info.defaultValue;
       if (info.type == SettingType::ENUM) {
         v = clamp(v, (uint8_t)info.enumValues.size(), info.defaultValue);
+      } else if (info.type == SettingType::TOGGLE) {
+        v = clamp(v, (uint8_t)2, info.defaultValue);
+      } else if (info.type == SettingType::VALUE) {
+        if (v < info.valueRange.min)
+          v = info.valueRange.min;
+        else if (v > info.valueRange.max)
+          v = info.valueRange.max;
       }
       s.*(info.valuePtr) = v;
     }
