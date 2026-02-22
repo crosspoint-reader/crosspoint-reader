@@ -199,12 +199,14 @@
     .file-icon {
       margin-right: 8px;
     }
-    .folder-link {
+    .folder-link,
+    .file-link {
       color: #2c3e50;
       text-decoration: none;
       cursor: pointer;
     }
-    .folder-link:hover {
+    .folder-link:hover,
+    .file-link:hover {
       color: #3498db;
       text-decoration: underline;
     }
@@ -853,7 +855,8 @@
           filePath += file.name;
 
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
-          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>${escapeHtml(file.name)}`;
+          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>`;
+          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
           if (file.isEpub) fileTableContent += '<span class="epub-badge">EPUB</span>';
           fileTableContent += '</td>';
           fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
