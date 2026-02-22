@@ -10,13 +10,7 @@
 
 /**
  * Reusable keyboard entry activity for text input.
- * Can be started from any activity that needs text entry.
- *
- * Usage:
- *   1. Create a KeyboardEntryActivity instance
- *   2. Call onEnter() to start the activity
- *   3. Call loop() in your main loop
- *   4. When complete or cancelled, activity exits with ActivityResult
+ * Can be started from any activity that needs text entry via startActivityForResult()
  */
 class KeyboardEntryActivity : public Activity {
  public:
