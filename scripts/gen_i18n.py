@@ -25,7 +25,6 @@ Example:
 import sys
 import os
 import re
-import unicodedata
 from pathlib import Path
 from typing import List, Dict, Tuple
 
