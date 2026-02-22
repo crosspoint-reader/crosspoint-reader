@@ -80,44 +80,61 @@ void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
   *h = maxY - minY;
 }
 
-template <typename T>
-const T* binarySearchPairs(const T* pairs, const uint32_t pairCount, const uint32_t leftCp, const uint32_t rightCp) {
-  if (!pairs || pairCount == 0) {
-    return nullptr;
+static uint8_t lookupKernClass(const EpdKernClassEntry* entries, const uint16_t count, const uint32_t cp) {
+  if (!entries || count == 0 || cp > 0xFFFF) {
+    return 0;
   }
-  if (leftCp > 0xFFFF || rightCp > 0xFFFF) {
-    return nullptr;
+  const auto target = static_cast<uint16_t>(cp);
+  int left = 0;
+  int right = static_cast<int>(count) - 1;
+  while (left <= right) {
+    const int mid = left + (right - left) / 2;
+    const uint16_t midCp = entries[mid].codepoint;
+    if (midCp == target) {
+      return entries[mid].classId;
+    }
+    if (midCp < target) {
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+  return 0;
+}
+
+int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
+  if (!data->kernMatrix) {
+    return 0;
+  }
+  const uint8_t lc = lookupKernClass(data->kernLeftClasses, data->kernLeftEntryCount, leftCp);
+  if (lc == 0) return 0;
+  const uint8_t rc = lookupKernClass(data->kernRightClasses, data->kernRightEntryCount, rightCp);
+  if (rc == 0) return 0;
+  return data->kernMatrix[(lc - 1) * data->kernRightClassCount + (rc - 1)];
+}
+
+uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) const {
+  const auto* pairs = data->ligaturePairs;
+  const auto count = data->ligaturePairCount;
+  if (!pairs || count == 0 || leftCp > 0xFFFF || rightCp > 0xFFFF) {
+    return 0;
   }
 
   const uint32_t key = (leftCp << 16) | rightCp;
   int left = 0;
-  int right = static_cast<int>(pairCount) - 1;
+  int right = static_cast<int>(count) - 1;
 
   while (left <= right) {
     const int mid = left + (right - left) / 2;
     const uint32_t midKey = pairs[mid].pair;
     if (midKey == key) {
-      return &pairs[mid];
+      return pairs[mid].ligatureCp;
     }
     if (midKey < key) {
       left = mid + 1;
     } else {
       right = mid - 1;
     }
-  }
-  return nullptr;
-}
-
-int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
-  if (const auto* found = binarySearchPairs(data->kernPairs, data->kernPairCount, leftCp, rightCp)) {
-    return found->adjust;
-  }
-  return 0;
-}
-
-uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) const {
-  if (const auto* found = binarySearchPairs(data->ligaturePairs, data->ligaturePairCount, leftCp, rightCp)) {
-    return found->ligatureCp;
   }
   return 0;
 }

@@ -444,6 +444,75 @@ for face_idx, cps in face_idx_cps.items():
 kern_pairs.sort(key=lambda p: p[0])
 print(f"kerning: {len(kern_pairs)} pairs extracted", file=sys.stderr)
 
+# --- Derive class-based kerning from expanded pairs ---
+kern_left_classes = []   # list of (codepoint, classId)
+kern_right_classes = []  # list of (codepoint, classId)
+kern_matrix = []         # flat list of int8_t values
+kern_left_class_count = 0
+kern_right_class_count = 0
+
+if kern_pairs:
+    kern_map = {}  # (leftCp, rightCp) -> adjust
+    all_left_cps = set()
+    all_right_cps = set()
+    for packed_pair, adjust in kern_pairs:
+        lcp = packed_pair >> 16
+        rcp = packed_pair & 0xFFFF
+        kern_map[(lcp, rcp)] = adjust
+        all_left_cps.add(lcp)
+        all_right_cps.add(rcp)
+
+    sorted_right_cps = sorted(all_right_cps)
+    sorted_left_cps = sorted(all_left_cps)
+
+    # Group left codepoints by identical adjustment row
+    left_profile_to_class = {}
+    left_class_map = {}
+    left_class_id = 1
+    for lcp in sorted(all_left_cps):
+        row = tuple(kern_map.get((lcp, rcp), 0) for rcp in sorted_right_cps)
+        if row not in left_profile_to_class:
+            left_profile_to_class[row] = left_class_id
+            left_class_id += 1
+        left_class_map[lcp] = left_profile_to_class[row]
+
+    # Group right codepoints by identical adjustment column
+    right_profile_to_class = {}
+    right_class_map = {}
+    right_class_id = 1
+    for rcp in sorted(all_right_cps):
+        col = tuple(kern_map.get((lcp, rcp), 0) for lcp in sorted_left_cps)
+        if col not in right_profile_to_class:
+            right_profile_to_class[col] = right_class_id
+            right_class_id += 1
+        right_class_map[rcp] = right_profile_to_class[col]
+
+    kern_left_class_count = left_class_id - 1
+    kern_right_class_count = right_class_id - 1
+
+    if kern_left_class_count > 255 or kern_right_class_count > 255:
+        print(f"WARNING: kerning class count exceeds uint8_t range "
+              f"(left={kern_left_class_count}, right={kern_right_class_count})",
+              file=sys.stderr)
+
+    # Build the class x class matrix
+    kern_matrix = [0] * (kern_left_class_count * kern_right_class_count)
+    for (lcp, rcp), adjust in kern_map.items():
+        lc = left_class_map[lcp] - 1
+        rc = right_class_map[rcp] - 1
+        kern_matrix[lc * kern_right_class_count + rc] = adjust
+
+    # Build sorted class entry lists
+    kern_left_classes = sorted(left_class_map.items())
+    kern_right_classes = sorted(right_class_map.items())
+
+    matrix_size = kern_left_class_count * kern_right_class_count
+    entries_size = (len(kern_left_classes) + len(kern_right_classes)) * 3
+    pair_size = len(kern_pairs) * 5
+    print(f"kerning: {kern_left_class_count} left classes, {kern_right_class_count} right classes, "
+          f"{matrix_size + entries_size} bytes (was {pair_size} bytes as pairs, "
+          f"{100 * (matrix_size + entries_size) / pair_size:.1f}%)", file=sys.stderr)
+
 # --- Ligature pair extraction ---
 # Parse the OpenType GSUB table for LigatureSubst (type 4) lookups.
 # Multi-character ligatures (3+ codepoints) are decomposed into chained
@@ -750,9 +819,21 @@ if compress:
     print("};\n")
 
 if kern_pairs:
-    print(f"static const EpdKernPair {font_name}KernPairs[] = {{")
-    for packed_pair, adjust in kern_pairs:
-        print(f"    {{ 0x{packed_pair:08X}, {adjust} }}, // {cp_label(packed_pair >> 16)} {cp_label(packed_pair & 0xFFFF)}")
+    print(f"static const EpdKernClassEntry {font_name}KernLeftClasses[] = {{")
+    for cp, cls in kern_left_classes:
+        print(f"    {{ 0x{cp:04X}, {cls} }}, // {cp_label(cp)}")
+    print("};\n")
+
+    print(f"static const EpdKernClassEntry {font_name}KernRightClasses[] = {{")
+    for cp, cls in kern_right_classes:
+        print(f"    {{ 0x{cp:04X}, {cls} }}, // {cp_label(cp)}")
+    print("};\n")
+
+    print(f"static const int8_t {font_name}KernMatrix[] = {{")
+    for row in range(kern_left_class_count):
+        row_start = row * kern_right_class_count
+        row_vals = kern_matrix[row_start:row_start + kern_right_class_count]
+        print("    " + ", ".join(f"{v:4d}" for v in row_vals) + ",")
     print("};\n")
 
 if ligature_pairs:
@@ -777,10 +858,20 @@ else:
     print(f"    nullptr,")
     print(f"    0,")
 if kern_pairs:
-    print(f"    {font_name}KernPairs,")
-    print(f"    {len(kern_pairs)},")
+    print(f"    {font_name}KernLeftClasses,")
+    print(f"    {font_name}KernRightClasses,")
+    print(f"    {font_name}KernMatrix,")
+    print(f"    {len(kern_left_classes)},")
+    print(f"    {len(kern_right_classes)},")
+    print(f"    {kern_left_class_count},")
+    print(f"    {kern_right_class_count},")
 else:
     print(f"    nullptr,")
+    print(f"    nullptr,")
+    print(f"    nullptr,")
+    print(f"    0,")
+    print(f"    0,")
+    print(f"    0,")
     print(f"    0,")
 if ligature_pairs:
     print(f"    {font_name}LigaturePairs,")
