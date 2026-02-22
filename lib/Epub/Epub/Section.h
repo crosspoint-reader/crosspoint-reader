@@ -14,6 +14,10 @@ class Section {
   std::string filePath;
   FsFile file;
 
+  // Cached LUT offset to reduce seeks during page loading (SD I/O optimization)
+  uint32_t cachedLutOffset = 0;
+  bool lutOffsetCached = false;
+
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
                               bool embeddedStyle);
