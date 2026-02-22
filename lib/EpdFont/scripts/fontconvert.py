@@ -344,8 +344,9 @@ def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
 def extract_kerning_fonttools(font_path, codepoints, ppem):
     """Extract kerning pairs from a font file using fonttools.
 
-    Returns list of (packed_pair, pixel_adjust) for the given codepoints.
-    Values are scaled from font design units to integer pixels at ppem.
+    Returns dict of {(leftCp, rightCp): pixel_adjust} for the given
+    codepoints.  Values are scaled from font design units to integer
+    pixels at ppem.
     """
     font = TTFont(font_path)
     units_per_em = font['head'].unitsPerEm
@@ -389,48 +390,40 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
 
     font.close()
 
-    # Scale design-unit values to pixels and pack
+    # Scale design-unit values to pixels
     scale = ppem / units_per_em
-    pairs = []
+    result = {}  # (leftCp, rightCp) -> adjust
     for (lg, rg), du in raw_kern.items():
         lcp = glyph_to_cp[lg]
         rcp = glyph_to_cp[rg]
         adjust = int(math.floor(du * scale))
         if adjust != 0:
             adjust = max(-128, min(127, adjust))
-            pairs.append(((lcp << 16) | rcp, adjust))
-    return pairs
+            result[(lcp, rcp)] = adjust
+    return result
 
 # The ppem used by the existing glyph rasterization:
 #   face.set_char_size(size << 6, size << 6, 150, 150)
 # means size_pt at 150 DPI -> ppem = size * 150 / 72
 ppem = size * 150.0 / 72.0
 
-kern_pairs = []
+kern_map = {}  # (leftCp, rightCp) -> adjust
 for face_idx, cps in face_idx_cps.items():
     font_path = args.fontstack[face_idx]
-    kern_pairs.extend(extract_kerning_fonttools(font_path, cps, ppem))
+    kern_map.update(extract_kerning_fonttools(font_path, cps, ppem))
 
-kern_pairs.sort(key=lambda p: p[0])
-print(f"kerning: {len(kern_pairs)} pairs extracted", file=sys.stderr)
+print(f"kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
 
-# --- Derive class-based kerning from expanded pairs ---
+# --- Derive class-based kerning from pairs ---
 kern_left_classes = []   # list of (codepoint, classId)
 kern_right_classes = []  # list of (codepoint, classId)
 kern_matrix = []         # flat list of int8_t values
 kern_left_class_count = 0
 kern_right_class_count = 0
 
-if kern_pairs:
-    kern_map = {}  # (leftCp, rightCp) -> adjust
-    all_left_cps = set()
-    all_right_cps = set()
-    for packed_pair, adjust in kern_pairs:
-        lcp = packed_pair >> 16
-        rcp = packed_pair & 0xFFFF
-        kern_map[(lcp, rcp)] = adjust
-        all_left_cps.add(lcp)
-        all_right_cps.add(rcp)
+if kern_map:
+    all_left_cps = {lcp for lcp, _ in kern_map}
+    all_right_cps = {rcp for _, rcp in kern_map}
 
     sorted_right_cps = sorted(all_right_cps)
     sorted_left_cps = sorted(all_left_cps)
@@ -478,10 +471,8 @@ if kern_pairs:
 
     matrix_size = kern_left_class_count * kern_right_class_count
     entries_size = (len(kern_left_classes) + len(kern_right_classes)) * 3
-    pair_size = len(kern_pairs) * 5
     print(f"kerning: {kern_left_class_count} left classes, {kern_right_class_count} right classes, "
-          f"{matrix_size + entries_size} bytes (was {pair_size} bytes as pairs, "
-          f"{100 * (matrix_size + entries_size) / pair_size:.1f}%)", file=sys.stderr)
+          f"{matrix_size + entries_size} bytes", file=sys.stderr)
 
 # --- Ligature pair extraction ---
 # Parse the OpenType GSUB table for LigatureSubst (type 4) lookups.
@@ -788,7 +779,7 @@ if compress:
         compressed_offset += len(compressed)
     print("};\n")
 
-if kern_pairs:
+if kern_map:
     print(f"static const EpdKernClassEntry {font_name}KernLeftClasses[] = {{")
     for cp, cls in kern_left_classes:
         print(f"    {{ 0x{cp:04X}, {cls} }}, // {cp_label(cp)}")
@@ -827,7 +818,7 @@ if compress:
 else:
     print(f"    nullptr,")
     print(f"    0,")
-if kern_pairs:
+if kern_map:
     print(f"    {font_name}KernLeftClasses,")
     print(f"    {font_name}KernRightClasses,")
     print(f"    {font_name}KernMatrix,")
