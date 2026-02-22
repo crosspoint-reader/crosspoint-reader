@@ -69,7 +69,8 @@ void EpubReaderPercentSelectionActivity::render(Activity::RenderLock&&) {
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
 
   const std::string percentText = std::to_string(percent) + "%";
-  theme.drawCenteredText(renderer, screen, UI_12_FONT_ID, contentTop, percentText.c_str(), true, EpdFontFamily::BOLD);
+  UITheme::drawCenteredText(renderer, screen, UI_12_FONT_ID, contentTop, percentText.c_str(), true,
+                            EpdFontFamily::BOLD);
 
   // Draw slider track.
   constexpr int barWidth = 360;
@@ -90,7 +91,7 @@ void EpubReaderPercentSelectionActivity::render(Activity::RenderLock&&) {
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
   // Hint text for step sizes.
-  theme.drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 30, tr(STR_PERCENT_STEP_HINT), true);
+  UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 30, tr(STR_PERCENT_STEP_HINT), true);
 
   // Button hints follow the current front button layout.
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");

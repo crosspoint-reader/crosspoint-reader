@@ -99,7 +99,7 @@ void EpubReaderMenuActivity::render(Activity::RenderLock&&) {
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
 
   GUI.drawList(
-      renderer, Rect{screen.x, screen.y + contentTop, screen.width, contentHeight}, menuItems.size(), selectedIndex,
+      renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, menuItems.size(), selectedIndex,
       [this](int index) { return I18N.get(menuItems[index].labelId); }, nullptr, nullptr,
       [this](int index) {
         if (menuItems[index].action == MenuAction::ROTATE_SCREEN) {

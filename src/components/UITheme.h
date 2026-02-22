@@ -20,8 +20,8 @@ class UITheme {
   const BaseTheme& getTheme() { return *currentTheme; }
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
-  void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
-                        bool black = true, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
+  static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
+                               bool black = true, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void reload();
   void setTheme(CrossPointSettings::UI_THEME type);
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,

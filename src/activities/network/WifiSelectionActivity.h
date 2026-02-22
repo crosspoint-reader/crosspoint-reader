@@ -9,6 +9,9 @@
 #include "activities/ActivityWithSubactivity.h"
 #include "util/ButtonNavigator.h"
 
+struct Rect;
+struct ThemeMetrics;
+
 // Structure to hold WiFi network information
 struct WifiNetworkInfo {
   std::string ssid;
@@ -80,13 +83,13 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
   unsigned long connectionStartTime = 0;
 
-  void renderNetworkList() const;
-  void renderPasswordEntry() const;
-  void renderConnecting() const;
-  void renderConnected() const;
-  void renderSavePrompt() const;
-  void renderConnectionFailed() const;
-  void renderForgetPrompt() const;
+  void renderNetworkList(Rect* screen, ThemeMetrics* metrics) const;
+  void renderPasswordEntry(Rect* screen, ThemeMetrics* metrics) const;
+  void renderConnecting(Rect* screen, ThemeMetrics* metrics) const;
+  void renderConnected(Rect* screen, ThemeMetrics* metrics) const;
+  void renderSavePrompt(Rect* screen, ThemeMetrics* metrics) const;
+  void renderConnectionFailed(Rect* screen, ThemeMetrics* metrics) const;
+  void renderForgetPrompt(Rect* screen, ThemeMetrics* metrics) const;
 
   void startWifiScan();
   void processWifiScanResults();
