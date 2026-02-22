@@ -9,7 +9,7 @@ extern const char* const STRINGS_EN[];
 extern const char* const STRINGS_ES[];
 extern const char* const STRINGS_FR[];
 extern const char* const STRINGS_DE[];
-extern const char* const STRINGS_CZ[];
+extern const char* const STRINGS_CS[];
 extern const char* const STRINGS_PO[];
 extern const char* const STRINGS_RU[];
 extern const char* const STRINGS_SV[];
@@ -372,7 +372,7 @@ inline const char* const* getStringArray(Language lang) {
     case Language::DE:
       return i18n_strings::STRINGS_DE;
     case Language::CS:
-      return i18n_strings::STRINGS_CZ;
+      return i18n_strings::STRINGS_CS;
     case Language::PT:
       return i18n_strings::STRINGS_PO;
     case Language::RU:
@@ -395,5 +395,5 @@ constexpr uint8_t getLanguageCount() { return static_cast<uint8_t>(Language::_CO
 // Order: English, Català, Čeština, Deutsch, Español, Français, Português (Brasil), Română, Русский, Svenska
 constexpr uint8_t SORTED_LANGUAGE_INDICES[] = {0, 9, 4, 3, 1, 2, 5, 8, 6, 7};
 
-static_assert(sizeof(SORTED_LANGUAGE_INDICES) / sizeof(SORTED_LANGUAGE_INDICES[0]) ==
-              getLanguageCount(), "SORTED_LANGUAGE_INDICES size mismatch");
+static_assert(sizeof(SORTED_LANGUAGE_INDICES) / sizeof(SORTED_LANGUAGE_INDICES[0]) == getLanguageCount(),
+              "SORTED_LANGUAGE_INDICES size mismatch");
