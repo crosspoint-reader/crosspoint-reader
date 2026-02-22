@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -52,6 +53,82 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
   return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
 }
 
+// ---------------------------------------------------------------------------
+// Direct-mapped word-width cache
+//
+// Avoids redundant getTextAdvanceX calls when the same (word, style, fontId)
+// triple appears across paragraphs.  A fixed-size static array is used so
+// that heap allocation and fragmentation are both zero.
+//
+// Eviction policy: hash-direct mapping — a word always occupies the single
+// slot determined by its hash; a collision simply overwrites that slot.
+// This gives O(1) lookup (one hash + one memcmp) regardless of how full the
+// cache is, avoiding the O(n) linear-scan overhead that causes a regression
+// on corpora with many unique words (e.g. German compound-heavy text).
+//
+// Words longer than 23 bytes bypass the cache entirely — they are uncommon,
+// unlikely to repeat verbatim, and exceed the fixed-width key buffer.
+// ---------------------------------------------------------------------------
+
+struct WordWidthCacheEntry {
+  char word[24];  // NUL-terminated; 23 usable bytes + terminator
+  int fontId;
+  uint16_t width;
+  uint8_t style;  // EpdFontFamily::Style narrowed to one byte
+  bool valid;     // false = slot empty (BSS-initialised to 0)
+};
+
+// Power-of-two size → slot selection via fast bitmask AND.
+// 128 entries × 32 bytes = 4 KB in BSS; covers typical paragraph vocabulary
+// with a low collision rate even for German compound-heavy prose.
+static constexpr uint32_t WORD_WIDTH_CACHE_SIZE = 128;
+static constexpr uint32_t WORD_WIDTH_CACHE_MASK = WORD_WIDTH_CACHE_SIZE - 1;
+static WordWidthCacheEntry s_wordWidthCache[WORD_WIDTH_CACHE_SIZE];
+
+// FNV-1a over the word bytes, then XOR-folded with fontId and style.
+// Fast, well-distributed for short strings, and branch-free.
+static uint32_t wordWidthCacheHash(const char* str, const size_t len, const int fontId, const uint8_t style) {
+  uint32_t h = 2166136261u;  // FNV offset basis
+  for (size_t i = 0; i < len; ++i) {
+    h ^= static_cast<uint8_t>(str[i]);
+    h *= 16777619u;  // FNV prime
+  }
+  h ^= static_cast<uint32_t>(fontId);
+  h *= 16777619u;
+  h ^= style;
+  return h;
+}
+
+// Returns the cached width for (word, style, fontId), measuring and caching
+// on a miss.  Appending a hyphen is not supported — those measurements are
+// word-fragment lookups that will not repeat and must not pollute the cache.
+static uint16_t cachedMeasureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                                       const EpdFontFamily::Style style) {
+  const size_t len = word.size();
+  if (len >= 24) {
+    return measureWordWidth(renderer, fontId, word, style);
+  }
+
+  const uint8_t styleByte = static_cast<uint8_t>(style);
+  const char* const wordCStr = word.c_str();
+
+  const uint32_t slot = wordWidthCacheHash(wordCStr, len, fontId, styleByte) & WORD_WIDTH_CACHE_MASK;
+  auto& e = s_wordWidthCache[slot];
+
+  if (e.valid && e.fontId == fontId && e.style == styleByte && memcmp(e.word, wordCStr, len + 1) == 0) {
+    return e.width;  // O(1) cache hit
+  }
+
+  // Cache miss (or hash collision): measure and overwrite this slot.
+  const uint16_t w = measureWordWidth(renderer, fontId, word, style);
+  memcpy(e.word, wordCStr, len + 1);
+  e.fontId = fontId;
+  e.width = w;
+  e.style = styleByte;
+  e.valid = true;
+  return w;
+}
+
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -82,7 +159,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   const int spaceWidth = renderer.getSpaceWidth(fontId);
   auto wordWidths = calculateWordWidths(renderer, fontId);
 
-  // Build indexed continues vector from the parallel list for O(1) access during layout
+  // Build an indexed copy of wordContinues for O(1) random access during layout.
+  // (wordContinues stays as std::list so hyphenateWordAtIndex can splice in O(1).)
   std::vector<bool> continuesVec(wordContinues.begin(), wordContinues.end());
 
   std::vector<size_t> lineBreakIndices;
@@ -109,8 +187,7 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   auto wordStylesIt = wordStyles.begin();
 
   while (wordsIt != words.end()) {
-    wordWidths.push_back(measureWordWidth(renderer, fontId, *wordsIt, *wordStylesIt));
-
+    wordWidths.push_back(cachedMeasureWordWidth(renderer, fontId, *wordsIt, *wordStylesIt));
     std::advance(wordsIt, 1);
     std::advance(wordStylesIt, 1);
   }
@@ -212,6 +289,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
   // Stores the index of the word that starts the next line (last_word_index + 1)
   std::vector<size_t> lineBreakIndices;
+  lineBreakIndices.reserve(totalWordCount / 8 + 1);  // rough lower bound avoids repeated reallocation
   size_t currentWordIndex = 0;
 
   while (currentWordIndex < totalWordCount) {
@@ -323,11 +401,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     return false;
   }
 
-  // Get iterators to target word and style.
-  auto wordIt = words.begin();
-  auto styleIt = wordStyles.begin();
-  std::advance(wordIt, wordIndex);
-  std::advance(styleIt, wordIndex);
+  // Advance list iterators to the target word and style in O(n).
+  // (words/wordStyles remain std::list to preserve O(1) splice during extraction)
+  auto wordIt = std::next(words.begin(), wordIndex);
+  auto styleIt = std::next(wordStyles.begin(), wordIndex);
 
   const std::string& word = *wordIt;
   const auto style = *styleIt;
@@ -343,6 +420,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   bool chosenNeedsHyphen = true;
 
   // Iterate over each legal breakpoint and retain the widest prefix that still fits.
+  // Re-use a single string buffer to avoid one heap allocation per candidate breakpoint.
+  std::string prefix;
+  prefix.reserve(word.size());
   for (const auto& info : breakInfos) {
     const size_t offset = info.byteOffset;
     if (offset == 0 || offset >= word.size()) {
@@ -350,9 +430,15 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
-    const int prefixWidth = measureWordWidth(renderer, fontId, word.substr(0, offset), style, needsHyphen);
-    if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
-      continue;  // Skip if too wide or not an improvement
+    prefix.assign(word, 0, offset);  // reuses existing buffer — no malloc when capacity suffices
+    const int prefixWidth = measureWordWidth(renderer, fontId, prefix, style, needsHyphen);
+    if (prefixWidth > availableWidth) {
+      // breakOffsets returns candidates in ascending byte-offset order, and prefix width is
+      // non-decreasing with offset, so every subsequent candidate will also be too wide.
+      break;
+    }
+    if (prefixWidth <= chosenWidth) {
+      continue;  // Not an improvement (guards against degenerate mixed-hyphen edge cases)
     }
 
     chosenWidth = prefixWidth;
@@ -372,23 +458,18 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     wordIt->push_back('-');
   }
 
-  // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
-  auto insertWordIt = std::next(wordIt);
-  auto insertStyleIt = std::next(styleIt);
-  words.insert(insertWordIt, remainder);
-  wordStyles.insert(insertStyleIt, style);
+  // Insert the remainder word (with matching style) directly after the prefix.
+  words.insert(std::next(wordIt), remainder);
+  wordStyles.insert(std::next(styleIt), style);
 
   // The remainder inherits whatever continuation status the original word had with the word after it.
-  // Find the continues entry for the original word and insert the remainder's entry after it.
   auto continuesIt = wordContinues.begin();
   std::advance(continuesIt, wordIndex);
   const bool originalContinuedToNext = *continuesIt;
-  // The original word (now prefix) does NOT continue to remainder (hyphen separates them)
+  // The prefix does NOT continue to the remainder (the hyphen separates them visually)
   *continuesIt = false;
-  const auto insertContinuesIt = std::next(continuesIt);
-  wordContinues.insert(insertContinuesIt, originalContinuedToNext);
-
-  // Keep the indexed vector in sync if provided
+  wordContinues.insert(std::next(continuesIt), originalContinuedToNext);
+  // Also keep the separate continuesVec in sync if provided.
   if (continuesVec) {
     (*continuesVec)[wordIndex] = false;
     continuesVec->insert(continuesVec->begin() + wordIndex + 1, originalContinuedToNext);
@@ -465,21 +546,17 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     xpos += currentWordWidth + (nextIsContinuation ? 0 : spacing);
   }
 
-  // Iterators always start at the beginning as we are moving content with splice below
-  auto wordEndIt = words.begin();
-  auto wordStyleEndIt = wordStyles.begin();
+  // *** CRITICAL STEP: CONSUME WORD / STYLE DATA USING SPLICE (O(1)) ***
+  // Iterator arithmetic on std::list is O(n); advance each end iterator to the split point first.
+  auto wordEndIt = std::next(words.begin(), lineWordCount);
+  auto wordStyleEndIt = std::next(wordStyles.begin(), lineWordCount);
   auto wordContinuesEndIt = wordContinues.begin();
-  std::advance(wordEndIt, lineWordCount);
-  std::advance(wordStyleEndIt, lineWordCount);
   std::advance(wordContinuesEndIt, lineWordCount);
 
-  // *** CRITICAL STEP: CONSUME DATA USING SPLICE ***
   std::list<std::string> lineWords;
   lineWords.splice(lineWords.begin(), words, words.begin(), wordEndIt);
   std::list<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.splice(lineWordStyles.begin(), wordStyles, wordStyles.begin(), wordStyleEndIt);
-
-  // Consume continues flags (not passed to TextBlock, but must be consumed to stay in sync)
   std::list<bool> lineContinues;
   lineContinues.splice(lineContinues.begin(), wordContinues, wordContinues.begin(), wordContinuesEndIt);
 
