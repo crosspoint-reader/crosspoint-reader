@@ -575,10 +575,18 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     ctx.reader.setReadCallback(zipReadCallback);
 
     bool success = false;
+    size_t totalProduced = 0;
 
     while (true) {
       size_t produced;
       const InflateStatus status = ctx.reader.readAtMost(outputBuffer, chunkSize, &produced);
+
+      totalProduced += produced;
+      if (totalProduced > static_cast<size_t>(inflatedDataSize)) {
+        LOG_ERR("ZIP", "Decompressed size exceeds expected (%zu > %zu)", totalProduced,
+                static_cast<size_t>(inflatedDataSize));
+        break;
+      }
 
       if (produced > 0) {
         if (out.write(outputBuffer, produced) != produced) {
@@ -588,6 +596,11 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
       }
 
       if (status == InflateStatus::Done) {
+        if (totalProduced != static_cast<size_t>(inflatedDataSize)) {
+          LOG_ERR("ZIP", "Decompressed size mismatch (expected %zu, got %zu)", static_cast<size_t>(inflatedDataSize),
+                  totalProduced);
+          break;
+        }
         LOG_DBG("ZIP", "Decompressed %d bytes into %d bytes", deflatedDataSize, inflatedDataSize);
         success = true;
         break;

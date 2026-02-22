@@ -14,8 +14,7 @@ static_assert(std::is_standard_layout<InflateReader>::value,
 InflateReader::~InflateReader() { deinit(); }
 
 bool InflateReader::init(const bool streaming) {
-  memset(&decomp, 0, sizeof(decomp));
-  ringBuffer = nullptr;
+  deinit();  // free any previously allocated ring buffer and reset state
 
   if (streaming) {
     ringBuffer = static_cast<uint8_t*>(malloc(INFLATE_DICT_SIZE));

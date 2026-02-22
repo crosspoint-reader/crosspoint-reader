@@ -4,10 +4,6 @@
 
 #include <cstddef>
 
-// One-shot inflate: decompresses raw deflate data from src into dst.
-// Returns true only if exactly dstLen bytes were produced.
-bool inflateBuffer(const uint8_t* src, size_t srcLen, uint8_t* dst, size_t dstLen);
-
 // Return value for readAtMost().
 enum class InflateStatus {
   Ok,     // Output buffer full; more compressed data remains.
