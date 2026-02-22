@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <iterator>
 
 #include "MappedInputManager.h"
 #include "fontIds.h"
