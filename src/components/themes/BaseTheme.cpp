@@ -519,7 +519,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         // Still have words left, so add ellipsis to last line
         lines.back().append("...");
 
-        while (!lines.back().empty() && renderer.getTextWidth(UI_12_FONT_ID, lines.back().c_str()) > maxLineWidth) {
+        while (!lines.back().empty() && lines.back().size() > 3 &&
+               renderer.getTextWidth(UI_12_FONT_ID, lines.back().c_str()) > maxLineWidth) {
           // Remove "..." first, then remove one UTF-8 char, then add "..." back
           lines.back().resize(lines.back().size() - 3);  // Remove "..."
           utf8RemoveLastChar(lines.back());
@@ -540,16 +541,19 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
           break;
         }
       }
+      if (i.empty()) continue;  // Skip words that couldn't fit even truncated
 
-      int newLineWidth = renderer.getTextWidth(UI_12_FONT_ID, currentLine.c_str());
+      int newLineWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, currentLine.c_str(), EpdFontFamily::REGULAR);
       if (newLineWidth > 0) {
         newLineWidth += spaceWidth;
       }
-      newLineWidth += wordWidth;
+      newLineWidth += renderer.getTextAdvanceX(UI_12_FONT_ID, i.c_str(), EpdFontFamily::REGULAR);
 
       if (newLineWidth > maxLineWidth && !currentLine.empty()) {
         // New line too long, push old line
         lines.push_back(currentLine);
+        currentLine = i;
+      } else if (currentLine.empty()) {
         currentLine = i;
       } else {
         currentLine.append(" ").append(i);

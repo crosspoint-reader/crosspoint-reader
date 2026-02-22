@@ -82,9 +82,11 @@ void SleepActivity::renderCustomSleepScreen() const {
         Bitmap bitmap(file, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           renderBitmapSleepScreen(bitmap);
+          file.close();
           dir.close();
           return;
         }
+        file.close();
       }
     }
   }
@@ -98,8 +100,10 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
+      file.close();
       return;
     }
+    file.close();
   }
 
   renderDefaultSleepScreen();
@@ -267,8 +271,10 @@ void SleepActivity::renderCoverSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
       renderBitmapSleepScreen(bitmap);
+      file.close();
       return;
     }
+    file.close();
   }
 
   return (this->*renderNoCoverSleepScreen)();
