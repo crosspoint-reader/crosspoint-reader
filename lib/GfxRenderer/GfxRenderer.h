@@ -45,6 +45,14 @@ class GfxRenderer {
   void drawPixelDither(int x, int y) const;
   template <Color color>
   void fillArc(int maxRadius, int cx, int cy, int xDir, int yDir) const;
+  // Write a patterned horizontal span directly to the physical framebuffer using byte-level operations.
+  // phyY: physical row; phyX_start/phyX_end: inclusive physical column range.
+  // patternByte is repeated across the span; partial edge bytes are blended with existing content.
+  // Bit layout: MSB-first (bit 7 = phyX=0); 0 bits = dark pixel, 1 bits = white pixel.
+  void fillPhysicalHSpanByte(int phyY, int phyX_start, int phyX_end, uint8_t patternByte) const;
+  // Write a solid horizontal span directly to the physical framebuffer using byte-level operations.
+  // Thin wrapper around fillPhysicalHSpanByte: state=true → 0x00 (dark), false → 0xFF (white).
+  void fillPhysicalHSpan(int phyY, int phyX_start, int phyX_end, bool state) const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
