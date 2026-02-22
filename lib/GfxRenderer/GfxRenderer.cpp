@@ -369,30 +369,28 @@ static inline uint8_t get2BitPixel(const uint8_t* const bitmap, const int stride
   return get2BitPixel(bitmap, row * stride + col);
 }
 
-static inline uint8_t drawMaskFor2BitMode(const GfxRenderer::RenderMode mode) {
-  switch (mode) {
-    case GfxRenderer::BW:
-      return 0x0E;  // draw raw {1,2,3}
-    case GfxRenderer::GRAYSCALE_MSB:
-      return 0x06;  // draw raw {1,2}
-    case GfxRenderer::GRAYSCALE_LSB:
-    default:
-      return 0x04;  // draw raw {2}
-  }
+template <GfxRenderer::RenderMode mode>
+static constexpr uint8_t drawMaskFor2BitMode() {
+  if constexpr (mode == GfxRenderer::BW)
+    return 0x0E;  // draw raw {1,2,3}
+  else if constexpr (mode == GfxRenderer::GRAYSCALE_MSB)
+    return 0x06;  // draw raw {1,2}
+  else
+    return 0x04;  // GRAYSCALE_LSB: draw raw {2}
 }
 
 // 2-bit pipeline — fused gather+threshold (X axis): the 2-bit analog of extractGlyphBlock, but
 // gather and threshold are collapsed into one pass. The threshold (2-bit raw value → 1-bit on/off)
 // is information-lossy, so no contiguous 2-bit intermediate block can be formed mid-pipeline.
 // The resulting 1-bit mask feeds writeRowBits directly (scatter). build2BitColMask is the Y-axis counterpart.
+template <GfxRenderer::RenderMode mode>
 static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int rowStartPixel, const int glyphXStartOrEnd,
-                                       const int count, const bool reverseXInChunk,
-                                       const GfxRenderer::RenderMode renderMode) {
+                                       const int count, const bool reverseXInChunk) {
   // drawMask uses raw 2-bit glyph values directly from font bitmaps:
   // raw 0=white, 1=light gray, 2=dark gray, 3=black.
   // Bit N set means: draw/update when raw==N.
-  // This avoids per-pixel remap (bmpVal = 3 - raw) and branch chains in the hot loop.
-  const uint8_t drawMask = drawMaskFor2BitMode(renderMode);
+  // Compile-time constant lets the compiler reduce (drawMask >> raw) & 1 to a single comparison.
+  constexpr uint8_t drawMask = drawMaskFor2BitMode<mode>();
 
   uint8_t mask = 0;
   for (int i = 0; i < count; i++) {
@@ -403,13 +401,64 @@ static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int ro
   return mask;
 }
 
+// Fast-path 2-bit mask builder for 8 byte-aligned pixels.
+//
+// The 2-bit glyph bitmap stores 4 pixels per byte, MSB-first:
+//   byte b = [p0.msb p0.lsb  p1.msb p1.lsb  p2.msb p2.lsb  p3.msb p3.lsb]
+//
+// For each render mode the draw decision collapses to a two-bit boolean:
+//   BW            (draw if raw ≠ 0):      msb | lsb
+//   GRAYSCALE_MSB (draw if raw ∈ {1,2}):  msb ^ lsb
+//   GRAYSCALE_LSB (draw if raw == 2):     msb & ~lsb
+//
+// Derivation for one byte:
+//   msb_bits = b & 0xAA  →  bits 7,5,3,1 hold p0.msb … p3.msb; bits 6,4,2,0 = 0
+//   lsb_bits = (b & 0x55) << 1  →  same positions hold p0.lsb … p3.lsb
+//   draw_bits = msb_bits OP lsb_bits  →  bits 7,5,3,1 are the per-pixel draw flags
+//
+// compact4: squeezes those 4 draw flags from bit positions 7,5,3,1
+//   into the top nibble (bits 7,6,5,4 → pixels 0,1,2,3).
+//
+// Two bytes b0 (pixels 0–3) and b1 (pixels 4–7) are combined:
+//   mask = compact4(draw(b0)) | (compact4(draw(b1)) >> 4)
+//
+// This avoids the 8-iteration per-pixel loop in build2BitRowMask and
+// processes the full 8-pixel chunk in ~16 ALU ops instead of ~56.
+// The caller is responsible for only calling this when pixelStart is
+// 4-pixel (1-byte) aligned (pixelStart & 3 == 0) and count == 8.
+template <GfxRenderer::RenderMode mode>
+static inline uint8_t build2BitRowMaskFromTwoBytes(const uint8_t b0, const uint8_t b1) {
+  const uint8_t msb0 = b0 & 0xAA;
+  const uint8_t lsb0 = (b0 & 0x55) << 1;
+  const uint8_t msb1 = b1 & 0xAA;
+  const uint8_t lsb1 = (b1 & 0x55) << 1;
+
+  uint8_t draw0, draw1;
+  if constexpr (mode == GfxRenderer::BW) {
+    draw0 = msb0 | lsb0;
+    draw1 = msb1 | lsb1;
+  } else if constexpr (mode == GfxRenderer::GRAYSCALE_MSB) {
+    draw0 = msb0 ^ lsb0;
+    draw1 = msb1 ^ lsb1;
+  } else {  // GRAYSCALE_LSB
+    draw0 = msb0 & ~lsb0;
+    draw1 = msb1 & ~lsb1;
+  }
+
+  // Compact each nibble's draw flags from bit positions 7,5,3,1 → 7,6,5,4.
+  auto compact4 = [](const uint8_t d) -> uint8_t {
+    return (d & 0x80) | ((d & 0x20) << 1) | ((d & 0x08) << 2) | ((d & 0x02) << 3);
+  };
+  return compact4(draw0) | (compact4(draw1) >> 4);
+}
+
 // 2-bit pipeline — fused gather+threshold (Y axis): column-direction counterpart to build2BitRowMask.
 // Samples count pixels down glyph column glyphX starting at row glyphYStart; reverseRows implements
 // a negative-stride view along Y (reads bottom-to-top), needed for PortraitInverted.
+template <GfxRenderer::RenderMode mode>
 static inline uint8_t build2BitColMask(const uint8_t* const bitmap, const int glyphWidth, const int glyphX,
-                                       const int glyphYStart, const int count, const bool reverseRows,
-                                       const GfxRenderer::RenderMode renderMode) {
-  const uint8_t drawMask = drawMaskFor2BitMode(renderMode);
+                                       const int glyphYStart, const int count, const bool reverseRows) {
+  constexpr uint8_t drawMask = drawMaskFor2BitMode<mode>();
   uint8_t mask = 0;
   for (int i = 0; i < count; i++) {
     const int row = reverseRows ? (glyphYStart + count - 1 - i) : (glyphYStart + i);
@@ -419,13 +468,37 @@ static inline uint8_t build2BitColMask(const uint8_t* const bitmap, const int gl
   return mask;
 }
 
+// Shared body for Portrait and PortraitInverted 2-bit rendering.
+// inverted=false → Portrait (phyY counts down, phyBitPos counts up).
+// inverted=true  → PortraitInverted (phyY counts up, phyBitPos counts down).
+// Both template params are compile-time constants; all ternaries fold away.
+template <GfxRenderer::RenderMode mode, bool inverted>
+static void renderGlyphFast2BitPortrait(uint8_t* const frameBuffer, const uint8_t* const bitmap, const int glyphWidth,
+                                        const int glyphHeight, const int screenXBase, const int screenYBase,
+                                        const bool writeState) {
+  for (int glyphX = 0; glyphX < glyphWidth; glyphX++) {
+    const int phyY = inverted ? (screenXBase + glyphX) : (HalDisplay::DISPLAY_HEIGHT - 1 - (screenXBase + glyphX));
+    if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
+    uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
+    for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
+      const int count = std::min(8, glyphHeight - glyphY);
+      const uint8_t mask = build2BitColMask<mode>(bitmap, glyphWidth, glyphX, glyphY, count, inverted);
+      if (mask == 0) continue;
+      const int phyBitPos =
+          inverted ? (HalDisplay::DISPLAY_WIDTH - 1 - screenYBase - (glyphY + count - 1)) : (screenYBase + glyphY);
+      if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
+      writeRowBits(row, phyBitPos, mask, writeState);
+    }
+  }
+}
+
+template <GfxRenderer::RenderMode mode>
 static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const bitmap, const int glyphWidth,
                                 const int glyphHeight, const int screenXBase, const int screenYBase,
-                                const bool pixelState, const GfxRenderer::Orientation orientation,
-                                const GfxRenderer::RenderMode renderMode) {
+                                const bool pixelState, const GfxRenderer::Orientation orientation) {
   // Non-rotated text fast path for 2-bit glyphs. Writes compact masks directly to framebuffer rows.
   // TextRotation::Rotated90CW keeps the legacy per-pixel fallback path for safety and readability.
-  const bool writeState = (renderMode == GfxRenderer::BW) ? pixelState : false;
+  const bool writeState = (mode == GfxRenderer::BW) ? pixelState : false;
 
   switch (orientation) {
     case GfxRenderer::LandscapeCounterClockwise: {
@@ -436,7 +509,14 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
         const int rowStartPixel = glyphY * glyphWidth;
         for (int glyphX = 0; glyphX < glyphWidth; glyphX += 8) {
           const int count = std::min(8, glyphWidth - glyphX);
-          const uint8_t mask = build2BitRowMask(bitmap, rowStartPixel, glyphX, count, false, renderMode);
+          const int pixelStart = rowStartPixel + glyphX;
+          uint8_t mask;
+          if (count == 8 && (pixelStart & 3) == 0) {
+            const int srcByteIdx = pixelStart >> 2;
+            mask = build2BitRowMaskFromTwoBytes<mode>(bitmap[srcByteIdx], bitmap[srcByteIdx + 1]);
+          } else {
+            mask = build2BitRowMask<mode>(bitmap, rowStartPixel, glyphX, count, false);
+          }
           if (mask == 0) continue;
           const int phyBitPos = screenXBase + glyphX;
           if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
@@ -447,6 +527,9 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
     }
 
     case GfxRenderer::LandscapeClockwise: {
+      // Row-outer/chunk-inner: framebuffer rows are written at stride -DISPLAY_WIDTH_BYTES
+      // (phyY decreases as glyphY increases). Keeping row-outer preserves sequential access
+      // within each row, which is more cache-friendly than the chunk-outer alternative.
       for (int glyphY = 0; glyphY < glyphHeight; glyphY++) {
         const int phyY = HalDisplay::DISPLAY_HEIGHT - 1 - (screenYBase + glyphY);
         if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
@@ -455,7 +538,14 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
         for (int chunkEnd = glyphWidth - 1; chunkEnd >= 0; chunkEnd -= 8) {
           const int chunkStart = std::max(0, chunkEnd - 7);
           const int count = chunkEnd - chunkStart + 1;
-          const uint8_t mask = build2BitRowMask(bitmap, rowStartPixel, chunkEnd, count, true, renderMode);
+          const int pixelStart = rowStartPixel + chunkStart;
+          uint8_t mask;
+          if (count == 8 && (pixelStart & 3) == 0) {
+            const int srcByteIdx = pixelStart >> 2;
+            mask = reverseBits8(build2BitRowMaskFromTwoBytes<mode>(bitmap[srcByteIdx], bitmap[srcByteIdx + 1]));
+          } else {
+            mask = build2BitRowMask<mode>(bitmap, rowStartPixel, chunkEnd, count, true);
+          }
           if (mask == 0) continue;
           const int phyBitPos = HalDisplay::DISPLAY_WIDTH - 1 - screenXBase - chunkEnd;
           if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
@@ -465,39 +555,15 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
       break;
     }
 
-    case GfxRenderer::Portrait: {
-      for (int glyphX = 0; glyphX < glyphWidth; glyphX++) {
-        const int phyY = HalDisplay::DISPLAY_HEIGHT - 1 - (screenXBase + glyphX);
-        if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
-        uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
-        for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
-          const int count = std::min(8, glyphHeight - glyphY);
-          const uint8_t mask = build2BitColMask(bitmap, glyphWidth, glyphX, glyphY, count, false, renderMode);
-          if (mask == 0) continue;
-          const int phyBitPos = screenYBase + glyphY;
-          if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
-          writeRowBits(row, phyBitPos, mask, writeState);
-        }
-      }
+    case GfxRenderer::Portrait:
+      renderGlyphFast2BitPortrait<mode, false>(frameBuffer, bitmap, glyphWidth, glyphHeight, screenXBase, screenYBase,
+                                               writeState);
       break;
-    }
 
-    case GfxRenderer::PortraitInverted: {
-      for (int glyphX = 0; glyphX < glyphWidth; glyphX++) {
-        const int phyY = screenXBase + glyphX;
-        if (phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
-        uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
-        for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
-          const int count = std::min(8, glyphHeight - glyphY);
-          const uint8_t mask = build2BitColMask(bitmap, glyphWidth, glyphX, glyphY, count, true, renderMode);
-          if (mask == 0) continue;
-          const int phyBitPos = HalDisplay::DISPLAY_WIDTH - 1 - screenYBase - (glyphY + count - 1);
-          if (phyBitPos + count <= 0 || phyBitPos >= HalDisplay::DISPLAY_WIDTH) continue;
-          writeRowBits(row, phyBitPos, mask, writeState);
-        }
-      }
+    case GfxRenderer::PortraitInverted:
+      renderGlyphFast2BitPortrait<mode, true>(frameBuffer, bitmap, glyphWidth, glyphHeight, screenXBase, screenYBase,
+                                              writeState);
       break;
-    }
   }
 }
 
@@ -541,8 +607,21 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     if (is2Bit) {
       if constexpr (rotation == TextRotation::None) {
         // Fast path for normal text orientation. Handles all device orientations via renderGlyphFast2Bit.
-        renderGlyphFast2Bit(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase, pixelState,
-                            renderer.getOrientation(), renderMode);
+        // Dispatch on renderMode at compile time so each specialization gets a constant drawMask.
+        switch (renderMode) {
+          case GfxRenderer::BW:
+            renderGlyphFast2Bit<GfxRenderer::BW>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
+                                                 pixelState, renderer.getOrientation());
+            break;
+          case GfxRenderer::GRAYSCALE_MSB:
+            renderGlyphFast2Bit<GfxRenderer::GRAYSCALE_MSB>(renderer.getFrameBuffer(), bitmap, width, height, innerBase,
+                                                            outerBase, pixelState, renderer.getOrientation());
+            break;
+          case GfxRenderer::GRAYSCALE_LSB:
+            renderGlyphFast2Bit<GfxRenderer::GRAYSCALE_LSB>(renderer.getFrameBuffer(), bitmap, width, height, innerBase,
+                                                            outerBase, pixelState, renderer.getOrientation());
+            break;
+        }
         *cursorX += glyph->advanceX;
         return;
       }
@@ -722,6 +801,49 @@ void GfxRenderer::drawTextBWLegacy(const int fontId, const int x, const int y, c
           if (!bit) continue;
           // Inline drawPixel without OOB logging — mirrors the old per-pixel path but clips silently,
           // matching the fast path's behaviour so the benchmark measures rendering cost only.
+          int phyX, phyY;
+          rotateCoordinates(orientation, screenXBase + glyphX, screenYBase + glyphY, &phyX, &phyY);
+          if (phyX < 0 || phyX >= HalDisplay::DISPLAY_WIDTH || phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
+          const uint16_t byteIndex = phyY * HalDisplay::DISPLAY_WIDTH_BYTES + (phyX / 8);
+          const uint8_t bitPosition = 7 - (phyX % 8);
+          frameBuffer[byteIndex] &= ~(1 << bitPosition);  // black pixel
+        }
+      }
+    }
+    xPos += glyph->advanceX;
+  }
+}
+
+// Legacy per-pixel rendering path — mirrors the old renderCharImpl 2-bit BW loop.
+// Used only by the renderChar benchmark to establish the baseline for antialiased fonts.
+void GfxRenderer::drawText2BitLegacy(const int fontId, const int x, const int y, const char* text) const {
+  if (text == nullptr || *text == '\0') return;
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) return;
+  const auto& fontFamily = fontIt->second;
+
+  int yPos = y + getFontAscenderSize(fontId);
+  int xPos = x;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    const EpdGlyph* glyph = fontFamily.getGlyph(cp, EpdFontFamily::REGULAR);
+    if (!glyph) glyph = fontFamily.getGlyph(REPLACEMENT_GLYPH, EpdFontFamily::REGULAR);
+    if (!glyph) continue;
+    const EpdFontData* fontData = fontFamily.getData(EpdFontFamily::REGULAR);
+    if (!fontData->is2Bit) {
+      xPos += glyph->advanceX;
+      continue;
+    }
+    const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
+    if (bitmap != nullptr) {
+      const int screenYBase = yPos - glyph->top;
+      const int screenXBase = xPos + glyph->left;
+      int pixelPosition = 0;
+      for (int glyphY = 0; glyphY < glyph->height; glyphY++) {
+        for (int glyphX = 0; glyphX < glyph->width; glyphX++, pixelPosition++) {
+          // 2-bit: each pixel occupies 2 bits; MSB first within each byte
+          const uint8_t raw = (bitmap[pixelPosition >> 2] >> (6 - ((pixelPosition & 3) << 1))) & 3;
+          if (!raw) continue;
           int phyX, phyY;
           rotateCoordinates(orientation, screenXBase + glyphX, screenYBase + glyphY, &phyX, &phyY);
           if (phyX < 0 || phyX >= HalDisplay::DISPLAY_WIDTH || phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) continue;
