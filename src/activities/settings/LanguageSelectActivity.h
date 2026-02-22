@@ -29,5 +29,5 @@ class LanguageSelectActivity final : public Activity {
 
   std::function<void()> onBack;
   int selectedIndex = 0;
-  int totalItems = 0;
+  constexpr static uint8_t totalItems = getLanguageCount();
 };
