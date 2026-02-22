@@ -5,8 +5,10 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "RecentBooksStore.h"
+#include "Utf8.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
@@ -86,8 +88,66 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       bool bookSelected = (selectorIndex == i);
 
       int tileX = Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
-      auto title =
-          renderer.truncatedText(UI_10_FONT_ID, recentBooks[i].title.c_str(), tileWidth - 2 * hPaddingInSelection);
+
+      // Wrap title to up to 3 lines (word-wrap by advance width)
+      const std::string& lastBookTitle = recentBooks[i].title;
+      std::vector<std::string> words;
+      words.reserve(8);
+      std::string::size_type wordStart = 0;
+      std::string::size_type wordEnd = 0;
+      // find_first_not_of skips leading/interstitial spaces
+      while ((wordStart = lastBookTitle.find_first_not_of(' ', wordEnd)) != std::string::npos) {
+        wordEnd = lastBookTitle.find(' ', wordStart);
+        if (wordEnd == std::string::npos) wordEnd = lastBookTitle.size();
+        words.emplace_back(lastBookTitle.substr(wordStart, wordEnd - wordStart));
+      }
+
+      const int maxLineWidth = tileWidth - 2 * hPaddingInSelection;
+      const int spaceWidth = renderer.getSpaceWidth(SMALL_FONT_ID, EpdFontFamily::REGULAR);
+      std::vector<std::string> titleLines;
+      std::string currentLine;
+
+      for (auto& w : words) {
+        if (titleLines.size() >= 3) {
+          titleLines.back().append("...");
+          while (!titleLines.back().empty() && titleLines.back().size() > 3 &&
+                 renderer.getTextWidth(SMALL_FONT_ID, titleLines.back().c_str(), EpdFontFamily::REGULAR) >
+                     maxLineWidth) {
+            titleLines.back().resize(titleLines.back().size() - 3);
+            utf8RemoveLastChar(titleLines.back());
+            titleLines.back().append("...");
+          }
+          break;
+        }
+        int wordW = renderer.getTextWidth(SMALL_FONT_ID, w.c_str(), EpdFontFamily::REGULAR);
+        while (wordW > maxLineWidth && !w.empty()) {
+          utf8RemoveLastChar(w);
+          std::string withE = w + "...";
+          wordW = renderer.getTextWidth(SMALL_FONT_ID, withE.c_str(), EpdFontFamily::REGULAR);
+          if (wordW <= maxLineWidth) {
+            w = withE;
+            break;
+          }
+        }
+        if (w.empty()) continue;  // Skip words that couldn't fit even truncated
+        int newW = renderer.getTextAdvanceX(SMALL_FONT_ID, currentLine.c_str(), EpdFontFamily::REGULAR);
+        if (newW > 0) newW += spaceWidth;
+        newW += renderer.getTextAdvanceX(SMALL_FONT_ID, w.c_str(), EpdFontFamily::REGULAR);
+        if (newW > maxLineWidth && !currentLine.empty()) {
+          titleLines.push_back(currentLine);
+          currentLine = w;
+        } else if (currentLine.empty()) {
+          currentLine = w;
+        } else {
+          currentLine.append(" ").append(w);
+        }
+      }
+      if (!currentLine.empty() && titleLines.size() < 3) titleLines.push_back(currentLine);
+
+      const int titleLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+      const int dynamicBlockHeight = static_cast<int>(titleLines.size()) * titleLineHeight;
+      // Add a little padding below the text inside the selection box just like the top padding (5 + hPaddingSelection)
+      const int dynamicTitleBoxHeight = dynamicBlockHeight + hPaddingInSelection + 5;
 
       if (bookSelected) {
         // Draw selection box
@@ -98,10 +158,15 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         renderer.fillRectDither(tileX + tileWidth - hPaddingInSelection, tileY + hPaddingInSelection,
                                 hPaddingInSelection, Lyra3CoversMetrics::values.homeCoverHeight, Color::LightGray);
         renderer.fillRoundedRect(tileX, tileY + Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection,
-                                 tileWidth, bookTitleHeight, cornerRadius, false, false, true, true, Color::LightGray);
+                                 tileWidth, dynamicTitleBoxHeight, cornerRadius, false, false, true, true,
+                                 Color::LightGray);
       }
-      renderer.drawText(UI_10_FONT_ID, tileX + hPaddingInSelection,
-                        tileY + tileHeight - bookTitleHeight + hPaddingInSelection + 5, title.c_str(), true);
+
+      int currentY = tileY + Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection + 5;
+      for (const auto& line : titleLines) {
+        renderer.drawText(SMALL_FONT_ID, tileX + hPaddingInSelection, currentY, line.c_str(), true);
+        currentY += titleLineHeight;
+      }
     }
   } else {
     drawEmptyRecents(renderer, rect);
