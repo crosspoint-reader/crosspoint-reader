@@ -212,49 +212,55 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
-void onGoHome();
+void onGoHome(HomeMenuItem item = HomeMenuItem::NONE);
 void onGoToMyLibraryWithPath(const std::string& path);
 void onGoToRecentBooks();
 void onGoToReader(const std::string& initialEpubPath) {
   const std::string bookPath = initialEpubPath;  // Copy before exitActivity() invalidates the reference
   exitActivity();
-  enterNewActivity(new ReaderActivity(renderer, mappedInputManager, bookPath, onGoHome, onGoToMyLibraryWithPath));
+  enterNewActivity(new ReaderActivity(renderer, mappedInputManager, bookPath, [] { onGoHome(); }, onGoToMyLibraryWithPath));
 }
 
 void onGoToFileTransfer() {
   exitActivity();
-  enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
+  enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager,
+                                                   [] { onGoHome(HomeMenuItem::FILE_TRANSFER); }));
 }
 
 void onGoToSettings() {
   exitActivity();
-  enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
+  enterNewActivity(new SettingsActivity(renderer, mappedInputManager,
+                                        [] { onGoHome(HomeMenuItem::SETTINGS_MENU); }));
 }
 
 void onGoToMyLibrary() {
   exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager,
+                                         [] { onGoHome(HomeMenuItem::MY_LIBRARY); }, onGoToReader));
 }
 
 void onGoToRecentBooks() {
   exitActivity();
-  enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+  enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager,
+                                           [] { onGoHome(HomeMenuItem::RECENTS); }, onGoToReader));
 }
 
 void onGoToMyLibraryWithPath(const std::string& path) {
   exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, path));
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager,
+                                         [] { onGoHome(HomeMenuItem::MY_LIBRARY); }, onGoToReader, path));
 }
 
 void onGoToBrowser() {
   exitActivity();
-  enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
+  enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager,
+                                               [] { onGoHome(HomeMenuItem::OPDS_BROWSER); }));
 }
 
-void onGoHome() {
+void onGoHome(HomeMenuItem item) {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
-                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser));
+                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser, item));
 }
 
 void setupDisplayAndFonts() {

@@ -9,6 +9,8 @@
 struct RecentBook;
 struct Rect;
 
+enum class HomeMenuItem { NONE, MY_LIBRARY, RECENTS, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
@@ -26,6 +28,7 @@ class HomeActivity final : public Activity {
   const std::function<void()> onSettingsOpen;
   const std::function<void()> onFileTransferOpen;
   const std::function<void()> onOpdsBrowserOpen;
+  const HomeMenuItem initialMenuItem;
 
   int getMenuItemCount() const;
   bool storeCoverBuffer();    // Store frame buffer for cover image
@@ -39,14 +42,16 @@ class HomeActivity final : public Activity {
                         const std::function<void(const std::string& path)>& onSelectBook,
                         const std::function<void()>& onMyLibraryOpen, const std::function<void()>& onRecentsOpen,
                         const std::function<void()>& onSettingsOpen, const std::function<void()>& onFileTransferOpen,
-                        const std::function<void()>& onOpdsBrowserOpen)
+                        const std::function<void()>& onOpdsBrowserOpen,
+                        HomeMenuItem initialMenuItem = HomeMenuItem::NONE)
       : Activity("Home", renderer, mappedInput),
         onSelectBook(onSelectBook),
         onMyLibraryOpen(onMyLibraryOpen),
         onRecentsOpen(onRecentsOpen),
         onSettingsOpen(onSettingsOpen),
         onFileTransferOpen(onFileTransferOpen),
-        onOpdsBrowserOpen(onOpdsBrowserOpen) {}
+        onOpdsBrowserOpen(onOpdsBrowserOpen),
+        initialMenuItem(initialMenuItem) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
