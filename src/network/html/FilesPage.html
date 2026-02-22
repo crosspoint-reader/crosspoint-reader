@@ -861,6 +861,7 @@
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
           fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
           fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
+          fileTableContent += `<button class="rename-btn" onclick="downloadFile('${filePath.replaceAll("'", "\\'")}')" title="Download file">⬇️</button>`;
           fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
@@ -1263,6 +1264,20 @@ function retryAllFailedUploads() {
 
     xhr.send(formData);
   }
+
+  function downloadFile(path) {
+    // Construct the URL: /download?path=/folder/file.epub
+    const url = '/download?path=' + encodeURIComponent(path);
+    
+    // Create a temporary hidden link and click it to trigger the download
+    const link = document.createElement('a');
+    link.href = url;
+    // The server provides the filename, but we can hint it here too
+    link.download = path.split('/').pop(); 
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 
   // Rename functions
   function openRenameModal(name, path) {

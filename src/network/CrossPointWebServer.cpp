@@ -449,14 +449,10 @@ void CrossPointWebServer::handleDownload() const {
     server->send(400, "text/plain", "Missing path");
     return;
   }
-
-  String itemPath = server->arg("path");
+  String itemPath = normalizeWebPath(server->arg("path"));
   if (itemPath.isEmpty() || itemPath == "/") {
     server->send(400, "text/plain", "Invalid path");
     return;
-  }
-  if (!itemPath.startsWith("/")) {
-    itemPath = "/" + itemPath;
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
@@ -502,9 +498,48 @@ void CrossPointWebServer::handleDownload() const {
   server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
   server->send(200, contentType.c_str(), "");
 
+  size_t fileSize = file.size();
+
   WiFiClient client = server->client();
-  client.write(file);
+  uint8_t buf[2048];  // 2KB buffer for efficiency
+  size_t totalSent = 0;
+  unsigned long startTime = millis();
+
+  LOG_DBG("WEB", "Starting download: %s (%d bytes)", filename.c_str(), fileSize);
+
+  while (file.available() && client.connected()) {
+    size_t len = file.read(buf, sizeof(buf));
+    if (len > 0) {
+      size_t written = client.write(buf, len);
+
+      if (written == 0) {
+        LOG_ERR("WEB", "Download write failed (0/%d) — closing client", len);
+        client.stop();
+        break;  // client stalled/disconnected
+      }
+      totalSent += written;
+      if (written != len) {
+        LOG_ERR("WEB", "Short write (%d/%d) — closing client", written, len);
+        client.stop();
+        break;  // short write; stop to avoid corrupting stream
+      }
+    }
+    if (totalSent % (256 * 1024) < 2048) {
+      LOG_DBG("WEB", "Sent: %d/%d bytes", totalSent, fileSize);
+    }
+    yield();
+    esp_task_wdt_reset();
+  }
+
+  unsigned long duration = millis() - startTime;
   file.close();
+
+  if (totalSent == fileSize) {
+    LOG_DBG("WEB", "Download finished! Took %lu ms (Avg: %.2f KB/s)", duration,
+            (totalSent / 1024.0) / (duration / 1000.0 + 0.001));
+  } else {
+    LOG_ERR("WEB", "Download interrupted at %d/%d bytes", totalSent, fileSize);
+  }
 }
 
 // Diagnostic counters for upload performance analysis
@@ -920,18 +955,13 @@ void CrossPointWebServer::handleDelete() const {
     return;
   }
 
-  String itemPath = server->arg("path");
+  String itemPath = normalizeWebPath(server->arg("path"));
   const String itemType = server->hasArg("type") ? server->arg("type") : "file";
 
   // Validate path
   if (itemPath.isEmpty() || itemPath == "/") {
     server->send(400, "text/plain", "Cannot delete root directory");
     return;
-  }
-
-  // Ensure path starts with /
-  if (!itemPath.startsWith("/")) {
-    itemPath = "/" + itemPath;
   }
 
   // Security check: prevent deletion of protected items
