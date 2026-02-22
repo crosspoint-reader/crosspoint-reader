@@ -4,6 +4,7 @@
 
 #include "../Activity.h"
 #include "./MyLibraryActivity.h"
+#include "CoverLoader.h"
 #include "util/ButtonNavigator.h"
 
 struct RecentBook;
@@ -12,7 +13,6 @@ struct Rect;
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
-  bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
   bool hasOpdsUrl = false;
@@ -20,6 +20,8 @@ class HomeActivity final : public Activity {
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
   std::vector<RecentBook> recentBooks;
+  CoverLoader coverLoader;
+
   const std::function<void(const std::string& path)> onSelectBook;
   const std::function<void()> onMyLibraryOpen;
   const std::function<void()> onRecentsOpen;
@@ -28,11 +30,10 @@ class HomeActivity final : public Activity {
   const std::function<void()> onOpdsBrowserOpen;
 
   int getMenuItemCount() const;
-  bool storeCoverBuffer();    // Store frame buffer for cover image
-  bool restoreCoverBuffer();  // Restore frame buffer from stored cover
-  void freeCoverBuffer();     // Free the stored cover buffer
+  bool storeCoverBuffer();
+  bool restoreCoverBuffer();
+  void freeCoverBuffer();
   void loadRecentBooks(int maxBooks);
-  void loadRecentCovers(int coverHeight);
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
