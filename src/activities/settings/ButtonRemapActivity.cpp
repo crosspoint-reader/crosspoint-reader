@@ -1,6 +1,7 @@
 #include "ButtonRemapActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -16,15 +17,9 @@ constexpr uint8_t kUnassigned = 0xFF;
 constexpr unsigned long kErrorDisplayMs = 1500;
 }  // namespace
 
-void ButtonRemapActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<ButtonRemapActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void ButtonRemapActivity::onEnter() {
   Activity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
   // Start with all roles unassigned to avoid duplicate blocking.
   currentStep = 0;
   tempMapping[0] = kUnassigned;
@@ -33,25 +28,20 @@ void ButtonRemapActivity::onEnter() {
   tempMapping[3] = kUnassigned;
   errorMessage.clear();
   errorUntil = 0;
-  updateRequired = true;
-
-  xTaskCreate(&ButtonRemapActivity::taskTrampoline, "ButtonRemapTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
-void ButtonRemapActivity::onExit() {
-  Activity::onExit();
-
-  // Ensure display task is stopped outside of active rendering.
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void ButtonRemapActivity::onExit() { Activity::onExit(); }
 
 void ButtonRemapActivity::loop() {
+  // Clear any temporary warning after its timeout.
+  if (errorUntil > 0 && millis() > errorUntil) {
+    errorMessage.clear();
+    errorUntil = 0;
+    requestUpdate();
+    return;
+  }
+
   // Side buttons:
   // - Up: reset mapping to defaults and exit.
   // - Down: cancel without saving.
@@ -72,63 +62,39 @@ void ButtonRemapActivity::loop() {
     return;
   }
 
-  // Wait for the UI to refresh before accepting another assignment.
-  // This avoids rapid double-presses that can advance the step without a visible redraw.
-  if (updateRequired) {
-    return;
-  }
+  {
+    // Wait for the UI to refresh before accepting another assignment.
+    // This avoids rapid double-presses that can advance the step without a visible redraw.
+    requestUpdateAndWait();
 
-  // Wait for a front button press to assign to the current role.
-  const int pressedButton = mappedInput.getPressedFrontButton();
-  if (pressedButton < 0) {
-    return;
-  }
-
-  // Update temporary mapping and advance the remap step.
-  // Only accept the press if this hardware button isn't already assigned elsewhere.
-  if (!validateUnassigned(static_cast<uint8_t>(pressedButton))) {
-    updateRequired = true;
-    return;
-  }
-  tempMapping[currentStep] = static_cast<uint8_t>(pressedButton);
-  currentStep++;
-
-  if (currentStep >= kRoleCount) {
-    // All roles assigned; save to settings and exit.
-    applyTempMapping();
-    SETTINGS.saveToFile();
-    onBack();
-    return;
-  }
-
-  updateRequired = true;
-}
-
-[[noreturn]] void ButtonRemapActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      // Ensure render calls are serialized with UI thread changes.
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      updateRequired = false;
-      xSemaphoreGive(renderingMutex);
+    // Wait for a front button press to assign to the current role.
+    const int pressedButton = mappedInput.getPressedFrontButton();
+    if (pressedButton < 0) {
+      return;
     }
 
-    // Clear any temporary warning after its timeout.
-    if (errorUntil > 0 && millis() > errorUntil) {
-      errorMessage.clear();
-      errorUntil = 0;
-      updateRequired = true;
+    // Update temporary mapping and advance the remap step.
+    // Only accept the press if this hardware button isn't already assigned elsewhere.
+    if (!validateUnassigned(static_cast<uint8_t>(pressedButton))) {
+      requestUpdate();
+      return;
+    }
+    tempMapping[currentStep] = static_cast<uint8_t>(pressedButton);
+    currentStep++;
+
+    if (currentStep >= kRoleCount) {
+      // All roles assigned; save to settings and exit.
+      applyTempMapping();
+      SETTINGS.saveToFile();
+      onBack();
+      return;
     }
 
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    requestUpdate();
   }
 }
 
-void ButtonRemapActivity::render() {
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
+void ButtonRemapActivity::render(Activity::RenderLock&&) {
   const auto labelForHardware = [&](uint8_t hardwareIndex) -> const char* {
     for (uint8_t i = 0; i < kRoleCount; i++) {
       if (tempMapping[i] == hardwareIndex) {
@@ -138,35 +104,41 @@ void ButtonRemapActivity::render() {
     return "-";
   };
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Remap Front Buttons", true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(UI_10_FONT_ID, 40, "Press a front button for each role");
+  auto metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
 
-  for (uint8_t i = 0; i < kRoleCount; i++) {
-    const int y = 70 + i * 30;
-    const bool isSelected = (i == currentStep);
+  renderer.clearScreen();
 
-    // Highlight the role that is currently being assigned.
-    if (isSelected) {
-      renderer.fillRect(0, y - 2, pageWidth - 1, 30);
-    }
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_REMAP_FRONT_BUTTONS));
+  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                    tr(STR_REMAP_PROMPT));
 
-    const char* roleName = getRoleName(i);
-    renderer.drawText(UI_10_FONT_ID, 20, y, roleName, !isSelected);
-
-    // Show currently assigned hardware button (or unassigned).
-    const char* assigned = (tempMapping[i] == kUnassigned) ? "Unassigned" : getHardwareName(tempMapping[i]);
-    const auto width = renderer.getTextWidth(UI_10_FONT_ID, assigned);
-    renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, y, assigned, !isSelected);
-  }
+  int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  GUI.drawList(
+      renderer, Rect{0, topOffset, pageWidth, contentHeight}, kRoleCount, currentStep,
+      [&](int index) { return getRoleName(static_cast<uint8_t>(index)); }, nullptr, nullptr,
+      [&](int index) {
+        uint8_t assignedButton = tempMapping[static_cast<uint8_t>(index)];
+        return (assignedButton == kUnassigned) ? tr(STR_UNASSIGNED) : getHardwareName(assignedButton);
+      },
+      true);
 
   // Temporary warning banner for duplicates.
   if (!errorMessage.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 210, errorMessage.c_str(), true);
+    GUI.drawHelpText(renderer,
+                     Rect{0, pageHeight - metrics.buttonHintsHeight - metrics.contentSidePadding - 15, pageWidth, 20},
+                     errorMessage.c_str());
   }
 
   // Provide side button actions at the bottom of the screen (split across two lines).
-  renderer.drawCenteredText(SMALL_FONT_ID, 250, "Side button Up: Reset to default layout", true);
-  renderer.drawCenteredText(SMALL_FONT_ID, 280, "Side button Down: Cancel remapping", true);
+  GUI.drawHelpText(renderer,
+                   Rect{0, topOffset + 4 * metrics.listRowHeight + 4 * metrics.verticalSpacing, pageWidth, 20},
+                   tr(STR_REMAP_RESET_HINT));
+  GUI.drawHelpText(renderer,
+                   Rect{0, topOffset + 4 * metrics.listRowHeight + 5 * metrics.verticalSpacing + 20, pageWidth, 20},
+                   tr(STR_REMAP_CANCEL_HINT));
 
   // Live preview of logical labels under front buttons.
   // This mirrors the on-device front button order: Back, Confirm, Left, Right.
@@ -189,7 +161,7 @@ bool ButtonRemapActivity::validateUnassigned(const uint8_t pressedButton) {
   // Block reusing a hardware button already assigned to another role.
   for (uint8_t i = 0; i < kRoleCount; i++) {
     if (tempMapping[i] == pressedButton && i != currentStep) {
-      errorMessage = "Already assigned";
+      errorMessage = tr(STR_ALREADY_ASSIGNED);
       errorUntil = millis() + kErrorDisplayMs;
       return false;
     }
@@ -200,27 +172,27 @@ bool ButtonRemapActivity::validateUnassigned(const uint8_t pressedButton) {
 const char* ButtonRemapActivity::getRoleName(const uint8_t roleIndex) const {
   switch (roleIndex) {
     case 0:
-      return "Back";
+      return tr(STR_BACK);
     case 1:
-      return "Confirm";
+      return tr(STR_CONFIRM);
     case 2:
-      return "Left";
+      return tr(STR_DIR_LEFT);
     case 3:
     default:
-      return "Right";
+      return tr(STR_DIR_RIGHT);
   }
 }
 
 const char* ButtonRemapActivity::getHardwareName(const uint8_t buttonIndex) const {
   switch (buttonIndex) {
     case CrossPointSettings::FRONT_HW_BACK:
-      return "Back (1st button)";
+      return tr(STR_HW_BACK_LABEL);
     case CrossPointSettings::FRONT_HW_CONFIRM:
-      return "Confirm (2nd button)";
+      return tr(STR_HW_CONFIRM_LABEL);
     case CrossPointSettings::FRONT_HW_LEFT:
-      return "Left (3rd button)";
+      return tr(STR_HW_LEFT_LABEL);
     case CrossPointSettings::FRONT_HW_RIGHT:
-      return "Right (4th button)";
+      return tr(STR_HW_RIGHT_LABEL);
     default:
       return "Unknown";
   }
