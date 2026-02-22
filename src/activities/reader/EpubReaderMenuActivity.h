@@ -1,5 +1,6 @@
 #pragma once
 #include <Epub.h>
+#include <I18n.h>
 
 #include <functional>
 #include <string>
@@ -11,7 +12,7 @@
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  public:
   // Menu actions available from the reader menu.
-  enum class MenuAction { SELECT_CHAPTER, GO_TO_PERCENT, ROTATE_SCREEN, GO_HOME, SYNC, DELETE_CACHE };
+  enum class MenuAction { SELECT_CHAPTER, GO_TO_PERCENT, ROTATE_SCREEN, SCREENSHOT, GO_HOME, SYNC, DELETE_CACHE };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
@@ -34,21 +35,22 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  private:
   struct MenuItem {
     MenuAction action;
-    std::string label;
+    StrId labelId;
   };
 
   // Fixed menu layout (order matters for up/down navigation).
   const std::vector<MenuItem> menuItems = {
-      {MenuAction::SELECT_CHAPTER, "Go to Chapter"}, {MenuAction::ROTATE_SCREEN, "Reading Orientation"},
-      {MenuAction::GO_TO_PERCENT, "Go to %"},        {MenuAction::GO_HOME, "Go Home"},
-      {MenuAction::SYNC, "Sync Progress"},           {MenuAction::DELETE_CACHE, "Delete Book Cache"}};
-
+      {MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER}, {MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION},
+      {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},   {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
+      {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},        {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
+      {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}};
   int selectedIndex = 0;
 
   ButtonNavigator buttonNavigator;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
-  const std::vector<const char*> orientationLabels = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"};
+  const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
+                                                StrId::STR_LANDSCAPE_CCW};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

@@ -1,6 +1,7 @@
 #include "KOReaderAuthActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <WiFi.h>
 
 #include "KOReaderCredentialStore.h"
@@ -14,18 +15,20 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();
 
   if (!success) {
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    state = FAILED;
-    errorMessage = "WiFi connection failed";
-    xSemaphoreGive(renderingMutex);
+    {
+      RenderLock lock(*this);
+      state = FAILED;
+      errorMessage = tr(STR_WIFI_CONN_FAILED);
+    }
     requestUpdate();
     return;
   }
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  state = AUTHENTICATING;
-  statusMessage = "Authenticating...";
-  xSemaphoreGive(renderingMutex);
+  {
+    RenderLock lock(*this);
+    state = AUTHENTICATING;
+    statusMessage = tr(STR_AUTHENTICATING);
+  }
   requestUpdate();
 
   performAuthentication();
@@ -34,15 +37,16 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
 void KOReaderAuthActivity::performAuthentication() {
   const auto result = KOReaderSyncClient::authenticate();
 
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (result == KOReaderSyncClient::OK) {
-    state = SUCCESS;
-    statusMessage = "Successfully authenticated!";
-  } else {
-    state = FAILED;
-    errorMessage = KOReaderSyncClient::errorString(result);
+  {
+    RenderLock lock(*this);
+    if (result == KOReaderSyncClient::OK) {
+      state = SUCCESS;
+      statusMessage = tr(STR_AUTH_SUCCESS);
+    } else {
+      state = FAILED;
+      errorMessage = KOReaderSyncClient::errorString(result);
+    }
   }
-  xSemaphoreGive(renderingMutex);
   requestUpdate();
 }
 
@@ -55,7 +59,7 @@ void KOReaderAuthActivity::onEnter() {
   // Check if already connected
   if (WiFi.status() == WL_CONNECTED) {
     state = AUTHENTICATING;
-    statusMessage = "Authenticating...";
+    statusMessage = tr(STR_AUTHENTICATING);
     requestUpdate();
 
     // Perform authentication in a separate task
@@ -86,33 +90,28 @@ void KOReaderAuthActivity::onExit() {
 
 void KOReaderAuthActivity::render(Activity::RenderLock&&) {
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "KOReader Auth", true, EpdFontFamily::BOLD);
+
+  auto metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_AUTH));
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height) / 2;
 
   if (state == AUTHENTICATING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
+    renderer.drawCenteredText(UI_10_FONT_ID, top, statusMessage.c_str());
+  } else if (state == SUCCESS) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_SUCCESS), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, tr(STR_SYNC_READY));
+  } else if (state == FAILED) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
   }
 
-  if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Success!", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, "KOReader sync is ready to use");
-
-    const auto labels = mappedInput.mapLabels("Done", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, "Authentication Failed", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, errorMessage.c_str());
-
-    const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer();
 }
 
 void KOReaderAuthActivity::loop() {

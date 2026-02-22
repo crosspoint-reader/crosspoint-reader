@@ -5,26 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CrossPoint Reader - Settings</title>
   <style>
+    :root {
+      --font-color: #333;
+      --bg: #f5f5f5;
+      --title-color: #2c3e50;
+      --card-bg: #FFF;
+      --label-color: #7f8c8d;
+      --border-color: #eee;
+      --accent-color: rgb(110, 154, 130);
+      --accent-hover-color: #5a8c73;
+      --toggle-bg: #ccc;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --font-color: #f5f5f5;
+        --bg: #333;
+        --title-color: #ecf0f1;
+        --card-bg: #444;
+        --label-color: #bdc3c7;
+        --border-color: #555;
+        --toggle-bg: #666;
+        color-scheme: dark;
+      }
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         Oxygen, Ubuntu, sans-serif;
       max-width: 800px;
       margin: 0 auto;
       padding: 20px;
-      background-color: #f5f5f5;
-      color: #333;
+      background-color: var(--bg);
+      color: var(--font-color);
     }
     h1 {
-      color: #2c3e50;
-      border-bottom: 2px solid #3498db;
+      color: var(--title-color);
+      border-bottom: 2px solid var(--accent-color);
       padding-bottom: 10px;
     }
     h2 {
-      color: #34495e;
+      color: var(--title-color);
       margin-top: 0;
     }
     .card {
-      background: white;
+      background: var(--card-bg);
       border-radius: 8px;
       padding: 20px;
       margin: 15px 0;
@@ -32,32 +55,36 @@
     }
     .nav-links {
       margin: 20px 0;
+      display: flex;
+      gap: 10px;
     }
     .nav-links a {
-      display: inline-block;
       padding: 10px 20px;
-      background-color: #3498db;
-      color: white;
+      color: var(--font-color);
       text-decoration: none;
       border-radius: 4px;
-      margin-right: 10px;
     }
-    .nav-links a:hover {
-      background-color: #2980b9;
+    .nav-links a.active {
+      background-color: var(--accent-color);
+      color: white;
+    }
+    .nav-links a:not(.active):hover {
+      background-color: var(--accent-hover-color);
+      color: white;
     }
     .setting-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 10px 0;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid var(--border-color);
     }
     .setting-row:last-child {
       border-bottom: none;
     }
     .setting-name {
       font-weight: 500;
-      color: #2c3e50;
+      color: var(--label-color);
       flex: 1;
       min-width: 0;
       padding-right: 12px;
@@ -73,7 +100,7 @@
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 0.95em;
-      background: white;
+      background: var(--card-bg);
     }
     .setting-control select {
       min-width: 160px;
@@ -101,7 +128,7 @@
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
-      background-color: #ccc;
+      background-color: var(--toggle-bg);
       border-radius: 26px;
       transition: 0.3s;
     }
@@ -117,7 +144,7 @@
       transition: 0.3s;
     }
     .toggle-switch input:checked + .toggle-slider {
-      background-color: #27ae60;
+      background-color: var(--accent-color);
     }
     .toggle-switch input:checked + .toggle-slider:before {
       transform: translateX(22px);
@@ -194,7 +221,6 @@
       }
       .nav-links a {
         padding: 8px 12px;
-        margin-right: 6px;
         font-size: 0.9em;
       }
       .setting-row {
@@ -205,7 +231,7 @@
       .setting-control input[type="text"],
       .setting-control input[type="password"] {
         min-width: 0;
-        width: 100%;
+        width: unset;
       }
     }
   </style>
@@ -216,7 +242,7 @@
   <div class="nav-links">
     <a href="/">Home</a>
     <a href="/files">File Manager</a>
-    <a href="/settings">Settings</a>
+    <a href="/settings" class="active">Settings</a>
   </div>
 
   <div id="message" class="message"></div>

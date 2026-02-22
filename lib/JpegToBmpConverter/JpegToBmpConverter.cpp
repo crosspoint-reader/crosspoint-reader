@@ -236,8 +236,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   uint32_t scaleY_fp = 65536;
   bool needsScaling = false;
 
-  if (targetWidth > 0 && targetHeight > 0 && (imageInfo.m_width > targetWidth || imageInfo.m_height > targetHeight)) {
-    // Calculate scale to fit within target dimensions while maintaining aspect ratio
+  if (targetWidth > 0 && targetHeight > 0 && (imageInfo.m_width != targetWidth || imageInfo.m_height != targetHeight)) {
+    // Calculate scale to fit/fill target dimensions while maintaining aspect ratio
     const float scaleToFitWidth = static_cast<float>(targetWidth) / imageInfo.m_width;
     const float scaleToFitHeight = static_cast<float>(targetHeight) / imageInfo.m_height;
     // We scale to the smaller dimension, so we can potentially crop later.
@@ -261,8 +261,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     scaleY_fp = (static_cast<uint32_t>(imageInfo.m_height) << 16) / outHeight;
     needsScaling = true;
 
-    LOG_DBG("JPG", "Pre-scaling %dx%d -> %dx%d (fit to %dx%d)", imageInfo.m_width, imageInfo.m_height, outWidth,
-            outHeight, targetWidth, targetHeight);
+    LOG_DBG("JPG", "Scaling %dx%d -> %dx%d (target %dx%d)", imageInfo.m_width, imageInfo.m_height, outWidth, outHeight,
+            targetWidth, targetHeight);
   }
 
   // Write BMP header with output dimensions
@@ -466,12 +466,13 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           rowCount[outX] += count;
         }
 
-        // Check if we've crossed into the next output row
+        // Check if we've crossed into the next output row(s)
         // Current source Y in fixed point: y << 16
         const uint32_t srcY_fp = static_cast<uint32_t>(y + 1) << 16;
 
-        // Output row when source Y crosses the boundary
-        if (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
+        // Output all rows whose boundaries we've crossed (handles both up and downscaling)
+        // For upscaling, one source row may produce multiple output rows
+        while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
           memset(rowBuffer, 0, bytesPerRow);
 
           if (USE_8BIT_OUTPUT && !oneBit) {
@@ -516,12 +517,18 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           bmpOut.write(rowBuffer, bytesPerRow);
           currentOutY++;
 
-          // Reset accumulators for next output row
-          memset(rowAccum, 0, outWidth * sizeof(uint32_t));
-          memset(rowCount, 0, outWidth * sizeof(uint16_t));
-
           // Update boundary for next output row
           nextOutY_srcStart = static_cast<uint32_t>(currentOutY + 1) * scaleY_fp;
+
+          // For upscaling: don't reset accumulators if next output row uses same source data
+          // Only reset when we'll move to a new source row
+          if (srcY_fp >= nextOutY_srcStart) {
+            // More output rows to emit from same source - keep accumulator data
+            continue;
+          }
+          // Moving to next source row - reset accumulators
+          memset(rowAccum, 0, outWidth * sizeof(uint32_t));
+          memset(rowCount, 0, outWidth * sizeof(uint16_t));
         }
       }
     }

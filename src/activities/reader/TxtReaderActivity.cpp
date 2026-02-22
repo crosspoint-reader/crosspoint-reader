@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <I18n.h>
 #include <Serialization.h>
 #include <Utf8.h>
 
@@ -182,7 +183,7 @@ void TxtReaderActivity::buildPageIndex() {
 
   LOG_DBG("TRS", "Building page index for %zu bytes...", fileSize);
 
-  GUI.drawPopup(renderer, "Indexing...");
+  GUI.drawPopup(renderer, tr(STR_INDEXING));
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
@@ -350,7 +351,7 @@ void TxtReaderActivity::render(Activity::RenderLock&&) {
 
   if (pageOffsets.empty()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, "Empty file", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_FILE), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
@@ -367,6 +368,7 @@ void TxtReaderActivity::render(Activity::RenderLock&&) {
 
   renderer.clearScreen();
   renderPage();
+  renderer.clearFontCache();
 
   // Save progress
   saveProgress();
@@ -508,8 +510,8 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
   }
 
   if (showBattery) {
-    GUI.drawBattery(renderer, Rect{orientedMarginLeft, textY, metrics.batteryWidth, metrics.batteryHeight},
-                    showBatteryPercentage);
+    GUI.drawBatteryLeft(renderer, Rect{orientedMarginLeft, textY, metrics.batteryWidth, metrics.batteryHeight},
+                        showBatteryPercentage);
   }
 
   if (showTitle) {
