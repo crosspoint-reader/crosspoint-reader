@@ -89,7 +89,7 @@ void I18n::loadSettings() {
 const char* I18n::getCharacterSet(Language lang) {
   const auto langIndex = static_cast<size_t>(lang);
   if (langIndex >= static_cast<size_t>(Language::_COUNT)) {
-    lang = Language::ENGLISH;  // Fallback to first language
+    lang = Language::EN;  // Fallback to first language
   }
 
   return CHARACTER_SETS[static_cast<size_t>(lang)];
