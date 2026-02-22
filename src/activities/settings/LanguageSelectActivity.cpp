@@ -3,16 +3,20 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
 void LanguageSelectActivity::onEnter() {
   Activity::onEnter();
 
-  totalItems = getLanguageCount();
-
   // Set current selection based on current language
-  selectedIndex = static_cast<int>(I18N.getLanguage());
+  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
+  const auto* begin = std::begin(SORTED_LANGUAGE_INDICES);
+  const auto* end = std::end(SORTED_LANGUAGE_INDICES);
+  const auto* it = std::find(begin, end, currentLang);
+  selectedIndex = (it != end) ? std::distance(begin, it) : 0;
 
   requestUpdate();
 }
@@ -44,7 +48,7 @@ void LanguageSelectActivity::loop() {
 void LanguageSelectActivity::handleSelection() {
   {
     RenderLock lock(*this);
-    I18N.setLanguage(static_cast<Language>(selectedIndex));
+    I18N.setLanguage(static_cast<Language>(SORTED_LANGUAGE_INDICES[selectedIndex]));
   }
 
   // Return to previous page
@@ -61,13 +65,14 @@ void LanguageSelectActivity::render(Activity::RenderLock&&) {
   renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_LANGUAGE), true, EpdFontFamily::BOLD);
 
   // Current language marker
-  const int currentLang = static_cast<int>(I18N.getLanguage());
+  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
 
-  // Draw options
+  // Draw options (in sorted order)
   for (int i = 0; i < totalItems; i++) {
     const int itemY = 60 + i * rowHeight;
     const bool isSelected = (i == selectedIndex);
-    const bool isCurrent = (i == currentLang);
+    const uint8_t langIdx = SORTED_LANGUAGE_INDICES[i];
+    const bool isCurrent = (langIdx == currentLang);
 
     // Draw selection highlight
     if (isSelected) {
@@ -75,7 +80,7 @@ void LanguageSelectActivity::render(Activity::RenderLock&&) {
     }
 
     // Draw language name - get it from i18n system
-    const char* langName = I18N.getLanguageName(static_cast<Language>(i));
+    const char* langName = I18N.getLanguageName(static_cast<Language>(langIdx));
     renderer.drawText(UI_10_FONT_ID, 20, itemY, langName, !isSelected);
 
     // Draw current selection marker
