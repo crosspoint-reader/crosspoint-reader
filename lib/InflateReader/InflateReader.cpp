@@ -55,16 +55,21 @@ bool InflateReader::read(uint8_t* dest, size_t len) {
   decomp.dest = dest;
   decomp.dest_limit = dest + len;
 
-  int res = uzlib_uncompress(&decomp);
+  const int res = uzlib_uncompress(&decomp);
   if (res < 0) return false;
   return decomp.dest == decomp.dest_limit;
 }
 
 InflateStatus InflateReader::readAtMost(uint8_t* dest, size_t maxLen, size_t* produced) {
+  if (!ringBuffer) {
+    // One-shot mode: back-references use absolute offset from dest_start.
+    // Valid only when readAtMost() is called once with the full output buffer.
+    decomp.dest_start = dest;
+  }
   decomp.dest = dest;
   decomp.dest_limit = dest + maxLen;
 
-  int res = uzlib_uncompress(&decomp);
+  const int res = uzlib_uncompress(&decomp);
   *produced = static_cast<size_t>(decomp.dest - dest);
 
   if (res == TINF_DONE) return InflateStatus::Done;
