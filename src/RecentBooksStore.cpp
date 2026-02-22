@@ -85,7 +85,9 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
 
   LOG_DBG("RBS", "Loading recent book: %s", path.c_str());
 
-  // If epub, try to load the metadata for title/author and cover
+  // If epub, try to load the metadata for title/author and cover.
+  // Use buildIfMissing=false to avoid heavy epub loading on boot; getTitle()/getAuthor() may be
+  // blank until the book is opened, and entries with missing title are omitted from recent list.
   if (StringUtils::checkFileExtension(lastBookFileName, ".epub")) {
     Epub epub(path, "/.crosspoint");
     epub.load(false, true);
@@ -112,40 +114,35 @@ bool RecentBooksStore::loadFromFile() {
 
   uint8_t version;
   serialization::readPod(inputFile, version);
-  if (version != RECENT_BOOKS_FILE_VERSION) {
-    if (version == 1 || version == 2) {
-      // Old version, just read paths
-      uint8_t count;
-      serialization::readPod(inputFile, count);
-      recentBooks.clear();
-      recentBooks.reserve(count);
-      for (uint8_t i = 0; i < count; i++) {
-        std::string path;
-        serialization::readString(inputFile, path);
+  if (version == 1 || version == 2) {
+    // Old version, just read paths
+    uint8_t count;
+    serialization::readPod(inputFile, count);
+    recentBooks.clear();
+    recentBooks.reserve(count);
+    for (uint8_t i = 0; i < count; i++) {
+      std::string path;
+      serialization::readString(inputFile, path);
 
-        // load book to get missing data
-        RecentBook book = getDataFromBook(path);
-        if (book.title.empty() && book.author.empty() && version == 2) {
-          // Fall back to loading what we can from the store
-          std::string title, author;
-          serialization::readString(inputFile, title);
-          serialization::readString(inputFile, author);
-          recentBooks.push_back({path, title, author, ""});
-        } else {
-          recentBooks.push_back(book);
-        }
+      // load book to get missing data
+      RecentBook book = getDataFromBook(path);
+      if (book.title.empty() && book.author.empty() && version == 2) {
+        // Fall back to loading what we can from the store
+        std::string title, author;
+        serialization::readString(inputFile, title);
+        serialization::readString(inputFile, author);
+        recentBooks.push_back({path, title, author, ""});
+      } else {
+        recentBooks.push_back(book);
       }
-    } else {
-      LOG_ERR("RBS", "Deserialization failed: Unknown version %u", version);
-      inputFile.close();
-      return false;
     }
-  } else {
+  } else if (version == 3) {
     uint8_t count;
     serialization::readPod(inputFile, count);
 
     recentBooks.clear();
     recentBooks.reserve(count);
+    uint8_t omitted = 0;
 
     for (uint8_t i = 0; i < count; i++) {
       std::string path, title, author, coverBmpPath;
@@ -153,8 +150,26 @@ bool RecentBooksStore::loadFromFile() {
       serialization::readString(inputFile, title);
       serialization::readString(inputFile, author);
       serialization::readString(inputFile, coverBmpPath);
+
+      // Omit books with missing title (e.g. saved before metadata was available)
+      if (title.empty()) {
+        omitted++;
+        continue;
+      }
+
       recentBooks.push_back({path, title, author, coverBmpPath});
     }
+
+    if (omitted > 0) {
+      inputFile.close();
+      saveToFile();
+      LOG_DBG("RBS", "Omitted %u recent book(s) with missing title", omitted);
+      return true;
+    }
+  } else {
+    LOG_ERR("RBS", "Deserialization failed: Unknown version %u", version);
+    inputFile.close();
+    return false;
   }
 
   inputFile.close();
