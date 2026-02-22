@@ -52,7 +52,7 @@ Alternatively, while reading a book, press the **Confirm** button to open the re
 To turn the device on or off, **press and hold the Power button for approximately half a second**.
 In **[Settings](#35-settings)** you can configure the power button to turn the device off with a short press instead of a long one.
 
-To reboot the device (for example if it's frozen, or after a firmware update), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
+To reboot the device (for example after a firmware update or if it's frozen), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
 
 ### First Launch
 
@@ -67,11 +67,11 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home Screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Book Selection](#32-book-selection)**, **[Settings](#35-settings)**, or the **[File Upload](#34-file-upload-screen)** screen.
+The Home Screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, the **[Browse Files](#32-browse-files)** screen, the **[File Transfer](#34-file-upload-screen)** screen, or the **[Settings](#35-settings)** screen.
 
-### 3.2 Book Selection
+### 3.2 Browse Files
 
-The Book Selection acts as a folder and file browser.
+The Browse Files screen acts as a folder and file browser.
 
 * **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
 * **Open Selection:** Press **Confirm** to open a folder or read a selected book.
@@ -80,9 +80,9 @@ The Book Selection acts as a folder and file browser.
 
 See [Reading Mode](#4-reading-mode) below for more information.
 
-### 3.4 File Upload Screen
+### 3.4 File Transfer Screen
 
-The File Upload screen allows you to upload new e-books to the device. When you enter the screen, you'll be prompted with a WiFi selection dialog and then your X4 will start hosting a web server.
+The File Transfer screen allows you to upload new e-books to the device. When you enter the screen, you'll be prompted with a WiFi selection dialog and then your X4 will start hosting a web server.
 
 See the [webserver docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
 
@@ -129,6 +129,15 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Never" - Always show battery percentage (default)
   - "In Reader" - Show battery percentage everywhere except in reading mode
   - "Always" - Always hide battery percentage
+- **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting.
+- **UI Theme**:
+  - "Lyra" - 
+  - "Lyra Extended" - 
+  - "Classic" - 
+
+- **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight
+  - "OFF" (default) - Disable the fix
+  - "ON" - Enable the fix
 - **Extra Paragraph Spacing**: If enabled, vertical space will be added between paragraphs in the book. If disabled, paragraphs will not have vertical space between them, but will have first-line indentation.
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
@@ -159,10 +168,6 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Reader Screen Margin**: Controls the screen margins in reader mode between 5 and 40 pixels in 5 pixel increments.
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep.
-- **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting.
-- **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight
-  - "OFF" (default) - Disable the fix
-  - "ON" - Enable the fix
 - **OPDS Browser**: Configure OPDS server settings for browsing and downloading books. Set the server URL (for Calibre Content Server, add `/opds` to the end), and optionally configure username and password for servers requiring authentication. Note: Only HTTP Basic authentication is supported. If using Calibre Content Server with authentication enabled, you must set it to use Basic authentication instead of the default Digest authentication.
 - **Check for updates**: Check for firmware updates over WiFi.
 
