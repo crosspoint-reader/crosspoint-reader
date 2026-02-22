@@ -456,6 +456,13 @@ def generate_keys_header(
         f"{', '.join(str(i) for i in sorted_indices)}"
         "};"
     )
+    lines.append("")
+    lines.append(
+        "static_assert(sizeof(SORTED_LANGUAGE_INDICES) / sizeof(SORTED_LANGUAGE_INDICES[0]) =="
+    )
+    lines.append(
+        '              getLanguageCount(), "SORTED_LANGUAGE_INDICES size mismatch");'
+    )
 
     _write_file(output_path, lines)
 
