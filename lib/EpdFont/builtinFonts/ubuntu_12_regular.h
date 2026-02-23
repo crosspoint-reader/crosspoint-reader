@@ -1724,4 +1724,6 @@ static const EpdFontData ubuntu_12_regular = {
     24,
     -5,
     false,
+    nullptr,
+    0,
 };

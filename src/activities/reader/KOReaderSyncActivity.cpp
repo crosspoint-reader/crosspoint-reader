@@ -123,7 +123,7 @@ void KOReaderSyncActivity::performSync() {
   // Convert remote progress to CrossPoint position
   hasRemoteProgress = true;
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
-  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, totalPagesInSpine);
+  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
 
   // Calculate local progress in KOReader format (for display)
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
@@ -132,7 +132,13 @@ void KOReaderSyncActivity::performSync() {
   {
     RenderLock lock(*this);
     state = SHOWING_RESULT;
-    selectedOption = 0;  // Default to "Apply"
+
+    // Default to the option that corresponds to the furthest progress
+    if (localProgress.percentage > remoteProgress.percentage) {
+      selectedOption = 1;  // Upload local progress
+    } else {
+      selectedOption = 0;  // Apply remote progress
+    }
   }
   requestUpdate();
 }
@@ -310,8 +316,8 @@ void KOReaderSyncActivity::render(Activity::RenderLock&&) {
     }
     renderer.drawText(UI_10_FONT_ID, 20, optionY + optionHeight, tr(STR_UPLOAD_LOCAL), selectedOption != 1);
 
-    // Bottom button hints: show Back and Select
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
+    // Bottom button hints
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;

@@ -45,7 +45,7 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   ButtonNavigator buttonNavigator;
 
   WifiSelectionState state = WifiSelectionState::SCANNING;
-  int selectedNetworkIndex = 0;
+  size_t selectedNetworkIndex = 0;
   std::vector<WifiNetworkInfo> networks;
   const std::function<void(bool connected)> onComplete;
 

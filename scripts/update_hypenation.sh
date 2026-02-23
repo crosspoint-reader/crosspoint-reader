@@ -22,3 +22,4 @@ process de
 process es
 process ru
 process it
+process uk

@@ -90,6 +90,32 @@ int32_t pngSeekWithHandle(PNGFILE* pFile, int32_t pos) {
 constexpr size_t PNG_DECODER_APPROX_SIZE = 44 * 1024;                          // ~42 KB + overhead
 constexpr size_t MIN_FREE_HEAP_FOR_PNG = PNG_DECODER_APPROX_SIZE + 16 * 1024;  // decoder + 16 KB headroom
 
+// PNGdec keeps TWO scanlines in its internal ucPixels buffer (current + previous)
+// and each scanline includes a leading filter byte.
+// Required storage is therefore approximately: 2 * (pitch + 1) + alignment slack.
+// If PNG_MAX_BUFFERED_PIXELS is smaller than this requirement for a given image,
+// PNGdec can overrun its internal buffer before our draw callback executes.
+int bytesPerPixelFromType(int pixelType) {
+  switch (pixelType) {
+    case PNG_PIXEL_TRUECOLOR:
+      return 3;
+    case PNG_PIXEL_GRAY_ALPHA:
+      return 2;
+    case PNG_PIXEL_TRUECOLOR_ALPHA:
+      return 4;
+    case PNG_PIXEL_GRAYSCALE:
+    case PNG_PIXEL_INDEXED:
+    default:
+      return 1;
+  }
+}
+
+int requiredPngInternalBufferBytes(int srcWidth, int pixelType) {
+  // +1 filter byte per scanline, *2 for current+previous lines, +32 for alignment margin.
+  int pitch = srcWidth * bytesPerPixelFromType(pixelType);
+  return ((pitch + 1) * 2) + 32;
+}
+
 // Convert entire source line to grayscale with alpha blending to white background.
 // For indexed PNGs with tRNS chunk, alpha values are stored at palette[768] onwards.
 // Processing the whole line at once improves cache locality and reduces per-pixel overhead.
@@ -303,6 +329,18 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   LOG_DBG("PNG", "PNG %dx%d -> %dx%d (scale %.2f), bpp: %d", ctx.srcWidth, ctx.srcHeight, ctx.dstWidth, ctx.dstHeight,
           ctx.scale, png->getBpp());
+
+  const int pixelType = png->getPixelType();
+  const int requiredInternal = requiredPngInternalBufferBytes(ctx.srcWidth, pixelType);
+  if (requiredInternal > PNG_MAX_BUFFERED_PIXELS) {
+    LOG_ERR("PNG",
+            "PNG row buffer too small: need %d bytes for width=%d type=%d, configured PNG_MAX_BUFFERED_PIXELS=%d",
+            requiredInternal, ctx.srcWidth, pixelType, PNG_MAX_BUFFERED_PIXELS);
+    LOG_ERR("PNG", "Aborting decode to avoid PNGdec internal buffer overflow");
+    png->close();
+    delete png;
+    return false;
+  }
 
   if (png->getBpp() != 8) {
     warnUnsupportedFeature("bit depth (" + std::to_string(png->getBpp()) + "bpp)", imagePath);
