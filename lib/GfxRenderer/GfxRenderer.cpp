@@ -880,9 +880,13 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
     } else {
       if (!currentLine.empty()) {
         lines.push_back(currentLine);
-        // If the carried-over word itself exceeds maxWidth, truncate it now.
+        // If the carried-over word itself exceeds maxWidth, truncate it and
+        // push it as a complete line immediately — storing it in currentLine
+        // would allow a subsequent short word to be appended after the ellipsis.
         if (getTextWidth(fontId, word.c_str(), style) > maxWidth) {
-          currentLine = truncatedText(fontId, word.c_str(), maxWidth, style);
+          lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
+          currentLine.clear();
+          if (static_cast<int>(lines.size()) >= maxLines) return lines;
         } else {
           currentLine = word;
         }
