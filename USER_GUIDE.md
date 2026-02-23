@@ -181,7 +181,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 #### 3.5.4 System
 
-- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep ("1 min", "5 min", "10 min, "15 min", and "30 min").
+- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep ("1 min", "5 min", "10 min", "15 min", and "30 min").
 
 - **WiFi Networks**: Connect to WiFi networks for file transfers and firmware updates.
 - **KOReader Sync**: Options for setting up KOReader for syncing book progress.
