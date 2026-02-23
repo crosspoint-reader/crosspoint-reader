@@ -31,8 +31,6 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     }
 
     const EpdGlyph* glyph = getGlyph(cp);
-    if (!glyph) glyph = getGlyph(REPLACEMENT_GLYPH);
-
     if (!glyph) {
       // TODO: Better handle this?
       prevCp = 0;
@@ -179,6 +177,8 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
       return &data->glyph[interval->offset + (cp - interval->first)];
     }
   }
-
+  if (cp != REPLACEMENT_GLYPH) {
+    return getGlyph(REPLACEMENT_GLYPH);
+  }
   return nullptr;
 }
