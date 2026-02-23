@@ -115,10 +115,77 @@ Also includes:
   Punctuation adjacency (T., V., W., Y.)
 """
 
+import io
 import os
 import zipfile
 import uuid
 from datetime import datetime
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    print("Please install Pillow: pip install Pillow")
+    exit(1)
+
+
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BOOKERLY_FONT = os.path.join(
+    _PROJECT_ROOT, "lib", "EpdFont", "builtinFonts", "source",
+    "Bookerly", "Bookerly-Regular.ttf",
+)
+
+
+def _get_font(size=20):
+    """Get the Bookerly font at the requested size, with system fallbacks."""
+    paths = [_BOOKERLY_FONT]
+    for path in paths:
+        try:
+            return ImageFont.truetype(path, size)
+        except (OSError, IOError):
+            continue
+    return ImageFont.load_default(size)
+
+
+def _draw_text_centered(draw, y, text, font, fill, width):
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    x = (width - text_width) // 2
+    draw.text((x, y), text, font=font, fill=fill)
+
+
+def create_cover_image():
+    """Generate a cover image matching the original layout and return JPEG bytes."""
+    width, height = 536, 800
+    bg_color = (30, 42, 58)
+    text_color = (225, 220, 205)
+
+    img = Image.new("RGB", (width, height), bg_color)
+    draw = ImageDraw.Draw(img)
+
+    font_title = _get_font(72)
+    font_subtitle = _get_font(26)
+    font_author = _get_font(14)
+    font_ornament = _get_font(64)
+
+    title_lines = ["Kerning", "& Ligature", "Edge Cases"]
+    title_y = 92
+    for line in title_lines:
+        _draw_text_centered(draw, title_y, line, font_title, text_color, width)
+        title_y += 90
+
+    ornament_y = title_y + 10
+    _draw_text_centered(draw, ornament_y, "*", font_ornament, text_color, width)
+
+    subtitle_y = ornament_y + 72
+    _draw_text_centered(draw, subtitle_y, "A Typographer\u2019s Compendium",
+                        font_subtitle, text_color, width)
+
+    _draw_text_centered(draw, height - 70, "CROSSPOINT TEST FIXTURES",
+                        font_author, text_color, width)
+
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=90)
+    return buf.getvalue()
 
 BOOK_UUID = str(uuid.uuid4())
 TITLE = "Kerning &amp; Ligature Edge Cases"
@@ -1352,17 +1419,15 @@ TOC_XHTML = """\
 
 
 def build_epub(output_path: str):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    cover_path = os.path.join(script_dir, "kerning_ligature_test.jpg")
+    cover_data = create_cover_image()
 
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        # mimetype must be first, stored (not deflated), no extra field
         zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
         zf.writestr("META-INF/container.xml", CONTAINER_XML)
         zf.writestr("OEBPS/content.opf", CONTENT_OPF)
         zf.writestr("OEBPS/toc.xhtml", TOC_XHTML)
         zf.writestr("OEBPS/style.css", STYLESHEET)
-        zf.write(cover_path, "OEBPS/cover.jpg")
+        zf.writestr("OEBPS/cover.jpg", cover_data)
         zf.writestr("OEBPS/cover.xhtml", COVER_XHTML)
         zf.writestr("OEBPS/chapter1.xhtml", CHAPTER_1)
         zf.writestr("OEBPS/chapter2.xhtml", CHAPTER_2)
@@ -1378,6 +1443,7 @@ def build_epub(output_path: str):
 
 
 if __name__ == "__main__":
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    out = os.path.join(script_dir, "kerning_ligature_test.epub")
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out = os.path.join(project_root, "test", "epubs", "test_kerning_ligature.epub")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     build_epub(out)
