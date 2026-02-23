@@ -16,6 +16,7 @@ parser.add_argument("fontstack", action="store", nargs='+', help="list of font f
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
+parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 args = parser.parse_args()
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
@@ -24,6 +25,9 @@ font_stack = [freetype.Face(f) for f in args.fontstack]
 is2Bit = args.is2Bit
 size = args.size
 font_name = args.name
+load_flags = freetype.FT_LOAD_RENDER
+if args.force_autohint:
+    load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
 
 # inclusive unicode code point intervals
 # must not overlap and be in ascending order
@@ -127,7 +131,7 @@ def load_glyph(code_point):
         face = font_stack[face_index]
         glyph_index = face.get_char_index(code_point)
         if glyph_index > 0:
-            face.load_glyph(glyph_index, freetype.FT_LOAD_RENDER)
+            face.load_glyph(glyph_index, load_flags)
             return face
         face_index += 1
     print(f"code point {code_point} ({hex(code_point)}) not found in font stack!", file=sys.stderr)
