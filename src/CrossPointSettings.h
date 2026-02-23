@@ -68,9 +68,9 @@ class CrossPointSettings {
 
   enum AUTO_BUTTON_ORIENTATION {
     NO_BUTTONS = 0,
-    SIDE_BUTTONS_ONLY = 1,  // Rotate the side buttons when screen is rotated 90-180°
-    SIDE_AND_FRONT_NAV = 2, // also rotate the front nav buttons when screen is rotated 180-270°
-    SIDE_AND_FRONT_ALL = 3, // also rotate front button cluster when screen is rotated 180-270°
+    SIDE_BUTTONS_ONLY = 1,   // Rotate the side buttons when screen is rotated 90-180°
+    SIDE_AND_FRONT_NAV = 2,  // also rotate the front nav buttons when screen is rotated 180-270°
+    SIDE_AND_FRONT_ALL = 3,  // also rotate front button cluster when screen is rotated 180-270°
     AUTO_BUTTON_ORIENTATION_COUNT
   };
 

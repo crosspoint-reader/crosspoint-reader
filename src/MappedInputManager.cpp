@@ -22,8 +22,8 @@ constexpr SideLayoutMap kSideLayouts[] = {
 // Given a raw button index, find the corresponding "rotated" index,
 // considering display orientation and orientation support
 static uint8_t mapOrientation(uint8_t halButtonIndex) {
-  if (SETTINGS.autoBtnOrientation == CrossPointSettings::AUTO_BUTTON_ORIENTATION::NO_BUTTONS ||
-      !currentActivity || !currentActivity->supportsOrientation()) {
+  if (SETTINGS.autoBtnOrientation == CrossPointSettings::AUTO_BUTTON_ORIENTATION::NO_BUTTONS || !currentActivity ||
+      !currentActivity->supportsOrientation()) {
     return halButtonIndex;
   }
 
@@ -45,10 +45,14 @@ static uint8_t mapOrientation(uint8_t halButtonIndex) {
   // Flip the entire front cluster
   if (SETTINGS.autoBtnOrientation == CrossPointSettings::AUTO_BUTTON_ORIENTATION::SIDE_AND_FRONT_ALL) {
     switch (halButtonIndex) {
-      case HalGPIO::BTN_BACK: return HalGPIO::BTN_RIGHT;
-      case HalGPIO::BTN_CONFIRM: return HalGPIO::BTN_LEFT;
-      case HalGPIO::BTN_LEFT: return HalGPIO::BTN_CONFIRM;
-      case HalGPIO::BTN_RIGHT: return HalGPIO::BTN_BACK;
+      case HalGPIO::BTN_BACK:
+        return HalGPIO::BTN_RIGHT;
+      case HalGPIO::BTN_CONFIRM:
+        return HalGPIO::BTN_LEFT;
+      case HalGPIO::BTN_LEFT:
+        return HalGPIO::BTN_CONFIRM;
+      case HalGPIO::BTN_RIGHT:
+        return HalGPIO::BTN_BACK;
     }
   }
 
