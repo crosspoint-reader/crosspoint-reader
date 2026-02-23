@@ -310,7 +310,7 @@ void EpubReaderActivity::loop() {
       lastPageTurnTime = millis();
       updateLastPageTurnTime = true;  // Fallback to update lastPageTurnTime if indexing or rendering takes too long
     }
-    
+
     if (section->currentPage < section->pageCount - 1) {
       section->currentPage++;
     } else {
