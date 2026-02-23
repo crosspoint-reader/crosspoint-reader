@@ -853,7 +853,7 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
   std::string currentLine;
 
   while (!remaining.empty()) {
-    if ((int)lines.size() == maxLines - 1) {
+    if (static_cast<int>(lines.size()) == maxLines - 1) {
       // Last available line: combine any word already started on this line with
       // the rest of the text, then let truncatedText fit it with an ellipsis.
       std::string lastContent = currentLine.empty() ? remaining : currentLine + " " + remaining;
@@ -880,7 +880,12 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
     } else {
       if (!currentLine.empty()) {
         lines.push_back(currentLine);
-        currentLine = word;
+        // If the carried-over word itself exceeds maxWidth, truncate it now.
+        if (getTextWidth(fontId, word.c_str(), style) > maxWidth) {
+          currentLine = truncatedText(fontId, word.c_str(), maxWidth, style);
+        } else {
+          currentLine = word;
+        }
       } else {
         // Single word wider than maxWidth: truncate and stop to avoid complicated
         // splitting rules (different between languages). Results in an aesthetically
@@ -891,7 +896,7 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
     }
   }
 
-  if (!currentLine.empty() && (int)lines.size() < maxLines) {
+  if (!currentLine.empty() && static_cast<int>(lines.size()) < maxLines) {
     lines.push_back(currentLine);
   }
 

@@ -23,7 +23,6 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                                            bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
   const int tileWidth = (rect.width - 2 * Lyra3CoversMetrics::values.contentSidePadding) / 3;
   const int tileHeight = rect.height;
-  const int bookTitleHeight = tileHeight - Lyra3CoversMetrics::values.homeCoverHeight - hPaddingInSelection;
   const int tileY = rect.y;
   const bool hasContinueReading = !recentBooks.empty();
 
