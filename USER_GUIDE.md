@@ -156,10 +156,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Bookerly" (default) - Amazon's reading font
   - "Noto Sans" - Google's sans-serif font
   - "Open Dyslexic" - Font designed for readers with dyslexia
-- **UI Font Size**: Adjust the text size for reading; options are "Small", "Medium", "Large", or "X Large".
+- **UI Font Size**: Adjust the text size for reading; options are "Small", "Medium" (default), "Large", or "X Large".
 
 - **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal" (default), or "Wide".
-- **Reader Screen Margin**: Controls the screen margins in reader mode between 5 and 40 pixels in 5-pixel increments.
+- **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 - **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
 - **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
@@ -170,7 +170,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Landscape CCW" - Landscape, rotated counter-clockwise
 - **Extra Paragraph Spacing**: Set how to handle paragraph breaks:
   - "ON" - Vertical space will be added between paragraphs in Reading Mode
-  - "OFF" - Paragraphs will not have vertical space, but will have first-line indentation
+  - "OFF" - Paragraphs will not have vertical space added, but will have first-line indentation
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
 
 #### 3.6.3 Controls
