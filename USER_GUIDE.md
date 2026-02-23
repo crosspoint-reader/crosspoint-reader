@@ -113,14 +113,14 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Custom" - Custom images from the SD card; see [Sleep Screen](#36-sleep-screen) below for more information
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
-  - "Cover + Custom" - The book cover image, fallbacks to "Custom" behavior
+  - "Cover + Custom" - The book cover image, falls back to "Custom" behavior
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
-  - "Crop" - Scale the image down and crop as necessary to try to to fill the screen (Note: this is experimental and may not work as expected)
+  - "Crop" - Scale the image down and crop as necessary to try to fill the screen (Note: this is experimental and may not work as expected)
 - **Sleep Screen Cover Filter**: What filter will be applied to the book cover when "Cover" sleep screen is selected 
   - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
   - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
-  - "Inverted" - The image will be inverted as in white&black and will be displayed without grayscale conversion
+  - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
 - **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
@@ -128,7 +128,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Full w/ Book Bar" - Show status bar with book progress (as bar)
   - "Book Bar Only" - Show book progress (as bar)
   - "Full w/ Chapter Bar" - Show status bar with chapter progress (as bar)
-- **Hide Battery %**: Configure where to suppress the battery pecentage display in the status bar; the battery icon will still be shown:
+- **Hide Battery %**: Configure where to suppress the battery percentage display in the status bar; the battery icon will still be shown:
   - "Never" - Always show battery percentage (default)
   - "In Reader" - Show battery percentage everywhere except in reading mode
   - "Always" - Always hide battery percentage
@@ -176,7 +176,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Page Scroll" - Long-pressing scrolls a page up/down
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
   - "Ignore" - Require a long press to turn off the device
-  - "Sleep" - A short press powers the device off
+  - "Sleep" - A short press puts the device into sleep mode
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
 
 #### 3.5.4 System
