@@ -38,7 +38,7 @@ std::string sanitizeArticleTitle(const std::string& title, size_t maxLen = 60) {
     while (cut > 0 && (static_cast<unsigned char>(result[cut]) & 0xC0) == 0x80) {
       --cut;
     }
-    result = result.substr(0, cut);
+    result.resize(cut);
   }
   return result;
 }
@@ -52,12 +52,7 @@ std::string articleFilename(int id, const std::string& title) {
 bool articleExists(int id) {
   const std::string prefix = "[w-id_" + std::to_string(id) + "]";
   std::vector<String> files = Storage.listFiles("/Articles/", 500);
-  for (const auto& f : files) {
-    if (f.startsWith(prefix.c_str())) {
-      return true;
-    }
-  }
-  return false;
+  return std::any_of(files.begin(), files.end(), [&prefix](const String& f) { return f.startsWith(prefix.c_str()); });
 }
 
 // Returns filenames (just the filename, not full path) of existing wallabag articles
@@ -238,10 +233,10 @@ void WallabagActivity::render(Activity::RenderLock&&) {
   }
 
   if (state == State::DONE) {
-    char msg[64];
     if (downloadedCount == 0) {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_WALLABAG_NO_ARTICLES));
     } else {
+      char msg[64];
       snprintf(msg, sizeof(msg), tr(STR_WALLABAG_ARTICLES_DOWNLOADED), downloadedCount);
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, msg);
     }
@@ -342,11 +337,8 @@ void WallabagActivity::runSync() {
 
   // Step 3: Find articles not yet downloaded
   std::vector<WallabagArticle> toDownload;
-  for (const auto& article : articles) {
-    if (!articleExists(article.id)) {
-      toDownload.push_back(article);
-    }
-  }
+  std::copy_if(articles.begin(), articles.end(), std::back_inserter(toDownload),
+               [](const WallabagArticle& a) { return !articleExists(a.id); });
 
   // Step 4: Enforce article limit - delete oldest articles to make room
   enforceArticleLimit(limit > 0 ? limit : 0, static_cast<int>(toDownload.size()));
