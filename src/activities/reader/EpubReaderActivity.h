@@ -25,6 +25,7 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  bool updateLastPageTurnTime = false;  // State to determine if lastPageTurnTime should be updated
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 

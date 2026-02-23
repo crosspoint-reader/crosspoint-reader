@@ -180,8 +180,15 @@ void EpubReaderActivity::loop() {
     }
 
     const unsigned long currentTime = millis();
-    if ((currentTime - lastPageTurnTime) >= pageTurnDuration) {
+
+    // Updates lastPageTurnTime while waiting for render/indexing
+    if (updateLastPageTurnTime) {
       lastPageTurnTime = currentTime;
+      return;
+    }
+
+    if ((currentTime - lastPageTurnTime) >= pageTurnDuration) {
+      updateLastPageTurnTime = true;
       if (section->currentPage < section->pageCount - 1) {
         section->currentPage++;
       } else {
@@ -264,6 +271,7 @@ void EpubReaderActivity::loop() {
       // if chapter was skipped manually, reset time elapsed
       if (automaticPageTurnActive) {
         lastPageTurnTime = millis();
+        updateLastPageTurnTime = true;  // Fallback to update lastPageTurnTime if indexing or rendering takes too long
       }
       section.reset();
     }
@@ -281,7 +289,9 @@ void EpubReaderActivity::loop() {
     // if page was turned manually, reset time elapsed
     if (automaticPageTurnActive) {
       lastPageTurnTime = millis();
+      updateLastPageTurnTime = true;  // Fallback to update lastPageTurnTime if indexing or rendering takes too long
     }
+
     if (section->currentPage > 0) {
       section->currentPage--;
     } else if (currentSpineIndex > 0) {
@@ -298,7 +308,9 @@ void EpubReaderActivity::loop() {
     // if page was turned manually, reset time elapsed
     if (automaticPageTurnActive) {
       lastPageTurnTime = millis();
+      updateLastPageTurnTime = true;  // Fallback to update lastPageTurnTime if indexing or rendering takes too long
     }
+    
     if (section->currentPage < section->pageCount - 1) {
       section->currentPage++;
     } else {
@@ -542,7 +554,10 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
-  if (selectedPageTurnOption == 0) {
+  // Resets updateLastPageTurnTime state
+  updateLastPageTurnTime = false;
+
+  if (selectedPageTurnOption == 0 || selectedPageTurnOption < 0 || selectedPageTurnOption >= PAGE_TURN_LABELS.size()) {
     automaticPageTurnActive = false;
   } else {
     lastPageTurnTime = millis();
@@ -554,6 +569,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
   // resets cached section so that space is reserved for auto page turn indicator when progress bar is None
   if (SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NONE) {
     // Preserve current reading position so we can restore after reflow.
+    RenderLock lock(*this);
     if (section) {
       cachedSpineIndex = currentSpineIndex;
       cachedChapterTotalPageCount = section->pageCount;
@@ -705,6 +721,9 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
     pendingScreenshot = false;
     ScreenshotUtil::takeScreenshot(renderer);
   }
+
+  // Stops updating lastPageTurnTime when render is completed
+  updateLastPageTurnTime = false;
 }
 
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
