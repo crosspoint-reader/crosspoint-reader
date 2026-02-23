@@ -509,10 +509,12 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
           maxTextWidth = lineWidth;
         }
       }
-      const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, lastBookAuthor.c_str());
-      if (authorWidth > maxTextWidth) {
-        maxTextWidth = renderer.getTextWidth(
-            UI_10_FONT_ID, renderer.truncatedText(UI_10_FONT_ID, lastBookAuthor.c_str(), maxLineWidth).c_str());
+      if (!lastBookAuthor.empty()) {
+        const auto truncatedAuthor = renderer.truncatedText(UI_10_FONT_ID, lastBookAuthor.c_str(), bookWidth - 40);
+        const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedAuthor.c_str());
+        if (authorWidth > maxTextWidth) {
+          maxTextWidth = authorWidth;
+        }
       }
 
       const int boxWidth = maxTextWidth + boxPadding * 2;
