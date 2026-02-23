@@ -10,6 +10,37 @@
 #include "WallabagCredentialStore.h"
 
 namespace {
+// Stream wrapper that yields to the WiFi/LwIP FreeRTOS task between reads.
+// On the single-core ESP32-C3, Stream::timedRead() is a tight busy-wait that
+// starves the WiFi task from processing incoming TCP segments and decrypting
+// TLS records, causing ArduinoJson to see a dry stream and return IncompleteInput.
+// Calling delay(1) here yields via vTaskDelay, letting the WiFi task run.
+class BlockingWiFiStream : public Stream {
+ public:
+  explicit BlockingWiFiStream(WiFiClient& client, unsigned long timeoutMs = 15000)
+      : _client(client), _timeoutMs(timeoutMs) {}
+
+  int read() override {
+    const unsigned long start = millis();
+    while (millis() - start < _timeoutMs) {
+      int c = _client.read();
+      if (c >= 0) return c;
+      if (!_client.connected()) return -1;  // Connection closed, no more data
+      delay(1);                              // Yield to WiFi/LwIP FreeRTOS task
+    }
+    return -1;  // Timeout
+  }
+
+  int available() override { return _client.available(); }
+  size_t write(uint8_t) override { return 0; }
+  int peek() override { return _client.peek(); }
+  void flush() override {}
+
+ private:
+  WiFiClient& _client;
+  unsigned long _timeoutMs;
+};
+
 bool isHttpsUrl(const std::string& url) { return url.rfind("https://", 0) == 0; }
 
 // Normalize URL: add https:// if no protocol specified
@@ -124,10 +155,11 @@ WallabagClient::Error WallabagClient::fetchArticles(std::vector<WallabagArticle>
 
     JsonDocument doc;
     // Parse directly from the HTTP stream — no intermediate String buffer.
-    WiFiClient* stream = http.getStreamPtr();
+    WiFiClient* rawStream = http.getStreamPtr();
     DeserializationError err = DeserializationError::Ok;
-    if (stream) {
-      err = deserializeJson(doc, *stream, DeserializationOption::Filter(filter));
+    if (rawStream) {
+      BlockingWiFiStream stream(*rawStream);
+      err = deserializeJson(doc, stream, DeserializationOption::Filter(filter));
     } else {
       err = DeserializationError::EmptyInput;
     }
