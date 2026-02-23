@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
-#include "Utf8.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
@@ -89,62 +88,9 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
       int tileX = Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
 
-      // Wrap title to up to 3 lines (word-wrap by advance width)
-      const std::string& lastBookTitle = recentBooks[i].title;
-      std::vector<std::string> words;
-      words.reserve(8);
-      std::string::size_type wordStart = 0;
-      std::string::size_type wordEnd = 0;
-      // find_first_not_of skips leading/interstitial spaces
-      while ((wordStart = lastBookTitle.find_first_not_of(' ', wordEnd)) != std::string::npos) {
-        wordEnd = lastBookTitle.find(' ', wordStart);
-        if (wordEnd == std::string::npos) wordEnd = lastBookTitle.size();
-        words.emplace_back(lastBookTitle.substr(wordStart, wordEnd - wordStart));
-      }
-
       const int maxLineWidth = tileWidth - 2 * hPaddingInSelection;
-      const int spaceWidth = renderer.getSpaceWidth(SMALL_FONT_ID, EpdFontFamily::REGULAR);
-      std::vector<std::string> titleLines;
-      std::string currentLine;
 
-      for (auto& w : words) {
-        if (titleLines.size() >= 3) {
-          if (titleLines.back().size() < 3 || titleLines.back().compare(titleLines.back().size() - 3, 3, "...") != 0) {
-            titleLines.back().append("...");
-          }
-          while (!titleLines.back().empty() && titleLines.back().size() > 3 &&
-                 renderer.getTextWidth(SMALL_FONT_ID, titleLines.back().c_str(), EpdFontFamily::REGULAR) >
-                     maxLineWidth) {
-            titleLines.back().resize(titleLines.back().size() - 3);
-            utf8RemoveLastChar(titleLines.back());
-            titleLines.back().append("...");
-          }
-          break;
-        }
-        int wordW = renderer.getTextWidth(SMALL_FONT_ID, w.c_str(), EpdFontFamily::REGULAR);
-        while (wordW > maxLineWidth && !w.empty()) {
-          utf8RemoveLastChar(w);
-          std::string withE = w + "...";
-          wordW = renderer.getTextWidth(SMALL_FONT_ID, withE.c_str(), EpdFontFamily::REGULAR);
-          if (wordW <= maxLineWidth) {
-            w = withE;
-            break;
-          }
-        }
-        if (w.empty()) continue;  // Skip words that couldn't fit even truncated
-        int newW = renderer.getTextAdvanceX(SMALL_FONT_ID, currentLine.c_str(), EpdFontFamily::REGULAR);
-        if (newW > 0) newW += spaceWidth;
-        newW += renderer.getTextAdvanceX(SMALL_FONT_ID, w.c_str(), EpdFontFamily::REGULAR);
-        if (newW > maxLineWidth && !currentLine.empty()) {
-          titleLines.push_back(currentLine);
-          currentLine = w;
-        } else if (currentLine.empty()) {
-          currentLine = w;
-        } else {
-          currentLine.append(" ").append(w);
-        }
-      }
-      if (!currentLine.empty() && titleLines.size() < 3) titleLines.push_back(currentLine);
+      auto titleLines = renderer.wrappedText(SMALL_FONT_ID, recentBooks[i].title.c_str(), maxLineWidth, 3);
 
       const int titleLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
       const int dynamicBlockHeight = static_cast<int>(titleLines.size()) * titleLineHeight;
