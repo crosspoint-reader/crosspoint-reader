@@ -6,10 +6,12 @@
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
+#include <HalSystem.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
+#include <esp32-hal.h>
 
 #include <cstring>
 
@@ -233,6 +235,7 @@ void onGoToSettings() {
 }
 
 void onGoToMyLibrary() {
+  assert(false && "test");
   exitActivity();
   enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
 }
@@ -315,6 +318,7 @@ void setup() {
     return;
   }
 
+  HalSystem::checkPanic();
   SETTINGS.loadFromFile();
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
