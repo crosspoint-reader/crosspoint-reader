@@ -736,7 +736,7 @@ void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   auto truncatedLabel =
       renderer.truncatedText(SMALL_FONT_ID, label, rect.width - metrics.contentSidePadding * 2, EpdFontFamily::REGULAR);
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());

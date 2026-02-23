@@ -1,5 +1,6 @@
 #pragma once
 
+#include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <SDCardManager.h>
 
 #include <vector>
@@ -28,6 +29,7 @@ class HalStorage {
   bool mkdir(const char* path, const bool pFlag = true);
   bool exists(const char* path);
   bool remove(const char* path);
+  bool rename(const char* oldPath, const char* newPath);
   bool rmdir(const char* path);
 
   bool openFileForRead(const char* moduleName, const char* path, FsFile& file);
