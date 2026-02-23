@@ -29,7 +29,7 @@ class BlockingWiFiStream : public Stream {
       int c = _client.read();
       if (c >= 0) return c;
       if (!_client.connected()) return -1;  // Connection closed, no more data
-      delay(1);                              // Yield to WiFi/LwIP FreeRTOS task
+      delay(1);                             // Yield to WiFi/LwIP FreeRTOS task
     }
     return -1;  // Timeout
   }
@@ -65,8 +65,7 @@ std::string urlEncode(const std::string& value) {
 int64_t parseIso8601(const char* s) {
   if (!s) return -1;
   struct tm t = {};
-  if (sscanf(s, "%4d-%2d-%2dT%2d:%2d:%2d", &t.tm_year, &t.tm_mon, &t.tm_mday, &t.tm_hour, &t.tm_min,
-             &t.tm_sec) != 6)
+  if (sscanf(s, "%4d-%2d-%2dT%2d:%2d:%2d", &t.tm_year, &t.tm_mon, &t.tm_mday, &t.tm_hour, &t.tm_min, &t.tm_sec) != 6)
     return -1;
   t.tm_year -= 1900;
   t.tm_mon -= 1;
@@ -84,8 +83,7 @@ std::string normalizeUrl(const std::string& url) {
   return url;
 }
 
-void beginRequest(HTTPClient& http, WiFiClient& plainClient, WiFiClientSecure& secureClient,
-                  const std::string& url) {
+void beginRequest(HTTPClient& http, WiFiClient& plainClient, WiFiClientSecure& secureClient, const std::string& url) {
   if (isHttpsUrl(url)) {
     secureClient.setInsecure();
     http.begin(secureClient, url.c_str());

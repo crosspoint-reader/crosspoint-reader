@@ -159,8 +159,7 @@ inline std::vector<SettingInfo> getSettingsList() {
           },
           "wallabagPassword", StrId::STR_WALLABAG_BROWSER),
       SettingInfo::DynamicString(
-          StrId::STR_WALLABAG_ARTICLE_LIMIT,
-          [] { return std::to_string(WALLABAG_STORE.getArticleLimit()); },
+          StrId::STR_WALLABAG_ARTICLE_LIMIT, [] { return std::to_string(WALLABAG_STORE.getArticleLimit()); },
           [](const std::string& v) {
             int val = 0;
             try {

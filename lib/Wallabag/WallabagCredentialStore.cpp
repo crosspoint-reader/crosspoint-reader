@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Serialization.h>
+
 #include <ctime>
 
 // Initialize the static instance
@@ -84,24 +85,48 @@ bool WallabagCredentialStore::loadFromFile() {
   int64_t tmpExpiry = 0;
   uint8_t tmpLimit = 0;
 
-  if (!file.available()) { file.close(); return false; }
+  if (!file.available()) {
+    file.close();
+    return false;
+  }
   serialization::readString(file, tmpServerUrl);
-  if (!file.available()) { file.close(); return false; }
+  if (!file.available()) {
+    file.close();
+    return false;
+  }
   serialization::readString(file, tmpClientId);
-  if (!file.available()) { file.close(); return false; }
+  if (!file.available()) {
+    file.close();
+    return false;
+  }
   serialization::readString(file, tmpClientSecret);
   obfuscate(tmpClientSecret);
-  if (!file.available()) { file.close(); return false; }
+  if (!file.available()) {
+    file.close();
+    return false;
+  }
   serialization::readString(file, tmpUsername);
-  if (!file.available()) { file.close(); return false; }
+  if (!file.available()) {
+    file.close();
+    return false;
+  }
   serialization::readString(file, tmpPassword);
   obfuscate(tmpPassword);
-  if (!file.available()) { file.close(); return false; }
+  if (!file.available()) {
+    file.close();
+    return false;
+  }
   serialization::readString(file, tmpToken);
   obfuscate(tmpToken);
-  if (!file.available()) { file.close(); return false; }
+  if (!file.available()) {
+    file.close();
+    return false;
+  }
   serialization::readPod(file, tmpExpiry);
-  if (!file.available()) { file.close(); return false; }
+  if (!file.available()) {
+    file.close();
+    return false;
+  }
   serialization::readPod(file, tmpLimit);
 
   file.close();

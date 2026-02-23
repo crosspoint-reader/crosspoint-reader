@@ -99,9 +99,8 @@ void enforceArticleLimit(int limit, int newCount) {
 
   // Sort numerically by article ID so the oldest (lowest ID) are deleted first.
   // A lexicographic sort would wrongly order e.g. [w-id_10] before [w-id_2].
-  std::sort(existing.begin(), existing.end(), [](const std::string& a, const std::string& b) {
-    return extractWallabagId(a) < extractWallabagId(b);
-  });
+  std::sort(existing.begin(), existing.end(),
+            [](const std::string& a, const std::string& b) { return extractWallabagId(a) < extractWallabagId(b); });
 
   int toDelete = total - limit;
   for (int i = 0; i < toDelete && i < static_cast<int>(existing.size()); i++) {
@@ -259,9 +258,9 @@ void WallabagActivity::render(Activity::RenderLock&&) {
   const int menuTop = 50;
   const int menuHeight = pageHeight - menuTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
-  GUI.drawButtonMenu(renderer, Rect{0, menuTop, pageWidth, menuHeight}, MENU_ITEM_COUNT, menuIndex,
-                     [&items](int i) { return std::string(items[i]); },
-                     [](int i) -> UIIcon { return (i == 0) ? Folder : Sync; });
+  GUI.drawButtonMenu(
+      renderer, Rect{0, menuTop, pageWidth, menuHeight}, MENU_ITEM_COUNT, menuIndex,
+      [&items](int i) { return std::string(items[i]); }, [](int i) -> UIIcon { return (i == 0) ? Folder : Sync; });
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -286,8 +285,8 @@ void WallabagActivity::launchWifiSelection() {
   state = State::WIFI_SELECTION;
   requestUpdate();
 
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](bool connected) { onWifiSelectionComplete(connected); }));
+  enterNewActivity(
+      new WifiSelectionActivity(renderer, mappedInput, [this](bool connected) { onWifiSelectionComplete(connected); }));
 }
 
 void WallabagActivity::onWifiSelectionComplete(bool connected) {
