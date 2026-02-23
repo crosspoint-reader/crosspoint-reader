@@ -25,8 +25,7 @@ class WallabagActivity final : public ActivityWithSubactivity {
   };
 
   explicit WallabagActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                            const std::function<void()>& onGoHome,
-                            const std::function<void()>& onGoToArticles)
+                            const std::function<void()>& onGoHome, const std::function<void()>& onGoToArticles)
       : ActivityWithSubactivity("Wallabag", renderer, mappedInput),
         onGoHome(onGoHome),
         onGoToArticles(onGoToArticles) {}

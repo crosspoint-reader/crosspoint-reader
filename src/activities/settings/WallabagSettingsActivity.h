@@ -12,7 +12,7 @@
 class WallabagSettingsActivity final : public ActivityWithSubactivity {
  public:
   explicit WallabagSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                   const std::function<void()>& onBack)
+                                    const std::function<void()>& onBack)
       : ActivityWithSubactivity("WallabagSettings", renderer, mappedInput), onBack(onBack) {}
 
   void onEnter() override;
