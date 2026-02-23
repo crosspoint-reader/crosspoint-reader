@@ -1,5 +1,5 @@
 #pragma once
-#include <SdFat.h>
+#include <HalStorage.h>
 
 #include <memory>
 #include <string>
