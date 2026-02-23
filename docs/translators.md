@@ -43,3 +43,6 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 
 ## Ukrainian
 - [mirus-ua](https://github.com/mirus-ua)
+
+## Belarusian
+- [Dexif](https://github.com/dexif)
