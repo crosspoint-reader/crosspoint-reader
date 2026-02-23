@@ -12,6 +12,7 @@ class MyLibraryActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
+  bool skipNextButtonCheck = false;
 
   // Files state
   std::string basepath = "/";
