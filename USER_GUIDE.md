@@ -236,7 +236,7 @@ This feature can be disabled in the **[Controls Settings](#363-controls)** to he
 ### System Navigation
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold **Back** to close the book and return to the **[Browse Files](#32-browse-files-screen)** screen.
-* **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)**.
+* **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)** screen.
 
 ### Supported Languages
 
