@@ -10,8 +10,8 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [First Launch](#first-launch)
   - [3. Screens](#3-screens)
     - [3.1 Home Screen](#31-home-screen)
-    - [3.2 Browse Files Screen](#32-browse-files-screen)
-    - [3.3 Reading Mode](#33-reading-mode)
+    - [3.2 Reading Mode](#32-reading-mode)
+    - [3.3 Browse Files Screen](#33-browse-files-screen)
     - [3.4 Recent Books Screen](#34-recent-books-screen)
     - [3.5 File Transfer Screen](#35-file-transfer-screen)
       - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
@@ -72,18 +72,18 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, the **[Browse Files](#32-browse-files-screen)** screen, the **[Recent Books](#34-recent-books-screen)** screen, the **[File Transfer](#35-file-transfer-screen)** screen, or **[Settings](#36-settings)**.
+The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, the **[Browse Files](#33-browse-files-screen)** screen, the **[Recent Books](#34-recent-books-screen)** screen, the **[File Transfer](#35-file-transfer-screen)** screen, or **[Settings](#36-settings)**.
 
-### 3.2 Browse Files Screen
+### 3.2 Reading Mode
+
+See [Reading Mode](#4-reading-mode) below for more information.
+
+### 3.3 Browse Files Screen
 
 The Browse Files screen acts as a file and folder browser.
 
 * **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
 * **Open Selection:** Press **Confirm** to open a folder or read a selected book.
-
-### 3.3 Reading Mode
-
-See [Reading Mode](#4-reading-mode) below for more information.
 
 ### 3.4 Recent Books Screen
 
@@ -235,7 +235,7 @@ This feature can be disabled in the **[Controls Settings](#363-controls)** to he
 
 ### System Navigation
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
-* **Return to Browse Files:** Press and hold **Back** to close the book and return to the **[Browse Files](#32-browse-files-screen)** screen.
+* **Return to Browse Files:** Press and hold **Back** to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)** screen.
 
 ### Supported Languages
