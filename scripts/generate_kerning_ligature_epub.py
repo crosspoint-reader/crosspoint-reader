@@ -109,6 +109,26 @@ Kerning pairs targeted (Cyrillic — U+0400–04FF):
   Ukrainian: Її, Єв, Ґа
   Bulgarian: Щу, Жа, Юл
 
+Combining marks targeted (U+0300–U+036F — Combining Diacritical Marks):
+  U+0300 grave, U+0301 acute, U+0302 circumflex, U+0303 tilde
+  U+0304 macron, U+0306 breve, U+0307 dot above, U+0308 diaeresis
+  U+030A ring above, U+030B double acute, U+030C caron
+  U+0323 dot below (Vietnamese stacking)
+  U+0327 cedilla, U+0328 ogonek
+  U+031B horn (Vietnamese)
+
+  Decomposed equivalents of precomposed characters (NFD vs NFC):
+    o+U+0308 vs ö, e+U+0301 vs é, e+U+0302 vs ê, a+U+0300 vs à, etc.
+  Multiple combining marks on one base character:
+    e+U+0302+U+0323 (Vietnamese ệ), u+U+031B+U+0301, etc.
+  Combining marks adjacent to kerning pairs:
+    To+U+0308 (decomposed Tö), Vo+U+0308, Wu+U+0308, etc.
+  Combining marks adjacent to ligature sequences:
+    de+U+0301+fi (définition), re+U+0301+fl (réflexion), etc.
+  Extended Latin-A decomposed compositions:
+    e+U+030C (ě), r+U+030C (ř), a+U+0328 (ą), s+U+0327 (ş), D+U+030C (Ď), etc.
+  Precomposed vs decomposed side-by-side comparison (Latin-1 and Extended-A)
+
 Also includes:
   Quotes around kerning-sensitive letters (e.g. "AWAY", "Typography")
   Numerals with kerning (10, 17, 74, 47)
@@ -1280,13 +1300,249 @@ any book that discusses physics, mathematics, or engineering.&#x201D;</p>
 <p>&#x201C;And with that,&#x201D; Avery said, setting down his pencil for the last
 time, &#x201C;we have covered every script from the Acropolis to the
 Urals, from the Rhine to the Mekong. If a typesetter can render
-every word in these ten chapters without a single miskerned pair,
+every word in these chapters without a single miskerned pair,
 they have earned my respect.&#x201D;</p>
 
 <p>Vera closed her notebook and smiled. &#x201C;Shall I put the kettle on
 one last time?&#x201D;</p>
 
 <p>&#x201C;Please,&#x201D; said Avery. &#x201C;And make it strong.&#x201D;</p>
+</body>
+</html>
+"""
+
+CHAPTER_11 = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head><title>Chapter 11 &#x2013; Combining Marks</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+<h1>Chapter 11<br/>Combining Marks</h1>
+
+<p>Avery had thought the project was finally complete when Vera placed
+a new stack of proofs on his desk. &#x201C;These came from a different
+typesetter,&#x201D; she explained. &#x201C;Their system outputs decomposed
+Unicode &#x2014; every accented letter is split into a base character
+followed by one or more combining diacritical marks.&#x201D;</p>
+
+<p>Avery stared. &#x201C;You mean instead of &#xF6; as a single glyph, they
+send o&#x0308;? And instead of &#xE9;, they send e&#x0301;?&#x201D;</p>
+
+<p>&#x201C;Exactly. The renderer has to overlay the combining mark onto
+the preceding base character &#x2014; centred horizontally, with proper
+vertical clearance, and without advancing the cursor. If it gets any
+of that wrong, the diacritics float off into space or crash into
+neighbouring letters.&#x201D;</p>
+
+<h2>Single Combining Marks</h2>
+
+<p>Avery began with the most common combining diacritical marks from the
+U+0300 block. He set each one after a simple base character to verify
+placement:</p>
+
+<p><i>a&#x0300; (a + grave), e&#x0301; (e + acute), i&#x0302; (i + circumflex),
+o&#x0303; (o + tilde), u&#x0308; (u + diaeresis), a&#x030A; (a + ring above),
+c&#x0327; (c + cedilla), e&#x0328; (e + ogonek), z&#x030C; (z + caron),
+o&#x030B; (o + double acute), a&#x0304; (a + macron),
+e&#x0306; (e + breve), z&#x0307; (z + dot above).</i></p>
+
+<p>&#x201C;Each mark must sit centred over its base character,&#x201D; Avery
+said, &#x201C;with at least a pixel of clearance between the top of the
+base glyph and the bottom of the combining mark. If the mark drifts
+left or right, the reader sees a broken letter.&#x201D;</p>
+
+<h2>Decomposed German</h2>
+
+<p>He turned to German text rendered entirely in decomposed form.
+Every umlaut and eszett combination that had worked perfectly in
+Chapter 6 now needed to survive the decomposition:</p>
+
+<p><i>To&#x0308;chter sa&#xDF;en u&#x0308;ber den Bu&#x0308;chern.
+Vo&#x0308;gel flogen u&#x0308;ber die Wa&#x0308;lder. Die Wu&#x0308;rde
+des Menschen ist unantastbar. Ta&#x0308;nzer u&#x0308;bten in der
+Tu&#x0308;rkei. O&#x0308;ffnung der A&#x0308;mter war um zehn Uhr.
+A&#x0308;u&#xDF;erst sorgfa&#x0308;ltig pru&#x0308;fte er die
+Gro&#x0308;&#xDF;e der Stra&#xDF;e.</i></p>
+
+<p>The To&#x0308; in &#x201C;To&#x0308;chter&#x201D; was the critical
+test &#x2014; the T-crossbar had to kern correctly against the
+base o, while the combining diaeresis (U+0308) sat above
+without shifting the cursor. Vo&#x0308; in &#x201C;Vo&#x0308;gel,&#x201D;
+Wu&#x0308; in &#x201C;Wu&#x0308;rde,&#x201D; and Ta&#x0308; in
+&#x201C;Ta&#x0308;nzer&#x201D; each exercised a different kerning pair
+with a decomposed umlaut. The O&#x0308;f in &#x201C;O&#x0308;ffnung&#x201D;
+tested a combining mark immediately before a double-f ligature.</p>
+
+<h2>Decomposed French</h2>
+
+<p>French offered its own decomposition challenges. Avery set the same
+passage from Chapter 6, but with every accent decomposed:</p>
+
+<p><i>Fe&#x0302;te de la Re&#x0301;publique. Pe&#x0300;re Noe&#x0308;l
+arriva en Fe&#x0301;vrier. A&#x0300; la recherche du cafe&#x0301;
+ide&#x0301;al. C&#x0327;a va? Garc&#x0327;on, un cafe&#x0301;
+cre&#x0300;me, s&#x2019;il vous plai&#x0302;t.</i></p>
+
+<p>The Fe&#x0302; in &#x201C;Fe&#x0302;te&#x201D; placed a combining
+circumflex over the e after the F &#x2014; both the F-overhang kerning
+and the mark placement had to work simultaneously.
+Re&#x0301; in &#x201C;Re&#x0301;publique&#x201D; tested acute placement
+after an R. The A&#x0300; in &#x201C;A&#x0300; la&#x201D; placed a
+combining grave accent on a capital A, which had to clear the apex
+of the letterform.</p>
+
+<h2>Combining Marks and Ligatures</h2>
+
+<p>The most demanding test combined decomposed diacritics with ligature
+sequences. In precomposed text, the ligature engine only saw
+single-codepoint accented letters. With decomposition, a combining
+mark could sit between a base character and the start of a ligature,
+or immediately after one:</p>
+
+<p><i>La de&#x0301;finition de l&#x2019;efficacite&#x0301; re&#x0301;side
+dans la re&#x0301;flexion. L&#x2019;officie&#x0300;re
+ve&#x0301;rifia les diffe&#x0301;rentes souffle&#x0301;s. Il souffrit
+magnifiquement. De&#x0301;fiant toute difficult&#xE9;, le
+greffier affirma l&#x2019;efficience du syste&#x0300;me.</i></p>
+
+<p>The fi ligature in &#x201C;de&#x0301;finition&#x201D; came right after
+a combining acute on the e. The ffi in
+&#x201C;efficacite&#x0301;&#x201D; was followed by a combining acute.
+The fl in &#x201C;re&#x0301;flexion&#x201D; came after a combining
+acute. The ff in &#x201C;diffe&#x0301;rentes&#x201D; contained a combining
+mark between the ligature and the following vowel. Each of these
+sequences tested whether the combining mark handler and the ligature
+engine interacted correctly.</p>
+
+<h2>Multiple Combining Marks</h2>
+
+<p>Some writing systems required two or even three combining marks on
+a single base character. Vietnamese was the classic example, where
+a vowel could carry both a diacritical mark (circumflex, horn, or
+breve) and a tone mark (acute, grave, hook above, tilde, or dot
+below):</p>
+
+<p><i>Vie&#x0302;&#x0323;t Nam ye&#x0302;u thu&#x031B;&#x0301;o&#x031B;ng
+&#x0111;a&#x0302;&#x0301;t nu&#x031B;&#x0301;o&#x031B;&#x0301;c.
+To&#x031B;&#x0300;i sa&#x0301;ng ro&#x0300;&#x0300;i.</i></p>
+
+<p>The e&#x0302;&#x0323; in &#x201C;Vie&#x0302;&#x0323;t&#x201D; stacked
+a combining circumflex (U+0302) and a combining dot below (U+0323) on
+a single base e. Both marks had to be positioned correctly relative to
+the base glyph and to each other &#x2014; the circumflex above and the
+dot below the baseline. The u&#x031B;&#x0301; sequences placed a
+combining horn (U+031B) and a combining acute (U+0301) on the same
+base u, testing whether the second mark used the base character&#x2019;s
+metrics rather than the first combining mark&#x2019;s.</p>
+
+<h2>Combining Marks in Extended Latin</h2>
+
+<p>The Czech and Polish texts from Chapter 7 could also appear in
+decomposed form. Avery set a test paragraph:</p>
+
+<p><i>Te&#x030C;s&#x030C;i&#x0301;n lez&#x030C;i&#x0301; nedaleko
+Tr&#x030C;ebi&#x0301;c&#x030C;e. Pr&#x030C;i&#x0301;bram a
+Pr&#x030C;erov jsou me&#x030C;sta. Ve&#x030C;ra se uc&#x030C;ila
+ve&#x030C;de&#x030C;. C&#x030C;a&#x0301;slav lez&#x030C;i&#x0301;
+na jih od C&#x030C;eske&#x0301;ho Brodu. Wa&#x0328;chock to
+ma&#x0142;e miasteczko. We&#x0328;gry sa&#x0328;siaduja&#x0328; z
+Polska&#x0328;.</i></p>
+
+<p>The Te&#x030C; in &#x201C;Te&#x030C;s&#x030C;i&#x0301;n&#x201D; placed
+a combining caron over e after the T-crossbar &#x2014; the same visual
+result as the precomposed &#x11B;, but assembled from parts. Each
+subsequent caron and acute in the sentence tested a different
+base-plus-mark combination. The Polish ogonek (U+0328) in
+&#x201C;Wa&#x0328;chock&#x201D; and &#x201C;We&#x0328;gry&#x201D; tested
+a below-baseline combining mark, which had to clear descenders in the
+line below without disrupting the W kerning.</p>
+
+<h2>Combining Marks with Capitals</h2>
+
+<p>Capital letters presented additional challenges because their greater
+height left less room for marks above. Avery tested each common
+combining mark on capitals:</p>
+
+<p><i>A&#x0300; propos. A&#x0301;gnes. A&#x0302;me. A&#x0303;o.
+A&#x0308;rger. A&#x030A;kesson. A&#x030C;lef. E&#x0300;ve.
+E&#x0301;mile. E&#x0302;tre. I&#x0300;talo. I&#x0301;ngrid.
+I&#x0302;le. O&#x0300;slo. O&#x0301;scar. O&#x0302;ter.
+O&#x0303;telo. O&#x0308;ffnung. U&#x0300;bald. U&#x0301;ltimo.
+U&#x0302;nion. U&#x0308;bung. N&#x0303;oqu&#xED;.</i></p>
+
+<p>The combining marks on capitals sat higher than on lowercase letters,
+and each mark needed to clear the top of the letterform. In particular,
+A&#x0308; (A + combining diaeresis) and O&#x0308; (O + combining
+diaeresis) had to match their precomposed equivalents &#xC4; and
+&#xD6; visually &#x2014; any discrepancy would be immediately obvious
+to the reader.</p>
+
+<h2>Precomposed vs. Decomposed Comparison</h2>
+
+<p>As a final verification, Avery set the same sentence in both forms,
+one after the other, so the typesetter could compare them directly:</p>
+
+<p><b>Precomposed:</b> <i>T&#xF6;chter &#xFC;bten in der T&#xFC;rkei.
+V&#xF6;gel flogen &#xFC;ber die W&#xE4;lder. F&#xEA;te de la
+R&#xE9;publique. &#xC0; la recherche du caf&#xE9;.
+&#xC7;a va?</i></p>
+
+<p><b>Decomposed:</b> <i>To&#x0308;chter u&#x0308;bten in der
+Tu&#x0308;rkei. Vo&#x0308;gel flogen u&#x0308;ber die
+Wa&#x0308;lder. Fe&#x0302;te de la Re&#x0301;publique.
+A&#x0300; la recherche du cafe&#x0301;. C&#x0327;a va?</i></p>
+
+<p>&#x201C;If those two lines are indistinguishable on screen,&#x201D; Avery
+said, &#x201C;the combining mark renderer is working correctly. Any
+difference in spacing, vertical position, or glyph alignment means
+something is wrong.&#x201D;</p>
+
+<p>Vera studied both lines through the loupe. &#x201C;They look identical
+to me.&#x201D;</p>
+
+<h2>Extended Latin Composition</h2>
+
+<p>&#x201C;But what about the Latin Extended-A characters?&#x201D; Vera
+asked. &#x201C;The old composition table only covered grave, acute,
+circumflex, tilde, diaeresis, and cedilla. Characters like
+&#x11B; (e-caron), &#x159; (r-caron), &#x105; (a-ogonek),
+&#x142; (l-stroke), and &#x171; (u-double-acute)
+were never composed from decomposed input.&#x201D;</p>
+
+<p><b>Precomposed:</b> <i>T&#x11B;&#x161;&#xED;n le&#x17E;&#xED;
+nedaleko T&#x159;eb&#xED;&#x10D;e. P&#x159;&#xED;bram a P&#x159;erov
+jsou m&#x11B;sta. V&#x11B;ra se u&#x10D;ila v&#x11B;d&#x11B;.
+&#x10C;&#xE1;slav le&#x17E;&#xED; na jih od &#x10C;esk&#xE9;ho
+Brodu.</i></p>
+
+<p><b>Decomposed:</b> <i>Te&#x030C;s&#x030C;i&#x0301;n
+le&#x030C;z&#x030C;i&#x0301; nedaleko Tr&#x030C;ebi&#x0301;c&#x030C;e.
+Pr&#x030C;i&#x0301;bram a Pr&#x030C;erov jsou me&#x030C;sta.
+Ve&#x030C;ra se uc&#x030C;ila ve&#x030C;de&#x030C;.
+C&#x030C;a&#x0301;slav le&#x030C;z&#x030C;i&#x0301; na jih od
+C&#x030C;eske&#x0301;ho Brodu.</i></p>
+
+<p><b>Precomposed:</b> <i>W&#x105;chock to ma&#x142;e miasteczko.
+W&#x119;gry s&#x105;siaduj&#x105; z Polsk&#x105;. G&#x15F;r&#xFC;n
+&#xDC;ber &#x15E;en &#x10E;&#xE1;le.</i></p>
+
+<p><b>Decomposed:</b> <i>Wa&#x0328;chock to ma&#x142;e miasteczko.
+We&#x0328;gry sa&#x0328;siaduja&#x0328; z Polska&#x0328;.
+Gs&#x0327;ru&#x0308;n U&#x0308;ber S&#x0327;en
+D&#x030C;a&#x0301;le.</i></p>
+
+<p>&#x201C;With the new composition table these should be
+indistinguishable,&#x201D; Avery said. &#x201C;Carons, ogoneks,
+cedillas, double acutes &#x2014; all composed from their parts into the
+same precomposed codepoints the font expects.&#x201D;</p>
+
+<p>&#x201C;Then we&#x2019;re done,&#x201D; Avery said. &#x201C;Eleven chapters,
+four scripts, three hundred kerning pairs, two dozen ligature sequences,
+and now combining marks. If the renderer survives all of that, it can
+handle anything a publisher throws at it.&#x201D;</p>
+
+<p>He set down his pencil and reached for his coffee. It was cold.</p>
 </body>
 </html>
 """
@@ -1371,6 +1627,7 @@ CONTENT_OPF = f"""\
     <item id="ch8" href="chapter8.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch9" href="chapter9.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch10" href="chapter10.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch11" href="chapter11.xhtml" media-type="application/xhtml+xml"/>
     <item id="toc" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>
   </manifest>
   <spine>
@@ -1386,6 +1643,7 @@ CONTENT_OPF = f"""\
     <itemref idref="ch8"/>
     <itemref idref="ch9"/>
     <itemref idref="ch10"/>
+    <itemref idref="ch11"/>
   </spine>
 </package>
 """
@@ -1411,6 +1669,7 @@ TOC_XHTML = """\
     <li><a href="chapter8.xhtml">Chapter 8 &#x2013; The Cyrillic Challenge</a></li>
     <li><a href="chapter9.xhtml">Chapter 9 &#x2013; Latin Extended-B</a></li>
     <li><a href="chapter10.xhtml">Chapter 10 &#x2013; Greek &amp; Coptic</a></li>
+    <li><a href="chapter11.xhtml">Chapter 11 &#x2013; Combining Marks</a></li>
   </ol>
 </nav>
 </body>
@@ -1439,6 +1698,7 @@ def build_epub(output_path: str):
         zf.writestr("OEBPS/chapter8.xhtml", CHAPTER_8)
         zf.writestr("OEBPS/chapter9.xhtml", CHAPTER_9)
         zf.writestr("OEBPS/chapter10.xhtml", CHAPTER_10)
+        zf.writestr("OEBPS/chapter11.xhtml", CHAPTER_11)
     print(f"EPUB written to {output_path}")
 
 
