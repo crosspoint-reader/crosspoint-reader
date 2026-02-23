@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <Epub.h>
 #include <Epub/Section.h>
 
@@ -34,6 +35,15 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void onReaderMenuBack(uint8_t orientation);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+
+ private:
+  // --- ETA to end of chapter (ported from older version) ---
+  uint32_t lastPageTurnMs = 0;
+  float avgMsPerPage = 0.0f;
+  uint32_t lastRenderedPageKey = 0;
+
+  void onPageTurnForEta();
+  int getEtaMinutesToEndOfChapter() const;
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
