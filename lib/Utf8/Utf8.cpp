@@ -15,14 +15,28 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
 
   const int bytes = utf8CodepointLen(**string);
   const uint8_t* chr = *string;
-  *string += bytes;
 
   if (bytes == 1) {
+    *string += 1;
     return chr[0];
   }
 
-  uint32_t cp = chr[0] & ((1 << (7 - bytes)) - 1);  // mask header bits
+  for (int i = 1; i < bytes; ++i) {
+    // Validate each continuation byte starts with expected 0b10 sequence.
+    // This also handles unexpected null string terminator in the middle of
+    // a UTF-8 multibyte sequence.
+    if ((chr[i] & 0xC0) != 0x80) {
+      *string += 1;
+      return REPLACEMENT_GLYPH;
+    }
+  }
 
+  *string += bytes;
+
+  // Mask off the 0b110, 0b1110, or 0b11110 header bits from the first byte.
+  uint32_t cp = chr[0] & ((1 << (7 - bytes)) - 1);
+
+  // Copy continuation bytes, masking off the 0b10 continuation header bits.
   for (int i = 1; i < bytes; i++) {
     cp = (cp << 6) | (chr[i] & 0x3F);
   }
