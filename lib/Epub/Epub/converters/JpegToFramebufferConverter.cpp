@@ -3,7 +3,6 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
-#include <SDCardManager.h>
 #include <picojpeg.h>
 
 #include <cstdio>

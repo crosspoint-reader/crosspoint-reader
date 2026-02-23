@@ -4,7 +4,6 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <PNGdec.h>
-#include <SDCardManager.h>
 
 #include <cstdlib>
 #include <new>
