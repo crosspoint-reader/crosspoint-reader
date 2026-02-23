@@ -4,7 +4,6 @@
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <Logging.h>
-#include <SDCardManager.h>
 #include <Serialization.h>
 
 #include "../converters/DitherUtils.h"

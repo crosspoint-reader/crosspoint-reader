@@ -191,6 +191,12 @@ class CrossPointSettings {
   bool saveToFile() const;
   bool loadFromFile();
 
+  static void validateFrontButtonMapping(CrossPointSettings& settings);
+
+ private:
+  bool loadFromBinaryFile();
+
+ public:
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;

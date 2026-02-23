@@ -12,6 +12,7 @@
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
+#include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "util/StringUtils.h"
 
@@ -31,6 +32,8 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
   return StringUtils::checkFileExtension(path, ".txt") ||
          StringUtils::checkFileExtension(path, ".md");  // Treat .md as txt files (until we have a markdown reader)
 }
+
+bool ReaderActivity::isBmpFile(const std::string& path) { return StringUtils::checkFileExtension(path, ".bmp"); }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
@@ -91,6 +94,11 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
       renderer, mappedInput, std::move(epub), [this, epubPath] { goToLibrary(epubPath); }, [this] { onGoBack(); }));
 }
 
+void ReaderActivity::onGoToBmpViewer(const std::string& path) {
+  exitActivity();
+  enterNewActivity(new BmpViewerActivity(renderer, mappedInput, path, [this, path] { goToLibrary(path); }));
+}
+
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   const auto xtcPath = xtc->getPath();
   currentBookPath = xtcPath;
@@ -116,8 +124,9 @@ void ReaderActivity::onEnter() {
   }
 
   currentBookPath = initialBookPath;
-
-  if (isXtcFile(initialBookPath)) {
+  if (isBmpFile(initialBookPath)) {
+    onGoToBmpViewer(initialBookPath);
+  } else if (isXtcFile(initialBookPath)) {
     auto xtc = loadXtc(initialBookPath);
     if (!xtc) {
       onGoBack();

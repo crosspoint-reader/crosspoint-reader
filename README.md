@@ -154,6 +154,8 @@ For more details on the internal file structures, see the [file formats document
 
 Contributions are very welcome!
 
+If you are new to the codebase, start with the [contributing docs](./docs/contributing/README.md).
+
 If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
 If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
 
