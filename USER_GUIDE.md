@@ -161,26 +161,28 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal" (default), or "Wide".
 - **Reader Screen Margin**: Controls the screen margins in reader mode between 5 and 40 pixels in 5-pixel increments.
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
-- **Embedded Style**: Whether to use embedded EPUB stylisation and formatting.
-- **Hyphenation**: Whether to hyphenate text in Reading Mode.
+- **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
+- **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
 - **Reading Orientation**: Set the screen orientation for reading EPUB files:
   - "Portrait" (default) - Standard portrait orientation
   - "Landscape CW" - Landscape, rotated clockwise
   - "Inverted" - Portrait, upside down
   - "Landscape CCW" - Landscape, rotated counter-clockwise
-- **Extra Paragraph Spacing**: If enabled, vertical space will be added between paragraphs in the book. If disabled, paragraphs will not have vertical space between them, but will have first-line indentation.
+- **Extra Paragraph Spacing**: Set how to handle paragraph breaks:
+  - "ON" - Vertical space will be added between paragraphs in Reading Mode
+  - "OFF" - Paragraphs will not have vertical space, but will have first-line indentation
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
 
 #### 3.6.3 Controls
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
-- **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from Prev/Next to Next/Prev. This change is only in effect when reading.
+- **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from "Prev/Next" (default) to "Next/Prev". This change is only in effect when reading.
 
 - **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:
   - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
   - "Page Scroll" - Long-pressing scrolls a page up/down
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
-  - "Ignore" - Require a long press to turn off the device
+  - "Ignore" (default) - Require a long press to turn off the device
   - "Sleep" - A short press puts the device into sleep mode
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
 
@@ -193,7 +195,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **OPDS Browser**: Configure OPDS server settings for browsing and downloading books. Set the server URL (for Calibre Content Server, add `/opds` to the end), and optionally configure username and password for servers requiring authentication. Note: Only HTTP Basic authentication is supported. If using Calibre Content Server with authentication enabled, you must set it to use Basic authentication instead of the default Digest authentication.
 - **Clear Reading Cache**: Clear the internal SD card cache.
 - **Check for updates**: Check for Crosspoint firmware updates over WiFi.
-- **Language**: Set the system language (see **[Supported Languages](#supported-languages)** for more informaiton).
+- **Language**: Set the system language (see **[Supported Languages](#supported-languages)** for more information).
 
 ### 3.7 Sleep Screen
 
@@ -235,7 +237,7 @@ This feature can be disabled in the **[Controls Settings](#363-controls)** to he
 
 ### System Navigation
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
-* **Return to Browse Files:** Press and hold **Back** to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
+* **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)** screen.
 
 ### Supported Languages
