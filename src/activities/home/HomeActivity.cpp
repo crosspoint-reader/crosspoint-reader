@@ -15,9 +15,14 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/home/HomeSelectorMemory.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
+
+namespace {
+HomeSelectorMemory homeSelectorMemory;
+}
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // My Library, Recents, File transfer, Settings
@@ -28,6 +33,20 @@ int HomeActivity::getMenuItemCount() const {
     count++;
   }
   return count;
+}
+
+void HomeActivity::applyPendingSelectorRestore() {
+  if (!pendingSelectorRestore) {
+    return;
+  }
+
+  selectorIndex = homeSelectorMemory.restore(getMenuItemCount());
+
+  // Keep retrying the restore while recents may still be changing.
+  const int storedIndex = homeSelectorMemory.getStoredIndex();
+  if (storedIndex < getMenuItemCount() || recentsLoaded) {
+    pendingSelectorRestore = false;
+  }
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -114,16 +133,19 @@ void HomeActivity::onEnter() {
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
 
-  selectorIndex = 0;
-
   auto metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
+  selectorIndex = homeSelectorMemory.restore(getMenuItemCount());
+  pendingSelectorRestore = true;
 
   // Trigger first update
   requestUpdate();
 }
 
 void HomeActivity::onExit() {
+  pendingSelectorRestore = false;
+  homeSelectorMemory.store(selectorIndex, getMenuItemCount());
+
   Activity::onExit();
 
   // Free the stored cover buffer if any
@@ -173,14 +195,18 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
+  applyPendingSelectorRestore();
+
   const int menuCount = getMenuItemCount();
 
   buttonNavigator.onNext([this, menuCount] {
+    pendingSelectorRestore = false;
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this, menuCount] {
+    pendingSelectorRestore = false;
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
     requestUpdate();
   });
@@ -212,6 +238,8 @@ void HomeActivity::loop() {
 }
 
 void HomeActivity::render(Activity::RenderLock&&) {
+  applyPendingSelectorRestore();
+
   auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();

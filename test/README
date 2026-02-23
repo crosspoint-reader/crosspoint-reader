@@ -9,3 +9,13 @@ in the development cycle.
 
 More information about PlatformIO Unit Testing:
 - https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+
+Host-side tests in this repository:
+- `./test/run_host_tests.sh` - discovers and runs all host unit tests under `test/host/**`
+- `./test/run_hyphenation_eval.sh` - evaluates hyphenation quality datasets
+
+How to add a new host unit test:
+1. Create a test file at `test/host/<group>/<Name>Test.cpp`
+2. If your test needs additional sources, add `test/host/<group>/<Name>Test.sources` with one repo-relative source path per line
+3. If your test needs extra compile flags, add `test/host/<group>/<Name>Test.cxxflags` with one compiler flag per line
+4. Run `./test/run_host_tests.sh`
