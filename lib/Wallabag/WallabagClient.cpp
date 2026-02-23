@@ -7,6 +7,9 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
+#include <cctype>
+#include <ctime>
+
 #include "WallabagCredentialStore.h"
 
 namespace {
@@ -40,6 +43,36 @@ class BlockingWiFiStream : public Stream {
   WiFiClient& _client;
   unsigned long _timeoutMs;
 };
+
+// Percent-encode a string for use as an OAuth form field value.
+std::string urlEncode(const std::string& value) {
+  std::string encoded;
+  encoded.reserve(value.size() * 3);
+  for (unsigned char c : value) {
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      encoded += static_cast<char>(c);
+    } else {
+      char buf[4];
+      snprintf(buf, sizeof(buf), "%%%02X", c);
+      encoded += buf;
+    }
+  }
+  return encoded;
+}
+
+// Parse an ISO 8601 timestamp string ("2016-04-05T09:07:54+0000") to Unix time.
+// Returns -1 on parse failure.
+int64_t parseIso8601(const char* s) {
+  if (!s) return -1;
+  struct tm t = {};
+  if (sscanf(s, "%4d-%2d-%2dT%2d:%2d:%2d", &t.tm_year, &t.tm_mon, &t.tm_mday, &t.tm_hour, &t.tm_min,
+             &t.tm_sec) != 6)
+    return -1;
+  t.tm_year -= 1900;
+  t.tm_mon -= 1;
+  t.tm_isdst = -1;
+  return static_cast<int64_t>(mktime(&t));
+}
 
 bool isHttpsUrl(const std::string& url) { return url.rfind("https://", 0) == 0; }
 
@@ -78,12 +111,13 @@ WallabagClient::Error WallabagClient::authenticate() {
   beginRequest(http, plainClient, secureClient, url);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-  // Build form body
+  // Build form body — values must be percent-encoded so special characters
+  // such as &, =, + don't corrupt the form-encoded request.
   std::string body = "grant_type=password";
-  body += "&client_id=" + WALLABAG_STORE.getClientId();
-  body += "&client_secret=" + WALLABAG_STORE.getClientSecret();
-  body += "&username=" + WALLABAG_STORE.getUsername();
-  body += "&password=" + WALLABAG_STORE.getPassword();
+  body += "&client_id=" + urlEncode(WALLABAG_STORE.getClientId());
+  body += "&client_secret=" + urlEncode(WALLABAG_STORE.getClientSecret());
+  body += "&username=" + urlEncode(WALLABAG_STORE.getUsername());
+  body += "&password=" + urlEncode(WALLABAG_STORE.getPassword());
 
   const int httpCode = http.POST(body.c_str());
 
@@ -177,7 +211,7 @@ WallabagClient::Error WallabagClient::fetchArticles(std::vector<WallabagArticle>
       article.id = item["id"].as<int>();
       const char* title = item["title"];
       article.title = title ? title : "(Untitled)";
-      article.updatedAt = item["id"].as<int64_t>();  // API already sorted by updated desc
+      article.updatedAt = parseIso8601(item["updated_at"]);
       out.push_back(std::move(article));
     }
 

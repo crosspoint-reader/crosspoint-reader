@@ -79,30 +79,43 @@ bool WallabagCredentialStore::loadFromFile() {
     return false;
   }
 
-  if (file.available()) serialization::readString(file, serverUrl);
-  if (file.available()) serialization::readString(file, clientId);
+  // Read all fields into temporaries so a truncated file leaves the store unchanged.
+  std::string tmpServerUrl, tmpClientId, tmpClientSecret, tmpUsername, tmpPassword, tmpToken;
+  int64_t tmpExpiry = 0;
+  uint8_t tmpLimit = 0;
 
-  if (file.available()) {
-    serialization::readString(file, clientSecret);
-    obfuscate(clientSecret);
-  }
-
-  if (file.available()) serialization::readString(file, username);
-
-  if (file.available()) {
-    serialization::readString(file, password);
-    obfuscate(password);
-  }
-
-  if (file.available()) {
-    serialization::readString(file, accessToken);
-    obfuscate(accessToken);
-  }
-
-  if (file.available()) serialization::readPod(file, tokenExpiry);
-  if (file.available()) serialization::readPod(file, articleLimit);
+  if (!file.available()) { file.close(); return false; }
+  serialization::readString(file, tmpServerUrl);
+  if (!file.available()) { file.close(); return false; }
+  serialization::readString(file, tmpClientId);
+  if (!file.available()) { file.close(); return false; }
+  serialization::readString(file, tmpClientSecret);
+  obfuscate(tmpClientSecret);
+  if (!file.available()) { file.close(); return false; }
+  serialization::readString(file, tmpUsername);
+  if (!file.available()) { file.close(); return false; }
+  serialization::readString(file, tmpPassword);
+  obfuscate(tmpPassword);
+  if (!file.available()) { file.close(); return false; }
+  serialization::readString(file, tmpToken);
+  obfuscate(tmpToken);
+  if (!file.available()) { file.close(); return false; }
+  serialization::readPod(file, tmpExpiry);
+  if (!file.available()) { file.close(); return false; }
+  serialization::readPod(file, tmpLimit);
 
   file.close();
+
+  // Commit atomically only after all fields loaded successfully.
+  serverUrl = std::move(tmpServerUrl);
+  clientId = std::move(tmpClientId);
+  clientSecret = std::move(tmpClientSecret);
+  username = std::move(tmpUsername);
+  password = std::move(tmpPassword);
+  accessToken = std::move(tmpToken);
+  tokenExpiry = tmpExpiry;
+  articleLimit = tmpLimit;
+
   LOG_DBG("WBG", "Loaded Wallabag credentials, server: %s", serverUrl.c_str());
   return true;
 }

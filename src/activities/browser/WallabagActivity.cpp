@@ -33,7 +33,12 @@ std::string sanitizeArticleTitle(const std::string& title, size_t maxLen = 60) {
     }
   }
   if (result.size() > maxLen) {
-    result = result.substr(0, maxLen);
+    // Walk back to a valid UTF-8 character boundary (skip continuation bytes 0x80–0xBF)
+    size_t cut = maxLen;
+    while (cut > 0 && (static_cast<unsigned char>(result[cut]) & 0xC0) == 0x80) {
+      --cut;
+    }
+    result = result.substr(0, cut);
   }
   return result;
 }
@@ -68,8 +73,23 @@ std::vector<std::string> listExistingArticles() {
   return result;
 }
 
-// Delete oldest wallabag articles (by filename sort, oldest prefix first)
-// to ensure total count stays within limit
+// Extract the numeric Wallabag article ID from a filename like "[w-id_42] Title.epub".
+// Returns -1 if the pattern is not found.
+int extractWallabagId(const std::string& filename) {
+  const std::string prefix = "[w-id_";
+  const size_t start = filename.find(prefix);
+  if (start == std::string::npos) return -1;
+  const size_t numStart = start + prefix.size();
+  const size_t numEnd = filename.find(']', numStart);
+  if (numEnd == std::string::npos) return -1;
+  try {
+    return std::stoi(filename.substr(numStart, numEnd - numStart));
+  } catch (...) {
+    return -1;
+  }
+}
+
+// Delete oldest wallabag articles (lowest ID first) to keep total within limit.
 void enforceArticleLimit(int limit, int newCount) {
   if (limit <= 0) return;
 
@@ -77,8 +97,11 @@ void enforceArticleLimit(int limit, int newCount) {
   int total = static_cast<int>(existing.size()) + newCount;
   if (total <= limit) return;
 
-  // Sort alphabetically - [w-id_N] sorts roughly by ascending id (older articles have lower ids)
-  std::sort(existing.begin(), existing.end());
+  // Sort numerically by article ID so the oldest (lowest ID) are deleted first.
+  // A lexicographic sort would wrongly order e.g. [w-id_10] before [w-id_2].
+  std::sort(existing.begin(), existing.end(), [](const std::string& a, const std::string& b) {
+    return extractWallabagId(a) < extractWallabagId(b);
+  });
 
   int toDelete = total - limit;
   for (int i = 0; i < toDelete && i < static_cast<int>(existing.size()); i++) {
@@ -341,7 +364,7 @@ void WallabagActivity::runSync() {
             article.title.c_str());
 
     char msg[64];
-    snprintf(msg, sizeof(msg), "Downloading %d of %d...", currentArticleNum, totalToDownload);
+    snprintf(msg, sizeof(msg), tr(STR_WALLABAG_DOWNLOADING), currentArticleNum, totalToDownload);
     statusMessage = msg;
     requestUpdate();
 

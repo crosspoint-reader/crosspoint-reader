@@ -162,7 +162,11 @@ inline std::vector<SettingInfo> getSettingsList() {
           StrId::STR_WALLABAG_ARTICLE_LIMIT,
           [] { return std::to_string(WALLABAG_STORE.getArticleLimit()); },
           [](const std::string& v) {
-            int val = std::stoi(v);
+            int val = 0;
+            try {
+              val = std::stoi(v);
+            } catch (...) {
+            }
             if (val < 0) val = 0;
             if (val > 255) val = 255;
             WALLABAG_STORE.setArticleLimit(static_cast<uint8_t>(val));

@@ -156,7 +156,7 @@ void WallabagSettingsActivity::cycleArticleLimit() {
 
 std::string WallabagSettingsActivity::articleLimitLabel() const {
   const uint8_t limit = WALLABAG_STORE.getArticleLimit();
-  if (limit == 0) return "Unlimited";
+  if (limit == 0) return std::string(tr(STR_WALLABAG_UNLIMITED));
   return std::to_string(limit);
 }
 
