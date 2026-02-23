@@ -459,6 +459,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       };
 
       enterNewActivity(new ConfirmationActivity(renderer, mappedInput, heading, bookPath, doDelete));
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
       {
         RenderLock lock(*this);
