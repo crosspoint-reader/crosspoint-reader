@@ -854,8 +854,10 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
 
   while (!remaining.empty()) {
     if ((int)lines.size() == maxLines - 1) {
-      // Last available line: use truncatedText to fit remaining text with ellipsis
-      lines.push_back(truncatedText(fontId, remaining.c_str(), maxWidth, style));
+      // Last available line: combine any word already started on this line with
+      // the rest of the text, then let truncatedText fit it with an ellipsis.
+      std::string lastContent = currentLine.empty() ? remaining : currentLine + " " + remaining;
+      lines.push_back(truncatedText(fontId, lastContent.c_str(), maxWidth, style));
       return lines;
     }
 
