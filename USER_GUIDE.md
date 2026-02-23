@@ -74,7 +74,8 @@ The Home Screen is the main entry point to the firmware. From here you can navig
 The Book Selection acts as a folder and file browser.
 
 * **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
-* **Open Selection:** Press **Confirm** to open a folder or read a selected book.
+* **Open Selection:** Press **Confirm** to open a folder or read a selected book. 
+* **Delete Files:** Hold and release **Confirm** to delete. You will be given an option to either confirm or cancel deletion.
 
 ### 3.3 Reading Mode
 

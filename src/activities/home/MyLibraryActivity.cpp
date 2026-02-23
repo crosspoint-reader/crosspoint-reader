@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "../util/ConfirmationActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -103,7 +104,7 @@ void MyLibraryActivity::loadFiles() {
 }
 
 void MyLibraryActivity::onEnter() {
-  Activity::onEnter();
+  ActivityWithSubactivity::onEnter();
 
   loadFiles();
   selectorIndex = 0;
@@ -112,11 +113,16 @@ void MyLibraryActivity::onEnter() {
 }
 
 void MyLibraryActivity::onExit() {
-  Activity::onExit();
+  ActivityWithSubactivity::onExit();
   files.clear();
 }
 
 void MyLibraryActivity::loop() {
+  if (subActivity) {
+    subActivity->loop();
+    return;
+  }
+
   // Long press BACK (1s+) goes to root folder
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
       basepath != "/") {
@@ -129,20 +135,53 @@ void MyLibraryActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (files.empty()) {
-      return;
-    }
+    if (files.empty()) return;
 
-    if (basepath.back() != '/') basepath += "/";
-    if (files[selectorIndex].back() == '/') {
-      basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
-      loadFiles();
-      selectorIndex = 0;
-      requestUpdate();
-    } else {
-      onSelectBook(basepath + files[selectorIndex]);
+    const std::string& entry = files[selectorIndex];
+    bool isDirectory = (entry.back() == '/');
+
+    // Check if this was a long press AND not a directory
+    if (mappedInput.getHeldTime() >= GO_HOME_MS && !isDirectory) {
+      // --- LONG PRESS ACTION: DELETE FILE ---
+      std::string cleanBasePath = basepath;
+      if (cleanBasePath.back() != '/') cleanBasePath += "/";
+      const std::string fullPath = cleanBasePath + entry;
+
+      auto onConfirmDelete = [this, fullPath](bool confirmed) {
+        if (confirmed) {
+          RenderLock lock(*this);
+          LOG_DBG("MyLibrary", "Attempting to delete: %s", fullPath.c_str());
+          if (Storage.remove(fullPath.c_str())) {
+            loadFiles();
+            if (selectorIndex >= files.size() && !files.empty()) {
+              selectorIndex = files.size() - 1;
+            } else if (files.empty()) {
+              selectorIndex = 0;
+            }
+          }
+        }
+        this->exitActivity();
+        this->requestUpdate();
+      };
+      std::string heading = tr(STR_DELETE) + std::string("? ");
+      enterNewActivity(new ConfirmationActivity(renderer, mappedInput, heading, entry, onConfirmDelete));
       return;
+    } else {
+      // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
+      if (basepath.back() != '/') basepath += "/";
+
+      if (isDirectory) {
+        // Navigate into folder (strip the trailing '/' for the path concatenation)
+        basepath += entry.substr(0, entry.length() - 1);
+        loadFiles();
+        selectorIndex = 0;
+        requestUpdate();
+      } else {
+        // Open the book
+        onSelectBook(basepath + entry);
+      }
     }
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {

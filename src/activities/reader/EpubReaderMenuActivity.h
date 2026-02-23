@@ -12,16 +12,7 @@
 class EpubReaderMenuActivity final : public ActivityWithSubactivity {
  public:
   // Menu actions available from the reader menu.
-  enum class MenuAction {
-    SELECT_CHAPTER,
-    GO_TO_PERCENT,
-    ROTATE_SCREEN,
-    SCREENSHOT,
-    GO_HOME,
-    SYNC,
-    DELETE_CACHE,
-    DELETE_BOOK
-  };
+  enum class MenuAction { SELECT_CHAPTER, GO_TO_PERCENT, ROTATE_SCREEN, SCREENSHOT, GO_HOME, SYNC, DELETE_CACHE };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
@@ -52,7 +43,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
       {MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER}, {MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION},
       {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},   {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
       {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},        {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
-      {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE},     {MenuAction::DELETE_BOOK, StrId::STR_DELETE}};
+      {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}};
   int selectedIndex = 0;
 
   ButtonNavigator buttonNavigator;
