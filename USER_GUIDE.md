@@ -150,7 +150,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **UI Font Size**: Adjust the text size for reading; options are "Small", "Medium", "Large", or "X Large".
 
 - **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal", or "Wide".
-- **Reader Screen Margin**: Controls the screen margins in reader mode between 5 and 40 pixels in 5 pixel increments.
+- **Reader Screen Margin**: Controls the screen margins in reader mode between 5 and 40 pixels in 5-pixel increments.
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 - **Embedded Style**: Whether to use embedded EPUB stylisation.
 - **Hyphenation**: Whether to hyphenate text at the end of lines in Reading Mode.
