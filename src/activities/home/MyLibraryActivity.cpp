@@ -111,6 +111,10 @@ void MyLibraryActivity::onEnter() {
   if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
     skipNextButtonCheck = true;
   }
+
+  if (!lastSelectedFile.empty()) {
+    selectorIndex = findEntry(lastSelectedFile);
+  }
   requestUpdate();
 }
 

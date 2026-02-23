@@ -213,7 +213,7 @@ void enterDeepSleep() {
 }
 
 void onGoHome();
-void onGoToMyLibraryWithPath(const std::string& path);
+void onGoToMyLibraryWithPath(const std::string& path, const std::string& fileName);
 void onGoToRecentBooks();
 void onGoToReader(const std::string& initialEpubPath) {
   const std::string bookPath = initialEpubPath;  // Copy before exitActivity() invalidates the reference
@@ -241,9 +241,9 @@ void onGoToRecentBooks() {
   enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
 }
 
-void onGoToMyLibraryWithPath(const std::string& path) {
+void onGoToMyLibraryWithPath(const std::string& path, const std::string& fileName) {
   exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, path));
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, path, fileName));
 }
 
 void onGoToBrowser() {
