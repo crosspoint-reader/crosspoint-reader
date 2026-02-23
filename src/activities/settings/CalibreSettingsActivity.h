@@ -23,7 +23,7 @@ class CalibreSettingsActivity final : public ActivityWithSubactivity {
  private:
   ButtonNavigator buttonNavigator;
 
-  int selectedIndex = 0;
+  size_t selectedIndex = 0;
   const std::function<void()> onBack;
   void handleSelection();
 };

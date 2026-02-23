@@ -38,12 +38,6 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
 
-  // Setup wake up GPIO and enter deep sleep
-  void startDeepSleep();
-
-  // Get battery percentage (range 0-100)
-  int getBatteryPercentage() const;
-
   // Check if USB is connected
   bool isUsbConnected() const;
 

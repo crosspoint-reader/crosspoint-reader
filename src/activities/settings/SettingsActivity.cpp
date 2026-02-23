@@ -218,7 +218,8 @@ void SettingsActivity::render(Activity::RenderLock&&) {
 
   auto metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
+                 CROSSPOINT_VERSION);
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
@@ -249,12 +250,8 @@ void SettingsActivity::render(Activity::RenderLock&&) {
           valueText = std::to_string(SETTINGS.*(setting.valuePtr));
         }
         return valueText;
-      });
-
-  // Draw version text
-  renderer.drawText(SMALL_FONT_ID,
-                    pageWidth - metrics.versionTextRightX - renderer.getTextWidth(SMALL_FONT_ID, CROSSPOINT_VERSION),
-                    metrics.versionTextY, CROSSPOINT_VERSION);
+      },
+      true);
 
   // Draw help text
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <functional>
-#include <vector>
+#include <memory>
 
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
@@ -21,10 +21,11 @@ class UITheme {
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
+  static UIIcon getFileIcon(std::string filename);
 
  private:
   const ThemeMetrics* currentMetrics;
-  const BaseTheme* currentTheme;
+  std::unique_ptr<BaseTheme> currentTheme;
 };
 
 // Helper macro to access current theme
