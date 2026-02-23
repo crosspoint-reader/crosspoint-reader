@@ -20,18 +20,18 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   int lastBaseX = startX;
   int lastBaseAdvance = 0;
   int lastBaseTop = 0;
-  bool hasBaseGlyph = false;
   constexpr int MIN_COMBINING_GAP_PX = 1;
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
-    cp = applyLigatures(cp, string);
+    const bool isCombining = utf8IsCombiningMark(cp);
+
+    if (!isCombining) {
+      cp = applyLigatures(cp, string);
+    }
 
     const EpdGlyph* glyph = getGlyph(cp);
-
-    if (!glyph) {
-      glyph = getGlyph(REPLACEMENT_GLYPH);
-    }
+    if (!glyph) glyph = getGlyph(REPLACEMENT_GLYPH);
 
     if (!glyph) {
       // TODO: Better handle this?
@@ -39,9 +39,8 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       continue;
     }
 
-    const bool isCombining = utf8IsCombiningMark(cp);
     int raiseBy = 0;
-    if (isCombining && hasBaseGlyph) {
+    if (isCombining) {
       const int currentGap = glyph->top - glyph->height - lastBaseTop;
       if (currentGap < MIN_COMBINING_GAP_PX) {
         raiseBy = MIN_COMBINING_GAP_PX - currentGap;
@@ -52,7 +51,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       cursorX += getKerning(prevCp, cp);
     }
 
-    const int glyphBaseX = (isCombining && hasBaseGlyph) ? (lastBaseX + lastBaseAdvance / 2) : cursorX;
+    const int glyphBaseX = isCombining ? (lastBaseX + lastBaseAdvance / 2) : cursorX;
     const int glyphBaseY = cursorY - raiseBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
@@ -64,7 +63,6 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       lastBaseX = cursorX;
       lastBaseAdvance = glyph->advanceX;
       lastBaseTop = glyph->top;
-      hasBaseGlyph = true;
       cursorX += glyph->advanceX;
       prevCp = cp;
     }
