@@ -557,7 +557,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
   // Resets updateLastPageTurnTime state
   updateLastPageTurnTime = false;
 
-  if (selectedPageTurnOption == 0 || selectedPageTurnOption < 0 || selectedPageTurnOption >= PAGE_TURN_LABELS.size()) {
+  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= PAGE_TURN_LABELS.size()) {
     automaticPageTurnActive = false;
   } else {
     lastPageTurnTime = millis();
