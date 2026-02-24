@@ -88,8 +88,14 @@ struct AugmentedWord {
 };
 
 // Encode a single Unicode codepoint into UTF-8 and append to word.bytes[].
-// Returns the number of bytes written, or 0 if the buffer would overflow.
+// Returns the number of bytes written, or 0 if the codepoint is invalid or the
+// buffer would overflow. Surrogates (0xD800–0xDFFF) and values above 0x10FFFF
+// are not valid Unicode scalar values and are rejected.
 size_t encodeUtf8(uint32_t cp, AugmentedWord& word) {
+  if ((cp >= 0xD800u && cp <= 0xDFFFu) || cp > 0x10FFFFu) {
+    return 0;
+  }
+
   uint8_t encoded[4];
   size_t len = 0;
 
