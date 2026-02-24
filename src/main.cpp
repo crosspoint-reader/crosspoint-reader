@@ -311,7 +311,7 @@ void setup() {
     }
   };
 
-  if (SETTINGS.lockEnabled && SETTINGS.lockSequenceLength >= 3) {
+  if (SETTINGS.lockEnabled && SETTINGS.lockSequenceLength >= 3 && SETTINGS.lockSequenceLength <= 6) {
     activityManager.replaceActivity(
         std::make_unique<LockScreenActivity>(renderer, mappedInputManager, proceedToBootTarget));
   } else {
