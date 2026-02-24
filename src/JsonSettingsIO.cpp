@@ -108,6 +108,12 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
         val = doc[info.key] | fieldDefault;
       }
       char* destPtr = (char*)&s + info.stringOffset;
+      if (info.stringMaxLen == 0) {
+        LOG_ERR("CPS", "Misconfigured SettingInfo: stringMaxLen is 0 for key '%s'", info.key);
+        destPtr[0] = '\0';
+        if (needsResave) *needsResave = true;
+        continue;
+      }
       strncpy(destPtr, val.c_str(), info.stringMaxLen - 1);
       destPtr[info.stringMaxLen - 1] = '\0';
     } else {
