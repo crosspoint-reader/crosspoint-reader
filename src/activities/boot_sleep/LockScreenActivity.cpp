@@ -121,7 +121,7 @@ void LockScreenActivity::render(Activity::RenderLock&&) {
   }
 
   const char* frontLabels[] = {ButtonShape::CIRCLE, ButtonShape::SQUARE, ButtonShape::TRIANGLE, ButtonShape::CROSS};
-  frontLabels[SETTINGS.frontButtonBack] = "";
+  if (SETTINGS.frontButtonBack < 4) frontLabels[SETTINGS.frontButtonBack] = "";
   GUI.drawButtonHints(renderer, frontLabels[0], frontLabels[1], frontLabels[2], frontLabels[3]);
   GUI.drawSideButtonHints(renderer, ButtonShape::DIAMOND, "");
 

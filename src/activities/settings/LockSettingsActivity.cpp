@@ -229,7 +229,7 @@ void LockSettingsActivity::render(Activity::RenderLock&&) {
     }
 
     const char* frontLabels[] = {ButtonShape::CIRCLE, ButtonShape::SQUARE, ButtonShape::TRIANGLE, ButtonShape::CROSS};
-    frontLabels[SETTINGS.frontButtonBack] = tr(STR_BACK);
+    if (SETTINGS.frontButtonBack < 4) frontLabels[SETTINGS.frontButtonBack] = tr(STR_BACK);
     GUI.drawButtonHints(renderer, frontLabels[0], frontLabels[1], frontLabels[2], frontLabels[3]);
     const bool canFinish = !isConfirm && currentLength >= kMinCodeLength && currentLength < kMaxCodeLength;
     GUI.drawSideButtonHints(renderer, ButtonShape::DIAMOND, canFinish ? "OK" : "");

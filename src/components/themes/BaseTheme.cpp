@@ -131,6 +131,8 @@ void BaseTheme::drawShape(const GfxRenderer& renderer, int cx, int cy, int size,
       renderer.fillRect(cx - arm, cy - half, arm * 2 + 1, size);
       break;
     }
+    default:
+      break;
   }
 }
 
