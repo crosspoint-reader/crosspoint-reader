@@ -156,7 +156,7 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
       if (static_cast<unsigned char>(labels[i][0]) < 0x20) {
-        drawShape(renderer, x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, 14, labels[i][0]);
+        drawShape(renderer, x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, ButtonShape::kSize, labels[i][0]);
       } else {
         const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
         const int textX = x + (buttonWidth - 1 - textWidth) / 2;
@@ -208,7 +208,7 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
       const int y = topButtonY + i * buttonHeight;
 
       if (static_cast<unsigned char>(labels[i][0]) < 0x20) {
-        drawShape(renderer, x + buttonWidth / 2, y + buttonHeight / 2, 14, labels[i][0]);
+        drawShape(renderer, x + buttonWidth / 2, y + buttonHeight / 2, ButtonShape::kSize, labels[i][0]);
       } else {
         // Draw rotated text centered in the button
         const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);

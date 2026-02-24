@@ -72,6 +72,7 @@ constexpr const char SQUARE[] = "\x02";
 constexpr const char TRIANGLE[] = "\x03";
 constexpr const char DIAMOND[] = "\x04";
 constexpr const char CROSS[] = "\x05";
+constexpr int kSize = 14;
 }  // namespace ButtonShape
 
 // Default theme implementation (Classic Theme)

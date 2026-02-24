@@ -360,7 +360,7 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, cornerRadius, true, true, false,
                                false, true);
       if (static_cast<unsigned char>(labels[i][0]) < 0x20) {
-        drawShape(renderer, x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, 14, labels[i][0]);
+        drawShape(renderer, x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, ButtonShape::kSize, labels[i][0]);
       } else {
         const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
         const int textX = x + (buttonWidth - 1 - textWidth) / 2;
@@ -407,7 +407,7 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
       const int y = topHintButtonY + (i * (buttonHeight + 5));
 
       if (static_cast<unsigned char>(labels[i][0]) < 0x20) {
-        drawShape(renderer, x + buttonWidth / 2, y + buttonHeight / 2, 14, labels[i][0]);
+        drawShape(renderer, x + buttonWidth / 2, y + buttonHeight / 2, ButtonShape::kSize, labels[i][0]);
       } else {
         const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
         renderer.drawTextRotated90CW(SMALL_FONT_ID, x, y + (buttonHeight + textWidth) / 2, labels[i]);
