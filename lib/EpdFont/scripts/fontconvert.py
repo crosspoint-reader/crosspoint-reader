@@ -46,6 +46,10 @@ intervals = [
     # Only Ơ/ơ (U+01A0-01A1), Ư/ư (U+01AF-01B0) for Vietnamese
     (0x01A0, 0x01A1),
     (0x01AF, 0x01B0),
+    ### Latin Extended-B (European subset only) ###
+    # Croatian digraphs (DŽ/Lj/Nj), Pinyin caron variants,
+    # European diacritical variants, Romanian (Ș/ș/Ț/ț)
+    (0x01C4, 0x021F),
     ### Vietnamese Extended ###
     # All precomposed Vietnamese characters with tone marks
     # Ả Ấ Ầ Ẩ Ẫ Ậ Ắ Ằ Ẳ Ẵ Ặ Ẹ Ẻ Ẽ Ế Ề Ể Ễ Ệ Ỉ Ị Ọ Ỏ Ố Ồ Ổ Ỗ Ộ Ớ Ờ Ở Ỡ Ợ Ụ Ủ Ứ Ừ Ử Ữ Ự Ỳ Ỵ Ỷ Ỹ
@@ -667,8 +671,10 @@ if compress:
         (0x0000, 0x007F),   # ASCII
         (0x0080, 0x00FF),   # Latin-1 Supplement
         (0x0100, 0x017F),   # Latin Extended-A
+        (0x0180, 0x024F),   # Latin Extended-B
         (0x0300, 0x036F),   # Combining Diacritical Marks
         (0x0400, 0x04FF),   # Cyrillic
+        (0x1EA0, 0x1EF9),   # Vietnamese Extended
         (0x2000, 0x206F),   # General Punctuation
         (0x2070, 0x209F),   # Superscripts & Subscripts
         (0x20A0, 0x20CF),   # Currency Symbols
