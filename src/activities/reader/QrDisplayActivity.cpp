@@ -35,7 +35,7 @@ void QrDisplayActivity::render(Activity::RenderLock&&) {
   const int availableHeight = pageHeight - metrics.topPadding - metrics.headerHeight - metrics.verticalSpacing * 2 - 40;
   const int startY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
-  const Rect qrBounds = {20, startY, availableWidth, availableHeight};
+  const Rect qrBounds(20, startY, availableWidth, availableHeight);
   QrUtils::drawQrCode(renderer, qrBounds, textPayload);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
