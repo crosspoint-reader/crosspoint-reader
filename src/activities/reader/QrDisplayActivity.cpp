@@ -44,7 +44,7 @@ void QrDisplayActivity::render(Activity::RenderLock&&) {
 
   // Make sure we have a large enough buffer on the heap to avoid blowing the stack
   uint32_t bufferSize = qrcode_getBufferSize(version);
-  uint8_t* qrcodeBytes = new uint8_t[bufferSize];
+  auto qrcodeBytes = std::make_unique<uint8_t[]>(bufferSize);
 
   QRCode qrcode;
   // Initialize the QR code. We use ECC_LOW for max capacity.
@@ -80,8 +80,6 @@ void QrDisplayActivity::render(Activity::RenderLock&&) {
     std::string errMsg = "Text too large for QR Code";
     renderer.drawText(UI_10_FONT_ID, 20, pageHeight / 2, errMsg.c_str());
   }
-
-  delete[] qrcodeBytes;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
