@@ -212,7 +212,7 @@ LANG_ABBREVIATIONS = {
     "svenska": "SV",
     "français": "FR", "francais": "FR",
     "deutsch": "DE", "german": "DE",
-    "polish": "PL",
+    "polski": "PL",
     "português": "PT", "portugues": "PT", "português (brasil)": "PO",
     "中文": "ZH", "chinese": "ZH",
     "日本語": "JA", "japanese": "JA",
