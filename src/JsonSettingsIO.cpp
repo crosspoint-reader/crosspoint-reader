@@ -107,11 +107,12 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       strncpy(info.stringPtr, val.c_str(), info.stringMaxLen - 1);
       info.stringPtr[info.stringMaxLen - 1] = '\0';
     } else {
-      uint8_t v = doc[info.key] | info.defaultValue;
+      const uint8_t fieldDefault = s.*(info.valuePtr);  // struct-initializer default, read before we overwrite it
+      uint8_t v = doc[info.key] | fieldDefault;
       if (info.type == SettingType::ENUM) {
-        v = clamp(v, (uint8_t)info.enumValues.size(), info.defaultValue);
+        v = clamp(v, (uint8_t)info.enumValues.size(), fieldDefault);
       } else if (info.type == SettingType::TOGGLE) {
-        v = clamp(v, (uint8_t)2, info.defaultValue);
+        v = clamp(v, (uint8_t)2, fieldDefault);
       } else if (info.type == SettingType::VALUE) {
         if (v < info.valueRange.min)
           v = info.valueRange.min;
