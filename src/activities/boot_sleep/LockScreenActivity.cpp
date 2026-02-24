@@ -11,6 +11,8 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 
+extern void enterDeepSleep();
+
 namespace {
 constexpr unsigned long kErrorDisplayMs = 1200;
 constexpr int kDotRadius = 8;
@@ -21,6 +23,7 @@ void LockScreenActivity::onEnter() {
   Activity::onEnter();
   inputLength = 0;
   errorUntil = 0;
+  unlockPending = false;
   requestUpdate();
 }
 
@@ -53,7 +56,6 @@ void LockScreenActivity::loop() {
   // Power long-press → go back to sleep
   if (mappedInput.isPressed(MappedInputManager::Button::Power) &&
       mappedInput.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    extern void enterDeepSleep();
     enterDeepSleep();
     return;
   }
@@ -65,8 +67,6 @@ void LockScreenActivity::loop() {
     pressed = frontBtn;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     pressed = 4;
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    pressed = 5;
   }
 
   if (pressed < 0) return;
