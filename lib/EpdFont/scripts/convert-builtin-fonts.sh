@@ -39,17 +39,30 @@ for size in ${OPENDYSLEXIC_FONT_SIZES[@]}; do
   done
 done
 
-UI_FONT_SIZES=(10 12)
+# UI fonts
+
 UI_FONT_STYLES=("Regular" "Bold")
 
-for size in ${UI_FONT_SIZES[@]}; do
-  for style in ${UI_FONT_STYLES[@]}; do
-    font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
-    font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
-    output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path > $output_path
-    echo "Generated $output_path"
-  done
+# For 10pt UI font, we fallback to 10pt NotoSans at conversion time
+# Therefore, we need to specify Ubuntu and NotoSans here
+size=10
+for style in ${UI_FONT_STYLES[@]}; do
+  font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
+  font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
+  font_fallback_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
+  output_path="../builtinFonts/${font_name}.h"
+  python fontconvert.py $font_name $size $font_path $font_fallback_path > $output_path
+  echo "Generated $output_path"
+done
+
+# For 12pt UI font, we fallback to 12pt NotoSans at runtime
+size=12
+for style in ${UI_FONT_STYLES[@]}; do
+  font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
+  font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
+  output_path="../builtinFonts/${font_name}.h"
+  python fontconvert.py $font_name $size $font_path > $output_path
+  echo "Generated $output_path"
 done
 
 python fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf > ../builtinFonts/notosans_8_regular.h

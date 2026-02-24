@@ -136,9 +136,6 @@ class GfxRenderer {
   void restoreBwBuffer();  // Restore and free the stored buffer
   void cleanupGrayscaleWithFrameBuffer() const;
 
-  // Font helpers
-  const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
-
   // Low level functions
   uint8_t* getFrameBuffer() const;
   static size_t getBufferSize();

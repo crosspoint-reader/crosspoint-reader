@@ -37,7 +37,6 @@ HalDisplay display;
 HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
-FontDecompressor fontDecompressor;
 Activity* currentActivity;
 
 // Fonts
@@ -121,12 +120,20 @@ EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
+// Glyph fallback for 10pt is handled upon conversion
 EpdFont ui10RegularFont(&ubuntu_10_regular);
 EpdFont ui10BoldFont(&ubuntu_10_bold);
 EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
 
+#ifndef OMIT_FONTS
+// Runtime fallback Ubuntu --> NotoSans
+EpdFont ui12RegularFont(&ubuntu_12_regular, &notosans12RegularFont);
+EpdFont ui12BoldFont(&ubuntu_12_bold, &notosans12BoldFont);
+#else
+// No fallback because NotoSans 12pt is not included
 EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
+#endif  // OMIT_FONTS
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 
 // measurement of power button press duration calibration value

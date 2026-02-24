@@ -3,18 +3,6 @@
 #include <Logging.h>
 #include <Utf8.h>
 
-const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
-  if (fontData->groups != nullptr) {
-    if (!fontDecompressor) {
-      LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
-      return nullptr;
-    }
-    uint16_t glyphIndex = static_cast<uint16_t>(glyph - fontData->glyph);
-    return fontDecompressor->getBitmap(fontData, glyph, glyphIndex);
-  }
-  return &fontData->bitmap[glyph->dataOffset];
-}
-
 void GfxRenderer::begin() {
   frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
@@ -73,14 +61,15 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     return;
   }
 
-  const EpdFontData* fontData = fontFamily.getData(style);
+  const EpdFont* ownerFont = fontFamily.getFont(style)->getOwnerFont(glyph);
+  const EpdFontData* fontData = ownerFont->data;
   const bool is2Bit = fontData->is2Bit;
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
   const int top = glyph->top;
 
-  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  const uint8_t* bitmap = ownerFont->getGlyphBitmap(glyph);
 
   if (bitmap != nullptr) {
     // For Normal:  outer loop advances screenY, inner loop advances screenX

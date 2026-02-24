@@ -6,11 +6,26 @@ class EpdFont {
 
  public:
   const EpdFontData* data;
-  explicit EpdFont(const EpdFontData* data) : data(data) {}
+  const EpdFont* fallback;
+  uint32_t glyphCount;
+  explicit EpdFont(const EpdFontData* data, const EpdFont* fallback = nullptr) : data(data), fallback(fallback) {
+    // Calculate glyph count from intervals
+    glyphCount = 0;
+    for (uint32_t i = 0; i < data->intervalCount; i++) {
+      const EpdUnicodeInterval* interval = &data->intervals[i];
+      glyphCount += (interval->last - interval->first + 1);
+    }
+  }
   ~EpdFont() = default;
   void getTextDimensions(const char* string, int* w, int* h) const;
 
   const EpdGlyph* getGlyph(uint32_t cp) const;
+
+  /// Returns the font that owns this glyph (follows fallback chain).
+  /// Always returns non-null; call getGlyphBitmap on the result.
+  const EpdFont* getOwnerFont(const EpdGlyph* glyph) const;
+
+  const uint8_t* getGlyphBitmap(const EpdGlyph* glyph) const;
 
   /// Returns the kerning adjustment (in pixels) between two codepoints.
   /// Returns 0 if no kerning data exists for the pair.
