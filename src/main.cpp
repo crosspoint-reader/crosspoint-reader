@@ -256,17 +256,6 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
-  // Reset lock if all 4 front buttons are held during boot (e.g. after pressing Reset)
-  gpio.update();
-  if (SETTINGS.lockEnabled && gpio.isPressed(HalGPIO::BTN_BACK) && gpio.isPressed(HalGPIO::BTN_CONFIRM) &&
-      gpio.isPressed(HalGPIO::BTN_LEFT) && gpio.isPressed(HalGPIO::BTN_RIGHT)) {
-    SETTINGS.lockEnabled = 0;
-    SETTINGS.lockSequenceLength = 0;
-    memset(SETTINGS.lockSequence, 0, sizeof(SETTINGS.lockSequence));
-    SETTINGS.saveToFile();
-    LOG_DBG("MAIN", "Lock reset by button combo");
-  }
-
   switch (gpio.getWakeupReason()) {
     case HalGPIO::WakeupReason::PowerButton:
       // For normal wakeups, verify power button press duration
@@ -312,8 +301,22 @@ void setup() {
   };
 
   if (SETTINGS.lockEnabled && SETTINGS.lockSequenceLength >= 3 && SETTINGS.lockSequenceLength <= 6) {
-    activityManager.replaceActivity(
-        std::make_unique<LockScreenActivity>(renderer, mappedInputManager, proceedToBootTarget));
+    // Reset lock if Back + Up are held during power-on
+    gpio.update();
+    if (gpio.isPressed(HalGPIO::BTN_BACK) && gpio.isPressed(HalGPIO::BTN_UP)) {
+      SETTINGS.lockEnabled = 0;
+      SETTINGS.lockSequenceLength = 0;
+      memset(SETTINGS.lockSequence, 0, sizeof(SETTINGS.lockSequence));
+      SETTINGS.saveToFile();
+      LOG_DBG("MAIN", "Lock reset by button combo");
+    }
+
+    if (SETTINGS.lockEnabled) {
+      activityManager.replaceActivity(
+          std::make_unique<LockScreenActivity>(renderer, mappedInputManager, proceedToBootTarget));
+    } else {
+      proceedToBootTarget();
+    }
   } else {
     proceedToBootTarget();
   }

@@ -15,7 +15,7 @@ constexpr int kDotRadius = 8;
 constexpr int kDotSpacing = 28;
 constexpr int kMaxCodeLength = 6;
 constexpr int kMinCodeLength = 3;
-constexpr int kMenuItems = 3;  // Change Code, Disable Lock, Back
+constexpr int kMenuItems = 2;  // Change Code, Disable Lock
 }  // namespace
 
 void LockSettingsActivity::onEnter() {
@@ -69,11 +69,13 @@ void LockSettingsActivity::loop() {
         handleMenuConfirm();
         return;
       }
-      if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+      if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+          mappedInput.wasPressed(MappedInputManager::Button::Left)) {
         menuSelection = (menuSelection + kMenuItems - 1) % kMenuItems;
         requestUpdate();
       }
-      if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+      if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+          mappedInput.wasPressed(MappedInputManager::Button::Right)) {
         menuSelection = (menuSelection + 1) % kMenuItems;
         requestUpdate();
       }
@@ -126,9 +128,6 @@ void LockSettingsActivity::handleMenuConfirm() {
       SETTINGS.lockSequenceLength = 0;
       memset(SETTINGS.lockSequence, 0, sizeof(SETTINGS.lockSequence));
       SETTINGS.saveToFile();
-      finish();
-      break;
-    case 2:  // Back
       finish();
       break;
   }
@@ -184,7 +183,7 @@ void LockSettingsActivity::render(Activity::RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
   if (mode == Mode::MENU) {
-    const StrId menuNames[kMenuItems] = {StrId::STR_CHANGE_CODE, StrId::STR_DISABLE_LOCK, StrId::STR_BACK};
+    const StrId menuNames[kMenuItems] = {StrId::STR_CHANGE_CODE, StrId::STR_DISABLE_LOCK};
     const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, kMenuItems, menuSelection,
