@@ -52,13 +52,14 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
-    if (!info.valuePtr && !info.stringPtr) continue;
+    if (!info.valuePtr && !info.stringOffset) continue;
 
-    if (info.stringPtr) {
+    if (info.stringOffset) {
+      const char* strPtr = (const char*)&s + info.stringOffset;
       if (info.obfuscated) {
-        doc[std::string(info.key) + "_obf"] = obfuscation::obfuscateToBase64(info.stringPtr);
+        doc[std::string(info.key) + "_obf"] = obfuscation::obfuscateToBase64(strPtr);
       } else {
-        doc[info.key] = info.stringPtr;
+        doc[info.key] = strPtr;
       }
     } else {
       doc[info.key] = s.*(info.valuePtr);
@@ -90,10 +91,11 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
-    if (!info.valuePtr && !info.stringPtr) continue;
+    if (!info.valuePtr && !info.stringOffset) continue;
 
-    if (info.stringPtr) {
-      const std::string fieldDefault = info.stringPtr;  // current buffer = struct-initializer default
+    if (info.stringOffset) {
+      const char* strPtr = (const char*)&s + info.stringOffset;
+      const std::string fieldDefault = strPtr;  // current buffer = struct-initializer default
       std::string val;
       if (info.obfuscated) {
         bool ok = false;
@@ -105,8 +107,9 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       } else {
         val = doc[info.key] | fieldDefault;
       }
-      strncpy(info.stringPtr, val.c_str(), info.stringMaxLen - 1);
-      info.stringPtr[info.stringMaxLen - 1] = '\0';
+      char* destPtr = (char*)&s + info.stringOffset;
+      strncpy(destPtr, val.c_str(), info.stringMaxLen - 1);
+      destPtr[info.stringMaxLen - 1] = '\0';
     } else {
       const uint8_t fieldDefault = s.*(info.valuePtr);  // struct-initializer default, read before we overwrite it
       uint8_t v = doc[info.key] | fieldDefault;

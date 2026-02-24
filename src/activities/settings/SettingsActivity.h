@@ -42,7 +42,7 @@ struct SettingInfo {
   bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)
-  char* stringPtr = nullptr;
+  size_t stringOffset = 0;
   size_t stringMaxLen = 0;
 
   // Dynamic accessors (for settings stored outside CrossPointSettings, e.g. KOReaderCredentialStore)
@@ -104,7 +104,7 @@ struct SettingInfo {
     SettingInfo s;
     s.nameId = nameId;
     s.type = SettingType::STRING;
-    s.stringPtr = ptr;
+    s.stringOffset = (size_t)ptr - (size_t)&SETTINGS;
     s.stringMaxLen = maxLen;
     s.key = key;
     s.category = category;
