@@ -170,15 +170,16 @@ void WifiSelectionActivity::processWifiScanResults() {
     hidden.ssid = cred.ssid;
     hidden.hasSavedPassword = true;
     hidden.isHidden = true;
-    hidden.isEncrypted = !cred.password.empty();
 
     if (targetResult > 0) {
-      // AP responded - use the actual RSSI from the first matching result
+      // AP responded - use actual RSSI and encryption type from the scan result
       hidden.rssi = WiFi.RSSI(0);
-      LOG_DBG("WIFI", "Hidden SSID %s found in range, RSSI=%d", cred.ssid.c_str(), hidden.rssi);
+      hidden.isEncrypted = (WiFi.encryptionType(0) != WIFI_AUTH_OPEN);
+      LOG_DBG("WIFI", "Hidden SSID %s found in range, RSSI=%d, encrypted=%s", cred.ssid.c_str(), hidden.rssi, hidden.isEncrypted ? "true" : "false");
     } else {
-      // Not found - still show in list (out of range or truly hidden) with no RSSI
+      // Not found - fall back to a password-based encryption guess since we have no scan data
       hidden.rssi = -100;
+      hidden.isEncrypted = !cred.password.empty();
       LOG_DBG("WIFI", "Hidden SSID %s not found in targeted scan", cred.ssid.c_str());
     }
     WiFi.scanDelete();
