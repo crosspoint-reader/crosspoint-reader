@@ -235,7 +235,6 @@ void onGoToSettings() {
 }
 
 void onGoToMyLibrary() {
-  assert(false && "test");
   exitActivity();
   enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
 }
