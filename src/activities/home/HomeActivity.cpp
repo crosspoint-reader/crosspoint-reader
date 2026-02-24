@@ -15,6 +15,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "WallabagCredentialStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
@@ -25,6 +26,9 @@ int HomeActivity::getMenuItemCount() const {
     count += recentBooks.size();
   }
   if (hasOpdsUrl) {
+    count++;
+  }
+  if (hasWallabagUrl) {
     count++;
   }
   return count;
@@ -114,6 +118,9 @@ void HomeActivity::onEnter() {
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
 
+  // Check if Wallabag is configured
+  hasWallabagUrl = WALLABAG_STORE.hasCredentials();
+
   selectorIndex = 0;
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -192,6 +199,7 @@ void HomeActivity::loop() {
     const int myLibraryIdx = idx++;
     const int recentsIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
+    const int wallabagIdx = hasWallabagUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
 
@@ -203,6 +211,8 @@ void HomeActivity::loop() {
       onRecentsOpen();
     } else if (menuSelectedIndex == opdsLibraryIdx) {
       onOpdsBrowserOpen();
+    } else if (menuSelectedIndex == wallabagIdx) {
+      if (onWallabagOpen) onWallabagOpen();
     } else if (menuSelectedIndex == fileTransferIdx) {
       onFileTransferOpen();
     } else if (menuSelectedIndex == settingsIdx) {
@@ -234,6 +244,13 @@ void HomeActivity::render(Activity::RenderLock&&) {
     // Insert OPDS Browser after My Library
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
+  }
+
+  if (hasWallabagUrl) {
+    // Insert Wallabag after OPDS (or after My Library if OPDS not shown)
+    const size_t insertPos = hasOpdsUrl ? 3 : 2;
+    menuItems.insert(menuItems.begin() + insertPos, tr(STR_WALLABAG));
+    menuIcons.insert(menuIcons.begin() + insertPos, Newspaper);
   }
 
   GUI.drawButtonMenu(

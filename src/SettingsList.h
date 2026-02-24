@@ -1,6 +1,7 @@
 #pragma once
 
 #include <I18n.h>
+#include <WallabagCredentialStore.h>
 
 #include <vector>
 
@@ -120,5 +121,56 @@ inline std::vector<SettingInfo> getSettingsList() {
                           StrId::STR_OPDS_BROWSER),
       SettingInfo::String(StrId::STR_PASSWORD, SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword), "opdsPassword",
                           StrId::STR_OPDS_BROWSER),
+
+      // --- Wallabag (web-only, uses WallabagCredentialStore) ---
+      SettingInfo::DynamicString(
+          StrId::STR_WALLABAG_SERVER_URL, [] { return WALLABAG_STORE.getServerUrl(); },
+          [](const std::string& v) {
+            WALLABAG_STORE.setServerUrl(v);
+            WALLABAG_STORE.saveToFile();
+          },
+          "wallabagServerUrl", StrId::STR_WALLABAG_BROWSER),
+      SettingInfo::DynamicString(
+          StrId::STR_WALLABAG_CLIENT_ID, [] { return WALLABAG_STORE.getClientId(); },
+          [](const std::string& v) {
+            WALLABAG_STORE.setClientId(v);
+            WALLABAG_STORE.saveToFile();
+          },
+          "wallabagClientId", StrId::STR_WALLABAG_BROWSER),
+      SettingInfo::DynamicString(
+          StrId::STR_WALLABAG_CLIENT_SECRET, [] { return WALLABAG_STORE.getClientSecret(); },
+          [](const std::string& v) {
+            WALLABAG_STORE.setClientSecret(v);
+            WALLABAG_STORE.saveToFile();
+          },
+          "wallabagClientSecret", StrId::STR_WALLABAG_BROWSER),
+      SettingInfo::DynamicString(
+          StrId::STR_WALLABAG_USERNAME, [] { return WALLABAG_STORE.getUsername(); },
+          [](const std::string& v) {
+            WALLABAG_STORE.setUsername(v);
+            WALLABAG_STORE.saveToFile();
+          },
+          "wallabagUsername", StrId::STR_WALLABAG_BROWSER),
+      SettingInfo::DynamicString(
+          StrId::STR_WALLABAG_PASSWORD, [] { return WALLABAG_STORE.getPassword(); },
+          [](const std::string& v) {
+            WALLABAG_STORE.setPassword(v);
+            WALLABAG_STORE.saveToFile();
+          },
+          "wallabagPassword", StrId::STR_WALLABAG_BROWSER),
+      SettingInfo::DynamicString(
+          StrId::STR_WALLABAG_ARTICLE_LIMIT, [] { return std::to_string(WALLABAG_STORE.getArticleLimit()); },
+          [](const std::string& v) {
+            int val = 0;
+            try {
+              val = std::stoi(v);
+            } catch (...) {
+            }
+            if (val < 0) val = 0;
+            if (val > 255) val = 255;
+            WALLABAG_STORE.setArticleLimit(static_cast<uint8_t>(val));
+            WALLABAG_STORE.saveToFile();
+          },
+          "wallabagArticleLimit", StrId::STR_WALLABAG_BROWSER),
   };
 }

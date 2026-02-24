@@ -17,6 +17,7 @@ enum class SettingAction {
   RemapFrontButtons,
   KOReaderSync,
   OPDSBrowser,
+  Wallabag,
   Network,
   ClearCache,
   CheckForUpdates,
