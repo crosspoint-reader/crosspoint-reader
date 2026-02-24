@@ -325,7 +325,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
 
     // If we entered a new password, ask if user wants to save it
     // Otherwise, immediately complete so parent can start web server
-    if (!usedSavedPassword && !enteredPassword.empty()) {
+    // Also trigger save prompt for manually entered hidden networks even when
+    // the password is empty, so the SSID is persisted with isHidden = true.
+    if (!usedSavedPassword && (!enteredPassword.empty() || isManualSsid)) {
       state = WifiSelectionState::SAVE_PROMPT;
       savePromptSelection = 0;  // Default to "Yes"
       requestUpdate();
