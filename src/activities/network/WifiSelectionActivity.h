@@ -15,6 +15,7 @@ struct WifiNetworkInfo {
   int32_t rssi;
   bool isEncrypted;
   bool hasSavedPassword;  // Whether we have saved credentials for this network
+  bool isHidden = false;  // Not visible in scan (injected from saved credentials)
 };
 
 // WiFi selection states
@@ -22,6 +23,7 @@ enum class WifiSelectionState {
   AUTO_CONNECTING,    // Trying to connect to the last known network
   SCANNING,           // Scanning for networks
   NETWORK_LIST,       // Displaying available networks
+  SSID_ENTRY,         // Entering SSID for a hidden network
   PASSWORD_ENTRY,     // Entering password for selected network
   CONNECTING,         // Attempting to connect
   CONNECTED,          // Successfully connected
@@ -71,6 +73,9 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
 
   // Whether we are attempting to auto-connect
   bool autoConnecting = false;
+
+  // Whether the SSID was manually entered by the user (hidden network)
+  bool isManualSsid = false;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;

@@ -35,6 +35,7 @@ void WifiSelectionActivity::onEnter() {
   savePromptSelection = 0;
   forgetPromptSelection = 0;
   autoConnecting = false;
+  isManualSsid = false;
 
   // Cache MAC address for display
   uint8_t mac[6];
@@ -89,6 +90,7 @@ void WifiSelectionActivity::onExit() {
 
 void WifiSelectionActivity::startWifiScan() {
   autoConnecting = false;
+  isManualSsid = false;
   state = WifiSelectionState::SCANNING;
   networks.clear();
   requestUpdate();
@@ -142,6 +144,48 @@ void WifiSelectionActivity::processWifiScanResults() {
     }
   }
 
+  // For credentials explicitly marked as hidden networks, do a targeted
+  // synchronous scan per SSID. Hidden APs don't broadcast their SSID in
+  // beacon frames, so they won't appear in the regular async scan above.
+  // The targeted scan sends directed probe requests so the AP can respond.
+  const auto& savedCreds = WIFI_STORE.getCredentials();
+  for (const auto& cred : savedCreds) {
+    if (!cred.isHidden) {
+      continue;  // Non-hidden saved networks are covered by the regular scan
+    }
+    if (uniqueNetworks.find(cred.ssid) != uniqueNetworks.end()) {
+      continue;  // Already found in the regular scan (e.g., network was made visible)
+    }
+
+    LOG_DBG("WIFI", "Targeted scan for hidden SSID: %s", cred.ssid.c_str());
+    const int16_t targetResult = WiFi.scanNetworks(false,             // async = false (blocking)
+                                                   true,              // show_hidden = true
+                                                   false,             // passive = false (active scan)
+                                                   300,               // timeout per channel in ms
+                                                   0,                 // all channels
+                                                   cred.ssid.c_str()  // directed probe to this SSID
+    );
+
+    WifiNetworkInfo hidden;
+    hidden.ssid = cred.ssid;
+    hidden.hasSavedPassword = true;
+    hidden.isHidden = true;
+    hidden.isEncrypted = !cred.password.empty();
+
+    if (targetResult > 0) {
+      // AP responded - use the actual RSSI from the first matching result
+      hidden.rssi = WiFi.RSSI(0);
+      LOG_DBG("WIFI", "Hidden SSID %s found in range, RSSI=%d", cred.ssid.c_str(), hidden.rssi);
+    } else {
+      // Not found - still show in list (out of range or truly hidden) with no RSSI
+      hidden.rssi = -100;
+      LOG_DBG("WIFI", "Hidden SSID %s not found in targeted scan", cred.ssid.c_str());
+    }
+    WiFi.scanDelete();
+
+    uniqueNetworks[cred.ssid] = hidden;
+  }
+
   // Convert map to vector
   networks.clear();
   for (const auto& pair : uniqueNetworks) {
@@ -149,10 +193,15 @@ void WifiSelectionActivity::processWifiScanResults() {
     networks.push_back(pair.second);
   }
 
-  // Sort: saved-password networks first, then by signal strength (strongest first)
+  // Sort: saved-password networks first, then hidden networks within saved,
+  // then by signal strength (strongest first)
   std::sort(networks.begin(), networks.end(), [](const WifiNetworkInfo& a, const WifiNetworkInfo& b) {
     if (a.hasSavedPassword != b.hasSavedPassword) {
       return a.hasSavedPassword;
+    }
+    // Among saved networks: visible before hidden
+    if (a.hasSavedPassword && b.hasSavedPassword && a.isHidden != b.isHidden) {
+      return !a.isHidden;
     }
     return a.rssi > b.rssi;
   });
@@ -174,6 +223,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
   usedSavedPassword = false;
   enteredPassword.clear();
   autoConnecting = false;
+  isManualSsid = network.isHidden;
 
   // Check if we have saved credentials for this network
   const auto* savedCred = WIFI_STORE.findCredential(selectedSSID);
@@ -224,6 +274,24 @@ void WifiSelectionActivity::attemptConnection() {
   mac.replace(":", "");
   String hostname = "CrossPoint-Reader-" + mac;
   WiFi.setHostname(hostname.c_str());
+
+  // For auto-connect (saved credentials) and manually entered SSIDs, perform a
+  // targeted scan first. This sends directed probe requests to the specific
+  // SSID, which is required to discover hidden networks (they don't broadcast
+  // their SSID in beacon frames). Without this, WiFi.begin() may immediately
+  // return WL_NO_SSID_AVAIL for hidden networks.
+  if (autoConnecting || isManualSsid) {
+    LOG_DBG("WIFI", "Doing targeted scan for hidden/saved SSID: %s", selectedSSID.c_str());
+    WiFi.scanNetworks(false,                // async = false (blocking)
+                      true,                 // show_hidden = true
+                      false,                // passive = false (active scan with directed probes)
+                      300,                  // timeout per channel in ms
+                      0,                    // channel = 0 (scan all channels)
+                      selectedSSID.c_str()  // target SSID for directed probe requests
+    );
+    WiFi.scanDelete();
+    LOG_DBG("WIFI", "Targeted scan complete");
+  }
 
   if (selectedRequiresPassword && !enteredPassword.empty()) {
     WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
@@ -308,6 +376,35 @@ void WifiSelectionActivity::loop() {
     return;
   }
 
+  if (state == WifiSelectionState::SSID_ENTRY) {
+    // Reached here after SSID keyboard subactivity exits.
+    if (selectedSSID.empty()) {
+      // Cancelled or empty - go back to network list
+      state = WifiSelectionState::NETWORK_LIST;
+      requestUpdate();
+      return;
+    }
+    // SSID entered - now ask for password (always prompt so user can leave
+    // blank for open networks)
+    state = WifiSelectionState::PASSWORD_ENTRY;
+    enterNewActivity(new KeyboardEntryActivity(
+        renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
+        "",     // No initial text
+        64,     // Max password length
+        false,  // Show password by default (hard keyboard to use)
+        [this](const std::string& text) {
+          enteredPassword = text;
+          exitActivity();
+        },
+        [this] {
+          // Password entry cancelled - go back to network list
+          state = WifiSelectionState::NETWORK_LIST;
+          exitActivity();
+          requestUpdate();
+        }));
+    return;
+  }
+
   if (state == WifiSelectionState::PASSWORD_ENTRY) {
     // Reach here once password entry finished in subactivity
     attemptConnection();
@@ -330,9 +427,9 @@ void WifiSelectionActivity::loop() {
       }
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (savePromptSelection == 0) {
-        // User chose "Yes" - save the password
+        // User chose "Yes" - save the password, preserving the hidden flag
         RenderLock lock(*this);
-        WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+        WIFI_STORE.addCredential(selectedSSID, enteredPassword, isManualSsid);
       }
       // Complete - parent will start web server
       onComplete(true);
@@ -407,15 +504,44 @@ void WifiSelectionActivity::loop() {
 
   // Handle network list state
   if (state == WifiSelectionState::NETWORK_LIST) {
+    // The list has networks.size() + 1 items: all visible networks plus a
+    // virtual "Add hidden network" entry at the bottom.
+    const size_t totalItems = networks.size() + 1;
+    const bool isAddHiddenSelected = (selectedNetworkIndex >= networks.size());
+
     // Check for Back button to exit (cancel)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onComplete(false);
       return;
     }
 
-    // Check for Confirm button to select network or rescan
+    // Check for Confirm button to select network, add hidden network, or rescan
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (!networks.empty()) {
+      if (isAddHiddenSelected) {
+        // "Add hidden network" selected - ask for SSID
+        selectedSSID.clear();
+        enteredPassword.clear();
+        selectedRequiresPassword = true;
+        usedSavedPassword = false;
+        autoConnecting = false;
+        isManualSsid = true;
+        state = WifiSelectionState::SSID_ENTRY;
+        enterNewActivity(new KeyboardEntryActivity(
+            renderer, mappedInput, tr(STR_ENTER_WIFI_NAME),
+            "",     // No initial text
+            64,     // Max SSID length
+            false,  // Not a password field
+            [this](const std::string& text) {
+              selectedSSID = text;
+              exitActivity();
+            },
+            [this] {
+              // Cancelled - clear SSID so SSID_ENTRY handler goes back to list
+              selectedSSID.clear();
+              isManualSsid = false;
+              exitActivity();
+            }));
+      } else if (!networks.empty()) {
         selectNetwork(selectedNetworkIndex);
       } else {
         startWifiScan();
@@ -430,7 +556,9 @@ void WifiSelectionActivity::loop() {
 
     const bool leftPressed = mappedInput.wasPressed(MappedInputManager::Button::Left);
     if (leftPressed) {
-      const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
+      // Only allow forget for real (non-virtual) network entries
+      const bool hasSavedPassword =
+          !networks.empty() && !isAddHiddenSelected && networks[selectedNetworkIndex].hasSavedPassword;
       if (hasSavedPassword) {
         selectedSSID = networks[selectedNetworkIndex].ssid;
         state = WifiSelectionState::FORGET_PROMPT;
@@ -440,14 +568,14 @@ void WifiSelectionActivity::loop() {
       }
     }
 
-    // Handle navigation
-    buttonNavigator.onNext([this] {
-      selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
+    // Handle navigation (include the virtual "Add hidden network" entry)
+    buttonNavigator.onNext([this, totalItems] {
+      selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, totalItems);
       requestUpdate();
     });
 
-    buttonNavigator.onPrevious([this] {
-      selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size());
+    buttonNavigator.onPrevious([this, totalItems] {
+      selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, totalItems);
       requestUpdate();
     });
   }
@@ -468,9 +596,9 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
 }
 
 void WifiSelectionActivity::render(Activity::RenderLock&&) {
-  // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
-  // from the keyboard subactivity back to the main activity
-  if (state == WifiSelectionState::PASSWORD_ENTRY) {
+  // Don't render during keyboard subactivity transitions - we're just
+  // transitioning from the keyboard back to the main activity
+  if (state == WifiSelectionState::PASSWORD_ENTRY || state == WifiSelectionState::SSID_ENTRY) {
     requestUpdateAndWait();
     return;
   }
@@ -499,6 +627,10 @@ void WifiSelectionActivity::render(Activity::RenderLock&&) {
     case WifiSelectionState::NETWORK_LIST:
       renderNetworkList();
       break;
+    case WifiSelectionState::SSID_ENTRY:
+    case WifiSelectionState::PASSWORD_ENTRY:
+      // These states are handled by the early return above; never reached here
+      break;
     case WifiSelectionState::CONNECTING:
       renderConnecting();
       break;
@@ -524,30 +656,44 @@ void WifiSelectionActivity::renderNetworkList() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  if (networks.empty()) {
-    // No networks found or scan failed
-    const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-    const auto top = (pageHeight - height) / 2;
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_NETWORKS));
-    renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, tr(STR_PRESS_OK_SCAN));
-  } else {
-    int contentTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-    int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(networks.size()),
-        selectedNetworkIndex, [this](int index) { return networks[index].ssid; }, nullptr, nullptr,
-        [this](int index) {
-          auto network = networks[index];
-          return std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
-                 getSignalStrengthIndicator(network.rssi);
-        });
-  }
+  // Always show networks + one virtual "Add hidden network" entry at the bottom
+  const int totalItems = static_cast<int>(networks.size()) + 1;
+  const bool isAddHiddenSelected = (selectedNetworkIndex >= networks.size());
+
+  int contentTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedNetworkIndex,
+      [this](int index) -> std::string {
+        if (index < static_cast<int>(networks.size())) {
+          return networks[index].ssid;
+        }
+        return tr(STR_ADD_HIDDEN_NETWORK);
+      },
+      nullptr, nullptr,
+      [this](int index) -> std::string {
+        if (index >= static_cast<int>(networks.size())) {
+          return "";  // No detail for virtual entry
+        }
+        const auto& network = networks[index];
+        if (network.isHidden) {
+          std::string detail = std::string("+ ~ ") + (network.isEncrypted ? "* " : "");
+          if (network.rssi > -100) {
+            detail += getSignalStrengthIndicator(network.rssi);
+          }
+          return detail;
+        }
+        return std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
+               getSignalStrengthIndicator(network.rssi);
+      });
 
   GUI.drawHelpText(renderer,
                    Rect{0, pageHeight - metrics.buttonHintsHeight - metrics.contentSidePadding - 15, pageWidth, 20},
                    tr(STR_NETWORK_LEGEND));
 
-  const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
+  // Only show "Forget" hint for real network entries with a saved password
+  const bool hasSavedPassword =
+      !networks.empty() && !isAddHiddenSelected && networks[selectedNetworkIndex].hasSavedPassword;
   const char* forgetLabel = hasSavedPassword ? tr(STR_FORGET_BUTTON) : "";
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CONNECT), forgetLabel, tr(STR_RETRY));
