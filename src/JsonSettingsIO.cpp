@@ -93,16 +93,17 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     if (!info.valuePtr && !info.stringPtr) continue;
 
     if (info.stringPtr) {
+      const std::string fieldDefault = info.stringPtr;  // current buffer = struct-initializer default
       std::string val;
       if (info.obfuscated) {
         bool ok = false;
         val = obfuscation::deobfuscateFromBase64(doc[std::string(info.key) + "_obf"] | "", &ok);
         if (!ok || val.empty()) {
-          val = doc[info.key] | "";
-          if (!val.empty() && needsResave) *needsResave = true;
+          val = doc[info.key] | fieldDefault;
+          if (val != fieldDefault && needsResave) *needsResave = true;
         }
       } else {
-        val = doc[info.key] | "";
+        val = doc[info.key] | fieldDefault;
       }
       strncpy(info.stringPtr, val.c_str(), info.stringMaxLen - 1);
       info.stringPtr[info.stringMaxLen - 1] = '\0';
