@@ -88,7 +88,7 @@ bool probeDS3231Signature() {
   const uint8_t tensDigit = (sec >> 4) & 0x07;
   const uint8_t onesDigit = sec & 0x0F;
 
-  return (tensDigit > 5 || onesDigit > 9) ? false : true;
+  return tensDigit <= 5 && onesDigit <= 9;
 }
 
 bool probeQMI8658Signature() {
