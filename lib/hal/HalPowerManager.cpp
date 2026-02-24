@@ -84,13 +84,11 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
     Wire.beginTransmission(I2C_ADDR_BQ27220);
     Wire.write(BQ27220_SOC_REG);
     if (Wire.endTransmission(false) != 0) {
-      _batteryI2cFailCount++;
       _batteryLastPollMs = now;
       return _batteryCachedPercent;
     }
     Wire.requestFrom(I2C_ADDR_BQ27220, (uint8_t)2);
     if (Wire.available() < 2) {
-      _batteryI2cFailCount++;
       _batteryLastPollMs = now;
       return _batteryCachedPercent;
     }
@@ -99,7 +97,6 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
     const uint16_t soc = (hi << 8) | lo;
     _batteryCachedPercent = soc > 100 ? 100 : soc;
     _batteryLastPollMs = now;
-    _batteryI2cFailCount = 0;
     return _batteryCachedPercent;
   }
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
