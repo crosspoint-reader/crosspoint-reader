@@ -510,7 +510,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     std::string currentLine;
     // Extra padding inside the card so text doesn't hug the border
     const int maxLineWidth = bookWidth - 40;
-    const int spaceWidth = renderer.getSpaceWidth(UI_12_FONT_ID);
+    const int spaceWidth = renderer.getSpaceWidth(UI_12_FONT_ID, EpdFontFamily::REGULAR);
 
     for (auto& i : words) {
       // If we just hit the line limit (3), stop processing words
@@ -736,7 +736,7 @@ void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, const size_t
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   auto truncatedLabel =
       renderer.truncatedText(SMALL_FONT_ID, label, rect.width - metrics.contentSidePadding * 2, EpdFontFamily::REGULAR);
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());

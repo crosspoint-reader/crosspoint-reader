@@ -789,6 +789,20 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   if (headerOrBlockTag) {
     self->currentCssStyle.reset();
     self->updateEffectiveInlineStyle();
+
+    // Reset alignment on empty text blocks to prevent stale alignment from bleeding
+    // into the next sibling element. This fixes issue #1026 where an empty <h1> (default
+    // Center) followed by an image-only <p> causes Center to persist through the chain
+    // of empty block reuse into subsequent text paragraphs.
+    // Margins/padding are preserved so parent element spacing still accumulates correctly.
+    if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
+      auto style = self->currentTextBlock->getBlockStyle();
+      style.textAlignDefined = false;
+      style.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                            ? CssTextAlign::Justify
+                            : static_cast<CssTextAlign>(self->paragraphAlignment);
+      self->currentTextBlock->setBlockStyle(style);
+    }
   }
 }
 

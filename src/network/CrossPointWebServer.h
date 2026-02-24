@@ -9,8 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "WebDAVHandler.h"
-
 // Structure to hold file information
 struct FileInfo {
   String name;
@@ -73,7 +71,6 @@ class CrossPointWebServer {
  private:
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;
-  WebDAVHandler davHandler;
   bool running = false;
   bool apMode = false;  // true when running in AP mode, false for STA mode
   uint16_t port = 80;

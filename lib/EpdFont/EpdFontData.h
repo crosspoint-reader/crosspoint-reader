@@ -31,6 +31,20 @@ typedef struct {
   uint32_t offset;  ///< Index of the first code point into the glyph array
 } EpdUnicodeInterval;
 
+/// Maps a codepoint to a kerning class ID, sorted by codepoint for binary search.
+/// Class IDs are 1-based; codepoints not in the table have implicit class 0 (no kerning).
+typedef struct {
+  uint16_t codepoint;  ///< Unicode codepoint
+  uint8_t classId;     ///< 1-based kerning class ID
+} __attribute__((packed)) EpdKernClassEntry;
+
+/// Ligature substitution for a specific glyph pair, sorted by `pair` for binary search.
+/// `pair` encodes (leftCodepoint << 16 | rightCodepoint) for single-key lookup.
+typedef struct {
+  uint32_t pair;        ///< Packed codepoint pair (left << 16 | right)
+  uint32_t ligatureCp;  ///< Codepoint of the replacement ligature glyph
+} __attribute__((packed)) EpdLigaturePair;
+
 /// Data stored for FONT AS A WHOLE
 typedef struct {
   const uint8_t* bitmap;                ///< Glyph bitmaps, concatenated
@@ -41,6 +55,15 @@ typedef struct {
   int ascender;                         ///< Maximal height of a glyph above the base line
   int descender;                        ///< Maximal height of a glyph below the base line
   bool is2Bit;
-  const EpdFontGroup* groups;  ///< NULL for uncompressed fonts
-  uint16_t groupCount;         ///< 0 for uncompressed fonts
+  const EpdFontGroup* groups;                 ///< NULL for uncompressed fonts
+  uint16_t groupCount;                        ///< 0 for uncompressed fonts
+  const EpdKernClassEntry* kernLeftClasses;   ///< Sorted left-side class map (nullptr if none)
+  const EpdKernClassEntry* kernRightClasses;  ///< Sorted right-side class map (nullptr if none)
+  const int8_t* kernMatrix;                   ///< Flat leftClassCount x rightClassCount matrix
+  uint16_t kernLeftEntryCount;                ///< Entries in kernLeftClasses
+  uint16_t kernRightEntryCount;               ///< Entries in kernRightClasses
+  uint8_t kernLeftClassCount;                 ///< Number of distinct left classes (matrix rows)
+  uint8_t kernRightClassCount;                ///< Number of distinct right classes (matrix cols)
+  const EpdLigaturePair* ligaturePairs;       ///< Sorted ligature pair table (nullptr if none)
+  uint32_t ligaturePairCount;                 ///< Number of entries in ligaturePairs
 } EpdFontData;
