@@ -70,6 +70,7 @@ void LockScreenActivity::loop() {
   }
 
   if (pressed < 0) return;
+  if (inputLength >= sizeof(inputBuffer)) return;
 
   inputBuffer[inputLength] = static_cast<uint8_t>(pressed);
   inputLength++;
@@ -99,19 +100,22 @@ void LockScreenActivity::render(Activity::RenderLock&&) {
 
   // Draw progress dots
   const int seqLen = SETTINGS.lockSequenceLength;
-  const int totalWidth = seqLen * kDotRadius * 2 + (seqLen - 1) * (kDotSpacing - kDotRadius * 2);
-  const int startX = (pageWidth - totalWidth) / 2;
   const int dotY = pageHeight / 2 + 60;
 
-  for (int i = 0; i < seqLen; i++) {
-    const int cx = startX + i * kDotSpacing + kDotRadius;
-    const int cy = dotY;
+  if (seqLen > 0) {
+    const int totalWidth = seqLen * kDotRadius * 2 + (seqLen - 1) * (kDotSpacing - kDotRadius * 2);
+    const int startX = (pageWidth - totalWidth) / 2;
 
-    if (i < inputLength) {
-      renderer.fillRoundedRect(cx - kDotRadius, cy - kDotRadius, kDotRadius * 2, kDotRadius * 2, kDotRadius,
-                               Color::Black);
-    } else {
-      renderer.drawRoundedRect(cx - kDotRadius, cy - kDotRadius, kDotRadius * 2, kDotRadius * 2, 1, kDotRadius, true);
+    for (int i = 0; i < seqLen; i++) {
+      const int cx = startX + i * kDotSpacing + kDotRadius;
+      const int cy = dotY;
+
+      if (i < inputLength) {
+        renderer.fillRoundedRect(cx - kDotRadius, cy - kDotRadius, kDotRadius * 2, kDotRadius * 2, kDotRadius,
+                                 Color::Black);
+      } else {
+        renderer.drawRoundedRect(cx - kDotRadius, cy - kDotRadius, kDotRadius * 2, kDotRadius * 2, 1, kDotRadius, true);
+      }
     }
   }
 
