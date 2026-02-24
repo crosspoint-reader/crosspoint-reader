@@ -19,10 +19,11 @@ extern "C" {
 
 void IRAM_ATTR __wrap_panic_abort(const char* message) {
   // IRAM-safe bounded copy (strncpy is not IRAM-safe in panic context)
-  for (int i = 0; i < (int)sizeof(panicMessage) - 1 && message[i]; i++) {
+  int i = 0;
+  for (; i < (int)sizeof(panicMessage) - 1 && message[i]; i++) {
     panicMessage[i] = message[i];
   }
-  panicMessage[sizeof(panicMessage) - 1] = '\0';
+  panicMessage[i] = '\0';
 
   __real_panic_abort(message);
 }
