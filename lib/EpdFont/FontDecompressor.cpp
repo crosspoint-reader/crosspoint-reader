@@ -4,6 +4,8 @@
 
 #include <cstdlib>
 
+FontDecompressor fontDecompressor;
+
 bool FontDecompressor::init() {
   clearCache();
   return true;

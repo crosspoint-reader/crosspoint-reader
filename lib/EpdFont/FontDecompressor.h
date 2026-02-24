@@ -38,3 +38,5 @@ class FontDecompressor {
   CacheEntry* findEvictionCandidate();
   bool decompressGroup(const EpdFontData* fontData, uint16_t groupIndex, CacheEntry* entry);
 };
+
+extern FontDecompressor fontDecompressor;

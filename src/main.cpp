@@ -37,7 +37,6 @@ HalDisplay display;
 HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
-FontDecompressor fontDecompressor;
 Activity* currentActivity;
 
 // Fonts

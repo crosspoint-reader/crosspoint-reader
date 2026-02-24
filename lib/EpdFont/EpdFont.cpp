@@ -1,5 +1,6 @@
 #include "EpdFont.h"
 
+#include <FontDecompressor.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -185,4 +186,24 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
     }
   }
   return nullptr;
+}
+
+const EpdFont* EpdFont::getOwnerFont(const EpdGlyph* glyph) const {
+  if (fallback) {
+    const uintptr_t glyphAddr = reinterpret_cast<uintptr_t>(glyph);
+    const uintptr_t fallbackGlyphStart = reinterpret_cast<uintptr_t>(fallback->data->glyph);
+    const uintptr_t fallbackGlyphEnd = fallbackGlyphStart + fallback->glyphCount * sizeof(EpdGlyph);
+    if (fallbackGlyphStart <= glyphAddr && glyphAddr < fallbackGlyphEnd) {
+      return fallback->getOwnerFont(glyph);
+    }
+  }
+  return this;
+}
+
+const uint8_t* EpdFont::getGlyphBitmap(const EpdGlyph* glyph) const {
+  if (data->groups != nullptr) {
+    uint16_t glyphIndex = static_cast<uint16_t>(glyph - data->glyph);
+    return fontDecompressor.getBitmap(data, glyph, glyphIndex);
+  }
+  return &data->bitmap[glyph->dataOffset];
 }
