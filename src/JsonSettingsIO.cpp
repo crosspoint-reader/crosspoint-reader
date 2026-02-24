@@ -131,6 +131,12 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["statusBarTitle"] = s.statusBarTitle;
   doc["statusBarBattery"] = s.statusBarBattery;
   doc["statusBarProgressBarThickness"] = s.statusBarProgressBarThickness;
+  doc["lockEnabled"] = s.lockEnabled;
+  doc["lockSequenceLength"] = s.lockSequenceLength;
+  JsonArray lockSeq = doc["lockSequence"].to<JsonArray>();
+  for (uint8_t i = 0; i < s.lockSequenceLength && i < 6; i++) {
+    lockSeq.add(s.lockSequence[i]);
+  }
 
   String json;
   serializeJson(doc, json);
@@ -186,6 +192,19 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   s.uiTheme = doc["uiTheme"] | (uint8_t)S::LYRA;
   s.fadingFix = doc["fadingFix"] | (uint8_t)0;
   s.embeddedStyle = doc["embeddedStyle"] | (uint8_t)1;
+  s.lockEnabled = doc["lockEnabled"] | (uint8_t)0;
+  s.lockSequenceLength = doc["lockSequenceLength"] | (uint8_t)0;
+  if (s.lockSequenceLength > 6) s.lockSequenceLength = 0;
+  memset(s.lockSequence, 0, sizeof(s.lockSequence));
+  JsonArray lockSeq = doc["lockSequence"].as<JsonArray>();
+  if (lockSeq) {
+    uint8_t i = 0;
+    for (JsonVariant v : lockSeq) {
+      if (i >= s.lockSequenceLength || i >= 6) break;
+      s.lockSequence[i] = v.as<uint8_t>();
+      i++;
+    }
+  }
 
   const char* url = doc["opdsServerUrl"] | "";
   strncpy(s.opdsServerUrl, url, sizeof(s.opdsServerUrl) - 1);

@@ -66,6 +66,14 @@ struct ThemeMetrics {
 
 enum UIIcon { Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot };
 
+namespace ButtonShape {
+constexpr const char CIRCLE[] = "\x01";
+constexpr const char SQUARE[] = "\x02";
+constexpr const char TRIANGLE[] = "\x03";
+constexpr const char DIAMOND[] = "\x04";
+constexpr const char CROSS[] = "\x05";
+}  // namespace ButtonShape
+
 // Default theme implementation (Classic Theme)
 // Additional themes can inherit from this and override methods as needed
 
@@ -140,4 +148,6 @@ class BaseTheme {
   virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const;
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const;
+
+  static void drawShape(const GfxRenderer& renderer, int cx, int cy, int size, char shapeId);
 };
