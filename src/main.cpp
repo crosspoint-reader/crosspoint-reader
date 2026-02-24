@@ -318,6 +318,8 @@ void setup() {
   }
 
   HalSystem::checkPanic();
+  HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
+
   SETTINGS.loadFromFile();
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
