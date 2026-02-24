@@ -175,7 +175,8 @@ void WifiSelectionActivity::processWifiScanResults() {
       // AP responded - use actual RSSI and encryption type from the scan result
       hidden.rssi = WiFi.RSSI(0);
       hidden.isEncrypted = (WiFi.encryptionType(0) != WIFI_AUTH_OPEN);
-      LOG_DBG("WIFI", "Hidden SSID %s found in range, RSSI=%d, encrypted=%s", cred.ssid.c_str(), hidden.rssi, hidden.isEncrypted ? "true" : "false");
+      LOG_DBG("WIFI", "Hidden SSID %s found in range, RSSI=%d, encrypted=%s", cred.ssid.c_str(), hidden.rssi,
+              hidden.isEncrypted ? "true" : "false");
     } else {
       // Not found - fall back to a password-based encryption guess since we have no scan data
       hidden.rssi = -100;
@@ -281,8 +282,10 @@ void WifiSelectionActivity::attemptConnection() {
   // SSID, which is required to discover hidden networks (they don't broadcast
   // their SSID in beacon frames). Without this, WiFi.begin() may immediately
   // return WL_NO_SSID_AVAIL for hidden networks.
-  if (autoConnecting || isManualSsid) {
-    LOG_DBG("WIFI", "Doing targeted scan for hidden/saved SSID: %s", selectedSSID.c_str());
+  const auto* targetedScanCred = WIFI_STORE.findCredential(selectedSSID);
+  const bool needsTargetedScan = isManualSsid || (targetedScanCred && targetedScanCred->isHidden);
+  if (needsTargetedScan) {
+    LOG_DBG("WIFI", "Doing targeted scan for hidden SSID: %s", selectedSSID.c_str());
     WiFi.scanNetworks(false,                // async = false (blocking)
                       true,                 // show_hidden = true
                       false,                // passive = false (active scan with directed probes)
