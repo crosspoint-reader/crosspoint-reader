@@ -188,6 +188,7 @@ void EpubReaderActivity::loop() {
     }
 
     if ((currentTime - lastPageTurnTime) >= pageTurnDuration) {
+      lastPageTurnTime = currentTime;
       updateLastPageTurnTime = true;
       if (section->currentPage < section->pageCount - 1) {
         section->currentPage++;
