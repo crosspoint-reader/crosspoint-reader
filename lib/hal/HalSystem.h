@@ -3,8 +3,6 @@
 #include <cstdint>
 #include <string>
 
-#include "Arduino.h"
-
 extern "C" {
 
 void __real_panic_abort(const char* message);
