@@ -178,7 +178,11 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
     }
   }
   if (cp != REPLACEMENT_GLYPH) {
-    return getGlyph(REPLACEMENT_GLYPH);
+    if (fallback) {
+      return fallback->getGlyph(cp);
+    } else {
+      return getGlyph(REPLACEMENT_GLYPH);
+    }
   }
   return nullptr;
 }
