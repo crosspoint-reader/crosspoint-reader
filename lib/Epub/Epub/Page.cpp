@@ -67,8 +67,8 @@ bool Page::serialize(FsFile& file) const {
     }
   }
 
-  // Serialize footnotes (clamp to 16 to match addFootnote/deserialize limits)
-  const uint16_t fnCount = std::min<uint16_t>(footnotes.size(), 16);
+  // Serialize footnotes (clamp to MAX_FOOTNOTES_PER_PAGE to match addFootnote/deserialize limits)
+  const uint16_t fnCount = std::min<uint16_t>(footnotes.size(), MAX_FOOTNOTES_PER_PAGE);
   serialization::writePod(file, fnCount);
   for (uint16_t i = 0; i < fnCount; i++) {
     const auto& fn = footnotes[i];
@@ -107,12 +107,13 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   // Deserialize footnotes
   uint16_t fnCount;
   serialization::readPod(file, fnCount);
-  if (fnCount > 16) {
+  if (fnCount > MAX_FOOTNOTES_PER_PAGE) {
     LOG_ERR("PGE", "Invalid footnote count %u", fnCount);
     return nullptr;
   }
+  page->footnotes.resize(fnCount);
   for (uint16_t i = 0; i < fnCount; i++) {
-    FootnoteEntry entry;
+    auto& entry = page->footnotes[i];
     if (file.read(entry.number, sizeof(entry.number)) != sizeof(entry.number) ||
         file.read(entry.href, sizeof(entry.href)) != sizeof(entry.href)) {
       LOG_ERR("PGE", "Failed to read footnote %u", i);
@@ -120,7 +121,6 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
     }
     entry.number[sizeof(entry.number) - 1] = '\0';
     entry.href[sizeof(entry.href) - 1] = '\0';
-    page->footnotes.push_back(entry);
   }
 
   return page;

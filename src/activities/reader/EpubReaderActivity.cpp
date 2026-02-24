@@ -645,7 +645,7 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
     }
 
     // Collect footnotes from the loaded page
-    currentPageFootnotes = p->footnotes;
+    currentPageFootnotes = std::move(p->footnotes);
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);

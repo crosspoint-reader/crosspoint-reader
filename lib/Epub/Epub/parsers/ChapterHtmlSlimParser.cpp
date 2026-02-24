@@ -989,15 +989,12 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
   // Track cumulative words to assign footnotes to the page containing their anchor
   wordsExtractedInBlock += line->wordCount();
-  auto it = pendingFootnotes.begin();
-  while (it != pendingFootnotes.end()) {
-    if (it->first <= wordsExtractedInBlock) {
-      currentPage->addFootnote(it->second.number, it->second.href);
-      it = pendingFootnotes.erase(it);
-    } else {
-      ++it;
-    }
+  auto footnoteIt = pendingFootnotes.begin();
+  while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
+    currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
+    ++footnoteIt;
   }
+  pendingFootnotes.erase(pendingFootnotes.begin(), footnoteIt);
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
