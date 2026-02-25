@@ -117,9 +117,23 @@ void MyLibraryActivity::onExit() {
   files.clear();
 }
 
+void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
+  // Only clear cache for .epub files
+  if (StringUtils::checkFileExtension(fullPath, ".epub")) {
+    Epub(fullPath.c_str(), "/.crosspoint").clearCache();
+    LOG_DBG("MyLibrary", "Cleared metadata cache for: %s", fullPath.c_str());
+  }
+}
+
 void MyLibraryActivity::loop() {
   if (subActivity) {
     subActivity->loop();
+    // Check the flag AFTER the subActivity loop returns safely
+    if (pendingSubActivityExit) {
+      this->exitActivity();
+      pendingSubActivityExit = false;
+      requestUpdate();
+    }
     return;
   }
 
@@ -151,6 +165,7 @@ void MyLibraryActivity::loop() {
         if (confirmed) {
           RenderLock lock(*this);
           LOG_DBG("MyLibrary", "Attempting to delete: %s", fullPath.c_str());
+          clearFileMetadata(fullPath);
           if (Storage.remove(fullPath.c_str())) {
             loadFiles();
             if (selectorIndex >= files.size() && !files.empty()) {
@@ -158,9 +173,11 @@ void MyLibraryActivity::loop() {
             } else if (files.empty()) {
               selectorIndex = 0;
             }
+          } else {
+            LOG_ERR("MyLibrary", "Failed to delete file: %s", fullPath.c_str());
           }
         }
-        this->exitActivity();
+        this->pendingSubActivityExit = true;
         this->requestUpdate();
       };
       std::string heading = tr(STR_DELETE) + std::string("? ");

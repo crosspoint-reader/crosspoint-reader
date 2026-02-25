@@ -16,4 +16,6 @@ class ConfirmationActivity : public Activity {
   std::string heading;
   std::string body;
   std::function<void(bool)> onResult;
+  bool isFinished = false;
+  bool resultValue = false;
 };
