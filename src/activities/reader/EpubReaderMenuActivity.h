@@ -18,6 +18,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
     ROTATE_SCREEN,
     SCREENSHOT,
     AUTO_PAGE_TURN,
+    DISPLAY_QR,
     GO_HOME,
     SYNC,
     DELETE_CACHE
@@ -51,12 +52,12 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
                                            {MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION},
                                            {MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN},
-                                           {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
                                            {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
+                                           {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
+                                           {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
                                            {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},
                                            {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
                                            {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}};
-
   int selectedIndex = 0;
 
   ButtonNavigator buttonNavigator;
