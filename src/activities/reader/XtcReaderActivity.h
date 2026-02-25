@@ -9,6 +9,8 @@
 
 #include <Xtc.h>
 
+#include <cstdint>
+
 #include "activities/ActivityWithSubactivity.h"
 
 class XtcReaderActivity final : public ActivityWithSubactivity {
@@ -16,6 +18,7 @@ class XtcReaderActivity final : public ActivityWithSubactivity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  uint32_t readingSessionStartMs = 0;
 
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;

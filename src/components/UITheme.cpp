@@ -90,3 +90,17 @@ UIIcon UITheme::getFileIcon(std::string filename) {
   }
   return File;
 }
+
+void UITheme::drawListRowProgress(const GfxRenderer& renderer, const int progressPercent, const int x, const int y,
+                                  const int width, const int height) {
+  if (width <= 4 || height <= 2) {
+    return;
+  }
+
+  const int clamped = std::min(100, std::max(0, progressPercent));
+  const int filledWidth = (width * clamped) / 100;
+  renderer.drawRect(x, y, width, height, true);
+  if (filledWidth > 0) {
+    renderer.fillRect(x + 1, y + 1, std::max(1, filledWidth - 2), std::max(1, height - 2), true);
+  }
+}

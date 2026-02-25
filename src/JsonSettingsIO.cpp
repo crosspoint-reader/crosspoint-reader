@@ -249,6 +249,8 @@ bool JsonSettingsIO::saveRecentBooks(const RecentBooksStore& store, const char* 
     obj["title"] = book.title;
     obj["author"] = book.author;
     obj["coverBmpPath"] = book.coverBmpPath;
+    obj["progressPercent"] = book.progressPercent;
+    obj["readingSeconds"] = book.readingSeconds;
   }
 
   String json;
@@ -273,6 +275,14 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
     book.title = obj["title"] | std::string("");
     book.author = obj["author"] | std::string("");
     book.coverBmpPath = obj["coverBmpPath"] | std::string("");
+    book.progressPercent = obj["progressPercent"] | -1;
+    if (book.progressPercent > 100) {
+      book.progressPercent = 100;
+    }
+    if (book.progressPercent < -1) {
+      book.progressPercent = -1;
+    }
+    book.readingSeconds = obj["readingSeconds"] | 0;
     store.recentBooks.push_back(book);
   }
 

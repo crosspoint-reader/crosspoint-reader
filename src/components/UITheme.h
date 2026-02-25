@@ -22,6 +22,8 @@ class UITheme {
                                      bool hasSubtitle);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(std::string filename);
+  static void drawListRowProgress(const GfxRenderer& renderer, int progressPercent, int x, int y, int width,
+                                  int height);
 
  private:
   const ThemeMetrics* currentMetrics;

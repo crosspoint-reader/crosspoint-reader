@@ -25,6 +25,7 @@ constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 constexpr int statusBarMargin = 19;
 constexpr int progressBarMarginTop = 1;
+constexpr char READING_TIME_FILE_NAME[] = "/reading_time.bin";
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -54,6 +55,36 @@ void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
       break;
     default:
       break;
+  }
+}
+
+void addReadingTimeToCache(const std::string& cachePath, const uint32_t elapsedSeconds) {
+  if (elapsedSeconds == 0) {
+    return;
+  }
+
+  uint32_t accumulatedSeconds = 0;
+  FsFile readFile;
+  if (Storage.openFileForRead("ERS", cachePath + READING_TIME_FILE_NAME, readFile)) {
+    uint8_t data[4];
+    if (readFile.read(data, sizeof(data)) == 4) {
+      accumulatedSeconds = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+    }
+    readFile.close();
+  }
+
+  uint32_t totalSeconds = accumulatedSeconds + elapsedSeconds;
+  if (totalSeconds < accumulatedSeconds) {
+    totalSeconds = UINT32_MAX;
+  }
+
+  FsFile writeFile;
+  if (Storage.openFileForWrite("ERS", cachePath + READING_TIME_FILE_NAME, writeFile)) {
+    const uint8_t out[4] = {static_cast<uint8_t>(totalSeconds & 0xFF), static_cast<uint8_t>((totalSeconds >> 8) & 0xFF),
+                            static_cast<uint8_t>((totalSeconds >> 16) & 0xFF),
+                            static_cast<uint8_t>((totalSeconds >> 24) & 0xFF)};
+    writeFile.write(out, sizeof(out));
+    writeFile.close();
   }
 }
 
@@ -101,6 +132,7 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+  readingSessionStartMs = millis();
 
   // Trigger first update
   requestUpdate();
@@ -108,6 +140,12 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   ActivityWithSubactivity::onExit();
+
+  if (epub && readingSessionStartMs != 0) {
+    const uint32_t elapsedSeconds = (millis() - readingSessionStartMs) / 1000U;
+    RECENT_BOOKS.addBookReadingTime(epub->getPath(), elapsedSeconds);
+  }
+  readingSessionStartMs = 0;
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -648,6 +686,13 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d", spineIndex, currentPage);
   } else {
     LOG_ERR("ERS", "Could not save progress!");
+  }
+
+  if (pageCount > 0) {
+    const float sectionProgress = static_cast<float>(currentPage) / static_cast<float>(pageCount);
+    const float bookProgress = epub->calculateProgress(spineIndex, sectionProgress);
+    const int percent = static_cast<int>(bookProgress * 100.0f + 0.5f);
+    RECENT_BOOKS.updateBookProgress(epub->getPath(), percent);
   }
 }
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,

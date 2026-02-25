@@ -1,20 +1,17 @@
 #include "RecentBooksActivity.h"
 
+#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
-
-#include <algorithm>
+#include <Serialization.h>
+#include <Txt.h>
+#include <Xtc.h>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
-
-namespace {
-constexpr unsigned long GO_HOME_MS = 1000;
-}  // namespace
 
 void RecentBooksActivity::loadRecentBooks() {
   recentBooks.clear();
@@ -43,6 +40,7 @@ void RecentBooksActivity::onEnter() {
 void RecentBooksActivity::onExit() {
   Activity::onExit();
   recentBooks.clear();
+  recentBookRows.clear();
 }
 
 void RecentBooksActivity::loop() {
@@ -99,10 +97,17 @@ void RecentBooksActivity::render(Activity::RenderLock&&) {
   if (recentBooks.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_RECENT_BOOKS));
   } else {
+    recentBookRows = RECENT_BOOKS.buildListRowData(recentBooks, renderer, metrics, pageWidth, contentHeight);
+
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
-        [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
-        [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
+        [this](int index) { return recentBooks[index].title; },
+        [this](int index) { return recentBookRows[index].authorSubtitle; },
+        [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); },
+        [this](int index) { return recentBooks[index].progressValue; }, false,
+        [this](int index) { return recentBooks[index].progressPercent; });
+
+    RECENT_BOOKS.drawMetricsOverlay(renderer, recentBookRows, selectorIndex, contentTop, contentHeight, metrics);
   }
 
   // Help text

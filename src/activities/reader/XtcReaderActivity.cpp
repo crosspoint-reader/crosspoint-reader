@@ -23,6 +23,37 @@
 namespace {
 constexpr unsigned long skipPageMs = 700;
 constexpr unsigned long goHomeMs = 1000;
+constexpr char READING_TIME_FILE_NAME[] = "/reading_time.bin";
+
+void addReadingTimeToCache(const std::string& cachePath, const uint32_t elapsedSeconds) {
+  if (elapsedSeconds == 0) {
+    return;
+  }
+
+  uint32_t accumulatedSeconds = 0;
+  FsFile readFile;
+  if (Storage.openFileForRead("XTR", cachePath + READING_TIME_FILE_NAME, readFile)) {
+    uint8_t data[4];
+    if (readFile.read(data, sizeof(data)) == 4) {
+      accumulatedSeconds = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+    }
+    readFile.close();
+  }
+
+  uint32_t totalSeconds = accumulatedSeconds + elapsedSeconds;
+  if (totalSeconds < accumulatedSeconds) {
+    totalSeconds = UINT32_MAX;
+  }
+
+  FsFile writeFile;
+  if (Storage.openFileForWrite("XTR", cachePath + READING_TIME_FILE_NAME, writeFile)) {
+    const uint8_t out[4] = {static_cast<uint8_t>(totalSeconds & 0xFF), static_cast<uint8_t>((totalSeconds >> 8) & 0xFF),
+                            static_cast<uint8_t>((totalSeconds >> 16) & 0xFF),
+                            static_cast<uint8_t>((totalSeconds >> 24) & 0xFF)};
+    writeFile.write(out, sizeof(out));
+    writeFile.close();
+  }
+}
 }  // namespace
 
 void XtcReaderActivity::onEnter() {
@@ -41,6 +72,7 @@ void XtcReaderActivity::onEnter() {
   APP_STATE.openEpubPath = xtc->getPath();
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
+  readingSessionStartMs = millis();
 
   // Trigger first update
   requestUpdate();
@@ -48,6 +80,11 @@ void XtcReaderActivity::onEnter() {
 
 void XtcReaderActivity::onExit() {
   ActivityWithSubactivity::onExit();
+
+  if (xtc && readingSessionStartMs != 0) {
+    RECENT_BOOKS.addBookReadingTime(xtc->getPath(), (millis() - readingSessionStartMs) / 1000U);
+  }
+  readingSessionStartMs = 0;
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -343,6 +380,16 @@ void XtcReaderActivity::saveProgress() const {
     data[3] = (currentPage >> 24) & 0xFF;
     f.write(data, 4);
     f.close();
+  }
+
+  const uint32_t pageCount = xtc->getPageCount();
+  if (pageCount > 0) {
+    uint32_t clampedPage = currentPage;
+    if (clampedPage >= pageCount) {
+      clampedPage = pageCount - 1;
+    }
+    const int percent = static_cast<int>(((clampedPage + 1U) * 100U) / pageCount);
+    RECENT_BOOKS.updateBookProgress(xtc->getPath(), percent);
   }
 }
 

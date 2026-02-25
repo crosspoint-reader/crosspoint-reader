@@ -6,6 +6,7 @@
 #include <I18n.h>
 #include <Utf8.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -250,7 +251,8 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowTitle,
                          const std::function<std::string(int index)>& rowSubtitle,
                          const std::function<UIIcon(int index)>& rowIcon,
-                         const std::function<std::string(int index)>& rowValue, bool highlightValue) const {
+                         const std::function<std::string(int index)>& rowValue, bool highlightValue,
+                         const std::function<int(int index)>& rowProgress) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
@@ -335,6 +337,14 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
       renderer.drawText(UI_10_FONT_ID, rect.x + contentWidth - LyraMetrics::values.contentSidePadding - valueWidth,
                         itemY + 6, valueText.c_str(), !(i == selectedIndex && highlightValue));
+    }
+
+    if (rowProgress != nullptr) {
+      const int barX = textX;
+      const int barWidth = textWidth;
+      const int barHeight = 3;
+      const int barY = itemY + rowHeight - (barHeight + 4);
+      UITheme::drawListRowProgress(renderer, rowProgress(i), barX, barY, barWidth, barHeight);
     }
   }
 }

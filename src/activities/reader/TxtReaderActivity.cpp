@@ -22,6 +22,37 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
+constexpr char READING_TIME_FILE_NAME[] = "/reading_time.bin";
+
+void addReadingTimeToCache(const std::string& cachePath, const uint32_t elapsedSeconds) {
+  if (elapsedSeconds == 0) {
+    return;
+  }
+
+  uint32_t accumulatedSeconds = 0;
+  FsFile readFile;
+  if (Storage.openFileForRead("TRS", cachePath + READING_TIME_FILE_NAME, readFile)) {
+    uint8_t data[4];
+    if (readFile.read(data, sizeof(data)) == 4) {
+      accumulatedSeconds = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+    }
+    readFile.close();
+  }
+
+  uint32_t totalSeconds = accumulatedSeconds + elapsedSeconds;
+  if (totalSeconds < accumulatedSeconds) {
+    totalSeconds = UINT32_MAX;
+  }
+
+  FsFile writeFile;
+  if (Storage.openFileForWrite("TRS", cachePath + READING_TIME_FILE_NAME, writeFile)) {
+    const uint8_t out[4] = {static_cast<uint8_t>(totalSeconds & 0xFF), static_cast<uint8_t>((totalSeconds >> 8) & 0xFF),
+                            static_cast<uint8_t>((totalSeconds >> 16) & 0xFF),
+                            static_cast<uint8_t>((totalSeconds >> 24) & 0xFF)};
+    writeFile.write(out, sizeof(out));
+    writeFile.close();
+  }
+}
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -57,6 +88,7 @@ void TxtReaderActivity::onEnter() {
   APP_STATE.openEpubPath = filePath;
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(filePath, fileName, "", "");
+  readingSessionStartMs = millis();
 
   // Trigger first update
   requestUpdate();
@@ -64,6 +96,11 @@ void TxtReaderActivity::onEnter() {
 
 void TxtReaderActivity::onExit() {
   ActivityWithSubactivity::onExit();
+
+  if (txt && readingSessionStartMs != 0) {
+    RECENT_BOOKS.addBookReadingTime(txt->getPath(), (millis() - readingSessionStartMs) / 1000U);
+  }
+  readingSessionStartMs = 0;
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -540,6 +577,11 @@ void TxtReaderActivity::saveProgress() const {
     data[3] = 0;
     f.write(data, 4);
     f.close();
+  }
+
+  if (totalPages > 0) {
+    const int percent = static_cast<int>(((static_cast<uint32_t>(currentPage) + 1U) * 100U) / totalPages);
+    RECENT_BOOKS.updateBookProgress(txt->getPath(), percent);
   }
 }
 

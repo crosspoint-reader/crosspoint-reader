@@ -17,6 +17,7 @@ class RecentBooksActivity final : public Activity {
 
   // Recent tab state
   std::vector<RecentBook> recentBooks;
+  std::vector<RecentBookListRowData> recentBookRows;
 
   // Callbacks
   const std::function<void(const std::string& path)> onSelectBook;

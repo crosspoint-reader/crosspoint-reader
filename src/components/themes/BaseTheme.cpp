@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <Utf8.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 
@@ -187,7 +188,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowTitle,
                          const std::function<std::string(int index)>& rowSubtitle,
                          const std::function<UIIcon(int index)>& rowIcon,
-                         const std::function<std::string(int index)>& rowValue, bool highlightValue) const {
+                         const std::function<std::string(int index)>& rowValue, bool highlightValue,
+                         const std::function<int(int index)>& rowProgress) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
@@ -249,6 +251,14 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       const auto valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
       renderer.drawText(UI_10_FONT_ID, rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth,
                         itemY, valueText.c_str(), i != selectedIndex);
+    }
+
+    if (rowProgress != nullptr) {
+      const int barX = rect.x + BaseMetrics::values.contentSidePadding;
+      const int barWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2;
+      const int barHeight = 4;
+      const int barY = itemY + rowHeight - (barHeight + 4);
+      UITheme::drawListRowProgress(renderer, rowProgress(i), barX, barY, barWidth, barHeight);
     }
   }
 }

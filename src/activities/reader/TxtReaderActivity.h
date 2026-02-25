@@ -2,6 +2,7 @@
 
 #include <Txt.h>
 
+#include <cstdint>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -28,6 +29,7 @@ class TxtReaderActivity final : public ActivityWithSubactivity {
   int cachedFontId = 0;
   int cachedScreenMargin = 0;
   uint8_t cachedParagraphAlignment = CrossPointSettings::LEFT_ALIGN;
+  uint32_t readingSessionStartMs = 0;
 
   void renderPage();
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
