@@ -217,6 +217,8 @@ curl -i "https://sync.koreader.rocks/users/create" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
 
+If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
+
 2. On each CrossPoint device:
    - Go to **Settings -> System -> KOReader Sync**.
    - Set **Username** and **Password** (same values on all devices).
@@ -273,6 +275,8 @@ curl -i "http://<server-ip>:17200/users/create" \
   -H "Content-Type: application/json" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
+
+If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, the account already exists.
 
 4. On each CrossPoint device:
    - Go to **Settings -> System -> KOReader Sync**.
