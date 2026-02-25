@@ -118,7 +118,12 @@ std::vector<ClippingEntry> ClippingStore::loadIndex(const std::string& bookPath)
 
   // Read and validate version
   uint8_t version;
-  if (file.read(&version, 1) != 1 || version != FORMAT_VERSION) {
+  if (file.read(&version, 1) != 1) {
+    LOG_ERR(TAG, "Failed to read version byte: %s", path.c_str());
+    file.close();
+    return entries;
+  }
+  if (version != FORMAT_VERSION) {
     LOG_DBG(TAG, "Skipping index with version %d (expected %d): %s", version, FORMAT_VERSION, path.c_str());
     file.close();
     return entries;
@@ -252,6 +257,14 @@ std::string ClippingStore::loadClippingText(const std::string& bookPath, const C
     return "";
   }
 
+  const uint32_t fileSize = file.fileSize();
+  if (entry.textOffset + entry.textLength > fileSize) {
+    LOG_ERR(TAG, "Clipping entry out of bounds: offset=%u len=%u fileSize=%u", entry.textOffset, entry.textLength,
+            fileSize);
+    file.close();
+    return "";
+  }
+
   if (!file.seekSet(entry.textOffset)) {
     file.close();
     return "";
@@ -276,12 +289,20 @@ std::string ClippingStore::loadClippingPreview(const std::string& bookPath, cons
     return "";
   }
 
+  const uint32_t fileSize = file.fileSize();
+  if (entry.textOffset > fileSize) {
+    LOG_ERR(TAG, "Clipping preview out of bounds: offset=%u fileSize=%u", entry.textOffset, fileSize);
+    file.close();
+    return "";
+  }
+
   if (!file.seekSet(entry.textOffset)) {
     file.close();
     return "";
   }
 
   uint32_t readLen = std::min(static_cast<uint32_t>(maxChars), entry.textLength);
+  readLen = std::min(readLen, fileSize - entry.textOffset);
   std::string text;
   text.resize(readLen);
   int bytesRead = file.read(reinterpret_cast<uint8_t*>(&text[0]), readLen);
