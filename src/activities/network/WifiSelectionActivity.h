@@ -77,6 +77,10 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   // Whether the selected network should be treated as hidden (manually entered SSID or saved hidden network)
   bool isManualSsid = false;
 
+  // Progress tracking for hidden-network targeted scans (shown during SCANNING state)
+  size_t hiddenScanProgress = 0;
+  size_t hiddenScanTotal = 0;
+
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;
   int forgetPromptSelection = 0;

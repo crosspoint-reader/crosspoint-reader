@@ -91,6 +91,8 @@ void WifiSelectionActivity::onExit() {
 void WifiSelectionActivity::startWifiScan() {
   autoConnecting = false;
   isManualSsid = false;
+  hiddenScanProgress = 0;
+  hiddenScanTotal = 0;
   selectedNetworkIndex = 0;
   state = WifiSelectionState::SCANNING;
   networks.clear();
@@ -150,6 +152,18 @@ void WifiSelectionActivity::processWifiScanResults() {
   // beacon frames, so they won't appear in the regular async scan above.
   // The targeted scan sends directed probe requests so the AP can respond.
   const auto& savedCreds = WIFI_STORE.getCredentials();
+
+  // Count hidden SSIDs that need targeted scanning so we can show progress
+  for (const auto& cred : savedCreds) {
+    if (cred.isHidden && uniqueNetworks.find(cred.ssid) == uniqueNetworks.end()) {
+      hiddenScanTotal++;
+    }
+  }
+  if (hiddenScanTotal > 0) {
+    hiddenScanProgress = 0;
+    requestUpdate();  // Show "Scanning hidden: 0/N" before first blocking scan
+  }
+
   for (const auto& cred : savedCreds) {
     if (!cred.isHidden) {
       continue;  // Non-hidden saved networks are covered by the regular scan
@@ -187,6 +201,10 @@ void WifiSelectionActivity::processWifiScanResults() {
     WiFi.scanDelete();
 
     uniqueNetworks[cred.ssid] = hidden;
+
+    // Update progress and request a render between blocking scans
+    hiddenScanProgress++;
+    requestUpdate();
   }
 
   // Convert map to vector
@@ -714,6 +732,12 @@ void WifiSelectionActivity::renderConnecting() const {
 
   if (state == WifiSelectionState::SCANNING) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_SCANNING));
+    // Show hidden-network targeted-scan progress when applicable
+    if (hiddenScanTotal > 0) {
+      char progressStr[48];
+      snprintf(progressStr, sizeof(progressStr), tr(STR_SCANNING_HIDDEN), hiddenScanProgress, hiddenScanTotal);
+      renderer.drawCenteredText(UI_10_FONT_ID, top + height + 8, progressStr);
+    }
   } else {
     renderer.drawCenteredText(UI_12_FONT_ID, top - 40, tr(STR_CONNECTING), true, EpdFontFamily::BOLD);
 
