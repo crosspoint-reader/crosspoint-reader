@@ -293,6 +293,7 @@ void setupDisplayAndFonts() {
 void setup() {
   t1 = millis();
 
+  HalSystem::begin();
   gpio.begin();
   powerManager.begin();
 

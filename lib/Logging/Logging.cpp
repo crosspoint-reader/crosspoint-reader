@@ -59,7 +59,9 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   // add the user message
   vsnprintf(c, sizeof(buf) - (c - buf), format, args);
   va_end(args);
-  logSerial.print(buf);
+  if (logSerial) {
+    logSerial.print(buf);
+  }
   addToLogRingBuffer(buf);
 }
 

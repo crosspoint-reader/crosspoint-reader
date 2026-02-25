@@ -66,6 +66,15 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
 
 namespace HalSystem {
 
+void begin() {
+  // This is mostly for the first boot, we need to initialize the panic info and logs to empty state
+  // If we reboot from a panic state, we want to keep the panic info until we successfully dump it to the SD card, use
+  // `clearPanic()` to clear it after dumping
+  if (!isRebootFromPanic()) {
+    clearPanic();
+  }
+}
+
 void checkPanic() {
   if (isRebootFromPanic()) {
     auto panicInfo = getPanicInfo(true);

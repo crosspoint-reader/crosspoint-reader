@@ -18,6 +18,8 @@ struct StackFrame {
   uint32_t spp[8];
 };
 
+void begin();
+
 // Dump panic info to SD card if necessary
 void checkPanic();
 void clearPanic();
