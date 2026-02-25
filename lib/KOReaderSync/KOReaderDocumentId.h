@@ -42,4 +42,15 @@ class KOReaderDocumentId {
 
   // Calculate offset for index i: 1024 << (2*i)
   static size_t getOffset(int i);
+
+  // Hash cache helpers
+  // Returns the path to the per-book cache file that stores the precomputed hash.
+  // Uses the same directory convention as the Epub cache (/.crosspoint/epub_<hash>/).
+  static std::string getCacheFilePath(const std::string& filePath);
+
+  // Returns the cached hash if the file size matches, or empty string on miss/invalidation.
+  static std::string loadCachedHash(const std::string& cacheFilePath, size_t fileSize);
+
+  // Persists the computed hash alongside the file size used to compute it.
+  static void saveCachedHash(const std::string& cacheFilePath, size_t fileSize, const std::string& hash);
 };
