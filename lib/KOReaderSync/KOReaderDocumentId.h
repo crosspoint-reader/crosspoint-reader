@@ -52,13 +52,16 @@ class KOReaderDocumentId {
   // string on miss/invalidation.
   //
   // The fingerprint is derived from the file's modification timestamp.  We
-  // call `FsFile::getModifyDateTime` to retrieve the packed date/time fields
-  // from the filesystem.  These two 16‑bit values are concatenated as
-  // eight hex digits (YYYYYYTTTT? actually date and time bits) and used as a
-  // lightweight change signal; any change to the file's mtime will cause the
-  // fingerprint to differ and the cache to be invalidated.  Since the full
-  // document hash is expensive to compute, using mtime gives us a quick way to
-  // detect modifications without reading file contents.
+  // call `FsFile::getModifyDateTime` to retrieve two 16‑bit packed values
+  // supplied by the filesystem: one for the date and one for the time.  These
+  // are concatenated and represented as eight hexadecimal digits in the form
+  // <date><time> (high 16 bits = packed date, low 16 bits = packed time).
+  //
+  // The resulting string serves as a lightweight change signal; any modification
+  // to the file's mtime will alter the packed date/time combo and invalidate
+  // the cache entry.  Since the full document hash is expensive to compute,
+  // using the packed timestamp gives us a quick way to detect modifications
+  // without reading file contents.
   static std::string loadCachedHash(const std::string& cacheFilePath, size_t fileSize,
                                     const std::string& currentFingerprint);
 
