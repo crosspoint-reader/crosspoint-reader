@@ -9,9 +9,9 @@ namespace StringUtils {
 /**
  * Sanitize a string for use as a filename.
  * Replaces invalid characters with underscores, trims spaces/dots,
- * and limits length to maxLength characters.
+ * and limits length to maxBytes bytes.
  */
-std::string sanitizeFilename(const std::string& name, size_t maxLength = 100);
+std::string sanitizeFilename(const std::string& name, size_t maxBytes = 100);
 
 /**
  * Check if the given filename ends with the specified extension (case-insensitive).
