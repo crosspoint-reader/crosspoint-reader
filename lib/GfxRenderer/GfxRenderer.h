@@ -5,6 +5,8 @@
 #include <HalDisplay.h>
 
 #include <map>
+#include <string>
+#include <vector>
 
 #include "Bitmap.h"
 
@@ -110,11 +112,21 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  /// Returns the kerning adjustment for a space between two codepoints:
+  /// kern(leftCp, ' ') + kern(' ', rightCp). Returns 0 if kerning is unavailable.
+  int getSpaceKernAdjust(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
+  /// Returns the kerning adjustment between two adjacent codepoints.
+  int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  /// Word-wrap \p text into at most \p maxLines lines, each no wider than
+  /// \p maxWidth pixels. Overflowing words and excess lines are UTF-8-safely
+  /// truncated with an ellipsis (U+2026).
+  std::vector<std::string> wrappedText(int fontId, const char* text, int maxWidth, int maxLines,
+                                       EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,

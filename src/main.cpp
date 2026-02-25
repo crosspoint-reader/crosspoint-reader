@@ -200,6 +200,7 @@ void waitForPowerRelease() {
 
 // Enter deep sleep mode
 void enterDeepSleep() {
+  HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = currentActivity && currentActivity->isReaderActivity();
   APP_STATE.saveToFile();
   exitActivity();
@@ -377,8 +378,8 @@ void loop() {
   renderer.setFadingFix(SETTINGS.fadingFix);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
-    LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes", ESP.getFreeHeap(), ESP.getHeapSize(),
-            ESP.getMinFreeHeap());
+    LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),
+            ESP.getHeapSize(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     lastMemPrint = millis();
   }
 

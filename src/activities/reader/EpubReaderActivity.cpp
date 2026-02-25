@@ -1,6 +1,7 @@
 #include "EpubReaderActivity.h"
 
 #include <Epub/Page.h>
+#include <Epub/blocks/TextBlock.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -14,6 +15,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "QrDisplayActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -399,6 +401,38 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             exitActivity();
             requestUpdate();
           }));
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
+      if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
+        auto p = section->loadPageFromSectionFile();
+        if (p) {
+          std::string fullText;
+          for (const auto& el : p->elements) {
+            if (el->getTag() == TAG_PageLine) {
+              const auto& line = static_cast<const PageLine&>(*el);
+              if (line.getBlock()) {
+                const auto& words = line.getBlock()->getWords();
+                for (const auto& w : words) {
+                  if (!fullText.empty()) fullText += " ";
+                  fullText += w;
+                }
+              }
+            }
+          }
+          if (!fullText.empty()) {
+            exitActivity();
+            enterNewActivity(new QrDisplayActivity(renderer, mappedInput, fullText, [this]() {
+              exitActivity();
+              requestUpdate();
+            }));
+            break;
+          }
+        }
+      }
+      // If no text or page loading failed, just close menu
+      exitActivity();
+      requestUpdate();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {

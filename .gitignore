@@ -3,6 +3,8 @@
 .DS_Store
 .vscode
 lib/EpdFont/fontsrc
+lib/I18n/I18nKeys.h
+lib/I18n/I18nStrings.h
 lib/I18n/I18nStrings.cpp
 *.generated.h
 .vs
