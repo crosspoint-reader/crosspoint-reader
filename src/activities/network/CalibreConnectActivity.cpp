@@ -8,9 +8,9 @@
 
 #include "MappedInputManager.h"
 #include "WifiSelectionActivity.h"
-#include "network/WifiHelpers.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/WifiHelpers.h"
 
 namespace {
 constexpr const char* HOSTNAME = "crosspoint";

@@ -4,11 +4,11 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
-#include "network/WifiHelpers.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
+#include "network/WifiHelpers.h"
 
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();

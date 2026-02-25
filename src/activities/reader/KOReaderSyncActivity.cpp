@@ -6,14 +6,13 @@
 #include <WiFi.h>
 #include <esp_sntp.h>
 
-#include "network/WifiHelpers.h"
-
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/WifiHelpers.h"
 
 namespace {
 void syncTimeWithNTP() {

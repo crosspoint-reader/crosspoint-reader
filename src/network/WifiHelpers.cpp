@@ -5,9 +5,7 @@
 
 namespace WifiHelpers {
 
-void wifiOn() {
-  WiFi.mode(WIFI_STA);
-}
+void wifiOn() { WiFi.mode(WIFI_STA); }
 
 void wifiOff() {
   WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame

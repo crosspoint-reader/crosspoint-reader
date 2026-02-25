@@ -4,14 +4,13 @@
 #include <I18n.h>
 #include <WiFi.h>
 
-#include "network/WifiHelpers.h"
-
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncClient.h"
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/WifiHelpers.h"
 
 void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
   exitActivity();
