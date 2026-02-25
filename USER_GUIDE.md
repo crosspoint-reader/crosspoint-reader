@@ -20,6 +20,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [3.6.2 Reader](#362-reader)
       - [3.6.3 Controls](#363-controls)
       - [3.6.4 System](#364-system)
+      - [3.6.5 KOReader Sync Quick Setup](#365-koreader-sync-quick-setup)
     - [3.7 Sleep Screen](#37-sleep-screen)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
@@ -197,6 +198,64 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Check for updates**: Check for Crosspoint firmware updates over WiFi.
 - **Language**: Set the system language (see **[Supported Languages](#supported-languages)** for more information).
 
+#### 3.6.5 KOReader Sync Quick Setup
+
+CrossPoint can sync reading progress with KOReader-compatible sync servers.
+
+1. Start a sync server with Compose (preferred):
+
+```bash
+mkdir -p kosync-quickstart
+cd kosync-quickstart
+
+cat > compose.yaml <<'YAML'
+services:
+  kosync:
+    image: koreader/kosync:latest
+    ports:
+      - "7200:7200"
+    environment:
+      - ENABLE_USER_REGISTRATION=true
+    restart: unless-stopped
+YAML
+
+# Docker
+docker compose up -d
+
+# Podman (alternative)
+podman compose up -d
+```
+
+2. Verify the server:
+
+```bash
+curl -k "https://<server-ip>:7200/healthcheck"
+```
+
+3. Register a user once (new self-hosted server only). If you already have a shared KOReader sync server account, reuse the same username/password on all devices.
+CrossPoint authenticates with an MD5 key, so register using the MD5 of your password:
+
+```bash
+USERNAME="willy"
+PASSWORD="willy"
+PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
+
+curl -k -i "https://<server-ip>:7200/users/create" \
+  -H "Accept: application/vnd.koreader.v1+json" \
+  -H "Content-Type: application/json" \
+  --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
+```
+
+4. On each CrossPoint device:
+   - Go to **Settings -> System -> KOReader Sync**.
+   - Set **Username** and **Password** (same values on all devices).
+   - Set **Sync Server URL** to `https://<server-ip>:7200`.
+   - Run **Authenticate**.
+
+5. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
+   - Choose **Apply Remote** to jump to remote progress.
+   - Choose **Upload Local** to push current progress.
+
 ### 3.7 Sleep Screen
 
 You can customize the sleep screen by placing custom images in specific locations on the SD card:
@@ -238,7 +297,7 @@ This feature can be disabled in the **[Controls Settings](#363-controls)** to he
 ### System Navigation
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
-* **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)** screen.
+* **Reader Menu:** Press **Confirm** to open the reader menu (chapter selection, sync progress, and more).
 
 ### Supported Languages
 
