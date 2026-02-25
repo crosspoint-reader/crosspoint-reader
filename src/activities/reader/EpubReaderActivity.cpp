@@ -135,7 +135,7 @@ void EpubReaderActivity::captureCurrentPage() {
   }
   const std::string pageText = page->getPlainText();
   const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-  const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
+  const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : tr(STR_UNNAMED);
   const float chapterProgress = (section->pageCount > 0)
                                     ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
                                     : 0.0f;
@@ -149,7 +149,7 @@ void EpubReaderActivity::captureCurrentPage() {
 void EpubReaderActivity::startCapture() {
   // Prevent capturing from books stored inside the exports directory
   if (epub && epub->getPath().find("/.crosspoint/") != std::string::npos) {
-    statusBarOverride = "Cannot capture here";
+    statusBarOverride = tr(STR_CANNOT_CAPTURE_HERE);
     requestUpdate();
     return;
   }
@@ -159,7 +159,7 @@ void EpubReaderActivity::startCapture() {
     captureCurrentPage();
   }
   captureState = CaptureState::CAPTURING;
-  statusBarOverride = "Capture started";
+  statusBarOverride = tr(STR_CAPTURE_STARTED);
   requestUpdate();
 }
 
@@ -169,12 +169,13 @@ void EpubReaderActivity::stopCapture() {
     return;
   }
   const bool ok = ClippingStore::saveClipping(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
-  statusBarOverride = ok ? "Clipping saved" : "Save failed";
+  statusBarOverride = ok ? tr(STR_CLIPPING_SAVED) : tr(STR_SAVE_FAILED);
   if (ok) {
     cachedClippings = ClippingStore::loadIndex(epub->getPath());
   }
   captureBuffer.clear();
   captureState = CaptureState::IDLE;
+  pendingCaptureAfterRender = false;
   requestUpdate();
 }
 
@@ -190,7 +191,7 @@ void EpubReaderActivity::addBookmark() {
   }
   // Prevent bookmarking from books stored inside the exports directory
   if (epub->getPath().find("/.crosspoint/") != std::string::npos) {
-    statusBarOverride = "Cannot bookmark here";
+    statusBarOverride = tr(STR_CANNOT_BOOKMARK_HERE);
     requestUpdate();
     return;
   }
@@ -217,7 +218,7 @@ void EpubReaderActivity::addBookmark() {
   const bool ok = BookmarkStore::addBookmark(epub->getPath(), entry);
   {
     RenderLock lock(*this);
-    statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
+    statusBarOverride = ok ? tr(STR_BOOKMARKED) : tr(STR_BOOKMARK_FAILED);
   }
   requestUpdate();
 }

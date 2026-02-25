@@ -377,7 +377,10 @@ bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
       if (minOffset > 0) {
         header.resize(minOffset);
         origFile.seekSet(0);
-        origFile.read(reinterpret_cast<uint8_t*>(&header[0]), minOffset);
+        if (origFile.read(reinterpret_cast<uint8_t*>(&header[0]), minOffset) != minOffset) {
+          origFile.close();
+          return false;
+        }
       }
       origFile.close();
     }

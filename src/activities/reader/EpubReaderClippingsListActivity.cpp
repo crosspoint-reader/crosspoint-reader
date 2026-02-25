@@ -1,6 +1,7 @@
 #include "EpubReaderClippingsListActivity.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 
 #include "ClippingTextViewerActivity.h"
 #include "MappedInputManager.h"
@@ -78,7 +79,9 @@ void EpubReaderClippingsListActivity::loop() {
   // Delete confirmation mode
   if (confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      ClippingStore::deleteClipping(bookPath, selectorIndex);
+      if (!ClippingStore::deleteClipping(bookPath, selectorIndex)) {
+        LOG_ERR("ClippingsList", "Failed to delete clipping at index %d", selectorIndex);
+      }
       clippings = ClippingStore::loadIndex(bookPath);
       refreshPreviews();
       if (selectorIndex >= getTotalItems()) {

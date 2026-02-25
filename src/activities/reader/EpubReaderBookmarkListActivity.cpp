@@ -152,8 +152,12 @@ void EpubReaderBookmarkListActivity::render(Activity::RenderLock&&) {
     char label[64];
     if (resolveChapterTitle && bk.chapterPercent > 0) {
       std::string title = resolveChapterTitle(bk.spineIndex);
-      if (title.length() > 20) {
-        title.resize(17);
+      if (title.size() > 20) {
+        size_t limit = 17;
+        while (limit > 0 && (title[limit] & 0xC0) == 0x80) {
+          --limit;
+        }
+        title.resize(limit);
         title += "...";
       }
       snprintf(label, sizeof(label), "%d%% of %s - %d%% of book", bk.chapterPercent, title.c_str(), bk.bookPercent);
