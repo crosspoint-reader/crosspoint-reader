@@ -74,7 +74,7 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   // Whether we are attempting to auto-connect
   bool autoConnecting = false;
 
-  // Whether the SSID was manually entered by the user (hidden network)
+  // Whether the selected network should be treated as hidden (manually entered SSID or saved hidden network)
   bool isManualSsid = false;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)

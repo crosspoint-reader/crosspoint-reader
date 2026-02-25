@@ -91,6 +91,7 @@ void WifiSelectionActivity::onExit() {
 void WifiSelectionActivity::startWifiScan() {
   autoConnecting = false;
   isManualSsid = false;
+  selectedNetworkIndex = 0;
   state = WifiSelectionState::SCANNING;
   networks.clear();
   requestUpdate();
@@ -179,7 +180,7 @@ void WifiSelectionActivity::processWifiScanResults() {
               hidden.isEncrypted ? "true" : "false");
     } else {
       // Not found - fall back to a password-based encryption guess since we have no scan data
-      hidden.rssi = -100;
+      hidden.rssi = -101;
       hidden.isEncrypted = !cred.password.empty();
       LOG_DBG("WIFI", "Hidden SSID %s not found in targeted scan", cred.ssid.c_str());
     }
@@ -277,15 +278,15 @@ void WifiSelectionActivity::attemptConnection() {
   String hostname = "CrossPoint-Reader-" + mac;
   WiFi.setHostname(hostname.c_str());
 
-  // For auto-connect (saved credentials) and manually entered SSIDs, perform a
-  // targeted scan first. This sends directed probe requests to the specific
+  // For manually entered SSIDs and saved credentials marked as hidden, perform
+  // a targeted scan first. This sends directed probe requests to the specific
   // SSID, which is required to discover hidden networks (they don't broadcast
   // their SSID in beacon frames). Without this, WiFi.begin() may immediately
   // return WL_NO_SSID_AVAIL for hidden networks.
   const auto* targetedScanCred = WIFI_STORE.findCredential(selectedSSID);
   const bool needsTargetedScan = isManualSsid || (targetedScanCred && targetedScanCred->isHidden);
   if (needsTargetedScan) {
-    LOG_DBG("WIFI", "Doing targeted scan for hidden SSID: %s", selectedSSID.c_str());
+    LOG_DBG("WIFI", "Doing targeted scan for SSID: %s", selectedSSID.c_str());
     WiFi.scanNetworks(false,                // async = false (blocking)
                       true,                 // show_hidden = true
                       false,                // passive = false (active scan with directed probes)
