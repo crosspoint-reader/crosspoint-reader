@@ -154,11 +154,10 @@ void WifiSelectionActivity::processWifiScanResults() {
   const auto& savedCreds = WIFI_STORE.getCredentials();
 
   // Count hidden SSIDs that need targeted scanning so we can show progress
-  for (const auto& cred : savedCreds) {
-    if (cred.isHidden && uniqueNetworks.find(cred.ssid) == uniqueNetworks.end()) {
-      hiddenScanTotal++;
-    }
-  }
+  hiddenScanTotal =
+      static_cast<int>(std::count_if(savedCreds.begin(), savedCreds.end(), [&uniqueNetworks](const auto& cred) {
+        return cred.isHidden && uniqueNetworks.find(cred.ssid) == uniqueNetworks.end();
+      }));
   if (hiddenScanTotal > 0) {
     hiddenScanProgress = 0;
     requestUpdate();  // Show "Scanning hidden: 0/N" before first blocking scan
@@ -221,7 +220,7 @@ void WifiSelectionActivity::processWifiScanResults() {
       return a.hasSavedPassword;
     }
     // Among saved networks: visible before hidden
-    if (a.hasSavedPassword && b.hasSavedPassword && a.isHidden != b.isHidden) {
+    if (a.hasSavedPassword && a.isHidden != b.isHidden) {
       return !a.isHidden;
     }
     return a.rssi > b.rssi;
