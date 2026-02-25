@@ -201,10 +201,11 @@ The Settings screen allows you to configure the device's behavior. There are a f
 #### 3.6.5 KOReader Sync Quick Setup
 
 CrossPoint can sync reading progress with KOReader-compatible sync servers.
+It also interoperates with KOReader apps/devices when they use the same server and credentials.
 
 ##### Option A: Free Public Server (`sync.koreader.rocks`)
 
-1. If needed, register a user once:
+1. Register a user once (only if needed):
 
 ```bash
 USERNAME="user"
@@ -217,15 +218,14 @@ curl -i "https://sync.koreader.rocks/users/create" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
 
-If you already have KOReader Sync credentials, skip registration; basic sync only requires using the same existing username/password on all devices.
+Already have KOReader Sync credentials? Skip registration; basic sync only requires using the same existing username/password on all devices.
 
-If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
+When this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
 
 2. On each CrossPoint device:
    - Go to **Settings -> System -> KOReader Sync**.
    - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
-   - Set **Sync Server URL** to `https://sync.koreader.rocks`.
-     You can also leave it empty to use the default KOReader sync server.
+   - Set **Sync Server URL** to `https://sync.koreader.rocks`, or leave it empty (both use the same default KOReader sync server).
    - Run **Authenticate**.
 
 3. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
