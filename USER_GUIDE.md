@@ -346,7 +346,7 @@ This feature can be disabled in the **[Controls Settings](#363-controls)** to he
 ### System Navigation
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
-* **Reader Menu:** Press **Confirm** to open the reader menu (chapter selection, sync progress, and more).
+* **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)** screen.
 
 ### Supported Languages
 
@@ -361,7 +361,7 @@ What is not supported: Chinese, Japanese, Korean, Vietnamese, Hebrew, Arabic, Gr
 
 ## 5. Chapter Selection Screen
 
-Accessible by pressing **Confirm** while inside a book to open the reader menu, then selecting **Chapter Selection**.
+Accessible by pressing **Confirm** while inside a book.
 
 1.  Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to highlight the desired chapter.
 2.  Press **Confirm** to jump to that chapter.
