@@ -464,7 +464,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       }
 
       coverBufferStored = storeCoverBuffer();
-      coverRendered = true;
+      coverRendered = coverBufferStored;  // Only consider it rendered if we successfully stored the buffer
     }
 
     bool bookSelected = (selectorIndex == 0);
