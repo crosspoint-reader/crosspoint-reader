@@ -4,7 +4,7 @@
 
 struct WifiCredential {
   std::string ssid;
-  std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  std::string password;   // Plaintext in memory; obfuscated with hardware key on disk
   bool isHidden = false;  // Explicitly marked as a hidden network (doesn't broadcast SSID)
 };
 
