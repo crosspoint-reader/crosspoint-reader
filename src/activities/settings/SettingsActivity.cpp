@@ -12,6 +12,7 @@
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "SettingsList.h"
+#include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -51,6 +52,7 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Reset selection to first category
   selectedCategoryIndex = 0;
@@ -181,6 +183,9 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::RemapFrontButtons:
         enterSubActivity(new ButtonRemapActivity(renderer, mappedInput, onComplete));
         break;
+      case SettingAction::CustomiseStatusBar:
+        enterSubActivity(new StatusBarSettingsActivity(renderer, mappedInput, onComplete));
+        break;
       case SettingAction::KOReaderSync:
         enterSubActivity(new KOReaderSettingsActivity(renderer, mappedInput, onComplete));
         break;
@@ -216,7 +221,7 @@ void SettingsActivity::render(Activity::RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
                  CROSSPOINT_VERSION);

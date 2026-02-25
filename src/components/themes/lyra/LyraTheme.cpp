@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -462,7 +463,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       }
 
       coverBufferStored = storeCoverBuffer();
-      coverRendered = true;
+      coverRendered = coverBufferStored;  // Only consider it rendered if we successfully stored the buffer
     }
 
     bool bookSelected = (selectorIndex == 0);
@@ -483,13 +484,23 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                                hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
     }
 
-    auto title = renderer.truncatedText(UI_12_FONT_ID, book.title.c_str(), textWidth, EpdFontFamily::BOLD);
+    auto titleLines = renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textWidth, 3, EpdFontFamily::BOLD);
+
     auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
-    auto bookTitleHeight = renderer.getTextHeight(UI_12_FONT_ID);
-    renderer.drawText(UI_12_FONT_ID, tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing,
-                      tileY + tileHeight / 2 - bookTitleHeight, title.c_str(), true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing,
-                      tileY + tileHeight / 2 + 5, author.c_str(), true);
+    const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+    const int titleBlockHeight = titleLineHeight * static_cast<int>(titleLines.size());
+    const int authorHeight = book.author.empty() ? 0 : (renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2);
+    const int totalBlockHeight = titleBlockHeight + authorHeight;
+    int titleY = tileY + tileHeight / 2 - totalBlockHeight / 2;
+    const int textX = tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing;
+    for (const auto& line : titleLines) {
+      renderer.drawText(UI_12_FONT_ID, textX, titleY, line.c_str(), true, EpdFontFamily::BOLD);
+      titleY += titleLineHeight;
+    }
+    if (!book.author.empty()) {
+      titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
+      renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
+    }
   } else {
     drawEmptyRecents(renderer, rect);
   }

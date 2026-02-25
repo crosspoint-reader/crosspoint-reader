@@ -219,6 +219,12 @@ void WifiSelectionActivity::attemptConnection() {
 
   WiFi.mode(WIFI_STA);
 
+  // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  String hostname = "CrossPoint-Reader-" + mac;
+  WiFi.setHostname(hostname.c_str());
+
   if (selectedRequiresPassword && !enteredPassword.empty()) {
     WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
   } else {
@@ -471,7 +477,7 @@ void WifiSelectionActivity::render(Activity::RenderLock&&) {
 
   renderer.clearScreen();
 
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -514,7 +520,7 @@ void WifiSelectionActivity::render(Activity::RenderLock&&) {
 }
 
 void WifiSelectionActivity::renderNetworkList() const {
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 

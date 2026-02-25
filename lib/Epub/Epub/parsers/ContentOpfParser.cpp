@@ -102,7 +102,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && strcmp(name, "dc:title") == 0) {
-    self->state = IN_BOOK_TITLE;
+    // Only capture the first dc:title element; subsequent ones are subtitles
+    if (self->title.empty()) {
+      self->state = IN_BOOK_TITLE;
+    }
     return;
   }
 

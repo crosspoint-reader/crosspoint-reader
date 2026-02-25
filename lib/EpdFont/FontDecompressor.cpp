@@ -1,14 +1,11 @@
 #include "FontDecompressor.h"
 
 #include <Logging.h>
-#include <uzlib.h>
 
 #include <cstdlib>
-#include <cstring>
 
 bool FontDecompressor::init() {
   clearCache();
-  memset(&decomp, 0, sizeof(decomp));
   return true;
 }
 
@@ -82,20 +79,10 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
     return false;
   }
 
-  // Decompress using uzlib
-  const uint8_t* inputBuf = &fontData->bitmap[group.compressedOffset];
-
-  uzlib_uncompress_init(&decomp, NULL, 0);
-  decomp.source = inputBuf;
-  decomp.source_limit = inputBuf + group.compressedSize;
-  decomp.dest_start = outBuf;
-  decomp.dest = outBuf;
-  decomp.dest_limit = outBuf + group.uncompressedSize;
-
-  int res = uzlib_uncompress(&decomp);
-
-  if (res < 0 || decomp.dest != decomp.dest_limit) {
-    LOG_ERR("FDC", "Decompression failed for group %u (status %d)", groupIndex, res);
+  inflateReader.init(false);
+  inflateReader.setSource(&fontData->bitmap[group.compressedOffset], group.compressedSize);
+  if (!inflateReader.read(outBuf, group.uncompressedSize)) {
+    LOG_ERR("FDC", "Decompression failed for group %u", groupIndex);
     free(outBuf);
     return false;
   }
