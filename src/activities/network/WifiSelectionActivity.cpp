@@ -191,15 +191,12 @@ void WifiSelectionActivity::processWifiScanResults() {
       hidden.isEncrypted = (WiFi.encryptionType(0) != WIFI_AUTH_OPEN);
       LOG_DBG("WIFI", "Hidden SSID %s found in range, RSSI=%d, encrypted=%s", cred.ssid.c_str(), hidden.rssi,
               hidden.isEncrypted ? "true" : "false");
+      uniqueNetworks[cred.ssid] = hidden;
     } else {
-      // Not found - fall back to a password-based encryption guess since we have no scan data
-      hidden.rssi = -101;
-      hidden.isEncrypted = !cred.password.empty();
-      LOG_DBG("WIFI", "Hidden SSID %s not found in targeted scan", cred.ssid.c_str());
+      // Not found - skip entirely, don't add to list
+      LOG_DBG("WIFI", "Hidden SSID %s not found in targeted scan, skipping", cred.ssid.c_str());
     }
     WiFi.scanDelete();
-
-    uniqueNetworks[cred.ssid] = hidden;
 
     // Update progress and request a render between blocking scans
     hiddenScanProgress++;
@@ -702,7 +699,7 @@ void WifiSelectionActivity::renderNetworkList() const {
         const auto& network = networks[index];
         if (network.isHidden) {
           std::string detail = std::string("+ ~ ") + (network.isEncrypted ? "* " : "");
-          if (network.rssi > -100) {
+          if (network.rssi >= -100) {
             detail += getSignalStrengthIndicator(network.rssi);
           }
           return detail;
