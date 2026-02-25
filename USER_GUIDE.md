@@ -217,11 +217,13 @@ curl -i "https://sync.koreader.rocks/users/create" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
 
+If you already have KOReader Sync credentials, skip registration; basic sync only requires using the same existing username/password on all devices.
+
 If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
 
 2. On each CrossPoint device:
    - Go to **Settings -> System -> KOReader Sync**.
-   - Set **Username** and **Password** (same values on all devices).
+   - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
    - Set **Sync Server URL** to `https://sync.koreader.rocks`.
      You can also leave it empty to use the default KOReader sync server.
    - Run **Authenticate**.
@@ -243,7 +245,10 @@ services:
   kosync:
     image: koreader/kosync:latest
     ports:
+      - "7200:7200"
       - "17200:17200"
+    volumes:
+      - ./data/redis:/var/lib/redis
     environment:
       - ENABLE_USER_REGISTRATION=true
     restart: unless-stopped
@@ -256,14 +261,24 @@ docker compose up -d
 podman compose up -d
 ```
 
+> [!NOTE]
+> `ENABLE_USER_REGISTRATION=true` is convenient for first setup. After creating your users, set it to `false` (or remove it) to avoid unexpected registrations.
+
 2. Verify the server:
 
 ```bash
-curl "http://<server-ip>:17200/healthcheck"
+curl -H "Accept: application/vnd.koreader.v1+json" "http://<server-ip>:17200/healthcheck"
+# Expected: {"state":"OK"}
 ```
 
 3. Register a user once.
 CrossPoint authenticates against KOReader Sync (`koreader/kosync`) using an MD5 key, so register using the MD5 of your password:
+
+> [!WARNING]
+> Sending a reusable MD5-derived password over plain HTTP is insecure.
+> Create unique sync-only credentials and do not reuse main account passwords.
+> Prefer `https://<server-ip>:7200` whenever traffic leaves a fully trusted LAN or when using untrusted networks.
+> Use `curl -k` only for self-signed certificate testing.
 
 ```bash
 USERNAME="user"
@@ -276,17 +291,11 @@ curl -i "http://<server-ip>:17200/users/create" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
 
-> [!WARNING]
-> Sending a reusable MD5-derived password over plain HTTP is insecure.
-> Create unique sync-only credentials and do not reuse main account passwords.
-> Prefer `https://<server-ip>:7200` whenever traffic leaves a fully trusted LAN or when using untrusted networks.
-> Use `curl -k` only for self-signed certificate testing.
-
 If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, the account already exists.
 
 4. On each CrossPoint device:
    - Go to **Settings -> System -> KOReader Sync**.
-   - Set **Username** and **Password** (same values on all devices).
+   - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
    - Set **Sync Server URL** to `http://<server-ip>:17200`.
    - Run **Authenticate**.
 
@@ -352,7 +361,7 @@ What is not supported: Chinese, Japanese, Korean, Vietnamese, Hebrew, Arabic, Gr
 
 ## 5. Chapter Selection Screen
 
-Accessible by pressing **Confirm** while inside a book.
+Accessible by pressing **Confirm** while inside a book to open the reader menu, then selecting **Chapter Selection**.
 
 1.  Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to highlight the desired chapter.
 2.  Press **Confirm** to jump to that chapter.
