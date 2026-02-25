@@ -213,7 +213,7 @@ services:
   kosync:
     image: koreader/kosync:latest
     ports:
-      - "7200:7200"
+      - "17200:17200"
     environment:
       - ENABLE_USER_REGISTRATION=true
     restart: unless-stopped
@@ -229,18 +229,18 @@ podman compose up -d
 2. Verify the server:
 
 ```bash
-curl -k "https://<server-ip>:7200/healthcheck"
+curl "http://<server-ip>:17200/healthcheck"
 ```
 
 3. Register a user once (new self-hosted server only). If you already have a shared KOReader sync server account, reuse the same username/password on all devices.
-CrossPoint authenticates with an MD5 key, so register using the MD5 of your password:
+CrossPoint authenticates against KOReader Sync (`koreader/kosync`) using an MD5 key, so register using the MD5 of your password:
 
 ```bash
 USERNAME="user"
 PASSWORD="pass"
 PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
 
-curl -k -i "https://<server-ip>:7200/users/create" \
+curl -i "http://<server-ip>:17200/users/create" \
   -H "Accept: application/vnd.koreader.v1+json" \
   -H "Content-Type: application/json" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
@@ -249,8 +249,10 @@ curl -k -i "https://<server-ip>:7200/users/create" \
 4. On each CrossPoint device:
    - Go to **Settings -> System -> KOReader Sync**.
    - Set **Username** and **Password** (same values on all devices).
-   - Set **Sync Server URL** to `https://<server-ip>:7200`.
+   - Set **Sync Server URL** to `http://<server-ip>:17200`.
    - Run **Authenticate**.
+
+If you intentionally expose the HTTPS listener instead, use `https://<server-ip>:7200` (and `curl -k` for local self-signed certificates).
 
 5. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
    - Choose **Apply Remote** to jump to remote progress.
