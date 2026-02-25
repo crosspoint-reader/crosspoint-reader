@@ -17,6 +17,27 @@
 
 #define UART0_RXD 20  // Used for USB connection detection
 
+// Xteink X3 Hardware
+#define X3_I2C_SDA 20
+#define X3_I2C_SCL 0
+#define X3_I2C_FREQ 400000
+
+// TI BQ27220 Fuel gauge I2C
+#define I2C_ADDR_BQ27220 0x55  // Fuel gauge I2C address
+#define BQ27220_SOC_REG 0x2C   // StateOfCharge() command code (%)
+#define BQ27220_CUR_REG 0x0C   // Current() command code (signed mA)
+#define BQ27220_VOLT_REG 0x08  // Voltage() command code (mV)
+
+// Analog DS3231 RTC I2C
+#define I2C_ADDR_DS3231 0x68  // RTC I2C address
+#define DS3231_SEC_REG 0x00   // Seconds command code (BCD)
+
+// QST QMI8658 IMU I2C
+#define I2C_ADDR_QMI8658 0x6B        // IMU I2C address
+#define I2C_ADDR_QMI8658_ALT 0x6A    // IMU I2C fallback address
+#define QMI8658_WHO_AM_I_REG 0x00    // WHO_AM_I command code
+#define QMI8658_WHO_AM_I_VALUE 0x05  // WHO_AM_I expected value
+
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
