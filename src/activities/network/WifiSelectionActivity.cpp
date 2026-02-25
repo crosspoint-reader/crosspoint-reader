@@ -536,7 +536,7 @@ void WifiSelectionActivity::loop() {
         enterNewActivity(new KeyboardEntryActivity(
             renderer, mappedInput, tr(STR_ENTER_WIFI_NAME),
             "",     // No initial text
-            64,     // Max SSID length
+            32,     // Max SSID length
             false,  // Not a password field
             [this](const std::string& text) {
               selectedSSID = text;
