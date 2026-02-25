@@ -70,6 +70,6 @@ class KeyboardEntryActivity : public Activity {
   static constexpr int DONE_COL = 9;
 
   char getSelectedChar() const;
-  void handleKeyPress();
+  bool handleKeyPress();  // false if onComplete was triggered
   int getRowLength(int row) const;
 };
