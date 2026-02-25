@@ -236,8 +236,8 @@ curl -k "https://<server-ip>:7200/healthcheck"
 CrossPoint authenticates with an MD5 key, so register using the MD5 of your password:
 
 ```bash
-USERNAME="willy"
-PASSWORD="willy"
+USERNAME="user"
+PASSWORD="pass"
 PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
 
 curl -k -i "https://<server-ip>:7200/users/create" \
