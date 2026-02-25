@@ -120,7 +120,7 @@ void MyLibraryActivity::onExit() {
 void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
   // Only clear cache for .epub files
   if (StringUtils::checkFileExtension(fullPath, ".epub")) {
-    Epub(fullPath.c_str(), "/.crosspoint").clearCache();
+    Epub(fullPath, "/.crosspoint").clearCache();
     LOG_DBG("MyLibrary", "Cleared metadata cache for: %s", fullPath.c_str());
   }
 }
