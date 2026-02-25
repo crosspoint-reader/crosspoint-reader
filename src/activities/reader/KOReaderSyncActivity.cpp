@@ -40,7 +40,7 @@ void syncTimeWithNTP() {
     LOG_DBG("KOSync", "NTP sync timeout, using fallback");
   }
 }
-void wifiOff() {
+void turnWifiOff() {
   if (esp_sntp_enabled()) {
     esp_sntp_stop();
   }
@@ -171,7 +171,7 @@ void KOReaderSyncActivity::performUpload() {
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   if (result != KOReaderSyncClient::OK) {
-    wifiOff();
+    turnWifiOff();
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;

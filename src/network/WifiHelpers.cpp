@@ -8,6 +8,9 @@ namespace WifiHelpers {
 void wifiOn() { WiFi.mode(WIFI_STA); }
 
 void wifiOff() {
+  if (WiFi.getMode() == WIFI_OFF) {
+    return;
+  }
   WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
   delay(100);              // Allow disconnect frame to be sent
   WiFi.mode(WIFI_OFF);
