@@ -3,16 +3,22 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+#include <iterator>
+
+#include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
 void LanguageSelectActivity::onEnter() {
   Activity::onEnter();
 
-  totalItems = getLanguageCount();
-
   // Set current selection based on current language
-  selectedIndex = static_cast<int>(I18N.getLanguage());
+  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
+  const auto* begin = std::begin(SORTED_LANGUAGE_INDICES);
+  const auto* end = std::end(SORTED_LANGUAGE_INDICES);
+  const auto* it = std::find(begin, end, currentLang);
+  selectedIndex = (it != end) ? std::distance(begin, it) : 0;
 
   requestUpdate();
 }
@@ -45,7 +51,7 @@ void LanguageSelectActivity::loop() {
 void LanguageSelectActivity::handleSelection() {
   {
     RenderLock lock(*this);
-    I18N.setLanguage(static_cast<Language>(selectedIndex));
+    I18N.setLanguage(static_cast<Language>(SORTED_LANGUAGE_INDICES[selectedIndex]));
   }
 
   // Return to previous page
@@ -61,13 +67,16 @@ void LanguageSelectActivity::render(Activity::RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LANGUAGE));
 
+  // Current language marker
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const int currentLang = static_cast<int>(I18N.getLanguage());
+  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
-      [this](int index) { return I18N.getLanguageName(static_cast<Language>(index)); }, nullptr, nullptr,
-      [this, currentLang](int index) { return index == currentLang ? tr(STR_SET) : ""; }, true);
+      [this](int index) { return I18N.getLanguageName(static_cast<Language>(SORTED_LANGUAGE_INDICES[index])); },
+      nullptr, nullptr,
+      [this, currentLang](int index) { return SORTED_LANGUAGE_INDICES[index] == currentLang ? tr(STR_SET) : ""; },
+      true);
 
   // Button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
