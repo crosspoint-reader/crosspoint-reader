@@ -153,12 +153,10 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     }
   }
 
-  if (!utf8IsCombiningMark(cp)) {
-    if constexpr (rotation == TextRotation::Rotated90CW) {
-      *cursorY -= glyph->advanceX;
-    } else {
-      *cursorX += glyph->advanceX;
-    }
+  if constexpr (rotation == TextRotation::Rotated90CW) {
+    *cursorY -= glyph->advanceX;
+  } else {
+    *cursorX += glyph->advanceX;
   }
 }
 
@@ -209,12 +207,11 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
   int yPos = y + getFontAscenderSize(fontId);
-  int xpos = x;
+  int xPos = x;
   int lastBaseX = x;
   int lastBaseY = yPos;
   int lastBaseAdvance = 0;
   int lastBaseTop = 0;
-  bool hasBaseGlyph = false;
 
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
@@ -230,8 +227,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   constexpr int MIN_COMBINING_GAP_PX = 1;
 
   uint32_t cp;
+  uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    if (utf8IsCombiningMark(cp) && hasBaseGlyph) {
+    if (utf8IsCombiningMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       int raiseBy = 0;
       if (combiningGlyph) {
@@ -247,16 +245,20 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       continue;
     }
 
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (!utf8IsCombiningMark(cp)) {
-      lastBaseX = xpos;
-      lastBaseY = yPos;
-      lastBaseAdvance = glyph ? glyph->advanceX : 0;
-      lastBaseTop = glyph ? glyph->top : 0;
-      hasBaseGlyph = true;
+    cp = font.applyLigatures(cp, text, style);
+    if (prevCp != 0) {
+      xPos += font.getKerning(prevCp, cp, style);
     }
 
-    renderChar(font, cp, &xpos, &yPos, black, style);
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+
+    lastBaseX = xPos;
+    lastBaseY = yPos;
+    lastBaseAdvance = glyph ? glyph->advanceX : 0;
+    lastBaseTop = glyph ? glyph->top : 0;
+
+    renderChar(font, cp, &xPos, &yPos, black, style);
+    prevCp = cp;
   }
 }
 
@@ -882,7 +884,22 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
   return spaceGlyph ? spaceGlyph->advanceX : 0;
 }
 
-int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+int GfxRenderer::getSpaceKernAdjust(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
+                                    const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) return 0;
+  const auto& font = fontIt->second;
+  return font.getKerning(leftCp, ' ', style) + font.getKerning(' ', rightCp, style);
+}
+
+int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
+                            const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) return 0;
+  return fontIt->second.getKerning(leftCp, rightCp, style);
+}
+
+int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -890,14 +907,20 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const EpdFo
   }
 
   uint32_t cp;
+  uint32_t prevCp = 0;
   int width = 0;
   const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (utf8IsCombiningMark(cp)) {
       continue;
     }
+    cp = font.applyLigatures(cp, text, style);
+    if (prevCp != 0) {
+      width += font.getKerning(prevCp, cp, style);
+    }
     const EpdGlyph* glyph = font.getGlyph(cp, style);
     if (glyph) width += glyph->advanceX;
+    prevCp = cp;
   }
   return width;
 }
@@ -952,12 +975,12 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   int lastBaseY = y;
   int lastBaseAdvance = 0;
   int lastBaseTop = 0;
-  bool hasBaseGlyph = false;
   constexpr int MIN_COMBINING_GAP_PX = 1;
 
   uint32_t cp;
+  uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    if (utf8IsCombiningMark(cp) && hasBaseGlyph) {
+    if (utf8IsCombiningMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       int raiseBy = 0;
       if (combiningGlyph) {
@@ -973,16 +996,20 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       continue;
     }
 
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (!utf8IsCombiningMark(cp)) {
-      lastBaseX = xPos;
-      lastBaseY = yPos;
-      lastBaseAdvance = glyph ? glyph->advanceX : 0;
-      lastBaseTop = glyph ? glyph->top : 0;
-      hasBaseGlyph = true;
+    cp = font.applyLigatures(cp, text, style);
+    if (prevCp != 0) {
+      yPos -= font.getKerning(prevCp, cp, style);
     }
 
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+
+    lastBaseX = xPos;
+    lastBaseY = yPos;
+    lastBaseAdvance = glyph ? glyph->advanceX : 0;
+    lastBaseTop = glyph ? glyph->top : 0;
+
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, &xPos, &yPos, black, style);
+    prevCp = cp;
   }
 }
 
