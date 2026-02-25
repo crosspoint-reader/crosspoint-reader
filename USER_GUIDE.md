@@ -276,6 +276,12 @@ curl -i "http://<server-ip>:17200/users/create" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
 
+> [!WARNING]
+> Sending a reusable MD5-derived password over plain HTTP is insecure.
+> Create unique sync-only credentials and do not reuse main account passwords.
+> Prefer `https://<server-ip>:7200` whenever traffic leaves a fully trusted LAN or when using untrusted networks.
+> Use `curl -k` only for self-signed certificate testing.
+
 If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, the account already exists.
 
 4. On each CrossPoint device:
@@ -284,7 +290,7 @@ If this returns `HTTP 402` with `{"code":2002,"message":"Username is already reg
    - Set **Sync Server URL** to `http://<server-ip>:17200`.
    - Run **Authenticate**.
 
-If you intentionally expose the HTTPS listener instead, use `https://<server-ip>:7200` (and `curl -k` for local self-signed certificates).
+If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only for self-signed certificate testing).
 
 5. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
    - Choose **Apply Remote** to jump to remote progress.
