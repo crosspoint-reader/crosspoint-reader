@@ -27,6 +27,7 @@ class TextBlock final : public Block {
   ~TextBlock() override = default;
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  const std::vector<std::string>& getWords() const { return words; }
   bool isEmpty() override { return words.empty(); }
   // given a renderer works out where to break the words into lines
   void render(const GfxRenderer& renderer, int fontId, int x, int y) const;

@@ -15,6 +15,55 @@
 #include "SettingsList.h"
 #include "WifiCredentialStore.h"
 
+// Convert legacy settings.
+void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
+  switch (static_cast<CrossPointSettings::STATUS_BAR_MODE>(settings.statusBar)) {
+    case CrossPointSettings::NONE:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::HIDE_TITLE;
+      settings.statusBarBattery = 0;
+      break;
+    case CrossPointSettings::NO_PROGRESS:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::BOOK_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::ONLY_BOOK_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::HIDE_TITLE;
+      settings.statusBarBattery = 0;
+      break;
+    case CrossPointSettings::CHAPTER_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 1;
+      settings.statusBarProgressBar = CrossPointSettings::CHAPTER_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::FULL:
+    default:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 1;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
+      settings.statusBarBattery = 1;
+      break;
+  }
+}
+
 // ---- CrossPointState ----
 
 bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
@@ -146,6 +195,19 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   CrossPointSettings::validateFrontButtonMapping(s);
 
   LOG_DBG("CPS", "Settings loaded from file");
+
+  if (doc.containsKey("statusBarChapterPageCount")) {
+    s.statusBarChapterPageCount = doc["statusBarChapterPageCount"];
+    s.statusBarBookProgressPercentage = doc["statusBarBookProgressPercentage"];
+    s.statusBarProgressBar = doc["statusBarProgressBar"];
+    s.statusBarTitle = doc["statusBarTitle"];
+    s.statusBarBattery = doc["statusBarBattery"];
+  } else {
+    applyLegacyStatusBarSettings(s);
+  }
+
+  s.statusBarProgressBarThickness = doc["statusBarProgressBarThickness"] | (uint8_t)S::PROGRESS_BAR_NORMAL;
+
   return true;
 }
 
