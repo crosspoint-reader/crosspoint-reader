@@ -6,7 +6,6 @@
 #include <I18n.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
-#include <qrcode.h>
 
 #include <cstddef>
 
@@ -16,6 +15,7 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/QrUtils.h"
 
 namespace {
 // AP Mode configuration
@@ -24,8 +24,8 @@ constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
 constexpr const char* AP_HOSTNAME = "crosspoint";
 constexpr uint8_t AP_CHANNEL = 1;
 constexpr uint8_t AP_MAX_CONNECTIONS = 4;
-constexpr int QR_CODE_WIDTH = 6 * 33;
-constexpr int QR_CODE_HEIGHT = 200;
+constexpr int QR_CODE_WIDTH = 198;
+constexpr int QR_CODE_HEIGHT = 198;
 
 // DNS server for captive portal (redirects all DNS queries to our IP)
 DNSServer* dnsServer = nullptr;
@@ -363,28 +363,6 @@ void CrossPointWebServerActivity::render(Activity::RenderLock&&) {
   }
 }
 
-void drawQRCode(const GfxRenderer& renderer, const int x, const int y, const std::string& data) {
-  // Implementation of QR code calculation
-  // The structure to manage the QR code
-  QRCode qrcode;
-  uint8_t qrcodeBytes[qrcode_getBufferSize(4)];
-  LOG_DBG("WEBACT", "QR Code (%lu): %s", data.length(), data.c_str());
-
-  qrcode_initText(&qrcode, qrcodeBytes, 4, ECC_LOW, data.c_str());
-  const uint8_t px = 6;  // pixels per module
-  for (uint8_t cy = 0; cy < qrcode.size; cy++) {
-    for (uint8_t cx = 0; cx < qrcode.size; cx++) {
-      if (qrcode_getModule(&qrcode, cx, cy)) {
-        // Serial.print("**");
-        renderer.fillRect(x + px * cx, y + px * cy, px, px, true);
-      } else {
-        // Serial.print("  ");
-      }
-    }
-    // Serial.print("\n");
-  }
-}
-
 void CrossPointWebServerActivity::renderServerRunning() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
@@ -404,7 +382,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // Show QR code for Wifi
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
-    drawQRCode(renderer, metrics.contentSidePadding, startY, wifiConfig);
+    const Rect qrBoundsWifi(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
+    QrUtils::drawQrCode(renderer, qrBoundsWifi, wifiConfig);
 
     // Show network name
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
@@ -421,7 +400,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     std::string ipUrl = tr(STR_OR_HTTP_PREFIX) + connectedIP + "/";
 
     // Show QR code for URL
-    drawQRCode(renderer, metrics.contentSidePadding, startY, hostnameUrl);
+    const Rect qrBoundsUrl(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
+    QrUtils::drawQrCode(renderer, qrBoundsUrl, hostnameUrl);
 
     // Show IP address as fallback
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
@@ -440,7 +420,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // Show QR code for URL
     std::string webInfo = "http://" + connectedIP + "/";
-    drawQRCode(renderer, (pageWidth - QR_CODE_WIDTH) / 2, startY, webInfo);
+    const Rect qrBounds((pageWidth - QR_CODE_WIDTH) / 2, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
+    QrUtils::drawQrCode(renderer, qrBounds, webInfo);
     startY += QR_CODE_HEIGHT + metrics.verticalSpacing * 2;
 
     // Show web server URL prominently

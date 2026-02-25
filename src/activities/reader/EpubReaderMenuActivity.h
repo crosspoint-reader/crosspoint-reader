@@ -18,6 +18,7 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
     GO_TO_PERCENT,
     ROTATE_SCREEN,
     SCREENSHOT,
+    DISPLAY_QR,
     GO_HOME,
     SYNC,
     DELETE_CACHE
