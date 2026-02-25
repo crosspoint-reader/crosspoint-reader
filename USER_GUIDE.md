@@ -202,7 +202,35 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 CrossPoint can sync reading progress with KOReader-compatible sync servers.
 
-1. Start a sync server with Compose (preferred):
+##### Option A: Free Public Server (`sync.koreader.rocks`)
+
+1. If needed, register a user once:
+
+```bash
+USERNAME="user"
+PASSWORD="pass"
+PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
+
+curl -i "https://sync.koreader.rocks/users/create" \
+  -H "Accept: application/vnd.koreader.v1+json" \
+  -H "Content-Type: application/json" \
+  --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
+```
+
+2. On each CrossPoint device:
+   - Go to **Settings -> System -> KOReader Sync**.
+   - Set **Username** and **Password** (same values on all devices).
+   - Set **Sync Server URL** to `https://sync.koreader.rocks`.
+     You can also leave it empty to use the default KOReader sync server.
+   - Run **Authenticate**.
+
+3. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
+   - Choose **Apply Remote** to jump to remote progress.
+   - Choose **Upload Local** to push current progress.
+
+##### Option B: Self-Hosted Server (Docker Compose)
+
+1. Start a sync server:
 
 ```bash
 mkdir -p kosync-quickstart
@@ -232,7 +260,7 @@ podman compose up -d
 curl "http://<server-ip>:17200/healthcheck"
 ```
 
-3. Register a user once (new self-hosted server only). If you already have a shared KOReader sync server account, reuse the same username/password on all devices.
+3. Register a user once.
 CrossPoint authenticates against KOReader Sync (`koreader/kosync`) using an MD5 key, so register using the MD5 of your password:
 
 ```bash
