@@ -6,10 +6,11 @@ void Activity::onEnter() { LOG_DBG("ACT", "Entering activity: %s", name.c_str())
 
 void Activity::onExit() { LOG_DBG("ACT", "Exiting activity: %s", name.c_str()); }
 
-void Activity::requestUpdate() { activityManager.requestUpdate(); }
+void Activity::requestUpdate(bool immediate) { activityManager.requestUpdate(immediate); }
 
 void Activity::requestUpdateAndWait() {
   // FIXME @ngxson : properly implement this using freeRTOS notification
+  activityManager.requestUpdate(true);
   delay(100);
 }
 

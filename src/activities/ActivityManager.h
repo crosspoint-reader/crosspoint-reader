@@ -50,6 +50,8 @@ class ActivityManager {
   static void renderTaskTrampoline(void* param);
   [[noreturn]] virtual void renderTaskLoop();
 
+  // Whether to trigger a render after the current loop()
+  // This variable must only be set by the main loop, to avoid race conditions
   bool requestedUpdate = false;
 
  public:
@@ -93,7 +95,9 @@ class ActivityManager {
   bool isReaderActivity() const;
   bool skipLoopDelay() const;
 
-  void requestUpdate();
+  // If immediate is true, the update will be triggered immediately.
+  // Otherwise, it will be deferred until the end of the current loop iteration.
+  void requestUpdate(bool immediate = false);
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp

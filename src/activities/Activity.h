@@ -30,7 +30,12 @@ class Activity {
   virtual void loop() {}
 
   virtual void render(RenderLock&&) {}
-  virtual void requestUpdate();
+
+  // If immediate is true, the update will be triggered immediately.
+  // Otherwise, it will be deferred until the end of the current loop iteration.
+  virtual void requestUpdate(bool immediate = false);
+
+  // Request an immediate render and block until it completes.
   virtual void requestUpdateAndWait();
 
   virtual bool skipLoopDelay() { return false; }

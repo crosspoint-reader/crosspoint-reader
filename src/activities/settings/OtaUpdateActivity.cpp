@@ -151,7 +151,6 @@ void OtaUpdateActivity::loop() {
         RenderLock lock(*this);
         state = UPDATE_IN_PROGRESS;
       }
-      requestUpdate();
       requestUpdateAndWait();
       const auto res = updater.installUpdate();
 

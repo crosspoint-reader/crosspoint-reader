@@ -67,7 +67,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
     state = SYNCING;
     statusMessage = tr(STR_SYNCING_TIME);
   }
-  requestUpdate();
+  requestUpdate(true);
 
   // Sync time with NTP before making API requests
   syncTimeWithNTP();
@@ -76,7 +76,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
     RenderLock lock(*this);
     statusMessage = tr(STR_CALC_HASH);
   }
-  requestUpdate();
+  requestUpdate(true);
 
   performSync();
 }
@@ -159,7 +159,6 @@ void KOReaderSyncActivity::performUpload() {
     state = UPLOADING;
     statusMessage = tr(STR_UPLOAD_PROGRESS);
   }
-  requestUpdate();
   requestUpdateAndWait();
 
   // Convert current position to KOReader format
@@ -219,7 +218,7 @@ void KOReaderSyncActivity::onEnter() {
             RenderLock lock(*self);
             self->statusMessage = tr(STR_CALC_HASH);
           }
-          self->requestUpdate();
+          self->requestUpdate(true);
           self->performSync();
           vTaskDelete(nullptr);
         },

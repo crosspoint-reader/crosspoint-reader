@@ -206,12 +206,17 @@ bool ActivityManager::isReaderActivity() const { return currentActivity && curre
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
-void ActivityManager::requestUpdate() {
-  // Deferring the update until current loop is finished
-  // This is to avoid multiple updates being requested in the same loop
-  requestedUpdate = true;
+void ActivityManager::requestUpdate(bool immediate) {
+  if (immediate) {
+    if (renderTaskHandle) {
+      xTaskNotify(renderTaskHandle, 1, eIncrement);
+    }
+  } else {
+    // Deferring the update until current loop is finished
+    // This is to avoid multiple updates being requested in the same loop
+    requestedUpdate = true;
+  }
 }
-
 // RenderLock
 
 RenderLock::RenderLock() {
