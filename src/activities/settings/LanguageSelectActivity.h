@@ -30,5 +30,5 @@ class LanguageSelectActivity final : public Activity {
   void onBack() { finish(); }
   ButtonNavigator buttonNavigator;
   int selectedIndex = 0;
-  int totalItems = 0;
+  constexpr static uint8_t totalItems = getLanguageCount();
 };
