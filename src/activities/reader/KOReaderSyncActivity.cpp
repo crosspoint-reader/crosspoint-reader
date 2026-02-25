@@ -233,7 +233,7 @@ void KOReaderSyncActivity::onEnter() {
 void KOReaderSyncActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
-  wifiOff();
+  turnWifiOff();
 }
 
 void KOReaderSyncActivity::render(Activity::RenderLock&&) {
@@ -382,7 +382,7 @@ void KOReaderSyncActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (selectedOption == 0) {
         // Apply remote progress — WiFi no longer needed
-        wifiOff();
+        turnWifiOff();
         onSyncComplete(remotePosition.spineIndex, remotePosition.pageNumber);
       } else if (selectedOption == 1) {
         // Upload local progress
