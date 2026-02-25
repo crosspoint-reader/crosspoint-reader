@@ -2,6 +2,9 @@
 #include <Epub.h>
 #include <Epub/Section.h>
 
+#include <optional>
+#include <vector>
+
 #include "EpubReaderMenuActivity.h"
 #include "activities/ActivityWithSubactivity.h"
 
@@ -10,6 +13,9 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
+  // Set when navigating to a TOC entry in a different spine (chapter skip or chapter selector).
+  // Cleared on the next render after the new section loads and resolves it to a page.
+  std::optional<int> pendingTocIndex;
   int pagesUntilFullRefresh = 0;
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
@@ -25,6 +31,20 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
+  // Chapter-level page info aggregated across spine items sharing a TOC entry
+  struct SpineSegment {
+    int spineIndex;
+    int startPage;         // first page in this spine belonging to the chapter
+    int pageCount;         // pages in this segment (endPage - startPage)
+    int cumulativeOffset;  // total chapter pages before this segment
+  };
+  struct ChapterPageInfo {
+    std::optional<int> tocIndex;
+    std::vector<SpineSegment> segments;
+    int totalPages = 0;
+  };
+  ChapterPageInfo chapterPageInfo;
+
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
@@ -34,6 +54,10 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void onReaderMenuBack(uint8_t orientation);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+  // Build section caches for all spine items in the current TOC chapter and compute page info.
+  void ensureChapterCached(uint16_t viewportWidth, uint16_t viewportHeight);
+  // Returns the chapter-relative page number for the current position.
+  int getChapterRelativePage() const;
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,

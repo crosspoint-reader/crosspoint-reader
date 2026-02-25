@@ -32,7 +32,9 @@ void EpubReaderChapterSelectionActivity::onEnter() {
     return;
   }
 
-  selectorIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  selectorIndex = (currentTocIndex >= 0 && currentTocIndex < epub->getTocItemsCount())
+                      ? currentTocIndex
+                      : epub->getTocIndexForSpineIndex(currentSpineIndex);
   if (selectorIndex == -1) {
     selectorIndex = 0;
   }
@@ -57,7 +59,7 @@ void EpubReaderChapterSelectionActivity::loop() {
     if (newSpineIndex == -1) {
       onGoBack();
     } else {
-      onSelectSpineIndex(newSpineIndex);
+      onSelectPosition(newSpineIndex, selectorIndex);
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoBack();

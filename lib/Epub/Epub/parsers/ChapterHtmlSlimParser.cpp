@@ -132,18 +132,35 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Extract class and style attributes for CSS processing
+  // Extract class, style, and id attributes
   std::string classAttr;
   std::string styleAttr;
+  std::string idAttr;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
         classAttr = atts[i + 1];
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "id") == 0) {
+        idAttr = atts[i + 1];
       }
     }
   }
+
+  // Record anchor AFTER any block flush so completedPageCount reflects the correct page.
+  // If this anchor is a TOC chapter boundary, start a fresh page so the chapter doesn't
+  // begin mid-page.
+  const auto recordAnchor = [self, &idAttr]() {
+    if (idAttr.empty() || !self->tocAnchors.count(idAttr)) return;
+    if (self->currentPage && !self->currentPage->elements.empty()) {
+      self->completePageFn(std::move(self->currentPage));
+      self->completedPageCount++;
+      self->currentPage.reset(new Page());
+      self->currentPageNextY = 0;
+    }
+    self->anchorPageMap[idAttr] = static_cast<uint16_t>(self->completedPageCount);
+  };
 
   auto centeredBlockStyle = BlockStyle();
   centeredBlockStyle.textAlignDefined = true;
@@ -160,6 +177,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
+    recordAnchor();
     self->tableDepth += 1;
     self->tableRowIndex = 0;
     self->tableColIndex = 0;
@@ -168,6 +186,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
+    recordAnchor();
     self->tableRowIndex += 1;
     self->tableColIndex = 0;
     self->depth += 1;
@@ -187,6 +206,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                            : static_cast<CssTextAlign>(self->paragraphAlignment);
     tableCellBlockStyle.alignment = align;
     self->startNewTextBlock(tableCellBlockStyle);
+    recordAnchor();
 
     const std::string headerText =
         "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
@@ -349,6 +369,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + displayHeight > self->viewportHeight)) {
                   self->completePageFn(std::move(self->currentPage));
+                  self->completedPageCount++;
                   self->currentPage.reset(new Page());
                   if (!self->currentPage) {
                     LOG_ERR("EHP", "Failed to create new page");
@@ -379,6 +400,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 self->currentPage->elements.push_back(pageImage);
                 self->currentPageNextY += displayHeight;
 
+                recordAnchor();
                 self->depth += 1;
                 return;
               } else {
@@ -396,6 +418,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       if (!alt.empty()) {
         alt = "[Image: " + alt + "]";
         self->startNewTextBlock(centeredBlockStyle);
+        recordAnchor();
         self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
         self->depth += 1;
         self->characterData(userData, alt.c_str(), alt.length());
@@ -566,6 +589,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   // Unprocessed tag, just increasing depth and continue forward
+  recordAnchor();
   self->depth += 1;
 }
 
@@ -894,6 +918,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   if (currentTextBlock) {
     makePages();
     completePageFn(std::move(currentPage));
+    completedPageCount++;
     currentPage.reset();
     currentTextBlock.reset();
   }
@@ -906,6 +931,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage));
+    completedPageCount++;
     currentPage.reset(new Page());
     currentPageNextY = 0;
   }
