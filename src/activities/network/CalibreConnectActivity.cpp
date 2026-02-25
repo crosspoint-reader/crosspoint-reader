@@ -8,6 +8,7 @@
 
 #include "MappedInputManager.h"
 #include "WifiSelectionActivity.h"
+#include "network/WifiHelpers.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -47,10 +48,7 @@ void CalibreConnectActivity::onExit() {
   MDNS.end();
 
   delay(50);
-  WiFi.disconnect(false);
-  delay(30);
-  WiFi.mode(WIFI_OFF);
-  delay(30);
+  WifiHelpers::wifiOff();
 }
 
 void CalibreConnectActivity::onWifiSelectionComplete(const bool connected) {
