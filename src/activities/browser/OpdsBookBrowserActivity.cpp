@@ -25,18 +25,20 @@ void OpdsBookBrowserActivity::onEnter() {
   state = BrowserState::CHECK_WIFI;
   entries.clear();
   navigationHistory.clear();
-  currentPath = "";
+  currentPath = "";  // Root path - user provides full URL in settings
   selectorIndex = 0;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
   requestUpdate();
 
+  // Check WiFi and connect if needed, then fetch feed
   checkAndConnectWifi();
 }
 
 void OpdsBookBrowserActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
+  // Turn off WiFi when exiting
   WiFi.mode(WIFI_OFF);
 
   entries.clear();
@@ -44,20 +46,25 @@ void OpdsBookBrowserActivity::onExit() {
 }
 
 void OpdsBookBrowserActivity::loop() {
+  // Handle WiFi selection subactivity
   if (state == BrowserState::WIFI_SELECTION) {
     ActivityWithSubactivity::loop();
     return;
   }
 
+  // Handle error state - Confirm retries, Back goes back or home
   if (state == BrowserState::ERROR) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      // Check if WiFi is still connected
       if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+        // WiFi connected - just retry fetching the feed
         LOG_DBG("OPDS", "Retry: WiFi connected, retrying fetch");
         state = BrowserState::LOADING;
         statusMessage = tr(STR_LOADING);
         requestUpdate();
         fetchFeed(currentPath);
       } else {
+        // WiFi not connected - launch WiFi selection
         LOG_DBG("OPDS", "Retry: WiFi not connected, launching selection");
         launchWifiSelection();
       }
@@ -67,6 +74,7 @@ void OpdsBookBrowserActivity::loop() {
     return;
   }
 
+  // Handle WiFi check state - only Back works
   if (state == BrowserState::CHECK_WIFI) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       onGoHome();
@@ -74,6 +82,7 @@ void OpdsBookBrowserActivity::loop() {
     return;
   }
 
+  // Handle loading state - only Back works
   if (state == BrowserState::LOADING) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
@@ -81,10 +90,12 @@ void OpdsBookBrowserActivity::loop() {
     return;
   }
 
+  // Handle downloading state - no input allowed
   if (state == BrowserState::DOWNLOADING) {
     return;
   }
 
+  // Handle browsing state
   if (state == BrowserState::BROWSING) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!entries.empty()) {
@@ -99,6 +110,7 @@ void OpdsBookBrowserActivity::loop() {
       navigateBack();
     }
 
+    // Handle navigation
     if (!entries.empty()) {
       buttonNavigator.onNextRelease([this] {
         selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
@@ -173,6 +185,7 @@ void OpdsBookBrowserActivity::render(Activity::RenderLock&&) {
   }
 
   // Browsing state
+  // Show appropriate button hint based on selected entry type
   const char* confirmLabel = tr(STR_OPEN);
   if (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) {
     confirmLabel = tr(STR_DOWNLOAD);
@@ -192,10 +205,12 @@ void OpdsBookBrowserActivity::render(Activity::RenderLock&&) {
   for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
     const auto& entry = entries[i];
 
+    // Format display text with type indicator
     std::string displayText;
     if (entry.type == OpdsEntryType::NAVIGATION) {
-      displayText = "> " + entry.title;
+      displayText = "> " + entry.title;  // Folder/navigation indicator
     } else {
+      // Book: "Title - Author" or just "Title"
       displayText = entry.title;
       if (!entry.author.empty()) {
         displayText += " - " + entry.author;
@@ -256,6 +271,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 }
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
+  // Push current path to history before navigating
   navigationHistory.push_back(currentPath);
   currentPath = entry.href;
 
@@ -270,8 +286,10 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
 
 void OpdsBookBrowserActivity::navigateBack() {
   if (navigationHistory.empty()) {
+    // At root, go home
     onGoHome();
   } else {
+    // Go back to previous catalog
     currentPath = navigationHistory.back();
     navigationHistory.pop_back();
 
@@ -292,8 +310,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   downloadTotal = 0;
   requestUpdate();
 
+  // Build full download URL
   std::string downloadUrl = UrlUtils::buildUrl(server.url, book.href);
 
+  // Create sanitized filename: "Title - Author.epub" or just "Title.epub" if no author
   std::string baseName = book.title;
   if (!book.author.empty()) {
     baseName += " - " + book.author;
@@ -314,6 +334,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   if (result == HttpDownloader::OK) {
     LOG_DBG("OPDS", "Download complete: %s", filename.c_str());
 
+    // Invalidate any existing cache for this file to prevent stale metadata issues
     Epub epub(filename, "/.crosspoint");
     epub.clearCache();
     LOG_DBG("OPDS", "Cleared cache for: %s", filename.c_str());
@@ -328,6 +349,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 }
 
 void OpdsBookBrowserActivity::checkAndConnectWifi() {
+  // Already connected? Verify connection is valid by checking IP
   if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
@@ -336,6 +358,7 @@ void OpdsBookBrowserActivity::checkAndConnectWifi() {
     return;
   }
 
+  // Not connected - launch WiFi selection screen directly
   launchWifiSelection();
 }
 
@@ -358,6 +381,8 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     fetchFeed(currentPath);
   } else {
     LOG_DBG("OPDS", "WiFi selection cancelled/failed");
+    // Force disconnect to ensure clean state for next retry
+    // This prevents stale connection status from interfering
     WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
     state = BrowserState::ERROR;

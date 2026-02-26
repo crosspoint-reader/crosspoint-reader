@@ -3,7 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
-#include "CalibreSettingsActivity.h"
+#include "OpdsSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "components/UITheme.h"
@@ -79,10 +79,10 @@ void OpdsServerListActivity::handleSelection() {
 
   if (selectedIndex < serverCount) {
     exitActivity();
-    enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, onEditDone, selectedIndex));
+    enterNewActivity(new OpdsSettingsActivity(renderer, mappedInput, onEditDone, selectedIndex));
   } else {
     exitActivity();
-    enterNewActivity(new CalibreSettingsActivity(renderer, mappedInput, onEditDone, -1));
+    enterNewActivity(new OpdsSettingsActivity(renderer, mappedInput, onEditDone, -1));
   }
 }
 
