@@ -107,14 +107,6 @@ inline std::vector<SettingInfo> getSettingsList() {
           },
           "koMatchMethod", StrId::STR_KOREADER_SYNC),
 
-      // --- OPDS Browser (web-only, uses CrossPointSettings char arrays) ---
-      SettingInfo::String(StrId::STR_OPDS_SERVER_URL, SETTINGS.opdsServerUrl, sizeof(SETTINGS.opdsServerUrl),
-                          "opdsServerUrl", StrId::STR_OPDS_BROWSER),
-      SettingInfo::String(StrId::STR_USERNAME, SETTINGS.opdsUsername, sizeof(SETTINGS.opdsUsername), "opdsUsername",
-                          StrId::STR_OPDS_BROWSER),
-      SettingInfo::String(StrId::STR_PASSWORD, SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword), "opdsPassword",
-                          StrId::STR_OPDS_BROWSER),
-
       // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
       SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                           "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),

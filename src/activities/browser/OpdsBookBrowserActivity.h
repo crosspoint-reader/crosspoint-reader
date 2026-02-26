@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../ActivityWithSubactivity.h"
+#include "OpdsServerStore.h"
 #include "util/ButtonNavigator.h"
 
 /**
@@ -25,8 +26,8 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                   const std::function<void()>& onGoHome)
-      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome) {}
+                                   const std::function<void()>& onGoHome, const OpdsServer& server)
+      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome), server(server) {}
 
   void onEnter() override;
   void onExit() override;
@@ -46,6 +47,7 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   size_t downloadTotal = 0;
 
   const std::function<void()> onGoHome;
+  OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
 
   void checkAndConnectWifi();
   void launchWifiSelection();

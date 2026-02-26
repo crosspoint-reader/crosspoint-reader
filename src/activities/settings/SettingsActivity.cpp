@@ -4,12 +4,12 @@
 #include <Logging.h>
 
 #include "ButtonRemapActivity.h"
-#include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
+#include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
@@ -190,7 +190,7 @@ void SettingsActivity::toggleCurrentSetting() {
         enterSubActivity(new KOReaderSettingsActivity(renderer, mappedInput, onComplete));
         break;
       case SettingAction::OPDSBrowser:
-        enterSubActivity(new CalibreSettingsActivity(renderer, mappedInput, onComplete));
+        enterSubActivity(new OpdsServerListActivity(renderer, mappedInput, onComplete));
         break;
       case SettingAction::Network:
         enterSubActivity(new WifiSelectionActivity(renderer, mappedInput, onCompleteBool, false));

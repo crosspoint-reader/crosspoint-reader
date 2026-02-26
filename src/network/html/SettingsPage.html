@@ -207,6 +207,48 @@
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
+    .opds-server {
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      margin: 10px 0;
+    }
+    .opds-server .setting-row:last-child {
+      border-bottom: none;
+    }
+    .opds-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .btn-small {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+    .btn-add {
+      background-color: var(--accent-color);
+      color: white;
+    }
+    .btn-add:hover {
+      background-color: var(--accent-hover-color);
+    }
+    .btn-delete {
+      background-color: #e74c3c;
+      color: white;
+    }
+    .btn-delete:hover {
+      background-color: #c0392b;
+    }
+    .btn-save-server {
+      background-color: #27ae60;
+      color: white;
+    }
+    .btn-save-server:hover {
+      background-color: #219a52;
+    }
     @media (max-width: 600px) {
       body {
         padding: 10px;
@@ -256,6 +298,8 @@
   <div class="save-container" id="save-container" style="display:none;">
     <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
   </div>
+
+  <div id="opds-container"></div>
 
   <div class="card">
     <p style="text-align: center; color: #95a5a6; margin: 0;">
@@ -435,6 +479,122 @@
   }
 
   loadSettings();
+
+  // --- OPDS Server Management ---
+  // Dynamically renders an editable list of OPDS servers, communicating with the
+  // /api/opds REST endpoints. Password fields are never pre-filled for security;
+  // the "(unchanged)" placeholder indicates an existing password is preserved on save.
+  let opdsServers = [];
+
+  function renderOpdsServer(srv, idx) {
+    const isNew = idx === -1;
+    const id = isNew ? 'new' : idx;
+    return '<div class="opds-server" id="opds-' + id + '">' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Server Name</span>' +
+        '<span class="setting-control"><input type="text" id="opds-name-' + id + '" value="' + escapeHtml(srv.name || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">URL</span>' +
+        '<span class="setting-control"><input type="text" id="opds-url-' + id + '" value="' + escapeHtml(srv.url || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Username</span>' +
+        '<span class="setting-control"><input type="text" id="opds-user-' + id + '" value="' + escapeHtml(srv.username || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Password</span>' +
+        '<span class="setting-control"><input type="password" id="opds-pass-' + id + '" placeholder="' + (srv.hasPassword ? '(unchanged)' : '') + '"></span>' +
+      '</div>' +
+      '<div class="opds-actions">' +
+        '<button class="btn-small btn-save-server" onclick="saveOpdsServer(' + idx + ')">Save</button>' +
+        (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteOpdsServer(' + idx + ')">Delete</button>') +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderOpdsSection() {
+    const container = document.getElementById('opds-container');
+    let html = '<div class="card"><h2>OPDS Servers</h2>';
+
+    if (opdsServers.length === 0) {
+      html += '<p style="color:var(--label-color);text-align:center;">No OPDS servers configured</p>';
+    } else {
+      opdsServers.forEach(function(srv, idx) {
+        html += renderOpdsServer(srv, idx);
+      });
+    }
+
+    html += '<div style="margin-top:12px;text-align:center;">' +
+      '<button class="btn-small btn-add" onclick="addOpdsServer()">+ Add Server</button>' +
+    '</div></div>';
+    container.innerHTML = html;
+  }
+
+  async function loadOpdsServers() {
+    try {
+      const resp = await fetch('/api/opds');
+      if (!resp.ok) throw new Error('Failed to load');
+      opdsServers = await resp.json();
+      renderOpdsSection();
+    } catch (e) {
+      console.error('OPDS load error:', e);
+    }
+  }
+
+  function addOpdsServer() {
+    const container = document.getElementById('opds-container');
+    const card = container.querySelector('.card');
+    const addBtn = card.querySelector('.btn-add').parentElement;
+    // Prevent multiple unsaved new-server forms at once (idx -1 → id "new")
+    if (document.getElementById('opds-new')) return;
+    addBtn.insertAdjacentHTML('beforebegin', renderOpdsServer({name:'',url:'',username:'',hasPassword:false}, -1));
+  }
+
+  async function saveOpdsServer(idx) {
+    const id = idx === -1 ? 'new' : idx;
+    const data = {
+      name: document.getElementById('opds-name-' + id).value,
+      url: document.getElementById('opds-url-' + id).value,
+      username: document.getElementById('opds-user-' + id).value,
+    };
+    // Only include password in payload when the user actually typed something;
+    // omitting it tells the server to keep the existing password.
+    const pass = document.getElementById('opds-pass-' + id).value;
+    if (pass) data.password = pass;
+    if (idx >= 0) data.index = idx;
+
+    try {
+      const resp = await fetch('/api/opds', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage('OPDS server saved!', false);
+      await loadOpdsServers();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
+  async function deleteOpdsServer(idx) {
+    if (!confirm('Delete this OPDS server?')) return;
+    try {
+      const resp = await fetch('/api/opds/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({index: idx})
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage('OPDS server deleted', false);
+      await loadOpdsServers();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
+  loadOpdsServers();
 </script>
 </body>
 </html>

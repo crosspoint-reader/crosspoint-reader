@@ -5,21 +5,39 @@
 
 #include <cstring>
 
-#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 3;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_CALIBRE_WEB_URL, StrId::STR_USERNAME, StrId::STR_PASSWORD};
+// Editable fields: Name, URL, Username, Password.
+// Existing servers also show a Delete option (BASE_ITEMS + 1).
+constexpr int BASE_ITEMS = 4;
 }  // namespace
+
+int CalibreSettingsActivity::getMenuItemCount() const {
+  return isNewServer ? BASE_ITEMS : BASE_ITEMS + 1;  // +1 for Delete
+}
 
 void CalibreSettingsActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   selectedIndex = 0;
+  isNewServer = (serverIndex < 0);
+
+  if (!isNewServer) {
+    const auto* server = OPDS_STORE.getServer(static_cast<size_t>(serverIndex));
+    if (server) {
+      editServer = *server;
+    } else {
+      // Server was deleted between navigation and entering this screen — treat as new
+      isNewServer = true;
+      serverIndex = -1;
+    }
+  }
+
   requestUpdate();
 }
 
@@ -41,30 +59,39 @@ void CalibreSettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
+  const int menuItems = getMenuItemCount();
+  buttonNavigator.onNext([this, menuItems] {
+    selectedIndex = (selectedIndex + 1) % menuItems;
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
+  buttonNavigator.onPrevious([this, menuItems] {
+    selectedIndex = (selectedIndex + menuItems - 1) % menuItems;
     requestUpdate();
   });
 }
 
+void CalibreSettingsActivity::saveServer() {
+  if (isNewServer) {
+    OPDS_STORE.addServer(editServer);
+    // After the first field is saved, promote to an existing server so
+    // subsequent field edits update in-place rather than creating duplicates.
+    isNewServer = false;
+    serverIndex = static_cast<int>(OPDS_STORE.getCount()) - 1;
+  } else {
+    OPDS_STORE.updateServer(static_cast<size_t>(serverIndex), editServer);
+  }
+}
+
 void CalibreSettingsActivity::handleSelection() {
   if (selectedIndex == 0) {
-    // OPDS Server URL
+    // Server Name
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_CALIBRE_WEB_URL), SETTINGS.opdsServerUrl,
-        127,    // maxLength
-        false,  // not password
-        [this](const std::string& url) {
-          strncpy(SETTINGS.opdsServerUrl, url.c_str(), sizeof(SETTINGS.opdsServerUrl) - 1);
-          SETTINGS.opdsServerUrl[sizeof(SETTINGS.opdsServerUrl) - 1] = '\0';
-          SETTINGS.saveToFile();
+        renderer, mappedInput, tr(STR_SERVER_NAME), editServer.name.c_str(), 63, false,
+        [this](const std::string& name) {
+          editServer.name = name;
+          saveServer();
           exitActivity();
           requestUpdate();
         },
@@ -73,16 +100,13 @@ void CalibreSettingsActivity::handleSelection() {
           requestUpdate();
         }));
   } else if (selectedIndex == 1) {
-    // Username
+    // Server URL
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_USERNAME), SETTINGS.opdsUsername,
-        63,     // maxLength
-        false,  // not password
-        [this](const std::string& username) {
-          strncpy(SETTINGS.opdsUsername, username.c_str(), sizeof(SETTINGS.opdsUsername) - 1);
-          SETTINGS.opdsUsername[sizeof(SETTINGS.opdsUsername) - 1] = '\0';
-          SETTINGS.saveToFile();
+        renderer, mappedInput, tr(STR_OPDS_SERVER_URL), editServer.url.c_str(), 127, false,
+        [this](const std::string& url) {
+          editServer.url = url;
+          saveServer();
           exitActivity();
           requestUpdate();
         },
@@ -91,16 +115,13 @@ void CalibreSettingsActivity::handleSelection() {
           requestUpdate();
         }));
   } else if (selectedIndex == 2) {
-    // Password
+    // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_PASSWORD), SETTINGS.opdsPassword,
-        63,     // maxLength
-        false,  // not password mode
-        [this](const std::string& password) {
-          strncpy(SETTINGS.opdsPassword, password.c_str(), sizeof(SETTINGS.opdsPassword) - 1);
-          SETTINGS.opdsPassword[sizeof(SETTINGS.opdsPassword) - 1] = '\0';
-          SETTINGS.saveToFile();
+        renderer, mappedInput, tr(STR_USERNAME), editServer.username.c_str(), 63, false,
+        [this](const std::string& username) {
+          editServer.username = username;
+          saveServer();
           exitActivity();
           requestUpdate();
         },
@@ -108,6 +129,25 @@ void CalibreSettingsActivity::handleSelection() {
           exitActivity();
           requestUpdate();
         }));
+  } else if (selectedIndex == 3) {
+    // Password
+    exitActivity();
+    enterNewActivity(new KeyboardEntryActivity(
+        renderer, mappedInput, tr(STR_PASSWORD), editServer.password.c_str(), 63, false,
+        [this](const std::string& password) {
+          editServer.password = password;
+          saveServer();
+          exitActivity();
+          requestUpdate();
+        },
+        [this]() {
+          exitActivity();
+          requestUpdate();
+        }));
+  } else if (selectedIndex == 4 && !isNewServer) {
+    // Delete server
+    OPDS_STORE.removeServer(static_cast<size_t>(serverIndex));
+    onBack();
   }
 }
 
@@ -117,32 +157,41 @@ void CalibreSettingsActivity::render(Activity::RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_OPDS_BROWSER));
+  const char* header = isNewServer ? tr(STR_ADD_SERVER) : tr(STR_OPDS_BROWSER);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, header);
   GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
                     tr(STR_CALIBRE_URL_HINT));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int menuItems = getMenuItemCount();
+
+  const StrId fieldNames[] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,
+                              StrId::STR_PASSWORD};
+
   GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
-      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
-      nullptr,
-      [this](int index) {
-        // Draw status for each setting
-        if (index == 0) {
-          return (strlen(SETTINGS.opdsServerUrl) > 0) ? std::string(SETTINGS.opdsServerUrl)
-                                                      : std::string(tr(STR_NOT_SET));
-        } else if (index == 1) {
-          return (strlen(SETTINGS.opdsUsername) > 0) ? std::string(SETTINGS.opdsUsername)
-                                                     : std::string(tr(STR_NOT_SET));
-        } else if (index == 2) {
-          return (strlen(SETTINGS.opdsPassword) > 0) ? std::string("******") : std::string(tr(STR_NOT_SET));
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
+      [this, &fieldNames](int index) {
+        if (index < BASE_ITEMS) {
+          return std::string(I18N.get(fieldNames[index]));
         }
-        return std::string(tr(STR_NOT_SET));
+        return std::string(tr(STR_DELETE_SERVER));
+      },
+      nullptr, nullptr,
+      [this](int index) {
+        if (index == 0) {
+          return editServer.name.empty() ? std::string(tr(STR_NOT_SET)) : editServer.name;
+        } else if (index == 1) {
+          return editServer.url.empty() ? std::string(tr(STR_NOT_SET)) : editServer.url;
+        } else if (index == 2) {
+          return editServer.username.empty() ? std::string(tr(STR_NOT_SET)) : editServer.username;
+        } else if (index == 3) {
+          return editServer.password.empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
+        }
+        return std::string("");
       },
       true);
 
-  // Draw help text at bottom
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

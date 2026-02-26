@@ -17,6 +17,7 @@
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
@@ -26,6 +27,7 @@
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
+#include "activities/settings/OpdsServerListActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
@@ -249,7 +251,20 @@ void onGoToMyLibraryWithPath(const std::string& path) {
 
 void onGoToBrowser() {
   exitActivity();
-  enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
+  const auto& servers = OPDS_STORE.getServers();
+  // Skip the server picker when there's only one server configured
+  if (servers.size() == 1) {
+    enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome, servers[0]));
+  } else {
+    // Show the server list in picker mode; the lambda is called when a server is selected
+    enterNewActivity(new OpdsServerListActivity(renderer, mappedInputManager, onGoHome, [](size_t serverIndex) {
+      const auto* server = OPDS_STORE.getServer(serverIndex);
+      if (server) {
+        exitActivity();
+        enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome, *server));
+      }
+    }));
+  }
 }
 
 void onGoHome() {
@@ -318,6 +333,7 @@ void setup() {
   SETTINGS.loadFromFile();
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
+  OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
