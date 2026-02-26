@@ -42,10 +42,13 @@ class HalStorage {
 
   static HalStorage& getInstance() { return instance; }
 
+  class StorageLock;  // private class, used internally
+
  private:
   static HalStorage instance;
 
   bool initialized = false;
+  SemaphoreHandle_t storageMutex = nullptr;
 };
 
 #define Storage HalStorage::getInstance()

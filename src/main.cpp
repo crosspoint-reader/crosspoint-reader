@@ -238,6 +238,19 @@ void onGoToMyLibrary() {
 }
 
 void onGoToRecentBooks() {
+  static auto testTask = [](void* param) {
+    for (int i = 0; i < 10; i++) {
+      String json = Storage.readFile("/.crosspoint/settings.json");
+      LOG_DBG("TEST_TASK", "Read settings.json, bytes read: %u", json.length());
+    }
+    vTaskDelete(nullptr);
+  };
+  xTaskCreate(testTask, "test0", 8192, nullptr, 1, nullptr);
+  xTaskCreate(testTask, "test1", 8192, nullptr, 1, nullptr);
+  xTaskCreate(testTask, "test2", 8192, nullptr, 1, nullptr);
+  xTaskCreate(testTask, "test3", 8192, nullptr, 1, nullptr);
+  testTask(nullptr);
+
   exitActivity();
   enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
 }

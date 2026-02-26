@@ -1,12 +1,17 @@
 #include "HalStorage.h"
 
+#include <cassert>
+#include <Logging.h>
 #include <SDCardManager.h>
 
 #define SDCard SDCardManager::getInstance()
 
 HalStorage HalStorage::instance;
 
-HalStorage::HalStorage() {}
+HalStorage::HalStorage() {
+  storageMutex = xSemaphoreCreateMutex();
+  assert(storageMutex != nullptr);
+}
 
 bool HalStorage::begin() { return SDCard.begin(); }
 
@@ -65,3 +70,42 @@ bool HalStorage::openFileForWrite(const char* moduleName, const String& path, Fs
 }
 
 bool HalStorage::removeDir(const char* path) { return SDCard.removeDir(path); }
+
+class HalStorage::StorageLock {
+ public:
+  StorageLock() {
+    // LOG_DBG("HalStorage", "Acquiring storage mutex");
+    xSemaphoreTake(HalStorage::getInstance().storageMutex, portMAX_DELAY);
+  }
+  ~StorageLock() {
+    xSemaphoreGive(HalStorage::getInstance().storageMutex);
+  }
+};
+
+extern "C" {
+
+// SDFat is known to be not thread-safe, this is a workaround to ensure that calls to FsCache are protected by a mutex in HalStorage.
+// See: https://github.com/crosspoint-reader/crosspoint-reader/issues/1137
+
+// uint8_t* FsCache::prepare(Sector_t sector, uint8_t option)
+uint8_t* __real__ZN7FsCache7prepareEmh(FsCache* self, Sector_t sector, uint8_t option);
+uint8_t* __wrap__ZN7FsCache7prepareEmh(FsCache* self, Sector_t sector, uint8_t option) {
+  HalStorage::StorageLock lock;  // Ensure thread safety
+  return __real__ZN7FsCache7prepareEmh(self, sector, option);
+}
+
+// bool FatFile::sync()
+bool __real__ZN7FatFile4syncEv(FatFile* self);
+bool __wrap__ZN7FatFile4syncEv(FatFile* self) {
+  HalStorage::StorageLock lock;  // Ensure thread safety
+  return __real__ZN7FatFile4syncEv(self);
+}
+
+// // bool SdSpiCard::syncDevice()
+// bool __real__ZN9SdSpiCard10syncDeviceEv(SdSpiCard* self);
+// bool __wrap__ZN9SdSpiCard10syncDeviceEv(SdSpiCard* self) {
+//   HalStorage::StorageLock lock;  // Ensure thread safety
+//   return __real__ZN9SdSpiCard10syncDeviceEv(self);
+// }
+
+}  // extern "C"
