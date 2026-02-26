@@ -16,6 +16,7 @@ class MyLibraryActivity final : public Activity {
   // Files state
   std::string basepath = "/";
   std::vector<std::string> files;
+  std::vector<bool> fileOpened;  // true if book has been previously opened
 
   // Callbacks
   const std::function<void(const std::string& path)> onSelectBook;

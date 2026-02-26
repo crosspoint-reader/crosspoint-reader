@@ -9,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ReadProgressUtil.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -100,6 +101,19 @@ void MyLibraryActivity::loadFiles() {
   }
   root.close();
   sortFileList(files);
+
+  // Look up opened status for each file
+  fileOpened.clear();
+  for (const auto& filename : files) {
+    if (filename.back() == '/') {
+      fileOpened.push_back(false);  // Directories have no progress
+    } else {
+      std::string fullPath = basepath;
+      if (fullPath.back() != '/') fullPath += "/";
+      fullPath += filename;
+      fileOpened.push_back(ReadProgressUtil::hasBeenOpened(fullPath));
+    }
+  }
 }
 
 void MyLibraryActivity::onEnter() {
@@ -114,6 +128,7 @@ void MyLibraryActivity::onEnter() {
 void MyLibraryActivity::onExit() {
   Activity::onExit();
   files.clear();
+  fileOpened.clear();
 }
 
 void MyLibraryActivity::loop() {
@@ -214,7 +229,13 @@ void MyLibraryActivity::render(Activity::RenderLock&&) {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
         [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); });
+        [this](int index) { return UITheme::getFileIcon(files[index]); },
+        [this](int index) -> std::string {
+          if (index >= 0 && index < static_cast<int>(fileOpened.size()) && fileOpened[index]) {
+            return "\u2022";  // bullet: •
+          }
+          return "";
+        });
   }
 
   // Help text
