@@ -88,7 +88,7 @@ void OpdsSettingsActivity::handleSelection() {
     // Server Name
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_SERVER_NAME), editServer.name.c_str(), 63, false,
+        renderer, mappedInput, tr(STR_SERVER_NAME), editServer.name, 63, false,
         [this](const std::string& name) {
           editServer.name = name;
           saveServer();
@@ -103,7 +103,7 @@ void OpdsSettingsActivity::handleSelection() {
     // Server URL
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_OPDS_SERVER_URL), editServer.url.c_str(), 127, false,
+        renderer, mappedInput, tr(STR_OPDS_SERVER_URL), editServer.url, 127, false,
         [this](const std::string& url) {
           editServer.url = url;
           saveServer();
@@ -118,7 +118,7 @@ void OpdsSettingsActivity::handleSelection() {
     // Username
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_USERNAME), editServer.username.c_str(), 63, false,
+        renderer, mappedInput, tr(STR_USERNAME), editServer.username, 63, false,
         [this](const std::string& username) {
           editServer.username = username;
           saveServer();
@@ -133,7 +133,7 @@ void OpdsSettingsActivity::handleSelection() {
     // Password
     exitActivity();
     enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_PASSWORD), editServer.password.c_str(), 63, false,
+        renderer, mappedInput, tr(STR_PASSWORD), editServer.password, 63, false,
         [this](const std::string& password) {
           editServer.password = password;
           saveServer();
