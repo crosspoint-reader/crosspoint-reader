@@ -94,7 +94,7 @@ void KOReaderSyncActivity::performSync() {
       state = SYNC_FAILED;
       statusMessage = tr(STR_HASH_FAILED);
     }
-    requestUpdate();
+    requestUpdate(true);
     return;
   }
 
@@ -116,7 +116,7 @@ void KOReaderSyncActivity::performSync() {
       state = NO_REMOTE_PROGRESS;
       hasRemoteProgress = false;
     }
-    requestUpdate();
+    requestUpdate(true);
     return;
   }
 
@@ -126,7 +126,7 @@ void KOReaderSyncActivity::performSync() {
       state = SYNC_FAILED;
       statusMessage = KOReaderSyncClient::errorString(result);
     }
-    requestUpdate();
+    requestUpdate(true);
     return;
   }
 
@@ -150,7 +150,7 @@ void KOReaderSyncActivity::performSync() {
       selectedOption = 0;  // Apply remote progress
     }
   }
-  requestUpdate();
+  requestUpdate(true);
 }
 
 void KOReaderSyncActivity::performUpload() {
@@ -188,7 +188,7 @@ void KOReaderSyncActivity::performUpload() {
     RenderLock lock(*this);
     state = UPLOAD_COMPLETE;
   }
-  requestUpdate();
+  requestUpdate(true);
 }
 
 void KOReaderSyncActivity::onEnter() {
@@ -206,7 +206,7 @@ void KOReaderSyncActivity::onEnter() {
     LOG_DBG("KOSync", "Already connected to WiFi");
     state = SYNCING;
     statusMessage = tr(STR_SYNCING_TIME);
-    requestUpdate();
+    requestUpdate(true);
 
     // Perform sync directly (will be handled in loop)
     xTaskCreate(
@@ -354,7 +354,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
 void KOReaderSyncActivity::loop() {
   if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ActivityResult result;
       result.isCancelled = true;
       setResult(std::move(result));
@@ -365,20 +365,19 @@ void KOReaderSyncActivity::loop() {
 
   if (state == SHOWING_RESULT) {
     // Navigate options
-    if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Left)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       requestUpdate();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-               mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    } else if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+               mappedInput.wasReleased(MappedInputManager::Button::Right)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       requestUpdate();
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (selectedOption == 0) {
-        // Apply remote progress — WiFi no longer needed
-        wifiOff();
+        // Wifi will be turned off in onExit()
         setResult(SyncResult{remotePosition.spineIndex, remotePosition.pageNumber});
         finish();
       } else if (selectedOption == 1) {
@@ -387,7 +386,7 @@ void KOReaderSyncActivity::loop() {
       }
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ActivityResult result;
       result.isCancelled = true;
       setResult(std::move(result));
@@ -397,7 +396,7 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == NO_REMOTE_PROGRESS) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       // Calculate hash if not done yet
       if (documentHash.empty()) {
         if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
@@ -409,7 +408,7 @@ void KOReaderSyncActivity::loop() {
       performUpload();
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ActivityResult result;
       result.isCancelled = true;
       setResult(std::move(result));
