@@ -12,6 +12,7 @@ class BmpViewerActivity final : public ActivityWithSubactivity {
                     std::function<void()> onGoBack);
 
   void onEnter() override;
+  void onExit() override;
   void loop() override;
 
  private:
