@@ -11,6 +11,7 @@ class BmpViewerActivity final : public ActivityWithSubactivity {
   BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath);
 
   void onEnter() override;
+  void onExit() override;
   void loop() override;
 
  private:
