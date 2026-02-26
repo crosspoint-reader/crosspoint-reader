@@ -13,7 +13,7 @@ class ReaderActivity final : public ActivityWithSubactivity {
   std::string currentBookPath;  // Track current book path for navigation
   const std::function<void()> onGoBack;
   const std::function<void(const std::string&)> onGoToLibrary;
-  static std::unique_ptr<Epub> loadEpub(const std::string& path);
+  std::unique_ptr<Epub> loadEpub(const std::string& path);
   static std::unique_ptr<Xtc> loadXtc(const std::string& path);
   static std::unique_ptr<Txt> loadTxt(const std::string& path);
   static bool isXtcFile(const std::string& path);
