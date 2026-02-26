@@ -169,6 +169,11 @@ principles, please see [GOVERNANCE.md](GOVERNANCE.md).
 3. Make changes
 4. Submit a PR
 
+#### i18n checklist
+- your new translation string at the bottom of `english.yaml`
+- you tagged the [translators](https://github.com/crosspoint-reader/crosspoint-reader/blob/master/docs/translators.md) in your PR 
+- accept `Suggested change` related to other languages
+
 ---
 
 CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 hardware**.
