@@ -19,8 +19,7 @@ class OpdsServerListActivity final : public ActivityWithSubactivity {
    * @param onServerSelected If set, acts as a picker: selecting a server calls this instead of opening editor.
    */
   explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                  const std::function<void()>& onBack,
-                                  OnServerSelected onServerSelected = nullptr)
+                                  const std::function<void()>& onBack, OnServerSelected onServerSelected = nullptr)
       : ActivityWithSubactivity("OpdsServerList", renderer, mappedInput),
         onBack(onBack),
         onServerSelected(std::move(onServerSelected)) {}

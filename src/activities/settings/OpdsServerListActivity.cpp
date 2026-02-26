@@ -3,9 +3,9 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
-#include "OpdsSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "OpdsSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
