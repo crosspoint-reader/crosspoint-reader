@@ -28,9 +28,6 @@ const StrId progressBarThicknessNames[PROGRESS_BAR_THICKNESS_ITEMS] = {
 constexpr int TITLE_ITEMS = 3;
 const StrId titleNames[TITLE_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE};
 
-const char* translatedShow = tr(STR_SHOW);
-const char* translatedHide = tr(STR_HIDE);
-
 const int widthMargin = 10;
 const int verticalPreviewPadding = 50;
 const int verticalPreviewTextPadding = 40;
@@ -135,9 +132,9 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
       [this](int index) {
         // Draw status for each setting
         if (index == 0) {
-          return SETTINGS.statusBarChapterPageCount ? translatedShow : translatedHide;
+          return SETTINGS.statusBarChapterPageCount ? tr(STR_SHOW) : tr(STR_HIDE);
         } else if (index == 1) {
-          return SETTINGS.statusBarBookProgressPercentage ? translatedShow : translatedHide;
+          return SETTINGS.statusBarBookProgressPercentage ? tr(STR_SHOW) : tr(STR_HIDE);
         } else if (index == 2) {
           return I18N.get(progressBarNames[SETTINGS.statusBarProgressBar]);
         } else if (index == 3) {
@@ -145,9 +142,9 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
         } else if (index == 4) {
           return I18N.get(titleNames[SETTINGS.statusBarTitle]);
         } else if (index == 5) {
-          return SETTINGS.statusBarBattery ? translatedShow : translatedHide;
+          return SETTINGS.statusBarBattery ? tr(STR_SHOW) : tr(STR_HIDE);
         } else {
-          return translatedHide;
+          return tr(STR_HIDE);
         }
       },
       true);
