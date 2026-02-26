@@ -1,4 +1,4 @@
-// from
+// based on
 // https://github.com/atomic14/diy-esp32-epub-reader/blob/2c2f57fdd7e2a788d14a0bcb26b9e845a47aac42/lib/Epub/RubbishHtmlParser/htmlEntities.cpp
 
 #include "htmlEntities.h"
@@ -10,67 +10,105 @@ struct EntityPair {
   const char* value;
 };
 
-static const EntityPair ENTITY_LOOKUP[] = {
-    {"&quot;", "\""},  {"&frasl;", "⁄"},   {"&amp;", "&"},         {"&lt;", "<"},     {"&gt;", ">"},
-    {"&Agrave;", "À"}, {"&Aacute;", "Á"},  {"&Acirc;", "Â"},       {"&Atilde;", "Ã"}, {"&Auml;", "Ä"},
-    {"&Aring;", "Å"},  {"&AElig;", "Æ"},   {"&Ccedil;", "Ç"},      {"&Egrave;", "È"}, {"&Eacute;", "É"},
-    {"&Ecirc;", "Ê"},  {"&Euml;", "Ë"},    {"&Igrave;", "Ì"},      {"&Iacute;", "Í"}, {"&Icirc;", "Î"},
-    {"&Iuml;", "Ï"},   {"&ETH;", "Ð"},     {"&Ntilde;", "Ñ"},      {"&Ograve;", "Ò"}, {"&Oacute;", "Ó"},
-    {"&Ocirc;", "Ô"},  {"&Otilde;", "Õ"},  {"&Ouml;", "Ö"},        {"&Oslash;", "Ø"}, {"&Ugrave;", "Ù"},
-    {"&Uacute;", "Ú"}, {"&Ucirc;", "Û"},   {"&Uuml;", "Ü"},        {"&Yacute;", "Ý"}, {"&THORN;", "Þ"},
-    {"&szlig;", "ß"},  {"&agrave;", "à"},  {"&aacute;", "á"},      {"&acirc;", "â"},  {"&atilde;", "ã"},
-    {"&auml;", "ä"},   {"&aring;", "å"},   {"&aelig;", "æ"},       {"&ccedil;", "ç"}, {"&egrave;", "è"},
-    {"&eacute;", "é"}, {"&ecirc;", "ê"},   {"&euml;", "ë"},        {"&igrave;", "ì"}, {"&iacute;", "í"},
-    {"&icirc;", "î"},  {"&iuml;", "ï"},    {"&eth;", "ð"},         {"&ntilde;", "ñ"}, {"&ograve;", "ò"},
-    {"&oacute;", "ó"}, {"&ocirc;", "ô"},   {"&otilde;", "õ"},      {"&ouml;", "ö"},   {"&oslash;", "ø"},
-    {"&ugrave;", "ù"}, {"&uacute;", "ú"},  {"&ucirc;", "û"},       {"&uuml;", "ü"},   {"&yacute;", "ý"},
-    {"&thorn;", "þ"},  {"&yuml;", "ÿ"},    {"&nbsp;", "\xC2\xA0"}, {"&iexcl;", "¡"},  {"&cent;", "¢"},
-    {"&pound;", "£"},  {"&curren;", "¤"},  {"&yen;", "¥"},         {"&brvbar;", "¦"}, {"&sect;", "§"},
-    {"&uml;", "¨"},    {"&copy;", "©"},    {"&ordf;", "ª"},        {"&laquo;", "«"},  {"&not;", "¬"},
-    {"&shy;", "­"},    {"&reg;", "®"},     {"&macr;", "¯"},        {"&deg;", "°"},    {"&plusmn;", "±"},
-    {"&sup2;", "²"},   {"&sup3;", "³"},    {"&acute;", "´"},       {"&micro;", "µ"},  {"&para;", "¶"},
-    {"&cedil;", "¸"},  {"&sup1;", "¹"},    {"&ordm;", "º"},        {"&raquo;", "»"},  {"&frac14;", "¼"},
-    {"&frac12;", "½"}, {"&frac34;", "¾"},  {"&iquest;", "¿"},      {"&times;", "×"},  {"&divide;", "÷"},
-    {"&forall;", "∀"}, {"&part;", "∂"},    {"&exist;", "∃"},       {"&empty;", "∅"},  {"&nabla;", "∇"},
-    {"&isin;", "∈"},   {"&notin;", "∉"},   {"&ni;", "∋"},          {"&prod;", "∏"},   {"&sum;", "∑"},
-    {"&minus;", "−"},  {"&lowast;", "∗"},  {"&radic;", "√"},       {"&prop;", "∝"},   {"&infin;", "∞"},
-    {"&ang;", "∠"},    {"&and;", "∧"},     {"&or;", "∨"},          {"&cap;", "∩"},    {"&cup;", "∪"},
-    {"&int;", "∫"},    {"&there4;", "∴"},  {"&sim;", "∼"},         {"&cong;", "≅"},   {"&asymp;", "≈"},
-    {"&ne;", "≠"},     {"&equiv;", "≡"},   {"&le;", "≤"},          {"&ge;", "≥"},     {"&sub;", "⊂"},
-    {"&sup;", "⊃"},    {"&nsub;", "⊄"},    {"&sube;", "⊆"},        {"&supe;", "⊇"},   {"&oplus;", "⊕"},
-    {"&otimes;", "⊗"}, {"&perp;", "⊥"},    {"&sdot;", "⋅"},        {"&Alpha;", "Α"},  {"&Beta;", "Β"},
-    {"&Gamma;", "Γ"},  {"&Delta;", "Δ"},   {"&Epsilon;", "Ε"},     {"&Zeta;", "Ζ"},   {"&Eta;", "Η"},
-    {"&Theta;", "Θ"},  {"&Iota;", "Ι"},    {"&Kappa;", "Κ"},       {"&Lambda;", "Λ"}, {"&Mu;", "Μ"},
-    {"&Nu;", "Ν"},     {"&Xi;", "Ξ"},      {"&Omicron;", "Ο"},     {"&Pi;", "Π"},     {"&Rho;", "Ρ"},
-    {"&Sigma;", "Σ"},  {"&Tau;", "Τ"},     {"&Upsilon;", "Υ"},     {"&Phi;", "Φ"},    {"&Chi;", "Χ"},
-    {"&Psi;", "Ψ"},    {"&Omega;", "Ω"},   {"&alpha;", "α"},       {"&beta;", "β"},   {"&gamma;", "γ"},
-    {"&delta;", "δ"},  {"&epsilon;", "ε"}, {"&zeta;", "ζ"},        {"&eta;", "η"},    {"&theta;", "θ"},
-    {"&iota;", "ι"},   {"&kappa;", "κ"},   {"&lambda;", "λ"},      {"&mu;", "μ"},     {"&nu;", "ν"},
-    {"&xi;", "ξ"},     {"&omicron;", "ο"}, {"&pi;", "π"},          {"&rho;", "ρ"},    {"&sigmaf;", "ς"},
-    {"&sigma;", "σ"},  {"&tau;", "τ"},     {"&upsilon;", "υ"},     {"&phi;", "φ"},    {"&chi;", "χ"},
-    {"&psi;", "ψ"},    {"&omega;", "ω"},   {"&thetasym;", "ϑ"},    {"&upsih;", "ϒ"},  {"&piv;", "ϖ"},
-    {"&OElig;", "Œ"},  {"&oelig;", "œ"},   {"&Scaron;", "Š"},      {"&scaron;", "š"}, {"&Yuml;", "Ÿ"},
-    {"&fnof;", "ƒ"},   {"&circ;", "ˆ"},    {"&tilde;", "˜"},       {"&ensp;", " "},   {"&emsp;", " "},
-    {"&thinsp;", " "}, {"&zwnj;", "‌"},  {"&zwj;", "‍"},       {"&lrm;", "‎"},  {"&rlm;", "‏"},
-    {"&ndash;", "–"},  {"&mdash;", "—"},   {"&lsquo;", "‘"},       {"&rsquo;", "’"},  {"&sbquo;", "‚"},
-    {"&ldquo;", "“"},  {"&rdquo;", "”"},   {"&bdquo;", "„"},       {"&dagger;", "†"}, {"&Dagger;", "‡"},
-    {"&bull;", "•"},   {"&hellip;", "…"},  {"&permil;", "‰"},      {"&prime;", "′"},  {"&Prime;", "″"},
-    {"&lsaquo;", "‹"}, {"&rsaquo;", "›"},  {"&oline;", "‾"},       {"&euro;", "€"},   {"&trade;", "™"},
-    {"&larr;", "←"},   {"&uarr;", "↑"},    {"&rarr;", "→"},        {"&darr;", "↓"},   {"&harr;", "↔"},
-    {"&crarr;", "↵"},  {"&lceil;", "⌈"},   {"&rceil;", "⌉"},       {"&lfloor;", "⌊"}, {"&rfloor;", "⌋"},
-    {"&loz;", "◊"},    {"&spades;", "♠"},  {"&clubs;", "♣"},       {"&hearts;", "♥"}, {"&diams;", "♦"}};
+// Sorted lexicographically by key to allow binary search.
+static constexpr EntityPair ENTITY_LOOKUP[] = {
+    {"&AElig;", "Æ"},    {"&Aacute;", "Á"},     {"&Acirc;", "Â"},      {"&Agrave;", "À"},   {"&Alpha;", "Α"},
+    {"&Aring;", "Å"},    {"&Atilde;", "Ã"},     {"&Auml;", "Ä"},       {"&Beta;", "Β"},     {"&Ccedil;", "Ç"},
+    {"&Chi;", "Χ"},      {"&Dagger;", "‡"},     {"&Delta;", "Δ"},      {"&ETH;", "Ð"},      {"&Eacute;", "É"},
+    {"&Ecirc;", "Ê"},    {"&Egrave;", "È"},     {"&Epsilon;", "Ε"},    {"&Eta;", "Η"},      {"&Euml;", "Ë"},
+    {"&Gamma;", "Γ"},    {"&Iacute;", "Í"},     {"&Icirc;", "Î"},      {"&Igrave;", "Ì"},   {"&Iota;", "Ι"},
+    {"&Iuml;", "Ï"},     {"&Kappa;", "Κ"},      {"&Lambda;", "Λ"},     {"&Mu;", "Μ"},       {"&Ntilde;", "Ñ"},
+    {"&Nu;", "Ν"},       {"&OElig;", "Œ"},      {"&Oacute;", "Ó"},     {"&Ocirc;", "Ô"},    {"&Ograve;", "Ò"},
+    {"&Omega;", "Ω"},    {"&Omicron;", "Ο"},    {"&Oslash;", "Ø"},     {"&Otilde;", "Õ"},   {"&Ouml;", "Ö"},
+    {"&Phi;", "Φ"},      {"&Pi;", "Π"},         {"&Prime;", "″"},      {"&Psi;", "Ψ"},      {"&Rho;", "Ρ"},
+    {"&Scaron;", "Š"},   {"&Sigma;", "Σ"},      {"&THORN;", "Þ"},      {"&Tau;", "Τ"},      {"&Theta;", "Θ"},
+    {"&Uacute;", "Ú"},   {"&Ucirc;", "Û"},      {"&Ugrave;", "Ù"},     {"&Upsilon;", "Υ"},  {"&Uuml;", "Ü"},
+    {"&Xi;", "Ξ"},       {"&Yacute;", "Ý"},     {"&Yuml;", "Ÿ"},       {"&Zeta;", "Ζ"},     {"&aacute;", "á"},
+    {"&acirc;", "â"},    {"&acute;", "´"},      {"&aelig;", "æ"},      {"&agrave;", "à"},   {"&alpha;", "α"},
+    {"&amp;", "&"},      {"&and;", "∧"},        {"&ang;", "∠"},        {"&aring;", "å"},    {"&asymp;", "≈"},
+    {"&atilde;", "ã"},   {"&auml;", "ä"},       {"&bdquo;", "„"},      {"&beta;", "β"},     {"&brvbar;", "¦"},
+    {"&bull;", "•"},     {"&cap;", "∩"},        {"&ccedil;", "ç"},     {"&cedil;", "¸"},    {"&cent;", "¢"},
+    {"&chi;", "χ"},      {"&circ;", "ˆ"},       {"&clubs;", "♣"},      {"&cong;", "≅"},     {"&copy;", "©"},
+    {"&crarr;", "↵"},    {"&cup;", "∪"},        {"&curren;", "¤"},     {"&dagger;", "†"},   {"&darr;", "↓"},
+    {"&deg;", "°"},      {"&delta;", "δ"},      {"&diams;", "♦"},      {"&divide;", "÷"},   {"&eacute;", "é"},
+    {"&ecirc;", "ê"},    {"&egrave;", "è"},     {"&empty;", "∅"},      {"&emsp;", " "},     {"&ensp;", " "},
+    {"&epsilon;", "ε"},  {"&equiv;", "≡"},      {"&eta;", "η"},        {"&eth;", "ð"},      {"&euml;", "ë"},
+    {"&euro;", "€"},     {"&exist;", "∃"},      {"&fnof;", "ƒ"},       {"&forall;", "∀"},   {"&frac12;", "½"},
+    {"&frac14;", "¼"},   {"&frac34;", "¾"},     {"&frasl;", "⁄"},      {"&gamma;", "γ"},    {"&ge;", "≥"},
+    {"&gt;", ">"},       {"&harr;", "↔"},       {"&hearts;", "♥"},     {"&hellip;", "…"},   {"&iacute;", "í"},
+    {"&icirc;", "î"},    {"&iexcl;", "¡"},      {"&igrave;", "ì"},     {"&infin;", "∞"},    {"&int;", "∫"},
+    {"&iota;", "ι"},     {"&iquest;", "¿"},     {"&isin;", "∈"},       {"&iuml;", "ï"},     {"&kappa;", "κ"},
+    {"&lambda;", "λ"},   {"&laquo;", "«"},      {"&larr;", "←"},       {"&lceil;", "⌈"},    {"&ldquo;", "\u201C"},
+    {"&le;", "≤"},       {"&lfloor;", "⌊"},     {"&lowast;", "∗"},     {"&loz;", "◊"},      {"&lrm;", "\u200E"},
+    {"&lsaquo;", "‹"},   {"&lsquo;", "\u2018"}, {"&lt;", "<"},         {"&macr;", "¯"},     {"&mdash;", "—"},
+    {"&micro;", "µ"},    {"&minus;", "−"},      {"&mu;", "μ"},         {"&nabla;", "∇"},    {"&nbsp;", "\xC2\xA0"},
+    {"&ndash;", "–"},    {"&ne;", "≠"},         {"&ni;", "∋"},         {"&not;", "¬"},      {"&notin;", "∉"},
+    {"&nsub;", "⊄"},     {"&ntilde;", "ñ"},     {"&nu;", "ν"},         {"&oacute;", "ó"},   {"&ocirc;", "ô"},
+    {"&oelig;", "œ"},    {"&ograve;", "ò"},     {"&oline;", "‾"},      {"&omega;", "ω"},    {"&omicron;", "ο"},
+    {"&oplus;", "⊕"},    {"&or;", "∨"},         {"&ordf;", "ª"},       {"&ordm;", "º"},     {"&oslash;", "ø"},
+    {"&otilde;", "õ"},   {"&otimes;", "⊗"},     {"&ouml;", "ö"},       {"&para;", "¶"},     {"&part;", "∂"},
+    {"&permil;", "‰"},   {"&perp;", "⊥"},       {"&phi;", "φ"},        {"&pi;", "π"},       {"&piv;", "ϖ"},
+    {"&plusmn;", "±"},   {"&pound;", "£"},      {"&prime;", "′"},      {"&prod;", "∏"},     {"&prop;", "∝"},
+    {"&psi;", "ψ"},      {"&quot;", "\""},      {"&radic;", "√"},      {"&raquo;", "»"},    {"&rarr;", "→"},
+    {"&rceil;", "⌉"},    {"&rdquo;", "\u201D"}, {"&reg;", "®"},        {"&rfloor;", "⌋"},   {"&rho;", "ρ"},
+    {"&rlm;", "\u200F"}, {"&rsaquo;", "›"},     {"&rsquo;", "\u2019"}, {"&sbquo;", "‚"},    {"&scaron;", "š"},
+    {"&sdot;", "⋅"},     {"&sect;", "§"},       {"&shy;", "\xC2\xAD"}, {"&sigma;", "σ"},    {"&sigmaf;", "ς"},
+    {"&sim;", "∼"},      {"&spades;", "♠"},     {"&sub;", "⊂"},        {"&sube;", "⊆"},     {"&sum;", "∑"},
+    {"&sup1;", "¹"},     {"&sup2;", "²"},       {"&sup3;", "³"},       {"&sup;", "⊃"},      {"&supe;", "⊇"},
+    {"&szlig;", "ß"},    {"&tau;", "τ"},        {"&there4;", "∴"},     {"&theta;", "θ"},    {"&thetasym;", "ϑ"},
+    {"&thinsp;", " "},   {"&thorn;", "þ"},      {"&tilde;", "˜"},      {"&times;", "×"},    {"&trade;", "™"},
+    {"&uacute;", "ú"},   {"&uarr;", "↑"},       {"&ucirc;", "û"},      {"&ugrave;", "ù"},   {"&uml;", "¨"},
+    {"&upsih;", "ϒ"},    {"&upsilon;", "υ"},    {"&uuml;", "ü"},       {"&xi;", "ξ"},       {"&yacute;", "ý"},
+    {"&yen;", "¥"},      {"&yuml;", "ÿ"},       {"&zeta;", "ζ"},       {"&zwj;", "\u200D"}, {"&zwnj;", "\u200C"},
+};
 
 static const size_t ENTITY_LOOKUP_COUNT = sizeof(ENTITY_LOOKUP) / sizeof(ENTITY_LOOKUP[0]);
 
-// Lookup a single HTML entity and return its UTF-8 value
-const char* lookupHtmlEntity(const char* entity, int len) {
-  for (size_t i = 0; i < ENTITY_LOOKUP_COUNT; i++) {
-    const char* key = ENTITY_LOOKUP[i].key;
+// Verify the table is sorted at compile time.
+static constexpr int constexprStrcmp(const char* a, const char* b) {
+  for (size_t i = 0;; i++) {
+    if (a[i] != b[i]) return (unsigned char)a[i] < (unsigned char)b[i] ? -1 : 1;
+    if (a[i] == '\0') return 0;
+  }
+}
+
+static constexpr bool isTableSorted() {
+  for (size_t i = 1; i < ENTITY_LOOKUP_COUNT; i++) {
+    if (constexprStrcmp(ENTITY_LOOKUP[i - 1].key, ENTITY_LOOKUP[i].key) >= 0) return false;
+  }
+  return true;
+}
+static_assert(isTableSorted(), "ENTITY_LOOKUP must be sorted lexicographically by key");
+
+// Lookup a single HTML entity and return its UTF-8 value.
+const char* lookupHtmlEntity(const char* entity, size_t len) {
+  if (entity == nullptr || len == 0) return nullptr;
+
+  size_t lo = 0;
+  size_t hi = ENTITY_LOOKUP_COUNT;
+
+  while (lo < hi) {
+    const size_t mid = lo + (hi - lo) / 2;
+    const char* key = ENTITY_LOOKUP[mid].key;
     const size_t keyLen = strlen(key);
-    if (static_cast<size_t>(len) == keyLen && memcmp(entity, key, keyLen) == 0) {
-      return ENTITY_LOOKUP[i].value;
+    const size_t cmpLen = (len < keyLen) ? len : keyLen;
+    int cmp = memcmp(entity, key, cmpLen);
+    if (cmp == 0) {
+      // safety net: if prefix equal, shorter string is considered smaller
+      if (len < keyLen)
+        cmp = -1;
+      else if (len > keyLen)
+        cmp = 1;
+      else
+        cmp = 0;
     }
+
+    if (cmp == 0) return ENTITY_LOOKUP[mid].value;
+    if (cmp < 0)
+      hi = mid;
+    else
+      lo = mid + 1;
   }
 
-  return nullptr;  // Entity not found
+  return nullptr;
 }
