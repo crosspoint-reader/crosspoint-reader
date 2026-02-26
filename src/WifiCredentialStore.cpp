@@ -103,13 +103,14 @@ bool WifiCredentialStore::loadFromBinaryFile() {
   return true;
 }
 
-bool WifiCredentialStore::addCredential(const std::string& ssid, const std::string& password) {
+bool WifiCredentialStore::addCredential(const std::string& ssid, const std::string& password, bool isHidden) {
   // Check if this SSID already exists and update it
   const auto cred = find_if(credentials.begin(), credentials.end(),
                             [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; });
   if (cred != credentials.end()) {
     cred->password = password;
-    LOG_DBG("WCS", "Updated credentials for: %s", ssid.c_str());
+    cred->isHidden = isHidden;
+    LOG_DBG("WCS", "Updated credentials for: %s (hidden=%d)", ssid.c_str(), isHidden);
     return saveToFile();
   }
 
@@ -120,8 +121,8 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
   }
 
   // Add new credential
-  credentials.push_back({ssid, password});
-  LOG_DBG("WCS", "Added credentials for: %s", ssid.c_str());
+  credentials.push_back({ssid, password, isHidden});
+  LOG_DBG("WCS", "Added credentials for: %s (hidden=%d)", ssid.c_str(), isHidden);
   return saveToFile();
 }
 

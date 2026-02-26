@@ -4,7 +4,8 @@
 
 struct WifiCredential {
   std::string ssid;
-  std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  std::string password;   // Plaintext in memory; obfuscated with hardware key on disk
+  bool isHidden = false;  // Explicitly marked as a hidden network (doesn't broadcast SSID)
 };
 
 class WifiCredentialStore;
@@ -48,7 +49,7 @@ class WifiCredentialStore {
   bool loadFromFile();
 
   // Credential management
-  bool addCredential(const std::string& ssid, const std::string& password);
+  bool addCredential(const std::string& ssid, const std::string& password, bool isHidden = false);
   bool removeCredential(const std::string& ssid);
   const WifiCredential* findCredential(const std::string& ssid) const;
 
