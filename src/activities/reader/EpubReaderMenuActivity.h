@@ -13,6 +13,7 @@ class EpubReaderMenuActivity final : public Activity {
   // Menu actions available from the reader menu.
   enum class MenuAction {
     SELECT_CHAPTER,
+    FOOTNOTES,
     GO_TO_PERCENT,
     ROTATE_SCREEN,
     SCREENSHOT,
@@ -24,13 +25,7 @@ class EpubReaderMenuActivity final : public Activity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation)
-      : Activity("EpubReaderMenu", renderer, mappedInput),
-        title(title),
-        pendingOrientation(currentOrientation),
-        currentPage(currentPage),
-        totalPages(totalPages),
-        bookProgressPercent(bookProgressPercent) {}
+                                  const uint8_t currentOrientation, const bool hasFootnotes);
 
   void onEnter() override;
   void onExit() override;
@@ -43,15 +38,11 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  // Fixed menu layout (order matters for up/down navigation).
-  const std::vector<MenuItem> menuItems = {{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
-                                           {MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION},
-                                           {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
-                                           {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
-                                           {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
-                                           {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},
-                                           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
-                                           {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}};
+  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes);
+
+  // Fixed menu layout
+  const std::vector<MenuItem> menuItems;
+
   int selectedIndex = 0;
 
   ButtonNavigator buttonNavigator;

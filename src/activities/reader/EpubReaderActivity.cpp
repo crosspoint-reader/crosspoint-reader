@@ -11,6 +11,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
+#include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
@@ -135,17 +136,17 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-    startActivityForResult(
-        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
-                                                 bookProgressPercent, SETTINGS.orientation),
-        [this](const ActivityResult& result) {
-          // Always apply orientation change even if the menu was cancelled
-          const auto& menu = std::get<MenuResult>(result.data);
-          applyOrientation(menu.orientation);
-          if (!result.isCancelled) {
-            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-          }
-        });
+    startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
+                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
+                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                           [this](const ActivityResult& result) {
+                             // Always apply orientation change even if the menu was cancelled
+                             const auto& menu = std::get<MenuResult>(result.data);
+                             applyOrientation(menu.orientation);
+                             if (!result.isCancelled) {
+                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                             }
+                           });
   }
 
   // Long press BACK (1s+) goes to file selection
@@ -154,8 +155,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Short press BACK goes directly to home
+  // Short press BACK goes directly to home (or restores position if viewing footnote)
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
+    if (footnoteDepth > 0) {
+      restoreSavedPosition();
+      return;
+    }
     onGoHome();
     return;
   }
@@ -312,6 +317,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               section.reset();
             }
           });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
+      startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 const auto& footnoteResult = std::get<FootnoteResult>(result.data);
+                                 navigateToHref(std::move(footnoteResult.href), true);
+                               }
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
@@ -551,6 +567,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       // TODO: prevent infinite loop if the page keeps failing to load for some reason
       return;
     }
+
+    // Collect footnotes from the loaded page
+    currentPageFootnotes = std::move(p->footnotes);
+
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
@@ -666,4 +686,56 @@ void EpubReaderActivity::renderStatusBar() const {
   }
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title);
+}
+
+void EpubReaderActivity::navigateToHref(const std::string hrefStr, const bool savePosition) {
+  if (!epub) return;
+
+  // Push current position onto saved stack
+  if (savePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
+    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
+    footnoteDepth++;
+    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, section->currentPage);
+  }
+
+  // Check for same-file anchor reference (#anchor only)
+  bool sameFile = !hrefStr.empty() && hrefStr[0] == '#';
+
+  int targetSpineIndex;
+  if (sameFile) {
+    // Same file — navigate to page 0 of current spine item
+    targetSpineIndex = currentSpineIndex;
+  } else {
+    targetSpineIndex = epub->resolveHrefToSpineIndex(hrefStr);
+  }
+
+  if (targetSpineIndex < 0) {
+    LOG_DBG("ERS", "Could not resolve href: %s", hrefStr.c_str());
+    if (savePosition && footnoteDepth > 0) footnoteDepth--;  // undo push
+    return;
+  }
+
+  {
+    RenderLock lock(*this);
+    currentSpineIndex = targetSpineIndex;
+    nextPageNumber = 0;
+    section.reset();
+  }
+  requestUpdate();
+  LOG_DBG("ERS", "Navigated to spine %d for href: %s", targetSpineIndex, hrefStr.c_str());
+}
+
+void EpubReaderActivity::restoreSavedPosition() {
+  if (footnoteDepth <= 0) return;
+  footnoteDepth--;
+  const auto& pos = savedPositions[footnoteDepth];
+  LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
+
+  {
+    RenderLock lock(*this);
+    currentSpineIndex = pos.spineIndex;
+    nextPageNumber = pos.pageNumber;
+    section.reset();
+  }
+  requestUpdate();
 }
