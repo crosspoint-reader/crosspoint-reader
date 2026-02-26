@@ -8,12 +8,14 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "PromptActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
-    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
+    : ActivityWithSubactivity("BmpViewer", renderer, mappedInput),
+      filePath(std::move(path)) {}
 
 void BmpViewerActivity::loadSiblingImages() {
   siblingImages.clear();
@@ -108,22 +110,14 @@ void BmpViewerActivity::onEnter() {
       }
 
       // 4. Prepare Rendering
-      MappedInputManager::Labels labels;
-      if (isConfirmingDelete) {
-        labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CONFIRM), "", "");
-      } else {
-        labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), tr(STR_DELETE), "");
-      }
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), tr(STR_DELETE), "");
+
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
       // Assuming drawBitmap defaults to 0,0 crop if omitted, or pass explicitly: drawBitmap(bitmap, x, y, pageWidth,
       // pageHeight, 0, 0)
       renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
-
-      if (isConfirmingDelete) {
-        GUI.drawPopup(renderer, tr(STR_DELETE_IMAGE_PROMPT));
-      }
 
       // Draw UI hints on the base layer
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -158,82 +152,34 @@ void BmpViewerActivity::onExit() {
 }
 
 void BmpViewerActivity::loop() {
-  // Keep CPU awake/polling so 1st click works
-  Activity::loop();
+  if (subActivity) {
+    subActivity->loop();
+    return;
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (isConfirmingDelete) {
-      isConfirmingDelete = false;
-      onEnter();
-    } else {
-      if (onGoBack) onGoBack();
-      onGoHome();
-    }
+    onGoHome();
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (isConfirmingDelete) {
-      GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-
-      if (Storage.remove(filePath.c_str())) {
-        GUI.drawPopup(renderer, tr(STR_DONE));
-        delay(1000);
-        if (onGoBack) onGoBack();
-        onGoHome();
-      } else {
-        GUI.drawPopup(renderer, tr(STR_FAILED_LOWER));
-        delay(1000);
-        isConfirmingDelete = false;
-        onEnter();
-      }
-      return;
-    }
-
-    GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-
-    bool success = false;
-    FsFile inFile, outFile;
-    if (Storage.openFileForRead("BMP", filePath, inFile)) {
-      if (Storage.openFileForWrite("BMP", "/sleep.bmp", outFile)) {
-        char buffer[2048];
-        int bytesRead;
-        success = true;
-        while ((bytesRead = inFile.read(buffer, sizeof(buffer))) > 0) {
-          if (outFile.write(buffer, bytesRead) != bytesRead) {
-            success = false;
-            break;
-          }
-        }
-        outFile.close();
-      }
-      inFile.close();
-    }
-
-    if (success) {
-      SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
-      SETTINGS.saveToFile();
-      GUI.drawPopup(renderer, tr(STR_DONE));
-    } else {
-      GUI.drawPopup(renderer, tr(STR_FAILED_LOWER));
-    }
-
-    delay(1000);
-    onEnter();
+    doSetSleepCover();
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    if (!isConfirmingDelete) {
-      isConfirmingDelete = true;
-      onEnter();
-    }
+    enterNewActivity(new PromptActivity(
+        renderer, mappedInput, tr(STR_DELETE_IMAGE_PROMPT), [this] { doDelete(); },
+        [this] {
+          exitActivity();
+          onEnter();
+        }));
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    if (!isConfirmingDelete && siblingImages.size() > 1 && currentImageIndex > 0) {
+    if (siblingImages.size() > 1 && currentImageIndex > 0) {
       currentImageIndex--;
       std::string dirPath = "/";
       size_t lastSlash = filePath.find_last_of('/');
@@ -249,7 +195,7 @@ void BmpViewerActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (!isConfirmingDelete && siblingImages.size() > 1 && currentImageIndex != -1 &&
+    if (siblingImages.size() > 1 && currentImageIndex != -1 &&
         currentImageIndex < static_cast<int>(siblingImages.size()) - 1) {
       currentImageIndex++;
       std::string dirPath = "/";
@@ -264,4 +210,52 @@ void BmpViewerActivity::loop() {
     }
     return;
   }
+}
+
+void BmpViewerActivity::doDelete() {
+  exitActivity();
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+
+  if (Storage.remove(filePath.c_str())) {
+    GUI.drawPopup(renderer, tr(STR_DONE));
+    delay(1000);
+    onGoHome();
+  } else {
+    GUI.drawPopup(renderer, tr(STR_FAILED_LOWER));
+    delay(1000);
+    onEnter();
+  }
+}
+
+void BmpViewerActivity::doSetSleepCover() {
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+
+  bool success = false;
+  FsFile inFile, outFile;
+  if (Storage.openFileForRead("BMP", filePath, inFile)) {
+    if (Storage.openFileForWrite("BMP", "/sleep.bmp", outFile)) {
+      char buffer[2048];
+      int bytesRead;
+      success = true;
+      while ((bytesRead = inFile.read(buffer, sizeof(buffer))) > 0) {
+        if (outFile.write(buffer, bytesRead) != bytesRead) {
+          success = false;
+          break;
+        }
+      }
+      outFile.close();
+    }
+    inFile.close();
+  }
+
+  if (success) {
+    SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+    SETTINGS.saveToFile();
+    GUI.drawPopup(renderer, tr(STR_DONE));
+  } else {
+    GUI.drawPopup(renderer, tr(STR_FAILED_LOWER));
+  }
+
+  delay(1000);
+  onEnter();
 }
