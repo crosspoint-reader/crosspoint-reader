@@ -60,13 +60,18 @@ class HalFile::Impl {
   FsFile file;
 };
 
+HalFile::HalFile() : impl(std::make_shared<HalFile::Impl>(FsFile())) {}
+
 HalFile fromFsFile(FsFile&& fsFile) {
   HalFile halFile;
   halFile.impl = std::make_shared<HalFile::Impl>(std::move(fsFile));
   return halFile;
 }
 
-HalFile HalStorage::open(const char* path, const oflag_t oflag) { return fromFsFile(SDCard.open(path, oflag)); }
+HalFile HalStorage::open(const char* path, const oflag_t oflag) {
+  StorageLock lock;  // ensure thread safety for the duration of this function
+  return fromFsFile(SDCard.open(path, oflag));
+}
 
 bool HalStorage::mkdir(const char* path, const bool pFlag) { HAL_STORAGE_WRAPPED_CALL(mkdir, path, pFlag); }
 

@@ -61,7 +61,7 @@ class HalFile : public Print {
   class Impl;
   std::shared_ptr<Impl> impl;
 
-  explicit HalFile() = default;
+  explicit HalFile();
   ~HalFile() = default;
 
   void flush();
