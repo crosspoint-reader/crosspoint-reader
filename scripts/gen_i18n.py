@@ -221,7 +221,8 @@ LANG_ABBREVIATIONS = {
     "العربية": "AR", "arabic": "AR",
     "עברית": "HE", "hebrew": "HE",
     "فارسی": "FA", "persian": "FA",
-    "čeština": "CS",
+    "čeština": "CZ",
+    "türkçe": "TR", "turkish": "TR",
 }
 
 
@@ -492,7 +493,6 @@ def generate_strings_header(
 
     lines.append("")
     lines.append("}  // namespace i18n_strings")
-
     _write_file(output_path, lines)
 
 
