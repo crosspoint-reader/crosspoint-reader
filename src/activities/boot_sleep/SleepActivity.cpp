@@ -32,37 +32,52 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
+  // Look for sleep.bmp on the root of the sd card to determine if we should
+  // render a custom sleep screen instead of the default.
+  // This takes priority over the /sleep folder.
+  FsFile file;
+  if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
+    Bitmap bitmap(file, true);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      LOG_DBG("SLP", "Loading: /sleep.bmp");
+      renderBitmapSleepScreen(bitmap);
+      file.close();
+      return;
+    }
+    file.close();
+  }
+
   // Check if we have a /sleep directory
   auto dir = Storage.open("/sleep");
   if (dir && dir.isDirectory()) {
     std::vector<std::string> files;
     char name[500];
     // collect all valid BMP files
-    for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
-      if (file.isDirectory()) {
-        file.close();
+    for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
+      if (dirFile.isDirectory()) {
+        dirFile.close();
         continue;
       }
-      file.getName(name, sizeof(name));
+      dirFile.getName(name, sizeof(name));
       auto filename = std::string(name);
       if (filename[0] == '.') {
-        file.close();
+        dirFile.close();
         continue;
       }
 
-      if (filename.substr(filename.length() - 4) != ".bmp") {
+      if (StringUtils::checkFileExtension(filename, ".bmp")) {
         LOG_DBG("SLP", "Skipping non-.bmp file name: %s", name);
-        file.close();
+        dirFile.close();
         continue;
       }
-      Bitmap bitmap(file);
+      Bitmap bitmap(dirFile);
       if (bitmap.parseHeaders() != BmpReaderError::Ok) {
         LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
-        file.close();
+        dirFile.close();
         continue;
       }
       files.emplace_back(filename);
-      file.close();
+      dirFile.close();
     }
     const auto numFiles = files.size();
     if (numFiles > 0) {
@@ -75,36 +90,22 @@ void SleepActivity::renderCustomSleepScreen() const {
       APP_STATE.lastSleepImage = randomFileIndex;
       APP_STATE.saveToFile();
       const auto filename = "/sleep/" + files[randomFileIndex];
-      FsFile file;
-      if (Storage.openFileForRead("SLP", filename, file)) {
+      FsFile randFile;
+      if (Storage.openFileForRead("SLP", filename, randFile)) {
         LOG_DBG("SLP", "Randomly loading: /sleep/%s", files[randomFileIndex].c_str());
         delay(100);
-        Bitmap bitmap(file, true);
+        Bitmap bitmap(randFile, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           renderBitmapSleepScreen(bitmap);
-          file.close();
+          randFile.close();
           dir.close();
           return;
         }
-        file.close();
+        randFile.close();
       }
     }
   }
   if (dir) dir.close();
-
-  // Look for sleep.bmp on the root of the sd card to determine if we should
-  // render a custom sleep screen instead of the default.
-  FsFile file;
-  if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
-    Bitmap bitmap(file, true);
-    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      LOG_DBG("SLP", "Loading: /sleep.bmp");
-      renderBitmapSleepScreen(bitmap);
-      file.close();
-      return;
-    }
-    file.close();
-  }
 
   renderDefaultSleepScreen();
 }
