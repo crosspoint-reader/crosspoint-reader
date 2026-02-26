@@ -9,6 +9,7 @@
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
+#include "components/themes/lyra/LyraGraphicalTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 #include "util/StringUtils.h"
 
@@ -44,6 +45,11 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Lyra 3 Covers theme");
       currentTheme = std::make_unique<Lyra3CoversTheme>();
       currentMetrics = &Lyra3CoversMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::LYRA_GRAPHICAL:
+      LOG_DBG("UI", "Using Lyra Graphical theme");
+      currentTheme = std::make_unique<LyraGraphicalTheme>();
+      currentMetrics = &LyraMetrics::values;
       break;
   }
 }
