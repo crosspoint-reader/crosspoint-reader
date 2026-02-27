@@ -20,6 +20,9 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 ## Portuguese (Brazil)
 - [yagofarias](https://github.com/yagofarias)
 
+## Portuguese (Portugal)
+- [victordomingos](https://github.com/victordomingos)
+
 ## Italian
 - [andreaturchet](https://github.com/andreaturchet)
 - [fragolinux](https://github.com/fragolinux)
@@ -50,3 +53,6 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 
 ## Belarusian
 - [Dexif](https://github.com/dexif)
+
+## Danish
+- [hajisan](https://github.com/hajisan)

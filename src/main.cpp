@@ -18,16 +18,8 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
-#include "activities/boot_sleep/BootActivity.h"
-#include "activities/boot_sleep/SleepActivity.h"
-#include "activities/browser/OpdsBookBrowserActivity.h"
-#include "activities/home/HomeActivity.h"
-#include "activities/home/MyLibraryActivity.h"
-#include "activities/home/RecentBooksActivity.h"
-#include "activities/network/CrossPointWebServerActivity.h"
-#include "activities/reader/ReaderActivity.h"
-#include "activities/settings/SettingsActivity.h"
-#include "activities/util/FullScreenMessageActivity.h"
+#include "activities/Activity.h"
+#include "activities/ActivityManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
@@ -36,8 +28,8 @@
 HalDisplay display;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
+ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
-Activity* currentActivity;
 
 // Fonts
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
@@ -132,19 +124,53 @@ EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 
-void exitActivity() {
-  if (currentActivity) {
-    currentActivity->onExit();
-    delete currentActivity;
-    currentActivity = nullptr;
+// measurement of power button press duration calibration value
+unsigned long t1 = 0;
+unsigned long t2 = 0;
+
+// Verify power button press duration on wake-up from deep sleep
+// Pre-condition: isWakeupByPowerButton() == true
+void verifyPowerButtonDuration() {
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
+    // Fast path for short press
+    // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
+    return;
+  }
+
+  // Give the user up to 1000ms to start holding the power button, and must hold for SETTINGS.getPowerButtonDuration()
+  const auto start = millis();
+  bool abort = false;
+  // Subtract the current time, because inputManager only starts counting the HeldTime from the first update()
+  // This way, we remove the time we already took to reach here from the duration,
+  // assuming the button was held until now from millis()==0 (i.e. device start time).
+  const uint16_t calibration = start;
+  const uint16_t calibratedPressDuration =
+      (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
+
+  gpio.update();
+  // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
+  while (!gpio.isPressed(HalGPIO::BTN_POWER) && millis() - start < 1000) {
+    delay(10);  // only wait 10ms each iteration to not delay too much in case of short configured duration.
+    gpio.update();
+  }
+
+  t2 = millis();
+  if (gpio.isPressed(HalGPIO::BTN_POWER)) {
+    do {
+      delay(10);
+      gpio.update();
+    } while (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() < calibratedPressDuration);
+    abort = gpio.getHeldTime() < calibratedPressDuration;
+  } else {
+    abort = true;
+  }
+
+  if (abort) {
+    // Button released too early. Returning to sleep.
+    // IMPORTANT: Re-arm the wakeup trigger before sleeping again
+    powerManager.startDeepSleep(gpio);
   }
 }
-
-void enterNewActivity(Activity* activity) {
-  currentActivity = activity;
-  currentActivity->onEnter();
-}
-
 void waitForPowerRelease() {
   gpio.update();
   while (gpio.isPressed(HalGPIO::BTN_POWER)) {
@@ -156,10 +182,10 @@ void waitForPowerRelease() {
 // Enter deep sleep mode
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
-  APP_STATE.lastSleepFromReader = currentActivity && currentActivity->isReaderActivity();
+  APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
   APP_STATE.saveToFile();
-  exitActivity();
-  enterNewActivity(new SleepActivity(renderer, mappedInputManager));
+
+  activityManager.goToSleep();
 
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
@@ -167,54 +193,10 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
-void onGoHome();
-void onGoToMyLibraryWithPath(const std::string& path);
-void onGoToRecentBooks();
-void onGoToReader(const std::string& initialEpubPath) {
-  const std::string bookPath = initialEpubPath;  // Copy before exitActivity() invalidates the reference
-  exitActivity();
-  enterNewActivity(new ReaderActivity(renderer, mappedInputManager, bookPath, onGoHome, onGoToMyLibraryWithPath));
-}
-
-void onGoToFileTransfer() {
-  exitActivity();
-  enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
-}
-
-void onGoToSettings() {
-  exitActivity();
-  enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
-}
-
-void onGoToMyLibrary() {
-  exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
-}
-
-void onGoToRecentBooks() {
-  exitActivity();
-  enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
-}
-
-void onGoToMyLibraryWithPath(const std::string& path) {
-  exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader, path));
-}
-
-void onGoToBrowser() {
-  exitActivity();
-  enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
-}
-
-void onGoHome() {
-  exitActivity();
-  enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
-                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser));
-}
-
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();
+  activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
 
   // Initialize font decompressor for compressed reader fonts
@@ -265,8 +247,7 @@ void setup() {
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
     setupDisplayAndFonts();
-    exitActivity();
-    enterNewActivity(new FullScreenMessageActivity(renderer, mappedInputManager, "SD card error", EpdFontFamily::BOLD));
+    activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
   }
 
@@ -300,8 +281,7 @@ void setup() {
 
   setupDisplayAndFonts();
 
-  exitActivity();
-  enterNewActivity(new BootActivity(renderer, mappedInputManager));
+  activityManager.goToBoot();
 
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
@@ -310,14 +290,14 @@ void setup() {
   // crashed (indicated by readerActivityLoadCount > 0)
   if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
       mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
-    onGoHome();
+    activityManager.goHome();
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
     APP_STATE.openEpubPath = "";
     APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
-    onGoToReader(path);
+    activityManager.goToReader(path);
   }
 
   // Ensure we're not still holding the power button before leaving setup
@@ -358,7 +338,7 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || (currentActivity && currentActivity->preventAutoSleep())) {
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
@@ -367,8 +347,8 @@ void loop() {
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
-      if (currentActivity) {
-        Activity::RenderLock lock(*currentActivity);
+      {
+        RenderLock lock;
         ScreenshotUtil::takeScreenshot(renderer);
       }
     }
@@ -396,9 +376,7 @@ void loop() {
   }
 
   const unsigned long activityStartTime = millis();
-  if (currentActivity) {
-    currentActivity->loop();
-  }
+  activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
 
   const unsigned long loopDuration = millis() - loopStartTime;
@@ -412,7 +390,7 @@ void loop() {
   // Add delay at the end of the loop to prevent tight spinning
   // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
   // Otherwise, use longer delay to save power
-  if (currentActivity && currentActivity->skipLoopDelay()) {
+  if (activityManager.skipLoopDelay()) {
     powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
