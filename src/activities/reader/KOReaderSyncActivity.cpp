@@ -39,14 +39,24 @@ void syncTimeWithNTP() {
     LOG_DBG("KOSync", "NTP sync timeout, using fallback");
   }
 }
+void wifiOff() {
+  if (esp_sntp_enabled()) {
+    esp_sntp_stop();
+  }
+  WiFi.disconnect(false);
+  delay(100);
+  WiFi.mode(WIFI_OFF);
+  delay(100);
+}
 }  // namespace
 
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
-  exitActivity();
-
   if (!success) {
     LOG_DBG("KOSync", "WiFi connection failed, exiting");
-    onCancel();
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
     return;
   }
 
@@ -57,7 +67,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
     state = SYNCING;
     statusMessage = tr(STR_SYNCING_TIME);
   }
-  requestUpdate();
+  requestUpdate(true);
 
   // Sync time with NTP before making API requests
   syncTimeWithNTP();
@@ -66,7 +76,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
     RenderLock lock(*this);
     statusMessage = tr(STR_CALC_HASH);
   }
-  requestUpdate();
+  requestUpdate(true);
 
   performSync();
 }
@@ -84,7 +94,7 @@ void KOReaderSyncActivity::performSync() {
       state = SYNC_FAILED;
       statusMessage = tr(STR_HASH_FAILED);
     }
-    requestUpdate();
+    requestUpdate(true);
     return;
   }
 
@@ -106,7 +116,7 @@ void KOReaderSyncActivity::performSync() {
       state = NO_REMOTE_PROGRESS;
       hasRemoteProgress = false;
     }
-    requestUpdate();
+    requestUpdate(true);
     return;
   }
 
@@ -116,7 +126,7 @@ void KOReaderSyncActivity::performSync() {
       state = SYNC_FAILED;
       statusMessage = KOReaderSyncClient::errorString(result);
     }
-    requestUpdate();
+    requestUpdate(true);
     return;
   }
 
@@ -140,7 +150,7 @@ void KOReaderSyncActivity::performSync() {
       selectedOption = 0;  // Apply remote progress
     }
   }
-  requestUpdate();
+  requestUpdate(true);
 }
 
 void KOReaderSyncActivity::performUpload() {
@@ -149,7 +159,6 @@ void KOReaderSyncActivity::performUpload() {
     state = UPLOADING;
     statusMessage = tr(STR_UPLOAD_PROGRESS);
   }
-  requestUpdate();
   requestUpdateAndWait();
 
   // Convert current position to KOReader format
@@ -164,6 +173,7 @@ void KOReaderSyncActivity::performUpload() {
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   if (result != KOReaderSyncClient::OK) {
+    wifiOff();
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -173,15 +183,16 @@ void KOReaderSyncActivity::performUpload() {
     return;
   }
 
+  wifiOff();
   {
     RenderLock lock(*this);
     state = UPLOAD_COMPLETE;
   }
-  requestUpdate();
+  requestUpdate(true);
 }
 
 void KOReaderSyncActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
@@ -190,16 +201,12 @@ void KOReaderSyncActivity::onEnter() {
     return;
   }
 
-  // Turn on WiFi
-  LOG_DBG("KOSync", "Turning on WiFi...");
-  WiFi.mode(WIFI_STA);
-
-  // Check if already connected
+  // Check if already connected (e.g. from settings page auth)
   if (WiFi.status() == WL_CONNECTED) {
     LOG_DBG("KOSync", "Already connected to WiFi");
     state = SYNCING;
     statusMessage = tr(STR_SYNCING_TIME);
-    requestUpdate();
+    requestUpdate(true);
 
     // Perform sync directly (will be handled in loop)
     xTaskCreate(
@@ -211,7 +218,7 @@ void KOReaderSyncActivity::onEnter() {
             RenderLock lock(*self);
             self->statusMessage = tr(STR_CALC_HASH);
           }
-          self->requestUpdate();
+          self->requestUpdate(true);
           self->performSync();
           vTaskDelete(nullptr);
         },
@@ -221,25 +228,17 @@ void KOReaderSyncActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
 void KOReaderSyncActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
-  // Turn off wifi
-  WiFi.disconnect(false);
-  delay(100);
-  WiFi.mode(WIFI_OFF);
-  delay(100);
+  wifiOff();
 }
 
-void KOReaderSyncActivity::render(Activity::RenderLock&&) {
-  if (subActivity) {
-    return;
-  }
-
+void KOReaderSyncActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
@@ -354,48 +353,50 @@ void KOReaderSyncActivity::render(Activity::RenderLock&&) {
 }
 
 void KOReaderSyncActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onCancel();
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+      finish();
     }
     return;
   }
 
   if (state == SHOWING_RESULT) {
     // Navigate options
-    if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Left)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       requestUpdate();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-               mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    } else if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+               mappedInput.wasReleased(MappedInputManager::Button::Right)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       requestUpdate();
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (selectedOption == 0) {
-        // Apply remote progress
-        onSyncComplete(remotePosition.spineIndex, remotePosition.pageNumber);
+        // Wifi will be turned off in onExit()
+        setResult(SyncResult{remotePosition.spineIndex, remotePosition.pageNumber});
+        finish();
       } else if (selectedOption == 1) {
         // Upload local progress
         performUpload();
       }
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onCancel();
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+      finish();
     }
     return;
   }
 
   if (state == NO_REMOTE_PROGRESS) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       // Calculate hash if not done yet
       if (documentHash.empty()) {
         if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
@@ -407,8 +408,11 @@ void KOReaderSyncActivity::loop() {
       performUpload();
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onCancel();
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+      finish();
     }
     return;
   }
