@@ -380,7 +380,7 @@ void syncTask(void*) {
     RssParserStream stream(rssParser);
     if (!HttpDownloader::fetchUrl(feedUrl, stream)) {
       LOG_ERR(TAG, "Failed to fetch feed: %s", feedUrl.c_str());
-      { char _b[256]; snprintf(_b, sizeof(_b), "ERROR: Failed to fetch feed URL: %s", feedUrl.c_str()); logToFile("ERR", _b); }
+      { char _b[320]; snprintf(_b, sizeof(_b), "ERROR: Failed to fetch feed URL (check server reachable, URL correct): %s", feedUrl.c_str()); logToFile("ERR", _b); }
       setState(RssFeedSync::State::ERROR);
       syncTaskHandle = nullptr;
       vTaskDelete(nullptr);

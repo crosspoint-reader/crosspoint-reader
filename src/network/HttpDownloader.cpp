@@ -70,8 +70,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
-  // Add Basic HTTP auth if credentials are configured
-  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
+  // Add Basic HTTP auth only for OPDS URLs (not for feed or firmware downloads)
+  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0 && strlen(SETTINGS.opdsServer) > 0 && url.rfind(SETTINGS.opdsServer, 0) == 0) {
     std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
     String encoded = base64::encode(credentials.c_str());
     http.addHeader("Authorization", "Basic " + encoded);
@@ -79,7 +79,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
 
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK) {
-    LOG_ERR("HTTP", "Fetch failed: %d", httpCode);
+    LOG_ERR("HTTP", "Fetch failed with code: %d for URL: %s", httpCode, url.c_str());
     http.end();
     return false;
   }
@@ -88,7 +88,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
 
   http.end();
 
-  LOG_DBG("HTTP", "Fetch success");
+  LOG_DBG("HTTP", "Fetch success: %s", url.c_str());
   return true;
 }
 
