@@ -380,14 +380,8 @@ void CrossPointWebServerActivity::loop() {
       wasSyncing = RssFeedSync::isSyncing();  // always false here, resets for next sync
     }
 
-    // Redraw whenever feed delivers a new file (even after isFeedActive() clears)
-    {
-      const int rc = static_cast<int>(UITheme::getReceivedFiles().size());
-      if (rc != lastReceivedFileCount) {
-        lastReceivedFileCount = rc;
-        requestUpdate();
-      }
-    }
+    // Redraw when feed delivers a new file (event-driven via dirty flag)
+    if (UITheme::consumeReceivedFileDirty()) requestUpdate();
 
     // Monitor upload status and trigger display refresh on file close only
     // Rate-limited to avoid excessive e-ink refreshes

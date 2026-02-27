@@ -24,6 +24,7 @@ static bool s_networkConnected   = false;
 static bool s_networkTransferring = false;
 static bool s_httpServerActive    = false;
 static std::vector<std::string> s_receivedFiles;
+static bool s_receivedFileDirty = false;
 
 void UITheme::setNetworkStatus(bool connected, bool transferring) {
   s_networkConnected   = connected;
@@ -34,9 +35,10 @@ bool UITheme::isNetworkTransferring() { return s_networkTransferring; }
 void UITheme::setHttpServerActive(bool active) { s_httpServerActive = active; }
 bool UITheme::isHttpServerActive()    { return s_httpServerActive; }
 
-void UITheme::addReceivedFile(const std::string& name) { s_receivedFiles.push_back(name); }
+void UITheme::addReceivedFile(const std::string& name) { s_receivedFiles.push_back(name); s_receivedFileDirty = true; }
 const std::vector<std::string>& UITheme::getReceivedFiles() { return s_receivedFiles; }
-void UITheme::clearReceivedFiles() { s_receivedFiles.clear(); }
+void UITheme::clearReceivedFiles() { s_receivedFiles.clear(); s_receivedFileDirty = false; }
+bool UITheme::consumeReceivedFileDirty() { const bool d = s_receivedFileDirty; s_receivedFileDirty = false; return d; }
 
 UITheme::UITheme() {
   auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);

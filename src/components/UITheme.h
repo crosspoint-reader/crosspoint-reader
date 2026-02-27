@@ -38,6 +38,7 @@ class UITheme {
   static void addReceivedFile(const std::string& name);
   static const std::vector<std::string>& getReceivedFiles();
   static void clearReceivedFiles();
+  static bool consumeReceivedFileDirty();  // returns true (and clears) if a new file was added since last call
 
  private:
   const ThemeMetrics* currentMetrics;
