@@ -733,7 +733,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
 void EpubReaderActivity::renderStatusBar() const {
   if (!statusBarOverride.empty()) {
-    const auto [top, right, bottom, left] = renderer.getOrientedViewableTRBL();
+    int top, right, bottom, left;
+    renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
     const auto screenHeight = renderer.getScreenHeight();
     const auto textY = screenHeight - bottom - 4;
     const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, statusBarOverride.c_str());
