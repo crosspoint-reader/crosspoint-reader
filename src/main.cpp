@@ -193,7 +193,6 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
-
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();

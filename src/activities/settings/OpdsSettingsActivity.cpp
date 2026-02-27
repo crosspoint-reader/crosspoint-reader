@@ -100,10 +100,9 @@ void OpdsSettingsActivity::handleSelection() {
         saveServer();
       }
     };
-    startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_SERVER_URL), editServer.url, 127,
-                                                false),
-        handler);
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_SERVER_URL),
+                                                                   editServer.url, 127, false),
+                           handler);
   } else if (selectedIndex == 2) {
     // Username
     auto handler = [this](const ActivityResult& result) {
@@ -113,10 +112,9 @@ void OpdsSettingsActivity::handleSelection() {
         saveServer();
       }
     };
-    startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME), editServer.username, 63,
-                                                false),
-        handler);
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME),
+                                                                   editServer.username, 63, false),
+                           handler);
   } else if (selectedIndex == 3) {
     // Password
     auto handler = [this](const ActivityResult& result) {
@@ -126,10 +124,9 @@ void OpdsSettingsActivity::handleSelection() {
         saveServer();
       }
     };
-    startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD), editServer.password, 63,
-                                                false),
-        handler);
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
+                                                                   editServer.password, 63, false),
+                           handler);
   } else if (selectedIndex == 4 && !isNewServer) {
     // Delete server
     OPDS_STORE.removeServer(static_cast<size_t>(serverIndex));
