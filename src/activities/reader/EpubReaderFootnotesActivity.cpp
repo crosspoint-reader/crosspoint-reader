@@ -10,27 +10,26 @@
 #include "fontIds.h"
 
 void EpubReaderFootnotesActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
   selectedIndex = 0;
   requestUpdate();
 }
 
-void EpubReaderFootnotesActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void EpubReaderFootnotesActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderFootnotesActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoBack();
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(footnotes.size())) {
-      onSelectFootnote(footnotes[selectedIndex].href);
+      setResult(FootnoteResult{footnotes[selectedIndex].href});
+      finish();
     }
     return;
   }
@@ -50,7 +49,7 @@ void EpubReaderFootnotesActivity::loop() {
   });
 }
 
-void EpubReaderFootnotesActivity::render(Activity::RenderLock&&) {
+void EpubReaderFootnotesActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_FOOTNOTES), true, EpdFontFamily::BOLD);

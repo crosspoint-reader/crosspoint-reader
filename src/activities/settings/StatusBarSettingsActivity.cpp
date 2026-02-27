@@ -58,7 +58,7 @@ void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
 
 void StatusBarSettingsActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onBack();
+    finish();
     return;
   }
 
@@ -114,7 +114,7 @@ void StatusBarSettingsActivity::handleSelection() {
   SETTINGS.saveToFile();
 }
 
-void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
+void StatusBarSettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();

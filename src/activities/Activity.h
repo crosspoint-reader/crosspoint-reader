@@ -1,16 +1,16 @@
 #pragma once
-#include <HardwareSerial.h>
 #include <Logging.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 
 #include <cassert>
+#include <memory>
 #include <string>
 #include <utility>
 
+#include "ActivityManager.h"  // for using the ActivityManager singleton
+#include "ActivityResult.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "RenderLock.h"
 
 class Activity {
  protected:
@@ -18,44 +18,42 @@ class Activity {
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
 
-  // Task to render and display the activity
-  TaskHandle_t renderTaskHandle = nullptr;
-  [[noreturn]] static void renderTaskTrampoline(void* param);
-  [[noreturn]] virtual void renderTaskLoop();
-
-  // Mutex to protect rendering operations from being deleted mid-render
-  SemaphoreHandle_t renderingMutex = nullptr;
-
  public:
+  ActivityResultHandler resultHandler;
+  ActivityResult result;
+
   explicit Activity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : name(std::move(name)), renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
-    assert(renderingMutex != nullptr && "Failed to create rendering mutex");
-  }
-  virtual ~Activity() {
-    vSemaphoreDelete(renderingMutex);
-    renderingMutex = nullptr;
-  };
-  class RenderLock;
+      : name(std::move(name)), renderer(renderer), mappedInput(mappedInput) {}
+  virtual ~Activity() = default;
   virtual void onEnter();
   virtual void onExit();
   virtual void loop() {}
 
   virtual void render(RenderLock&&) {}
-  virtual void requestUpdate();
+
+  // If immediate is true, the update will be triggered immediately.
+  // Otherwise, it will be deferred until the end of the current loop iteration.
+  virtual void requestUpdate(bool immediate = false);
+
+  // Request an immediate render and block until it completes.
   virtual void requestUpdateAndWait();
 
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
 
-  // RAII helper to lock rendering mutex for the duration of a scope.
-  class RenderLock {
-    Activity& activity;
+  // Start a new activity without destroying the current one
+  // Note: requestUpdate() will be invoked automatically once resultHandler finishes
+  void startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler);
 
-   public:
-    explicit RenderLock(Activity& activity);
-    RenderLock(const RenderLock&) = delete;
-    RenderLock& operator=(const RenderLock&) = delete;
-    ~RenderLock();
-  };
+  // Set the result to be passed back to the previous activity when this activity finishes
+  void setResult(ActivityResult&& result);
+
+  // Finish this activity and return to the previous one on the stack (if any)
+  void finish();
+
+  // Convenience method to facilitate API transition to ActivityManager
+  // TODO: remove this in near future
+  void onGoHome();
+  void onSelectBook(const std::string& path);
 };

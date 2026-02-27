@@ -6,29 +6,22 @@
 #include <functional>
 #include <vector>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "util/ButtonNavigator.h"
 
-class EpubReaderFootnotesActivity final : public ActivityWithSubactivity {
+class EpubReaderFootnotesActivity final : public Activity {
  public:
   explicit EpubReaderFootnotesActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                       const std::vector<FootnoteEntry>& footnotes,
-                                       const std::function<void()>& onGoBack,
-                                       const std::function<void(const char*)>& onSelectFootnote)
-      : ActivityWithSubactivity("EpubReaderFootnotes", renderer, mappedInput),
-        footnotes(footnotes),
-        onGoBack(onGoBack),
-        onSelectFootnote(onSelectFootnote) {}
+                                       const std::vector<FootnoteEntry>& footnotes)
+      : Activity("EpubReaderFootnotes", renderer, mappedInput), footnotes(footnotes) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   const std::vector<FootnoteEntry>& footnotes;
-  const std::function<void()> onGoBack;
-  const std::function<void(const char*)> onSelectFootnote;
   int selectedIndex = 0;
   int scrollOffset = 0;
   ButtonNavigator buttonNavigator;

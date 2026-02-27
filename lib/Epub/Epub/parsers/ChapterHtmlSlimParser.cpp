@@ -761,7 +761,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const XML_Char* s, const int len) {
   // Check if this looks like an entity reference (&...;)
   if (len >= 3 && s[0] == '&' && s[len - 1] == ';') {
-    const char* utf8Value = lookupHtmlEntity(s, len);
+    const char* utf8Value = lookupHtmlEntity(s, static_cast<size_t>(len));
     if (utf8Value != nullptr) {
       // Known entity: expand to its UTF-8 value
       characterData(userData, utf8Value, strlen(utf8Value));
