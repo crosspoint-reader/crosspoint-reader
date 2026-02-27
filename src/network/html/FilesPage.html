@@ -284,6 +284,272 @@
       display: inline-block;
       margin-right: 10px;
     }
+    /* Advanced Options Panel */
+    .advanced-options-panel {
+      margin-top: 10px;
+      padding: 12px;
+      background-color: rgba(0, 0, 0, 0.02);
+      border-radius: 6px;
+      border: 1px dashed var(--accent-color);
+    }
+    .advanced-options-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      padding: 4px 0;
+    }
+    /* Settings content - hidden by default, shown when expanded */
+    .advanced-settings-content {
+      display: none;
+    }
+    .advanced-options-panel.expanded .advanced-settings-content {
+      display: block;
+    }
+    .advanced-options-title {
+      font-size: 0.85em;
+      color: var(--accent-color);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .advanced-options-arrow {
+      font-size: 0.7em;
+      transition: transform 0.2s;
+    }
+    .advanced-options-arrow.expanded {
+      transform: rotate(90deg);
+    }
+    .advanced-setting-row {
+      margin-top: 12px;
+    }
+    .advanced-setting-row:first-child {
+      margin-top: 0;
+    }
+    .setting-row-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .setting-title {
+      font-size: 0.85em;
+      color: var(--title-color);
+      font-weight: 500;
+    }
+    .setting-value {
+      font-size: 0.8em;
+      color: var(--accent-color);
+      font-weight: 600;
+    }
+    /* Quality Slider */
+    .quality-slider-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .quality-slider {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border-color);
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+    .quality-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+    }
+    .quality-slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      border: none;
+      cursor: pointer;
+    }
+    .quality-input-wrapper {
+      display: flex;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 8px;
+    }
+    .quality-input {
+      width: 40px;
+      border: none;
+      background: transparent;
+      text-align: center;
+      font-size: 0.85em;
+      color: var(--title-color);
+      font-weight: 600;
+    }
+    .quality-input:focus {
+      outline: none;
+    }
+    .quality-unit {
+      font-size: 0.75em;
+      color: var(--label-color);
+    }
+    .quality-slider-container-inline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      max-width: 180px;
+      min-width: 0;
+    }
+    .quality-slider-container-inline .quality-slider {
+      flex: 1;
+      min-width: 50px;
+    }
+    .quality-slider-container-inline .quality-input-wrapper {
+      padding: 2px 4px;
+      flex-shrink: 0;
+    }
+    .quality-slider-container-inline .quality-input {
+      width: 32px;
+      font-size: 0.8em;
+    }
+    /* Quality Presets */
+    .quality-presets {
+      display: flex;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+    .quality-preset {
+      flex: 1;
+      padding: 6px 4px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 0.7em;
+      color: var(--label-color);
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .quality-preset small {
+      font-size: 0.85em;
+      white-space: nowrap;
+    }
+    .quality-preset:hover {
+      border-color: var(--accent-color);
+      color: var(--accent-color);
+    }
+    .quality-preset.active {
+      border-color: var(--accent-color);
+      background: var(--accent-color-10);
+      color: var(--accent-color);
+      font-weight: 600;
+    }
+    /* Toggle Switch */
+    .setting-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: var(--border-color);
+      border-radius: 24px;
+      transition: 0.2s;
+    }
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: var(--accent-color);
+    }
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+    .setting-desc {
+      font-size: 0.75em;
+      color: var(--label-color);
+      margin-top: 4px;
+      line-height: 1.3;
+    }
+    /* Handedness options */
+    .handedness-options {
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.02);
+      border-radius: 6px;
+    }
+    .handedness-options-inline {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: nowrap;
+    }
+    .handedness-options-inline .setting-title {
+      margin: 0;
+      white-space: nowrap;
+    }
+    .handedness-buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: nowrap;
+      justify-content: center;
+      width: 100%;
+    }
+    .handedness-btn {
+      flex: 0 1 auto;
+      padding: 8px 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 0.75em;
+      color: var(--label-color);
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .handedness-btn:hover {
+      border-color: var(--accent-color);
+      color: var(--accent-color);
+    }
+    .handedness-btn.active {
+      border-color: var(--accent-color);
+      background: var(--accent-color-10);
+      color: var(--accent-color);
+      font-weight: 600;
+    }
+    .handedness-btn small {
+      font-size: 0.85em;
+      opacity: 0.8;
+    }
     .file-info {
       color: var(--label-color);
       font-size: 0.85em;
@@ -342,6 +608,9 @@
       background-color: #27ae60;
       width: 0%;
       transition: width 0.3s;
+    }
+    #progress-fill.no-transition {
+      transition: none !important;
     }
     #progress-text {
       text-align: center;
@@ -673,6 +942,21 @@
         padding: 20px;
         font-size: 0.9em;
       }
+      .handedness-btn {
+        flex-basis: 100%;
+        max-width: 100%;
+        min-width: unset;
+      }
+      .quality-slider-container-inline {
+        max-width: 140px;
+        gap: 4px;
+      }
+      .quality-slider-container-inline .quality-slider {
+        min-width: 40px;
+      }
+      .quality-slider-container-inline .quality-input {
+        width: 28px;
+      }
     }
   </style>
 </head>
@@ -739,13 +1023,79 @@
           <span>🔄 Convert EPUB images before upload</span>
         </label>
         <div class="convert-info" id="convertInfo" style="display:none;">
-          Optimizes images for e-ink displays (480x800 max, grayscale, 85% JPEG quality, fixes SVG covers)
+          Optimizes images for e-ink displays
         </div>
         <div class="convert-settings" id="convertSettings" style="display:none;">
-          <span>🎨 Grayscale</span>
+          <span>⚫ True-Grayscale</span>
           <span>📏 Max 480×800px</span>
-          <span>📦 85% JPEG</span>
+          <span id="qualityDisplaySimple">📦 85% JPEG</span>
           <span>🔧 Fix SVG</span>
+        </div>
+        <!-- Advanced Options Panel -->
+        <div class="advanced-options-panel" id="advancedOptionsPanel">
+          <div class="advanced-options-header" onclick="toggleAdvancedOptions()">
+            <span class="advanced-options-title">
+              <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
+              ⚙️ Advanced Options
+            </span>
+          </div>
+          <div class="advanced-settings-content">
+          <!-- JPEG Quality -->
+          <div class="advanced-setting-row" style="margin-top: 12px;">
+            <div class="setting-row-header">
+              <span class="setting-title">📦 JPEG Quality</span>
+              <div class="quality-slider-container-inline">
+                <input type="range" class="quality-slider" id="qualitySlider" min="1" max="95" value="85">
+                <div class="quality-input-wrapper">
+                  <input type="number" class="quality-input" id="qualityInput" min="1" max="95" value="85">
+                  <span class="quality-unit">%</span>
+                </div>
+              </div>
+            </div>
+            <div class="quality-presets">
+              <button class="quality-preset" data-value="60" onclick="setQualityPreset(60)">Low<br><small>60%</small></button>
+              <button class="quality-preset" data-value="75" onclick="setQualityPreset(75)">Medium<br><small>75%</small></button>
+              <button class="quality-preset active" data-value="85" onclick="setQualityPreset(85)">High<br><small>85%</small></button>
+              <button class="quality-preset" data-value="95" onclick="setQualityPreset(95)">Max<br><small>95%</small></button>
+            </div>
+          </div>
+          <!-- Grayscale Toggle (commented for e-ink optimization, kept for compatibility with other devices/web apps)
+          <div class="advanced-setting-row" style="display:none;">
+            <div class="setting-toggle">
+              <div>
+                <div class="setting-title">⚫ True-Grayscale</div>
+                <div class="setting-desc">BT.709 luminance formula (recommended for e-ink)</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="grayscaleToggle" checked onchange="updateQualitySettings()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          -->
+          <!-- Light Novel Mode -->
+          <div class="advanced-setting-row">
+            <div class="setting-toggle">
+              <div>
+                <div class="setting-title">📖 Light Novel Mode</div>
+                <div class="setting-desc">Rotate wide images 90° and split into pages for vertical reading</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="lightNovelToggle" onchange="toggleLightNovelMode()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <!-- Handedness options (shown when Light Novel Mode is on) -->
+            <div class="handedness-buttons" id="handednessOptions" style="display:none; margin-top: 12px;">
+              <button class="handedness-btn" id="handednessLeft" data-value="left" onclick="setHandedness('left')">
+                <span style="float: right;">✋</span><span>Left-handed<br><small>(Counter-clockwise)</small></span>
+              </button>
+              <button class="handedness-btn active" id="handednessRight" data-value="right" onclick="setHandedness('right')">
+                <span style="float: left;">🤚</span><span>Right-handed<br><small>(Clockwise)</small></span>
+              </button>
+            </div>
+          </div>
+          </div><!-- advanced-settings-content -->
         </div>
       </div>
       <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
@@ -866,7 +1216,7 @@
 
     let files = [];
     try {
-      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath));
+      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
       if (!response.ok) {
         throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
       }
@@ -948,6 +1298,12 @@
 
   // Modal functions
   function openUploadModal() {
+    // Reset converter variables to defaults
+    ENABLE_LIGHT_NOVEL_MODE = false;
+    ENABLE_GRAYSCALE = true;
+    JPEG_QUALITY = 85;
+    HANDEDNESS = 'right';
+
     document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
     document.getElementById('uploadModal').classList.add('open');
   }
@@ -962,13 +1318,119 @@
     document.getElementById('convertBeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertSettings').style.display = 'none';
+    // Reset advanced options
+    document.getElementById('advancedOptionsPanel').classList.remove('expanded');
+    document.getElementById('advancedOptionsArrow').classList.remove('expanded');
+    // Reset to defaults
+    document.getElementById('qualitySlider').value = 85;
+    document.getElementById('qualityInput').value = 85;
+    document.getElementById('grayscaleToggle').checked = true; // Always grayscale for e-ink
+    // Reset Light Novel Mode
+    document.getElementById('lightNovelToggle').checked = false;
+    document.getElementById('handednessOptions').style.display = 'none';
+    setHandedness('right');
+    // Update converter variables
+    updateQualitySettings();
   }
 
   function toggleConvertOptions() {
     const checked = document.getElementById('convertBeforeUpload').checked;
     document.getElementById('convertInfo').style.display = checked ? 'block' : 'none';
     document.getElementById('convertSettings').style.display = checked ? 'block' : 'none';
+    // Reset advanced options when toggling off
+    if (!checked) {
+      document.getElementById('advancedOptionsPanel').classList.remove('expanded');
+      document.getElementById('advancedOptionsArrow').classList.remove('expanded');
+    }
   }
+
+  function toggleAdvancedOptions() {
+    const panel = document.getElementById('advancedOptionsPanel');
+    const arrow = document.getElementById('advancedOptionsArrow');
+    panel.classList.toggle('expanded');
+    arrow.classList.toggle('expanded');
+  }
+
+  function setQualityPreset(value) {
+    document.getElementById('qualitySlider').value = value;
+    document.getElementById('qualityInput').value = value;
+    // Update active preset
+    document.querySelectorAll('.quality-preset').forEach(btn => {
+      btn.classList.remove('active');
+      if (parseInt(btn.dataset.value) === value) {
+        btn.classList.add('active');
+      }
+    });
+    updateQualitySettings();
+  }
+
+  function updateQualitySettings() {
+    const quality = document.getElementById('qualitySlider').value;
+    // Check if grayscaleToggle exists (may be hidden for compatibility with other devices)
+    const grayscaleToggle = document.getElementById('grayscaleToggle');
+    const grayscale = grayscaleToggle ? grayscaleToggle.checked : true; // Default to true for e-ink
+
+    // Update displays (grayscale is always enabled for e-ink)
+    document.getElementById('qualityDisplaySimple').textContent = '📦 ' + quality + '% JPEG';
+
+    // Update conversion settings - both window globals and converter variables
+    if (typeof window !== 'undefined') {
+      window.jpegQuality = parseInt(quality);
+      window.enableGrayscale = true; // Always grayscale for e-ink displays
+    }
+    // Update the converter global variables that are actually used
+    JPEG_QUALITY = parseInt(quality);
+    ENABLE_GRAYSCALE = true; // Always grayscale for e-ink
+  }
+
+  function setHandedness(value) {
+    HANDEDNESS = value;
+    // Update UI
+    document.getElementById('handednessRight').classList.remove('active');
+    document.getElementById('handednessLeft').classList.remove('active');
+    document.getElementById('handedness' + (value === 'right' ? 'Right' : 'Left')).classList.add('active');
+  }
+
+  function toggleLightNovelMode() {
+    const enabled = document.getElementById('lightNovelToggle').checked;
+    ENABLE_LIGHT_NOVEL_MODE = enabled;
+    // Show/hide handedness options
+    document.getElementById('handednessOptions').style.display = enabled ? 'block' : 'none';
+  }
+
+  // Initialize quality settings handlers
+  document.addEventListener('DOMContentLoaded', function() {
+    const qualitySlider = document.getElementById('qualitySlider');
+    const qualityInput = document.getElementById('qualityInput');
+
+    if (qualitySlider && qualityInput) {
+      // Initialize converter variables with UI default values
+      updateQualitySettings();
+
+      // Deselect all presets when slider is manually changed
+      const deselectPresets = function() {
+        document.querySelectorAll('.quality-preset').forEach(btn => {
+          btn.classList.remove('active');
+        });
+      };
+
+      qualitySlider.oninput = function() {
+        qualityInput.value = this.value;
+        deselectPresets();
+        updateQualitySettings();
+      };
+      qualityInput.onchange = function() {
+        let v = Math.max(1, Math.min(95, parseInt(this.value) || 85));
+        this.value = v;
+        qualitySlider.value = v;
+        deselectPresets();
+        updateQualitySettings();
+      };
+      qualityInput.onblur = function() {
+        this.value = qualitySlider.value;
+      };
+    }
+  });
 
   function openFolderModal() {
     document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
@@ -1082,11 +1544,20 @@ const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
 // EPUB Image Conversion Functions (from Baseline JPEG Converter)
 // ============================================================================
 
-// Conversion settings (fixed as per user requirements)
-const MAX_WIDTH = 480;
-const MAX_HEIGHT = 800;
-const JPEG_QUALITY = 85;  // 85%
-const ENABLE_GRAYSCALE = true;  // true-grayscale
+// Default conversion settings
+const DEFAULT_MAX_WIDTH = 480;
+const DEFAULT_MAX_HEIGHT = 800;
+const DEFAULT_JPEG_QUALITY = 85;
+const DEFAULT_ENABLE_GRAYSCALE = true;
+const OVERLAP = 0.15; // 15% overlap for split images
+
+// Dynamic conversion settings (updated by UI)
+let MAX_WIDTH = DEFAULT_MAX_WIDTH;
+let MAX_HEIGHT = DEFAULT_MAX_HEIGHT;
+let JPEG_QUALITY = DEFAULT_JPEG_QUALITY;
+let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
+let ENABLE_LIGHT_NOVEL_MODE = false;
+let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
 
 // Fix SVG cover - converts SVG-wrapped covers to plain HTML img tags
 function fixSvgCover(content) {
@@ -1211,43 +1682,148 @@ async function processImage(data) {
       URL.revokeObjectURL(url);
       const origW = img.width, origH = img.height;
 
-      // Check if scaling is needed
-      const fitsInScreen = origW <= MAX_WIDTH && origH <= MAX_HEIGHT;
+      // Check if Light Novel Mode should apply
+      const isHorizontal = origW > origH;
+      const exceedsScreen = origW > MAX_WIDTH || origH > MAX_HEIGHT;
+      const needsRotation = isHorizontal && exceedsScreen && ENABLE_LIGHT_NOVEL_MODE;
 
-      if (fitsInScreen) {
-        // Image already fits - just convert to JPEG with grayscale
-        const c = document.createElement('canvas');
-        c.width = origW;
-        c.height = origH;
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#FFF';
-        ctx.fillRect(0, 0, origW, origH);
-        ctx.drawImage(img, 0, 0);
-        applyGrayscale(ctx, origW, origH);
+      if (needsRotation) {
+        // LIGHT NOVEL MODE: Rotate and split wide images
+        // Step 1: Scale WIDTH to MAX_HEIGHT (800px)
+        const scale = MAX_HEIGHT / origW;
+        const scaledW = MAX_HEIGHT;
+        const scaledH = Math.round(origH * scale);
 
-        const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-        const arrBuf = await blob.arrayBuffer();
-        resolve([{ data: arrBuf, suffix: '' }]);
+        const scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = scaledW;
+        scaledCanvas.height = scaledH;
+        const scaledCtx = scaledCanvas.getContext('2d');
+        scaledCtx.imageSmoothingEnabled = true;
+        scaledCtx.imageSmoothingQuality = 'high';
+        scaledCtx.fillStyle = '#FFF';
+        scaledCtx.fillRect(0, 0, scaledW, scaledH);
+        scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
+
+        // Step 2: Rotate based on handedness
+        // Right-handed (clockwise): rotate 90° CW
+        // Left-handed (counter-clockwise): rotate 90° CCW
+        const isClockwise = HANDEDNESS === 'right';
+        const rotW = scaledH;  // After rotation, width becomes original height
+        const rotH = scaledW;  // After rotation, height becomes original width (800)
+
+        const rotCanvas = document.createElement('canvas');
+        rotCanvas.width = rotW;
+        rotCanvas.height = rotH;
+        const rotCtx = rotCanvas.getContext('2d');
+        rotCtx.fillStyle = '#FFF';
+        rotCtx.fillRect(0, 0, rotW, rotH);
+
+        if (isClockwise) {
+          // Rotate 90° clockwise (right-handed)
+          rotCtx.translate(rotW, 0);
+          rotCtx.rotate(Math.PI / 2);
+          rotCtx.drawImage(scaledCanvas, 0, 0);
+        } else {
+          // Rotate 90° counter-clockwise (left-handed)
+          rotCtx.translate(0, rotH);
+          rotCtx.rotate(-Math.PI / 2);
+          rotCtx.drawImage(scaledCanvas, 0, 0);
+        }
+
+        applyGrayscale(rotCtx, rotW, rotH);
+
+        // Step 3: Split if width exceeds MAX_WIDTH (480px)
+        if (rotW <= MAX_WIDTH) {
+          // No split needed
+          const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve([{ data: arrBuf, suffix: '' }]);
+        } else {
+          // Split vertically with overlap
+          const parts = [];
+          const maxW = MAX_WIDTH;
+          const overlapPx = Math.round(maxW * OVERLAP);
+          const step = maxW - overlapPx;
+          const numParts = Math.ceil((rotW - overlapPx) / step);
+
+          if (isClockwise) {
+            // For clockwise: cut from right to left (top to bottom after rotation)
+            for (let i = 0; i < numParts; i++) {
+              let x = rotW - maxW - (i * step);
+              if (i === numParts - 1) x = 0;
+              x = Math.max(0, x);
+              const partW = Math.min(maxW, rotW - x);
+
+              const partCanvas = document.createElement('canvas');
+              partCanvas.width = partW;
+              partCanvas.height = rotH;
+              const partCtx = partCanvas.getContext('2d');
+              partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
+
+              const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+              const arrBuf = await blob.arrayBuffer();
+              parts.push({ data: arrBuf, suffix: `_part${i + 1}` });
+            }
+          } else {
+            // For counter-clockwise: cut from left to right (top to bottom after rotation)
+            for (let i = 0; i < numParts; i++) {
+              let x = i * step;
+              if (i === numParts - 1) x = rotW - maxW;
+              x = Math.max(0, Math.min(x, rotW - maxW));
+              const partW = Math.min(maxW, rotW - x);
+
+              const partCanvas = document.createElement('canvas');
+              partCanvas.width = partW;
+              partCanvas.height = rotH;
+              const partCtx = partCanvas.getContext('2d');
+              partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
+
+              const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+              const arrBuf = await blob.arrayBuffer();
+              parts.push({ data: arrBuf, suffix: `_part${i + 1}` });
+            }
+          }
+          resolve(parts);
+        }
       } else {
-        // Scale to fit 480x800
-        const scale = Math.min(MAX_WIDTH / origW, MAX_HEIGHT / origH);
-        const newW = Math.round(origW * scale);
-        const newH = Math.round(origH * scale);
+        // Normal processing: check if scaling is needed
+        const fitsInScreen = origW <= MAX_WIDTH && origH <= MAX_HEIGHT;
 
-        const c = document.createElement('canvas');
-        c.width = newW;
-        c.height = newH;
-        const ctx = c.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.fillStyle = '#FFF';
-        ctx.fillRect(0, 0, newW, newH);
-        ctx.drawImage(img, 0, 0, newW, newH);
-        applyGrayscale(ctx, newW, newH);
+        if (fitsInScreen) {
+          // Image already fits - just convert to JPEG with grayscale
+          const c = document.createElement('canvas');
+          c.width = origW;
+          c.height = origH;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#FFF';
+          ctx.fillRect(0, 0, origW, origH);
+          ctx.drawImage(img, 0, 0);
+          applyGrayscale(ctx, origW, origH);
 
-        const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-        const arrBuf = await blob.arrayBuffer();
-        resolve([{ data: arrBuf, suffix: '' }]);
+          const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve([{ data: arrBuf, suffix: '' }]);
+        } else {
+          // Scale to fit 480x800
+          const scale = Math.min(MAX_WIDTH / origW, MAX_HEIGHT / origH);
+          const newW = Math.round(origW * scale);
+          const newH = Math.round(origH * scale);
+
+          const c = document.createElement('canvas');
+          c.width = newW;
+          c.height = newH;
+          const ctx = c.getContext('2d');
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.fillStyle = '#FFF';
+          ctx.fillRect(0, 0, newW, newH);
+          ctx.drawImage(img, 0, 0, newW, newH);
+          applyGrayscale(ctx, newW, newH);
+
+          const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve([{ data: arrBuf, suffix: '' }]);
+        }
       }
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Load failed')); };
@@ -1272,6 +1848,7 @@ async function convertEpubFile(file, progressCallback) {
   const xhtmlFiles = {};
   let opfPath = null, opfContent = null;
   let svgFix = 0;
+  let mainIdentifier = null;
 
   // Write mimetype FIRST per EPUB OCF spec
   if (zip.files['mimetype']) {
@@ -1296,10 +1873,19 @@ async function convertEpubFile(file, progressCallback) {
         const newPath = renamed[path] || path.replace(/\.[^.]+$/, newExt);
         out.file(newPath, parts[0].data, { compression: 'DEFLATE', createFolders: false });
       } else {
+        const origName = path.split('/').pop();
+        splitImages[origName] = [];
         for (const part of parts) {
           const partName = baseName.split('/').pop() + part.suffix + newExt;
           const partPath = (path.includes('/') ? path.substring(0, path.lastIndexOf('/') + 1) : '') + partName;
           out.file(partPath, part.data, { compression: 'DEFLATE', createFolders: false });
+          // Store metadata for XHTML/OPF updates
+          splitImages[origName].push({
+            path: partPath,
+            imgName: partName,
+            id: baseName.split('/').pop() + part.suffix,
+            suffix: part.suffix
+          });
         }
       }
     } else if (low.match(/\.(xhtml|html|htm)$/)) {
@@ -1325,7 +1911,65 @@ async function convertEpubFile(file, progressCallback) {
       t = t.split(o.split('/').pop()).join(n.split('/').pop());
     }
 
+    // Handle split images - replace single image references with all parts
+    for (const [origName, parts] of Object.entries(splitImages)) {
+      const newName = origName.replace(/\.(png|gif|webp|bmp|jpeg)$/i, '.jpg');
+      // Match block-wrapped images: <p>...<img src="image.jpg"/>...</p>
+      const blockRegex = new RegExp(
+        `(<(?:p|div)[^>]*>\\s*<span>\\s*<img[^>]*src=["'][^"']*(?:${origName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}|${newName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})[^>]*/>\\s*</span>\\s*</(?:p|div)>)`,
+        'gi'
+      );
+      t = t.replace(blockRegex, (match) => {
+        let result = '';
+        for (let i = 0; i < parts.length; i++) {
+          if (i > 0) result += '\n';
+          let newBlock = match.replace(origName, parts[i].imgName).replace(newName, parts[i].imgName);
+          // Update id attribute to make it unique for each part
+          newBlock = newBlock.replace(/\bid="([^"]+)"/, (m, id) => `id="${id}${parts[i].suffix || '_part' + (i+1)}"`);
+          result += newBlock;
+        }
+        return result;
+      });
+
+      // Match simple images: <img src="image.jpg"/>
+      const simpleImgRegex = new RegExp(
+        `(<img[^>]*src=["'])([^"']*(?:${origName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}|${newName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}))([^>]*/>)`,
+        'gi'
+      );
+      t = t.replace(simpleImgRegex, (match, before, src, after) => {
+        let result = '';
+        for (let i = 0; i < parts.length; i++) {
+          if (i > 0) result += '\n';
+          const partSrc = src.replace(origName, parts[i].imgName).replace(newName, parts[i].imgName);
+          // Update id attribute in before or after to make it unique
+          let partBefore = before.replace(/\bid="([^"]+)"/, (m, id) => `id="${id}${parts[i].suffix || '_part' + (i+1)}"`);
+          let partAfter = after.replace(/\bid="([^"]+)"/, (m, id) => `id="${id}${parts[i].suffix || '_part' + (i+1)}"`);
+          result += `${partBefore}${partSrc}${partAfter}`;
+        }
+        return result;
+      });
+    }
+
     out.file(path, t, { compression: 'DEFLATE', createFolders: false });
+  }
+
+  // Extract main identifier from OPF before modifying it
+  if (opfContent) {
+    const uniqueIdMatch = opfContent.match(/<package[^>]*unique-identifier=["']([^"']+)["']/i);
+    if (uniqueIdMatch) {
+      const uniqueIdName = uniqueIdMatch[1];
+      const idRegex = new RegExp(`<dc:identifier[^>]*id=["']${uniqueIdName}["'][^>]*>([^<]+)</dc:identifier>`, 'i');
+      const idMatch = opfContent.match(idRegex);
+      if (idMatch) {
+        mainIdentifier = idMatch[1].trim();
+      }
+    }
+    if (!mainIdentifier) {
+      const firstIdMatch = opfContent.match(/<dc:identifier[^>]*>([^<]+)</i);
+      if (firstIdMatch) {
+        mainIdentifier = firstIdMatch[1].trim();
+      }
+    }
   }
 
   // Third pass: update OPF
@@ -1337,6 +1981,37 @@ async function convertEpubFile(file, progressCallback) {
     t = t.replace(/href="([^"]+\.jpg)"([^>]*)media-type="image\/(png|gif|webp|bmp)"/g, 'href="$1"$2media-type="image/jpeg"');
     t = t.replace(/media-type="image\/(png|gif|webp|bmp)"([^>]*)href="([^"]+\.jpg)"/g, 'media-type="image/jpeg"$2href="$3"');
     if (svgFix) t = t.replace(/\s+svg(?=["'\s>])/g, '');
+
+    // Calculate OPF directory for relative paths
+    const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')) : '';
+
+    // Add manifest entries for split image parts
+    for (const [origName, parts] of Object.entries(splitImages)) {
+      const origBaseName = origName.replace(/\.[^.]+$/, '');
+      // Replace original image reference in manifest/spine with first part
+      const origImgRegex = new RegExp(`(href=["'][^"']*/?)(${origBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\.(?:jpg|jpeg|png|gif|webp|bmp)(["'])`, 'gi');
+      t = t.replace(origImgRegex, `$1${origBaseName}_part1.jpg$3`);
+
+      // Add manifest entries for additional parts
+      let manifestAdditions = '';
+      for (let j = 1; j < parts.length; j++) {
+        const p = parts[j];
+        // Calculate href relative to OPF directory
+        let href;
+        if (opfDir && p.path.startsWith(opfDir + '/')) {
+          href = p.path.substring(opfDir.length + 1);
+        } else if (opfDir) {
+          href = p.path;
+        } else {
+          href = p.path;
+        }
+        manifestAdditions += `<item id="img-${p.id}" href="${href}" media-type="image/jpeg"/>\n`;
+      }
+      // Only replace first occurrence of </manifest>
+      if (manifestAdditions && t.includes('</manifest>')) {
+        t = t.replace('</manifest>', manifestAdditions + '</manifest>');
+      }
+    }
 
     const cm = ensureCoverMeta(t);
     if (cm.fixed) t = cm.o;
@@ -1350,16 +2025,28 @@ async function convertEpubFile(file, progressCallback) {
     if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/) || low.match(/\.(xhtml|html|htm)$/) || low.endsWith('.opf')) continue;
 
     let data = await fileObj.async('arraybuffer');
-    if (low.endsWith('.css') || low.endsWith('.ncx')) {
+    if (low.endsWith('.css')) {
       let t = new TextDecoder().decode(data);
       for (const [o, n] of Object.entries(renamed)) {
         t = t.split(o.split('/').pop()).join(n.split('/').pop());
+      }
+      data = new TextEncoder().encode(t);
+    } else if (low.endsWith('.ncx')) {
+      let t = new TextDecoder().decode(data);
+      for (const [o, n] of Object.entries(renamed)) {
+        t = t.split(o.split('/').pop()).join(n.split('/').pop());
+      }
+      // Sync NCX identifier with OPF
+      if (mainIdentifier) {
+        t = t.replace(/<meta\s+name=["']dtb:uid["']\s+content=["'][^"']*["']\s*\/?>/gi,
+          `<meta name="dtb:uid" content="${mainIdentifier}"/>`);
       }
       data = new TextEncoder().encode(t);
     }
     out.file(path, data, { compression: 'DEFLATE', createFolders: false });
   }
 
+  if (progressCallback) progressCallback(100);
   return await out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
 }
 
@@ -1417,11 +2104,10 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
             ws.send(buffer);
             offset += chunkSize;
 
-            // Update local progress - cap at 95% since server still needs to write
-            // Final 100% shown when server confirms DONE
+            // Update local progress with real transfer progress
+            // Server will confirm 100% with DONE message
             if (onProgress) {
-              const cappedOffset = Math.min(offset, Math.floor(totalSize * 0.95));
-              onProgress(cappedOffset, totalSize);
+              onProgress(offset, totalSize);
             }
           }
 
@@ -1534,8 +2220,7 @@ function uploadFile() {
         progressFill.style.backgroundColor = '#4caf50';
         progressText.textContent = 'All uploads complete!';
         setTimeout(() => {
-          closeUploadModal();
-          hydrate();
+          window.location.reload();
         }, 1000);
       } else {
         progressFill.style.backgroundColor = '#e74c3c';
@@ -1543,9 +2228,7 @@ function uploadFile() {
         progressText.textContent = `${files.length - failedFiles.length}/${files.length} uploaded. Failed: ${failedList}`;
         failedUploadsGlobal = failedFiles;
         setTimeout(() => {
-          closeUploadModal();
-          showFailedUploadsBanner();
-          hydrate();
+          window.location.reload();
         }, 2000);
       }
       return;
@@ -1553,8 +2236,12 @@ function uploadFile() {
 
     let file = files[currentIndex];
     const originalFile = file;
+    // Reset progress bar instantly without transition when starting a new file
+    progressFill.classList.add('no-transition');
     progressFill.style.width = '0%';
     progressFill.style.backgroundColor = '#27ae60';
+    // Re-enable transition after a brief delay
+    setTimeout(() => progressFill.classList.remove('no-transition'), 50);
 
     // Check if file is an EPUB and conversion is enabled
     const isEpub = file.name.toLowerCase().endsWith('.epub');
@@ -1565,10 +2252,12 @@ function uploadFile() {
     progressText.textContent = `${stageText} ${file.name} (${currentIndex + 1}/${files.length})${methodText}`;
 
     const onProgress = (loaded, total) => {
-      const percent = Math.round((loaded / total) * 100);
-      progressFill.style.width = percent + '%';
+      const uploadPercent = Math.round((loaded / total) * 100);
+      // If conversion happened, display goes from 50-100%, otherwise 0-100%
+      const displayPercent = needsConversion ? 50 + Math.round(uploadPercent / 2) : uploadPercent;
+      progressFill.style.width = displayPercent + '%';
       const prefix = needsConversion ? 'Converting & uploading' : 'Uploading';
-      progressText.textContent = `${prefix} ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${percent}%`;
+      progressText.textContent = `${prefix} ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${uploadPercent}%`;
     };
 
     const onComplete = () => {
@@ -1590,6 +2279,7 @@ function uploadFile() {
 
         try {
           const convertedBlob = await convertEpubFile(file, (percent) => {
+            // Pass current quality setting to converter
             progressFill.style.width = (percent * 0.5) + '%'; // Conversion takes first 50%
           });
 
@@ -1605,11 +2295,13 @@ function uploadFile() {
 
       if (useWebSocket) {
         await uploadFileWebSocket(file, onProgress, null, null);
-        onComplete();
       } else {
         await uploadFileHTTP(file, onProgress, null, null);
-        onComplete();
       }
+      // Ensure progress bar shows 100% before moving to next file
+      progressFill.style.width = '100%';
+      progressText.textContent = `Upload complete: ${file.name}`;
+      onComplete();
     } catch (error) {
       console.error('Upload error:', error);
       if (useWebSocket && error.message === 'WebSocket connection failed') {
