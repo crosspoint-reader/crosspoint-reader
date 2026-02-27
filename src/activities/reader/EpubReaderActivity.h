@@ -24,7 +24,7 @@ class EpubReaderActivity final : public Activity {
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
-  std::string statusBarOverride;  // Temporary override text (e.g. "Bookmarked"), cleared on page turn
+  std::string statusBarOverride;     // Temporary override text (e.g. "Bookmarked"), cleared on page turn
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

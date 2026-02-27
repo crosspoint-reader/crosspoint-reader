@@ -379,12 +379,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
       startActivityForResult(
-          std::make_unique<EpubReaderBookmarkListActivity>(
-              renderer, mappedInput, epub->getPath(),
-              [this](uint16_t spineIndex) -> std::string {
-                const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
-                return (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "Unnamed";
-              }),
+          std::make_unique<EpubReaderBookmarkListActivity>(renderer, mappedInput, epub->getPath(),
+                                                           [this](uint16_t spineIndex) -> std::string {
+                                                             const int tocIndex =
+                                                                 epub->getTocIndexForSpineIndex(spineIndex);
+                                                             return (tocIndex >= 0) ? epub->getTocItem(tocIndex).title
+                                                                                    : "Unnamed";
+                                                           }),
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               const auto& bk = std::get<BookmarkResult>(result.data);
