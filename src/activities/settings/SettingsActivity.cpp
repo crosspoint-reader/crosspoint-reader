@@ -5,6 +5,7 @@
 
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
+#include "LockSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "KOReaderSettingsActivity.h"
@@ -46,6 +47,7 @@ void SettingsActivity::onEnter() {
   // Append device-only ACTION items
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  controlsSettings.push_back(SettingInfo::Action(StrId::STR_LOCK_SCREEN, SettingAction::LockScreen));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));
@@ -168,6 +170,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::CustomiseStatusBar:
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::LockScreen:
+        startActivityForResult(std::make_unique<LockSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::KOReaderSync:
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);

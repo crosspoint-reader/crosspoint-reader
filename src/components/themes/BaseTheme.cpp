@@ -102,6 +102,40 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
+void BaseTheme::drawShape(const GfxRenderer& renderer, int cx, int cy, int size, char shapeId) {
+  const int half = size / 2;
+  switch (shapeId) {
+    case '\x01': {  // Circle
+      renderer.fillRoundedRect(cx - half, cy - half, size, size, half, Color::Black);
+      break;
+    }
+    case '\x02': {  // Square
+      renderer.fillRect(cx - half, cy - half, size, size);
+      break;
+    }
+    case '\x03': {  // Triangle
+      const int xPts[] = {cx, cx - half, cx + half};
+      const int yPts[] = {cy - half, cy + half, cy + half};
+      renderer.fillPolygon(xPts, yPts, 3);
+      break;
+    }
+    case '\x04': {  // Diamond
+      const int xPts[] = {cx, cx + half, cx, cx - half};
+      const int yPts[] = {cy - half, cy, cy + half, cy};
+      renderer.fillPolygon(xPts, yPts, 4);
+      break;
+    }
+    case '\x05': {  // Cross
+      const int arm = size / 6;
+      renderer.fillRect(cx - half, cy - arm, size, arm * 2 + 1);
+      renderer.fillRect(cx - arm, cy - half, arm * 2 + 1, size);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
@@ -121,9 +155,13 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       const int x = buttonPositions[i];
       renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+      if (static_cast<unsigned char>(labels[i][0]) < 0x20) {
+        drawShape(renderer, x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, ButtonShape::kSize, labels[i][0]);
+      } else {
+        const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
+        const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+        renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+      }
     }
   }
 
@@ -164,20 +202,24 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
                       topButtonY + 2 * buttonHeight - 1);  // Bottom
   }
 
-  // Draw text for each button
+  // Draw text or shape for each button
   for (int i = 0; i < 2; i++) {
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const int y = topButtonY + i * buttonHeight;
 
-      // Draw rotated text centered in the button
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-      const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
+      if (static_cast<unsigned char>(labels[i][0]) < 0x20) {
+        drawShape(renderer, x + buttonWidth / 2, y + buttonHeight / 2, ButtonShape::kSize, labels[i][0]);
+      } else {
+        // Draw rotated text centered in the button
+        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
+        const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
 
-      // Center the rotated text in the button
-      const int textX = x + (buttonWidth - textHeight) / 2;
-      const int textY = y + (buttonHeight + textWidth) / 2;
+        // Center the rotated text in the button
+        const int textX = x + (buttonWidth - textHeight) / 2;
+        const int textY = y + (buttonHeight + textWidth) / 2;
 
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, labels[i]);
+        renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, labels[i]);
+      }
     }
   }
 }

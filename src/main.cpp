@@ -20,6 +20,7 @@
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/boot_sleep/LockScreenActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
@@ -283,18 +284,41 @@ void setup() {
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
-  // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
-  // crashed (indicated by readerActivityLoadCount > 0)
-  if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
-      mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
-    activityManager.goHome();
+  auto proceedToBootTarget = [] {
+    // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
+    // crashed (indicated by readerActivityLoadCount > 0)
+    if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
+        mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
+      activityManager.goHome();
+    } else {
+      // Clear app state to avoid getting into a boot loop if the epub doesn't load
+      const auto path = APP_STATE.openEpubPath;
+      APP_STATE.openEpubPath = "";
+      APP_STATE.readerActivityLoadCount++;
+      APP_STATE.saveToFile();
+      activityManager.goToReader(path);
+    }
+  };
+
+  if (SETTINGS.lockEnabled && SETTINGS.lockSequenceLength >= 3 && SETTINGS.lockSequenceLength <= 6) {
+    // Reset lock if Back + Up are held during power-on
+    gpio.update();
+    if (gpio.isPressed(HalGPIO::BTN_BACK) && gpio.isPressed(HalGPIO::BTN_UP)) {
+      SETTINGS.lockEnabled = 0;
+      SETTINGS.lockSequenceLength = 0;
+      memset(SETTINGS.lockSequence, 0, sizeof(SETTINGS.lockSequence));
+      SETTINGS.saveToFile();
+      LOG_DBG("MAIN", "Lock reset by button combo");
+    }
+
+    if (SETTINGS.lockEnabled) {
+      activityManager.replaceActivity(
+          std::make_unique<LockScreenActivity>(renderer, mappedInputManager, proceedToBootTarget));
+    } else {
+      proceedToBootTarget();
+    }
   } else {
-    // Clear app state to avoid getting into a boot loop if the epub doesn't load
-    const auto path = APP_STATE.openEpubPath;
-    APP_STATE.openEpubPath = "";
-    APP_STATE.readerActivityLoadCount++;
-    APP_STATE.saveToFile();
-    activityManager.goToReader(path);
+    proceedToBootTarget();
   }
 
   // Ensure we're not still holding the power button before leaving setup
