@@ -8,9 +8,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path,
-                                     std::function<void()> onGoBack)
-    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)), onGoBack(std::move(onGoBack)) {}
+BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
+    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
 
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
@@ -95,7 +94,7 @@ void BmpViewerActivity::loop() {
   Activity::loop();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (onGoBack) onGoBack();
+    onGoHome();
     return;
   }
 }

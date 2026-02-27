@@ -59,10 +59,14 @@ void XtcReaderChapterSelectionActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto& chapters = xtc->getChapters();
     if (!chapters.empty() && selectorIndex >= 0 && selectorIndex < static_cast<int>(chapters.size())) {
-      onSelectPage(chapters[selectorIndex].startPage);
+      setResult(PageResult{chapters[selectorIndex].startPage});
+      finish();
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoBack();
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
   }
 
   buttonNavigator.onNextRelease([this, totalItems] {
@@ -86,7 +90,7 @@ void XtcReaderChapterSelectionActivity::loop() {
   });
 }
 
-void XtcReaderChapterSelectionActivity::render(Activity::RenderLock&&) {
+void XtcReaderChapterSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
