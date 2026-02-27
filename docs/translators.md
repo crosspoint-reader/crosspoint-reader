@@ -21,6 +21,7 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 - [yagofarias](https://github.com/yagofarias)
 
 ## Italian
+- [andreaturchet](https://github.com/andreaturchet)
 - [fragolinux](https://github.com/fragolinux)
 
 ## Russian
@@ -41,8 +42,14 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 ## Catalan
 - [angeldenom](https://github.com/angeldenom)
 
+## Finnish
+- [plahteenlahti](https://github.com/plahteenlahti)
+
 ## Ukrainian
 - [mirus-ua](https://github.com/mirus-ua)
 
 ## Belarusian
 - [Dexif](https://github.com/dexif)
+
+## Danish
+- [hajisan](https://github.com/hajisan)

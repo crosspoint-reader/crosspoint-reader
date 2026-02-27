@@ -1,7 +1,10 @@
 #include "EpubReaderBookmarkListActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
+#include <Logging.h>
 
+#include "../ActivityResult.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -24,7 +27,7 @@ int EpubReaderBookmarkListActivity::getPageItems() const {
 }
 
 void EpubReaderBookmarkListActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   bookmarks = BookmarkStore::loadBookmarks(bookPath);
 
@@ -35,20 +38,16 @@ void EpubReaderBookmarkListActivity::onEnter() {
   requestUpdate();
 }
 
-void EpubReaderBookmarkListActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void EpubReaderBookmarkListActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderBookmarkListActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   const int totalItems = getTotalItems();
 
   // Handle empty bookmark list
   if (totalItems == 0 && !confirmingDelete) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      onGoBack();
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      finish();
     }
     return;
   }
@@ -56,7 +55,9 @@ void EpubReaderBookmarkListActivity::loop() {
   // Delete confirmation mode
   if (confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      BookmarkStore::deleteBookmark(bookPath, selectorIndex);
+      if (!BookmarkStore::deleteBookmark(bookPath, selectorIndex)) {
+        LOG_ERR("BookmarkList", "Failed to delete bookmark at index %d", selectorIndex);
+      }
       bookmarks = BookmarkStore::loadBookmarks(bookPath);
       if (selectorIndex >= getTotalItems()) {
         selectorIndex = std::max(0, getTotalItems() - 1);
@@ -84,22 +85,21 @@ void EpubReaderBookmarkListActivity::loop() {
       requestUpdate();
     } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
       const auto& bk = bookmarks[selectorIndex];
-      onSelectBookmark(bk.spineIndex, bk.pageIndex);
+      setResult(BookmarkResult{bk.spineIndex, bk.pageIndex});
+      finish();
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoBack();
+    finish();
   } else if (prevReleased) {
     if (skipPage) {
-      const int prevPage = selectorIndex / pageItems - 1;
-      selectorIndex = prevPage >= 0 ? prevPage * pageItems : (totalItems - 1) / pageItems * pageItems;
+      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + totalItems) % totalItems;
     } else {
       selectorIndex = (selectorIndex + totalItems - 1) % totalItems;
     }
     requestUpdate();
   } else if (nextReleased) {
     if (skipPage) {
-      const int nextPageStart = (selectorIndex / pageItems + 1) * pageItems;
-      selectorIndex = nextPageStart < totalItems ? nextPageStart : 0;
+      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % totalItems;
     } else {
       selectorIndex = (selectorIndex + 1) % totalItems;
     }
@@ -107,7 +107,7 @@ void EpubReaderBookmarkListActivity::loop() {
   }
 }
 
-void EpubReaderBookmarkListActivity::render(Activity::RenderLock&&) {
+void EpubReaderBookmarkListActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -123,18 +123,18 @@ void EpubReaderBookmarkListActivity::render(Activity::RenderLock&&) {
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
-  const char* titleText = confirmingDelete ? "Delete bookmark?" : "Bookmarks";
+  const char* titleText = confirmingDelete ? tr(STR_DELETE_BOOKMARK_CONFIRM) : tr(STR_BOOKMARKS);
   const int titleX =
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, titleText, EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, titleText, true, EpdFontFamily::BOLD);
 
   if (!confirmingDelete && totalItems > 0) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 40 + contentY, "Hold confirm to delete");
+    renderer.drawCenteredText(UI_10_FONT_ID, 40 + contentY, tr(STR_HOLD_CONFIRM_TO_DELETE));
   }
 
   if (totalItems == 0) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "No bookmarks", true);
-    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "", "", "");
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_NO_BOOKMARKS), true);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -153,8 +153,12 @@ void EpubReaderBookmarkListActivity::render(Activity::RenderLock&&) {
     char label[64];
     if (resolveChapterTitle && bk.chapterPercent > 0) {
       std::string title = resolveChapterTitle(bk.spineIndex);
-      if (title.length() > 20) {
-        title.resize(17);
+      if (title.size() > 20) {
+        size_t limit = 17;
+        while (limit > 0 && (title[limit] & 0xC0) == 0x80) {
+          --limit;
+        }
+        title.resize(limit);
         title += "...";
       }
       snprintf(label, sizeof(label), "%d%% of %s - %d%% of book", bk.chapterPercent, title.c_str(), bk.bookPercent);
@@ -167,10 +171,10 @@ void EpubReaderBookmarkListActivity::render(Activity::RenderLock&&) {
   }
 
   if (confirmingDelete) {
-    const auto labels = mappedInput.mapLabels("Cancel", "Delete", "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_DELETE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
-    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Go to", "Up", "Down");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_GO_TO), tr(STR_UP), tr(STR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
