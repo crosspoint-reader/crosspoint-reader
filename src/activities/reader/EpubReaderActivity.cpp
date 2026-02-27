@@ -599,8 +599,10 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
     automaticPageTurnActive = true;
   }
 
-  // resets cached section so that space is reserved for auto page turn indicator when progress bar is None
-  if (SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::NONE) {
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  // resets cached section so that space is reserved for auto page turn indicator when progress bar only or None
+  if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
+    updateLastPageTurnTime = true;  // To only update lastPageTurnTime after rendering is complete
     // Preserve current reading position so we can restore after reflow.
     RenderLock lock(*this);
     if (section) {
@@ -644,8 +646,17 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
   orientedMarginRight += SETTINGS.screenMargin;
-  orientedMarginBottom +=
-      std::max(SETTINGS.screenMargin, static_cast<uint8_t>(UITheme::getInstance().getStatusBarHeight()));
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+
+  // reserves space for automatic page turn indicator when no status bar or progress bar only
+  if (automaticPageTurnActive &&
+      (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
+    orientedMarginBottom +=
+        std::max(SETTINGS.screenMargin,
+                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
+  } else {
+    orientedMarginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
+  }
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
@@ -831,9 +842,17 @@ void EpubReaderActivity::renderStatusBar() const {
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
   std::string title;
+  int textYOffset = 0;
 
   if (automaticPageTurnActive) {
     title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
+
+    // calculates textYOffset when rendering title in status bar
+    const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+    // offsets text if no status bar or progress bar only
+    if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
+      textYOffset = UITheme::getInstance().getMetrics().statusBarVerticalMargin;
+    }
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
     if (tocIndex == -1) {
@@ -844,9 +863,7 @@ void EpubReaderActivity::renderStatusBar() const {
     }
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
     title = epub->getTitle();
-  } else {
-    title = "";
   }
 
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title);
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
 }

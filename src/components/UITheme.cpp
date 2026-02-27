@@ -103,3 +103,10 @@ int UITheme::getStatusBarHeight() {
   return (showStatusBar ? (metrics.statusBarVerticalMargin) : 0) +
          (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
 }
+
+int UITheme::getProgressBarHeight() {
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const bool showProgressBar =
+      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
+  return (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+}
