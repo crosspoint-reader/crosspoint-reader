@@ -71,7 +71,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
   // Add Basic HTTP auth only for OPDS URLs (not for feed or firmware downloads)
-  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0 && strlen(SETTINGS.opdsServer) > 0 && url.rfind(SETTINGS.opdsServer, 0) == 0) {
+  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0 && strlen(SETTINGS.opdsServerUrl) > 0 && url.rfind(SETTINGS.opdsServerUrl, 0) == 0) {
     std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
     String encoded = base64::encode(credentials.c_str());
     http.addHeader("Authorization", "Basic " + encoded);
