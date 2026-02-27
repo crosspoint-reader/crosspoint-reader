@@ -131,5 +131,10 @@ inline std::vector<SettingInfo> getSettingsList() {
                         StrId::STR_CUSTOMISE_STATUS_BAR),
       SettingInfo::Toggle(StrId::STR_BATTERY, &CrossPointSettings::statusBarBattery, "statusBarBattery",
                           StrId::STR_CUSTOMISE_STATUS_BAR),
+      // --- Feed Sync (web-only) ---
+      SettingInfo::String(StrId::STR_FEED_URL, SETTINGS.feedUrl, sizeof(SETTINGS.feedUrl), "feedUrl",
+                          StrId::STR_CAT_FEED_SYNC),
+      SettingInfo::Value(StrId::STR_FEED_NEWS_DAYS, &CrossPointSettings::feedNewsDays, {1, 30, 1}, "feedNewsDays",
+                         StrId::STR_CAT_FEED_SYNC),
   };
 }

@@ -108,4 +108,8 @@ class CrossPointWebServer {
   void handleSettingsPage() const;
   void handleGetSettings() const;
   void handlePostSettings();
+
+  // Feed URL handlers
+  void handleGetFeedUrl() const;
+  void handlePostFeedUrl();
 };

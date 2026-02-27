@@ -157,6 +157,10 @@ void CrossPointWebServer::begin() {
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
 
+  // Feed URL endpoint
+  server->on("/api/feed-url", HTTP_GET, [this] { handleGetFeedUrl(); });
+  server->on("/api/feed-url", HTTP_POST, [this] { handlePostFeedUrl(); });
+
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
@@ -1234,6 +1238,45 @@ void CrossPointWebServer::handlePostSettings() {
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
+}
+
+void CrossPointWebServer::handleGetFeedUrl() const {
+  JsonDocument doc;
+  doc["feedUrl"] = SETTINGS.feedUrl;
+  doc["feedNewsDays"] = SETTINGS.feedNewsDays;
+  char output[384];
+  serializeJson(doc, output, sizeof(output));
+  server->send(200, "application/json", output);
+}
+
+void CrossPointWebServer::handlePostFeedUrl() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  if (doc["feedUrl"].is<const char*>()) {
+    const char* url = doc["feedUrl"].as<const char*>();
+    strncpy(SETTINGS.feedUrl, url, sizeof(SETTINGS.feedUrl) - 1);
+    SETTINGS.feedUrl[sizeof(SETTINGS.feedUrl) - 1] = '\0';
+  }
+  if (doc["feedNewsDays"].is<int>()) {
+    int days = doc["feedNewsDays"].as<int>();
+    if (days >= 1 && days <= 30) {
+      SETTINGS.feedNewsDays = static_cast<uint8_t>(days);
+    }
+  }
+
+  SETTINGS.saveToFile();
+  server->send(200, "text/plain", "Feed settings updated");
 }
 
 // WebSocket callback trampoline

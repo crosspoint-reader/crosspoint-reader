@@ -192,6 +192,9 @@ class CrossPointSettings {
   uint8_t fadingFix = 0;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // RSS feed sync settings (web-only)
+  char feedUrl[256] = "";
+  uint8_t feedNewsDays = 7;
 
   ~CrossPointSettings() = default;
 
