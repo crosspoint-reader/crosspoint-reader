@@ -138,7 +138,7 @@ std::string Page::getPlainText() const {
     if (!result.empty()) {
       result += '\n';
     }
-    result += pageLine->getBlock().getPlainText();
+    result += pageLine->getBlock()->getPlainText();
   }
   return result;
 }
