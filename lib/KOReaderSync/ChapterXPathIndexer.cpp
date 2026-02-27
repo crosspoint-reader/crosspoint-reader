@@ -305,25 +305,38 @@ struct ParserState {
 
     size_t matchedOffset = 0;
     bool exact = false;
-    bool matched = pickBestAnchorByPath(normalized, false, matchedOffset, exact);
+    const char* matchTier = nullptr;
 
-    if (!matched) {
-      matched = pickBestAnchorByPath(normalized, true, matchedOffset, exact);
-      if (matched) exact = false;
+    bool matched = pickBestAnchorByPath(normalized, false, matchedOffset, exact);
+    if (matched) {
+      matchTier = exact ? "exact" : "ancestor";
+    } else {
+      bool exactRaw = false;
+      matched = pickBestAnchorByPath(normalized, true, matchedOffset, exactRaw);
+      if (matched) {
+        exact = false;
+        matchTier = exactRaw ? "index-insensitive" : "index-insensitive-ancestor";
+      }
     }
 
     if (!matched) {
+      LOG_DBG("KOX", "Reverse: spine=%d no anchor match for '%s' (%zu anchors)", spineIndex, normalized.c_str(),
+              anchors.size());
       return false;
     }
 
     outExactMatch = exact;
     if (totalTextBytes == 0) {
       outIntraSpineProgress = 0.0f;
+      LOG_DBG("KOX", "Reverse: spine=%d %s match offset=%zu -> progress=0.0 (no text)", spineIndex, matchTier,
+              matchedOffset);
       return true;
     }
 
     outIntraSpineProgress = static_cast<float>(matchedOffset) / static_cast<float>(totalTextBytes);
     outIntraSpineProgress = std::max(0.0f, std::min(1.0f, outIntraSpineProgress));
+    LOG_DBG("KOX", "Reverse: spine=%d %s match offset=%zu/%zu -> progress=%.3f", spineIndex, matchTier, matchedOffset,
+            totalTextBytes, outIntraSpineProgress);
     return true;
   }
 };
@@ -397,7 +410,10 @@ std::string ChapterXPathIndexer::findXPathForProgress(const std::shared_ptr<Epub
     return "";
   }
 
-  return state.chooseXPath(intraSpineProgress);
+  const std::string result = state.chooseXPath(intraSpineProgress);
+  LOG_DBG("KOX", "Forward: spine=%d progress=%.3f anchors=%zu textBytes=%zu -> %s", spineIndex, intraSpineProgress,
+          state.anchors.size(), state.totalTextBytes, result.c_str());
+  return result;
 }
 
 bool ChapterXPathIndexer::findProgressForXPath(const std::shared_ptr<Epub>& epub, const int spineIndex,
@@ -450,6 +466,8 @@ bool ChapterXPathIndexer::findProgressForXPath(const std::shared_ptr<Epub>& epub
     return false;
   }
 
+  LOG_DBG("KOX", "Reverse: spine=%d anchors=%zu textBytes=%zu for '%s'", spineIndex, state.anchors.size(),
+          state.totalTextBytes, xpath.c_str());
   return state.chooseProgressForXPath(xpath, outIntraSpineProgress, outExactMatch);
 }
 
@@ -463,6 +481,7 @@ bool ChapterXPathIndexer::tryExtractSpineIndexFromXPath(const std::string& xpath
   const std::string key = "/docfragment[";
   const size_t pos = normalized.find(key);
   if (pos == std::string::npos) {
+    LOG_DBG("KOX", "No DocFragment in xpath: '%s'", xpath.c_str());
     return false;
   }
 
