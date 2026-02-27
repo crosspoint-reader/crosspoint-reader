@@ -29,7 +29,8 @@ bool ReaderActivity::isMdFile(const std::string& path) {
 }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
-  return StringUtils::checkFileExtension(path, ".txt");
+  return StringUtils::checkFileExtension(path, ".txt") ||
+         StringUtils::checkFileExtension(path, ".log");
 }
 
 bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }

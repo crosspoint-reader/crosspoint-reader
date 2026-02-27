@@ -91,10 +91,12 @@ void FileBrowserActivity::loadFiles() {
     if (file.isDirectory()) {
       files.emplace_back(std::string(name) + "/");
     } else {
-      std::string_view filename{name};
-      if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-          FsHelpers::hasBmpExtension(filename)) {
+      auto filename = std::string(name);
+      if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
+          StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
+          StringUtils::checkFileExtension(filename, ".md") || StringUtils::checkFileExtension(filename, ".bmp")) {
+          StringUtils::checkFileExtension(filename, ".md") ||
+          StringUtils::checkFileExtension(filename, ".log")) {
         files.emplace_back(filename);
       }
     }
