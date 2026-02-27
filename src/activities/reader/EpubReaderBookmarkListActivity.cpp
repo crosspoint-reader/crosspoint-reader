@@ -5,7 +5,6 @@
 #include <Logging.h>
 
 #include "../ActivityResult.h"
-
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"

@@ -484,22 +484,22 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::CLIPPINGS: {
-      startActivityForResult(
-          std::make_unique<EpubReaderClippingsListActivity>(renderer, mappedInput, epub->getPath()),
-          [this](const ActivityResult&) {
-            cachedClippings = ClippingStore::loadIndex(epub->getPath());
-            requestUpdate();
-          });
+      startActivityForResult(std::make_unique<EpubReaderClippingsListActivity>(renderer, mappedInput, epub->getPath()),
+                             [this](const ActivityResult&) {
+                               cachedClippings = ClippingStore::loadIndex(epub->getPath());
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
       startActivityForResult(
-          std::make_unique<EpubReaderBookmarkListActivity>(
-              renderer, mappedInput, epub->getPath(),
-              [this](uint16_t spineIndex) -> std::string {
-                const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
-                return (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : tr(STR_UNNAMED);
-              }),
+          std::make_unique<EpubReaderBookmarkListActivity>(renderer, mappedInput, epub->getPath(),
+                                                           [this](uint16_t spineIndex) -> std::string {
+                                                             const int tocIndex =
+                                                                 epub->getTocIndexForSpineIndex(spineIndex);
+                                                             return (tocIndex >= 0) ? epub->getTocItem(tocIndex).title
+                                                                                    : tr(STR_UNNAMED);
+                                                           }),
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               const auto& bk = std::get<BookmarkResult>(result.data);
