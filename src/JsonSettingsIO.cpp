@@ -196,7 +196,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
 
   LOG_DBG("CPS", "Settings loaded from file");
 
-  if (doc.containsKey("statusBarChapterPageCount")) {
+  if (!doc["statusBarChapterPageCount"].isNull()) {
     s.statusBarChapterPageCount = doc["statusBarChapterPageCount"];
     s.statusBarBookProgressPercentage = doc["statusBarBookProgressPercentage"];
     s.statusBarProgressBar = doc["statusBarProgressBar"];

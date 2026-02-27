@@ -131,4 +131,5 @@ inline const std::vector<SettingInfo>& getSettingsList() {
       SettingInfo::Toggle(StrId::STR_BATTERY, &CrossPointSettings::statusBarBattery, "statusBarBattery",
                           StrId::STR_CUSTOMISE_STATUS_BAR),
   };
+  return list;
 }
