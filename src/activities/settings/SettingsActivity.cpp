@@ -231,6 +231,13 @@ void SettingsActivity::render(RenderLock&&) {
           valueText = I18N.get(setting.enumValues[value]);
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
           valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+        } else if (setting.type == SettingType::ACTION) {
+          // Show current language name for Language action; chevron for all actions
+          if (setting.action == SettingAction::Language) {
+            valueText = std::string(I18N.getLanguageName(I18N.getLanguage())) + "  ›";
+          } else {
+            valueText = "›";
+          }
         }
         return valueText;
       },

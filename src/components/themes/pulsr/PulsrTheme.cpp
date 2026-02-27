@@ -696,8 +696,8 @@ void PulsrTheme::drawReadingProgressBar(const GfxRenderer& renderer,
 // ─────────────────────────────────────────────────────────────────────────────
 Rect PulsrTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
   const int W       = renderer.getScreenWidth();
-  const int textW   = renderer.getTextWidth(UI_12_FONT_ID, message);
-  const int textH   = renderer.getLineHeight(UI_12_FONT_ID);
+  const int textW   = renderer.getTextWidth(PULSR_12_FONT_ID, message);
+  const int textH   = renderer.getLineHeight(PULSR_12_FONT_ID);
   const int boxW    = textW + POPUP_MARGIN_X * 2;
   const int boxH    = textH + POPUP_MARGIN_Y * 2;
   const int boxX    = LEFT_W + (W - LEFT_W - boxW) / 2;
@@ -710,7 +710,7 @@ Rect PulsrTheme::drawPopup(const GfxRenderer& renderer, const char* message) con
 
   const int tx = boxX + (boxW - textW) / 2;
   const int ty = boxY + POPUP_MARGIN_Y - 2;
-  renderer.drawText(UI_12_FONT_ID, tx, ty, message, /*black=*/false);
+  renderer.drawText(PULSR_12_FONT_ID, tx, ty, message, /*black=*/false);
   renderer.displayBuffer();
 
   return Rect{boxX, boxY, boxW, boxH};
@@ -737,7 +737,7 @@ void PulsrTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layo
 void PulsrTheme::drawTextField(const GfxRenderer& renderer, Rect rect, int textWidth) const {
   constexpr int PAD    = 8;
   const int lineW      = textWidth + PAD * 2;
-  const int lineY      = rect.y + rect.height + renderer.getLineHeight(UI_12_FONT_ID) +
+  const int lineY      = rect.y + rect.height + renderer.getLineHeight(PULSR_12_FONT_ID) +
                          Lm::values.verticalSpacing;
   const int lineX      = rect.x + (rect.width - lineW) / 2;
   renderer.drawLine(lineX, lineY, lineX + lineW, lineY, /*lineWidth=*/2, /*black=*/true);
@@ -754,8 +754,8 @@ void PulsrTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const c
   } else {
     renderer.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, 1, R, /*black=*/true);
   }
-  const int tw = renderer.getTextWidth(UI_12_FONT_ID, label);
-  const int th = renderer.getTextHeight(UI_12_FONT_ID);
-  renderer.drawText(UI_12_FONT_ID, rect.x + (rect.width - tw) / 2,
+  const int tw = renderer.getTextWidth(PULSR_12_FONT_ID, label);
+  const int th = renderer.getTextHeight(PULSR_12_FONT_ID);
+  renderer.drawText(PULSR_12_FONT_ID, rect.x + (rect.width - tw) / 2,
                     rect.y + (rect.height - th) / 2, label, /*black=*/!isSelected);
 }

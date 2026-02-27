@@ -77,6 +77,34 @@ void LanguageSelectActivity::render(RenderLock&&) {
       nullptr, nullptr,
       [this, currentLang](int index) { return SORTED_LANGUAGE_INDICES[index] == currentLang ? tr(STR_SELECTED) : ""; },
       true);
+  // Title
+  renderer.drawCenteredText(PULSR_12_FONT_ID, 15, tr(STR_LANGUAGE), true, EpdFontFamily::BOLD);
+
+  // Current language marker
+  const int currentLang = static_cast<int>(I18N.getLanguage());
+
+  // Draw options
+  for (int i = 0; i < totalItems; i++) {
+    const int itemY = 60 + i * rowHeight;
+    const bool isSelected = (i == selectedIndex);
+    const bool isCurrent = (i == currentLang);
+
+    // Draw selection highlight
+    if (isSelected) {
+      renderer.fillRect(0, itemY - 2, pageWidth - 1, rowHeight);
+    }
+
+    // Draw language name - get it from i18n system
+    const char* langName = I18N.getLanguageName(static_cast<Language>(i));
+    renderer.drawText(PULSR_10_FONT_ID, 20, itemY, langName, !isSelected);
+
+    // Draw current selection marker
+    if (isCurrent) {
+      const char* marker = tr(STR_ON_MARKER);
+      const auto width = renderer.getTextWidth(PULSR_10_FONT_ID, marker);
+      renderer.drawText(PULSR_10_FONT_ID, pageWidth - 20 - width, itemY, marker, !isSelected);
+    }
+  }
 
   // Button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

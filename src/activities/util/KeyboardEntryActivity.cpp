@@ -199,7 +199,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title.c_str());
 
   // Draw input field
-  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int lineHeight = renderer.getLineHeight(PULSR_12_FONT_ID);
   const int inputStartY =
       metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.verticalSpacing * 4;
   int inputHeight = 0;
@@ -220,12 +220,12 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   int textWidth = 0;
   while (true) {
     std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
-    textWidth = renderer.getTextWidth(UI_12_FONT_ID, lineText.c_str());
+    textWidth = renderer.getTextWidth(PULSR_12_FONT_ID, lineText.c_str());
     if (textWidth <= pageWidth - 2 * metrics.contentSidePadding) {
       if (metrics.keyboardCenteredText) {
-        renderer.drawCenteredText(UI_12_FONT_ID, inputStartY + inputHeight, lineText.c_str());
+        renderer.drawCenteredText(PULSR_12_FONT_ID, inputStartY + inputHeight, lineText.c_str());
       } else {
-        renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, inputStartY + inputHeight, lineText.c_str());
+        renderer.drawText(PULSR_12_FONT_ID, metrics.contentSidePadding, inputStartY + inputHeight, lineText.c_str());
       }
       if (lineEndIdx == displayText.length()) {
         break;
@@ -254,7 +254,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   // Calculate left margin to center the longest row (13 keys)
   const int maxRowWidth = KEYS_PER_ROW * (keyWidth + keySpacing);
-  const int leftMargin = (pageWidth - maxRowWidth) / 2;
+  // Start keyboard past the left sidebar; center in remaining content area
+  const int leftMargin = metrics.contentSidePadding + (pageWidth - metrics.contentSidePadding - maxRowWidth) / 2;
 
   for (int row = 0; row < NUM_ROWS; row++) {
     const int rowY = keyboardStartY + row * (keyHeight + keySpacing);

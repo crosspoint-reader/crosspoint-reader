@@ -239,8 +239,8 @@ void setupDisplayAndFonts() {
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
   renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
+  renderer.insertFont(PULSR_10_FONT_ID, ui10FontFamily);
+  renderer.insertFont(PULSR_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
   renderer.insertFont(PULSR_10_FONT_ID, pulsr10FontFamily);
   renderer.insertFont(PULSR_12_FONT_ID, pulsr12FontFamily);
@@ -315,7 +315,7 @@ void setup() {
 
     auto drawUpdateScreen = [&](int pct) {
       renderer.clearScreen();
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Updating firmware...", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 20, "Updating firmware...", true, EpdFontFamily::BOLD);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 10, "Do not power off");
       renderer.drawRect(barX, barY, barW, barH, true);
       if (pct > 0) {
@@ -327,6 +327,39 @@ void setup() {
       renderer.drawCenteredText(SMALL_FONT_ID, barY + barH + 8, pctStr);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, CROSSPOINT_VERSION);
       renderer.displayBuffer();
+    };
+
+    auto logOtaError = [](const char* msg, size_t fileSize = 0, size_t written = 0) -> bool {
+      FsFile logFile;
+      if (!Storage.openFileForWrite("MAIN", "/ota_error.log", logFile)) {
+        LOG_ERR("MAIN", "OTA: could not open /ota_error.log for writing");
+        return false;
+      }
+      logFile.print("OTA error: ");
+      logFile.println(msg);
+      if (fileSize > 0) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "File size: %u, Written: %u", (unsigned)fileSize, (unsigned)written);
+        logFile.println(buf);
+      }
+      logFile.print("Free heap: ");
+      logFile.println(ESP.getFreeHeap());
+      logFile.print("Version: ");
+      logFile.println(CROSSPOINT_VERSION);
+      logFile.close();
+      return true;
+    };
+
+    auto showError = [&](const char* msg, size_t fileSize = 0, size_t written = 0) {
+      const bool logged = logOtaError(msg, fileSize, written);
+      renderer.clearScreen();
+      renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 30, "Firmware update failed", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2, msg);
+      renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 20, "firmware.bin NOT deleted");
+      renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 38,
+                                logged ? "Error saved to /ota_error.log" : "Could not write /ota_error.log");
+      renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+      delay(15000);
     };
 
     drawUpdateScreen(0);
