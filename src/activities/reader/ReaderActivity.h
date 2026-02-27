@@ -15,6 +15,7 @@ class ReaderActivity final : public Activity {
   static std::unique_ptr<Xtc> loadXtc(const std::string& path);
   static std::unique_ptr<Txt> loadTxt(const std::string& path);
   static bool isXtcFile(const std::string& path);
+  static bool isMdFile(const std::string& path);
   static bool isTxtFile(const std::string& path);
   static bool isBmpFile(const std::string& path);
 
@@ -22,6 +23,7 @@ class ReaderActivity final : public Activity {
   void goToLibrary(const std::string& fromBookPath = "");
   void onGoToEpubReader(std::unique_ptr<Epub> epub);
   void onGoToXtcReader(std::unique_ptr<Xtc> xtc);
+  void onGoToMdReader(std::unique_ptr<Txt> txt);
   void onGoToTxtReader(std::unique_ptr<Txt> txt);
   void onGoToBmpViewer(const std::string& path);
 
