@@ -20,6 +20,7 @@ struct KeyboardResult {
 struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
+  uint8_t pageTurnOption = 0;
 };
 
 struct ChapterResult {
