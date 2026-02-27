@@ -153,7 +153,10 @@ static std::string stripInlineMarkdown(const std::string& s) {
 }
 
 // Parse a single raw line into an MdLine. Updates inCodeFence state.
-static MdLine parseMdLine(const std::string& raw, bool& inCodeFence) {
+// Pass stripInline=false during page index building to skip the string
+// allocation overhead of stripInlineMarkdown (width slightly overestimated,
+// but page breaks are conservative and content is not affected).
+static MdLine parseMdLine(const std::string& raw, bool& inCodeFence, bool stripInline = true) {
   MdLine result;
   const std::string trimmed = trimWhitespace(raw);
 
@@ -181,7 +184,8 @@ static MdLine parseMdLine(const std::string& raw, bool& inCodeFence) {
     while (level < trimmed.size() && trimmed[level] == '#') level++;
     if (level <= 6 && level < trimmed.size() && trimmed[level] == ' ') {
       result.style = EpdFontFamily::BOLD;
-      result.text = stripInlineMarkdown(trimWhitespace(trimmed.substr(level + 1)));
+      const std::string body = trimWhitespace(trimmed.substr(level + 1));
+      result.text = stripInline ? stripInlineMarkdown(body) : body;
       return result;
     }
   }
@@ -189,13 +193,15 @@ static MdLine parseMdLine(const std::string& raw, bool& inCodeFence) {
   // Bullet: "- ", "+ " (not "* " to avoid ambiguity with HRule before this check)
   if (trimmed.size() >= 2 && (trimmed[0] == '-' || trimmed[0] == '+') && trimmed[1] == ' ') {
     result.indentPixels = BULLET_INDENT;
-    result.text = "\xe2\x80\xa2 " + stripInlineMarkdown(trimWhitespace(trimmed.substr(2)));  // UTF-8 •
+    const std::string body = trimWhitespace(trimmed.substr(2));
+    result.text = "\xe2\x80\xa2 " + (stripInline ? stripInlineMarkdown(body) : body);  // UTF-8 •
     return result;
   }
   // Bullet: "* " (safe here since HRule "***" was already matched above)
   if (trimmed.size() >= 2 && trimmed[0] == '*' && trimmed[1] == ' ') {
     result.indentPixels = BULLET_INDENT;
-    result.text = "\xe2\x80\xa2 " + stripInlineMarkdown(trimWhitespace(trimmed.substr(2)));
+    const std::string body = trimWhitespace(trimmed.substr(2));
+    result.text = "\xe2\x80\xa2 " + (stripInline ? stripInlineMarkdown(body) : body);
     return result;
   }
 
@@ -205,7 +211,8 @@ static MdLine parseMdLine(const std::string& raw, bool& inCodeFence) {
     while (k < trimmed.size() && trimmed[k] >= '0' && trimmed[k] <= '9') k++;
     if (k < trimmed.size() && trimmed[k] == '.' && k + 1 < trimmed.size() && trimmed[k + 1] == ' ') {
       result.indentPixels = BULLET_INDENT;
-      result.text = trimmed.substr(0, k + 1) + " " + stripInlineMarkdown(trimWhitespace(trimmed.substr(k + 2)));
+      const std::string body = trimWhitespace(trimmed.substr(k + 2));
+      result.text = trimmed.substr(0, k + 1) + " " + (stripInline ? stripInlineMarkdown(body) : body);
       return result;
     }
   }
@@ -214,12 +221,13 @@ static MdLine parseMdLine(const std::string& raw, bool& inCodeFence) {
   if (trimmed.size() >= 2 && trimmed[0] == '>' && trimmed[1] == ' ') {
     result.style = EpdFontFamily::ITALIC;
     result.indentPixels = BULLET_INDENT;
-    result.text = stripInlineMarkdown(trimWhitespace(trimmed.substr(2)));
+    const std::string body = trimWhitespace(trimmed.substr(2));
+    result.text = stripInline ? stripInlineMarkdown(body) : body;
     return result;
   }
 
   // Normal paragraph text
-  result.text = stripInlineMarkdown(raw);
+  result.text = stripInline ? stripInlineMarkdown(raw) : raw;
   return result;
 }
 
@@ -368,7 +376,7 @@ void MdReaderActivity::buildPageIndex() {
   while (offset < fileSize) {
     std::vector<MdLine> tempLines;
     size_t nextOffset = offset;
-    if (!loadPageAtOffset(offset, tempLines, nextOffset, inCodeFence)) break;
+    if (!loadPageAtOffset(offset, tempLines, nextOffset, inCodeFence, false)) break;
     if (nextOffset <= offset) break;
 
     offset = nextOffset;
@@ -386,7 +394,7 @@ void MdReaderActivity::buildPageIndex() {
 // ── Page loading ──────────────────────────────────────────────────────────────
 
 bool MdReaderActivity::loadPageAtOffset(size_t offset, std::vector<MdLine>& outLines, size_t& nextOffset,
-                                        bool& inCodeFence) {
+                                        bool& inCodeFence, bool stripInline) {
   outLines.clear();
   const size_t fileSize = txt->getFileSize();
   if (offset >= fileSize) return false;
@@ -420,7 +428,7 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, std::vector<MdLine>& outL
     // Save fence state so we can restore it if this raw line doesn't fit on the current page
     const bool fenceBeforeLine = inCodeFence;
 
-    MdLine mdLine = parseMdLine(rawLine, inCodeFence);
+    MdLine mdLine = parseMdLine(rawLine, inCodeFence, stripInline);
 
     // Build word-wrapped sub-lines from this raw line
     std::vector<MdLine> subLines;

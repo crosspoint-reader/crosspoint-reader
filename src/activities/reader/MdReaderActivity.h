@@ -43,7 +43,8 @@ class MdReaderActivity final : public ActivityWithSubactivity {
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
 
   void initializeReader();
-  bool loadPageAtOffset(size_t offset, std::vector<MdLine>& outLines, size_t& nextOffset, bool& inCodeFence);
+  bool loadPageAtOffset(size_t offset, std::vector<MdLine>& outLines, size_t& nextOffset, bool& inCodeFence,
+                        bool stripInline = true);
   void buildPageIndex();
   bool loadPageIndexCache();
   void savePageIndexCache() const;
