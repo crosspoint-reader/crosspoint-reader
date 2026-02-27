@@ -195,6 +195,7 @@ class CrossPointSettings {
   // RSS feed sync settings (web-only)
   char feedUrl[256] = "";
   uint8_t feedNewsDays = 7;
+  uint8_t feedAllowFirmware = 0;  // 0=off, 1=on
 
   ~CrossPointSettings() = default;
 

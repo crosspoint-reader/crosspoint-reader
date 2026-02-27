@@ -404,6 +404,10 @@ void syncTask(void*) {
       LOG_DBG(TAG, "Downloaded %s → %s", type.c_str(), item.crosspointPath.c_str());
 
     } else if (type == "firmware") {
+      if (SETTINGS.feedAllowFirmware == 0) {
+        LOG_ERR(TAG, "Skipping firmware item '%s': firmware updates disabled in settings", item.guid.c_str());
+        continue;
+      }
       if (item.enclosureUrl.empty()) {
         LOG_DBG(TAG, "Skipping firmware item '%s': missing enclosure", item.guid.c_str());
         continue;

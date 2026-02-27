@@ -120,6 +120,7 @@ uint8_t CrossPointSettings::writeSettings(FsFile& file, bool count_only) const {
   writer.writeItem(file, embeddedStyle);
   writer.writeItemString(file, feedUrl);
   writer.writeItem(file, feedNewsDays);
+  writer.writeItem(file, feedAllowFirmware);
   // New fields need to be added at end for backward compatibility
 
   return writer.item_count;
@@ -269,6 +270,7 @@ bool CrossPointSettings::loadFromBinaryFile() {
     }
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, feedNewsDays);
+    serialization::readPod(inputFile, feedAllowFirmware);
     if (++settingsRead >= fileSettingsCount) break;
     // New fields added at end for backward compatibility
   } while (false);
