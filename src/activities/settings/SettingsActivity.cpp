@@ -67,16 +67,12 @@ void SettingsActivity::onEnter() {
 }
 
 void SettingsActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed
 }
 
 void SettingsActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
   bool hasChangedCategory = false;
 
   // Handle actions with early return
@@ -164,50 +160,38 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
   } else if (setting.type == SettingType::ACTION) {
-    auto enterSubActivity = [this](Activity* activity) {
-      exitActivity();
-      enterNewActivity(activity);
-    };
-
-    auto onComplete = [this] {
-      exitActivity();
-      requestUpdate();
-    };
-
-    auto onCompleteBool = [this](bool) {
-      exitActivity();
-      requestUpdate();
-    };
+    auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
-        enterSubActivity(new ButtonRemapActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CustomiseStatusBar:
-        enterSubActivity(new StatusBarSettingsActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::KOReaderSync:
-        enterSubActivity(new KOReaderSettingsActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::OPDSBrowser:
-        enterSubActivity(new CalibreSettingsActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(std::make_unique<CalibreSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Network:
-        enterSubActivity(new WifiSelectionActivity(renderer, mappedInput, onCompleteBool, false));
+        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
         break;
       case SettingAction::ClearCache:
-        enterSubActivity(new ClearCacheActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CheckForUpdates:
-        enterSubActivity(new OtaUpdateActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Language:
-        enterSubActivity(new LanguageSelectActivity(renderer, mappedInput, onComplete));
+        startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::None:
         // Do nothing
         break;
     }
+    return;  // Results will be handled in the result handler, so we can return early here
   } else {
     return;
   }
@@ -215,7 +199,7 @@ void SettingsActivity::toggleCurrentSetting() {
   SETTINGS.saveToFile();
 }
 
-void SettingsActivity::render(Activity::RenderLock&&) {
+void SettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
