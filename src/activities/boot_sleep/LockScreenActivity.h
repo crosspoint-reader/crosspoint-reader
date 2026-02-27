@@ -12,7 +12,7 @@ class LockScreenActivity final : public Activity {
 
   void onEnter() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   const std::function<void()> onUnlocked;

@@ -171,7 +171,7 @@ void LockSettingsActivity::handleConfirmInput(int pressed) {
   }
 }
 
-void LockSettingsActivity::render(Activity::RenderLock&&) {
+void LockSettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();

@@ -86,7 +86,7 @@ void LockScreenActivity::loop() {
   }
 }
 
-void LockScreenActivity::render(Activity::RenderLock&&) {
+void LockScreenActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
