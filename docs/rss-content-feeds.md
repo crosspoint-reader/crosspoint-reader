@@ -32,7 +32,7 @@ xmlns:crosspoint="https://crosspoint.example/ns"
 </item>
 ```
 
-- `<crosspoint:path>` — destination directory on SD card (e.g. `/Books/chip/`, `/Thought/`, `/trips/`)
+- `<crosspoint:path>` — destination directory on SD card (e.g. `/Books/fiction/`, `/Thought/`, `/trips/`)
 - `<enclosure url>` — direct download URL for the file
 - File is saved as `<path>/<filename from URL>`
 
@@ -121,8 +121,8 @@ FEED_URL = "http://localhost:8090"
 
 # Map file extensions to CrossPoint types and destination paths
 CONTENT_RULES = [
-    {"dir": "books/chip",    "ext": ".epub", "type": "file",  "path": "/Books/chip/"},
-    {"dir": "books/erotic",  "ext": ".epub", "type": "file",  "path": "/Books/erotic/"},
+    {"dir": "books/fiction", "ext": ".epub", "type": "file",  "path": "/Books/fiction/"},
+    {"dir": "books/other",   "ext": ".epub", "type": "file",  "path": "/Books/other/"},
     {"dir": "thought",       "ext": ".epub", "type": "file",  "path": "/Thought/"},
     {"dir": "trips",         "ext": ".epub", "type": "file",  "path": "/trips/"},
     {"dir": "sleep",         "ext": ".bmp",  "type": "image", "path": "/sleep/"},
@@ -225,8 +225,8 @@ if __name__ == "__main__":
 **Directory structure:**
 ```
 content/
-  books/chip/         ← Chip-written stories (.epub)
-  books/erotic/       ← AO3 downloads (.epub)
+  books/fiction/       ← Your own stories (.epub)
+  books/other/         ← Downloaded EPUBs (.epub)
   thought/            ← Thought leadership articles (.epub)
   trips/              ← Trip guides (.epub)
   sleep/              ← Sleep screen art (.bmp)
@@ -257,7 +257,7 @@ Read docs/rss-content-feeds.md for the full spec.
 
 Build a Python script that:
 1. Fetches today's top AI news from Hacker News (filter for AI/ML posts)
-2. Summarizes each story in 150 words using the Ollama API (model: deepseek-v3.2:cloud)
+2. Summarizes each story in 150 words using the Ollama API (model: your-preferred-model)
 3. Saves each story as a JSON file in content/news/ with today's date in the filename
 4. Fetches a random public domain artwork from Wikimedia Commons
 5. Converts it to a 480×800 greyscale BMP and saves to content/sleep/
@@ -270,7 +270,7 @@ Run this as a daily cron job at 6 AM.
 
 OpenClaw (Chip) already runs several crons that generate content and can push it to the feed automatically:
 
-- **Daily erotic story** (4 AM) → generates `.md` → convert to EPUB → drop in `content/books/chip/`
+- **Daily story generator** → generates `.md` → convert to EPUB → drop in `content/books/fiction/`
 - **Daily art** (9 AM) → fetches Wikimedia art → converts to BMP → drop in `content/sleep/`
 - **Daily AI digest** (6:30 AM) → summarizes AI news → save as JSON → drop in `content/news/`
 - **Daily trip suggestion** (6 AM) → generates trip guide → convert to EPUB → drop in `content/trips/`

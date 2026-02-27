@@ -15,8 +15,8 @@ I want to contribute to the CrossPoint Reader firmware project.
 Read docs/development-workflow.md for context, then:
 
 1. Install PlatformIO CLI if not already present (pip install platformio)
-2. Clone the repo: https://github.com/laird/crosspoint-reader-laird
-   (or use the fork: https://github.com/laird/crosspoint-reader-laird)
+2. Clone the repo: https://github.com/YOUR_USERNAME/crosspoint-reader
+   (or use the fork: https://github.com/YOUR_USERNAME/crosspoint-reader)
 3. Initialize git submodules (open-x4-sdk is required)
 4. Run a full build with `pio run` and confirm it succeeds
 5. Report the firmware size (RAM % and Flash % used)
@@ -40,8 +40,8 @@ Claude Code will handle the install, clone, submodule init, and build end-to-end
 ### Clone and Build
 
 ```bash
-git clone https://github.com/laird/crosspoint-reader-laird.git
-cd crosspoint-reader-laird
+git clone https://github.com/YOUR_USERNAME/crosspoint-reader.git
+cd crosspoint-reader
 git submodule update --init --recursive
 
 # Build firmware
@@ -62,8 +62,8 @@ pio run
 # Find your SD card mount point (it changes every reconnect!)
 lsblk -rno NAME,MOUNTPOINT | grep -v "^$"
 
-# Copy firmware (replace /media/laird/SDCARD with your actual mount point)
-SDCARD=/media/laird/SDCARD
+# Copy firmware (replace /media/YOUR_USER/SDCARD with your actual mount point)
+SDCARD=/media/YOUR_USER/SDCARD
 cp .pio/build/default/firmware.bin "$SDCARD/firmware.bin"
 ls -lh "$SDCARD/firmware.bin"   # verify it landed
 udisksctl unmount -b /dev/sdX   # eject safely
@@ -89,7 +89,7 @@ The RSS sync module logs all activity to Serial in real time:
 ```
 [RssFeedSync] Starting sync from https://example.com/feed.xml
 [RssFeedSync] Fetched feed (HTTP 200, 4321 bytes)
-[RssFeedSync] Item: guid=abc123 type=file path=/Books/erotic/ → downloading...
+[RssFeedSync] Item: guid=abc123 type=file path=/Books/fiction/ → downloading...
 [RssFeedSync] ✓ Downloaded: story-title.epub (45.2KB)
 [RssFeedSync] Item: guid=def456 type=news → updating News.md
 [RssFeedSync] Sync complete: 3 downloaded, 2 skipped, 0 errors
@@ -107,7 +107,7 @@ When the device connects to a non-hotspot WiFi network, it automatically checks 
 
 | Type | Description | Destination |
 |------|-------------|-------------|
-| `file` | EPUB, Markdown, or any document | Specified path (e.g. `/Books/erotic/`) |
+| `file` | EPUB, Markdown, or any document | Specified path (e.g. `/Books/fiction/`) |
 | `image` | BMP sleep screen art | `/sleep/` |
 | `news` | News stories | Aggregated into `/News.md` (newest first) |
 | `firmware` | Firmware binary | `/firmware.bin` → OTA on next boot |
@@ -130,7 +130,7 @@ Every sync run appends to `/.crosspoint/feed-sync.log` on the SD card. This is y
 ```
 2026-02-27T12:00:01Z [INFO] Sync started. Feed: https://example.com/...xml
 2026-02-27T12:00:02Z [INFO] HTTP 200, 3421 bytes received
-2026-02-27T12:00:02Z [INFO] guid=abc123 type=file → /Books/chip/story.epub → OK (45.2KB)
+2026-02-27T12:00:02Z [INFO] guid=abc123 type=file → /Books/fiction/story.epub → OK (45.2KB)
 2026-02-27T12:00:03Z [INFO] guid=def456 type=news → News.md → OK
 2026-02-27T12:00:03Z [SKIP] guid=ghi789 already seen
 2026-02-27T12:00:03Z [INFO] Sync complete: 2 downloaded, 1 skipped, 0 errors
@@ -157,7 +157,7 @@ The simplest possible OTA setup is a static file on a web server. Python's built
 
 **Step 1: Build firmware**
 ```bash
-cd crosspoint-reader-laird
+cd crosspoint-reader
 pio run
 cp .pio/build/default/firmware.bin /var/www/crosspoint/firmware.bin
 ```
