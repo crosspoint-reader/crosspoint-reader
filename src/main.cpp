@@ -239,8 +239,8 @@ void setupDisplayAndFonts() {
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
   renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
+  renderer.insertFont(PULSR_10_FONT_ID, ui10FontFamily);
+  renderer.insertFont(PULSR_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
   renderer.insertFont(PULSR_10_FONT_ID, pulsr10FontFamily);
   renderer.insertFont(PULSR_12_FONT_ID, pulsr12FontFamily);
@@ -315,7 +315,7 @@ void setup() {
 
     auto drawUpdateScreen = [&](int pct) {
       renderer.clearScreen();
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Updating firmware...", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 20, "Updating firmware...", true, EpdFontFamily::BOLD);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 10, "Do not power off");
       renderer.drawRect(barX, barY, barW, barH, true);
       if (pct > 0) {
@@ -353,7 +353,7 @@ void setup() {
     auto showError = [&](const char* msg, size_t fileSize = 0, size_t written = 0) {
       const bool logged = logOtaError(msg, fileSize, written);
       renderer.clearScreen();
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 30, "Firmware update failed", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 30, "Firmware update failed", true, EpdFontFamily::BOLD);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2, msg);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 20, "firmware.bin NOT deleted");
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 38,

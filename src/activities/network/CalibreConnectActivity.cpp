@@ -175,20 +175,20 @@ void CalibreConnectActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CALIBRE_WIRELESS));
-  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto height = renderer.getLineHeight(PULSR_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
   if (state == CalibreConnectState::SERVER_STARTING) {
-    renderer.drawCenteredText(UI_12_FONT_ID, top, tr(STR_CALIBRE_STARTING));
+    renderer.drawCenteredText(PULSR_12_FONT_ID, top, tr(STR_CALIBRE_STARTING));
   } else if (state == CalibreConnectState::ERROR) {
-    renderer.drawCenteredText(UI_12_FONT_ID, top, tr(STR_CONNECTION_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(PULSR_12_FONT_ID, top, tr(STR_CONNECTION_FAILED), true, EpdFontFamily::BOLD);
   } else if (state == CalibreConnectState::SERVER_RUNNING) {
     GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
                       connectedSSID.c_str(), (std::string(tr(STR_IP_ADDRESS_PREFIX)) + connectedIP).c_str());
 
     int y = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 4;
-    const auto heightText12 = renderer.getTextHeight(UI_12_FONT_ID);
-    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_SETUP), true, EpdFontFamily::BOLD);
+    const auto heightText12 = renderer.getTextHeight(PULSR_12_FONT_ID);
+    renderer.drawText(PULSR_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_SETUP), true, EpdFontFamily::BOLD);
     y += heightText12 + metrics.verticalSpacing * 2;
 
     renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_INSTRUCTION_1));
@@ -197,7 +197,7 @@ void CalibreConnectActivity::render(RenderLock&&) {
     renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y + height * 3, tr(STR_CALIBRE_INSTRUCTION_4));
 
     y += height * 3 + metrics.verticalSpacing * 4;
-    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_STATUS), true, EpdFontFamily::BOLD);
+    renderer.drawText(PULSR_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_STATUS), true, EpdFontFamily::BOLD);
     y += heightText12 + metrics.verticalSpacing * 2;
 
     if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {

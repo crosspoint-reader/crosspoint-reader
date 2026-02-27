@@ -393,5 +393,16 @@ int CrossPointSettings::getReaderFontId() const {
         case EXTRA_LARGE:
           return OPENDYSLEXIC_14_FONT_ID;
       }
+    case PULSR_FONT:
+      // PULSR font only has 10 and 12 sizes; map all sizes to closest available
+      switch (fontSize) {
+        case SMALL:
+        case MEDIUM:
+        default:
+          return PULSR_10_FONT_ID;
+        case LARGE:
+        case EXTRA_LARGE:
+          return PULSR_12_FONT_ID;
+      }
   }
 }

@@ -414,9 +414,9 @@ void CrossPointWebServerActivity::render(RenderLock&&) {
                         connectedSSID.c_str());
       renderServerRunning();
     } else {
-      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const auto height = renderer.getLineHeight(PULSR_10_FONT_ID);
       const auto top = (pageHeight - height) / 2;
-      renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_STARTING_HOTSPOT));
+      renderer.drawCenteredText(PULSR_10_FONT_ID, top, tr(STR_STARTING_HOTSPOT));
     }
     renderer.displayBuffer();
   }
@@ -468,7 +468,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
                     connectedSSID.c_str());
 
   int startY = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
-  int height10 = renderer.getLineHeight(UI_10_FONT_ID);
+  int height10 = renderer.getLineHeight(PULSR_10_FONT_ID);
   // Center QR codes and text within the content area (to the right of any left bar)
   const int contentLeft = metrics.contentSidePadding;
   const int contentW    = pageWidth - contentLeft;
@@ -510,7 +510,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     // AP mode: two QR codes stacked vertically, text centered below each.
 
     // ── Section 1: WiFi connection ───────────────────────────────────────────
-    startY += drawCenteredWrapped(UI_10_FONT_ID, startY, tr(STR_CONNECT_WIFI_HINT), true, EpdFontFamily::BOLD);
+    startY += drawCenteredWrapped(PULSR_10_FONT_ID, startY, tr(STR_CONNECT_WIFI_HINT), true, EpdFontFamily::BOLD);
     startY += metrics.verticalSpacing;
 
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
@@ -519,11 +519,11 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     drawQRCode(renderer, qrX, startY, wifiConfig);
     startY += QR_CODE_HEIGHT + metrics.verticalSpacing;
 
-    startY += drawCenteredWrapped(UI_10_FONT_ID, startY, connectedSSID.c_str(), true);
+    startY += drawCenteredWrapped(PULSR_10_FONT_ID, startY, connectedSSID.c_str(), true);
     startY += metrics.verticalSpacing * 3;
 
     // ── Section 2: Web URL ───────────────────────────────────────────────────
-    startY += drawCenteredWrapped(UI_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
+    startY += drawCenteredWrapped(PULSR_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
     startY += metrics.verticalSpacing;
 
     std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
@@ -535,9 +535,9 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     drawQRCode(renderer, qrX, startY, hostnameUrl);
     startY += QR_CODE_HEIGHT + metrics.verticalSpacing;
 
-    startY += drawCenteredWrapped(UI_12_FONT_ID, startY, hostnameUrl.c_str(), true);
+    startY += drawCenteredWrapped(PULSR_12_FONT_ID, startY, hostnameUrl.c_str(), true);
     startY += metrics.verticalSpacing;
-    startY += drawCenteredWrapped(UI_10_FONT_ID, startY, ipUrl.c_str(), true);
+    startY += drawCenteredWrapped(PULSR_10_FONT_ID, startY, ipUrl.c_str(), true);
     startY += metrics.verticalSpacing;
 
     // Completed uploads list (oldest first), left-justified in PULSR font
@@ -555,8 +555,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     startY += metrics.verticalSpacing * 2;
 
     // STA mode: one QR code centered in the content area.
-    startY += drawCenteredWrapped(UI_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
-    startY += drawCenteredWrapped(UI_10_FONT_ID, startY, tr(STR_SCAN_QR_HINT), true, EpdFontFamily::BOLD);
+    startY += drawCenteredWrapped(PULSR_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
+    startY += drawCenteredWrapped(PULSR_10_FONT_ID, startY, tr(STR_SCAN_QR_HINT), true, EpdFontFamily::BOLD);
     startY += metrics.verticalSpacing * 2;
 
     std::string webInfo = "http://" + connectedIP + "/";
@@ -566,10 +566,10 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     drawQRCode(renderer, qrX, startY, webInfo);
     startY += QR_CODE_HEIGHT + metrics.verticalSpacing;
 
-    startY += drawCenteredWrapped(UI_12_FONT_ID, startY, webInfo.c_str(), true);
+    startY += drawCenteredWrapped(PULSR_12_FONT_ID, startY, webInfo.c_str(), true);
     startY += metrics.verticalSpacing;
     std::string hostnameUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
-    startY += drawCenteredWrapped(UI_10_FONT_ID, startY, hostnameUrl.c_str(), true);
+    startY += drawCenteredWrapped(PULSR_10_FONT_ID, startY, hostnameUrl.c_str(), true);
     startY += metrics.verticalSpacing;
 
     // Completed uploads list (oldest first), left-justified in PULSR font
