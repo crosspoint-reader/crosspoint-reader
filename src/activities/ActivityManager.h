@@ -49,6 +49,10 @@ class ActivityManager {
   static void renderTaskTrampoline(void* param);
   [[noreturn]] virtual void renderTaskLoop();
 
+  // Set by requestUpdateAndWait(); read and cleared by the render task after render completes.
+  // Note: only one waiting task is supported at a time
+  TaskHandle_t waitingTaskHandle = nullptr;
+
   // Whether to trigger a render after the current loop()
   // This variable must only be set by the main loop, to avoid race conditions
   bool requestedUpdate = false;
@@ -97,6 +101,10 @@ class ActivityManager {
   // If immediate is true, the update will be triggered immediately.
   // Otherwise, it will be deferred until the end of the current loop iteration.
   void requestUpdate(bool immediate = false);
+
+  // Trigger a render and block until it completes.
+  // Must NOT be called from the render task or while holding a RenderLock.
+  void requestUpdateAndWait();
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp

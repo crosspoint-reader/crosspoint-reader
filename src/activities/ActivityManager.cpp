@@ -38,6 +38,11 @@ void ActivityManager::renderTaskLoop() {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       currentActivity->render(std::move(lock));
     }
+    // Notify any task blocked in requestUpdateAndWait() that the render is done.
+    if (waitingTaskHandle) {
+      xTaskNotify(waitingTaskHandle, 1, eIncrement);
+      waitingTaskHandle = nullptr;
+    }
   }
 }
 
@@ -225,6 +230,19 @@ void ActivityManager::requestUpdate(bool immediate) {
     requestedUpdate = true;
   }
 }
+void ActivityManager::requestUpdateAndWait() {
+  if (!renderTaskHandle) {
+    return;
+  }
+  // There should never be the case where 2 tasks are waiting for a render at the same time
+  assert(!waitingTaskHandle && "Already waiting for a render to complete");
+  // Render task cannot call requestUpdateAndWait() or it will cause a deadlock
+  assert(xTaskGetCurrentTaskHandle() != renderTaskHandle && "Render task cannot call requestUpdateAndWait()");
+  waitingTaskHandle = xTaskGetCurrentTaskHandle();
+  xTaskNotify(renderTaskHandle, 1, eIncrement);
+  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+}
+
 // RenderLock
 
 RenderLock::RenderLock() {
