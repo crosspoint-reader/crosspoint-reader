@@ -139,10 +139,11 @@ void OpdsBookBrowserActivity::loop() {
 void OpdsBookBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
+  const auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  renderer.drawCenteredText(PULSR_12_FONT_ID, 15, tr(STR_OPDS_BROWSER), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_OPDS_BROWSER));
 
   if (state == BrowserState::CHECK_WIFI) {
     renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2, statusMessage.c_str());

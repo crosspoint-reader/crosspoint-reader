@@ -438,6 +438,7 @@ void syncTask(void*) {
 
   LOG_DBG(TAG, "Feed sync complete");
   syncTaskHandle = nullptr;
+  s_feedActive = false;
   vTaskDelete(nullptr);
 }
 

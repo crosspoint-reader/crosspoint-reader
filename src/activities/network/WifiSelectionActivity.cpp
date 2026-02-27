@@ -555,6 +555,8 @@ void WifiSelectionActivity::renderConnecting() const {
 
   if (state == WifiSelectionState::SCANNING) {
     renderer.drawCenteredText(PULSR_10_FONT_ID, top, tr(STR_SCANNING));
+    const auto scanLabels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, scanLabels.btn1, scanLabels.btn2, scanLabels.btn3, scanLabels.btn4);
   } else {
     renderer.drawCenteredText(PULSR_12_FONT_ID, top - 40, tr(STR_CONNECTING), true, EpdFontFamily::BOLD);
 
