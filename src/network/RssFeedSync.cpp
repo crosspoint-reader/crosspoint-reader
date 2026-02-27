@@ -464,7 +464,7 @@ void syncTask(void*) {
     setState(RssFeedSync::State::PARSING);
     if (!HttpDownloader::fetchUrl(feedUrl, stream)) {
       LOG_ERR(TAG, "Failed to fetch feed: %s", feedUrl.c_str());
-      { char _b[320]; snprintf(_b, sizeof(_b), "ERROR: Failed to fetch feed URL: %s", feedUrl.c_str()); logToFile("ERR", _b); }
+      { char _b[320]; snprintf(_b, sizeof(_b), "FETCH FAILED url=%s heap=%lu", feedUrl.c_str(), (unsigned long)ESP.getFreeHeap()); logToFile("ERR", _b); }
       setState(RssFeedSync::State::ERROR);
       syncTaskHandle = nullptr;
       vTaskDelete(nullptr);

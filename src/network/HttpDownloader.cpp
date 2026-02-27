@@ -78,6 +78,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   }
 
   const int httpCode = http.GET();
+  LOG_DBG("HTTP", "HTTP response code: %d for %s", httpCode, url.c_str());
   if (httpCode != HTTP_CODE_OK) {
     LOG_ERR("HTTP", "Fetch failed with code: %d for URL: %s", httpCode, url.c_str());
     http.end();
