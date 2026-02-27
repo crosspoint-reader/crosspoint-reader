@@ -3,6 +3,11 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <string>
+#include <vector>
+
+#include "BookmarkStore.h"
+#include "ClippingStore.h"
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
 
@@ -21,6 +26,13 @@ class EpubReaderActivity final : public Activity {
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
+  std::string statusBarOverride;     // Temporary override text (e.g. "Passage saved"), cleared on page turn
+  // Capture state machine
+  enum class CaptureState { IDLE, CAPTURING };
+  CaptureState captureState = CaptureState::IDLE;
+  std::vector<CapturedPage> captureBuffer;
+  bool pendingCaptureAfterRender = false;      // Capture deferred until section loads after boundary crossing
+  std::vector<ClippingEntry> cachedClippings;  // Cached clipping index for sidebar indicator
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -40,6 +52,13 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+
+  // Capture helpers
+  void captureCurrentPage();
+  void startCapture();
+  void stopCapture();
+  void cancelCapture();
+  void addBookmark();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

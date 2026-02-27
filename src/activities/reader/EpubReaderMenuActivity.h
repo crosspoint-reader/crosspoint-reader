@@ -13,6 +13,9 @@ class EpubReaderMenuActivity final : public Activity {
   // Menu actions available from the reader menu.
   enum class MenuAction {
     SELECT_CHAPTER,
+    BOOKMARKS,
+    CLIPPINGS,
+    CAPTURE,
     FOOTNOTES,
     GO_TO_PERCENT,
     ROTATE_SCREEN,
