@@ -157,12 +157,17 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   }
 
   // Let HTTPClient handle chunked decoding and stream body bytes into the file.
-  const size_t total = contentLength > 0 ? contentLength : 0;
-  FileWriteStream fileStream(file, total, progress);
-  http.writeToStream(&fileStream);
+  FileWriteStream fileStream(file, contentLength, progress);
+  const int writeResult = http.writeToStream(&fileStream);
 
   file.close();
   http.end();
+
+  if (writeResult < 0) {
+    LOG_ERR("HTTP", "writeToStream error: %d", writeResult);
+    Storage.remove(destPath.c_str());
+    return HTTP_ERROR;
+  }
 
   const size_t downloaded = fileStream.downloaded();
   LOG_DBG("HTTP", "Downloaded %zu bytes", downloaded);
