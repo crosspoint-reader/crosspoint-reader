@@ -23,6 +23,7 @@ class UITheme {
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(std::string filename);
   static int getStatusBarHeight();
+  static int getProgressBarHeight();
 
  private:
   const ThemeMetrics* currentMetrics;

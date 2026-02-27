@@ -11,7 +11,6 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
-#include "RenderLock.h"
 
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
@@ -31,6 +30,8 @@ class RenderLock;  // forward declaration
  * - onActivityResult is implemented via a callback instead of a separate method, for simplicity
  */
 class ActivityManager {
+  friend class RenderLock;
+
  protected:
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
@@ -53,6 +54,10 @@ class ActivityManager {
   // Note: only one waiting task is supported at a time
   TaskHandle_t waitingTaskHandle = nullptr;
 
+  // Mutex to protect rendering operations from race conditions
+  // Must only be used via RenderLock
+  SemaphoreHandle_t renderingMutex = nullptr;
+
   // Whether to trigger a render after the current loop()
   // This variable must only be set by the main loop, to avoid race conditions
   bool requestedUpdate = false;
@@ -64,10 +69,6 @@ class ActivityManager {
     stackActivities.reserve(10);
   }
   ~ActivityManager() { assert(false); /* should never be called */ };
-
-  // Mutex to protect rendering operations from race conditions
-  // Must only be used via RenderLock
-  SemaphoreHandle_t renderingMutex = nullptr;
 
   void begin();
   void loop();
