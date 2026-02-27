@@ -53,8 +53,8 @@ void ConfirmationActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     ActivityResult res;
     res.isCancelled = false;
-    this->setResult(std::move(res));
-    this->finish();
+    setResult(std::move(res));
+    finish();
     return;
   }
 
