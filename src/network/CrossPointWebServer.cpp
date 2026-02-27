@@ -1087,8 +1087,8 @@ void CrossPointWebServer::handleGetSettings() const {
         doc["type"] = "string";
         if (s.stringGetter) {
           doc["value"] = s.stringGetter();
-        } else if (s.stringPtr) {
-          doc["value"] = s.stringPtr;
+        } else if (s.stringOffset > 0) {
+          doc["value"] = reinterpret_cast<const char*>(&SETTINGS) + s.stringOffset;
         }
         break;
       }
@@ -1171,9 +1171,10 @@ void CrossPointWebServer::handlePostSettings() {
         const std::string val = doc[s.key].as<std::string>();
         if (s.stringSetter) {
           s.stringSetter(val);
-        } else if (s.stringPtr && s.stringMaxLen > 0) {
-          strncpy(s.stringPtr, val.c_str(), s.stringMaxLen - 1);
-          s.stringPtr[s.stringMaxLen - 1] = '\0';
+        } else if (s.stringOffset > 0 && s.stringMaxLen > 0) {
+          char* ptr = reinterpret_cast<char*>(&SETTINGS) + s.stringOffset;
+          strncpy(ptr, val.c_str(), s.stringMaxLen - 1);
+          ptr[s.stringMaxLen - 1] = '\0';
         }
         applied++;
         break;

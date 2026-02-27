@@ -9,7 +9,6 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
-
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
 enum class SettingAction {

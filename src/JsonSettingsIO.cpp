@@ -137,6 +137,12 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
 
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
 
+  // Legacy migration: if statusBarChapterPageCount is absent this is a pre-refactor settings file.
+  // Populate s with migrated values now so the generic loop below picks them up as defaults and clamps them.
+  if (doc["statusBarChapterPageCount"].isNull()) {
+    applyLegacyStatusBarSettings(s);
+  }
+
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
@@ -195,18 +201,6 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   CrossPointSettings::validateFrontButtonMapping(s);
 
   LOG_DBG("CPS", "Settings loaded from file");
-
-  if (!doc["statusBarChapterPageCount"].isNull()) {
-    s.statusBarChapterPageCount = doc["statusBarChapterPageCount"];
-    s.statusBarBookProgressPercentage = doc["statusBarBookProgressPercentage"];
-    s.statusBarProgressBar = doc["statusBarProgressBar"];
-    s.statusBarTitle = doc["statusBarTitle"];
-    s.statusBarBattery = doc["statusBarBattery"];
-  } else {
-    applyLegacyStatusBarSettings(s);
-  }
-
-  s.statusBarProgressBarThickness = doc["statusBarProgressBarThickness"] | (uint8_t)S::PROGRESS_BAR_NORMAL;
 
   return true;
 }
