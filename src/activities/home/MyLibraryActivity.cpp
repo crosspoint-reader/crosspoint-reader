@@ -104,7 +104,7 @@ void MyLibraryActivity::loadFiles() {
 }
 
 void MyLibraryActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   loadFiles();
   selectorIndex = 0;
@@ -113,7 +113,7 @@ void MyLibraryActivity::onEnter() {
 }
 
 void MyLibraryActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
   files.clear();
 }
 
@@ -126,17 +126,6 @@ void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
 }
 
 void MyLibraryActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    // Check the flag AFTER the subActivity loop returns safely
-    if (pendingSubActivityExit) {
-      this->exitActivity();
-      pendingSubActivityExit = false;
-      requestUpdate();
-    }
-    return;
-  }
-
   // Long press BACK (1s+) goes to root folder
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
       basepath != "/") {
@@ -154,48 +143,46 @@ void MyLibraryActivity::loop() {
     const std::string& entry = files[selectorIndex];
     bool isDirectory = (entry.back() == '/');
 
-    // Check if this was a long press AND not a directory
     if (mappedInput.getHeldTime() >= GO_HOME_MS && !isDirectory) {
       // --- LONG PRESS ACTION: DELETE FILE ---
       std::string cleanBasePath = basepath;
       if (cleanBasePath.back() != '/') cleanBasePath += "/";
       const std::string fullPath = cleanBasePath + entry;
 
-      auto onConfirmDelete = [this, fullPath](bool confirmed) {
-        if (confirmed) {
-          RenderLock lock(*this);
+      auto handler = [this, fullPath](const ActivityResult& res) {
+        if (!res.isCancelled) {
           LOG_DBG("MyLibrary", "Attempting to delete: %s", fullPath.c_str());
           clearFileMetadata(fullPath);
+
           if (Storage.remove(fullPath.c_str())) {
-            loadFiles();
-            if (selectorIndex >= files.size() && !files.empty()) {
-              selectorIndex = files.size() - 1;
-            } else if (files.empty()) {
-              selectorIndex = 0;
-            }
+            LOG_DBG("MyLibrary", "Deleted successfully");
+            // refresh the file list
+            this->loadFiles();
+            this->requestUpdate(true);
           } else {
             LOG_ERR("MyLibrary", "Failed to delete file: %s", fullPath.c_str());
           }
+        } else {
+          LOG_DBG("MyLibrary", "Delete cancelled by user");
         }
-        this->pendingSubActivityExit = true;
-        this->requestUpdate();
       };
+
       std::string heading = tr(STR_DELETE) + std::string("? ");
-      enterNewActivity(new ConfirmationActivity(renderer, mappedInput, heading, entry, onConfirmDelete));
+
+      this->startActivityForResult(
+          std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry, [](bool) {}), handler);
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
       if (basepath.back() != '/') basepath += "/";
 
       if (isDirectory) {
-        // Navigate into folder (strip the trailing '/' for the path concatenation)
         basepath += entry.substr(0, entry.length() - 1);
         loadFiles();
         selectorIndex = 0;
-        requestUpdate();
+        this->requestUpdate();
       } else {
-        // Open the book
-        onSelectBook(basepath + entry);
+        this->onSelectBook(basepath + entry);
       }
     }
     return;

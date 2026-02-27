@@ -50,17 +50,19 @@ void ConfirmationActivity::onEnter() {
 }
 
 void ConfirmationActivity::loop() {
-  // If we've already flagged for exit, don't process further
-  if (isFinished) return;
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    resultValue = true;
-    isFinished = true;
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    resultValue = false;
-    isFinished = true;
+    ActivityResult res;
+    res.isCancelled = false;
+    this->setResult(std::move(res));
+    this->finish();
+    return;
   }
-  if (isFinished && onResult) {
-    onResult(resultValue);
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    ActivityResult res;
+    res.isCancelled = true;
+    this->setResult(std::move(res));
+    this->finish();
+    return;
   }
 }

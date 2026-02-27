@@ -5,11 +5,11 @@
 #include <string>
 #include <vector>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "RecentBooksStore.h"
 #include "util/ButtonNavigator.h"
 
-class MyLibraryActivity final : public ActivityWithSubactivity {
+class MyLibraryActivity final : public Activity {
  private:
   // Deletion
   bool pendingSubActivityExit = false;
