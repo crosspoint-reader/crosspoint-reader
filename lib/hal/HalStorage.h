@@ -98,7 +98,7 @@ class HalFile : public Print {
 // The renaming is to allow using the thread-safe HalFile instead of the raw FsFile, without needing to change the
 // downstream code
 #ifndef HAL_STORAGE_IMPL
-#define FsFile HalFile
+using FsFile = HalFile;
 #endif
 
 // Downstream code must use Storage instead of SdMan
