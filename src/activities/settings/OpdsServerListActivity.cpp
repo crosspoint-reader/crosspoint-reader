@@ -6,20 +6,22 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "OpdsSettingsActivity.h"
+#include "activities/ActivityManager.h"
+#include "activities/browser/OpdsBookBrowserActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
   // In settings mode, append a virtual "Add Server" item; in picker mode, only show real servers
-  if (!isPickerMode()) {
+  if (!pickerMode) {
     count++;
   }
   return count;
 }
 
 void OpdsServerListActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   // Reload from disk in case servers were added/removed by a subactivity or the web UI
   OPDS_STORE.loadFromFile();
@@ -27,16 +29,15 @@ void OpdsServerListActivity::onEnter() {
   requestUpdate();
 }
 
-void OpdsServerListActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void OpdsServerListActivity::onExit() { Activity::onExit(); }
 
 void OpdsServerListActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onBack();
+    if (pickerMode) {
+      activityManager.goHome();
+    } else {
+      finish();
+    }
     return;
   }
 
@@ -62,31 +63,33 @@ void OpdsServerListActivity::loop() {
 void OpdsServerListActivity::handleSelection() {
   const auto serverCount = static_cast<int>(OPDS_STORE.getCount());
 
-  if (isPickerMode()) {
-    // Picker mode: selecting a server triggers the callback instead of opening the editor
+  if (pickerMode) {
+    // Picker mode: selecting a server navigates to the OPDS browser
     if (selectedIndex < serverCount) {
-      onServerSelected(static_cast<size_t>(selectedIndex));
+      const auto* server = OPDS_STORE.getServer(static_cast<size_t>(selectedIndex));
+      if (server) {
+        activityManager.replaceActivity(
+            std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
+      }
     }
     return;
   }
 
   // Settings mode: open editor for selected server, or create a new one
-  auto onEditDone = [this] {
-    exitActivity();
+  auto resultHandler = [this](const ActivityResult&) {
+    // Reload server list when returning from editor
+    OPDS_STORE.loadFromFile();
     selectedIndex = 0;
-    requestUpdate();
   };
 
   if (selectedIndex < serverCount) {
-    exitActivity();
-    enterNewActivity(new OpdsSettingsActivity(renderer, mappedInput, onEditDone, selectedIndex));
+    startActivityForResult(std::make_unique<OpdsSettingsActivity>(renderer, mappedInput, selectedIndex), resultHandler);
   } else {
-    exitActivity();
-    enterNewActivity(new OpdsSettingsActivity(renderer, mappedInput, onEditDone, -1));
+    startActivityForResult(std::make_unique<OpdsSettingsActivity>(renderer, mappedInput, -1), resultHandler);
   }
 }
 
-void OpdsServerListActivity::render(Activity::RenderLock&&) {
+void OpdsServerListActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();

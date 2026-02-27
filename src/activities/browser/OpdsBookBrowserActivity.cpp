@@ -20,7 +20,7 @@ constexpr int PAGE_ITEMS = 23;
 }  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   state = BrowserState::CHECK_WIFI;
   entries.clear();
@@ -36,7 +36,7 @@ void OpdsBookBrowserActivity::onEnter() {
 }
 
 void OpdsBookBrowserActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Turn off WiFi when exiting
   WiFi.mode(WIFI_OFF);
@@ -48,7 +48,7 @@ void OpdsBookBrowserActivity::onExit() {
 void OpdsBookBrowserActivity::loop() {
   // Handle WiFi selection subactivity
   if (state == BrowserState::WIFI_SELECTION) {
-    ActivityWithSubactivity::loop();
+    // Should already handled by the WifiSelectionActivity
     return;
   }
 
@@ -135,7 +135,7 @@ void OpdsBookBrowserActivity::loop() {
   }
 }
 
-void OpdsBookBrowserActivity::render(Activity::RenderLock&&) {
+void OpdsBookBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -279,7 +279,7 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   statusMessage = tr(STR_LOADING);
   entries.clear();
   selectorIndex = 0;
-  requestUpdate();
+  requestUpdate(true);  // Force update to show loading state immediately before fetch
 
   fetchFeed(currentPath);
 }
@@ -308,7 +308,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   statusMessage = book.title;
   downloadProgress = 0;
   downloadTotal = 0;
-  requestUpdate();
+  requestUpdate(true);
 
   // Build full download URL
   std::string downloadUrl = UrlUtils::buildUrl(server.url, book.href);
@@ -327,7 +327,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       [this](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
-        requestUpdate();
+        requestUpdate(true);  // Force update to refresh progress bar
       },
       server.username, server.password);
 
@@ -366,18 +366,16 @@ void OpdsBookBrowserActivity::launchWifiSelection() {
   state = BrowserState::WIFI_SELECTION;
   requestUpdate();
 
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
 void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
-  exitActivity();
-
   if (connected) {
     LOG_DBG("OPDS", "WiFi connected via selection, fetching feed");
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
-    requestUpdate();
+    requestUpdate(true);  // Force update to show loading state immediately before fetch
     fetchFeed(currentPath);
   } else {
     LOG_DBG("OPDS", "WiFi selection cancelled/failed");
@@ -387,6 +385,5 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     WiFi.mode(WIFI_OFF);
     state = BrowserState::ERROR;
     errorMessage = tr(STR_WIFI_CONN_FAILED);
-    requestUpdate();
   }
 }

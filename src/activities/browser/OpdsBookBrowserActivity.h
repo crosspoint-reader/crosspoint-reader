@@ -1,11 +1,11 @@
 #pragma once
 #include <OpdsParser.h>
 
-#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "OpdsServerStore.h"
 #include "util/ButtonNavigator.h"
 
@@ -14,7 +14,7 @@
  * Supports navigation through catalog hierarchy and downloading EPUBs.
  * When WiFi connection fails, launches WiFi selection to let user connect.
  */
-class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
+class OpdsBookBrowserActivity final : public Activity {
  public:
   enum class BrowserState {
     CHECK_WIFI,      // Checking WiFi connection
@@ -25,14 +25,13 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
     ERROR            // Error state with message
   };
 
-  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                   const std::function<void()>& onGoHome, const OpdsServer& server)
-      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome), server(server) {}
+  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server)
+      : Activity("OpdsBookBrowser", renderer, mappedInput), server(std::move(server)) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   ButtonNavigator buttonNavigator;
@@ -46,7 +45,6 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
 
-  const std::function<void()> onGoHome;
   OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
 
   void checkAndConnectWifi();

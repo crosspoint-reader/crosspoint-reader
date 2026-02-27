@@ -22,7 +22,7 @@ int OpdsSettingsActivity::getMenuItemCount() const {
 }
 
 void OpdsSettingsActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   selectedIndex = 0;
   isNewServer = (serverIndex < 0);
@@ -41,16 +41,11 @@ void OpdsSettingsActivity::onEnter() {
   requestUpdate();
 }
 
-void OpdsSettingsActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void OpdsSettingsActivity::onExit() { Activity::onExit(); }
 
 void OpdsSettingsActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onBack();
+    finish();
     return;
   }
 
@@ -86,72 +81,63 @@ void OpdsSettingsActivity::saveServer() {
 void OpdsSettingsActivity::handleSelection() {
   if (selectedIndex == 0) {
     // Server Name
-    exitActivity();
-    enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_SERVER_NAME), editServer.name, 63, false,
-        [this](const std::string& name) {
-          editServer.name = name;
-          saveServer();
-          exitActivity();
-          requestUpdate();
-        },
-        [this]() {
-          exitActivity();
-          requestUpdate();
-        }));
+    auto handler = [this](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& kb = std::get<KeyboardResult>(result.data);
+        editServer.name = kb.text;
+        saveServer();
+      }
+    };
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SERVER_NAME), editServer.name, 63, false),
+        handler);
   } else if (selectedIndex == 1) {
     // Server URL
-    exitActivity();
-    enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_OPDS_SERVER_URL), editServer.url, 127, false,
-        [this](const std::string& url) {
-          editServer.url = url;
-          saveServer();
-          exitActivity();
-          requestUpdate();
-        },
-        [this]() {
-          exitActivity();
-          requestUpdate();
-        }));
+    auto handler = [this](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& kb = std::get<KeyboardResult>(result.data);
+        editServer.url = kb.text;
+        saveServer();
+      }
+    };
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_SERVER_URL), editServer.url, 127,
+                                                false),
+        handler);
   } else if (selectedIndex == 2) {
     // Username
-    exitActivity();
-    enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_USERNAME), editServer.username, 63, false,
-        [this](const std::string& username) {
-          editServer.username = username;
-          saveServer();
-          exitActivity();
-          requestUpdate();
-        },
-        [this]() {
-          exitActivity();
-          requestUpdate();
-        }));
+    auto handler = [this](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& kb = std::get<KeyboardResult>(result.data);
+        editServer.username = kb.text;
+        saveServer();
+      }
+    };
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME), editServer.username, 63,
+                                                false),
+        handler);
   } else if (selectedIndex == 3) {
     // Password
-    exitActivity();
-    enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_PASSWORD), editServer.password, 63, false,
-        [this](const std::string& password) {
-          editServer.password = password;
-          saveServer();
-          exitActivity();
-          requestUpdate();
-        },
-        [this]() {
-          exitActivity();
-          requestUpdate();
-        }));
+    auto handler = [this](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& kb = std::get<KeyboardResult>(result.data);
+        editServer.password = kb.text;
+        saveServer();
+      }
+    };
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD), editServer.password, 63,
+                                                false),
+        handler);
   } else if (selectedIndex == 4 && !isNewServer) {
     // Delete server
     OPDS_STORE.removeServer(static_cast<size_t>(serverIndex));
-    onBack();
+    finish();
   }
 }
 
-void OpdsSettingsActivity::render(Activity::RenderLock&&) {
+void OpdsSettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();

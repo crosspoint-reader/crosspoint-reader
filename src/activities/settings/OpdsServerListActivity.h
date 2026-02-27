@@ -1,41 +1,29 @@
 #pragma once
 
-#include <functional>
-
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 /**
  * Activity showing the list of configured OPDS servers.
  * Allows adding new servers and editing/deleting existing ones.
- * Used from Settings and also as a server picker from the home screen.
+ * When pickerMode is true, selecting a server navigates to the OPDS browser
+ * instead of opening the editor (used from the home screen).
  */
-class OpdsServerListActivity final : public ActivityWithSubactivity {
+class OpdsServerListActivity final : public Activity {
  public:
-  using OnServerSelected = std::function<void(size_t serverIndex)>;
-
-  /**
-   * @param onBack Called when user presses Back
-   * @param onServerSelected If set, acts as a picker: selecting a server calls this instead of opening editor.
-   */
-  explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                  const std::function<void()>& onBack, OnServerSelected onServerSelected = nullptr)
-      : ActivityWithSubactivity("OpdsServerList", renderer, mappedInput),
-        onBack(onBack),
-        onServerSelected(std::move(onServerSelected)) {}
+  explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool pickerMode = false)
+      : Activity("OpdsServerList", renderer, mappedInput), pickerMode(pickerMode) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   ButtonNavigator buttonNavigator;
   int selectedIndex = 0;
-  const std::function<void()> onBack;
-  OnServerSelected onServerSelected;
+  bool pickerMode = false;
 
-  bool isPickerMode() const { return onServerSelected != nullptr; }
   int getItemCount() const;
   void handleSelection();
 };
