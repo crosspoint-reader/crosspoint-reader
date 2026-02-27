@@ -132,7 +132,6 @@ void EpubReaderActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       automaticPageTurnActive = false;
-      updateLastPageTurnTime = false;
       // updates chapter title space to indicate page turn disabled
       requestUpdate();
       return;
@@ -143,26 +142,14 @@ void EpubReaderActivity::loop() {
       return;
     }
 
-    const unsigned long currentTime = millis();
-
-    // Updates lastPageTurnTime while waiting for render/indexing
-    if (updateLastPageTurnTime) {
-      lastPageTurnTime = currentTime;
+    // Skips page turn if renderingMutex is busy
+    if (RenderLock::peek()) {
+      lastPageTurnTime = millis();
       return;
     }
 
-    if ((currentTime - lastPageTurnTime) >= pageTurnDuration) {
-      lastPageTurnTime = currentTime;
-      updateLastPageTurnTime = true;
-      if (section->currentPage < section->pageCount - 1) {
-        section->currentPage++;
-      } else {
-        RenderLock lock(*this);
-        nextPageNumber = 0;
-        currentSpineIndex++;
-        section.reset();
-      }
-      requestUpdate();
+    if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
+      pageTurn(true);
       return;
     }
   }
@@ -236,8 +223,7 @@ void EpubReaderActivity::loop() {
   const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
 
   if (skipChapter) {
-    // if chapter was skipped manually, reset time elapsed
-    resetLastPageTurnTime();
+    lastPageTurnTime = millis();
     // We don't want to delete the section mid-render, so grab the semaphore
     {
       RenderLock lock(*this);
@@ -256,34 +242,9 @@ void EpubReaderActivity::loop() {
   }
 
   if (prevTriggered) {
-    resetLastPageTurnTime();
-    if (section->currentPage > 0) {
-      section->currentPage--;
-    } else if (currentSpineIndex > 0) {
-      // We don't want to delete the section mid-render, so grab the semaphore
-      {
-        RenderLock lock(*this);
-        nextPageNumber = UINT16_MAX;
-        currentSpineIndex--;
-        section.reset();
-      }
-    }
-    requestUpdate();
+    pageTurn(false);
   } else {
-    resetLastPageTurnTime();
-
-    if (section->currentPage < section->pageCount - 1) {
-      section->currentPage++;
-    } else {
-      // We don't want to delete the section mid-render, so grab the semaphore
-      {
-        RenderLock lock(*this);
-        nextPageNumber = 0;
-        currentSpineIndex++;
-        section.reset();
-      }
-    }
-    requestUpdate();
+    pageTurn(true);
   }
 }
 
@@ -500,9 +461,6 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
-  // Resets updateLastPageTurnTime state
-  updateLastPageTurnTime = false;
-
   if (selectedPageTurnOption == 0 || selectedPageTurnOption >= PAGE_TURN_LABELS.size()) {
     automaticPageTurnActive = false;
     return;
@@ -516,7 +474,6 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
   // resets cached section so that space is reserved for auto page turn indicator when None or progress bar only
   if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
-    updateLastPageTurnTime = true;  // To only update lastPageTurnTime after rendering is complete
     // Preserve current reading position so we can restore after reflow.
     RenderLock lock(*this);
     if (section) {
@@ -528,11 +485,34 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
   }
 }
 
-void EpubReaderActivity::resetLastPageTurnTime() {
-  if (automaticPageTurnActive) {
-    lastPageTurnTime = millis();
-    updateLastPageTurnTime = true;  // Fallback to update lastPageTurnTime if indexing or rendering takes too long
+void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+  if (isForwardTurn) {
+    if (section->currentPage < section->pageCount - 1) {
+      section->currentPage++;
+    } else {
+      // We don't want to delete the section mid-render, so grab the semaphore
+      {
+        RenderLock lock(*this);
+        nextPageNumber = 0;
+        currentSpineIndex++;
+        section.reset();
+      }
+    }
+  } else {
+    if (section->currentPage > 0) {
+      section->currentPage--;
+    } else if (currentSpineIndex > 0) {
+      // We don't want to delete the section mid-render, so grab the semaphore
+      {
+        RenderLock lock(*this);
+        nextPageNumber = UINT16_MAX;
+        currentSpineIndex--;
+        section.reset();
+      }
+    }
   }
+  lastPageTurnTime = millis();
+  requestUpdate();
 }
 
 // TODO: Failure handling
@@ -556,7 +536,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
-    updateLastPageTurnTime = false;
     return;
   }
 
@@ -642,7 +621,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
-    updateLastPageTurnTime = false;
     return;
   }
 
@@ -652,7 +630,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
-    updateLastPageTurnTime = false;
     return;
   }
 
@@ -665,7 +642,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       requestUpdate();  // Try again after clearing cache
                         // TODO: prevent infinite loop if the page keeps failing to load for some reason
       automaticPageTurnActive = false;
-      updateLastPageTurnTime = false;
       return;
     }
 
@@ -683,9 +659,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     pendingScreenshot = false;
     ScreenshotUtil::takeScreenshot(renderer);
   }
-
-  // Stops updating lastPageTurnTime when render is completed
-  updateLastPageTurnTime = false;
 }
 
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
