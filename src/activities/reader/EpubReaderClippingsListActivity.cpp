@@ -132,7 +132,7 @@ void EpubReaderClippingsListActivity::loop() {
   }
 }
 
-void EpubReaderClippingsListActivity::render(Activity::RenderLock&&) {
+void EpubReaderClippingsListActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

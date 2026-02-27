@@ -136,7 +136,7 @@ void ClippingTextViewerActivity::loop() {
   }
 }
 
-void ClippingTextViewerActivity::render(Activity::RenderLock&&) {
+void ClippingTextViewerActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto orientation = renderer.getOrientation();

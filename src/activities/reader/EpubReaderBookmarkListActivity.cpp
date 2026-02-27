@@ -107,7 +107,7 @@ void EpubReaderBookmarkListActivity::loop() {
   }
 }
 
-void EpubReaderBookmarkListActivity::render(Activity::RenderLock&&) {
+void EpubReaderBookmarkListActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
