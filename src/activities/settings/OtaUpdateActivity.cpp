@@ -13,7 +13,7 @@
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_ERR("OTA", "WiFi connection failed, exiting");
-    activityManager.popActivity();
+    finish();
     return;
   }
 
@@ -172,7 +172,7 @@ void OtaUpdateActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      activityManager.popActivity();
+      finish();
     }
 
     return;
@@ -180,14 +180,14 @@ void OtaUpdateActivity::loop() {
 
   if (state == FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      activityManager.popActivity();
+      finish();
     }
     return;
   }
 
   if (state == NO_UPDATE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      activityManager.popActivity();
+      finish();
     }
     return;
   }

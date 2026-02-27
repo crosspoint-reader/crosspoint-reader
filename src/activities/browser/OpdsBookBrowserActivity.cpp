@@ -383,5 +383,6 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     WiFi.mode(WIFI_OFF);
     state = BrowserState::ERROR;
     errorMessage = tr(STR_WIFI_CONN_FAILED);
+    requestUpdate();
   }
 }

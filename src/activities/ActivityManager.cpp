@@ -232,7 +232,7 @@ RenderLock::RenderLock() {
   isLocked = true;
 }
 
-RenderLock::RenderLock(Activity& /* unused */) {
+RenderLock::RenderLock([[maybe_unused]] Activity&) {
   xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
   isLocked = true;
 }
