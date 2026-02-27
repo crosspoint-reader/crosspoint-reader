@@ -5,10 +5,10 @@
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
-#include "CrossPointSettings.h"
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
