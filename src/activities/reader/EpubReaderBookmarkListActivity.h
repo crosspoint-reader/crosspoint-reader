@@ -1,36 +1,31 @@
 #pragma once
 #include <functional>
+#include <string>
 #include <vector>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "BookmarkStore.h"
 
-class EpubReaderBookmarkListActivity final : public ActivityWithSubactivity {
+class EpubReaderBookmarkListActivity final : public Activity {
   std::string bookPath;
   std::vector<BookmarkEntry> bookmarks;
   int selectorIndex = 0;
   bool confirmingDelete = false;
 
   const std::function<std::string(uint16_t)> resolveChapterTitle;
-  const std::function<void()> onGoBack;
-  const std::function<void(int spineIndex, int pageIndex)> onSelectBookmark;
 
   int getPageItems() const;
   int getTotalItems() const;
 
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  public:
   explicit EpubReaderBookmarkListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                           const std::string& bookPath,
-                                          const std::function<std::string(uint16_t)>& resolveChapterTitle,
-                                          const std::function<void()>& onGoBack,
-                                          const std::function<void(int spineIndex, int pageIndex)>& onSelectBookmark)
-      : ActivityWithSubactivity("EpubReaderBookmarkList", renderer, mappedInput),
+                                          const std::function<std::string(uint16_t)>& resolveChapterTitle)
+      : Activity("EpubReaderBookmarkList", renderer, mappedInput),
         bookPath(bookPath),
-        resolveChapterTitle(resolveChapterTitle),
-        onGoBack(onGoBack),
-        onSelectBookmark(onSelectBookmark) {}
+        resolveChapterTitle(resolveChapterTitle) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

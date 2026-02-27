@@ -4,6 +4,8 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include <memory>
+
 #include "ClippingTextViewerActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -46,7 +48,7 @@ int EpubReaderClippingsListActivity::getPageItems() const {
 }
 
 void EpubReaderClippingsListActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   clippings = ClippingStore::loadIndex(bookPath);
   refreshPreviews();
@@ -58,21 +60,16 @@ void EpubReaderClippingsListActivity::onEnter() {
   requestUpdate();
 }
 
-void EpubReaderClippingsListActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void EpubReaderClippingsListActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderClippingsListActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   const int totalItems = getTotalItems();
 
   // Handle empty clippings list
   if (totalItems == 0 && !confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      onGoBack();
+      finish();
     }
     return;
   }
@@ -112,14 +109,12 @@ void EpubReaderClippingsListActivity::loop() {
     } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
       const std::string text = ClippingStore::loadClippingText(bookPath, clippings[selectorIndex]);
       if (!text.empty()) {
-        enterNewActivity(new ClippingTextViewerActivity(renderer, mappedInput, text, [this]() {
-          exitActivity();
-          requestUpdate();
-        }));
+        startActivityForResult(std::make_unique<ClippingTextViewerActivity>(renderer, mappedInput, text),
+                               [this](const ActivityResult&) { requestUpdate(); });
       }
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoBack();
+    finish();
   } else if (prevReleased) {
     if (skipPage) {
       selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + totalItems) % totalItems;

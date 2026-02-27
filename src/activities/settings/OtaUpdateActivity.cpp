@@ -11,11 +11,9 @@
 #include "network/OtaUpdater.h"
 
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
-  exitActivity();
-
   if (!success) {
     LOG_ERR("OTA", "WiFi connection failed, exiting");
-    goBack();
+    activityManager.popActivity();
     return;
   }
 
@@ -34,7 +32,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
       RenderLock lock(*this);
       state = FAILED;
     }
-    requestUpdate();
     return;
   }
 
@@ -44,7 +41,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
       RenderLock lock(*this);
       state = NO_UPDATE;
     }
-    requestUpdate();
     return;
   }
 
@@ -52,11 +48,10 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     RenderLock lock(*this);
     state = WAITING_CONFIRMATION;
   }
-  requestUpdate();
 }
 
 void OtaUpdateActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   // Turn on WiFi immediately
   LOG_DBG("OTA", "Turning on WiFi...");
@@ -64,12 +59,12 @@ void OtaUpdateActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   LOG_DBG("OTA", "Launching WifiSelectionActivity...");
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
 void OtaUpdateActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Turn off wifi
   WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
@@ -78,12 +73,7 @@ void OtaUpdateActivity::onExit() {
   delay(100);  // Allow WiFi hardware to fully power down
 }
 
-void OtaUpdateActivity::render(Activity::RenderLock&&) {
-  if (subActivity) {
-    // Subactivity handles its own rendering
-    return;
-  }
-
+void OtaUpdateActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -134,8 +124,12 @@ void OtaUpdateActivity::render(Activity::RenderLock&&) {
         (std::to_string(updater.getProcessedSize()) + " / " + std::to_string(updater.getTotalSize())).c_str());
   } else if (state == NO_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_UPDATE), true, EpdFontFamily::BOLD);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FAILED) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FINISHED) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, tr(STR_POWER_ON_HINT));
@@ -150,11 +144,6 @@ void OtaUpdateActivity::loop() {
     requestUpdate();
   }
 
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (state == WAITING_CONFIRMATION) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       LOG_DBG("OTA", "New update available, starting download...");
@@ -162,7 +151,6 @@ void OtaUpdateActivity::loop() {
         RenderLock lock(*this);
         state = UPDATE_IN_PROGRESS;
       }
-      requestUpdate();
       requestUpdateAndWait();
       const auto res = updater.installUpdate();
 
@@ -184,7 +172,7 @@ void OtaUpdateActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      goBack();
+      activityManager.popActivity();
     }
 
     return;
@@ -192,14 +180,14 @@ void OtaUpdateActivity::loop() {
 
   if (state == FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      goBack();
+      activityManager.popActivity();
     }
     return;
   }
 
   if (state == NO_UPDATE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      goBack();
+      activityManager.popActivity();
     }
     return;
   }

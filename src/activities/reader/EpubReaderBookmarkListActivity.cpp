@@ -4,6 +4,8 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include "../ActivityResult.h"
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -26,7 +28,7 @@ int EpubReaderBookmarkListActivity::getPageItems() const {
 }
 
 void EpubReaderBookmarkListActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   bookmarks = BookmarkStore::loadBookmarks(bookPath);
 
@@ -37,21 +39,16 @@ void EpubReaderBookmarkListActivity::onEnter() {
   requestUpdate();
 }
 
-void EpubReaderBookmarkListActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void EpubReaderBookmarkListActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderBookmarkListActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   const int totalItems = getTotalItems();
 
   // Handle empty bookmark list
   if (totalItems == 0 && !confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      onGoBack();
+      finish();
     }
     return;
   }
@@ -89,10 +86,11 @@ void EpubReaderBookmarkListActivity::loop() {
       requestUpdate();
     } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
       const auto& bk = bookmarks[selectorIndex];
-      onSelectBookmark(bk.spineIndex, bk.pageIndex);
+      setResult(BookmarkResult{bk.spineIndex, bk.pageIndex});
+      finish();
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoBack();
+    finish();
   } else if (prevReleased) {
     if (skipPage) {
       selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + totalItems) % totalItems;

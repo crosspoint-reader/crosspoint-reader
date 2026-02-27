@@ -94,7 +94,7 @@ void ClippingTextViewerActivity::wrapText() {
 }
 
 void ClippingTextViewerActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   wrapText();
 
@@ -109,14 +109,9 @@ void ClippingTextViewerActivity::onEnter() {
   requestUpdate();
 }
 
-void ClippingTextViewerActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void ClippingTextViewerActivity::onExit() { Activity::onExit(); }
 
 void ClippingTextViewerActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   const int totalLines = static_cast<int>(lines.size());
   const int maxOffset = std::max(0, totalLines - linesPerPage);
 
@@ -129,7 +124,7 @@ void ClippingTextViewerActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
       mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    onGoBack();
+    finish();
   } else if (prevReleased) {
     const int step = skipPage ? linesPerPage : 1;
     scrollOffset = std::max(0, scrollOffset - step);
