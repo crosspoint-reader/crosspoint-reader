@@ -8,8 +8,7 @@
 
 class BmpViewerActivity final : public Activity {
  public:
-  BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
-                    std::function<void()> onGoBack);
+  BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath);
 
   void onEnter() override;
   void onExit() override;
@@ -17,5 +16,4 @@ class BmpViewerActivity final : public Activity {
 
  private:
   std::string filePath;
-  std::function<void()> onGoBack;
 };
