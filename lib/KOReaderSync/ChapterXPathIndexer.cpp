@@ -129,7 +129,8 @@ struct ParserState {
       bool found = false;
 
       for (const auto& anchor : anchors) {
-        const std::string anchorPath = ignoreIndices ? removeIndices(anchor.xpath) : anchor.xpath;
+        const std::string normalizedAnchor = normalizeXPath(anchor.xpath);
+        const std::string anchorPath = ignoreIndices ? removeIndices(normalizedAnchor) : normalizedAnchor;
         if (anchorPath == probe) {
           const int depth = pathDepth(anchorPath);
           if (!found || depth > bestDepth || (depth == bestDepth && anchor.textOffset < bestOffset)) {
