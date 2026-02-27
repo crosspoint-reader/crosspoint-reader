@@ -39,9 +39,13 @@ void ActivityManager::renderTaskLoop() {
       currentActivity->render(std::move(lock));
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
-    if (waitingTaskHandle) {
-      xTaskNotify(waitingTaskHandle, 1, eIncrement);
-      waitingTaskHandle = nullptr;
+    TaskHandle_t waiter = nullptr;
+    taskENTER_CRITICAL();
+    waiter = waitingTaskHandle;
+    waitingTaskHandle = nullptr;
+    taskEXIT_CRITICAL();
+    if (waiter) {
+      xTaskNotify(waiter, 1, eIncrement);
     }
   }
 }
