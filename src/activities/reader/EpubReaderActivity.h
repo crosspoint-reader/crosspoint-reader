@@ -3,6 +3,9 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <optional>
+#include <vector>
+
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
 
@@ -22,6 +25,20 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
 
+  // Chapter-level page info aggregated across spine items sharing a TOC entry
+  struct SpineSegment {
+    int spineIndex;
+    int startPage;         // first page in this spine belonging to the chapter (always 0 without anchor support)
+    int pageCount;         // pages in this segment
+    int cumulativeOffset;  // total chapter pages before this segment
+  };
+  struct ChapterPageInfo {
+    std::optional<int> tocIndex;
+    std::vector<SpineSegment> segments;
+    int totalPages = 0;
+  };
+  ChapterPageInfo chapterPageInfo;
+
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
   struct SavedPosition {
@@ -40,6 +57,10 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+  // Prepare the current section (and all sibling spines in the TOC chapter if needed).
+  bool prepareSection(uint16_t viewportWidth, uint16_t viewportHeight);
+  // Returns the chapter-relative page number for the current position.
+  int getChapterRelativePage() const;
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

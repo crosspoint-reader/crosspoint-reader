@@ -14,6 +14,43 @@ constexpr uint8_t SECTION_FILE_VERSION = 14;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint32_t);
+bool readAndValidateHeader(FsFile& f, const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+                           const uint8_t paragraphAlignment, const uint16_t viewportWidth,
+                           const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
+                           uint16_t& outPageCount) {
+  uint8_t version;
+  serialization::readPod(f, version);
+  if (version != SECTION_FILE_VERSION) {
+    LOG_ERR("SCT", "Deserialization failed: Unknown version %u", version);
+    return false;
+  }
+
+  int fileFontId;
+  float fileLineCompression;
+  bool fileExtraParagraphSpacing;
+  uint8_t fileParagraphAlignment;
+  uint16_t fileViewportWidth, fileViewportHeight;
+  bool fileHyphenationEnabled, fileEmbeddedStyle;
+  serialization::readPod(f, fileFontId);
+  serialization::readPod(f, fileLineCompression);
+  serialization::readPod(f, fileExtraParagraphSpacing);
+  serialization::readPod(f, fileParagraphAlignment);
+  serialization::readPod(f, fileViewportWidth);
+  serialization::readPod(f, fileViewportHeight);
+  serialization::readPod(f, fileHyphenationEnabled);
+  serialization::readPod(f, fileEmbeddedStyle);
+
+  if (fontId != fileFontId || lineCompression != fileLineCompression ||
+      extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
+      viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight ||
+      hyphenationEnabled != fileHyphenationEnabled || embeddedStyle != fileEmbeddedStyle) {
+    LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
+    return false;
+  }
+
+  serialization::readPod(f, outPageCount);
+  return true;
+}
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
@@ -65,46 +102,12 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
   }
-
-  // Match parameters
-  {
-    uint8_t version;
-    serialization::readPod(file, version);
-    if (version != SECTION_FILE_VERSION) {
-      file.close();
-      LOG_ERR("SCT", "Deserialization failed: Unknown version %u", version);
-      clearCache();
-      return false;
-    }
-
-    int fileFontId;
-    uint16_t fileViewportWidth, fileViewportHeight;
-    float fileLineCompression;
-    bool fileExtraParagraphSpacing;
-    uint8_t fileParagraphAlignment;
-    bool fileHyphenationEnabled;
-    bool fileEmbeddedStyle;
-    serialization::readPod(file, fileFontId);
-    serialization::readPod(file, fileLineCompression);
-    serialization::readPod(file, fileExtraParagraphSpacing);
-    serialization::readPod(file, fileParagraphAlignment);
-    serialization::readPod(file, fileViewportWidth);
-    serialization::readPod(file, fileViewportHeight);
-    serialization::readPod(file, fileHyphenationEnabled);
-    serialization::readPod(file, fileEmbeddedStyle);
-
-    if (fontId != fileFontId || lineCompression != fileLineCompression ||
-        extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
-        viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight ||
-        hyphenationEnabled != fileHyphenationEnabled || embeddedStyle != fileEmbeddedStyle) {
-      file.close();
-      LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
-      clearCache();
-      return false;
-    }
+  if (!readAndValidateHeader(file, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+                             viewportHeight, hyphenationEnabled, embeddedStyle, pageCount)) {
+    file.close();
+    clearCache();
+    return false;
   }
-
-  serialization::readPod(file, pageCount);
   file.close();
   LOG_DBG("SCT", "Deserialization succeeded: %d pages", pageCount);
   return true;
@@ -261,4 +264,24 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   auto page = Page::deserialize(file);
   file.close();
   return page;
+}
+
+std::optional<uint16_t> Section::readCachedPageCount(const std::string& cachePath, const int spineIndex,
+                                                     const int fontId, const float lineCompression,
+                                                     const bool extraParagraphSpacing, const uint8_t paragraphAlignment,
+                                                     const uint16_t viewportWidth, const uint16_t viewportHeight,
+                                                     const bool hyphenationEnabled, const bool embeddedStyle) {
+  const std::string filePath = cachePath + "/sections/" + std::to_string(spineIndex) + ".bin";
+  FsFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
+  }
+  uint16_t count;
+  if (!readAndValidateHeader(f, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+                             viewportHeight, hyphenationEnabled, embeddedStyle, count)) {
+    f.close();
+    return std::nullopt;
+  }
+  f.close();
+  return count;
 }

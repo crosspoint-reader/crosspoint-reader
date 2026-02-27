@@ -1,6 +1,8 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 
 #include "Epub.h"
 
@@ -36,4 +38,12 @@ class Section {
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
                          const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
+
+  // Reads just the pageCount from an existing section cache file without loading the full section.
+  // Returns nullopt if the cache is missing, stale, or has mismatched render parameters.
+  static std::optional<uint16_t> readCachedPageCount(const std::string& cachePath, int spineIndex, int fontId,
+                                                     float lineCompression, bool extraParagraphSpacing,
+                                                     uint8_t paragraphAlignment, uint16_t viewportWidth,
+                                                     uint16_t viewportHeight, bool hyphenationEnabled,
+                                                     bool embeddedStyle);
 };
