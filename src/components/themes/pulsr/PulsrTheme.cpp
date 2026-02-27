@@ -129,9 +129,9 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
 
     // Centered "HTTP" label — black text on grey pill
     const char* httpLabel = "HTTP";
-    const int lblW = renderer.getTextWidth(SMALL_FONT_ID, httpLabel);
-    const int lblH = renderer.getTextHeight(SMALL_FONT_ID);
-    renderer.drawText(SMALL_FONT_ID, indX + (indW - lblW) / 2, indY + (indH - lblH) / 2, httpLabel, /*black=*/true);
+    const int lblW = renderer.getTextWidth(PULSR_10_FONT_ID, httpLabel);
+    const int lblH = renderer.getTextHeight(PULSR_10_FONT_ID);
+    renderer.drawText(PULSR_10_FONT_ID, indX + (indW - lblW) / 2, indY + (indH - lblH) / 2, httpLabel, /*black=*/true);
   }
 
   // ── 5b. RSS sync indicator in second segment of left bar ───────────────────
@@ -201,9 +201,9 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
 
     // Centered "FEED" label — white text (visible on both dark bg and lit pill)
     const char* feedLabel = "FEED";
-    const int lblW = renderer.getTextWidth(SMALL_FONT_ID, feedLabel);
-    const int lblH = renderer.getTextHeight(SMALL_FONT_ID);
-    renderer.drawText(SMALL_FONT_ID, indX + (indW - lblW) / 2, indY + (indH - lblH) / 2, feedLabel, /*black=*/false);
+    const int lblW = renderer.getTextWidth(PULSR_10_FONT_ID, feedLabel);
+    const int lblH = renderer.getTextHeight(PULSR_10_FONT_ID);
+    renderer.drawText(PULSR_10_FONT_ID, indX + (indW - lblW) / 2, indY + (indH - lblH) / 2, feedLabel, /*black=*/false);
   }
 
   // ── 6. Screen title in top bar (white, uppercase, PULSR-12) ────────────────
