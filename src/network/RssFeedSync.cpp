@@ -25,6 +25,7 @@ TaskHandle_t syncTaskHandle = nullptr;
 RssFeedSync::State s_state = RssFeedSync::State::IDLE;
 int s_dlCurrent = 0;
 int s_dlTotal   = 0;
+unsigned long s_doneTime = 0;  // millis() when DONE was set, for auto-clear
 
 static void setState(RssFeedSync::State st) { s_state = st; }
 
@@ -430,6 +431,7 @@ void syncTask(void*) {
       }
       s_dlCurrent++;
       { char _b[256]; snprintf(_b, sizeof(_b), "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, item.crosspointPath.c_str(), (unsigned long)ESP.getFreeHeap()); logToFile("INFO", _b); }
+      // addReceivedFile called here = after file close, correct
       // Extract filename and add to shared received-files list for display
       const std::string& path = item.crosspointPath;
       const auto slash = path.rfind('/');
@@ -499,6 +501,7 @@ void syncTask(void*) {
 
   LOG_DBG(TAG, "Feed sync complete");
   { char _b[64]; snprintf(_b, sizeof(_b), "Sync complete — %d files downloaded", s_dlCurrent); logToFile("INFO", _b); }
+  s_doneTime = millis();
   setState(RssFeedSync::State::DONE);
   syncTaskHandle = nullptr;
   vTaskDelete(nullptr);
@@ -523,7 +526,10 @@ void startSync() {
   xTaskCreate(syncTask, "FeedSync", 16384, nullptr, 1, &syncTaskHandle);  // 16KB: HTTPS+Expat+std::string need headroom
 }
 
-State getState()    { return s_state; }
+State getState() {
+  if (s_state == State::DONE && millis() - s_doneTime > 5000) s_state = State::IDLE;
+  return s_state;
+}
 bool isFeedActive() { return s_state != RssFeedSync::State::IDLE && s_state != RssFeedSync::State::DONE && s_state != RssFeedSync::State::ERROR; }
 bool isSyncing()    { return s_state == RssFeedSync::State::DOWNLOADING; }
 
@@ -534,7 +540,8 @@ const char* getStatusLabel() {
     case RssFeedSync::State::DOWNLOADING: {
       // "n/nn" progress — written into a static buffer
       static char buf[8];
-      snprintf(buf, sizeof(buf), "%d/%d", s_dlCurrent + 1, s_dlTotal);
+      if (s_dlTotal > 0) snprintf(buf, sizeof(buf), "%d/%d", s_dlCurrent + 1, s_dlTotal);
+      else snprintf(buf, sizeof(buf), "#%d", s_dlCurrent + 1);
       return buf;
     }
     case RssFeedSync::State::ERROR:       return "ERR!";
