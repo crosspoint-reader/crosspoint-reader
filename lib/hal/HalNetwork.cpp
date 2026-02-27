@@ -6,7 +6,7 @@ HalNetwork network;  // Singleton instance
 
 void HalNetwork::enable() { WiFi.mode(WIFI_STA); }
 
-bool HalNetwork::isActive() const { return WiFi.getMode() != WIFI_MODE_NULL; }
+bool HalNetwork::isActive() const { return WiFi.getMode() != WIFI_OFF; }
 
 bool HalNetwork::isConnected() const {
   return WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0);
