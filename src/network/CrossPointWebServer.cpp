@@ -313,15 +313,24 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getUploadStatus() const
   if (wsUploadInProgress) {
     return getWsUploadStatus();
   }
-  // Fall back to HTTP upload status
+  // Fall back to HTTP upload status, but surface whichever completion (HTTP or WS) is more recent.
+  // Without this, WS completions are invisible: wsUploadInProgress is cleared before
+  // wsLastCompleteAt is written, so getUploadStatus() would return httpLastCompleteAt = 0
+  // and the activity's fileCompleted detection would never fire for WS uploads.
   WsUploadStatus status;
   status.inProgress = httpUploadInProgress;
   status.received = httpUploadReceived;
   status.total = 0;  // HTTP uploads don't know total size in advance
   status.filename = httpUploadFileName.c_str();
-  status.lastCompleteName = httpLastCompleteName.c_str();
-  status.lastCompleteSize = httpLastCompleteSize;
-  status.lastCompleteAt = httpLastCompleteAt;
+  if (wsLastCompleteAt > httpLastCompleteAt) {
+    status.lastCompleteName = wsLastCompleteName.c_str();
+    status.lastCompleteSize = wsLastCompleteSize;
+    status.lastCompleteAt = wsLastCompleteAt;
+  } else {
+    status.lastCompleteName = httpLastCompleteName.c_str();
+    status.lastCompleteSize = httpLastCompleteSize;
+    status.lastCompleteAt = httpLastCompleteAt;
+  }
   return status;
 }
 

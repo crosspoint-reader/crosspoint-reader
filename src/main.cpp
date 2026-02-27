@@ -326,7 +326,7 @@ void setup() {
       snprintf(pctStr, sizeof(pctStr), "%d%%", pct);
       renderer.drawCenteredText(SMALL_FONT_ID, barY + barH + 8, pctStr);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, CROSSPOINT_VERSION);
-      renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+      renderer.displayBuffer();
     };
 
     auto logOtaError = [](const char* msg, size_t fileSize = 0, size_t written = 0) -> bool {
