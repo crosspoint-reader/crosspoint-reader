@@ -116,7 +116,9 @@ class RssParser final : public Print {
   }
 
   bool error() const { return errorOccurred; }
-  const std::vector<RssItem>& getItems() const { return items; }
+
+  using ItemCallback = std::function<void(const RssItem&)>;
+  void setItemCallback(ItemCallback cb) { itemCallback = std::move(cb); }
 
  private:
   // Check if the local part of a namespace-qualified name matches.
@@ -186,8 +188,8 @@ class RssParser final : public Print {
     auto* self = static_cast<RssParser*>(userData);
 
     if (nameEquals(name, "item")) {
-      if (!self->currentItem.guid.empty()) {
-        self->items.push_back(std::move(self->currentItem));
+      if (!self->currentItem.guid.empty() && self->itemCallback) {
+        self->itemCallback(self->currentItem);
       }
       self->inItem = false;
       self->currentItem = RssItem{};
@@ -237,7 +239,7 @@ class RssParser final : public Print {
   Field activeField = Field::None;
   std::string currentText;
   RssItem currentItem;
-  std::vector<RssItem> items;
+  ItemCallback itemCallback;
 };
 
 // ---------------------------------------------------------------------------
@@ -374,79 +376,41 @@ void syncTask(void*) {
 
   const std::string feedUrl = SETTINGS.feedUrl;
 
-  // 1. Fetch and parse the RSS feed
-  RssParser rssParser;
-  {
-    RssParserStream stream(rssParser);
-    if (!HttpDownloader::fetchUrl(feedUrl, stream)) {
-      LOG_ERR(TAG, "Failed to fetch feed: %s", feedUrl.c_str());
-      { char _b[320]; snprintf(_b, sizeof(_b), "ERROR: Failed to fetch feed URL (check server reachable, URL correct): %s", feedUrl.c_str()); logToFile("ERR", _b); }
-      setState(RssFeedSync::State::ERROR);
-      syncTaskHandle = nullptr;
-      vTaskDelete(nullptr);
-      return;
-    }
-  }  // stream destroyed here → parser.flush()
-
-  setState(RssFeedSync::State::PARSING);
-
-  if (rssParser.error()) {
-    LOG_ERR(TAG, "Failed to parse feed XML");
-    logToFile("ERR", "Failed to parse feed XML");
-    setState(RssFeedSync::State::ERROR);
-    syncTaskHandle = nullptr;
-    vTaskDelete(nullptr);
-    return;
-  }
-
-  const auto& items = rssParser.getItems();
-  LOG_DBG(TAG, "Parsed %u items from feed", items.size());
-  { char _b[64]; snprintf(_b, sizeof(_b), "Parsed %u items from feed", (unsigned)items.size()); logToFile("INFO", _b); }
-
-  if (items.empty()) {
-    setState(RssFeedSync::State::DONE);
-    syncTaskHandle = nullptr;
-    vTaskDelete(nullptr);
-    return;
-  }
-
-  // 2. Load last sync timestamp — skip anything older than this
+  // 2. Load last sync timestamp — skip items older than this
   const uint32_t lastSync = loadLastSyncTime();
-  // We only advance the watermark after we've gone all the way back to lastSync.
-  // oldestSuccess = timestamp of the oldest item we successfully processed this run.
-  // We save oldestSuccess at the end — this ensures that any item that failed or
-  // was interrupted between oldestSuccess and the newest item will be retried next sync.
   uint32_t oldestSuccess = 0;
-
-  // Count new file/image items for progress display (feed is newest-first; stop at lastSync)
   s_dlCurrent = 0;
   s_dlTotal = 0;
-  for (const auto& item : items) {
-    const uint32_t t = parseRfc2822(item.pubDate);
-    if (t > 0 && t <= lastSync) break;  // reached already-processed items
-    if (item.crosspointType == "file" || item.crosspointType == "image") s_dlTotal++;
-  }
-  if (s_dlTotal > 0) setState(RssFeedSync::State::DOWNLOADING);
 
-  // 3. Process each new item (stop when we reach items older than last sync)
-  for (const auto& item : items) {
+  // 1+3. Fetch AND process items simultaneously via SAX callback.
+  //      Items are processed as each </item> is parsed — no vector accumulation.
+  //      The parser calls our callback inline during the fetch loop.
+  //      Feed is newest-first; we stop once we hit items older than lastSync.
+  bool reachedOldItems = false;
+  RssParser rssParser;
+  rssParser.setItemCallback([&](const RssItem& item) {
+    if (reachedOldItems) return;  // already past the watermark
+
     const uint32_t itemTime = parseRfc2822(item.pubDate);
-    if (itemTime > 0 && itemTime <= lastSync) break;  // done — rest already processed
-    if (item.guid.empty()) continue;
+    if (itemTime > 0 && itemTime <= lastSync) {
+      reachedOldItems = true;  // stop processing further items
+      return;
+    }
+    if (item.guid.empty()) return;
 
     const auto& type = item.crosspointType;
 
     if (type == "file" || type == "image") {
       if (item.enclosureUrl.empty() || item.crosspointPath.empty()) {
         LOG_DBG(TAG, "Skipping %s item '%s': missing enclosure/path", type.c_str(), item.guid.c_str());
-        continue;
+        return;
       }
       ensureParentDir(item.crosspointPath);
       auto result = HttpDownloader::downloadToFile(item.enclosureUrl, item.crosspointPath);
       if (result != HttpDownloader::OK) {
         LOG_ERR(TAG, "Download failed for %s → %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str());
         { char _b[256]; snprintf(_b, sizeof(_b), "Download failed: %s -> %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str()); logToFile("ERR", _b); }
-        continue;
+        return;
       }
       s_dlCurrent++;
       LOG_DBG(TAG, "Downloaded %s → %s [%d/%d]", type.c_str(), item.crosspointPath.c_str(), s_dlCurrent, s_dlTotal);
@@ -458,17 +422,17 @@ void syncTask(void*) {
     } else if (type == "firmware") {
       if (SETTINGS.feedAllowFirmware == 0) {
         LOG_ERR(TAG, "Skipping firmware item '%s': firmware updates disabled in settings", item.guid.c_str());
-        continue;
+        return;
       }
       if (item.enclosureUrl.empty()) {
         LOG_DBG(TAG, "Skipping firmware item '%s': missing enclosure", item.guid.c_str());
-        continue;
+        return;
       }
       auto result = HttpDownloader::downloadToFile(item.enclosureUrl, "/firmware.bin");
       if (result != HttpDownloader::OK) {
         LOG_ERR(TAG, "Firmware download failed: %s", item.enclosureUrl.c_str());
         { char _b[256]; snprintf(_b, sizeof(_b), "Firmware download failed: %s", item.enclosureUrl.c_str()); logToFile("ERR", _b); }
-        continue;
+        return;
       }
       LOG_DBG(TAG, "Firmware downloaded — will apply on next boot");
 
@@ -478,20 +442,40 @@ void syncTask(void*) {
 
     } else {
       LOG_DBG(TAG, "Unknown item type '%s' for guid '%s', skipping", type.c_str(), item.guid.c_str());
-      continue;
+      return;
     }
 
-    // Record this item's timestamp — since feed is newest-first, each iteration
-    // is older than the last, so this keeps getting overwritten with older values.
-    // After the loop completes fully, oldestSuccess = oldest item we processed.
+    // Track oldest successfully processed item (feed is newest-first, so this
+    // keeps getting overwritten with progressively older timestamps).
     const uint32_t t = parseRfc2822(item.pubDate);
     if (t > 0) oldestSuccess = t;
+  });
+
+  // Now fetch — the callback fires for each item as it is parsed during the fetch.
+  {
+    RssParserStream stream(rssParser);
+    setState(RssFeedSync::State::PARSING);
+    if (!HttpDownloader::fetchUrl(feedUrl, stream)) {
+      LOG_ERR(TAG, "Failed to fetch feed: %s", feedUrl.c_str());
+      { char _b[320]; snprintf(_b, sizeof(_b), "ERROR: Failed to fetch feed URL: %s", feedUrl.c_str()); logToFile("ERR", _b); }
+      setState(RssFeedSync::State::ERROR);
+      syncTaskHandle = nullptr;
+      vTaskDelete(nullptr);
+      return;
+    }
+  }  // stream destroyed here → parser.flush() → any final item callback fires
+
+  if (rssParser.error()) {
+    LOG_ERR(TAG, "XML parse error in feed");
+    logToFile("ERR", "XML parse error in feed");
+    setState(RssFeedSync::State::ERROR);
+    syncTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+    return;
   }
 
-  // Save watermark: only after the loop ran all the way back.
-  // We save the timestamp of the OLDEST item we processed — anything newer that
-  // failed will be retried next sync (they have newer timestamps > oldestSuccess).
-  // We do NOT save if the loop never processed any items successfully.
+  // Save watermark after fetch+parse fully complete.
+  // oldestSuccess = timestamp of oldest item we processed this run.
   if (oldestSuccess > lastSync) saveLastSyncTime(oldestSuccess);
 
   LOG_DBG(TAG, "Feed sync complete");
