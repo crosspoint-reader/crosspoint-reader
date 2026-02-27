@@ -57,6 +57,9 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
 }
 
 bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<BookmarkEntry>& entries) {
+  if (entries.size() > 255) {
+    return false;
+  }
   FsFile file;
   if (!SdMan.openFileForWrite(TAG, path, file)) {
     return false;

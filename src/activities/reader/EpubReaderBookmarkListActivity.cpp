@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Utf8.h>
 
 #include "../ActivityResult.h"
 #include "MappedInputManager.h"
@@ -154,11 +155,9 @@ void EpubReaderBookmarkListActivity::render(RenderLock&&) {
     if (resolveChapterTitle && bk.chapterPercent > 0) {
       std::string title = resolveChapterTitle(bk.spineIndex);
       if (title.size() > 20) {
-        size_t limit = 17;
-        while (limit > 0 && (title[limit] & 0xC0) == 0x80) {
-          --limit;
+        while (title.size() > 17) {
+          utf8RemoveLastChar(title);
         }
-        title.resize(limit);
         title += "...";
       }
       snprintf(label, sizeof(label), "%d%% of %s - %d%% of book", bk.chapterPercent, title.c_str(), bk.bookPercent);
