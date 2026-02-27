@@ -238,14 +238,28 @@ void ActivityManager::requestUpdateAndWait() {
   if (!renderTaskHandle) {
     return;
   }
-  // There should never be the case where 2 tasks are waiting for a render at the same time
-  assert(!waitingTaskHandle && "Already waiting for a render to complete");
+
+  // Atomic section to perform checks
+  taskENTER_CRITICAL(nullptr);
+  auto currTaskHandler = xTaskGetCurrentTaskHandle();
+  auto mutexHolder = xSemaphoreGetMutexHolder(renderingMutex);
+  bool isRenderTask = (currTaskHandler == renderTaskHandle);
+  bool alreadyWaiting = (waitingTaskHandle != nullptr);
+  bool holdingRenderLock = (mutexHolder == currTaskHandler);
+  if (!alreadyWaiting && !isRenderTask && !holdingRenderLock) {
+    waitingTaskHandle = currTaskHandler;
+  }
+  taskEXIT_CRITICAL(nullptr);
+
   // Render task cannot call requestUpdateAndWait() or it will cause a deadlock
-  assert(xTaskGetCurrentTaskHandle() != renderTaskHandle && "Render task cannot call requestUpdateAndWait()");
+  assert(!isRenderTask && "Render task cannot call requestUpdateAndWait()");
+
+  // There should never be the case where 2 tasks are waiting for a render at the same time
+  assert(!alreadyWaiting && "Already waiting for a render to complete");
+
   // Cannot call while holding RenderLock or it will cause a deadlock
-  assert(xSemaphoreGetMutexHolder(renderingMutex) != xTaskGetCurrentTaskHandle() &&
-         "Cannot call requestUpdateAndWait() while holding RenderLock");
-  waitingTaskHandle = xTaskGetCurrentTaskHandle();
+  assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
+
   xTaskNotify(renderTaskHandle, 1, eIncrement);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
