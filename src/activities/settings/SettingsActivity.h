@@ -8,7 +8,7 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
-class CrossPointSettings;
+#include "CrossPointSettings.h"
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
