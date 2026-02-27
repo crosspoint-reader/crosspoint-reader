@@ -151,17 +151,25 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Extract class and style attributes for CSS processing
+  // Extract class, style, and id attributes
   std::string classAttr;
   std::string styleAttr;
+  std::string idAttr;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
         classAttr = atts[i + 1];
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "id") == 0) {
+        idAttr = atts[i + 1];
       }
     }
+  }
+
+  // Record anchor position for fragment navigation (e.g. footnote targets)
+  if (!idAttr.empty()) {
+    self->anchorPageMap[idAttr] = static_cast<uint16_t>(self->completedPageCount);
   }
 
   auto centeredBlockStyle = BlockStyle();
@@ -368,6 +376,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + displayHeight > self->viewportHeight)) {
                   self->completePageFn(std::move(self->currentPage));
+                  self->completedPageCount++;
                   self->currentPage.reset(new Page());
                   if (!self->currentPage) {
                     LOG_ERR("EHP", "Failed to create new page");
@@ -985,6 +994,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   if (currentTextBlock) {
     makePages();
     completePageFn(std::move(currentPage));
+    completedPageCount++;
     currentPage.reset();
     currentTextBlock.reset();
   }
@@ -997,6 +1007,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage));
+    completedPageCount++;
     currentPage.reset(new Page());
     currentPageNextY = 0;
   }

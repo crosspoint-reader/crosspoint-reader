@@ -1,6 +1,8 @@
 #pragma once
 #include <functional>
+#include <map>
 #include <memory>
+#include <string>
 
 #include "Epub.h"
 
@@ -36,4 +38,7 @@ class Section {
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
                          const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
+
+  // Read the anchor-to-page map from a section cache file (for fragment navigation).
+  static std::map<std::string, uint16_t> readAnchorMap(const std::string& sectionPath);
 };
