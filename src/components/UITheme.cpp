@@ -8,6 +8,7 @@
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
+#include "components/themes/lcars/LcarsTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 #include "util/StringUtils.h"
@@ -44,6 +45,11 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Lyra 3 Covers theme");
       currentTheme = std::make_unique<Lyra3CoversTheme>();
       currentMetrics = &Lyra3CoversMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::LCARS:
+      LOG_DBG("UI", "Using LCARS theme");
+      currentTheme = std::make_unique<LcarsTheme>();
+      currentMetrics = &LcarsMetrics::values;
       break;
   }
 }

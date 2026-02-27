@@ -44,6 +44,11 @@ class CrossPointWebServerActivity final : public Activity {
   // Performance monitoring
   unsigned long lastHandleClientTime = 0;
 
+  // Transfer status tracking (for display updates)
+  bool lastUploadInProgress = false;
+  size_t lastUploadReceived = 0;
+  unsigned long lastTransferUpdateTime = 0;
+
   void renderServerRunning() const;
 
   void onNetworkModeSelected(NetworkMode mode);

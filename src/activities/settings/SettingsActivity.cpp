@@ -75,17 +75,10 @@ void SettingsActivity::onExit() {
 void SettingsActivity::loop() {
   bool hasChangedCategory = false;
 
-  // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selectedSettingIndex == 0) {
-      selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
-      hasChangedCategory = true;
-      requestUpdate();
-    } else {
-      toggleCurrentSetting();
-      requestUpdate();
-      return;
-    }
+    toggleCurrentSetting();
+    requestUpdate();
+    return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -94,17 +87,18 @@ void SettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
+  // Up/Down navigate the settings list
   buttonNavigator.onNextRelease([this] {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this] {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount);
     requestUpdate();
   });
 
+  // Left/Right switch tabs
   buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
     selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
@@ -118,7 +112,7 @@ void SettingsActivity::loop() {
   });
 
   if (hasChangedCategory) {
-    selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
+    selectedSettingIndex = 0;
     switch (selectedCategoryIndex) {
       case 0:
         currentSettings = &displaySettings;
@@ -138,7 +132,7 @@ void SettingsActivity::loop() {
 }
 
 void SettingsActivity::toggleCurrentSetting() {
-  int selectedSetting = selectedSettingIndex - 1;
+  int selectedSetting = selectedSettingIndex;
   if (selectedSetting < 0 || selectedSetting >= settingsCount) {
     return;
   }
@@ -216,7 +210,7 @@ void SettingsActivity::render(RenderLock&&) {
     tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
   }
   GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedSettingIndex == 0);
+                 true);
 
   const auto& settings = *currentSettings;
   GUI.drawList(
@@ -224,7 +218,7 @@ void SettingsActivity::render(RenderLock&&) {
       Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
                          metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex - 1,
+      settingsCount, selectedSettingIndex,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
       [&settings](int i) {
         const auto& setting = settings[i];

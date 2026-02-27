@@ -1,5 +1,6 @@
 #include "CrossPointWebServerActivity.h"
 
+#include <algorithm>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
@@ -339,6 +340,26 @@ void CrossPointWebServerActivity::loop() {
       onGoHome();
       return;
     }
+
+    // Monitor upload status and trigger display refresh on changes
+    if (webServer) {
+      const auto uploadStatus = webServer->getUploadStatus();
+      const unsigned long now = millis();
+
+      // Trigger re-render when upload starts, ends, or makes significant progress
+      const bool uploadStarted = uploadStatus.inProgress && !lastUploadInProgress;
+      const bool uploadEnded = !uploadStatus.inProgress && lastUploadInProgress;
+      const bool significantProgress = uploadStatus.inProgress &&
+          (uploadStatus.received - lastUploadReceived > 32768 || // every 32KB
+           now - lastTransferUpdateTime > 1000);                 // or every 1 second
+
+      if (uploadStarted || uploadEnded || significantProgress) {
+        lastUploadInProgress = uploadStatus.inProgress;
+        lastUploadReceived = uploadStatus.received;
+        lastTransferUpdateTime = now;
+        requestUpdate();
+      }
+    }
   }
 }
 
@@ -370,9 +391,19 @@ void CrossPointWebServerActivity::render(RenderLock&&) {
 void CrossPointWebServerActivity::renderServerRunning() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  // Build header title with live connection/transfer status
+  const auto uploadStatus = webServer ? webServer->getUploadStatus()
+                                      : CrossPointWebServer::WsUploadStatus{};
+
+  std::string headerTitle = isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER);
+  if (uploadStatus.inProgress) {
+    headerTitle = "● Receiving File...";
+  }
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER), nullptr);
+                 headerTitle.c_str(), nullptr);
   GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
                     connectedSSID.c_str());
 
@@ -435,6 +466,23 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     // Also show hostname URL
     std::string hostnameUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY, hostnameUrl.c_str(), true);
+  }
+
+  // --- Transfer status bar (shown at bottom, above button hints) ---
+  const int hintAreaHeight = metrics.buttonHintsHeight + metrics.verticalSpacing;
+  const int statusBarH = renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing * 2;
+  const int statusBarY = pageHeight - hintAreaHeight - statusBarH - metrics.verticalSpacing;
+
+  if (uploadStatus.inProgress) {
+    char label[80];
+    snprintf(label, sizeof(label), "%.70s", uploadStatus.filename.c_str());
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, statusBarY, label, true);
+  } else if (uploadStatus.lastCompleteAt > 0) {
+    char label[80];
+    snprintf(label, sizeof(label), "✓ %.68s", uploadStatus.lastCompleteName.c_str());
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, statusBarY, label, true);
+  } else {
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, statusBarY, "Ready", true);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");

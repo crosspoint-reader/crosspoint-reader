@@ -9,6 +9,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <Update.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -24,6 +25,7 @@
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
+#include "util/ScreenCapture.h"
 
 HalDisplay display;
 HalGPIO gpio;
@@ -120,6 +122,12 @@ EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
 EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
+
+EpdFont lcars10Font(&antonio_10_regular);
+EpdFontFamily lcars10FontFamily(&lcars10Font);
+
+EpdFont lcars12Font(&antonio_12_regular);
+EpdFontFamily lcars12FontFamily(&lcars12Font);
 
 // measurement of power button press duration calibration value
 unsigned long t1 = 0;
@@ -221,6 +229,8 @@ void setupDisplayAndFonts() {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  renderer.insertFont(LCARS_10_FONT_ID, lcars10FontFamily);
+  renderer.insertFont(LCARS_12_FONT_ID, lcars12FontFamily);
   LOG_DBG("MAIN", "Fonts setup");
 }
 
@@ -280,6 +290,66 @@ void setup() {
 
   activityManager.goToBoot();
 
+  // Check for SD card firmware update
+  if (Storage.exists("/firmware.bin")) {
+    LOG_INF("MAIN", "SD card firmware update found, applying...");
+    const auto pageWidth = renderer.getScreenWidth();
+    const auto pageHeight = renderer.getScreenHeight();
+    const int barX = 40;
+    const int barW = pageWidth - 80;
+    const int barH = 12;
+    const int barY = pageHeight / 2 + 35;
+
+    auto drawUpdateScreen = [&](int pct) {
+      renderer.clearScreen();
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "Updating firmware...", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 10, "Do not power off");
+      renderer.drawRect(barX, barY, barW, barH, true);
+      if (pct > 0) {
+        const int fillW = (barW * pct) / 100;
+        if (fillW > 2) renderer.fillRect(barX + 1, barY + 1, fillW - 2, barH - 2, true);
+      }
+      char pctStr[8];
+      snprintf(pctStr, sizeof(pctStr), "%d%%", pct);
+      renderer.drawCenteredText(SMALL_FONT_ID, barY + barH + 8, pctStr);
+      renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, CROSSPOINT_VERSION);
+      renderer.displayBuffer();
+    };
+
+    drawUpdateScreen(0);
+
+    FsFile firmwareFile = Storage.open("/firmware.bin");
+    if (firmwareFile) {
+      const size_t fileSize = firmwareFile.size();
+      LOG_INF("MAIN", "Firmware file size: %u bytes", fileSize);
+      if (Update.begin(fileSize, U_FLASH)) {
+        int lastPct = 0;
+        Update.onProgress([&](size_t progress, size_t total) {
+          if (total == 0) return;
+          const int pct = static_cast<int>((progress * 100) / total);
+          if (pct >= lastPct + 5) {
+            lastPct = pct;
+            drawUpdateScreen(pct);
+          }
+        });
+        const size_t written = Update.writeStream(firmwareFile);
+        if (written == fileSize && Update.end()) {
+          firmwareFile.close();
+          Storage.remove("/firmware.bin");
+          LOG_INF("MAIN", "Firmware update complete, restarting...");
+          ESP.restart();
+        } else {
+          LOG_ERR("MAIN", "Firmware write failed: written=%u/%u, error: %s", written, fileSize, Update.errorString());
+        }
+      } else {
+        LOG_ERR("MAIN", "Update.begin() failed: %s", Update.errorString());
+      }
+      firmwareFile.close();
+    } else {
+      LOG_ERR("MAIN", "Failed to open /firmware.bin");
+    }
+  }
+
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
@@ -299,6 +369,39 @@ void setup() {
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
+}
+
+void runScreenshotTour() {
+  auto captureStep = [](const char* name) {
+    for (int i = 0; i < 6; i++) {
+      if (currentActivity) currentActivity->loop();
+      delay(100);
+    }
+    ScreenCapture::save(renderer, name);
+  };
+
+  GUI.drawPopup(renderer, "Taking screenshots...");
+  delay(300);
+
+  onGoHome();
+  captureStep("home");
+
+  exitActivity();
+  enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome));
+  captureStep("settings");
+
+  exitActivity();
+  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+  captureStep("browse");
+
+  exitActivity();
+  enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+  captureStep("recents");
+
+  onGoHome();
+  delay(300);
+  GUI.drawPopup(renderer, "Done! Saved to /screencap/");
+  delay(2000);
 }
 
 void loop() {
@@ -366,6 +469,27 @@ void loop() {
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
     }
+  // Screenshot tour combo: Power + Confirm held 1.5 s
+  {
+    static unsigned long screenshotHoldStart = 0;
+    static bool screenshotTriggered = false;
+    const bool powerHeld   = gpio.isPressed(HalGPIO::BTN_POWER);
+    const bool confirmHeld = gpio.isPressed(HalGPIO::BTN_CONFIRM);
+    if (powerHeld && confirmHeld && !screenshotTriggered) {
+      if (screenshotHoldStart == 0) screenshotHoldStart = millis();
+      else if (millis() - screenshotHoldStart >= 1500) {
+        screenshotTriggered = true;
+        runScreenshotTour();
+      }
+    } else {
+      if (!powerHeld || !confirmHeld) screenshotHoldStart = 0;
+      if (!powerHeld) screenshotTriggered = false;
+    }
+  }
+
+  // Power-only hold triggers deep sleep; skip if Confirm is also held (screenshot combo)
+  if (gpio.isPressed(HalGPIO::BTN_POWER) && !gpio.isPressed(HalGPIO::BTN_CONFIRM) &&
+      gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;

@@ -288,6 +288,14 @@ void CrossPointWebServer::handleClient() {
   }
 }
 
+// HTTP upload status tracking (mirrors WsUploadStatus for display purposes)
+static bool httpUploadInProgress = false;
+static String httpUploadFileName;
+static size_t httpUploadReceived = 0;
+static String httpLastCompleteName;
+static size_t httpLastCompleteSize = 0;
+static unsigned long httpLastCompleteAt = 0;
+
 CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() const {
   WsUploadStatus status;
   status.inProgress = wsUploadInProgress;
@@ -297,6 +305,23 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
   status.lastCompleteName = wsLastCompleteName.c_str();
   status.lastCompleteSize = wsLastCompleteSize;
   status.lastCompleteAt = wsLastCompleteAt;
+  return status;
+}
+
+CrossPointWebServer::WsUploadStatus CrossPointWebServer::getUploadStatus() const {
+  // WebSocket upload takes priority if active
+  if (wsUploadInProgress) {
+    return getWsUploadStatus();
+  }
+  // Fall back to HTTP upload status
+  WsUploadStatus status;
+  status.inProgress = httpUploadInProgress;
+  status.received = httpUploadReceived;
+  status.total = 0;  // HTTP uploads don't know total size in advance
+  status.filename = httpUploadFileName.c_str();
+  status.lastCompleteName = httpLastCompleteName.c_str();
+  status.lastCompleteSize = httpLastCompleteSize;
+  status.lastCompleteAt = httpLastCompleteAt;
   return status;
 }
 
@@ -566,6 +591,11 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     totalWriteTime = 0;
     writeCount = 0;
 
+    // Track for display
+    httpUploadInProgress = true;
+    httpUploadFileName = upload.filename;
+    httpUploadReceived = 0;
+
     // Get upload path from query parameter (defaults to root if not specified)
     // Note: We use query parameter instead of form data because multipart form
     // fields aren't available until after file upload completes
@@ -636,6 +666,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       }
 
       state.size += upload.currentSize;
+      httpUploadReceived = state.size;
 
       // Log progress every 100KB
       if (state.size - lastLoggedSize >= 102400) {
@@ -664,6 +695,12 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         LOG_DBG("WEB", "[UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)", writeCount, totalWriteTime,
                 writePercent);
 
+        // Track completion for display
+        httpUploadInProgress = false;
+        httpLastCompleteName = state.fileName;
+        httpLastCompleteSize = state.size;
+        httpLastCompleteAt = millis();
+
         // Clear epub cache to prevent stale metadata issues when overwriting files
         String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
@@ -682,6 +719,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       Storage.remove(filePath.c_str());
     }
     state.error = "Upload aborted";
+    httpUploadInProgress = false;
     LOG_DBG("WEB", "Upload aborted");
   }
 }

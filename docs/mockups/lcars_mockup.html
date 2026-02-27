@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LCARS Theme Mockup — CrossPoint Reader</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #444;
+  font-family: 'Arial Narrow', 'Liberation Sans Narrow', Arial, sans-serif;
+  padding: 24px 24px 40px;
+}
+h2 { color: #ccc; font-size: 11px; margin-bottom: 8px; font-family: monospace; letter-spacing: 1px; }
+.screens { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; }
+.screen-wrap { display: flex; flex-direction: column; }
+
+/* ═══════════════════════════════════════════════════════════════
+   DEVICE SHELL
+   Wraps the screen with a bezel and physical button stubs.
+   Right side: Power, Vol▲, Vol▼  (top-to-bottom)
+   Bottom edge: Back, Confirm, ◄Left, Right► (left-to-right)
+═══════════════════════════════════════════════════════════════ */
+.device {
+  position: relative;
+  display: inline-block;
+}
+
+/* Dark bezel around the screen */
+.bezel {
+  background: #1a1a1a;
+  border-radius: 18px;
+  padding: 8px 8px 8px 8px;
+  /* extra right padding for button stubs */
+  padding-right: 8px;
+  display: inline-block;
+  position: relative;
+}
+
+/* ── Right-side buttons ─────────────────────────────────────── */
+.right-btns {
+  position: absolute;
+  right: -28px;   /* sticking out from bezel right edge */
+  top: 0; bottom: 0;
+  display: flex; flex-direction: column;
+  justify-content: flex-start;
+  gap: 0;
+  pointer-events: none;
+}
+.hw-btn-r {
+  position: absolute;
+  right: 0;
+  width: 7px;
+  height: 20px;
+  background: #2a2a2a;
+  border-radius: 0 3px 3px 0;
+  border: 1px solid #555;
+  border-left: none;
+}
+.hw-btn-r .hw-label {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 8px;
+  font-family: monospace;
+  color: #bbb;
+  letter-spacing: 0.5px;
+}
+.hw-btn-r.power { background: #333; border-color: #777; }
+
+/* ── Bottom-edge buttons ────────────────────────────────────── */
+.bottom-btns {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 2px;
+  padding: 0 8px;
+}
+.hw-btn-b {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.hw-btn-b .stub {
+  width: 32px; height: 6px;
+  background: #2a2a2a;
+  border-radius: 2px;
+  border: 1px solid #555;
+}
+.hw-btn-b .fn {
+  font-size: 7.5px; font-family: monospace;
+  color: #aaa; text-align: center; letter-spacing: 0.3px;
+  line-height: 1.3;
+}
+.hw-btn-b .fn .action { color: #ddd; font-weight: bold; }
+.hw-btn-b .fn .key { color: #888; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SCREEN  480×800 at 50% = 240×400
+═══════════════════════════════════════════════════════════════ */
+.screen {
+  width: 240px; height: 400px;
+  background: black;
+  position: relative; overflow: hidden;
+  flex-shrink: 0;
+  border-radius: 28px 0 0 28px;
+}
+
+/* ─── Content area ──────────────────────────────────────────── */
+.content {
+  position: absolute;
+  top: 22px; left: 46px; right: 0; bottom: 22px;
+  background: white;
+  border-top-left-radius: 16px;
+  border-bottom-left-radius: 16px;
+  overflow: hidden;
+}
+
+/* ─── Top bar ───────────────────────────────────────────────── */
+.top-label {
+  position: absolute; top: 0; left: 46px; right: 0; height: 22px;
+  display: flex; align-items: center;
+  padding: 0 8px 0 16px;
+  color: white; font-size: 7px; font-weight: bold;
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.top-label .batt { margin-left: auto; font-size: 6px; letter-spacing: 1px; }
+
+/* ─── Bottom bar ────────────────────────────────────────────── */
+.bottom-bar {
+  position: absolute; bottom: 0; left: 46px; right: 0; height: 22px;
+  display: flex; align-items: center; gap: 3px; padding: 3px 4px;
+}
+.btm-btn {
+  flex: 1; height: 16px; border: 2px solid white;
+  color: white; font-size: 5px; font-weight: bold;
+  letter-spacing: 0.5px; text-transform: uppercase;
+  display: flex; align-items: center; justify-content: center;
+}
+.btm-btn.off { opacity: 0.2; border-style: dashed; }
+
+/* ─── Left nav bar ──────────────────────────────────────────── */
+.left-nav {
+  position: absolute;
+  top: 28px; left: 0; bottom: 28px; width: 44px;
+  display: flex; flex-direction: column;
+}
+.nav-btn {
+  width: 44px; background: black; color: white;
+  font-size: 5.5px; font-weight: bold;
+  letter-spacing: 0.8px; text-transform: uppercase;
+  text-align: center; padding: 5px 2px; line-height: 1.2;
+  flex-shrink: 0;
+  border-bottom: 2px solid white;
+}
+.nav-btn:last-child { border-bottom: none; }
+.nav-btn.selected { background: white; color: black; }
+.nav-btn.spacer { flex: 1; padding: 0; border-bottom: none; }
+
+/* ─── Content components ────────────────────────────────────── */
+.c-subhdr {
+  background: black; color: white;
+  font-size: 6.5px; font-weight: bold;
+  letter-spacing: 2px; text-transform: uppercase;
+  padding: 3px 10px; flex-shrink: 0;
+}
+.c-list-item {
+  display: flex; align-items: center;
+  padding: 0 8px; height: 18px;
+  font-size: 6.5px; text-transform: uppercase; letter-spacing: 0.4px;
+  border-bottom: 1px solid #e0e0e0;
+  position: relative; color: black;
+}
+.c-list-item.sel { background: #ececec; }
+.c-list-item.sel::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: black;
+}
+.c-list-item .val { margin-left: auto; font-size: 6px; color: #444; }
+.c-list-item .val.hi { background: black; color: white; padding: 1px 4px; font-size: 6px; }
+
+.c-file-item {
+  display: flex; align-items: center; padding: 0 8px; height: 15px;
+  font-size: 6px; text-transform: uppercase; letter-spacing: 0.3px;
+  border-bottom: 1px solid #eee; position: relative; color: black;
+}
+.c-file-item.sel { background: #ececec; }
+.c-file-item.sel::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: black; }
+.c-file-icon { margin-right: 4px; font-size: 8px; }
+
+.seg-bar { display: flex; gap: 2px; height: 8px; }
+.seg-bar .s { flex: 1; background: black; }
+.seg-bar .s.e { background: white; border: 1px solid #ccc; }
+
+.tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 5px 8px; flex-shrink: 0; }
+.tile {
+  border: 2px solid black; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 6px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.8px; gap: 3px;
+}
+.tile.sel { background: black; color: white; }
+.tile-icon { font-size: 9px; }
+
+/* helper: btn label macro */
+</style>
+</head>
+<body>
+
+<div style="color:#bbb;font-family:monospace;font-size:11px;margin-bottom:24px;">
+  LCARS THEME MOCKUP — CrossPoint Reader &nbsp;|&nbsp; 480×800 e-ink B&amp;W &nbsp;|&nbsp; 50% scale
+  <br><span style="font-size:10px;color:#888;">Button stubs shown on device body. Bottom edge: Back · Confirm · ◄Left · Right►. Right side: Power · Vol▲ · Vol▼.</span>
+</div>
+
+<div class="screens">
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 1 — HOME
+═══════════════════════════════════════════════════════ -->
+<div class="screen-wrap">
+<h2>1 — HOME</h2>
+<div class="device">
+  <div class="bezel">
+    <div class="screen">
+
+      <div class="top-label">CrossPoint Reader<span class="batt">▮▮▯ 72%</span></div>
+      <div class="left-nav">
+        <div class="nav-btn selected">Library</div>
+        <div class="nav-btn">Recent</div>
+        <div class="nav-btn">Settings</div>
+        <div class="nav-btn spacer"></div>
+        <div class="nav-btn">Browse</div>
+        <div class="nav-btn">Upload</div>
+      </div>
+      <div class="bottom-bar">
+        <div class="btm-btn">Back</div>
+        <div class="btm-btn">Open</div>
+        <div class="btm-btn off"></div>
+        <div class="btm-btn off"></div>
+      </div>
+
+      <div class="content" style="display:flex;flex-direction:column;">
+        <div class="c-subhdr">Recent Books</div>
+        <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+
+          <div style="flex:1;display:flex;align-items:stretch;border-bottom:1px solid #ddd;position:relative;background:#ececec;">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:black;"></div>
+            <div style="flex-shrink:0;width:40px;background:#ccc;border-right:1px solid #aaa;display:flex;align-items:center;justify-content:center;font-size:16px;">📖</div>
+            <div style="flex:1;padding:5px 7px;display:flex;flex-direction:column;justify-content:center;gap:2px;">
+              <div style="font-size:7px;font-weight:bold;text-transform:uppercase;letter-spacing:0.3px;">Hitchhiker's Guide</div>
+              <div style="font-size:6px;color:#555;text-transform:uppercase;">Douglas Adams</div>
+              <div style="display:flex;align-items:center;gap:5px;">
+                <div class="seg-bar" style="flex:1;"><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div></div>
+                <span style="font-size:6px;color:#666;flex-shrink:0;">60%</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="flex:1;display:flex;align-items:stretch;border-bottom:1px solid #ddd;">
+            <div style="flex-shrink:0;width:40px;background:#ccc;border-right:1px solid #aaa;display:flex;align-items:center;justify-content:center;font-size:16px;">📖</div>
+            <div style="flex:1;padding:5px 7px;display:flex;flex-direction:column;justify-content:center;gap:2px;">
+              <div style="font-size:7px;font-weight:bold;text-transform:uppercase;letter-spacing:0.3px;">Dune</div>
+              <div style="font-size:6px;color:#555;text-transform:uppercase;">Frank Herbert</div>
+              <div style="display:flex;align-items:center;gap:5px;">
+                <div class="seg-bar" style="flex:1;"><div class="s"></div><div class="s"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div><div class="s e"></div></div>
+                <span style="font-size:6px;color:#666;flex-shrink:0;">23%</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="flex:1;display:flex;align-items:stretch;border-bottom:1px solid #ddd;">
+            <div style="flex-shrink:0;width:40px;background:#ccc;border-right:1px solid #aaa;display:flex;align-items:center;justify-content:center;font-size:16px;">📖</div>
+            <div style="flex:1;padding:5px 7px;display:flex;flex-direction:column;justify-content:center;gap:2px;">
+              <div style="font-size:7px;font-weight:bold;text-transform:uppercase;letter-spacing:0.3px;">Foundation</div>
+              <div style="font-size:6px;color:#555;text-transform:uppercase;">Isaac Asimov</div>
+              <div style="display:flex;align-items:center;gap:5px;">
+                <div class="seg-bar" style="flex:1;"><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s e"></div><div class="s e"></div></div>
+                <span style="font-size:6px;color:#666;flex-shrink:0;">88%</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div class="tile-grid">
+          <div class="tile sel"><span class="tile-icon">📚</span> Library</div>
+          <div class="tile"><span class="tile-icon">⚙</span> Settings</div>
+          <div class="tile"><span class="tile-icon">📡</span> Transfer</div>
+          <div class="tile"><span class="tile-icon">🌐</span> Browse</div>
+        </div>
+      </div>
+
+    </div><!-- screen -->
+
+    <!-- Right-side button stubs -->
+    <div class="hw-btn-r power" style="position:absolute;right:-7px;top:60px;">
+      <div class="hw-label">Power — Sleep/Wake</div>
+    </div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:130px;">
+      <div class="hw-label">Vol▲ — Scroll up</div>
+    </div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:160px;">
+      <div class="hw-label">Vol▼ — Scroll down</div>
+    </div>
+  </div><!-- bezel -->
+
+  <!-- Bottom edge buttons -->
+  <div class="bottom-btns">
+    <div class="hw-btn-b">
+      <div class="stub"></div>
+      <div class="fn"><span class="key">Back</span><br><span class="action">—</span></div>
+    </div>
+    <div class="hw-btn-b">
+      <div class="stub"></div>
+      <div class="fn"><span class="key">Confirm</span><br><span class="action">Open</span></div>
+    </div>
+    <div class="hw-btn-b">
+      <div class="stub"></div>
+      <div class="fn"><span class="key">◄ Left</span><br><span class="action">Scroll up</span></div>
+    </div>
+    <div class="hw-btn-b">
+      <div class="stub"></div>
+      <div class="fn"><span class="key">Right ►</span><br><span class="action">Scroll down</span></div>
+    </div>
+  </div>
+</div><!-- device -->
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 2 — SETTINGS LIST
+═══════════════════════════════════════════════════════ -->
+<div class="screen-wrap">
+<h2>2 — SETTINGS</h2>
+<div class="device">
+  <div class="bezel">
+    <div class="screen">
+      <div class="top-label">Settings<span class="batt">▮▮▮ 99%</span></div>
+      <div class="left-nav">
+        <div class="nav-btn">Library</div>
+        <div class="nav-btn">Recent</div>
+        <div class="nav-btn selected">Settings</div>
+        <div class="nav-btn spacer"></div>
+        <div class="nav-btn">Browse</div>
+        <div class="nav-btn">Upload</div>
+      </div>
+      <div class="bottom-bar">
+        <div class="btm-btn">Back</div>
+        <div class="btm-btn">Select</div>
+        <div class="btm-btn">Up</div>
+        <div class="btm-btn">Down</div>
+      </div>
+      <div class="content">
+        <div class="c-subhdr">Display</div>
+        <div class="c-list-item">Sleep Screen <span class="val">Cover</span></div>
+        <div class="c-list-item">Sleep Cover Mode <span class="val">Fit</span></div>
+        <div class="c-list-item">Status Bar <span class="val">Full %</span></div>
+        <div class="c-list-item sel">UI Theme <span class="val hi">LCARS</span></div>
+        <div class="c-list-item">Hide Battery <span class="val">Never</span></div>
+        <div class="c-list-item">Refresh Freq <span class="val">5 pages</span></div>
+        <div class="c-subhdr">Reading</div>
+        <div class="c-list-item">Font <span class="val">Bookerly 14</span></div>
+        <div class="c-list-item">Margins <span class="val">Normal</span></div>
+        <div class="c-list-item">Line Spacing <span class="val">1.5×</span></div>
+        <div class="c-list-item">Hyphenation <span class="val">On</span></div>
+        <div class="c-subhdr">System</div>
+        <div class="c-list-item">Check for Updates <span class="val">→</span></div>
+      </div>
+    </div>
+    <div class="hw-btn-r power" style="position:absolute;right:-7px;top:60px;"><div class="hw-label">Power — Sleep/Wake</div></div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:130px;"><div class="hw-label">Vol▲ — Scroll up</div></div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:160px;"><div class="hw-label">Vol▼ — Scroll down</div></div>
+  </div>
+  <div class="bottom-btns">
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Back</span><br><span class="action">Go back</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Confirm</span><br><span class="action">Edit value</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">◄ Left</span><br><span class="action">Scroll up</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Right ►</span><br><span class="action">Scroll down</span></div></div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 3 — FILE BROWSER
+═══════════════════════════════════════════════════════ -->
+<div class="screen-wrap">
+<h2>3 — FILE BROWSER</h2>
+<div class="device">
+  <div class="bezel">
+    <div class="screen">
+      <div class="top-label">My Library<span class="batt">▮▮▮ 99%</span></div>
+      <div class="left-nav">
+        <div class="nav-btn selected">Library</div>
+        <div class="nav-btn">Recent</div>
+        <div class="nav-btn">Settings</div>
+        <div class="nav-btn spacer"></div>
+        <div class="nav-btn">Browse</div>
+        <div class="nav-btn">Upload</div>
+      </div>
+      <div class="bottom-bar">
+        <div class="btm-btn">Back</div>
+        <div class="btm-btn">Open</div>
+        <div class="btm-btn">Up</div>
+        <div class="btm-btn">Down</div>
+      </div>
+      <div class="content">
+        <div class="c-subhdr">/ Books <span style="float:right;margin-right:4px;font-weight:normal;">12 items</span></div>
+        <div class="c-file-item"><span class="c-file-icon">📁</span>Science Fiction</div>
+        <div class="c-file-item sel"><span class="c-file-icon">📖</span>Hitchhiker's Guide.epub</div>
+        <div class="c-file-item"><span class="c-file-icon">📖</span>Dune.epub</div>
+        <div class="c-file-item"><span class="c-file-icon">📖</span>Foundation.epub</div>
+        <div class="c-file-item"><span class="c-file-icon">📁</span>Non-Fiction</div>
+        <div class="c-file-item"><span class="c-file-icon">📖</span>Thinking Fast and Slow.epub</div>
+        <div class="c-file-item"><span class="c-file-icon">📖</span>Sapiens.epub</div>
+        <div class="c-file-item"><span class="c-file-icon">📖</span>Pragmatic Programmer.epub</div>
+        <div class="c-file-item"><span class="c-file-icon">📖</span>Clean Code.epub</div>
+        <div class="c-file-item"><span class="c-file-icon">📖</span>Deep Work.epub</div>
+        <div class="c-file-item"><span class="c-file-icon">📖</span>Atomic Habits.epub</div>
+        <div style="position:absolute;right:3px;top:14px;width:2px;bottom:0;background:#eee;"><div style="position:absolute;top:0;width:2px;height:28%;background:black;"></div></div>
+      </div>
+    </div>
+    <div class="hw-btn-r power" style="position:absolute;right:-7px;top:60px;"><div class="hw-label">Power — Sleep/Wake</div></div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:130px;"><div class="hw-label">Vol▲ — Scroll up</div></div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:160px;"><div class="hw-label">Vol▼ — Scroll down</div></div>
+  </div>
+  <div class="bottom-btns">
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Back</span><br><span class="action">Up a level</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Confirm</span><br><span class="action">Open</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">◄ Left</span><br><span class="action">Scroll up</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Right ►</span><br><span class="action">Scroll down</span></div></div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 4 — READING MODE
+═══════════════════════════════════════════════════════ -->
+<div class="screen-wrap">
+<h2>4 — READING MODE</h2>
+<div class="device">
+  <div class="bezel">
+    <div class="screen">
+      <div class="top-label" style="font-size:6px;letter-spacing:1px;">Ch. 4 — Restaurant at End of Universe<span class="batt">▮▮▯ 72%</span></div>
+      <div class="left-nav" style="gap:0;">
+        <div class="nav-btn" style="flex:1;padding:0;display:flex;align-items:center;justify-content:center;font-size:9px;">↑</div>
+        <div class="nav-btn" style="flex:1;padding:0;display:flex;align-items:center;justify-content:center;font-size:9px;border-bottom:none;">↓</div>
+      </div>
+      <div class="bottom-bar">
+        <div class="btm-btn">Back</div>
+        <div class="btm-btn">Menu</div>
+        <div class="btm-btn off"></div>
+        <div class="btm-btn off"></div>
+      </div>
+      <div class="content">
+        <div style="height:3px;display:flex;flex-shrink:0;">
+          <div style="flex:42;background:black;"></div>
+          <div style="flex:58;background:#e0e0e0;"></div>
+        </div>
+        <div style="position:absolute;top:3px;right:4px;font-size:5px;letter-spacing:1px;text-transform:uppercase;color:#888;">42%</div>
+        <div style="padding:10px 12px;font-size:7.5px;line-height:13px;color:black;">
+          <p>The ships hung in the sky in much the same way that bricks don't.</p><br>
+          <p>"So this is it," said Arthur, "we are going to die."</p><br>
+          <p>"Yes," said Ford, "except — no! Wait a minute!" He grabbed Arthur's arm.</p><br>
+          <p>Ford opened his satchel and pulled out his copy of <em>The Hitchhiker's Guide to the Galaxy.</em></p>
+        </div>
+      </div>
+    </div>
+    <div class="hw-btn-r power" style="position:absolute;right:-7px;top:60px;"><div class="hw-label">Power — Sleep/Wake</div></div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:130px;"><div class="hw-label">Vol▲ — Prev page</div></div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:160px;"><div class="hw-label">Vol▼ — Next page</div></div>
+  </div>
+  <div class="bottom-btns">
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Back</span><br><span class="action">Exit reader</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Confirm</span><br><span class="action">Menu</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">◄ Left</span><br><span class="action">Prev page</span></div></div>
+    <div class="hw-btn-b"><div class="stub"></div><div class="fn"><span class="key">Right ►</span><br><span class="action">Next page</span></div></div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 5 — FIRMWARE UPDATE
+═══════════════════════════════════════════════════════ -->
+<div class="screen-wrap">
+<h2>5 — FIRMWARE UPDATE</h2>
+<div class="device">
+  <div class="bezel">
+    <div class="screen">
+      <div class="top-label">System Update<span class="batt">▮▮▮ 99%</span></div>
+      <div class="left-nav"><div class="nav-btn spacer"></div></div>
+      <div class="bottom-bar">
+        <div class="btm-btn off"></div><div class="btm-btn off"></div>
+        <div class="btm-btn off"></div><div class="btm-btn off"></div>
+      </div>
+      <div class="content" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
+        <div style="font-size:9px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">Updating Firmware</div>
+        <div style="font-size:6.5px;letter-spacing:1.5px;text-transform:uppercase;color:#555;">Do not power off</div>
+        <div style="width:150px;">
+          <div style="border:2px solid black;padding:2px;display:flex;gap:2px;height:14px;">
+            <div style="flex:1;background:black;"></div><div style="flex:1;background:black;"></div><div style="flex:1;background:black;"></div><div style="flex:1;background:black;"></div><div style="flex:1;background:black;"></div><div style="flex:1;background:black;"></div><div style="flex:1;background:black;"></div>
+            <div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div><div style="flex:1;background:white;border:1px solid #ccc;"></div>
+          </div>
+          <div style="text-align:center;font-size:7px;letter-spacing:1.5px;margin-top:4px;text-transform:uppercase;">35%</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;letter-spacing:1px;">v1.0.0-dev</div>
+      </div>
+    </div>
+    <div class="hw-btn-r power" style="position:absolute;right:-7px;top:60px;"><div class="hw-label" style="color:#f88;">Power — DO NOT USE</div></div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:130px;opacity:0.3;"><div class="hw-label">Vol▲ — (disabled)</div></div>
+    <div class="hw-btn-r" style="position:absolute;right:-7px;top:160px;opacity:0.3;"><div class="hw-label">Vol▼ — (disabled)</div></div>
+  </div>
+  <div class="bottom-btns">
+    <div class="hw-btn-b" style="opacity:0.3;"><div class="stub"></div><div class="fn"><span class="key">Back</span><br><span class="action">—</span></div></div>
+    <div class="hw-btn-b" style="opacity:0.3;"><div class="stub"></div><div class="fn"><span class="key">Confirm</span><br><span class="action">—</span></div></div>
+    <div class="hw-btn-b" style="opacity:0.3;"><div class="stub"></div><div class="fn"><span class="key">◄ Left</span><br><span class="action">—</span></div></div>
+    <div class="hw-btn-b" style="opacity:0.3;"><div class="stub"></div><div class="fn"><span class="key">Right ►</span><br><span class="action">—</span></div></div>
+  </div>
+</div>
+</div>
+
+</div><!-- end .screens -->
+
+<!-- Button reference legend -->
+<div style="margin-top:36px;color:#bbb;font-family:monospace;font-size:10px;line-height:2;border-top:1px solid #666;padding-top:16px;">
+  <div style="color:#ddd;font-size:11px;margin-bottom:8px;letter-spacing:1px;">BUTTON REFERENCE</div>
+  <table style="border-collapse:collapse;font-size:10px;">
+    <tr style="color:#888;">
+      <th style="padding:2px 16px 2px 0;text-align:left;">Button</th>
+      <th style="padding:2px 16px 2px 0;text-align:left;">Location</th>
+      <th style="padding:2px 16px 2px 0;text-align:left;">Home / Browse</th>
+      <th style="padding:2px 16px 2px 0;text-align:left;">Settings</th>
+      <th style="padding:2px 16px 2px 0;text-align:left;">Reading</th>
+    </tr>
+    <tr><td style="padding:1px 16px 1px 0;color:#ccc;">Back</td><td style="color:#888;">Bottom edge</td><td style="color:#aaa;">—</td><td style="color:#aaa;">Go back</td><td style="color:#aaa;">Exit reader</td></tr>
+    <tr><td style="padding:1px 16px 1px 0;color:#ccc;">Confirm</td><td style="color:#888;">Bottom edge</td><td style="color:#aaa;">Open / Select</td><td style="color:#aaa;">Edit value</td><td style="color:#aaa;">Open menu</td></tr>
+    <tr><td style="padding:1px 16px 1px 0;color:#ccc;">◄ Left</td><td style="color:#888;">Bottom edge</td><td style="color:#aaa;">Scroll up</td><td style="color:#aaa;">Scroll up</td><td style="color:#aaa;">Prev page</td></tr>
+    <tr><td style="padding:1px 16px 1px 0;color:#ccc;">Right ►</td><td style="color:#888;">Bottom edge</td><td style="color:#aaa;">Scroll down</td><td style="color:#aaa;">Scroll down</td><td style="color:#aaa;">Next page</td></tr>
+    <tr><td style="padding:1px 16px 1px 0;color:#ccc;">Power</td><td style="color:#888;">Right side (top)</td><td style="color:#aaa;">Sleep / Wake</td><td style="color:#aaa;">Sleep / Wake</td><td style="color:#aaa;">Sleep / Wake</td></tr>
+    <tr><td style="padding:1px 16px 1px 0;color:#ccc;">Vol ▲</td><td style="color:#888;">Right side (mid)</td><td style="color:#aaa;">= ◄ Left</td><td style="color:#aaa;">= ◄ Left</td><td style="color:#aaa;">Prev page</td></tr>
+    <tr><td style="padding:1px 16px 1px 0;color:#ccc;">Vol ▼</td><td style="color:#888;">Right side (low)</td><td style="color:#aaa;">= Right ►</td><td style="color:#aaa;">= Right ►</td><td style="color:#aaa;">Next page</td></tr>
+  </table>
+  <div style="margin-top:10px;color:#777;">
+    Note: Vol▲/Vol▼ mirror ◄Left/Right► in all navigation contexts. Long-press ◄Left or Right► to jump a full page of list items.
+  </div>
+</div>
+
+</body>
+</html>
