@@ -17,7 +17,8 @@
 namespace {
 
 constexpr const char* TAG = "FEED";
-constexpr const char* SEEN_FILE = "/.crosspoint/feed-seen.txt";
+constexpr const char* SEEN_FILE    = "/.crosspoint/feed-seen.txt";
+constexpr const char* LOG_FILE     = "/.crosspoint/feed-sync.log";
 constexpr const char* NEWS_FILE = "/News.md";
 constexpr size_t NEWS_MAX_SIZE = 50 * 1024;
 
@@ -262,6 +263,18 @@ class RssParserStream : public Stream {
 // ---------------------------------------------------------------------------
 // GUID dedup helpers
 // ---------------------------------------------------------------------------
+// Append a line to the feed sync log file
+static void logToFile(const char* level, const char* msg) {
+  FsFile file;
+  Storage.mkdir("/.crosspoint");
+  if (!Storage.openFileForWrite(TAG, LOG_FILE, file)) return;
+  file.seekEnd(0);
+  char buf[280];
+  int n = snprintf(buf, sizeof(buf), "[%s] %s\n", level, msg);
+  if (n > 0) file.write(reinterpret_cast<const uint8_t*>(buf), static_cast<size_t>(n));
+  file.close();
+}
+
 std::set<std::string> loadSeenGuids() {
   std::set<std::string> seen;
   FsFile file;
@@ -356,6 +369,7 @@ void ensureParentDir(const std::string& path) {
 // ---------------------------------------------------------------------------
 void syncTask(void*) {
   LOG_DBG(TAG, "Feed sync started");
+  logToFile("INFO", "Feed sync started");
   setState(RssFeedSync::State::FETCHING);
 
   const std::string feedUrl = SETTINGS.feedUrl;
@@ -366,6 +380,7 @@ void syncTask(void*) {
     RssParserStream stream(rssParser);
     if (!HttpDownloader::fetchUrl(feedUrl, stream)) {
       LOG_ERR(TAG, "Failed to fetch feed: %s", feedUrl.c_str());
+      { char _b[256]; snprintf(_b, sizeof(_b), "ERROR: Failed to fetch feed URL: %s", feedUrl.c_str()); logToFile("ERR", _b); }
       setState(RssFeedSync::State::ERROR);
       syncTaskHandle = nullptr;
       vTaskDelete(nullptr);
@@ -377,6 +392,7 @@ void syncTask(void*) {
 
   if (rssParser.error()) {
     LOG_ERR(TAG, "Failed to parse feed XML");
+    logToFile("ERR", "Failed to parse feed XML");
     setState(RssFeedSync::State::ERROR);
     syncTaskHandle = nullptr;
     vTaskDelete(nullptr);
@@ -385,6 +401,7 @@ void syncTask(void*) {
 
   const auto& items = rssParser.getItems();
   LOG_DBG(TAG, "Parsed %u items from feed", items.size());
+  { char _b[64]; snprintf(_b, sizeof(_b), "Parsed %u items from feed", (unsigned)items.size()); logToFile("INFO", _b); }
 
   if (items.empty()) {
     setState(RssFeedSync::State::DONE);
@@ -421,6 +438,7 @@ void syncTask(void*) {
       auto result = HttpDownloader::downloadToFile(item.enclosureUrl, item.crosspointPath);
       if (result != HttpDownloader::OK) {
         LOG_ERR(TAG, "Download failed for %s → %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str());
+        { char _b[256]; snprintf(_b, sizeof(_b), "Download failed: %s -> %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str()); logToFile("ERR", _b); }
         continue;
       }
       s_dlCurrent++;
@@ -442,6 +460,7 @@ void syncTask(void*) {
       auto result = HttpDownloader::downloadToFile(item.enclosureUrl, "/firmware.bin");
       if (result != HttpDownloader::OK) {
         LOG_ERR(TAG, "Firmware download failed: %s", item.enclosureUrl.c_str());
+        { char _b[256]; snprintf(_b, sizeof(_b), "Firmware download failed: %s", item.enclosureUrl.c_str()); logToFile("ERR", _b); }
         continue;
       }
       LOG_DBG(TAG, "Firmware downloaded — will apply on next boot");
@@ -460,6 +479,7 @@ void syncTask(void*) {
   }
 
   LOG_DBG(TAG, "Feed sync complete");
+  { char _b[64]; snprintf(_b, sizeof(_b), "Sync complete — %d files downloaded", s_dlCurrent); logToFile("INFO", _b); }
   setState(RssFeedSync::State::DONE);
   syncTaskHandle = nullptr;
   vTaskDelete(nullptr);
