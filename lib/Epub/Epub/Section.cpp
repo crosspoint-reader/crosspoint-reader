@@ -122,6 +122,11 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   }
   for (uint32_t& pos : lut) {
     serialization::readPod(file, pos);
+    if (pos < HEADER_SIZE || pos >= lutOffset) {
+      LOG_ERR("SCT", "Deserialization failed: LUT entry %u out of range [%u, %u)", pos, HEADER_SIZE, lutOffset);
+      clearCache();
+      return false;
+    }
   }
   // File is intentionally left open; subsequent loadPageFromSectionFile() calls
   // seek within this handle instead of re-opening the file each time.
@@ -268,11 +273,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 
   // Cache the LUT in memory and open the file for reading so that
   // subsequent loadPageFromSectionFile() calls can seek directly without re-opening.
-  this->lut = std::move(lut);
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     LOG_ERR("SCT", "Failed to open section file for reading after creation");
     return false;
   }
+  this->lut = std::move(lut);
   return true;
 }
 
