@@ -17,7 +17,6 @@ namespace {
 
 constexpr const char* TAG = "FEED";
 constexpr const char* SYNC_TIME_FILE = "/.crosspoint/feed-sync-time.bin";  // stores uint32_t epoch of last processed item
-constexpr const char* LOG_FILE     = "/.crosspoint/feed-sync.log";
 constexpr const char* NEWS_FILE = "/News.md";
 constexpr size_t NEWS_MAX_SIZE = 50 * 1024;
 
@@ -273,17 +272,6 @@ class RssParserStream : public Stream {
 // ---------------------------------------------------------------------------
 // GUID dedup helpers
 // ---------------------------------------------------------------------------
-// Append a line to the feed sync log file
-static void logToFile(const char* level, const char* msg) {
-  FsFile file;
-  Storage.mkdir("/.crosspoint");
-  if (!Storage.openFileForWrite(TAG, LOG_FILE, file)) return;
-  file.seekEnd(0);
-  char buf[280];
-  int n = snprintf(buf, sizeof(buf), "[%s] %s\n", level, msg);
-  if (n > 0) file.write(reinterpret_cast<const uint8_t*>(buf), static_cast<size_t>(n));
-  file.close();
-}
 
 // Parse RFC 2822 "Fri, 27 Feb 2026 18:00:11 +0000" → Unix epoch seconds. Returns 0 on failure.
 static uint32_t parseRfc2822(const std::string& s) {
@@ -380,20 +368,20 @@ void ensureParentDir(const std::string& path) {
 // ---------------------------------------------------------------------------
 void syncTask(void*) {
   LOG_DBG(TAG, "Feed sync started");
-  logToFile("INFO", "Feed sync started");
+  LOG_INF(TAG, "Feed sync started");
   setState(RssFeedSync::State::FETCHING);
 
   const std::string feedUrl = SETTINGS.feedUrl;
-  { char _b[320]; snprintf(_b, sizeof(_b), "Feed URL: %s", feedUrl.c_str()); logToFile("INFO", _b); }
+  LOG_INF(TAG, "Feed URL: %s", feedUrl.c_str());
 
   // 2. Load last sync timestamp — skip items older than this
   const uint32_t lastSync = loadLastSyncTime();
-  { char _b[64]; snprintf(_b, sizeof(_b), "Last sync timestamp: %lu", (unsigned long)lastSync); logToFile("INFO", _b); }
+  LOG_INF(TAG, "Last sync timestamp: %lu", (unsigned long)lastSync);
   uint32_t oldestSuccess = 0;
   s_dlCurrent = 0;
   s_dlTotal = 0;
 
-  { char _b[64]; snprintf(_b, sizeof(_b), "Free heap before fetch: %lu bytes", (unsigned long)ESP.getFreeHeap()); logToFile("INFO", _b); }
+  LOG_INF(TAG, "Free heap before fetch: %lu bytes", (unsigned long)ESP.getFreeHeap());
 
   // 1+3. Fetch AND process items simultaneously via SAX callback.
   //      Items are processed as each </item> is parsed — no vector accumulation.
@@ -407,14 +395,14 @@ void syncTask(void*) {
     const uint32_t itemTime = parseRfc2822(item.pubDate);
     if (itemTime > 0 && itemTime <= lastSync) {
       reachedOldItems = true;
-      logToFile("INFO", "Reached already-processed items — stopping parse");
+      LOG_INF(TAG, "Reached already-processed items - stopping parse");
       rssParser.stopParsing();  // abort XML parse early — no need to read rest of feed
       return;
     }
     if (item.guid.empty()) return;
 
     const auto& type = item.crosspointType;
-    { char _b[256]; snprintf(_b, sizeof(_b), "Item: type=%s guid=%s", type.c_str(), item.guid.c_str()); logToFile("INFO", _b); }
+    LOG_INF(TAG, "Item: type=%s guid=%s", type.c_str(), item.guid.c_str());
 
     if (type == "file" || type == "image") {
       setState(RssFeedSync::State::DOWNLOADING);  // switch indicator as soon as first download starts
@@ -426,11 +414,11 @@ void syncTask(void*) {
       auto result = HttpDownloader::downloadToFile(item.enclosureUrl, item.crosspointPath);
       if (result != HttpDownloader::OK) {
         LOG_ERR(TAG, "Download failed for %s → %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str());
-        { char _b[256]; snprintf(_b, sizeof(_b), "Download failed: %s -> %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str()); logToFile("ERR", _b); }
+        LOG_ERR(TAG, "Download failed: %s -> %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str());
         return;
       }
       s_dlCurrent++;
-      { char _b[256]; snprintf(_b, sizeof(_b), "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, item.crosspointPath.c_str(), (unsigned long)ESP.getFreeHeap()); logToFile("INFO", _b); }
+      LOG_INF(TAG, "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, item.crosspointPath.c_str(), (unsigned long)ESP.getFreeHeap());
       // addReceivedFile called here = after file close, correct
       // Extract filename and add to shared received-files list for display
       const std::string& path = item.crosspointPath;
@@ -449,7 +437,7 @@ void syncTask(void*) {
       auto result = HttpDownloader::downloadToFile(item.enclosureUrl, "/firmware.bin");
       if (result != HttpDownloader::OK) {
         LOG_ERR(TAG, "Firmware download failed: %s", item.enclosureUrl.c_str());
-        { char _b[256]; snprintf(_b, sizeof(_b), "Firmware download failed: %s", item.enclosureUrl.c_str()); logToFile("ERR", _b); }
+        LOG_ERR(TAG, "Firmware download failed: %s", item.enclosureUrl.c_str());
         return;
       }
       LOG_DBG(TAG, "Firmware downloaded — will apply on next boot");
@@ -472,23 +460,23 @@ void syncTask(void*) {
   // Now fetch — the callback fires for each item as it is parsed during the fetch.
   {
     RssParserStream stream(rssParser);
-    logToFile("INFO", "Starting feed fetch...");
+    LOG_INF(TAG, "Starting feed fetch...");
     setState(RssFeedSync::State::PARSING);
     if (!HttpDownloader::fetchUrl(feedUrl, stream)) {
       LOG_ERR(TAG, "Failed to fetch feed: %s", feedUrl.c_str());
-      { char _b[320]; snprintf(_b, sizeof(_b), "FETCH FAILED url=%s heap=%lu", feedUrl.c_str(), (unsigned long)ESP.getFreeHeap()); logToFile("ERR", _b); }
+      LOG_ERR(TAG, "FETCH FAILED url=%s heap=%lu", feedUrl.c_str(), (unsigned long)ESP.getFreeHeap());
       setState(RssFeedSync::State::ERROR);
       syncTaskHandle = nullptr;
       vTaskDelete(nullptr);
       return;
     }
   }  // stream destroyed here → parser.flush() → any final item callback fires
-  logToFile("INFO", "Feed fetch complete");
-  { char _b[64]; snprintf(_b, sizeof(_b), "Free heap after fetch: %lu bytes", (unsigned long)ESP.getFreeHeap()); logToFile("INFO", _b); }
+  LOG_INF(TAG, "Feed fetch complete");
+  LOG_INF(TAG, "Free heap after fetch: %lu bytes", (unsigned long)ESP.getFreeHeap());
 
   if (rssParser.error()) {
     LOG_ERR(TAG, "XML parse error in feed");
-    logToFile("ERR", "XML parse error in feed");
+    LOG_ERR(TAG, "XML parse error in feed");
     setState(RssFeedSync::State::ERROR);
     syncTaskHandle = nullptr;
     vTaskDelete(nullptr);
@@ -500,7 +488,7 @@ void syncTask(void*) {
   if (oldestSuccess > lastSync) saveLastSyncTime(oldestSuccess);
 
   LOG_DBG(TAG, "Feed sync complete");
-  { char _b[64]; snprintf(_b, sizeof(_b), "Sync complete — %d files downloaded", s_dlCurrent); logToFile("INFO", _b); }
+  LOG_INF(TAG, "Sync complete - %d files downloaded", s_dlCurrent);
   s_doneTime = millis();
   setState(RssFeedSync::State::DONE);
   syncTaskHandle = nullptr;
