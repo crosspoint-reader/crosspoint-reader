@@ -21,6 +21,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
+#include "EpubReaderBookmarksActivity.h"
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
@@ -432,6 +433,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                                    currentPage, totalPages), progressChangeResultHandler);
       }
       break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
+
+      // TODO: Change activity
+      const int currentPage = section ? section->currentPage : 0;
+      startActivityForResult(
+          std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
+                                                 currentPage), progressChangeResultHandler);
     }
   }
 }
