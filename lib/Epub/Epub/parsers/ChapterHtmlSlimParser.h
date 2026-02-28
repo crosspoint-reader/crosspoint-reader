@@ -73,6 +73,7 @@ class ChapterHtmlSlimParser {
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
   std::map<std::string, uint16_t> anchorPageMap;
+  std::string pendingAnchorId;  // deferred until after previous text block is flushed
 
   // Footnote link tracking
   bool insideFootnoteLink = false;

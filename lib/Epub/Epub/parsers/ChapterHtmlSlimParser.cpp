@@ -133,10 +133,20 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
       // div's margin should be preserved, even though it has no direct text content.
       currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
+
+      if (!pendingAnchorId.empty()) {
+        anchorPageMap[pendingAnchorId] = static_cast<uint16_t>(completedPageCount);
+        pendingAnchorId.clear();
+      }
       return;
     }
 
     makePages();
+  }
+  // Record deferred anchor after previous block is flushed
+  if (!pendingAnchorId.empty()) {
+    anchorPageMap[pendingAnchorId] = static_cast<uint16_t>(completedPageCount);
+    pendingAnchorId.clear();
   }
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
   wordsExtractedInBlock = 0;
@@ -167,9 +177,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
-  // Record anchor position for fragment navigation (e.g. footnote targets)
+  // Defer anchor recording until after any previous text block is flushed to pages
+  // (startNewTextBlock → makePages may complete pages and change completedPageCount)
   if (!idAttr.empty()) {
-    self->anchorPageMap[idAttr] = static_cast<uint16_t>(self->completedPageCount);
+    self->pendingAnchorId = idAttr;
   }
 
   auto centeredBlockStyle = BlockStyle();
@@ -993,6 +1004,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
+    if (!pendingAnchorId.empty()) {
+      anchorPageMap[pendingAnchorId] = static_cast<uint16_t>(completedPageCount);
+      pendingAnchorId.clear();
+    }
     completePageFn(std::move(currentPage));
     completedPageCount++;
     currentPage.reset();
