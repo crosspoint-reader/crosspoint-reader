@@ -7,7 +7,6 @@
 
 #include "ReadingStats.h"
 
-
 namespace {
 
 void writeU32(FsFile& f, uint32_t value) {
@@ -99,10 +98,10 @@ bool BookFinishedCache::loadFromDisk() {
   f.close();
 
   if (corrupted) {
-    LOG_WARN("BFC", "Corrupted finished cache detected at %s; resetting", CACHE_PATH);
+    LOG_INF("BFC", "Corrupted finished cache detected at %s; resetting", CACHE_PATH);
     clear();
     if (!Storage.remove(CACHE_PATH)) {
-      LOG_WARN("BFC", "Failed to remove corrupted finished cache file: %s", CACHE_PATH);
+      LOG_ERR("BFC", "Failed to remove corrupted finished cache file: %s", CACHE_PATH);
     }
     return false;
   }
@@ -207,9 +206,9 @@ bool BookFinishedCache::resolve(const std::string& bookPath, bool& finished) {
     return true;
   }
 
-  loadFinishedFromStats(bookPath, finished);
+  const bool loaded = loadFinishedFromStats(bookPath, finished);
   put(bookPath, finished);
-  return true;
+  return loaded;
 }
 
 void BookFinishedCache::put(const std::string& bookPath, const bool finished) {

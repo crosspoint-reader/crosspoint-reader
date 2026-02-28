@@ -125,7 +125,7 @@ void EpubReaderActivity::onEnter() {
   bookStats = BookStats{};
   bookStats.loadFromFile(epub->getCachePath() + "/stats.json");
   if (hasFinishedInProgress) {
-    bookStats.finished = loadedFinishedFromProgress;
+    bookStats.finished = bookStats.finished || loadedFinishedFromProgress;
   }
   bookWasFinishedOnEnter = bookStats.finished;
   BOOK_FINISHED_CACHE.put(epub->getPath(), bookStats.finished);
