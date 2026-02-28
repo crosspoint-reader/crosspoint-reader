@@ -1,10 +1,13 @@
 # What's New in CrossPoint (Laird Fork)
 
-This document describes the features and improvements added in the `laird/crosspoint-reader` fork on the `feature/rss-feed-sync` branch, relative to upstream CrossPoint.
+This document covers both features **added in this fork** and features from the **base CrossPoint firmware** — clearly labelled so you know what's new vs what's already there.
+
+> 🔵 **This fork** — added in `laird/crosspoint-reader` (`feature/rss-feed-sync` branch)  
+> ⚪ **Base CrossPoint** — present in upstream `crosspoint-reader/crosspoint-reader`
 
 ---
 
-## PULSR Theme
+## 🔵 PULSR Theme
 
 The UI has been redesigned with the **PULSR** theme — a high-contrast black-and-white aesthetic optimized for e-ink readability. All screens use the PULSR theme by default.
 
@@ -20,7 +23,7 @@ Key design elements:
 
 ---
 
-## Persistent Left Sidebar
+## 🔵 Persistent Left Sidebar
 
 Every screen features a consistent **left sidebar** providing always-accessible controls:
 
@@ -36,7 +39,7 @@ The sidebar layout adapts per screen — for example, showing **SYNC** in the OP
 
 ---
 
-## RSS Feed Sync
+## 🔵 RSS Feed Sync
 
 The reader automatically syncs content from an RSS feed server over WiFi. Every time the reader connects to WiFi, it fetches new items from the configured feed URL and downloads them to the SD card.
 
@@ -84,7 +87,7 @@ See [`feed-server/README.md`](../feed-server/README.md) for setup instructions.
 
 ---
 
-## OTA Firmware Updates via Feed
+## 🔵 OTA Firmware Updates via Feed
 
 > ⚠️ **Security warning:** Only enable this if you control the feed server and trust it completely. A malicious feed server could deliver compromised firmware that fully owns your device. This feature is intended for developers building and delivering their own personalized firmware to their own Xteink reader — for example, if you've forked this repo and want to push your own builds over WiFi. **Do not enable it on a feed server you did not set up yourself.** The setting defaults to OFF.
 
@@ -99,7 +102,7 @@ After flashing, the reader reboots automatically.
 
 ---
 
-## Settings: Improved Column Navigation
+## 🔵 Settings: Improved Column Navigation
 
 Settings have always been organized into four columns (DISP, READ, CTRL, SYST). The improvement is that the **left/right hardware buttons now switch between columns**, making it much faster to jump between setting categories without hunting through menus.
 
@@ -161,7 +164,7 @@ Settings have always been organized into four columns (DISP, READ, CTRL, SYST). 
 
 ---
 
-## File Transfer Mode
+## ⚪ File Transfer Mode
 
 The reader can receive files over WiFi in three modes:
 
@@ -177,7 +180,7 @@ The file transfer screen now shows **live file arrival updates** — files appea
 
 ---
 
-## OPDS Browser
+## ⚪ OPDS Browser
 
 Browse and download books directly from OPDS catalog servers (Calibre, Jellyfin, public libraries, etc.).
 
@@ -187,7 +190,7 @@ Configure the server URL in Settings → System → OPDS Browser.
 
 ---
 
-## WiFi Network Management
+## ⚪ WiFi Network Management
 
 ![WiFi Scan](images/screenshots/wifi_scan.png)
 
@@ -195,7 +198,7 @@ The WiFi scan screen shows available networks with a **Back button** to cancel. 
 
 ---
 
-## On-Screen Keyboard
+## 🔵 On-Screen Keyboard (sidebar fix)
 
 ![Keyboard](images/screenshots/keyboard.png)
 
@@ -203,7 +206,7 @@ Full QWERTY keyboard for password and URL entry. Keys are no longer clipped by t
 
 ---
 
-## Screenshot Tour
+## 🔵 Screenshot Tour
 
 Hold **Power + Confirm** for 1.5 seconds to trigger a screenshot tour. The device automatically navigates through all major screens and saves `.bmp` captures to `/screencap/` on the SD card.
 
@@ -211,13 +214,13 @@ Screenshots can be viewed in the file browser or downloaded via the web transfer
 
 ---
 
-## Log Files
+## 🔵 Log Files
 
 Feed sync activity is logged to `/.crosspoint/feed-sync.log` on the SD card. `.log` files are readable in the on-device text viewer and downloadable via the browser interface.
 
 ---
 
-## Multilingual Support
+## ⚪ Multilingual Support
 
 Settings → System → Language. Supported languages include:
 - English
@@ -227,7 +230,7 @@ Settings → System → Language. Supported languages include:
 
 ---
 
-## Feed Server Quick Start
+## 🔵 Feed Server Quick Start
 
 ```bash
 # Clone the repo
