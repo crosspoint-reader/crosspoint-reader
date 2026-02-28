@@ -15,6 +15,7 @@
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
+#include <FontManager.h>
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
@@ -80,6 +81,18 @@ bool isProtectedItemName(const String& name) {
     }
   }
   return false;
+}
+
+bool isReaderFontFamilySetting(const SettingInfo& s) {
+  return s.key != nullptr && strcmp(s.key, "fontFamily") == 0;
+}
+
+bool isUiFontFamilyKey(const char* key) {
+  return key != nullptr && strcmp(key, "uiFontFamily") == 0;
+}
+
+bool isLanguageSettingKey(const char* key) {
+  return key != nullptr && strcmp(key, "language") == 0;
 }
 }  // namespace
 
@@ -1041,16 +1054,17 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
-  auto settings = getSettingsList();
+  const auto& settings = getSettingsList();
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  char output[512];
+  static char output[2048];
   constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
+  bool fontsScanned = false;
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
@@ -1070,14 +1084,46 @@ void CrossPointWebServer::handleGetSettings() const {
       }
       case SettingType::ENUM: {
         doc["type"] = "enum";
-        if (s.valuePtr) {
-          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
-        } else if (s.valueGetter) {
-          doc["value"] = static_cast<int>(s.valueGetter());
-        }
         JsonArray options = doc["options"].to<JsonArray>();
-        for (const auto& opt : s.enumValues) {
-          options.add(I18N.get(opt));
+
+        if (isReaderFontFamilySetting(s)) {
+          if (!fontsScanned) {
+            FontMgr.scanFonts();
+            fontsScanned = true;
+          }
+
+          const int builtinCount = static_cast<int>(s.enumValues.size());
+          const int selectedExternal = FontMgr.getSelectedIndex();
+          if (selectedExternal >= 0) {
+            doc["value"] = builtinCount + selectedExternal;
+          } else if (s.valuePtr) {
+            doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+          } else {
+            doc["value"] = 0;
+          }
+
+          for (const auto& opt : s.enumValues) {
+            options.add(I18N.get(opt));
+          }
+
+          for (int i = 0; i < FontMgr.getFontCount(); i++) {
+            const FontInfo* info = FontMgr.getFontInfo(i);
+            if (!info) continue;
+            std::string label = std::string(info->name) + " (" + std::to_string(info->size) + "pt)";
+            if (!ExternalFont::canFitGlyph(info->width, info->height)) {
+              label += " [!]";
+            }
+            options.add(label);
+          }
+        } else {
+          if (s.valuePtr) {
+            doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+          } else if (s.valueGetter) {
+            doc["value"] = static_cast<int>(s.valueGetter());
+          }
+          for (const auto& opt : s.enumValues) {
+            options.add(I18N.get(opt));
+          }
         }
         break;
       }
@@ -1118,6 +1164,66 @@ void CrossPointWebServer::handleGetSettings() const {
     server->sendContent(output);
   }
 
+  // Add UI font selector for web settings.
+  // Device UI already has a dedicated action page for this; web gets an enum list.
+  doc.clear();
+  doc["key"] = "uiFontFamily";
+  doc["name"] = I18N.get(StrId::STR_EXT_UI_FONT);
+  doc["category"] = I18N.get(StrId::STR_CAT_DISPLAY);
+  doc["type"] = "enum";
+  if (!fontsScanned) {
+    FontMgr.scanFonts();
+    fontsScanned = true;
+  }
+  const int selectedUiExternal = FontMgr.getUiSelectedIndex();
+  doc["value"] = selectedUiExternal >= 0 ? selectedUiExternal + 1 : 0;
+
+  JsonArray uiOptions = doc["options"].to<JsonArray>();
+  uiOptions.add(I18N.get(StrId::STR_BUILTIN_DISABLED));
+  for (int i = 0; i < FontMgr.getFontCount(); i++) {
+    const FontInfo* info = FontMgr.getFontInfo(i);
+    if (!info) continue;
+    std::string label = std::string(info->name) + " (" + std::to_string(info->size) + "pt)";
+    if (!ExternalFont::canFitGlyph(info->width, info->height)) {
+      label += " [!]";
+    }
+    uiOptions.add(label);
+  }
+
+  const size_t uiWritten = serializeJson(doc, output, outputSize);
+  if (uiWritten < outputSize) {
+    if (seenFirst) {
+      server->sendContent(",");
+    }
+    seenFirst = true;
+    server->sendContent(output);
+  } else {
+    LOG_DBG("WEB", "Skipping oversized setting JSON for: uiFontFamily");
+  }
+
+  // Add language selector for web settings.
+  doc.clear();
+  doc["key"] = "language";
+  doc["name"] = I18N.get(StrId::STR_LANGUAGE);
+  doc["category"] = I18N.get(StrId::STR_CAT_SYSTEM);
+  doc["type"] = "enum";
+  doc["value"] = static_cast<int>(I18N.getLanguage());
+
+  JsonArray languageOptions = doc["options"].to<JsonArray>();
+  for (int i = 0; i < static_cast<int>(getLanguageCount()); i++) {
+    languageOptions.add(I18N.getLanguageName(static_cast<Language>(i)));
+  }
+
+  const size_t langWritten = serializeJson(doc, output, outputSize);
+  if (langWritten < outputSize) {
+    if (seenFirst) {
+      server->sendContent(",");
+    }
+    server->sendContent(output);
+  } else {
+    LOG_DBG("WEB", "Skipping oversized setting JSON for: language");
+  }
+
   server->sendContent("]");
   server->sendContent("");
   LOG_DBG("WEB", "Served settings API");
@@ -1137,10 +1243,40 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  auto settings = getSettingsList();
+  const auto& settings = getSettingsList();
   int applied = 0;
+  bool fontsScanned = false;
 
-  for (auto& s : settings) {
+  if (doc["uiFontFamily"].is<JsonVariant>()) {
+    const int val = doc["uiFontFamily"].as<int>();
+    if (!fontsScanned) {
+      FontMgr.scanFonts();
+      fontsScanned = true;
+    }
+
+    if (val == 0) {
+      FontMgr.selectUiFont(-1);
+      applied++;
+    } else {
+      const int externalIndex = val - 1;
+      const FontInfo* info = FontMgr.getFontInfo(externalIndex);
+      if (info && ExternalFont::canFitGlyph(info->width, info->height)) {
+        FontMgr.selectUiFont(externalIndex);
+        applied++;
+      }
+    }
+  }
+
+  if (doc["language"].is<JsonVariant>()) {
+    const int val = doc["language"].as<int>();
+    if (val >= 0 && val < static_cast<int>(getLanguageCount())) {
+      I18N.setLanguage(static_cast<Language>(val));
+      applied++;
+    }
+  }
+
+  for (const auto& s : settings) {
+    if (isUiFontFamilyKey(s.key) || isLanguageSettingKey(s.key)) continue;
     if (!s.key) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
 
@@ -1155,6 +1291,31 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
+        if (isReaderFontFamilySetting(s)) {
+          if (!fontsScanned) {
+            FontMgr.scanFonts();
+            fontsScanned = true;
+          }
+
+          const int builtinCount = static_cast<int>(s.enumValues.size());
+          if (val >= 0 && val < builtinCount) {
+            if (s.valuePtr) {
+              SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+            }
+            // Switch to built-in family selected in web UI.
+            FontMgr.selectFont(-1);
+            applied++;
+          } else {
+            const int externalIndex = val - builtinCount;
+            const FontInfo* info = FontMgr.getFontInfo(externalIndex);
+            if (info && ExternalFont::canFitGlyph(info->width, info->height)) {
+              FontMgr.selectFont(externalIndex);
+              applied++;
+            }
+          }
+          break;
+        }
+
         if (val >= 0 && val < static_cast<int>(s.enumValues.size())) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
@@ -1359,12 +1520,28 @@ void CrossPointWebServer::handleWifiScan() const {
     delay(100);
   }
 
-  // Synchronous scan -- blocks but keeps AP alive in AP_STA mode
-  const int n = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/false);
+  // Use async scan to avoid long blocking calls that can trigger task watchdog resets.
+  const unsigned long scanStart = millis();
+  constexpr unsigned long SCAN_TIMEOUT_MS = 20000;
+  WiFi.scanNetworks(/*async=*/true, /*show_hidden=*/false);
+
+  int n = WIFI_SCAN_RUNNING;
+  while (n == WIFI_SCAN_RUNNING && (millis() - scanStart) < SCAN_TIMEOUT_MS) {
+    esp_task_wdt_reset();
+    delay(20);
+    n = WiFi.scanComplete();
+  }
 
   // Restore previous WiFi mode after scan
   if (apMode && prevMode != WIFI_AP_STA) {
     WiFi.mode(prevMode);
+  }
+
+  if (n == WIFI_SCAN_RUNNING) {
+    WiFi.scanDelete();
+    server->send(500, "application/json", "{\"error\":\"Scan timeout\"}");
+    LOG_ERR("WEB", "WiFi scan timed out after %lu ms", millis() - scanStart);
+    return;
   }
 
   if (n < 0) {
