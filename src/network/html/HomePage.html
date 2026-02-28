@@ -158,21 +158,14 @@
     <div class="card" id="dz-card" style="display:none">
       <h2>⚠️ Danger Zone</h2>
       <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center">
-        <div>
-          <label style="color:var(--label-color);font-size:0.85em;display:block;margin-bottom:4px">Upload &amp; Install Firmware</label>
-          <input type="file" id="dz-fw-file" accept=".bin" style="margin-bottom:8px;display:block">
-          <button id="dz-flash-btn" onclick="dzUploadAndFlash()" style="
-            padding:10px 20px;background:#e74c3c;color:white;border:none;
-            border-radius:4px;cursor:pointer;font-size:1em">Upload &amp; Flash</button>
-          <span id="dz-flash-status" style="margin-left:12px;color:var(--label-color)"></span>
-        </div>
-        <div style="border-left:1px solid var(--border-color);padding-left:12px">
-          <label style="color:var(--label-color);font-size:0.85em;display:block;margin-bottom:4px">Device Control</label>
-          <button id="dz-reboot-btn" onclick="dzReboot()" style="
-            padding:10px 20px;background:#e67e22;color:white;border:none;
-            border-radius:4px;cursor:pointer;font-size:1em">Reboot</button>
-          <span id="dz-reboot-status" style="margin-left:12px;color:var(--label-color)"></span>
-        </div>
+        <button id="dz-flash-btn" onclick="dzFlash()" style="
+          padding:10px 20px;background:#e74c3c;color:white;border:none;
+          border-radius:4px;cursor:pointer;font-size:1em">Flash Firmware</button>
+        <span id="dz-flash-status" style="color:var(--label-color)"></span>
+        <button id="dz-reboot-btn" onclick="dzReboot()" style="
+          padding:10px 20px;background:#e67e22;color:white;border:none;
+          border-radius:4px;cursor:pointer;font-size:1em">Reboot</button>
+        <span id="dz-reboot-status" style="color:var(--label-color)"></span>
       </div>
     </div>
 
@@ -262,23 +255,16 @@
       } catch (e) {}
     }
 
-    async function dzUploadAndFlash() {
-      const file = document.getElementById('dz-fw-file').files[0];
-      if (!file) { alert('Select a .bin file first'); return; }
+    async function dzFlash() {
       const btn = document.getElementById('dz-flash-btn');
       const status = document.getElementById('dz-flash-status');
-      if (!confirm('Upload and flash ' + file.name + '? Device will reboot.')) return;
+      if (!confirm('Flash firmware.bin now? Device will reboot.')) return;
       btn.disabled = true;
-      status.textContent = 'Uploading...';
+      status.textContent = 'Flashing...';
       try {
-        const fd = new FormData();
-        fd.append('file', file, 'firmware.bin');
-        const up = await fetch('/upload?path=/', { method: 'POST', body: fd });
-        if (!up.ok) { status.textContent = 'Upload failed'; btn.disabled = false; return; }
-        status.textContent = 'Flashing...';
-        const fl = await fetch('/api/flash', { method: 'POST' });
-        status.textContent = fl.ok ? 'Flashing — device will reboot...' : (await fl.text() || 'Flash failed');
-        if (!fl.ok) btn.disabled = false;
+        const r = await fetch('/api/flash', { method: 'POST' });
+        status.textContent = r.ok ? 'Flashing — device will reboot...' : (await r.text() || 'Failed');
+        if (!r.ok) btn.disabled = false;
       } catch (e) {
         status.textContent = 'Error: ' + e.message;
         btn.disabled = false;
