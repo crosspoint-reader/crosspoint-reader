@@ -870,6 +870,8 @@
           let filePath = currentPath;
           if (!filePath.endsWith("/")) filePath += "/";
           filePath += file.name;
+          const ext = file.name.split('.').pop().toLowerCase();
+          const isViewable = ['log', 'txt', 'md', 'json', 'csv', 'xml', 'ini', 'cfg'].includes(ext);
 
           // Checkbox cell + file row
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
@@ -881,6 +883,7 @@
           fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
+          if (isViewable) fileTableContent += `<button class="rename-btn" onclick="openTextViewModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}'  )" title="View file">👁️</button>`;
           fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
           fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
           fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
