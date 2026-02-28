@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <limits>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -374,24 +375,23 @@ void XMLCALL onDefaultHandlerExpand(void* userData, const XML_Char* text, const 
   state->onCharacterData(text, len);
 }
 
-}  // namespace
-
-std::string ChapterXPathIndexer::findXPathForProgress(const std::shared_ptr<Epub>& epub, const int spineIndex,
-                                                      const float intraSpineProgress) {
+// Parse one spine item and return a fully populated ParserState.
+// Returns std::nullopt if validation, I/O, or XML parse fails.
+static std::optional<ParserState> parseSpineItem(const std::shared_ptr<Epub>& epub, const int spineIndex) {
   if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
-    return "";
+    return std::nullopt;
   }
 
   const auto spineItem = epub->getSpineItem(spineIndex);
   if (spineItem.href.empty()) {
-    return "";
+    return std::nullopt;
   }
 
   size_t chapterSize = 0;
   uint8_t* chapterBytes = epub->readItemContentsToBytes(spineItem.href, &chapterSize, false);
   if (!chapterBytes || chapterSize == 0) {
     free(chapterBytes);
-    return "";
+    return std::nullopt;
   }
 
   ParserState state(spineIndex);
@@ -400,7 +400,7 @@ std::string ChapterXPathIndexer::findXPathForProgress(const std::shared_ptr<Epub
   if (!parser) {
     free(chapterBytes);
     LOG_ERR("KOX", "Failed to allocate XML parser for spine=%d", spineIndex);
-    return "";
+    return std::nullopt;
   }
 
   XML_SetUserData(parser, &state);
@@ -420,12 +420,24 @@ std::string ChapterXPathIndexer::findXPathForProgress(const std::shared_ptr<Epub
   free(chapterBytes);
 
   if (!parseOk) {
+    return std::nullopt;
+  }
+
+  return state;
+}
+
+}  // namespace
+
+std::string ChapterXPathIndexer::findXPathForProgress(const std::shared_ptr<Epub>& epub, const int spineIndex,
+                                                      const float intraSpineProgress) {
+  const auto state = parseSpineItem(epub, spineIndex);
+  if (!state) {
     return "";
   }
 
-  const std::string result = state.chooseXPath(intraSpineProgress);
+  const std::string result = state->chooseXPath(intraSpineProgress);
   LOG_DBG("KOX", "Forward: spine=%d progress=%.3f anchors=%zu textBytes=%zu -> %s", spineIndex, intraSpineProgress,
-          state.anchors.size(), state.totalTextBytes, result.c_str());
+          state->anchors.size(), state->totalTextBytes, result.c_str());
   return result;
 }
 
@@ -435,53 +447,18 @@ bool ChapterXPathIndexer::findProgressForXPath(const std::shared_ptr<Epub>& epub
   outIntraSpineProgress = 0.0f;
   outExactMatch = false;
 
-  if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount() || xpath.empty()) {
+  if (xpath.empty()) {
     return false;
   }
 
-  const auto spineItem = epub->getSpineItem(spineIndex);
-  if (spineItem.href.empty()) {
+  const auto state = parseSpineItem(epub, spineIndex);
+  if (!state) {
     return false;
   }
 
-  size_t chapterSize = 0;
-  uint8_t* chapterBytes = epub->readItemContentsToBytes(spineItem.href, &chapterSize, false);
-  if (!chapterBytes || chapterSize == 0) {
-    free(chapterBytes);
-    return false;
-  }
-
-  ParserState state(spineIndex);
-  XML_Parser parser = XML_ParserCreate(nullptr);
-  if (!parser) {
-    free(chapterBytes);
-    LOG_ERR("KOX", "Failed to allocate XML parser for reverse lookup spine=%d", spineIndex);
-    return false;
-  }
-
-  XML_SetUserData(parser, &state);
-  XML_SetElementHandler(parser, onStartElement, onEndElement);
-  XML_SetCharacterDataHandler(parser, onCharacterData);
-  XML_SetDefaultHandlerExpand(parser, onDefaultHandlerExpand);
-
-  const bool parseOk = XML_Parse(parser, reinterpret_cast<const char*>(chapterBytes), static_cast<int>(chapterSize),
-                                 XML_TRUE) != XML_STATUS_ERROR;
-
-  if (!parseOk) {
-    LOG_ERR("KOX", "Reverse XPath parse failed for spine=%d at line %lu: %s", spineIndex,
-            XML_GetCurrentLineNumber(parser), XML_ErrorString(XML_GetErrorCode(parser)));
-  }
-
-  XML_ParserFree(parser);
-  free(chapterBytes);
-
-  if (!parseOk) {
-    return false;
-  }
-
-  LOG_DBG("KOX", "Reverse: spine=%d anchors=%zu textBytes=%zu for '%s'", spineIndex, state.anchors.size(),
-          state.totalTextBytes, xpath.c_str());
-  return state.chooseProgressForXPath(xpath, outIntraSpineProgress, outExactMatch);
+  LOG_DBG("KOX", "Reverse: spine=%d anchors=%zu textBytes=%zu for '%s'", spineIndex, state->anchors.size(),
+          state->totalTextBytes, xpath.c_str());
+  return state->chooseProgressForXPath(xpath, outIntraSpineProgress, outExactMatch);
 }
 
 bool ChapterXPathIndexer::tryExtractSpineIndexFromXPath(const std::string& xpath, int& outSpineIndex) {
