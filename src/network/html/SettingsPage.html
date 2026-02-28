@@ -440,9 +440,10 @@
       const res = await fetch('/api/status');
       const data = await res.json();
       const enabled = data.dangerZoneEnabled === true || data.dangerZoneEnabled === 1;
-      document.getElementById('dz-status').textContent = enabled ? '✅ Enabled' : '❌ Disabled';
-      document.getElementById('dz-status').style.color = enabled ? '#27ae60' : '#e74c3c';
-      document.getElementById('dz-actions').style.display = enabled ? '' : 'none';
+      document.getElementById('dz-card').style.display = enabled ? '' : 'none';
+      document.getElementById('dz-status').textContent = '✅ Enabled';
+      document.getElementById('dz-status').style.color = '#27ae60';
+      document.getElementById('dz-actions').style.display = '';
     } catch(e) {
       document.getElementById('dz-status').textContent = 'Unknown';
     }
@@ -483,7 +484,7 @@
 </script>
 
 <!-- Danger Zone Tab -->
-<div class="card" style="border: 2px solid #e74c3c; margin-top: 24px;">
+<div id="dz-card" class="card" style="border: 2px solid #e74c3c; margin-top: 24px; display:none">
   <h2 style="color:#e74c3c;">🔴 Danger Zone</h2>
   <p style="color:#888;font-size:13px;margin:0 0 12px">These controls require your Danger Zone password. Enable/disable Danger Zone mode from the device settings UI.</p>
   <div class="setting-row">
