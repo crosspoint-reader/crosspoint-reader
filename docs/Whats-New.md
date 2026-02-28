@@ -86,7 +86,9 @@ See [`feed-server/README.md`](../feed-server/README.md) for setup instructions.
 
 ## OTA Firmware Updates via Feed
 
-When **Allow Firmware Updates** is enabled, the reader will download and apply new firmware automatically from the feed. The feed server places the latest `.bin` in `content/firmware/` and the reader flashes it on next boot.
+> ⚠️ **Security warning:** Only enable this if you control the feed server and trust it completely. A malicious feed server could deliver compromised firmware that fully owns your device. This feature is intended for developers building and delivering their own personalized firmware to their own Xteink reader — for example, if you've forked this repo and want to push your own builds over WiFi. **Do not enable it on a feed server you did not set up yourself.** The setting defaults to OFF.
+
+When **Allow Firmware Updates** is enabled in Settings → System → Feed Sync, the reader will download and apply new firmware automatically from the configured feed. The feed server places the latest `.bin` in `content/firmware/` and the reader flashes it on next boot.
 
 The firmware update progress is shown on-screen:
 
