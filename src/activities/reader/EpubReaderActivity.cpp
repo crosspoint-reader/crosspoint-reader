@@ -186,7 +186,7 @@ void EpubReaderActivity::loop() {
       return;
     }
   }
-  
+
   // Long press CONFIRM (1s+): bookmark
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= bookmarkHoldMs) {
     addBookmark();
