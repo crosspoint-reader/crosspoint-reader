@@ -20,6 +20,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [3.6.2 Reader](#362-reader)
       - [3.6.3 Controls](#363-controls)
       - [3.6.4 System](#364-system)
+      - [3.6.5 KOReader Sync Quick Setup](#365-koreader-sync-quick-setup)
     - [3.7 Sleep Screen](#37-sleep-screen)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
@@ -83,7 +84,8 @@ See [Reading Mode](#4-reading-mode) below for more information.
 The Browse Files screen acts as a file and folder browser.
 
 * **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
-* **Open Selection:** Press **Confirm** to open a folder or read a selected book.
+* **Open Selection:** Press **Confirm** to open a folder or read a selected book. 
+* **Delete Files:** Hold and release **Confirm** to delete the selected file. You will be given an option to either confirm or cancel deletion. Folder deletion is not supported.
 
 ### 3.4 Recent Books Screen
 
@@ -196,6 +198,113 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Clear Reading Cache**: Clear the internal SD card cache.
 - **Check for updates**: Check for Crosspoint firmware updates over WiFi.
 - **Language**: Set the system language (see **[Supported Languages](#supported-languages)** for more information).
+
+#### 3.6.5 KOReader Sync Quick Setup
+
+CrossPoint can sync reading progress with KOReader-compatible sync servers.
+It also interoperates with KOReader apps/devices when they use the same server and credentials.
+
+##### Option A: Free Public Server (`sync.koreader.rocks`)
+
+1. Register a user once (only if needed):
+
+```bash
+USERNAME="user"
+PASSWORD="pass"
+PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
+
+curl -i "https://sync.koreader.rocks/users/create" \
+  -H "Accept: application/vnd.koreader.v1+json" \
+  -H "Content-Type: application/json" \
+  --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
+```
+
+Already have KOReader Sync credentials? Skip registration; basic sync only requires using the same existing username/password on all devices.
+
+When this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
+
+2. On each CrossPoint device:
+   - Go to **Settings -> System -> KOReader Sync**.
+   - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
+   - Set **Sync Server URL** to `https://sync.koreader.rocks`, or leave it empty (both use the same default KOReader sync server).
+   - Run **Authenticate**.
+
+3. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
+   - Choose **Apply Remote** to jump to remote progress.
+   - Choose **Upload Local** to push current progress.
+
+##### Option B: Self-Hosted Server (Docker Compose)
+
+1. Start a sync server:
+
+```bash
+mkdir -p kosync-quickstart
+cd kosync-quickstart
+
+cat > compose.yaml <<'YAML'
+services:
+  kosync:
+    image: koreader/kosync:latest
+    ports:
+      - "7200:7200"
+      - "17200:17200"
+    volumes:
+      - ./data/redis:/var/lib/redis
+    environment:
+      - ENABLE_USER_REGISTRATION=true
+    restart: unless-stopped
+YAML
+
+# Docker
+docker compose up -d
+
+# Podman (alternative)
+podman compose up -d
+```
+
+> [!NOTE]
+> `ENABLE_USER_REGISTRATION=true` is convenient for first setup. After creating your users, set it to `false` (or remove it) to avoid unexpected registrations.
+
+2. Verify the server:
+
+```bash
+curl -H "Accept: application/vnd.koreader.v1+json" "http://<server-ip>:17200/healthcheck"
+# Expected: {"state":"OK"}
+```
+
+3. Register a user once.
+CrossPoint authenticates against KOReader Sync (`koreader/kosync`) using an MD5 key, so register using the MD5 of your password:
+
+> [!WARNING]
+> Sending a reusable MD5-derived password over plain HTTP is insecure.
+> Create unique sync-only credentials and do not reuse main account passwords.
+> Prefer `https://<server-ip>:7200` whenever traffic leaves a fully trusted LAN or when using untrusted networks.
+> Use `curl -k` only for self-signed certificate testing.
+
+```bash
+USERNAME="user"
+PASSWORD="pass"
+PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
+
+curl -i "http://<server-ip>:17200/users/create" \
+  -H "Accept: application/vnd.koreader.v1+json" \
+  -H "Content-Type: application/json" \
+  --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
+```
+
+If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, the account already exists.
+
+4. On each CrossPoint device:
+   - Go to **Settings -> System -> KOReader Sync**.
+   - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
+   - Set **Sync Server URL** to `http://<server-ip>:17200`.
+   - Run **Authenticate**.
+
+If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only for self-signed certificate testing).
+
+5. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
+   - Choose **Apply Remote** to jump to remote progress.
+   - Choose **Upload Local** to push current progress.
 
 ### 3.7 Sleep Screen
 

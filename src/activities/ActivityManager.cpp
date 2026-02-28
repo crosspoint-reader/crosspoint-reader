@@ -232,7 +232,7 @@ RenderLock::RenderLock() {
   isLocked = true;
 }
 
-RenderLock::RenderLock(Activity& /* unused */) {
+RenderLock::RenderLock([[maybe_unused]] Activity&) {
   xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
   isLocked = true;
 }
@@ -250,3 +250,12 @@ void RenderLock::unlock() {
     isLocked = false;
   }
 }
+
+/**
+ *
+ * Checks if renderingMutex is busy.
+ *
+ * @return true if renderingMutex is busy, otherwise false.
+ *
+ */
+bool RenderLock::peek() { return xQueuePeek(activityManager.renderingMutex, NULL, 0) != pdTRUE; };

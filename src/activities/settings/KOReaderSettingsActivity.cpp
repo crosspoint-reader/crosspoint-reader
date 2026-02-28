@@ -29,7 +29,7 @@ void KOReaderSettingsActivity::onExit() { Activity::onExit(); }
 
 void KOReaderSettingsActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    activityManager.popActivity();
+    finish();
     return;
   }
 

@@ -1,9 +1,8 @@
 #pragma once
+#include <HalStorage.h>
+
 #include <cstdint>
 #include <iosfwd>
-
-// Forward declarations
-class FsFile;
 
 class CrossPointSettings {
  private:
