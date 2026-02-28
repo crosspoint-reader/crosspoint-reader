@@ -399,9 +399,9 @@ void setup() {
           LOG_INF("MAIN", "Firmware update complete, restarting...");
           ESP.restart();
         } else {
+          const char* updateErr = Update.errorString();  // capture BEFORE abort clears it
           Update.abort();
           char errMsg[80];
-          const char* updateErr = Update.errorString();
           if (written != fileSize) {
             snprintf(errMsg, sizeof(errMsg), "short write %u/%u: %s", (unsigned)written, (unsigned)fileSize, updateErr);
           } else {
