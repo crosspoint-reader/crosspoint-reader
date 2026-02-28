@@ -903,3 +903,74 @@ struct PageLine {
 ---
 
 Philosophy: We are building a dedicated e-reader, not a Swiss Army knife. If a feature adds RAM pressure without significantly improving the reading experience, it is Out of Scope.
+---
+
+## OpenClaw Firmware Dev Loop
+
+This section documents the build/deploy/test cycle used with OpenClaw (Chip) as the dev agent.
+
+### Prerequisites
+- Reader IP: `192.168.0.234` (Laird's reader), `192.168.0.194` (Juliette's)
+- Feed server: `http://192.168.0.83:8090` (serves firmware + content via RSS)
+- Reader must be manually brought online (Settings → WiFi) — does NOT auto-connect until Danger Zone is enabled
+
+### Build
+```bash
+cd /home/laird/src/crosspoint-claw
+pio run
+# Verify SHA embedded correctly:
+strings .pio/build/default/firmware.bin | grep "^1\.[0-9]\."
+# Expected: 1.1.0-dev+<sha>
+```
+
+### Deploy to Feed Server
+```bash
+SHA=$(git rev-parse --short HEAD)
+cp .pio/build/default/firmware.bin /home/laird/clawd/crosspoint-feed/firmware/firmware.bin
+echo "$SHA" > /home/laird/clawd/crosspoint-feed/firmware/.version
+```
+
+### Upload to Reader SD Card
+```bash
+curl -X POST "http://192.168.0.234/upload?path=/" \
+  -F "file=@/home/laird/src/crosspoint-claw/.pio/build/default/firmware.bin"
+```
+
+### Trigger Flash
+- **Sleep/wake** on the device triggers the flash on boot (most reliable method)
+- Power cycle also works
+- There is no "Settings → Restart" menu option
+- `/api/reboot` (POST, Danger Zone auth required) can trigger reboot remotely once DZ is enabled
+
+### Verify
+```bash
+curl -s "http://192.168.0.234/api/status" | jq .version
+# Should show: "1.1.0-dev+<sha>"
+```
+
+### Key Lessons Learned
+- **Settings are persisted via `JsonSettingsIO`** — new settings fields MUST be added to both `saveSettings()` and `loadSettings()` in `src/JsonSettingsIO.cpp` or they silently reset to defaults on every boot
+- **Version string is injected at build time** via `scripts/git_version.py` pre-script — always run `strings firmware.bin | grep "^1\."` to confirm the right SHA is baked in before uploading
+- **Feed server auto-picks up `firmware.bin`** — updating the file is enough, the RSS feed reflects it immediately
+- **Reader does not auto-connect** to WiFi on boot until Danger Zone is enabled + password set
+- **`/api/feed/sync`, `/api/flash`, `/api/reboot`** are all Danger Zone endpoints (require Basic Auth password)
+- **Multiple flashes in one session**: each build produces a new `firmware.bin`; always verify SHA after upload before triggering flash
+
+### Danger Zone Setup (one-time on device)
+1. Settings → SYST tab → toggle **Danger Zone** ON
+2. Tap **Danger Zone Password** → set a password
+3. After reboot, device auto-connects and web server runs in background
+4. All DZ endpoints require: `-u "anyuser:YOUR_PASSWORD"`
+
+### Full Automated Loop (once Danger Zone active)
+```bash
+pio run && \
+SHA=$(git rev-parse --short HEAD) && \
+strings .pio/build/default/firmware.bin | grep "^1\." && \
+cp .pio/build/default/firmware.bin ~/clawd/crosspoint-feed/firmware/firmware.bin && \
+echo "$SHA" > ~/clawd/crosspoint-feed/firmware/.version && \
+curl -X POST "http://192.168.0.234/upload?path=/" -F "file=@.pio/build/default/firmware.bin" && \
+curl -X POST "http://192.168.0.234/api/reboot" -u "chip:PASSWORD" && \
+sleep 30 && \
+curl -s "http://192.168.0.234/api/status" | jq .version
+```
