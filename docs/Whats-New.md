@@ -99,9 +99,9 @@ After flashing, the reader reboots automatically.
 
 ---
 
-## Settings: Four-Tab Layout
+## Settings: Improved Column Navigation
 
-Settings are now organized into four tabs for easier navigation:
+Settings have always been organized into four columns (DISP, READ, CTRL, SYST). The improvement is that the **left/right hardware buttons now switch between columns**, making it much faster to jump between setting categories without hunting through menus.
 
 ### DISP — Display
 
