@@ -593,6 +593,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       section->currentPage = nextPageNumber;
     }
 
+    if (!pendingAnchor.empty()) {
+      const auto anchorMap =
+          Section::readAnchorMap(epub->getCachePath() + "/sections/" + std::to_string(currentSpineIndex) + ".bin");
+      auto it = anchorMap.find(pendingAnchor);
+      if (it != anchorMap.end()) {
+        section->currentPage = it->second;
+        LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), it->second);
+      } else {
+        LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
+      }
+      pendingAnchor.clear();
+    }
+
     // handles changes in reader settings and reset to approximate position based on cached progress
     if (cachedChapterTotalPageCount > 0) {
       // only goes to relative position if spine index matches cached value
@@ -612,19 +625,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       }
       section->currentPage = newPage;
       pendingPercentJump = false;
-    }
-
-    if (!pendingAnchor.empty()) {
-      const auto anchorMap =
-          Section::readAnchorMap(epub->getCachePath() + "/sections/" + std::to_string(currentSpineIndex) + ".bin");
-      auto it = anchorMap.find(pendingAnchor);
-      if (it != anchorMap.end()) {
-        section->currentPage = it->second;
-        LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), it->second);
-      } else {
-        LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
-      }
-      pendingAnchor.clear();
     }
   }
 
