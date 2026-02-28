@@ -10,6 +10,7 @@
 #include <Logging.h>
 #include <SPI.h>
 #include <Update.h>
+#include <esp_ota_ops.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -334,6 +335,9 @@ void dangerZoneAutoConnect() {
 
 void setup() {
   t1 = millis();
+
+  // Mark this firmware as valid to prevent rollback
+  esp_ota_mark_app_valid_cancel_rollback();
 
   gpio.begin();
   powerManager.begin();
