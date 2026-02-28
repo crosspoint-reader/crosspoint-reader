@@ -11,6 +11,12 @@
 #include <SPI.h>
 #include <Update.h>
 #include <esp_ota_ops.h>
+
+// Run before global constructors to prevent OTA rollback even if a global crashes
+__attribute__((constructor(101))) static void earlyMarkOtaValid() {
+  esp_ota_mark_app_valid_cancel_rollback();
+}
+
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -335,9 +341,6 @@ void dangerZoneAutoConnect() {
 
 void setup() {
   t1 = millis();
-
-  // Mark this firmware as valid to prevent rollback
-  esp_ota_mark_app_valid_cancel_rollback();
 
   gpio.begin();
   powerManager.begin();
