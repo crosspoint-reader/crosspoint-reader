@@ -439,8 +439,9 @@ void setup() {
 
 void runScreenshotTour() {
   auto captureStep = [](const char* name) {
+    // Give the activity time to render
     for (int i = 0; i < 6; i++) {
-      if (currentActivity) currentActivity->loop();
+      activityManager.loop();
       delay(100);
     }
     ScreenCapture::save(renderer, name);
@@ -449,71 +450,39 @@ void runScreenshotTour() {
   GUI.drawPopup(renderer, "Taking screenshots...");
   delay(300);
 
-  onGoHome();
+  activityManager.goToBoot();
   captureStep("home");
 
-  // ── Settings: all four tabs ───────────────────────────────────────────────
-  {
-    exitActivity();
-    auto* settings = new SettingsActivity(renderer, mappedInputManager, onGoHome);
-    enterNewActivity(settings);
-    captureStep("settings_disp");
+  activityManager.goToSettings();
+  captureStep("settings");
 
-    settings->enterCategory(1);
-    captureStep("settings_read");
-
-    settings->enterCategory(2);
-    captureStep("settings_ctrl");
-
-    settings->enterCategory(3);
-    captureStep("settings_syst");
-  }
-
-  // ── Browse / Library ──────────────────────────────────────────────────────
-  exitActivity();
-  enterNewActivity(new MyLibraryActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+  activityManager.goToMyLibrary();
   captureStep("browse");
 
-  // ── Recent Books ──────────────────────────────────────────────────────────
-  exitActivity();
-  enterNewActivity(new RecentBooksActivity(renderer, mappedInputManager, onGoHome, onGoToReader));
+  activityManager.goToRecentBooks();
   captureStep("recents");
 
-  // ── Reader (open last book if available) ─────────────────────────────────
   if (!APP_STATE.openEpubPath.empty()) {
-    exitActivity();
-    enterNewActivity(new ReaderActivity(renderer, mappedInputManager, APP_STATE.openEpubPath,
-                                        onGoHome, onGoToMyLibraryWithPath));
+    activityManager.goToReader(APP_STATE.openEpubPath);
     captureStep("reader");
-    exitActivity();
   }
 
-  // ── OPDS Browser ─────────────────────────────────────────────────────────
-  exitActivity();
-  enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
+  activityManager.goToBrowser();
   captureStep("opds");
 
-  // ── File Transfer / Web Server ────────────────────────────────────────────
-  exitActivity();
-  enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoHome));
+  activityManager.goToFileTransfer();
   captureStep("file_transfer");
 
-  // ── Network screens ───────────────────────────────────────────────────────
-  exitActivity();
-  enterNewActivity(new NetworkModeSelectionActivity(renderer, mappedInputManager,
-                                                    [](NetworkMode) {}, [] {}));
+  activityManager.replaceActivity(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInputManager));
   captureStep("network_mode");
 
-  exitActivity();
-  // false = no auto-connect, so we stay in SCANNING state for the capture
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInputManager, false));
+  activityManager.replaceActivity(std::make_unique<WifiSelectionActivity>(renderer, mappedInputManager, false));
   captureStep("wifi_scan");
 
-  exitActivity();
-  enterNewActivity(new KeyboardEntryActivity(renderer, mappedInputManager, "WIFI PASSWORD", "", 64, true));
+  activityManager.replaceActivity(std::make_unique<KeyboardEntryActivity>(renderer, mappedInputManager, "WIFI PASSWORD", "", 64, true));
   captureStep("keyboard");
 
-  onGoHome();
+  activityManager.goToBoot();
   delay(300);
   GUI.drawPopup(renderer, "Done! Saved to /screencap/");
   delay(2000);
