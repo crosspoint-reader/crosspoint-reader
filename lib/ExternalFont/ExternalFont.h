@@ -70,6 +70,14 @@ class ExternalFont {
   void unload();
 
   /**
+   * Check if a font with given dimensions can fit in the glyph cache.
+   * Fonts with bytesPerChar > MAX_GLYPH_BYTES cannot be loaded.
+   */
+  static bool canFitGlyph(uint8_t width, uint8_t height) {
+    return static_cast<uint16_t>(((width + 7) / 8)) * height <= MAX_GLYPH_BYTES;
+  }
+
+  /**
    * Get cached metrics for a glyph.
    * Must call getGlyph() first to ensure it's loaded!
    * @param cp Unicode codepoint
@@ -92,9 +100,10 @@ class ExternalFont {
   uint8_t _bytesPerRow = 0;
   uint16_t _bytesPerChar = 0;
 
-  // LRU cache - 256 glyphs for better Chinese text performance
-  // Memory: ~52KB (256 * 204 bytes per entry)
-  static constexpr int CACHE_SIZE = 256;       // 256 glyphs
+  // LRU cache - 128 glyphs for CJK text rendering
+  // Memory: ~26KB (128 * ~211 bytes per entry) per font instance
+  // 128 entries covers typical CJK pages (80-150 unique chars).
+  static constexpr int CACHE_SIZE = 128;       // 128 glyphs
   static constexpr int MAX_GLYPH_BYTES = 200;  // Max 200 bytes per glyph (enough for 33x39)
 
   // Flag to mark cached "non-existent" glyphs (avoid repeated SD reads)

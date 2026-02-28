@@ -104,6 +104,17 @@ bool isUiFont(int fontId) {
   }
   return false;
 }
+// Check if the font has at least one renderable glyph for any character in text
+bool fontHasPrintableChars(const EpdFontFamily& font, const char* text, EpdFontFamily::Style style) {
+  const char* ptr = text;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+    if (font.getGlyph(cp, style) != nullptr) {
+      return true;
+    }
+  }
+  return false;
+}
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -421,7 +432,12 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
     if (hasUiFontChar || hasCjkChar) {
       int width = 0;
       const char* ptr = text;
-      const EpdFontFamily& fontFamily = fontMap.at(fontId);
+      const auto fontIt = fontMap.find(effectiveFontId);
+      if (fontIt == fontMap.end()) {
+        LOG_ERR("GFX", "Font %d not found in UI CJK path", effectiveFontId);
+        return 0;
+      }
+      const EpdFontFamily& fontFamily = fontIt->second;
       FontManager& fmLocal = FontManager::getInstance();
       uint32_t cp;
       while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
@@ -578,10 +594,10 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return;
   }
-  const auto font = fontMap.at(effectiveFontId);
+  const auto& font = fontMap.at(effectiveFontId);
 
   // no printable characters
-  if (!font.hasPrintableChars(text, style)) {
+  if (!fontHasPrintableChars(font, text, style)) {
     FontManager& fm = FontManager::getInstance();
     if (isReaderFont(fontId)) {
       if (!fm.isExternalFontEnabled()) {
@@ -1340,6 +1356,47 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
+  // External reader font: compute advance using bitmap font metrics
+  if (isReaderFont(fontId)) {
+    FontManager& fm = FontManager::getInstance();
+    if (fm.isExternalFontEnabled()) {
+      ExternalFont* extFont = fm.getActiveFont();
+      if (extFont) {
+        int width = 0;
+        const int effectiveFontId = getEffectiveFontId(fontId);
+        const auto fallbackIt = fontMap.find(effectiveFontId);
+        const int cjkAdvance = clampExternalAdvance(extFont->getCharWidth(), cjkSpacing);
+        uint32_t cp;
+        while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+          if (utf8IsCombiningMark(cp)) continue;
+          // CJK: use charWidth directly (no SD card read needed)
+          if (isCjkCodepoint(cp)) {
+            width += cjkAdvance;
+            continue;
+          }
+          // Non-CJK: try external font glyph metrics
+          const uint8_t* bitmap = extFont->getGlyph(cp);
+          if (bitmap) {
+            uint8_t advanceX = extFont->getCharWidth();
+            extFont->getGlyphMetrics(cp, nullptr, &advanceX);
+            int spacing = 0;
+            if (isAsciiDigit(cp)) {
+              spacing = asciiDigitSpacing;
+            } else if (isAsciiLetter(cp)) {
+              spacing = asciiLetterSpacing;
+            }
+            width += clampExternalAdvance(advanceX, spacing);
+          } else if (fallbackIt != fontMap.end()) {
+            // Fall back to built-in reader font for missing glyphs
+            const EpdGlyph* glyph = fallbackIt->second.getGlyph(cp, style);
+            if (glyph) width += glyph->advanceX;
+          }
+        }
+        return width;
+      }
+    }
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -1476,10 +1533,10 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return;
   }
-  const auto font = fontMap.at(effectiveFontId);
+  const auto& font = fontMap.at(effectiveFontId);
 
   // No printable characters
-  if (!font.hasPrintableChars(text, style)) {
+  if (!fontHasPrintableChars(font, text, style)) {
     if (isReaderFont(fontId)) {
       return;
     }
