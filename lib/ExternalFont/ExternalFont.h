@@ -17,17 +17,7 @@
  */
 class ExternalFont {
  public:
-  ExternalFont() {
-    // Initialize cache and hash table
-    for (int i = 0; i < CACHE_SIZE; i++) {
-      _cache[i].codepoint = 0xFFFFFFFF;
-      _cache[i].lastUsed = 0;
-      _cache[i].notFound = false;
-      _cache[i].minX = 0;
-      _cache[i].advanceX = 0;
-      _hashTable[i] = -1;
-    }
-  }
+  ExternalFont() = default;
   ~ExternalFont();
 
   // Disable copy
@@ -100,9 +90,9 @@ class ExternalFont {
   uint8_t _bytesPerRow = 0;
   uint16_t _bytesPerChar = 0;
 
-  // LRU cache - 128 glyphs for CJK text rendering
-  // Memory: ~26KB (128 * ~211 bytes per entry) per font instance
-  // 128 entries covers typical CJK pages (80-150 unique chars).
+  // LRU cache - dynamically allocated on load(), freed on unload()
+  // 128 glyphs for CJK text rendering (~26KB per font when loaded).
+  // Memory is only allocated when an external font is actually used.
   static constexpr int CACHE_SIZE = 128;       // 128 glyphs
   static constexpr int MAX_GLYPH_BYTES = 200;  // Max 200 bytes per glyph (enough for 33x39)
 
@@ -117,7 +107,7 @@ class ExternalFont {
     uint8_t minX = 0;       // Cached rendering metrics
     uint8_t advanceX = 0;   // Cached advance width
   };
-  CacheEntry _cache[CACHE_SIZE];
+  CacheEntry* _cache = nullptr;       // Dynamically allocated on load()
   uint32_t _accessCounter = 0;
 
   // Sequential read fast path - skip seek if reading consecutive glyphs
@@ -126,7 +116,7 @@ class ExternalFont {
 
   // Simple hash table for O(1) cache lookup (codepoint -> cache index, -1 if
   // not cached)
-  int16_t _hashTable[CACHE_SIZE];
+  int16_t* _hashTable = nullptr;      // Dynamically allocated on load()
   static int hashCodepoint(uint32_t cp) { return cp % CACHE_SIZE; }
 
   /**

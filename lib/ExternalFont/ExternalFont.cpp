@@ -24,13 +24,11 @@ void ExternalFont::unload() {
   _lastReadOffset = 0;
   _hasLastReadOffset = false;
 
-  // Clear cache and hash table
-  for (int i = 0; i < CACHE_SIZE; i++) {
-    _cache[i].codepoint = 0xFFFFFFFF;
-    _cache[i].lastUsed = 0;
-    _cache[i].notFound = false;
-    _hashTable[i] = -1;
-  }
+  // Free dynamically allocated cache
+  delete[] _cache;
+  _cache = nullptr;
+  delete[] _hashTable;
+  _hashTable = nullptr;
 }
 
 bool ExternalFont::parseFilename(const char* filepath) {
@@ -120,10 +118,28 @@ bool ExternalFont::load(const char* filepath) {
     return false;
   }
 
+  // Allocate glyph cache on demand (saves ~27KB when font is not loaded)
+  _cache = new (std::nothrow) CacheEntry[CACHE_SIZE];
+  _hashTable = new (std::nothrow) int16_t[CACHE_SIZE];
+  if (!_cache || !_hashTable) {
+    LOG_ERR("EFT", "Failed to allocate glyph cache (%d bytes)", static_cast<int>(CACHE_SIZE * (sizeof(CacheEntry) + sizeof(int16_t))));
+    delete[] _cache;
+    _cache = nullptr;
+    delete[] _hashTable;
+    _hashTable = nullptr;
+    _fontFile.close();
+    return false;
+  }
+
+  // CacheEntry default member initializers handle codepoint/lastUsed/etc.
+  // Just need to initialize hash table to -1 (empty)
+  memset(_hashTable, -1, CACHE_SIZE * sizeof(int16_t));
+
   _isLoaded = true;
   _lastReadOffset = 0;
   _hasLastReadOffset = false;
-  LOG_DBG("EFT", "Loaded: %s", filepath);
+  LOG_DBG("EFT", "Loaded: %s (cache %dKB allocated)", filepath,
+          static_cast<int>(CACHE_SIZE * (sizeof(CacheEntry) + sizeof(int16_t)) / 1024));
   return true;
 }
 
@@ -329,6 +345,7 @@ const uint8_t* ExternalFont::getGlyph(uint32_t codepoint) {
 }
 
 bool ExternalFont::getGlyphMetrics(uint32_t codepoint, uint8_t* outMinX, uint8_t* outAdvanceX) {
+  if (!_cache) return false;
   int idx = findInCache(codepoint);
   if (idx >= 0 && !_cache[idx].notFound) {
     if (outMinX) *outMinX = _cache[idx].minX;
