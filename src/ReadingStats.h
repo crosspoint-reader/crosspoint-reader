@@ -16,6 +16,7 @@ struct GlobalStats {
   uint32_t totalReadingSeconds = 0;
   uint32_t totalPagesRead = 0;
   uint32_t totalWordsRead = 0;
+  uint16_t booksStarted = 0;
   uint16_t booksFinished = 0;
 
   static constexpr char PATH[] = "/.crosspoint/stats.json";

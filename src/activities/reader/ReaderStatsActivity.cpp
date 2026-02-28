@@ -32,8 +32,8 @@ void ReaderStatsActivity::onEnter() {
 void ReaderStatsActivity::onExit() { Activity::onExit(); }
 
 void ReaderStatsActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
@@ -107,6 +107,9 @@ void ReaderStatsActivity::render(RenderLock&&) {
   y += rowHeight;
   renderer.drawText(UI_10_FONT_ID, marginLeft, y,
                     (std::string(tr(STR_STATS_WORDS)) + std::to_string(globalStats.totalWordsRead)).c_str());
+  y += rowHeight;
+  renderer.drawText(UI_10_FONT_ID, marginLeft, y,
+                    (std::string(tr(STR_STATS_STARTED)) + std::to_string(globalStats.booksStarted)).c_str());
   y += rowHeight;
   renderer.drawText(UI_10_FONT_ID, marginLeft, y,
                     (std::string(tr(STR_STATS_FINISHED)) + std::to_string(globalStats.booksFinished)).c_str());

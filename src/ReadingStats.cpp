@@ -51,6 +51,7 @@ bool GlobalStats::loadFromFile() {
   totalReadingSeconds = doc["totalReadingSeconds"] | (uint32_t)0;
   totalPagesRead = doc["totalPagesRead"] | (uint32_t)0;
   totalWordsRead = doc["totalWordsRead"] | (uint32_t)0;
+  booksStarted = doc["booksStarted"] | (uint16_t)0;
   booksFinished = doc["booksFinished"] | (uint16_t)0;
   return true;
 }
@@ -61,6 +62,7 @@ bool GlobalStats::saveToFile() const {
   doc["totalReadingSeconds"] = totalReadingSeconds;
   doc["totalPagesRead"] = totalPagesRead;
   doc["totalWordsRead"] = totalWordsRead;
+  doc["booksStarted"] = booksStarted;
   doc["booksFinished"] = booksFinished;
   String json;
   serializeJson(doc, json);

@@ -125,6 +125,7 @@ void EpubReaderActivity::onExit() {
   // Reading stats: commit session to disk
   if (epub) {
     const uint32_t sessionSeconds = static_cast<uint32_t>((millis() - sessionStartMs) / 1000);
+    const bool isFirstSession = (bookStats.sessionsCount == 0);
     bookStats.totalReadingSeconds += sessionSeconds;
     bookStats.totalPagesRead += sessionPagesRead;
     bookStats.totalWordsRead += sessionWordsRead;
@@ -136,6 +137,9 @@ void EpubReaderActivity::onExit() {
     global.totalReadingSeconds += sessionSeconds;
     global.totalPagesRead += sessionPagesRead;
     global.totalWordsRead += sessionWordsRead;
+    if (isFirstSession) {
+      global.booksStarted++;
+    }
     if (bookFinishedThisSession) {
       global.booksFinished++;
     }
