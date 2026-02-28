@@ -13,4 +13,5 @@ class RenderLock {
   RenderLock& operator=(const RenderLock&) = delete;
   ~RenderLock();
   void unlock();
+  static bool peek();
 };

@@ -13,15 +13,17 @@
 #include "RenderLock.h"
 
 class Activity {
+  friend class ActivityManager;
+
  protected:
   std::string name;
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
 
- public:
   ActivityResultHandler resultHandler;
   ActivityResult result;
 
+ public:
   explicit Activity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)
       : name(std::move(name)), renderer(renderer), mappedInput(mappedInput) {}
   virtual ~Activity() = default;
