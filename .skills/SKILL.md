@@ -522,6 +522,35 @@ find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
 clang-format -i src/**/*.cpp src/**/*.h
 ```
 
+### OTA Firmware Updates — Critical: Rollback Enabled
+
+**`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=1` is set in the ESP-IDF sdkconfig for this platform.**
+
+This means: after a successful OTA flash, the bootloader gives the new firmware one boot to prove itself. If the new firmware does NOT call `esp_ota_mark_app_valid_cancel_rollback()` within the watchdog timeout, the bootloader **automatically rolls back to the previous firmware** — silently, with no error log.
+
+**Symptom**: OTA appears to succeed (progress bar completes, `firmware.bin` is deleted, device reboots), but the device comes back running the old firmware version.
+
+**Fix**: `esp_ota_mark_app_valid_cancel_rollback()` MUST be called early in `setup()`, before any code that could hang or crash:
+
+```cpp
+#include <esp_ota_ops.h>
+
+void setup() {
+  // MUST be first — prevents OTA rollback on clean boot
+  esp_ota_mark_app_valid_cancel_rollback();
+  // ... rest of setup
+}
+```
+
+**This call is already in `src/main.cpp`** — do not remove it. If you add a new entry point or split setup(), ensure this call happens first.
+
+**Why rollback is good**: It prevents bricked devices. If new firmware crashes on boot, the device automatically recovers. The call above is what tells the bootloader "this firmware is healthy, don't roll back."
+
+**Debugging silent rollbacks**: If OTA seems to work but old firmware keeps running, check:
+1. Is `esp_ota_mark_app_valid_cancel_rollback()` being called?
+2. Is the firmware crashing before that call?
+3. Check `esp_reset_reason()` in `/api/status` — `ESP_RST_TASK_WDT` or `ESP_RST_PANIC` after an OTA attempt = rollback triggered
+
 ### Debugging Crashes
 
 **Common Crash Causes**:
