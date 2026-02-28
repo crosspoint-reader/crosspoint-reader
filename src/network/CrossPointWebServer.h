@@ -120,6 +120,8 @@ class CrossPointWebServer {
   void handlePostReboot();
   void handleGetDangerZoneStatus() const;
   void handlePostScreenshotTour();
+  void handlePostFlash();
+  void handleGetFirmwareStatus() const;
 
   // Check Danger Zone password from request header or query param
   bool checkDangerZoneAuth() const;

@@ -54,6 +54,7 @@ ActivityManager activityManager(renderer, mappedInputManager);
 static std::unique_ptr<CrossPointWebServer> dzWebServer;
 static bool dzWifiConnected = false;
 volatile bool dzScreenshotTourRequested = false;
+volatile bool dzFlashRequested = false;
 FontDecompressor fontDecompressor;
 
 // Fonts
@@ -704,6 +705,58 @@ void loop() {
 
     // Return to home screen
     activityManager.goHome();
+  }
+
+  // Danger Zone: handle flash firmware request from API
+  if (dzFlashRequested) {
+    dzFlashRequested = false;
+
+    if (!Storage.exists("/firmware.bin")) {
+      LOG_ERR("DZ", "Flash requested but /firmware.bin not found");
+    } else {
+      LOG_INF("DZ", "Flashing firmware from /firmware.bin via API...");
+
+      // Stop DZ web server before flashing (OTA disables flash cache)
+      if (dzWebServer) {
+        dzWebServer->stop();
+        dzWebServer.reset();
+        UITheme::setHttpServerActive(false);
+      }
+      UITheme::setNetworkStatus(false, false);
+      WiFi.disconnect(false);
+      WiFi.mode(WIFI_OFF);
+      dzWifiConnected = false;
+
+      FsFile firmwareFile = Storage.open("/firmware.bin");
+      if (firmwareFile) {
+        const size_t fileSize = firmwareFile.size();
+        if (fileSize > 0 && Update.begin(fileSize, U_FLASH)) {
+          size_t written = 0;
+          uint8_t buf[512];
+          while (written < fileSize) {
+            const int bytesRead = firmwareFile.read(buf, sizeof(buf));
+            if (bytesRead <= 0) break;
+            const size_t bytesWritten = Update.write(buf, bytesRead);
+            if (bytesWritten != static_cast<size_t>(bytesRead)) break;
+            written += bytesWritten;
+          }
+          firmwareFile.close();
+          if (written == fileSize && Update.end()) {
+            Storage.remove("/firmware.bin");
+            LOG_INF("DZ", "Firmware flash complete, restarting...");
+            ESP.restart();
+          } else {
+            Update.abort();
+            LOG_ERR("DZ", "Firmware flash failed: written=%u/%u", (unsigned)written, (unsigned)fileSize);
+          }
+        } else {
+          firmwareFile.close();
+          LOG_ERR("DZ", "Update.begin() failed: %s", Update.errorString());
+        }
+      }
+      // If flash failed, reconnect WiFi so the device is still reachable
+      dangerZoneAutoConnect();
+    }
   }
 
   const unsigned long loopDuration = millis() - loopStartTime;

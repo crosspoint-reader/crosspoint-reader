@@ -169,6 +169,8 @@ void CrossPointWebServer::begin() {
   server->on("/api/reboot", HTTP_POST, [this] { handlePostReboot(); });
   server->on("/api/danger-zone/status", HTTP_GET, [this] { handleGetDangerZoneStatus(); });
   server->on("/api/screenshot-tour", HTTP_POST, [this] { handlePostScreenshotTour(); });
+  server->on("/api/flash", HTTP_POST, [this] { handlePostFlash(); });
+  server->on("/api/firmware-status", HTTP_GET, [this] { handleGetFirmwareStatus(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -1446,8 +1448,9 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
 // ─── Danger Zone ──────────────────────────────────────────────────────────────
 
-// Flag checked by main loop to trigger screenshot tour (defined in main.cpp)
+// Flags checked by main loop (defined in main.cpp)
 extern volatile bool dzScreenshotTourRequested;
+extern volatile bool dzFlashRequested;
 
 bool CrossPointWebServer::checkDangerZoneAuth() const {
   if (!SETTINGS.dangerZoneEnabled) return false;
@@ -1491,4 +1494,25 @@ void CrossPointWebServer::handlePostScreenshotTour() {
   // during the tour, so we respond immediately and let the main loop handle it.
   dzScreenshotTourRequested = true;
   server->send(200, "text/plain", "Screenshot tour starting. WiFi will reconnect when done.");
+}
+
+void CrossPointWebServer::handlePostFlash() {
+  if (!checkDangerZoneAuth()) {
+    server->send(403, "text/plain", "Forbidden: Danger Zone not enabled or bad password");
+    return;
+  }
+  if (!Storage.exists("/firmware.bin")) {
+    server->send(404, "text/plain", "No /firmware.bin found on SD card");
+    return;
+  }
+  // Signal the main loop to flash firmware.  Device will reboot after flashing.
+  dzFlashRequested = true;
+  server->send(200, "text/plain", "Flashing firmware. Device will reboot when done.");
+}
+
+void CrossPointWebServer::handleGetFirmwareStatus() const {
+  const bool exists = Storage.exists("/firmware.bin");
+  char buf[64];
+  snprintf(buf, sizeof(buf), "{\"firmwareReady\":%s}", exists ? "true" : "false");
+  server->send(200, "application/json", buf);
 }
