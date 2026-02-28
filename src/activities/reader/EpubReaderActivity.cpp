@@ -17,7 +17,9 @@
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/ReaderStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
@@ -105,12 +107,40 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  // Reading stats: begin session
+  sessionStartMs = millis();
+  sessionWordsRead = 0;
+  sessionPagesRead = 0;
+  bookFinishedThisSession = false;
+  bookStats = BookStats{};
+  bookStats.loadFromFile(epub->getCachePath() + "/stats.json");
+
   // Trigger first update
   requestUpdate();
 }
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  // Reading stats: commit session to disk
+  if (epub) {
+    const uint32_t sessionSeconds = static_cast<uint32_t>((millis() - sessionStartMs) / 1000);
+    bookStats.totalReadingSeconds += sessionSeconds;
+    bookStats.totalPagesRead += sessionPagesRead;
+    bookStats.totalWordsRead += sessionWordsRead;
+    bookStats.sessionsCount++;
+    bookStats.saveToFile(epub->getCachePath() + "/stats.json");
+
+    GlobalStats global;
+    global.loadFromFile();
+    global.totalReadingSeconds += sessionSeconds;
+    global.totalPagesRead += sessionPagesRead;
+    global.totalWordsRead += sessionWordsRead;
+    if (bookFinishedThisSession) {
+      global.booksFinished++;
+    }
+    global.saveToFile();
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -411,6 +441,28 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::STATISTICS: {
+      const uint32_t sessionSeconds = static_cast<uint32_t>((millis() - sessionStartMs) / 1000);
+
+      // Merge current session into display-only copies so the stats screen reflects
+      // the full picture including the session in progress.
+      BookStats displayBook = bookStats;
+      displayBook.totalReadingSeconds += sessionSeconds;
+      displayBook.totalPagesRead += sessionPagesRead;
+      displayBook.totalWordsRead += sessionWordsRead;
+      displayBook.sessionsCount++;
+
+      GlobalStats displayGlobal;
+      displayGlobal.loadFromFile();
+      displayGlobal.totalReadingSeconds += sessionSeconds;
+      displayGlobal.totalPagesRead += sessionPagesRead;
+      displayGlobal.totalWordsRead += sessionWordsRead;
+
+      startActivityForResult(std::make_unique<ReaderStatsActivity>(renderer, mappedInput, displayBook, displayGlobal,
+                                                                   sessionSeconds, sessionPagesRead, sessionWordsRead),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : 0;
@@ -534,6 +586,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
+    if (!bookFinishedThisSession) {
+      bookFinishedThisSession = true;
+    }
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
@@ -664,6 +719,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 }
 
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
+  sessionPagesRead++;
   FsFile f;
   if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
@@ -683,6 +739,9 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
+  // Accumulate word count for reading statistics
+  sessionWordsRead += static_cast<uint32_t>(page->wordCount());
+
   // Force special handling for pages with images when anti-aliasing is on
   bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
