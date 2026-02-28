@@ -383,7 +383,14 @@ void setup() {
             drawUpdateScreen(pct);
           }
         });
-        const size_t written = Update.writeStream(firmwareFile);
+        size_t written = 0;
+        uint8_t buf[512];
+        while (written < fileSize) {
+          const int bytesRead = firmwareFile.read(buf, sizeof(buf));
+          if (bytesRead <= 0) break;
+          Update.write(buf, bytesRead);
+          written += bytesRead;
+        }
         firmwareFile.close();
         if (written == fileSize && Update.end()) {
           if (!Storage.remove("/firmware.bin")) {
