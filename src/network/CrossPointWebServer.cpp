@@ -136,6 +136,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
+  server->on("/api/read", HTTP_GET, [this] { handleReadText(); });
 
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
@@ -553,6 +554,63 @@ void CrossPointWebServer::handleDownload() const {
 }
 
 // Diagnostic counters for upload performance analysis
+
+void CrossPointWebServer::handleReadText() const {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+
+  String itemPath = server->arg("path");
+  if (itemPath.isEmpty() || itemPath == "/") {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+  if (!itemPath.startsWith("/")) {
+    itemPath = "/" + itemPath;
+  }
+
+  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+  if (itemName.startsWith(".")) {
+    server->send(403, "text/plain", "Cannot access system files");
+    return;
+  }
+
+  if (!Storage.exists(itemPath.c_str())) {
+    server->send(404, "text/plain", "File not found");
+    return;
+  }
+
+  FsFile file = Storage.open(itemPath.c_str());
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    server->send(400, "text/plain", "Not a file");
+    return;
+  }
+
+  const size_t fileSize = file.size();
+  constexpr size_t MAX_TEXT_SIZE = 32768;  // 32KB max for text viewer
+  if (fileSize > MAX_TEXT_SIZE) {
+    file.close();
+    server->send(413, "text/plain", "File too large for text viewer (max 32KB)");
+    return;
+  }
+
+  // Read entire file into a buffer and send as text/plain
+  String content;
+  content.reserve(fileSize + 1);
+  uint8_t buf[256];
+  while (file.available()) {
+    int n = file.read(buf, sizeof(buf));
+    if (n <= 0) break;
+    content.concat(reinterpret_cast<const char*>(buf), n);
+  }
+  file.close();
+
+  server->sendHeader("Cache-Control", "no-cache");
+  server->send(200, "text/plain; charset=utf-8", content);
+}
+
 static unsigned long uploadStartTime = 0;
 static unsigned long totalWriteTime = 0;
 static size_t writeCount = 0;

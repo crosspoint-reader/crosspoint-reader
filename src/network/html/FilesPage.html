@@ -1535,7 +1535,41 @@ function retryAllFailedUploads() {
 
     xhr.send(formData);
   }
+
+  // Text file viewer
+  function openTextViewModal(name, path) {
+    document.getElementById('textViewTitle').textContent = '📄 ' + name;
+    const pre = document.getElementById('textViewContent');
+    pre.textContent = 'Loading…';
+    document.getElementById('textViewModal').classList.add('open');
+    fetch('/api/read?path=' + encodeURIComponent(path))
+      .then(async res => {
+        if (res.ok) {
+          pre.textContent = await res.text();
+        } else {
+          pre.textContent = 'Error: ' + await res.text();
+        }
+      })
+      .catch(err => { pre.textContent = 'Network error: ' + err.message; });
+  }
+
+  function closeTextViewModal() {
+    document.getElementById('textViewModal').classList.remove('open');
+  }
+
   hydrate();
 </script>
+
+<!-- Text View Modal -->
+<div id="textViewModal" class="modal-overlay" onclick="if(event.target===this)closeTextViewModal()">
+  <div class="modal" style="max-width:800px;width:95%">
+    <h3 id="textViewTitle" style="margin:0 0 12px">File Viewer</h3>
+    <pre id="textViewContent" style="background:#1a1a1a;color:#e0e0e0;padding:12px;border-radius:6px;overflow:auto;max-height:60vh;font-size:12px;white-space:pre-wrap;word-break:break-all;margin:0"></pre>
+    <div style="margin-top:12px;text-align:right">
+      <button class="folder-btn" onclick="closeTextViewModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
