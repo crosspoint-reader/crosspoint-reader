@@ -1,0 +1,15 @@
+# Content is local — don't commit it to the repo
+content/books/
+content/thought/
+content/trips/
+content/sleep/
+content/news/
+content/firmware/
+
+# Keep the directory structure
+!content/books/.gitkeep
+!content/thought/.gitkeep
+!content/trips/.gitkeep
+!content/sleep/.gitkeep
+!content/news/.gitkeep
+!content/firmware/.gitkeep
