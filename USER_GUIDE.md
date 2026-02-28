@@ -84,7 +84,8 @@ See [Reading Mode](#4-reading-mode) below for more information.
 The Browse Files screen acts as a file and folder browser.
 
 * **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
-* **Open Selection:** Press **Confirm** to open a folder or read a selected book.
+* **Open Selection:** Press **Confirm** to open a folder or read a selected book. 
+* **Delete Files:** Hold and release **Confirm** to delete the selected file. You will be given an option to either confirm or cancel deletion. Folder deletion is not supported.
 
 ### 3.4 Recent Books Screen
 
