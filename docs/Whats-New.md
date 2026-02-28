@@ -267,3 +267,48 @@ python3 feed_server.py --feed-url http://YOUR_SERVER_IP:8090
 ```
 
 New files dropped into any content directory automatically appear in the feed on the next request — no restart needed.
+
+---
+
+## 🔵 OpenClaw Dev Scripts
+
+The `scripts/` directory includes helper scripts for the OpenClaw-driven development workflow:
+
+### `scripts/push-to-reader.sh` — Push files via HTTP
+
+Push any file to a CrossPoint reader over HTTP. If pushing `firmware.bin`, it automatically triggers OTA flash after upload.
+
+```bash
+# Push firmware and trigger OTA flash
+./scripts/push-to-reader.sh .pio/build/default/firmware.bin 192.168.0.234
+
+# Push an EPUB to a specific folder
+./scripts/push-to-reader.sh mybook.epub 192.168.0.234 /Books/chip/
+
+# Push a sleep screen BMP
+./scripts/push-to-reader.sh art.bmp 192.168.0.234 /sleep/
+```
+
+### Full automated dev loop (with Danger Zone enabled)
+
+```bash
+# 1. Build
+pio run
+
+# 2. Push firmware + trigger flash
+./scripts/push-to-reader.sh .pio/build/default/firmware.bin 192.168.0.234
+
+# 3. Poll until back online
+until curl -s http://192.168.0.234/api/status | grep -q uptime; do sleep 2; done
+
+# 4. Trigger feed sync
+curl -X POST http://192.168.0.234/api/feed/sync
+
+# 5. Pull sync log
+curl http://192.168.0.234/download?path=/.crosspoint/feed-sync.log
+
+# 6. Trigger screenshot tour
+curl -X POST http://192.168.0.234/api/screenshot-tour
+```
+
+> OpenClaw runs this loop automatically when asked to test firmware changes.
