@@ -1,5 +1,21 @@
 # What's New in CrossPoint (Laird Fork)
 
+## Purpose
+
+This fork extends CrossPoint to work seamlessly with **[OpenClaw](https://openclaw.ai)** (an AI assistant platform). The core idea: your AI assistant automatically delivers new content — stories, articles, trip guides, sleep screen art, and firmware builds — to your Xteink reader over WiFi, with no manual steps.
+
+The fork includes:
+1. **RSS feed sync** built into the firmware — the reader pulls new content automatically on WiFi connect
+2. **A companion feed server** (`feed-server/`) that serves your content library as an RSS feed
+3. **OpenClaw prompts** (`clawd-prompts.md`) — ready-to-use prompts you can give to your OpenClaw assistant to set up the feed server, build firmware, and keep your reader stocked with fresh content automatically
+
+**Two main use cases:**
+
+- **Content delivery** — point OpenClaw at your EPUB/BMP library, run the feed server, and new stories/articles/art appear on your reader automatically as your AI generates them
+- **Firmware development** — use the included prompts to tell OpenClaw to build the firmware and push new builds to your reader via the feed, enabling a hands-free compile→deploy→test loop
+
+---
+
 This document covers both features **added in this fork** and features from the **base CrossPoint firmware** — clearly labelled so you know what's new vs what's already there.
 
 > 🔵 **This fork** — added in `laird/crosspoint-reader` (`feature/rss-feed-sync` branch)  
