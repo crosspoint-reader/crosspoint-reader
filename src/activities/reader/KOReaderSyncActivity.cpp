@@ -115,6 +115,7 @@ void KOReaderSyncActivity::performSync() {
       RenderLock lock(*this);
       state = NO_REMOTE_PROGRESS;
       hasRemoteProgress = false;
+      selectedOption = 1;  // Default to "Upload local" when remote progress is unavailable
     }
     requestUpdate(true);
     return;
