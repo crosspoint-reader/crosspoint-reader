@@ -2039,13 +2039,9 @@ async function convertEpubFile(file, progressCallback) {
       for (let j = 1; j < parts.length; j++) {
         const p = parts[j];
         // Calculate href relative to OPF directory
-        let href;
+        let href = p.path;
         if (opfDir && p.path.startsWith(opfDir + '/')) {
           href = p.path.substring(opfDir.length + 1);
-        } else if (opfDir) {
-          href = p.path;
-        } else {
-          href = p.path;
         }
         manifestAdditions += `<item id="img-${p.id}" href="${href}" media-type="image/jpeg"/>\n`;
       }
