@@ -190,20 +190,19 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     // Show password entry
     state = WifiSelectionState::PASSWORD_ENTRY;
     // Don't allow screen updates while changing activity
-    enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
-        "",     // No initial text
-        64,     // Max password length
-        false,  // Show password by default (hard keyboard to use)
-        [this](const std::string& text) {
-          enteredPassword = text;
-          exitActivity();
-        },
-        [this] {
-          state = WifiSelectionState::NETWORK_LIST;
-          exitActivity();
-          requestUpdate();
-        }));
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
+                                                "",    // No initial text
+                                                64,    // Max password length
+                                                false  // Show password by default (hard keyboard to use)
+                                                ),
+        [this](const ActivityResult& result) {
+          if (result.isCancelled) {
+            state = WifiSelectionState::NETWORK_LIST;
+          } else {
+            enteredPassword = std::get<KeyboardResult>(result.data).text;
+          }
+        });
   } else {
     // Connect directly for open networks
     attemptConnection();
@@ -218,6 +217,12 @@ void WifiSelectionActivity::attemptConnection() {
   requestUpdate();
 
   WiFi.mode(WIFI_STA);
+
+  // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  String hostname = "CrossPoint-Reader-" + mac;
+  WiFi.setHostname(hostname.c_str());
 
   if (selectedRequiresPassword && !enteredPassword.empty()) {
     WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
@@ -285,11 +290,6 @@ void WifiSelectionActivity::checkConnectionStatus() {
 }
 
 void WifiSelectionActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   // Check scan progress
   if (state == WifiSelectionState::SCANNING) {
     processWifiScanResults();
@@ -461,7 +461,7 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
   return "   |";  // Very weak
 }
 
-void WifiSelectionActivity::render(Activity::RenderLock&&) {
+void WifiSelectionActivity::render(RenderLock&&) {
   // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
   // from the keyboard subactivity back to the main activity
   if (state == WifiSelectionState::PASSWORD_ENTRY) {
@@ -471,7 +471,7 @@ void WifiSelectionActivity::render(Activity::RenderLock&&) {
 
   renderer.clearScreen();
 
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -514,7 +514,7 @@ void WifiSelectionActivity::render(Activity::RenderLock&&) {
 }
 
 void WifiSelectionActivity::renderNetworkList() const {
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -686,4 +686,14 @@ void WifiSelectionActivity::renderForgetPrompt() const {
   // Use centralized button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+void WifiSelectionActivity::onComplete(const bool connected) {
+  ActivityResult result;
+  result.isCancelled = !connected;
+  if (connected) {
+    result.data = WifiResult{true, selectedSSID, connectedIP};
+  }
+  setResult(std::move(result));
+  finish();
 }

@@ -3,16 +3,22 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+#include <iterator>
+
+#include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
 void LanguageSelectActivity::onEnter() {
   Activity::onEnter();
 
-  totalItems = getLanguageCount();
-
   // Set current selection based on current language
-  selectedIndex = static_cast<int>(I18N.getLanguage());
+  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
+  const auto* begin = std::begin(SORTED_LANGUAGE_INDICES);
+  const auto* end = std::end(SORTED_LANGUAGE_INDICES);
+  const auto* it = std::find(begin, end, currentLang);
+  selectedIndex = (it != end) ? std::distance(begin, it) : 0;
 
   requestUpdate();
 }
@@ -30,61 +36,47 @@ void LanguageSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    selectedIndex = (selectedIndex + totalItems - 1) % totalItems;
+  // Handle navigation
+  buttonNavigator.onNextRelease([this] {
+    selectedIndex = ButtonNavigator::nextIndex(static_cast<int>(selectedIndex), totalItems);
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    selectedIndex = (selectedIndex + 1) % totalItems;
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    selectedIndex = ButtonNavigator::previousIndex(static_cast<int>(selectedIndex), totalItems);
     requestUpdate();
-  }
+  });
 }
 
 void LanguageSelectActivity::handleSelection() {
   {
     RenderLock lock(*this);
-    I18N.setLanguage(static_cast<Language>(selectedIndex));
+    I18N.setLanguage(static_cast<Language>(SORTED_LANGUAGE_INDICES[selectedIndex]));
   }
 
   // Return to previous page
   onBack();
 }
 
-void LanguageSelectActivity::render(Activity::RenderLock&&) {
+void LanguageSelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  constexpr int rowHeight = 30;
+  const auto pageHeight = renderer.getScreenHeight();
+  auto metrics = UITheme::getInstance().getMetrics();
 
-  // Title
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_LANGUAGE), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LANGUAGE));
 
   // Current language marker
-  const int currentLang = static_cast<int>(I18N.getLanguage());
-
-  // Draw options
-  for (int i = 0; i < totalItems; i++) {
-    const int itemY = 60 + i * rowHeight;
-    const bool isSelected = (i == selectedIndex);
-    const bool isCurrent = (i == currentLang);
-
-    // Draw selection highlight
-    if (isSelected) {
-      renderer.fillRect(0, itemY - 2, pageWidth - 1, rowHeight);
-    }
-
-    // Draw language name - get it from i18n system
-    const char* langName = I18N.getLanguageName(static_cast<Language>(i));
-    renderer.drawText(UI_10_FONT_ID, 20, itemY, langName, !isSelected);
-
-    // Draw current selection marker
-    if (isCurrent) {
-      const char* marker = tr(STR_ON_MARKER);
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, marker);
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 20 - width, itemY, marker, !isSelected);
-    }
-  }
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
+      [this](int index) { return I18N.getLanguageName(static_cast<Language>(SORTED_LANGUAGE_INDICES[index])); },
+      nullptr, nullptr,
+      [this, currentLang](int index) { return SORTED_LANGUAGE_INDICES[index] == currentLang ? tr(STR_SELECTED) : ""; },
+      true);
 
   // Button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

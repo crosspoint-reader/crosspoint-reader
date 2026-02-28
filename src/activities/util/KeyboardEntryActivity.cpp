@@ -57,13 +57,13 @@ char KeyboardEntryActivity::getSelectedChar() const {
   return layout[selectedRow][selectedCol];
 }
 
-void KeyboardEntryActivity::handleKeyPress() {
+bool KeyboardEntryActivity::handleKeyPress() {
   // Handle special row (bottom row with shift, space, backspace, done)
   if (selectedRow == SPECIAL_ROW) {
     if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
       // Shift toggle (0 = lower case, 1 = upper case, 2 = shift lock)
       shiftState = (shiftState + 1) % 3;
-      return;
+      return true;
     }
 
     if (selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL) {
@@ -71,7 +71,7 @@ void KeyboardEntryActivity::handleKeyPress() {
       if (maxLength == 0 || text.length() < maxLength) {
         text += ' ';
       }
-      return;
+      return true;
     }
 
     if (selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL) {
@@ -79,22 +79,20 @@ void KeyboardEntryActivity::handleKeyPress() {
       if (!text.empty()) {
         text.pop_back();
       }
-      return;
+      return true;
     }
 
     if (selectedCol >= DONE_COL) {
       // Done button
-      if (onComplete) {
-        onComplete(text);
-      }
-      return;
+      onComplete(text);
+      return false;
     }
   }
 
   // Regular character
   const char c = getSelectedChar();
   if (c == '\0') {
-    return;
+    return true;
   }
 
   if (maxLength == 0 || text.length() < maxLength) {
@@ -104,6 +102,8 @@ void KeyboardEntryActivity::handleKeyPress() {
       shiftState = 0;
     }
   }
+
+  return true;
 }
 
 void KeyboardEntryActivity::loop() {
@@ -177,25 +177,24 @@ void KeyboardEntryActivity::loop() {
 
   // Selection
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    handleKeyPress();
-    requestUpdate();
+    if (handleKeyPress()) {
+      requestUpdate();
+    }
+    // If handleKeyPress returns false, it means onComplete was triggered, no update needed
   }
 
   // Cancel
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    if (onCancel) {
-      onCancel();
-    }
-    requestUpdate();
+    onCancel();
   }
 }
 
-void KeyboardEntryActivity::render(Activity::RenderLock&&) {
+void KeyboardEntryActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title.c_str());
 
@@ -320,4 +319,16 @@ void KeyboardEntryActivity::render(Activity::RenderLock&&) {
   GUI.drawSideButtonHints(renderer, ">", "<");
 
   renderer.displayBuffer();
+}
+
+void KeyboardEntryActivity::onComplete(std::string text) {
+  setResult(KeyboardResult{std::move(text)});
+  finish();
+}
+
+void KeyboardEntryActivity::onCancel() {
+  ActivityResult result;
+  result.isCancelled = true;
+  setResult(std::move(result));
+  finish();
 }

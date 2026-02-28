@@ -1,35 +1,45 @@
 #include "StringUtils.h"
 
+#include <Utf8.h>
+
 #include <cstring>
 
 namespace StringUtils {
 
-std::string sanitizeFilename(const std::string& name, size_t maxLength) {
+std::string sanitizeFilename(const std::string& name, size_t maxBytes) {
   std::string result;
-  result.reserve(name.size());
+  result.reserve(std::min(name.size(), maxBytes));
 
-  for (char c : name) {
-    // Replace invalid filename characters with underscore
-    if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+  const auto* text = reinterpret_cast<const unsigned char*>(name.c_str());
+
+  // Skip leading spaces and dots so they don't consume the byte budget
+  while (*text == ' ' || *text == '.') {
+    text++;
+  }
+
+  // Process full UTF-8 codepoints to avoid trimming in the middle of a multibyte sequence
+  while (*text != 0) {
+    const auto* cpStart = text;
+    uint32_t cp = utf8NextCodepoint(&text);
+
+    if (cp == '/' || cp == '\\' || cp == ':' || cp == '*' || cp == '?' || cp == '"' || cp == '<' || cp == '>' ||
+        cp == '|') {
+      // Replace illegal and control characters with '_'
+      if (result.length() + 1 > maxBytes) break;
       result += '_';
-    } else if (c >= 32 && c < 127) {
-      // Keep printable ASCII characters
-      result += c;
+    } else if (cp >= 128 || (cp >= 32 && cp < 127)) {
+      const size_t cpBytes = text - cpStart;
+      if (result.length() + cpBytes > maxBytes) break;
+      result.append(reinterpret_cast<const char*>(cpStart), cpBytes);
     }
-    // Skip non-printable characters
   }
 
-  // Trim leading/trailing spaces and dots
-  size_t start = result.find_first_not_of(" .");
-  if (start == std::string::npos) {
-    return "book";  // Fallback if name is all invalid characters
-  }
+  // Trim trailing spaces and dots
   size_t end = result.find_last_not_of(" .");
-  result = result.substr(start, end - start + 1);
-
-  // Limit filename length
-  if (result.length() > maxLength) {
-    result.resize(maxLength);
+  if (end != std::string::npos) {
+    result.resize(end + 1);
+  } else {
+    result.clear();
   }
 
   return result.empty() ? "book" : result;

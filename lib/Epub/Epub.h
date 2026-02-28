@@ -78,4 +78,5 @@ class Epub {
   static ImageFormat detectCoverFormat(const std::string& href);
   bool extractToTempFile(const std::string& href, const std::string& tempPath) const;
   std::string resolveCoverHref() const;
+  int resolveHrefToSpineIndex(const std::string& href) const;
 };

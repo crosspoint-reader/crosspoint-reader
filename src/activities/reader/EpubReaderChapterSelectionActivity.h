@@ -3,21 +3,15 @@
 
 #include <memory>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "util/ButtonNavigator.h"
 
-class EpubReaderChapterSelectionActivity final : public ActivityWithSubactivity {
+class EpubReaderChapterSelectionActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   std::string epubPath;
   ButtonNavigator buttonNavigator;
   int currentSpineIndex = 0;
-  int currentPage = 0;
-  int totalPagesInSpine = 0;
   int selectorIndex = 0;
-
-  const std::function<void()> onGoBack;
-  const std::function<void(int newSpineIndex)> onSelectSpineIndex;
-  const std::function<void(int newSpineIndex, int newPage)> onSyncPosition;
 
   // Number of items that fit on a page, derived from logical screen height.
   // This adapts automatically when switching between portrait and landscape.
@@ -29,21 +23,13 @@ class EpubReaderChapterSelectionActivity final : public ActivityWithSubactivity 
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                               const std::shared_ptr<Epub>& epub, const std::string& epubPath,
-                                              const int currentSpineIndex, const int currentPage,
-                                              const int totalPagesInSpine, const std::function<void()>& onGoBack,
-                                              const std::function<void(int newSpineIndex)>& onSelectSpineIndex,
-                                              const std::function<void(int newSpineIndex, int newPage)>& onSyncPosition)
-      : ActivityWithSubactivity("EpubReaderChapterSelection", renderer, mappedInput),
+                                              const int currentSpineIndex)
+      : Activity("EpubReaderChapterSelection", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),
-        currentSpineIndex(currentSpineIndex),
-        currentPage(currentPage),
-        totalPagesInSpine(totalPagesInSpine),
-        onGoBack(onGoBack),
-        onSelectSpineIndex(onSelectSpineIndex),
-        onSyncPosition(onSyncPosition) {}
+        currentSpineIndex(currentSpineIndex) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 };
