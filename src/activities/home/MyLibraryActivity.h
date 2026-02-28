@@ -1,5 +1,4 @@
 #pragma once
-#include <Epub.h>
 
 #include <functional>
 #include <string>

@@ -1,5 +1,6 @@
 #include "MyLibraryActivity.h"
 
+#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -153,11 +154,16 @@ void MyLibraryActivity::loop() {
         if (!res.isCancelled) {
           LOG_DBG("MyLibrary", "Attempting to delete: %s", fullPath.c_str());
           clearFileMetadata(fullPath);
-
           if (Storage.remove(fullPath.c_str())) {
             LOG_DBG("MyLibrary", "Deleted successfully");
-            // refresh the file list
             this->loadFiles();
+            if (files.empty()) {
+              selectorIndex = 0;
+            } else if (selectorIndex >= files.size()) {
+              // Move selection to the new "last" item
+              selectorIndex = files.size() - 1;
+            }
+
             this->requestUpdate(true);
           } else {
             LOG_ERR("MyLibrary", "Failed to delete file: %s", fullPath.c_str());
@@ -169,8 +175,8 @@ void MyLibraryActivity::loop() {
 
       std::string heading = tr(STR_DELETE) + std::string("? ");
 
-      this->startActivityForResult(
-          std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry, [](bool) {}), handler);
+      this->startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry),
+                                   handler);
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
