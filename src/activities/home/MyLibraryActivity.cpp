@@ -8,12 +8,13 @@
 #include <algorithm>
 #include <functional>
 
-#include "BookFinishedCache.h"
 #include "../util/ConfirmationActivity.h"
+#include "BookFinishedCache.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
+
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
