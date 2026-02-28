@@ -268,6 +268,16 @@
       height: 18px;
       cursor: pointer;
     }
+    .convert-warning {
+      font-size: 0.85em;
+      color: #d68910;
+      background-color: rgba(214, 137, 16, 0.1);
+      border: 1px solid #d68910;
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
     .convert-info {
       font-size: 0.85em;
       color: var(--label-color);
@@ -1022,6 +1032,10 @@
           <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
           <span>🔄 Convert EPUB images before upload</span>
         </label>
+        <!-- Sync compatibility warning -->
+        <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
+          ⚠️ Conversion mutates files and may break hash-based sync — back up or disable sync before proceeding
+        </div>
         <div class="convert-info" id="convertInfo" style="display:none;">
           Optimizes images for e-ink displays
         </div>
@@ -1188,10 +1202,16 @@
   }
 
   async function hydrate() {
-    // Close modals when clicking overlay
+    // Close modals when clicking overlay - call proper cleanup functions
     document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
       overlay.addEventListener('click', function(e) {
         if (e.target === overlay) {
+          // Call the appropriate close function for each modal to ensure cleanup
+          if (overlay.id === 'uploadModal') return closeUploadModal();
+          if (overlay.id === 'folderModal') return closeFolderModal();
+          if (overlay.id === 'deleteModal') return closeDeleteModal();
+          if (overlay.id === 'renameModal') return closeRenameModal();
+          if (overlay.id === 'moveModal') return closeMoveModal();
           overlay.classList.remove('open');
         }
       });
@@ -1318,13 +1338,16 @@
     document.getElementById('convertBeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertSettings').style.display = 'none';
+    document.getElementById('convertWarning').style.display = 'none';
     // Reset advanced options
     document.getElementById('advancedOptionsPanel').classList.remove('expanded');
     document.getElementById('advancedOptionsArrow').classList.remove('expanded');
     // Reset to defaults
     document.getElementById('qualitySlider').value = 85;
     document.getElementById('qualityInput').value = 85;
-    document.getElementById('grayscaleToggle').checked = true; // Always grayscale for e-ink
+    // grayscaleToggle may not be present in the DOM (commented out)
+    const grayscaleToggle = document.getElementById('grayscaleToggle');
+    if (grayscaleToggle) grayscaleToggle.checked = true; // Always grayscale for e-ink
     // Reset Light Novel Mode
     document.getElementById('lightNovelToggle').checked = false;
     document.getElementById('handednessOptions').style.display = 'none';
@@ -1335,6 +1358,7 @@
 
   function toggleConvertOptions() {
     const checked = document.getElementById('convertBeforeUpload').checked;
+    document.getElementById('convertWarning').style.display = checked ? 'block' : 'none';
     document.getElementById('convertInfo').style.display = checked ? 'block' : 'none';
     document.getElementById('convertSettings').style.display = checked ? 'block' : 'none';
     // Reset advanced options when toggling off
@@ -1873,14 +1897,14 @@ async function convertEpubFile(file, progressCallback) {
         const newPath = renamed[path] || path.replace(/\.[^.]+$/, newExt);
         out.file(newPath, parts[0].data, { compression: 'DEFLATE', createFolders: false });
       } else {
-        const origName = path.split('/').pop();
-        splitImages[origName] = [];
+        // Use full path as key to avoid collisions for identical filenames in different directories
+        splitImages[path] = [];
         for (const part of parts) {
           const partName = baseName.split('/').pop() + part.suffix + newExt;
           const partPath = (path.includes('/') ? path.substring(0, path.lastIndexOf('/') + 1) : '') + partName;
           out.file(partPath, part.data, { compression: 'DEFLATE', createFolders: false });
           // Store metadata for XHTML/OPF updates
-          splitImages[origName].push({
+          splitImages[path].push({
             path: partPath,
             imgName: partName,
             id: baseName.split('/').pop() + part.suffix,
@@ -1912,7 +1936,9 @@ async function convertEpubFile(file, progressCallback) {
     }
 
     // Handle split images - replace single image references with all parts
-    for (const [origName, parts] of Object.entries(splitImages)) {
+    for (const [fullPath, parts] of Object.entries(splitImages)) {
+      // Extract basename from full path for matching in XHTML
+      const origName = fullPath.split('/').pop();
       const newName = origName.replace(/\.(png|gif|webp|bmp|jpeg)$/i, '.jpg');
       // Match block-wrapped images: <p>...<img src="image.jpg"/>...</p>
       const blockRegex = new RegExp(
@@ -1978,16 +2004,24 @@ async function convertEpubFile(file, progressCallback) {
     for (const [o, n] of Object.entries(renamed)) {
       t = t.split(o.split('/').pop()).join(n.split('/').pop());
     }
-    // Replace image media-types for converted files (handles any attribute order)
-    t = t.replace(/(<item\b[^>]*href="[^"]+\.jpg"[^>]*)media-type="image\/(png|gif|webp|bmp)"/g, '$1media-type="image/jpeg"');
-    t = t.replace(/(<item\b[^>]*)media-type="image\/(png|gif|webp|bmp)"([^>]*href="[^"]+\.jpg")/g, '$1media-type="image/jpeg"$3');
+    // Replace image media-types for converted files (order-agnostic: processes each <item> tag individually)
+    t = t.replace(/<item\b[^>]*>/g, (itemTag) => {
+      // Only process item tags that reference .jpg files
+      if (/href="[^"]+\.jpg"/i.test(itemTag)) {
+        // Replace any non-jpeg image media-type with jpeg
+        return itemTag.replace(/media-type="image\/(png|gif|webp|bmp)"/gi, 'media-type="image/jpeg"');
+      }
+      return itemTag;
+    });
     if (svgFix) t = t.replace(/\s+svg(?=["'\s>])/g, '');
 
     // Calculate OPF directory for relative paths
     const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')) : '';
 
     // Add manifest entries for split image parts
-    for (const [origName, parts] of Object.entries(splitImages)) {
+    for (const [fullPath, parts] of Object.entries(splitImages)) {
+      // Extract basename from full path for matching in OPF
+      const origName = fullPath.split('/').pop();
       const origBaseName = origName.replace(/\.[^.]+$/, '');
       // Replace original image reference in manifest/spine with first part
       const origImgRegex = new RegExp(`(href=["'][^"']*/?)(${origBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\.(?:jpg|jpeg|png|gif|webp|bmp)(["'])`, 'gi');
@@ -2144,6 +2178,9 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
         reject(new Error('WebSocket connection failed'));
       } else if (!sendingChunks) {
         reject(new Error('WebSocket error during upload'));
+      } else {
+        // Error during chunk sending - reject with appropriate message
+        reject(new Error('WebSocket error during file transfer'));
       }
     };
 
@@ -2227,10 +2264,15 @@ function uploadFile() {
         progressFill.style.backgroundColor = '#e74c3c';
         const failedList = failedFiles.map(f => f.name).join(', ');
         progressText.textContent = `${files.length - failedFiles.length}/${files.length} uploaded. Failed: ${failedList}`;
-        failedUploadsGlobal = failedFiles;
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
+        // Only show banner if THIS upload session had failures
+        // Use local failedFiles, not the global shared variable
+        if (failedFiles.length > 0) {
+          // Accumulate failed uploads to global (don't replace)
+          failedUploadsGlobal = failedUploadsGlobal.concat(failedFiles);
+          // Close upload modal and show banner with retry options
+          closeUploadModal();
+          showFailedUploadsBanner();
+        }
       }
       return;
     }
@@ -2247,6 +2289,7 @@ function uploadFile() {
     // Check if file is an EPUB and conversion is enabled
     const isEpub = file.name.toLowerCase().endsWith('.epub');
     const needsConversion = isEpub && convertEnabled;
+    let conversionSucceeded = false;
 
     const methodText = useWebSocket ? ' [WS]' : ' [HTTP]';
     const stageText = needsConversion ? 'Converting & uploading' : 'Uploading';
@@ -2254,10 +2297,10 @@ function uploadFile() {
 
     const onProgress = (loaded, total) => {
       const uploadPercent = Math.round((loaded / total) * 100);
-      // If conversion happened, display goes from 50-100%, otherwise 0-100%
-      const displayPercent = needsConversion ? 50 + Math.round(uploadPercent / 2) : uploadPercent;
+      // If conversion succeeded, display goes from 50-100%, otherwise 0-100%
+      const displayPercent = conversionSucceeded ? 50 + Math.round(uploadPercent / 2) : uploadPercent;
       progressFill.style.width = displayPercent + '%';
-      const prefix = needsConversion ? 'Converting & uploading' : 'Uploading';
+      const prefix = conversionSucceeded ? 'Converting & uploading' : 'Uploading';
       progressText.textContent = `${prefix} ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${uploadPercent}%`;
     };
 
@@ -2287,10 +2330,14 @@ function uploadFile() {
           // Create new File from converted blob
           file = new File([convertedBlob], file.name, { type: 'application/epub+zip' });
           progressFill.style.backgroundColor = '#27ae60'; // Back to green for upload
+          conversionSucceeded = true;
         } catch (convError) {
           console.error('Conversion error:', convError);
           // If conversion fails, try uploading original file
           progressText.textContent = `Conversion failed, uploading original ${file.name}...`;
+          progressFill.style.backgroundColor = '#e67e22'; // Orange for fallback
+          // Reset progress bar to 0% for original file upload
+          progressFill.style.width = '0%';
         }
       }
 

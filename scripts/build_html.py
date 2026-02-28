@@ -32,27 +32,41 @@ def minify_html(html: str) -> str:
 
     return html.strip()
 
+def sanitize_identifier(name: str) -> str:
+    """Sanitize a filename to create a valid C identifier.
+
+    C identifiers must:
+    - Start with a letter or underscore
+    - Contain only letters, digits, and underscores
+    """
+    # Replace non-alphanumeric characters (including hyphens) with underscores
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    # Prefix with underscore if starts with a digit
+    if sanitized and sanitized[0].isdigit():
+        sanitized = f"_{sanitized}"
+    return sanitized
+
 for root, _, files in os.walk(SRC_DIR):
     for file in files:
         if file.endswith(".html") or file.endswith(".js"):
-            html_path = os.path.join(root, file)
-            with open(html_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
+            file_path = os.path.join(root, file)
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
 
             # Only minify HTML files; JS files are typically pre-minified (e.g., jszip.min.js)
             if file.endswith(".html"):
-                minified = minify_html(html_content)
+                processed = minify_html(content)
             else:
-                minified = html_content
+                processed = content
 
             # Compress with gzip (compresslevel 9 is maximum compression)
             # IMPORTANT: we don't use brotli because Firefox doesn't support brotli with insecured context (only supported on HTTPS)
-            compressed = gzip.compress(minified.encode('utf-8'), compresslevel=9)
+            compressed = gzip.compress(processed.encode('utf-8'), compresslevel=9)
 
-            # Replace dots with underscores in base_name for valid C identifier
+            # Create valid C identifier from filename
             # Use appropriate suffix based on file type
             suffix = "Html" if file.endswith(".html") else "Js"
-            base_name = f"{os.path.splitext(file)[0]}{suffix}".replace(".", "_")
+            base_name = sanitize_identifier(f"{os.path.splitext(file)[0]}{suffix}")
             header_path = os.path.join(root, f"{base_name}.generated.h")
 
             with open(header_path, "w", encoding="utf-8") as h:
@@ -71,10 +85,9 @@ for root, _, files in os.walk(SRC_DIR):
 
                 h.write(f"}};\n\n")
                 h.write(f"constexpr size_t {base_name}CompressedSize = {len(compressed)};\n")
-                h.write(f"constexpr size_t {base_name}OriginalSize = {len(minified)};\n")
+                h.write(f"constexpr size_t {base_name}OriginalSize = {len(processed)};\n")
 
             print(f"Generated: {header_path}")
-            print(f"  Original: {len(html_content)} bytes")
-            print(f"  Minified: {len(minified)} bytes ({100*len(minified)/len(html_content):.1f}%)")
-            print(f"  Compressed: {len(compressed)} bytes ({100*len(compressed)/len(html_content):.1f}%)")
-
+            print(f"  Original: {len(content)} bytes")
+            print(f"  Minified: {len(processed)} bytes ({100*len(processed)/len(content):.1f}%)")
+            print(f"  Compressed: {len(compressed)} bytes ({100*len(compressed)/len(content):.1f}%)")
