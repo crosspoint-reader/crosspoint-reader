@@ -1,5 +1,7 @@
 #include "ConfirmationActivity.h"
+
 #include <I18n.h>
+
 #include "../../components/UITheme.h"
 #include "HalDisplay.h"
 
@@ -29,7 +31,7 @@ void ConfirmationActivity::onEnter() {
   LOG_DBG("CONF", "startY: %d", startY);
   LOG_DBG("CONF", "Heading: %s", safeHeading.c_str());
 
-  this->requestUpdate(true);
+  requestUpdate(true);
 }
 
 void ConfirmationActivity::render(RenderLock&& lock) {

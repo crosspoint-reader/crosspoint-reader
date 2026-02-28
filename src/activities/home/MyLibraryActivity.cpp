@@ -156,7 +156,7 @@ void MyLibraryActivity::loop() {
           clearFileMetadata(fullPath);
           if (Storage.remove(fullPath.c_str())) {
             LOG_DBG("MyLibrary", "Deleted successfully");
-            this->loadFiles();
+            loadFiles();
             if (files.empty()) {
               selectorIndex = 0;
             } else if (selectorIndex >= files.size()) {
@@ -164,7 +164,7 @@ void MyLibraryActivity::loop() {
               selectorIndex = files.size() - 1;
             }
 
-            this->requestUpdate(true);
+            requestUpdate(true);
           } else {
             LOG_ERR("MyLibrary", "Failed to delete file: %s", fullPath.c_str());
           }
@@ -175,8 +175,7 @@ void MyLibraryActivity::loop() {
 
       std::string heading = tr(STR_DELETE) + std::string("? ");
 
-      this->startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry),
-                                   handler);
+      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
@@ -186,9 +185,9 @@ void MyLibraryActivity::loop() {
         basepath += entry.substr(0, entry.length() - 1);
         loadFiles();
         selectorIndex = 0;
-        this->requestUpdate();
+        requestUpdate();
       } else {
-        this->onSelectBook(basepath + entry);
+        onSelectBook(basepath + entry);
       }
     }
     return;
