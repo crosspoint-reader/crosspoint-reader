@@ -391,6 +391,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           renderer, mappedInput,
           [this] {
             exitActivity();
+            // Reader settings (font/line spacing/margins etc.) may change pagination.
+            // Force section re-layout and preserve approximate reading position.
+            {
+              RenderLock lock(*this);
+              if (section) {
+                cachedSpineIndex = currentSpineIndex;
+                cachedChapterTotalPageCount = section->pageCount;
+                nextPageNumber = section->currentPage;
+                section.reset();
+              }
+            }
+            skipNextButtonCheck = true;
             requestUpdate();
           },
           1, 1));
@@ -559,8 +571,11 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
 
     const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
     const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+    const float lineCompression = SETTINGS.getReaderLineCompression();
+    LOG_DBG("ERS", "Reflow params: lineSpacing=%u, compression=%.2f, viewport=%ux%u", SETTINGS.lineSpacing,
+            lineCompression, viewportWidth, viewportHeight);
 
-    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), lineCompression,
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
                                   SETTINGS.embeddedStyle)) {
@@ -568,7 +583,7 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
 
       const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
 
-      if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+      if (!section->createSectionFile(SETTINGS.getReaderFontId(), lineCompression,
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                       viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
                                       SETTINGS.embeddedStyle, popupFn)) {
