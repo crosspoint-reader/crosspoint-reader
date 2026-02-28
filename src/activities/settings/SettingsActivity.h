@@ -32,6 +32,7 @@ struct SettingInfo {
   uint8_t CrossPointSettings::* valuePtr = nullptr;
   std::vector<StrId> enumValues;
   SettingAction action = SettingAction::None;
+  bool deviceOnly = false;  // If true, hidden from web settings API
 
   struct ValueRange {
     uint8_t min;

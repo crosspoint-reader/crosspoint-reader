@@ -434,7 +434,71 @@
     btn.textContent = 'Save Settings';
   }
 
+
+  async function loadDangerZoneStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      const enabled = data.dangerZoneEnabled === true || data.dangerZoneEnabled === 1;
+      document.getElementById('dz-status').textContent = enabled ? '✅ Enabled' : '❌ Disabled';
+      document.getElementById('dz-status').style.color = enabled ? '#27ae60' : '#e74c3c';
+      document.getElementById('dz-actions').style.display = enabled ? '' : 'none';
+    } catch(e) {
+      document.getElementById('dz-status').textContent = 'Unknown';
+    }
+  }
+
+  async function dzReboot() {
+    const pw = document.getElementById('dz-password').value;
+    if (!pw) { alert('Enter your Danger Zone password'); return; }
+    if (!confirm('Reboot the device?')) return;
+    const res = await fetch('/api/reboot', { method: 'POST', headers: {'Authorization': 'Basic ' + btoa('chip:' + pw)} });
+    if (res.ok) { alert('Rebooting…'); }
+    else { alert('Failed: ' + await res.text()); }
+  }
+
+  async function dzFlash() {
+    const pw = document.getElementById('dz-password').value;
+    if (!pw) { alert('Enter your Danger Zone password'); return; }
+    const res = await fetch('/api/files?path=/');
+    const files = await res.json();
+    const hasFirmware = files.some(f => f.name === 'firmware.bin');
+    if (!hasFirmware) { alert('No firmware.bin on SD card'); return; }
+    if (!confirm('Flash firmware.bin now? Device will reboot.')) return;
+    const r2 = await fetch('/api/flash', { method: 'POST', headers: {'Authorization': 'Basic ' + btoa('chip:' + pw)} });
+    if (r2.ok) { alert('Flashing… device will reboot'); }
+    else { alert('Failed: ' + await r2.text()); }
+  }
+
+  async function dzFeedSync() {
+    const pw = document.getElementById('dz-password').value;
+    if (!pw) { alert('Enter your Danger Zone password'); return; }
+    const r = await fetch('/api/feed/sync', { method: 'POST', headers: {'Authorization': 'Basic ' + btoa('chip:' + pw)} });
+    if (r.ok) { alert('Feed sync triggered'); }
+    else { alert('Failed: ' + await r.text()); }
+  }
+
   loadSettings();
+  loadDangerZoneStatus();
 </script>
+
+<!-- Danger Zone Tab -->
+<div class="card" style="border: 2px solid #e74c3c; margin-top: 24px;">
+  <h2 style="color:#e74c3c;">🔴 Danger Zone</h2>
+  <p style="color:#888;font-size:13px;margin:0 0 12px">These controls require your Danger Zone password. Enable/disable Danger Zone mode from the device settings UI.</p>
+  <div class="setting-row">
+    <span class="setting-name">Status</span>
+    <span class="setting-control"><b id="dz-status">Checking…</b></span>
+  </div>
+  <div class="setting-row" style="margin-top:8px">
+    <span class="setting-name">Password</span>
+    <span class="setting-control"><input type="password" id="dz-password" placeholder="Danger Zone password" style="padding:4px 8px;border-radius:4px;border:1px solid #ccc;width:180px"></span>
+  </div>
+  <div id="dz-actions" style="display:none;margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+    <button onclick="dzFeedSync()" style="background:#2980b9;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer">🔄 Sync Feed</button>
+    <button onclick="dzFlash()" style="background:#e67e22;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer">⚡ Flash firmware.bin</button>
+    <button onclick="dzReboot()" style="background:#e74c3c;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer">🔁 Reboot</button>
+  </div>
+</div>
 </body>
 </html>

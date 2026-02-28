@@ -366,6 +366,7 @@ void CrossPointWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+  doc["dangerZoneEnabled"] = SETTINGS.dangerZoneEnabled ? true : false;
 
   String json;
   serializeJson(doc, json);
@@ -1155,6 +1156,7 @@ void CrossPointWebServer::handleGetSettings() const {
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
+    if (s.deviceOnly) continue;  // Skip device-only settings
 
     doc.clear();
     doc["key"] = s.key;
@@ -1243,6 +1245,7 @@ void CrossPointWebServer::handlePostSettings() {
 
   for (auto& s : settings) {
     if (!s.key) continue;
+    if (s.deviceOnly) continue;  // Skip device-only settings
     if (!doc[s.key].is<JsonVariant>()) continue;
 
     switch (s.type) {
