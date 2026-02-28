@@ -8,12 +8,12 @@
 #   ./scripts/push-to-reader.sh art.bmp 192.168.0.194 /sleep/
 
 FILE="${1}"
-READER_IP="${2:-192.168.0.234}"
+READER_IP="${2}"
 DEST_PATH="${3:-/}"
 
-if [ -z "$FILE" ]; then
+if [ -z "$FILE" ] || [ -z "$READER_IP" ]; then
   echo "Usage: $0 <file> [reader-ip] [dest-path]"
-  echo "  reader-ip defaults to 192.168.0.234 (Laird's reader)"
+  
   echo "  dest-path defaults to / (root)"
   exit 1
 fi
