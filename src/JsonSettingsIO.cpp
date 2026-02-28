@@ -176,7 +176,32 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   CrossPointSettings::validateFrontButtonMapping(s);
   s.fontFamily = clamp(doc["fontFamily"] | (uint8_t)S::BOOKERLY, S::FONT_FAMILY_COUNT, S::BOOKERLY);
   s.fontSize = clamp(doc["fontSize"] | (uint8_t)S::MEDIUM, S::FONT_SIZE_COUNT, S::MEDIUM);
-  s.lineSpacing = clamp(doc["lineSpacing"] | (uint8_t)S::NORMAL, S::LINE_COMPRESSION_COUNT, S::NORMAL);
+  {
+    const uint8_t rawLineSpacing = doc["lineSpacing"] | (uint8_t)S::LINE_SPACING_DEFAULT;
+    if (rawLineSpacing < S::LINE_COMPRESSION_COUNT) {
+      if (needsResave) *needsResave = true;
+      switch (rawLineSpacing) {
+        case S::TIGHT:
+          s.lineSpacing = 90;
+          break;
+        case S::WIDE:
+          s.lineSpacing = 120;
+          break;
+        case S::NORMAL:
+        default:
+          s.lineSpacing = 100;
+          break;
+      }
+    } else if (rawLineSpacing >= 20 && rawLineSpacing <= 60) {
+      // Legacy 20..60 slider values migrate to default 1.0x.
+      if (needsResave) *needsResave = true;
+      s.lineSpacing = S::LINE_SPACING_DEFAULT;
+    } else if (rawLineSpacing >= S::LINE_SPACING_MIN && rawLineSpacing <= S::LINE_SPACING_MAX) {
+      s.lineSpacing = rawLineSpacing;
+    } else {
+      s.lineSpacing = S::LINE_SPACING_DEFAULT;
+    }
+  }
   s.paragraphAlignment =
       clamp(doc["paragraphAlignment"] | (uint8_t)S::JUSTIFIED, S::PARAGRAPH_ALIGNMENT_COUNT, S::JUSTIFIED);
   s.sleepTimeout = clamp(doc["sleepTimeout"] | (uint8_t)S::SLEEP_10_MIN, S::SLEEP_TIMEOUT_COUNT, S::SLEEP_10_MIN);

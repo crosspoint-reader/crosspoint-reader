@@ -1,5 +1,6 @@
 #include "SettingsActivity.h"
 
+#include <cstdio>
 #include <FontManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
@@ -11,6 +12,7 @@
 #include "FontSelectActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
+#include "LineSpacingSelectionActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "SettingsList.h"
@@ -207,6 +209,24 @@ void SettingsActivity::toggleCurrentSetting() {
       renderer.setDarkMode(SETTINGS.colorMode == CrossPointSettings::COLOR_MODE::DARK_MODE);
     }
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+    // Line spacing uses a slider activity (0.8x-2.5x) for finer control.
+    if (setting.nameId == StrId::STR_LINE_SPACING) {
+      exitActivity();
+      enterNewActivity(new LineSpacingSelectionActivity(
+          renderer, mappedInput, static_cast<int>(SETTINGS.lineSpacing),
+          [this](const int selectedValue) {
+            SETTINGS.lineSpacing = static_cast<uint8_t>(selectedValue);
+            SETTINGS.saveToFile();
+            exitActivity();
+            requestUpdate();
+          },
+          [this] {
+            exitActivity();
+            requestUpdate();
+          }));
+      return;
+    }
+
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
       SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
@@ -319,7 +339,13 @@ void SettingsActivity::render(Activity::RenderLock&&) {
             valueText = I18N.get(setting.enumValues[value]);
           }
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-          valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+          if (setting.nameId == StrId::STR_LINE_SPACING) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.2fx", static_cast<float>(SETTINGS.*(setting.valuePtr)) / 100.0f);
+            valueText = buf;
+          } else {
+            valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+          }
         } else if (setting.type == SettingType::ACTION && setting.nameId == StrId::STR_EXT_UI_FONT) {
           // Show current UI font name or "Built-in"
           if (FontMgr.isUiFontEnabled()) {
