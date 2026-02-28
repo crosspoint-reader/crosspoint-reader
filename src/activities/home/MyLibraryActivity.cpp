@@ -15,7 +15,6 @@
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
-
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
