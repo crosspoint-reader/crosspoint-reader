@@ -578,7 +578,14 @@ void setup() {
   // Danger Zone: auto-connect WiFi + start web server + feed sync
   dangerZoneAutoConnect();
   if (dzWifiConnected) {
-    activityManager.goToFileTransfer();
+    // Hand off to the web server activity in pre-connected mode.
+    // Stop the DZ background server first — the activity will start its own.
+    if (dzWebServer) {
+      dzWebServer->stop();
+      dzWebServer.reset();
+    }
+    activityManager.replaceActivity(
+        std::make_unique<CrossPointWebServerActivity>(renderer, mappedInputManager, /*preConnected=*/true));
   }
 
   // Ensure we're not still holding the power button before leaving setup

@@ -50,6 +50,20 @@ void CrossPointWebServerActivity::onEnter() {
   // Note: don't clear received files here — feed sync may have already run before user opened this screen
   requestUpdate();
 
+  if (preConnected) {
+    // DZ auto-connect already joined WiFi — skip mode/WiFi selection and go straight to server.
+    LOG_DBG("WEBACT", "Pre-connected mode: skipping network selection");
+    isApMode = false;
+    connectedIP = WiFi.localIP().toString().c_str();
+    connectedSSID = WiFi.SSID().c_str();
+    if (MDNS.begin(AP_HOSTNAME)) {
+      LOG_DBG("WEBACT", "mDNS started: http://%s.local/", AP_HOSTNAME);
+    }
+    startWebServer();
+    RssFeedSync::startSync();
+    return;
+  }
+
   // Launch network mode selection subactivity
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
   startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
