@@ -28,12 +28,7 @@ void EpubReaderBookmarksActivity::onEnter() {
 
   if (!epub) {
     return;
-  }
-
-  selectorIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-  if (selectorIndex == -1) {
-    selectorIndex = 0;
-  }
+  } 
 
   LOG_DBG("EPB", "Load %d bookmarks", getPageItems());
   bookmarkUtil.load(getPageItems());
@@ -108,7 +103,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
         if (bookmarkUtil.doesBookmarkExist(index)) {
           auto bookmark = bookmarkUtil.getBookmark(index).value();
           auto item = epub->getTocItem(epub->getTocIndexForSpineIndex(bookmark.currentSpineIndex));
-          return item.title;
+          return item.title == "" ? tr(STR_UNNAMED) : item.title;
         } else {
           return std::string();
         }
@@ -124,7 +119,8 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
         }
       }, [](int index) { return UIIcon::Bookmark; });
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DELETE), bookmarkUtil.doesBookmarkExist(selectorIndex) ? tr(STR_OVERWRITE) : tr(STR_NEW));
+  const bool doesSelectedBookmarkExist = bookmarkUtil.doesBookmarkExist(selectorIndex);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), doesSelectedBookmarkExist ? tr(STR_OPEN) : "-", tr(STR_DELETE), doesSelectedBookmarkExist ? tr(STR_OVERWRITE) : tr(STR_NEW));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
