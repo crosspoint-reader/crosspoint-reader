@@ -56,6 +56,19 @@ jobs:
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 
+  verify-routes:
+    name: API route coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Verify all required API routes are registered
+        run: python3 scripts/verify-routes.py --verbose
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -110,6 +123,7 @@ jobs:
       - build
       - clang-format
       - cppcheck
+      - verify-routes
     if: always()
     runs-on: ubuntu-latest
     steps:
