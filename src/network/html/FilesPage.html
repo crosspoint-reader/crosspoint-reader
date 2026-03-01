@@ -3350,7 +3350,9 @@ function uploadFile() {
 
       // If network error, check if we should retry or mark as failed
       if (error.includes('connection failed') || error.includes('Network error') ||
-          error.includes('timeout') || error.includes('disconnected')) {
+          error.includes('timeout') || error.includes('disconnected') ||
+          error.includes('WebSocket connection timeout') ||
+          (error.includes('WebSocket') && error.includes('failed'))) {
         if (isNetworkOnline) {
           // Network is currently online, treat as a hard failure
           console.log(`[Network] Network error with online status: ${error}`);
