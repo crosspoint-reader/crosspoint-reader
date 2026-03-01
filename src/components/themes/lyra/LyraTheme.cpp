@@ -495,7 +495,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       if (!book.seriesIndex.empty()) {
         std::string idx = book.seriesIndex;
         if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
-          idx = idx.substr(0, idx.size() - 2);
+          idx.resize(idx.size() - 2);
         }
         seriesLabel += " #" + idx;
       }

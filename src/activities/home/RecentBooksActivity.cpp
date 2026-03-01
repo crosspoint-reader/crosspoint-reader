@@ -107,7 +107,7 @@ void RecentBooksActivity::render(RenderLock&&) {
           if (book.series.empty()) return book.author;
           std::string idx = book.seriesIndex;
           if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
-            idx = idx.substr(0, idx.size() - 2);
+            idx.resize(idx.size() - 2);
           }
           std::string seriesLabel = book.series + (idx.empty() ? "" : " #" + idx);
           return book.author.empty() ? seriesLabel : book.author + " \xc2\xb7 " + seriesLabel;

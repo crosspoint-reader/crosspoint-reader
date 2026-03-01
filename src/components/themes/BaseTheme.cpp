@@ -492,7 +492,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       if (!lastBookSeriesIndex.empty()) {
         std::string idx = lastBookSeriesIndex;
         if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
-          idx = idx.substr(0, idx.size() - 2);
+          idx.resize(idx.size() - 2);
         }
         seriesLabel += " #" + idx;
       }

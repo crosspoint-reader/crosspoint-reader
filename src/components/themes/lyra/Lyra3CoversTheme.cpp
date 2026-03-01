@@ -97,7 +97,7 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         if (!recentBooks[i].seriesIndex.empty()) {
           std::string idx = recentBooks[i].seriesIndex;
           if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
-            idx = idx.substr(0, idx.size() - 2);
+            idx.resize(idx.size() - 2);
           }
           seriesLabel += " #" + idx;
         }
