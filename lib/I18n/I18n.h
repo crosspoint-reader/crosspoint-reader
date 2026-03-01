@@ -32,7 +32,7 @@ class I18n {
   static const char* getCharacterSet(Language lang);
 
  private:
-  I18n() : _language(Language::ENGLISH) {}
+  I18n() : _language(Language::EN) {}
 
   Language _language;
 };

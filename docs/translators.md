@@ -9,19 +9,50 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 
 ## French
 - [Spigaw](https://github.com/Spigaw)
+- [CaptainFrito](https://github.com/CaptainFrito)
 
 ## German
 - [DavidOrtmann](https://github.com/DavidOrtmann)
 
+## Czech
+- [brbla](https://github.com/brbla)
+
+## Portuguese (Brazil)
+- [yagofarias](https://github.com/yagofarias)
+
+## Portuguese (Portugal)
+- [victordomingos](https://github.com/victordomingos)
+
 ## Italian
+- [andreaturchet](https://github.com/andreaturchet)
 - [fragolinux](https://github.com/fragolinux)
 
 ## Russian
 - [madebyKir](https://github.com/madebyKir)
+- [mrtnvgr](https://github.com/mrtnvgr)
 
 ## Spanish
 - [yeyeto2788](https://github.com/yeyeto2788)
 - [Skrzakk](https://github.com/Skrzakk)
+- [pablohc](https://github.com/pablohc)
 
 ## Swedish
 - [dawiik](https://github.com/dawiik)
+
+## Romanian
+- [ariel-lindemann](https://github.com/ariel-lindemann)
+
+## Catalan
+- [angeldenom](https://github.com/angeldenom)
+
+## Finnish
+- [plahteenlahti](https://github.com/plahteenlahti)
+
+## Ukrainian
+- [mirus-ua](https://github.com/mirus-ua)
+
+## Belarusian
+- [Dexif](https://github.com/dexif)
+
+## Danish
+- [hajisan](https://github.com/hajisan)

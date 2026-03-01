@@ -11,11 +11,9 @@
 #include "network/OtaUpdater.h"
 
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
-  exitActivity();
-
   if (!success) {
     LOG_ERR("OTA", "WiFi connection failed, exiting");
-    goBack();
+    finish();
     return;
   }
 
@@ -34,7 +32,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
       RenderLock lock(*this);
       state = FAILED;
     }
-    requestUpdate();
     return;
   }
 
@@ -44,7 +41,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
       RenderLock lock(*this);
       state = NO_UPDATE;
     }
-    requestUpdate();
     return;
   }
 
@@ -52,11 +48,10 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     RenderLock lock(*this);
     state = WAITING_CONFIRMATION;
   }
-  requestUpdate();
 }
 
 void OtaUpdateActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   // Turn on WiFi immediately
   LOG_DBG("OTA", "Turning on WiFi...");
@@ -64,12 +59,12 @@ void OtaUpdateActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   LOG_DBG("OTA", "Launching WifiSelectionActivity...");
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
 void OtaUpdateActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Turn off wifi
   WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
@@ -78,11 +73,16 @@ void OtaUpdateActivity::onExit() {
   delay(100);  // Allow WiFi hardware to fully power down
 }
 
-void OtaUpdateActivity::render(Activity::RenderLock&&) {
-  if (subActivity) {
-    // Subactivity handles its own rendering
-    return;
-  }
+void OtaUpdateActivity::render(RenderLock&&) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  renderer.clearScreen();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_UPDATE));
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height) / 2;
 
   float updaterProgress = 0;
   if (state == UPDATE_IN_PROGRESS) {
@@ -95,71 +95,53 @@ void OtaUpdateActivity::render(Activity::RenderLock&&) {
     lastUpdaterPercentage = static_cast<int>(updaterProgress * 100);
   }
 
-  const auto pageWidth = renderer.getScreenWidth();
-
-  renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_UPDATE), true, EpdFontFamily::BOLD);
-
   if (state == CHECKING_FOR_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_CHECKING_UPDATE), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == WAITING_CONFIRMATION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 200, tr(STR_NEW_UPDATE), true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, 20, 250, (std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
-    renderer.drawText(UI_10_FONT_ID, 20, 270, (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_CHECKING_UPDATE));
+  } else if (state == WAITING_CONFIRMATION) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEW_UPDATE), true, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height + metrics.verticalSpacing,
+                      (std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height * 2 + metrics.verticalSpacing * 2,
+                      (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
 
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_UPDATE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
+  } else if (state == UPDATE_IN_PROGRESS) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATING));
 
-  if (state == UPDATE_IN_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 310, tr(STR_UPDATING), true, EpdFontFamily::BOLD);
-    renderer.drawRect(20, 350, pageWidth - 40, 50);
-    renderer.fillRect(24, 354, static_cast<int>(updaterProgress * static_cast<float>(pageWidth - 44)), 42);
-    renderer.drawCenteredText(UI_10_FONT_ID, 420,
+    int y = top + height + metrics.verticalSpacing;
+    GUI.drawProgressBar(
+        renderer,
+        Rect{metrics.contentSidePadding, y, pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
+        static_cast<int>(updaterProgress * 100), 100);
+
+    y += metrics.progressBarHeight + metrics.verticalSpacing;
+    renderer.drawCenteredText(UI_10_FONT_ID, y,
                               (std::to_string(static_cast<int>(updaterProgress * 100)) + "%").c_str());
+    y += height + metrics.verticalSpacing;
     renderer.drawCenteredText(
-        UI_10_FONT_ID, 440,
+        UI_10_FONT_ID, y,
         (std::to_string(updater.getProcessedSize()) + " / " + std::to_string(updater.getTotalSize())).c_str());
-    renderer.displayBuffer();
-    return;
+  } else if (state == NO_UPDATE) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_UPDATE), true, EpdFontFamily::BOLD);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  } else if (state == FAILED) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  } else if (state == FINISHED) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, tr(STR_POWER_ON_HINT));
   }
 
-  if (state == NO_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_NO_UPDATE), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == FINISHED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 350, tr(STR_POWER_ON_HINT));
-    renderer.displayBuffer();
-    state = SHUTTING_DOWN;
-    return;
-  }
+  renderer.displayBuffer();
 }
 
 void OtaUpdateActivity::loop() {
   // TODO @ngxson : refactor this logic later
   if (updater.getRender()) {
     requestUpdate();
-  }
-
-  if (subActivity) {
-    subActivity->loop();
-    return;
   }
 
   if (state == WAITING_CONFIRMATION) {
@@ -169,7 +151,6 @@ void OtaUpdateActivity::loop() {
         RenderLock lock(*this);
         state = UPDATE_IN_PROGRESS;
       }
-      requestUpdate();
       requestUpdateAndWait();
       const auto res = updater.installUpdate();
 
@@ -191,7 +172,7 @@ void OtaUpdateActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      goBack();
+      finish();
     }
 
     return;
@@ -199,14 +180,14 @@ void OtaUpdateActivity::loop() {
 
   if (state == FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      goBack();
+      finish();
     }
     return;
   }
 
   if (state == NO_UPDATE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      goBack();
+      finish();
     }
     return;
   }

@@ -12,8 +12,6 @@
 #include "fontIds.h"
 
 void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
-  exitActivity();
-
   if (!success) {
     {
       RenderLock lock(*this);
@@ -51,7 +49,7 @@ void KOReaderAuthActivity::performAuthentication() {
 }
 
 void KOReaderAuthActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   // Turn on WiFi
   WiFi.mode(WIFI_STA);
@@ -74,12 +72,12 @@ void KOReaderAuthActivity::onEnter() {
   }
 
   // Launch WiFi selection
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
 void KOReaderAuthActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Turn off wifi
   WiFi.disconnect(false);
@@ -88,47 +86,37 @@ void KOReaderAuthActivity::onExit() {
   delay(100);
 }
 
-void KOReaderAuthActivity::render(Activity::RenderLock&&) {
+void KOReaderAuthActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_KOREADER_AUTH), true, EpdFontFamily::BOLD);
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_AUTH));
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height) / 2;
 
   if (state == AUTHENTICATING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
+    renderer.drawCenteredText(UI_10_FONT_ID, top, statusMessage.c_str());
+  } else if (state == SUCCESS) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_SUCCESS), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, tr(STR_SYNC_READY));
+  } else if (state == FAILED) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
   }
 
-  if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, tr(STR_AUTH_SUCCESS), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, tr(STR_SYNC_READY));
-
-    const auto labels = mappedInput.mapLabels(tr(STR_DONE), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 280, tr(STR_AUTH_FAILED), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, 320, errorMessage.c_str());
-
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer();
 }
 
 void KOReaderAuthActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (state == SUCCESS || state == FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      onComplete();
+      finish();
     }
   }
 }

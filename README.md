@@ -26,7 +26,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 ## Features & Usage
 
 - [x] EPUB parsing and rendering (EPUB 2 and EPUB 3)
-- [ ] Image support within EPUB
+- [x] Image support within EPUB
 - [x] Saved reading position
 - [x] File explorer with file picker
   - [x] Basic EPUB picker from root directory
@@ -36,6 +36,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
   - [x] Cover sleep screen
 - [x] Wifi book upload
 - [x] Wifi OTA updates
+- [x] KOReader Sync integration for cross-device reading progress
 - [x] Configurable font, layout, and display options
   - [ ] User provided fonts
   - [ ] Full UTF support
@@ -43,7 +44,8 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 
 Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
 
-See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint. 
+See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint, including the
+[KOReader Sync quick setup](./USER_GUIDE.md#365-koreader-sync-quick-setup).
 
 For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
 
@@ -153,6 +155,8 @@ For more details on the internal file structures, see the [file formats document
 ## Contributing
 
 Contributions are very welcome!
+
+If you are new to the codebase, start with the [contributing docs](./docs/contributing/README.md).
 
 If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
 If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.

@@ -83,12 +83,12 @@ void RecentBooksActivity::loop() {
   });
 }
 
-void RecentBooksActivity::render(Activity::RenderLock&&) {
+void RecentBooksActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_MENU_RECENT_BOOKS));
 
@@ -102,7 +102,7 @@ void RecentBooksActivity::render(Activity::RenderLock&&) {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
         [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
-        nullptr, nullptr);
+        [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
   }
 
   // Help text

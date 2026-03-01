@@ -607,6 +607,17 @@ def main():
 <img src="images/cache_test_2.jpg" alt="Cache test 2"/>
 <p>Navigate back to Page A - it should load faster from cache.</p>
 """), [('cache_test_2.jpg', images['cache_test_2.jpg'])]),
+            ("9. Alignment Bleed", make_chapter("Image Centering Bleed Test", """
+<p>Tests that image centering does not bleed into following text blocks (issue #1026).</p>
+<p>Set Paragraph Alignment to Justify and Embedded Style to OFF before testing.</p>
+<p>All paragraphs below the images should be justified, not centered.</p>
+<h1 class="hidden"></h1>
+<p><img src="images/centering_test.jpg" alt="Test image"/></p>
+<div>
+<p>FIRST PARAGRAPH after image. This paragraph follows an empty heading and an image-only paragraph. With the bug present, this text appears centered instead of justified because the empty heading's default Center alignment bleeds through the chain of empty text blocks. Lorem ipsum dolor sit amet, consectetur adipiscing elit sed do eiusmod tempor.</p>
+<p>SECOND PARAGRAPH in the same div. This paragraph should always be justified because the first paragraph's text block was flushed. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia.</p>
+</div>
+"""), []),  # centering_test.jpg already included by chapter 4
         ]
 
         create_epub(OUTPUT_DIR / 'test_jpeg_images.epub', 'JPEG Image Tests', jpeg_chapters)
@@ -661,6 +672,17 @@ def main():
 <img src="images/cache_test_2.png" alt="Cache test 2"/>
 <p>Navigate back to Page A - it should load faster from cache.</p>
 """), [('cache_test_2.png', images['cache_test_2.png'])]),
+            ("9. Alignment Bleed", make_chapter("Image Centering Bleed Test", """
+<p>Tests that image centering does not bleed into following text blocks (issue #1026).</p>
+<p>Set Paragraph Alignment to Justify and Embedded Style to OFF before testing.</p>
+<p>All paragraphs below the images should be justified, not centered.</p>
+<h1 class="hidden"></h1>
+<p><img src="images/centering_test.png" alt="Test image"/></p>
+<div>
+<p>FIRST PARAGRAPH after image. This paragraph follows an empty heading and an image-only paragraph. With the bug present, this text appears centered instead of justified because the empty heading's default Center alignment bleeds through the chain of empty text blocks. Lorem ipsum dolor sit amet, consectetur adipiscing elit sed do eiusmod tempor.</p>
+<p>SECOND PARAGRAPH in the same div. This paragraph should always be justified because the first paragraph's text block was flushed. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia.</p>
+</div>
+"""), []),  # centering_test.png already included by chapter 4
         ]
 
         create_epub(OUTPUT_DIR / 'test_png_images.epub', 'PNG Image Tests', png_chapters)

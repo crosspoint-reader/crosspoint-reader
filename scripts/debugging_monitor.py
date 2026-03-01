@@ -78,6 +78,7 @@ MAX_POINTS = 50
 time_data: deque[str] = deque(maxlen=MAX_POINTS)
 free_mem_data: deque[float] = deque(maxlen=MAX_POINTS)
 total_mem_data: deque[float] = deque(maxlen=MAX_POINTS)
+max_alloc_data: deque[float] = deque(maxlen=MAX_POINTS)
 data_lock: threading.Lock = threading.Lock()  # Prevent reading while writing
 
 # Global shutdown flag
@@ -172,21 +173,26 @@ def get_color_for_line(line: str) -> str:
     return Fore.WHITE
 
 
-def parse_memory_line(line: str) -> tuple[int | None, int | None]:
+def parse_memory_line(line: str) -> tuple[int | None, int | None, int | None]:
     """
-    Extracts Free and Total bytes from the specific log line.
-    Format: [MEM] Free: 196344 bytes, Total: 226412 bytes, Min Free: 112620 bytes
+    Extracts memory stats from MEM log lines.
+    Format: Free: N bytes, Total: N bytes, Min Free: N bytes, MaxAlloc: N bytes
+    Returns: (free_bytes, total_bytes, max_alloc_bytes)
     """
-    # Regex to find 'Free: <digits>' and 'Total: <digits>'
-    match = re.search(r"Free:\s*(\d+).*Total:\s*(\d+)", line)
-    if match:
-        try:
-            free_bytes = int(match.group(1))
-            total_bytes = int(match.group(2))
-            return free_bytes, total_bytes
-        except ValueError:
-            return None, None
-    return None, None
+    def _find(pattern: str) -> int | None:
+        m = re.search(pattern, line)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                pass
+        return None
+
+    return (
+        _find(r"\bFree:\s*(\d+)"),
+        _find(r"\bTotal:\s*(\d+)"),
+        _find(r"\bMaxAlloc:\s*(\d+)"),
+    )
 
 
 def serial_worker(ser, kwargs: dict[str, str]) -> None:
@@ -265,12 +271,13 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
 
                     # Check for Memory Line
                     if "[MEM]" in formatted_line:
-                        free_val, total_val = parse_memory_line(formatted_line)
+                        free_val, total_val, max_alloc_val = parse_memory_line(formatted_line)
                         if free_val is not None and total_val is not None:
                             with data_lock:
                                 time_data.append(pc_time)
-                                free_mem_data.append(free_val / 1024)  # Convert to KB
-                                total_mem_data.append(total_val / 1024)  # Convert to KB
+                                free_mem_data.append(free_val / 1024)
+                                total_mem_data.append(total_val / 1024)
+                                max_alloc_data.append((max_alloc_val or 0) / 1024)
                     # Apply filters
                     if filter_keyword and filter_keyword not in formatted_line.lower():
                         continue
@@ -309,6 +316,7 @@ def update_graph(frame) -> list:  # pylint: disable=unused-argument
     """
     Called by Matplotlib animation to redraw the memory usage chart.
     Monitors the global shutdown event and closes the plot when shutdown is requested.
+    Shows DRAM metrics (free, total, max contiguous alloc) and an optional PSRAM subplot.
     """
     if shutdown_event.is_set():
         plt.close("all")
@@ -318,32 +326,28 @@ def update_graph(frame) -> list:  # pylint: disable=unused-argument
         if not time_data:
             return []
 
-        # Convert deques to lists for plotting
         x = list(time_data)
         y_free = list(free_mem_data)
         y_total = list(total_mem_data)
+        y_max_alloc = list(max_alloc_data)
 
-    plt.cla()  # Clear axis
+    fig = plt.gcf()
+    fig.clf()
+    ax1 = fig.add_subplot(111)
 
-    # Plot Total RAM
-    plt.plot(x, y_total, label="Total RAM (KB)", color="red", linestyle="--")
+    ax1.plot(x, y_total, label="Total RAM (KB)", color="red", linestyle="--")
+    ax1.plot(x, y_free, label="Free RAM (KB)", color="green", marker="o", markersize=3)
+    if any(v > 0 for v in y_max_alloc):
+        ax1.plot(x, y_max_alloc, label="Max Alloc (KB)", color="orange", linestyle="-.")
+    ax1.fill_between(x, y_free, color="green", alpha=0.1)
+    ax1.set_title("ESP32 Memory Monitor")
+    ax1.set_ylabel("Memory (KB)")
+    ax1.set_xlabel("Time")
+    ax1.legend(loc="upper left")
+    ax1.grid(True, linestyle=":", alpha=0.6)
+    plt.setp(ax1.get_xticklabels(), rotation=45, ha="right")
 
-    # Plot Free RAM
-    plt.plot(x, y_free, label="Free RAM (KB)", color="green", marker="o")
-
-    # Fill area under Free RAM
-    plt.fill_between(x, y_free, color="green", alpha=0.1)
-
-    plt.title("ESP32 Memory Monitor")
-    plt.ylabel("Memory (KB)")
-    plt.xlabel("Time")
-    plt.legend(loc="upper left")
-    plt.grid(True, linestyle=":", alpha=0.6)
-
-    # Rotate date labels
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-
+    fig.tight_layout()
     return []
 
 
