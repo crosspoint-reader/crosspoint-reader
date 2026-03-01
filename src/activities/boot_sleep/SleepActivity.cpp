@@ -155,7 +155,7 @@ std::string SleepActivity::getBookOverlayText(const std::string& bookPath) const
       if (Storage.openFileForRead("SLP", xtc.getCachePath() + "/progress.bin", f)) {
         uint8_t data[4];
         if (f.read(data, 4) == 4) {
-          uint32_t currentPage = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
+          uint32_t currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
           uint32_t totalPages = xtc.getPageCount();
           float progress = xtc.calculateProgress(currentPage) * 100.0f;
           char progressStr[32];
