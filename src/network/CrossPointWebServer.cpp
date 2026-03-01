@@ -571,12 +571,25 @@ void CrossPointWebServer::handleDownload() const {
     filename = nameBuf;
   }
 
-  server->setContentLength(file.size());
+  const size_t fileSize = file.size();
+  server->setContentLength(fileSize);
   server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
   server->send(200, contentType.c_str(), "");
 
+  // Stream in chunks so large files (e.g. firmware.bin) don't overflow the TCP
+  // send buffer or trigger the watchdog.
   NetworkClient client = server->client();
-  client.write(file);
+  uint8_t buf[4096];
+  size_t remaining = fileSize;
+  while (remaining > 0 && client.connected()) {
+    const size_t toRead = min(sizeof(buf), remaining);
+    const int bytesRead = file.read(buf, toRead);
+    if (bytesRead <= 0) break;
+    const size_t sent = client.write(buf, bytesRead);
+    if (sent == 0) break;  // Client disconnected
+    remaining -= sent;
+    esp_task_wdt_reset();  // Feed watchdog during large transfers
+  }
   file.close();
 }
 
