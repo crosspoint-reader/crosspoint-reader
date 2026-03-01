@@ -266,6 +266,12 @@ void WifiSelectionActivity::checkConnectionStatus() {
       LOG_DBG("WIFI",
               "Connected with saved/open credentials, "
               "completing immediately");
+      // Skip feed sync if the user holds Up or Down during connection
+      if (mappedInput.isPressed(MappedInputManager::Button::Up) ||
+          mappedInput.isPressed(MappedInputManager::Button::Down)) {
+        LOG_INF("WIFI", "Button held at WiFi connect — suppressing RSS feed sync");
+        RssFeedSync::suppressSync();
+      }
       LOG_DBG("WIFI", "WiFi connected to %s — starting feed sync", selectedSSID.c_str());
       RssFeedSync::startSync();
       onComplete(true);

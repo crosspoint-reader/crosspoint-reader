@@ -26,7 +26,8 @@ TaskHandle_t syncTaskHandle = nullptr;
 RssFeedSync::State s_state = RssFeedSync::State::IDLE;
 int s_dlCurrent = 0;
 int s_dlTotal   = 0;
-unsigned long s_doneTime = 0;  // millis() when DONE was set, for auto-clear
+unsigned long s_doneTime = 0;       // millis() when DONE was set, for auto-clear
+unsigned long s_suppressUntilMs = 0;  // millis() until sync is suppressed (button-hold skip)
 
 static void setState(RssFeedSync::State st) { s_state = st; }
 
@@ -435,20 +436,26 @@ void syncTask(void*) {
         LOG_DBG(TAG, "Skipping %s item '%s': missing enclosure/path", type.c_str(), item.guid.c_str());
         return;
       }
-      ensureParentDir(item.crosspointPath);
-      auto result = HttpDownloader::downloadToFile(item.enclosureUrl, item.crosspointPath);
+      // crosspointPath is a destination directory (ends with '/'); append filename from URL.
+      std::string destPath = item.crosspointPath;
+      if (!destPath.empty() && destPath.back() == '/') {
+        const auto lastSlash = item.enclosureUrl.rfind('/');
+        if (lastSlash != std::string::npos) {
+          destPath += item.enclosureUrl.substr(lastSlash + 1);
+        }
+      }
+      ensureParentDir(destPath);
+      auto result = HttpDownloader::downloadToFile(item.enclosureUrl, destPath);
       if (result != HttpDownloader::OK) {
-        LOG_ERR(TAG, "Download failed for %s → %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str());
-        LOG_ERR(TAG, "Download failed: %s -> %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str());
+        LOG_ERR(TAG, "Download failed: %s -> %s", item.enclosureUrl.c_str(), destPath.c_str());
         return;
       }
       s_dlCurrent++;
-      LOG_INF(TAG, "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, item.crosspointPath.c_str(), (unsigned long)ESP.getFreeHeap());
+      LOG_INF(TAG, "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, destPath.c_str(), (unsigned long)ESP.getFreeHeap());
       // addReceivedFile called here = after file close, correct
       // Extract filename and add to shared received-files list for display
-      const std::string& path = item.crosspointPath;
-      const auto slash = path.rfind('/');
-      UITheme::addReceivedFile(slash == std::string::npos ? path : path.substr(slash + 1));
+      const auto slash = destPath.rfind('/');
+      UITheme::addReceivedFile(slash == std::string::npos ? destPath : destPath.substr(slash + 1));
 
     } else if (type == "firmware") {
       if (SETTINGS.feedAllowFirmware == 0) {
@@ -538,6 +545,12 @@ void syncTask(void*) {
 namespace RssFeedSync {
 
 void startSync() {
+  // Guard: suppressed by user (button held at WiFi connect time)
+  if (millis() < s_suppressUntilMs) {
+    LOG_INF(TAG, "Feed sync suppressed by user request — skipping");
+    return;
+  }
+
   // Guard: feed URL must be configured
   if (strlen(SETTINGS.feedUrl) == 0) return;
 
@@ -550,6 +563,11 @@ void startSync() {
   s_state = RssFeedSync::State::FETCHING;  // set immediately so indicator lights before task starts
   s_dlCurrent = 0; s_dlTotal = 0;
   xTaskCreate(syncTask, "FeedSync", 16384, nullptr, 1, &syncTaskHandle);  // 16KB: HTTPS+Expat+std::string need headroom
+}
+
+void suppressSync(unsigned long durationMs) {
+  s_suppressUntilMs = millis() + durationMs;
+  LOG_INF(TAG, "Feed sync suppressed for %lums", durationMs);
 }
 
 State getState() {
