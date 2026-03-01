@@ -177,3 +177,11 @@ CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 
 
 Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
 was making CrossPoint.
+
+## Fonts & Typefaces
+
+CrossPoint bundles several open-source typefaces:
+
+- **[Ubuntu](https://design.ubuntu.com/font)** by [Dalton Maag](https://www.daltonmaag.com/) — used as the UI font for the Pulsr theme. Licensed under the [Ubuntu Font Licence 1.0](https://ubuntu.com/legal/font-licence).
+- **[Noto Sans](https://fonts.google.com/noto/specimen/Noto+Sans)** by Google — licensed under the [SIL Open Font Licence 1.1](https://openfontlicense.org/).
+- **[OpenDyslexic](https://opendyslexic.org/)** by Abbie Gonzalez — licensed under the [SIL Open Font Licence 1.1](https://openfontlicense.org/).
