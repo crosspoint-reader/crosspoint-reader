@@ -13,6 +13,8 @@
 #include "CrossPointSettings.h"
 #include "HttpDownloader.h"
 
+extern volatile bool dzFlashRequested;
+
 namespace {
 
 constexpr const char* TAG = "FEED";
@@ -448,6 +450,10 @@ void syncTask(void*) {
         return;
       }
       LOG_DBG(TAG, "Firmware downloaded — will apply on next boot");
+      if (SETTINGS.dangerZoneEnabled) {
+        LOG_DBG(TAG, "Danger Zone enabled — auto-triggering flash");
+        dzFlashRequested = true;
+      }
 
     } else if (type == "news") {
       prependNewsEntry(item);

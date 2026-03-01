@@ -1458,6 +1458,15 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         filePath += wsUploadFileName;
         clearEpubCacheIfNeeded(filePath);
 
+        // Auto-flash: if firmware.bin was uploaded to root and Danger Zone is enabled,
+        // trigger install immediately without requiring a manual flash command.
+        if (wsUploadFileName == "firmware.bin" && (wsUploadPath == "/" || wsUploadPath == "") &&
+            SETTINGS.dangerZoneEnabled) {
+          LOG_DBG("WS", "[UPLOAD] firmware.bin uploaded with DZ enabled — auto-triggering flash");
+          extern volatile bool dzFlashRequested;
+          dzFlashRequested = true;
+        }
+
         wsServer->sendTXT(num, "DONE");
         lastProgressSent = 0;
       }
