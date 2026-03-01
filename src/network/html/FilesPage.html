@@ -349,6 +349,23 @@
     .advanced-setting-row:first-child {
       margin-top: 0;
     }
+    .setting-row-inline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .setting-info {
+      flex: 1;
+    }
+    .setting-select {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg);
+      color: var(--font-color);
+      min-width: 140px;
+    }
     .setting-row-header {
       display: flex;
       justify-content: space-between;
@@ -1236,13 +1253,13 @@
             </div>
           </div>
           -->
-          <!-- Rotate and Crop Mode -->
-          <div class="advanced-setting-row">
-            <div>
-              <div class="setting-title">📖 Rotate and Crop</div>
+          <!-- Rotate & Crop Mode -->
+          <div class="advanced-setting-row setting-row-inline">
+            <div class="setting-info">
+              <div class="setting-title">📖 Rotate & Crop</div>
               <div class="setting-desc">Choose image processing mode</div>
             </div>
-            <select id="rotateAndCropSelect" onchange="updateRotateAndCropMode()" style="margin-top: 8px; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--font-color);">
+            <select id="rotateAndCropSelect" class="setting-select" onchange="updateRotateAndCropMode()">
               <option value="off">OFF</option>
               <option value="lightNovel">Light Novel</option>
               <option value="manual">Manual Picker</option>
