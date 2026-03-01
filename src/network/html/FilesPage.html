@@ -521,6 +521,49 @@
       margin-top: 4px;
       line-height: 1.3;
     }
+    /* Rotate & Crop Mode Selector */
+    .rotate-crop-selector {
+      display: flex;
+      gap: 2px;
+      background: var(--border-color);
+      border-radius: 4px;
+      padding: 2px;
+      flex-shrink: 0;
+    }
+    .rotate-crop-option {
+      position: relative;
+    }
+    .rotate-crop-option input {
+      opacity: 0;
+      position: absolute;
+      width: 0;
+      height: 0;
+    }
+    .rotate-crop-option label {
+      display: block;
+      padding: 4px 10px;
+      font-size: 0.75em;
+      font-weight: 500;
+      color: var(--label-color);
+      border-radius: 3px;
+      cursor: pointer;
+      text-align: center;
+      min-width: 60px;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .rotate-crop-option input:disabled + label {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .rotate-crop-option input:checked + label {
+      background: var(--accent-color);
+      color: white;
+    }
+    .rotate-crop-option input:not(:checked):not(:disabled) + label:hover {
+      background: var(--accent-color-10);
+      color: var(--accent-color);
+    }
     /* Handedness options */
     .handedness-options {
       padding: 10px;
@@ -1374,39 +1417,49 @@
             </div>
           </div>
           -->
-          <!-- Light Novel Mode -->
+          <!-- Rotate & Crop Mode -->
           <div class="advanced-setting-row">
             <div class="setting-toggle">
               <div>
-                <div class="setting-title">📖 Light Novel Mode</div>
-                <div class="setting-desc">Rotate wide images 90° and split into pages for vertical reading</div>
+                <div class="setting-title">📐 Rotate & Crop</div>
+                <div class="setting-desc">Select image processing mode</div>
               </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="lightNovelToggle" onchange="toggleLightNovelMode()">
-                <span class="toggle-slider"></span>
-              </label>
+              <div class="rotate-crop-selector">
+                <div class="rotate-crop-option">
+                  <input type="radio" name="rotateCropMode" id="rotateCropOff" value="off" onchange="setRotateCropMode('off')" checked>
+                  <label for="rotateCropOff">OFF</label>
+                </div>
+                <div class="rotate-crop-option">
+                  <input type="radio" name="rotateCropMode" id="rotateCropLightNovel" value="light_novel" onchange="setRotateCropMode('light_novel')">
+                  <label for="rotateCropLightNovel">Light Novel</label>
+                </div>
+                <div class="rotate-crop-option">
+                  <input type="radio" name="rotateCropMode" id="rotateCropManualPicker" value="manual_picker" onchange="setRotateCropMode('manual_picker')">
+                  <label for="rotateCropManualPicker">Manual Picker</label>
+                </div>
+              </div>
             </div>
-            <!-- Handedness options (shown when Light Novel Mode is on) -->
+            <!-- Handedness options (shown when mode is Light Novel or Manual Picker) -->
             <div class="handedness-buttons" id="handednessOptions" style="display:none; margin-top: 12px;">
               <button class="handedness-btn" id="handednessLeft" data-value="left" onclick="setHandedness('left')">
                 <span style="float: right;">✋</span><span>Left-handed<br><small>(Counter-clockwise)</small></span>
               </button>
               <button class="handedness-btn active" id="handednessRight" data-value="right" onclick="setHandedness('right')">
-                <span style="float: left;">🤚</span><span>Right-handed<br><small>(Clockwise)</small></span>
+                <span style="float: right;">✋</span><span>Right-handed<br><small>(Clockwise)</small></span>
               </button>
             </div>
-            <!-- Conversion Log Export -->
-            <div class="advanced-setting-row" style="margin-top: 12px;">
-              <div class="setting-toggle">
-                <div>
-                  <div class="setting-title">📥 Auto-download Conversion Log</div>
-                  <div class="setting-desc">Export detailed log with statistics</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="export-log-checkbox">
-                  <span class="toggle-slider"></span>
-                </label>
+          </div>
+          <!-- Conversion Log Export -->
+          <div class="advanced-setting-row">
+            <div class="setting-toggle">
+              <div>
+                <div class="setting-title">📥 Auto-download Conversion Log</div>
+                <div class="setting-desc">Export detailed log with statistics</div>
               </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="export-log-checkbox">
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
           </div><!-- advanced-settings-content -->
@@ -1658,10 +1711,17 @@
   // Modal functions
   function openUploadModal() {
     // Reset converter variables to defaults
+    ROTATE_CROP_MODE = 'off';
     ENABLE_LIGHT_NOVEL_MODE = false;
     ENABLE_GRAYSCALE = true;
     JPEG_QUALITY = 85;
     HANDEDNESS = 'right';
+
+    // Reset Rotate & Crop selector
+    document.getElementById('rotateCropOff').checked = true;
+    document.getElementById('handednessOptions').style.display = 'none';
+    setHandedness('right');
+    updateRotateCropOptions();
 
     // Hide log section from previous session
     const logSection = document.getElementById('log-section');
@@ -1760,11 +1820,46 @@
     document.getElementById('handedness' + (value === 'right' ? 'Right' : 'Left')).classList.add('active');
   }
 
-  function toggleLightNovelMode() {
-    const enabled = document.getElementById('lightNovelToggle').checked;
-    ENABLE_LIGHT_NOVEL_MODE = enabled;
-    // Show/hide handedness options
-    document.getElementById('handednessOptions').style.display = enabled ? 'block' : 'none';
+  function setRotateCropMode(mode) {
+    ROTATE_CROP_MODE = mode;
+    ENABLE_LIGHT_NOVEL_MODE = (mode === 'light_novel');
+
+    // Show/hide handedness options (hidden when OFF, visible for Light Novel and Manual Picker)
+    document.getElementById('handednessOptions').style.display = (mode === 'off') ? 'none' : 'block';
+
+    // If switching to/from Manual Picker, handle image picker visibility
+    const fileInput = document.getElementById('fileInput');
+    const files = fileInput.files;
+
+    if (files.length === 1 && mode === 'manual_picker' && files[0].name.toLowerCase().endsWith('.epub')) {
+      const convertEnabled = document.getElementById('convertBeforeUpload').checked;
+      if (convertEnabled) {
+        showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
+      }
+    } else if (mode !== 'manual_picker') {
+      // Hide picker if switching away from Manual Picker
+      document.getElementById('imagePickerSection').style.display = 'none';
+      document.getElementById('uploadBtn').style.display = 'block';
+      document.getElementById('uploadBtn').disabled = false;
+    }
+  }
+
+  function updateRotateCropOptions() {
+    const fileInput = document.getElementById('fileInput');
+    const files = fileInput.files;
+    const manualPickerOption = document.getElementById('rotateCropManualPicker');
+
+    // Disable Manual Picker option if multiple files selected
+    if (files.length > 1) {
+      manualPickerOption.disabled = true;
+      // If currently in Manual Picker mode, switch to OFF
+      if (ROTATE_CROP_MODE === 'manual_picker') {
+        document.getElementById('rotateCropOff').checked = true;
+        setRotateCropMode('off');
+      }
+    } else {
+      manualPickerOption.disabled = false;
+    }
   }
 
   // ============================================================================
@@ -2085,11 +2180,14 @@
     const uploadBtn = document.getElementById('uploadBtn');
     const files = fileInput.files;
 
+    // Update Rotate & Crop options based on file count
+    updateRotateCropOptions();
+
     if (files.length > 0) {
       const convertEnabled = document.getElementById('convertBeforeUpload').checked;
 
-      // Check if single EPUB with conversion enabled - show image picker
-      if (files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
+      // Check if single EPUB with conversion enabled AND Manual Picker mode - show image picker
+      if (files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub') && ROTATE_CROP_MODE === 'manual_picker') {
         // Show picker (async - don't wait for completion)
         showImagePicker(files[0]).catch(err => {
           console.error('Image picker error:', err);
@@ -2133,6 +2231,7 @@ let MAX_WIDTH = DEFAULT_MAX_WIDTH;
 let MAX_HEIGHT = DEFAULT_MAX_HEIGHT;
 let JPEG_QUALITY = DEFAULT_JPEG_QUALITY;
 let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
+let ROTATE_CROP_MODE = 'off'; // 'off', 'light_novel', 'manual_picker'
 let ENABLE_LIGHT_NOVEL_MODE = false;
 let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
 
@@ -2620,7 +2719,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // Check if Light Novel Mode should apply (only for auto mode)
       const isHorizontal = origW > origH;
       const exceedsScreen = origW > MAX_WIDTH || origH > MAX_HEIGHT;
-      const needsRotation = !useManualState && isHorizontal && exceedsScreen && ENABLE_LIGHT_NOVEL_MODE;
+      const needsRotation = !useManualState && isHorizontal && exceedsScreen && ENABLE_LIGHT_NOVEL_MODE && ROTATE_CROP_MODE !== 'manual_picker';
 
       // ========================================================================
       // STATE 1: H-Split (Horizontal Split)
