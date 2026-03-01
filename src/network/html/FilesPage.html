@@ -225,7 +225,7 @@
       text-decoration: underline;
     }
     .upload-form {
-      margin-top: 10px;
+      margin-bottom: 10px;
     }
     .upload-form input[type="file"] {
       margin: 10px 0;
@@ -250,9 +250,8 @@
     }
     /* Convert options */
     .convert-options {
-      margin-top: 15px;
+      margin-bottom: 10px;
       padding: 12px;
-      background-color: var(--accent-color-10);
       border-radius: 6px;
       border: 1px solid var(--accent-color);
     }
@@ -267,6 +266,11 @@
       width: 18px;
       height: 18px;
       cursor: pointer;
+      outline: none;
+    }
+    .convert-checkbox input[type="checkbox"]:focus {
+      outline: none;
+      box-shadow: none;
     }
     .convert-warning {
       font-size: 0.85em;
@@ -289,48 +293,55 @@
       color: var(--label-color);
       margin-top: 6px;
       padding-left: 26px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
     }
     .convert-settings span {
       display: inline-block;
-      margin-right: 10px;
     }
-    /* Advanced Options Panel */
-    .advanced-options-panel {
-      margin-top: 10px;
-      padding: 12px;
-      background-color: rgba(0, 0, 0, 0.02);
-      border-radius: 6px;
-      border: 1px dashed var(--accent-color);
-    }
-    .advanced-options-header {
+    /* Convert row - compact layout with checkbox and advanced options toggle */
+    .convert-row {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .convert-separator {
+      display: none; /* Hidden, using space-between instead */
+    }
+    .advanced-options-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.85em;
+      color: var(--label-color);
       cursor: pointer;
       user-select: none;
-      padding: 4px 0;
+      transition: color 0.2s;
     }
-    /* Settings content - hidden by default, shown when expanded */
-    .advanced-settings-content {
-      display: none;
-    }
-    .advanced-options-panel.expanded .advanced-settings-content {
-      display: block;
-    }
-    .advanced-options-title {
-      font-size: 0.85em;
+    .advanced-options-toggle:hover {
       color: var(--accent-color);
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 6px;
     }
+    .advanced-options-text {
+      font-weight: 500;
+    }
+    /* Advanced Options */
     .advanced-options-arrow {
       font-size: 0.7em;
       transition: transform 0.2s;
     }
     .advanced-options-arrow.expanded {
       transform: rotate(90deg);
+    }
+    /* Settings content - hidden by default, shown when expanded */
+    .advanced-settings-content {
+      display: none;
+      margin-top: 12px;
+      padding-left: 4px;
+    }
+    .advanced-settings-content.visible {
+      display: block;
     }
     .advanced-setting-row {
       margin-top: 12px;
@@ -958,7 +969,7 @@
         min-width: unset;
       }
       .quality-slider-container-inline {
-        max-width: 140px;
+        max-width: 215px;
         gap: 4px;
       }
       .quality-slider-container-inline .quality-slider {
@@ -967,6 +978,150 @@
       .quality-slider-container-inline .quality-input {
         width: 28px;
       }
+    }
+    /* Enhanced Logging System Styles */
+    .log-section {
+      margin-top: 15px;
+      display: none;
+    }
+    .log-section.visible {
+      display: block;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .log-title {
+      font-weight: 600;
+      color: var(--title-color);
+      font-size: 0.95em;
+    }
+    .log-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
+      font-size: 0.8em;
+    }
+    .log-entry {
+      color: var(--font-color);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    .log-entry.success {
+      color: var(--accent-color);
+    }
+    .log-entry.error {
+      color: #e74c3c;
+    }
+    .log-entry.warning {
+      color: #f39c12;
+    }
+    .log-entry.info {
+      color: #3498db;
+    }
+    .log-timestamp {
+      color: var(--label-color);
+      font-size: 0.75em;
+      min-width: 52px;
+      opacity: 0.7;
+    }
+    .log-tag {
+      font-size: 0.7em;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      min-width: 56px;
+      text-align: center;
+    }
+    .log-tag.convert {
+      background: rgba(110, 154, 130, 0.15);
+      color: var(--accent-color);
+    }
+    .log-tag.split {
+      background: rgba(243, 156, 18, 0.15);
+      color: #f39c12;
+    }
+    .log-tag.fix {
+      background: rgba(39, 174, 96, 0.15);
+      color: #27ae60;
+    }
+    .log-tag.skip {
+      background: rgba(127, 140, 141, 0.15);
+      color: #7f8c8d;
+    }
+    .log-tag.info {
+      background: rgba(52, 152, 219, 0.15);
+      color: #3498db;
+    }
+    .log-tag.error {
+      background: rgba(231, 76, 60, 0.15);
+      color: #e74c3c;
+    }
+    .log-tag.done {
+      background: rgba(39, 174, 96, 0.15);
+      color: #27ae60;
+    }
+    .log-message {
+      flex: 1;
+      word-break: break-word;
+    }
+    .log-detail {
+      color: var(--label-color);
+      font-size: 0.9em;
+    }
+    .log-summary {
+      background: rgba(110, 154, 130, 0.08);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+    .log-summary-title {
+      background: rgba(110, 154, 130, 0.15);
+      padding: 8px 12px;
+      font-weight: 600;
+      font-size: 0.85em;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--accent-color);
+    }
+    .log-summary-table {
+      width: 100%;
+      font-size: 0.8em;
+    }
+    .log-summary-table td {
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .log-summary-table tr:last-child td {
+      border-bottom: none;
+    }
+    .log-summary-table td:first-child {
+      color: var(--label-color);
+      width: 45%;
+    }
+    .log-summary-table td:last-child {
+      color: var(--font-color);
+      font-weight: 500;
+      text-align: right;
+    }
+    .log-summary-table .highlight {
+      color: var(--accent-color);
+    }
+    .log-summary-table .saved {
+      color: #27ae60;
+    }
+    .log-summary-table .increased {
+      color: #f39c12;
     }
   </style>
 </head>
@@ -1028,32 +1183,26 @@
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <input type="file" id="fileInput" onchange="validateFile()" multiple>
       <div class="convert-options">
-        <label class="convert-checkbox">
-          <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
-          <span>🔄 Convert EPUB images before upload</span>
-        </label>
-        <!-- Sync compatibility warning -->
-        <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
-          ⚠️ Conversion mutates files and may break hash-based sync — back up or disable sync before proceeding
+        <div class="convert-row">
+          <label class="convert-checkbox">
+            <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
+            <span>Optimize EPUB</span>
+          </label>
+          <span class="convert-separator">—</span>
+          <span class="advanced-options-toggle" onclick="toggleAdvancedOptions()">
+            <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
+            <span class="advanced-options-text">Advanced Mode</span>
+          </span>
         </div>
-        <div class="convert-info" id="convertInfo" style="display:none;">
-          Optimizes images for e-ink displays
-        </div>
+
         <div class="convert-settings" id="convertSettings" style="display:none;">
           <span>⚫ True-Grayscale</span>
           <span>📏 Max 480×800px</span>
           <span id="qualityDisplaySimple">📦 85% JPEG</span>
           <span>🔧 Fix SVG</span>
         </div>
-        <!-- Advanced Options Panel -->
-        <div class="advanced-options-panel" id="advancedOptionsPanel">
-          <div class="advanced-options-header" onclick="toggleAdvancedOptions()">
-            <span class="advanced-options-title">
-              <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
-              ⚙️ Advanced Options
-            </span>
-          </div>
-          <div class="advanced-settings-content">
+        <!-- Advanced Settings Content -->
+        <div class="advanced-settings-content" id="advancedSettingsContent">
           <!-- JPEG Quality -->
           <div class="advanced-setting-row" style="margin-top: 12px;">
             <div class="setting-row-header">
@@ -1108,14 +1257,37 @@
                 <span style="float: left;">🤚</span><span>Right-handed<br><small>(Clockwise)</small></span>
               </button>
             </div>
+            <!-- Conversion Log Export -->
+            <div class="advanced-setting-row" style="margin-top: 12px;">
+              <div class="setting-toggle">
+                <div>
+                  <div class="setting-title">📥 Auto-download Conversion Log</div>
+                  <div class="setting-desc">Export detailed log with statistics</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="export-log-checkbox">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
           </div>
           </div><!-- advanced-settings-content -->
         </div>
+      <!-- Sync compatibility warning -->
+      <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
+        ⚠️ Conversion mutates files and may break hash-based sync — back up or disable sync before proceeding
+      </div>
       </div>
       <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
       <div id="progress-container">
         <div id="progress-bar"><div id="progress-fill"></div></div>
         <div id="progress-text"></div>
+      </div>
+      <div class="log-section" id="log-section">
+        <div class="log-header">
+          <div class="log-title">📋 Conversion Log</div>
+        </div>
+        <div class="log-container" id="log-container"></div>
       </div>
     </div>
   </div>
@@ -1202,6 +1374,9 @@
   }
 
   async function hydrate() {
+    // Fetch CrossPoint version
+    fetchVersion();
+
     // Close modals when clicking overlay - call proper cleanup functions
     document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
       overlay.addEventListener('click', function(e) {
@@ -1324,6 +1499,12 @@
     JPEG_QUALITY = 85;
     HANDEDNESS = 'right';
 
+    // Hide log section from previous session
+    const logSection = document.getElementById('log-section');
+    if (logSection) logSection.classList.remove('visible');
+    const logContainer = document.getElementById('log-container');
+    if (logContainer) logContainer.innerHTML = '';
+
     document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
     document.getElementById('uploadModal').classList.add('open');
   }
@@ -1339,8 +1520,12 @@
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertSettings').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
+    // Hide log section
+    const logSection = document.getElementById('log-section');
+    if (logSection) logSection.classList.remove('visible');
     // Reset advanced options
-    document.getElementById('advancedOptionsPanel').classList.remove('expanded');
+    const advancedSettingsContent = document.getElementById('advancedSettingsContent');
+    if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
     document.getElementById('advancedOptionsArrow').classList.remove('expanded');
     // Reset to defaults
     document.getElementById('qualitySlider').value = 85;
@@ -1363,15 +1548,16 @@
     document.getElementById('convertSettings').style.display = checked ? 'block' : 'none';
     // Reset advanced options when toggling off
     if (!checked) {
-      document.getElementById('advancedOptionsPanel').classList.remove('expanded');
+      const advancedSettingsContent = document.getElementById('advancedSettingsContent');
+      if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
       document.getElementById('advancedOptionsArrow').classList.remove('expanded');
     }
   }
 
   function toggleAdvancedOptions() {
-    const panel = document.getElementById('advancedOptionsPanel');
+    const content = document.getElementById('advancedSettingsContent');
     const arrow = document.getElementById('advancedOptionsArrow');
-    panel.classList.toggle('expanded');
+    content.classList.toggle('visible');
     arrow.classList.toggle('expanded');
   }
 
@@ -1578,6 +1764,335 @@ let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
 let ENABLE_LIGHT_NOVEL_MODE = false;
 let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
 
+// ============================================================================
+// Enhanced Logging System
+// ============================================================================
+
+let logStartTime = null;
+let conversionStats = { images: 0, splits: 0, splitParts: 0, fixes: 0, skipped: 0, errors: 0, originalSize: 0, newSize: 0 };
+const logSection = document.getElementById('log-section');
+const logContainer = document.getElementById('log-container');
+const exportLogCheckbox = document.getElementById('export-log-checkbox');
+
+// CrossPoint version (fetched from API)
+let crosspointVersion = 'Unknown';
+
+// Fetch version from API
+async function fetchVersion() {
+  try {
+    const response = await fetch('/api/status');
+    if (response.ok) {
+      const data = await response.json();
+      crosspointVersion = data.version || 'Unknown';
+    }
+  } catch (e) {
+    console.error('Failed to fetch version:', e);
+  }
+}
+
+// Batch logging system for multiple files
+let batchLogEntries = [];
+let batchStats = { filesProcessed: 0, filesSucceeded: 0, filesFailed: 0, totalImages: 0, totalSplits: 0, totalFixes: 0, totalErrors: 0, totalOriginalSize: 0, totalNewSize: 0 };
+let batchStartTime = null;
+let isBatchMode = false;
+
+// Format bytes to human-readable size (for logging)
+function formatBytes(b) {
+  if (!b) return '0 B';
+  const k = 1024;
+  const s = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(b) / Math.log(k));
+  return (b / Math.pow(k, i)).toFixed(1) + ' ' + s[i];
+}
+
+// Get elapsed timestamp since log start
+function getTimestamp() {
+  if (!logStartTime) return '[00:00.0]';
+  const elapsed = (Date.now() - logStartTime) / 1000;
+  const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+  const secs = (elapsed % 60).toFixed(1).padStart(4, '0');
+  return `[${mins}:${secs}]`;
+}
+
+// Main logging function
+function log(message, type = '', tag = '') {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + type;
+
+  // Timestamp
+  const timestamp = document.createElement('span');
+  timestamp.className = 'log-timestamp';
+  timestamp.textContent = getTimestamp();
+  entry.appendChild(timestamp);
+
+  // Tag (if provided)
+  if (tag) {
+    const tagEl = document.createElement('span');
+    tagEl.className = 'log-tag ' + tag.toLowerCase();
+    tagEl.textContent = tag;
+    entry.appendChild(tagEl);
+  }
+
+  // Message
+  const msg = document.createElement('span');
+  msg.className = 'log-message';
+  msg.innerHTML = message;
+  entry.appendChild(msg);
+
+  logContainer.appendChild(entry);
+  logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+// Log image processing details
+function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize, wasSplit = false, splitCount = 0, partsInfo = null) {
+  const saved = origSize - newSize;
+  const savedPct = ((saved / origSize) * 100).toFixed(0);
+  const dims = `${origW}×${origH}`;
+  const newDims = `${newW}×${newH}`;
+
+  if (wasSplit) {
+    conversionStats.splits++;
+    conversionStats.splitParts += splitCount;
+    // Build parts detail string
+    let partsDetail = '';
+    if (partsInfo && partsInfo.length > 0) {
+      partsDetail = partsInfo.map(p =>
+        `${p.name} (${p.width}×${p.height}, ${formatBytes(p.size)})`
+      ).join(', ');
+    }
+    const savedInfo = saved > 0 ? `, <span style="color:#27ae60">-${savedPct}%</span>` : '';
+    log(`<strong>${name}</strong> <span class="log-detail">(${dims} ${origFormat.toUpperCase()}, ${formatBytes(origSize)}) → ${splitCount} parts${savedInfo}</span>`, '', 'SPLIT');
+    if (partsDetail) {
+      log(`<span class="log-detail" style="margin-left: 20px;">↳ ${partsDetail}</span>`, '', '');
+    }
+  } else {
+    conversionStats.images++;
+    const detail = saved > 0
+      ? `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(origSize)} → ${formatBytes(newSize)}, <span style="color:#27ae60">-${savedPct}%</span>)</span>`
+      : `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(newSize)})</span>`;
+    log(`<strong>${name}</strong> ${detail}`, '', 'CONVERT');
+  }
+}
+
+// Log fix applied
+function logFix(type, detail) {
+  conversionStats.fixes++;
+  log(`${type}: <span class="log-detail">${detail}</span>`, 'success', 'FIX');
+}
+
+// Log skipped item
+function logSkip(name, reason) {
+  conversionStats.skipped++;
+  log(`${name} <span class="log-detail">(${reason})</span>`, '', 'SKIP');
+}
+
+// Log error
+function logError(message) {
+  conversionStats.errors++;
+  log(message, 'error', 'ERROR');
+}
+
+// Log summary table
+function logSummary(originalSize, newSize, timeElapsed) {
+  const saved = originalSize - newSize;
+  const savedPct = ((saved / originalSize) * 100).toFixed(1);
+  const totalImages = conversionStats.images + conversionStats.splits;
+  const totalOutput = conversionStats.images + conversionStats.splitParts;
+
+  const summaryHtml = `
+    <div class="log-summary">
+      <div class="log-summary-title">📊 Conversion Summary</div>
+      <table class="log-summary-table">
+        <tr><td>Images processed</td><td class="highlight">${totalImages}${conversionStats.splits > 0 ? ` (${conversionStats.splits} split → ${conversionStats.splitParts} parts)` : ''}</td></tr>
+        <tr><td>Output images</td><td>${totalOutput}</td></tr>
+        <tr><td>EPUB repairs</td><td>${conversionStats.fixes > 0 ? conversionStats.fixes + ' fixes applied' : 'None needed'}</td></tr>
+        ${conversionStats.errors > 0 ? `<tr><td>Errors</td><td style="color:#e74c3c">${conversionStats.errors}</td></tr>` : ''}
+        <tr><td>Original size</td><td>${formatBytes(originalSize)}</td></tr>
+        <tr><td>New size</td><td>${formatBytes(newSize)}</td></tr>
+        <tr><td>Saved</td><td class="${saved > 0 ? 'saved' : 'increased'}">${saved > 0 ? formatBytes(saved) + ' (' + savedPct + '%)' : '+' + formatBytes(-saved)}</td></tr>
+        <tr><td>Time</td><td>${timeElapsed.toFixed(1)}s</td></tr>
+      </table>
+    </div>
+  `;
+  logContainer.insertAdjacentHTML('beforeend', summaryHtml);
+  logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+// Clear log
+function clearLog() {
+  logContainer.innerHTML = '';
+  logStartTime = Date.now();
+  conversionStats = { images: 0, splits: 0, splitParts: 0, fixes: 0, skipped: 0, errors: 0, originalSize: 0, newSize: 0 };
+}
+
+// Start batch logging mode
+function startBatchLog(fileCount) {
+  isBatchMode = true;
+  batchStartTime = Date.now();
+  batchLogEntries = [];
+  batchStats = { filesProcessed: 0, filesSucceeded: 0, filesFailed: 0, totalImages: 0, totalSplits: 0, totalFixes: 0, totalErrors: 0, totalOriginalSize: 0, totalNewSize: 0 };
+  clearLog();
+  logContainer.innerHTML = ''; // Clear display
+  log(`Starting batch conversion: ${fileCount} file(s)`, '', 'INFO');
+}
+
+// Save current file's log to batch entries
+function saveToFileBatchLog(fileName, succeeded) {
+  if (!isBatchMode) return;
+
+  const entries = Array.from(logContainer.querySelectorAll('.log-entry'));
+  batchLogEntries.push({
+    fileName: fileName,
+    succeeded: succeeded,
+    entries: entries,
+    stats: { ...conversionStats }
+  });
+
+  // Update batch stats
+  batchStats.filesProcessed++;
+  if (succeeded) {
+    batchStats.filesSucceeded++;
+  } else {
+    batchStats.filesFailed++;
+  }
+  batchStats.totalImages += conversionStats.images;
+  batchStats.totalSplits += conversionStats.splits;
+  batchStats.totalFixes += conversionStats.fixes;
+  batchStats.totalErrors += conversionStats.errors;
+
+  // Clear for next file
+  logContainer.innerHTML = '';
+  conversionStats = { images: 0, splits: 0, splitParts: 0, fixes: 0, skipped: 0, errors: 0, originalSize: 0, newSize: 0 };
+}
+
+// Finalize batch log and export
+function finalizeBatchLog() {
+  if (!isBatchMode) return;
+
+  const batchTime = (Date.now() - batchStartTime) / 1000;
+
+  // Build consolidated log display
+  logContainer.innerHTML = '';
+  log(`Starting batch conversion: ${batchStats.filesProcessed} file(s)`, '', 'INFO');
+
+  // Add all file entries
+  batchLogEntries.forEach((fileLog, index) => {
+    const fileHeader = document.createElement('div');
+    fileHeader.className = 'log-entry';
+    fileHeader.style.marginTop = index > 0 ? '15px' : '5px';
+    fileHeader.style.borderTop = index > 0 ? '1px solid var(--border-color)' : 'none';
+    fileHeader.style.paddingTop = index > 0 ? '10px' : '0';
+    fileHeader.innerHTML = `<span class="log-timestamp"></span><span class="log-message"><strong>${fileLog.fileName}</strong> — ${fileLog.succeeded ? '<span style="color:#27ae60">✓ Success</span>' : '<span style="color:#e74c3c">✗ Failed</span>'}</span>`;
+    logContainer.appendChild(fileHeader);
+
+    fileLog.entries.forEach(entry => {
+      const clone = entry.cloneNode(true);
+      logContainer.appendChild(clone);
+    });
+  });
+
+  // Add batch summary
+  const batchSummaryHtml = `
+    <div class="log-summary">
+      <div class="log-summary-title">📊 Batch Conversion Summary</div>
+      <table class="log-summary-table">
+        <tr><td>Files processed</td><td class="highlight">${batchStats.filesProcessed}</td></tr>
+        <tr><td>Successful</td><td style="color:#27ae60">${batchStats.filesSucceeded}</td></tr>
+        <tr><td>Failed</td><td style="${batchStats.filesFailed > 0 ? '#e74c3c' : '#7f8c8d'}">${batchStats.filesFailed}</td></tr>
+        <tr><td>Total images processed</td><td>${batchStats.totalImages}</td></tr>
+        <tr><td>Total splits</td><td>${batchStats.totalSplits}</td></tr>
+        <tr><td>Total fixes applied</td><td>${batchStats.totalFixes}</td></tr>
+        ${batchStats.totalErrors > 0 ? `<tr><td>Total errors</td><td style="color:#e74c3c">${batchStats.totalErrors}</td></tr>` : ''}
+        <tr><td>Total time</td><td>${batchTime.toFixed(1)}s</td></tr>
+      </table>
+    </div>
+  `;
+  logContainer.insertAdjacentHTML('beforeend', batchSummaryHtml);
+  logContainer.scrollTop = logContainer.scrollHeight;
+
+  // Auto-export if checkbox is checked
+  if (exportLogCheckbox && exportLogCheckbox.checked) {
+    setTimeout(() => {
+      exportLogToFile(null, true); // isBatch = true
+    }, 200);
+  }
+
+  // Reset batch mode
+  isBatchMode = false;
+  batchLogEntries = [];
+}
+
+// Show/hide log section
+function showLog() {
+  logSection.classList.add('visible');
+}
+
+function hideLog() {
+  logSection.classList.remove('visible');
+}
+
+// Generate standardized log filename with date
+function generateLogFilename(isBatch = false) {
+  const now = new Date();
+  const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const time = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+  const prefix = isBatch ? 'batch' : 'epub';
+  return `${prefix}-conversion-log-${date}_${time}.txt`;
+}
+
+// Export log as text file (can be called automatically)
+function exportLogToFile(filename = null, isBatch = false) {
+  // Use standardized filename if none provided
+  if (!filename) {
+    filename = generateLogFilename(isBatch);
+  }
+  // Extract text from log entries
+  const entries = logContainer.querySelectorAll('.log-entry');
+  let logText = `CrossPoint Reader ${crosspointVersion} - EPUB Conversion Log\n`;
+  logText += `Generated: ${new Date().toLocaleString()}\n`;
+  logText += `${'='.repeat(60)}\n\n`;
+
+  entries.forEach(entry => {
+    const timestamp = entry.querySelector('.log-timestamp')?.textContent || '';
+    const tag = entry.querySelector('.log-tag')?.textContent || '';
+    const message = entry.querySelector('.log-message')?.textContent || entry.textContent;
+
+    if (tag) {
+      logText += `${timestamp} [${tag}] ${message}\n`;
+    } else {
+      logText += `${timestamp} ${message}\n`;
+    }
+  });
+
+  // Extract summary table if present
+  const summary = logContainer.querySelector('.log-summary');
+  if (summary) {
+    logText += `\n${'='.repeat(60)}\n`;
+    const title = summary.querySelector('.log-summary-title')?.textContent || 'Summary';
+    logText += `${title}\n`;
+    logText += `${'-'.repeat(40)}\n`;
+
+    const rows = summary.querySelectorAll('tr');
+    rows.forEach(row => {
+      const cells = row.querySelectorAll('td');
+      if (cells.length >= 2) {
+        logText += `${cells[0].textContent.padEnd(25)} ${cells[1].textContent}\n`;
+      }
+    });
+  }
+
+  // Create download link
+  const blob = new Blob([logText], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || `epub-conversion-log-${Date.now()}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // Fix SVG cover - converts SVG-wrapped covers to plain HTML img tags
 function fixSvgCover(content) {
   if (!content.includes('<svg') || !content.includes('xlink:href')) {
@@ -1698,6 +2213,7 @@ async function processImage(data) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(new Blob([data]));
     const img = new Image();
+    const origSize = data.byteLength;
     // Set up timeout to handle cases where image never loads
     const timeoutId = setTimeout(() => {
       URL.revokeObjectURL(url);
@@ -1764,7 +2280,10 @@ async function processImage(data) {
           // No split needed
           const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
           const arrBuf = await blob.arrayBuffer();
-          resolve([{ data: arrBuf, suffix: '' }]);
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: rotW, height: rotH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength }
+          });
         } else {
           // Split vertically with overlap
           const parts = [];
@@ -1789,7 +2308,7 @@ async function processImage(data) {
 
               const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
               const arrBuf = await blob.arrayBuffer();
-              parts.push({ data: arrBuf, suffix: `_part${i + 1}` });
+              parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
             }
           } else {
             // For counter-clockwise: cut from left to right (top to bottom after rotation)
@@ -1807,10 +2326,14 @@ async function processImage(data) {
 
               const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
               const arrBuf = await blob.arrayBuffer();
-              parts.push({ data: arrBuf, suffix: `_part${i + 1}` });
+              parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
             }
           }
-          resolve(parts);
+          const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
+          resolve({
+            parts: parts,
+            meta: { origW, origH, origSize, wasSplit: true, rotated: true, splitCount: numParts, finalW: rotW, finalH: rotH, finalSize: totalSize }
+          });
         }
       } else {
         // Normal processing: check if scaling is needed
@@ -1829,7 +2352,10 @@ async function processImage(data) {
 
           const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
           const arrBuf = await blob.arrayBuffer();
-          resolve([{ data: arrBuf, suffix: '' }]);
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: origW, height: origH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: origW, finalH: origH, finalSize: arrBuf.byteLength }
+          });
         } else {
           // Scale to fit 480x800
           const scale = Math.min(MAX_WIDTH / origW, MAX_HEIGHT / origH);
@@ -1849,7 +2375,10 @@ async function processImage(data) {
 
           const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
           const arrBuf = await blob.arrayBuffer();
-          resolve([{ data: arrBuf, suffix: '' }]);
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: newW, height: newH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: newW, finalH: newH, finalSize: arrBuf.byteLength }
+          });
         }
       }
     };
@@ -1864,6 +2393,17 @@ async function processImage(data) {
 
 // Convert EPUB file - returns converted blob
 async function convertEpubFile(file, progressCallback) {
+  const startTime = Date.now();
+  const originalSize = file.size;
+  let totalImageSize = 0;
+  let totalNewSize = 0;
+
+  // Initialize logging
+  clearLog();
+  showLog();
+  log(`<strong>${file.name}</strong> <span class="log-detail">(${formatBytes(originalSize)})</span>`, '', 'INFO');
+  log(`Quality: ${JPEG_QUALITY}% | Light Novel Mode: ${ENABLE_LIGHT_NOVEL_MODE ? 'ON' : 'OFF'} | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'}`, '', 'INFO');
+
   const zip = await JSZip.loadAsync(file);
   const renamed = {};
   zip.forEach(p => {
@@ -1895,10 +2435,20 @@ async function convertEpubFile(file, progressCallback) {
 
     if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/)) {
       const data = await fileObj.async('arraybuffer');
-      const parts = await processImage(data);
+      const result = await processImage(data);
+      const parts = result.parts;
+      const meta = result.meta;
 
       const baseName = path.replace(/\.[^.]+$/, '');
       const newExt = '.jpg';
+
+      // Log image processing
+      const imgName = path.split('/').pop();
+      const origFormat = path.split('.').pop();
+      logImage(imgName, meta.origW, meta.origH, origFormat, meta.origSize, meta.finalW, meta.finalH, meta.finalSize, meta.wasSplit, meta.splitCount || 0, parts);
+
+      totalImageSize += meta.origSize;
+      totalNewSize += meta.finalSize;
 
       if (parts.length === 1 && parts[0].suffix === '') {
         const newPath = renamed[path] || path.replace(/\.[^.]+$/, newExt);
@@ -1933,10 +2483,10 @@ async function convertEpubFile(file, progressCallback) {
   for (const [path, content] of Object.entries(xhtmlFiles)) {
     let t = content;
     const r = fixSvgCover(t);
-    if (r.fixed) { t = r.c; svgFix += r.count || 1; }
+    if (r.fixed) { t = r.c; svgFix += r.count || 1; logFix('SVG cover', path.split('/').pop()); }
 
     const r2 = fixSvgWrappedImages(t);
-    if (r2.fixed) { t = r2.c; svgFix += r2.count || 1; }
+    if (r2.fixed) { t = r2.c; svgFix += r2.count || 1; logFix(`SVG images (${r2.count})`, path.split('/').pop()); }
 
     for (const [o, n] of Object.entries(renamed)) {
       t = t.split(o.split('/').pop()).join(n.split('/').pop());
@@ -2052,7 +2602,7 @@ async function convertEpubFile(file, progressCallback) {
     }
 
     const cm = ensureCoverMeta(t);
-    if (cm.fixed) t = cm.o;
+    if (cm.fixed) { t = cm.o; logFix('Cover meta', 'Added to OPF manifest'); }
     out.file(opfPath, t, { compression: 'DEFLATE', createFolders: false });
   }
 
@@ -2076,6 +2626,13 @@ async function convertEpubFile(file, progressCallback) {
       }
       // Sync NCX identifier with OPF
       if (mainIdentifier) {
+        const oldMeta = t.match(/<meta\s+name=["']dtb:uid["']\s+content=["'][^"']*["']\s*\/?>/gi);
+        if (oldMeta && oldMeta[0]) {
+          const oldId = oldMeta[0].match(/content=["']([^"']+)["']/);
+          if (oldId && oldId[1] !== mainIdentifier) {
+            logFix('NCX identifier', 'Synced with OPF');
+          }
+        }
         t = t.replace(/<meta\s+name=["']dtb:uid["']\s+content=["'][^"']*["']\s*\/?>/gi,
           `<meta name="dtb:uid" content="${mainIdentifier}"/>`);
       }
@@ -2085,7 +2642,24 @@ async function convertEpubFile(file, progressCallback) {
   }
 
   if (progressCallback) progressCallback(100);
-  return await out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+
+  // Generate final blob
+  const newBlob = await out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+  const newSize = newBlob.size;
+  const timeElapsed = (Date.now() - startTime) / 1000;
+
+  // Log completion
+  log('Conversion complete!', 'success', 'DONE');
+  logSummary(totalImageSize > 0 ? totalImageSize : originalSize, totalNewSize > 0 ? totalNewSize : newSize, timeElapsed);
+
+  // Auto-export only if NOT in batch mode (batch mode exports at the end)
+  if (!isBatchMode && exportLogCheckbox && exportLogCheckbox.checked) {
+    setTimeout(() => {
+      exportLogToFile(null, false); // isBatch = false for single file
+    }, 100);
+  }
+
+  return newBlob;
 }
 
 // Get WebSocket URL based on current page location
@@ -2254,19 +2828,47 @@ function uploadFile() {
   const failedFiles = [];
   let useWebSocket = true; // Try WebSocket first
 
+  // Check if we should use batch logging mode
+  const epubFilesToConvert = files.filter(f => f.name.toLowerCase().endsWith('.epub') && convertEnabled);
+  const useBatchLog = epubFilesToConvert.length > 1 && exportLogCheckbox && exportLogCheckbox.checked;
+
+  // Start batch log mode if needed
+  if (useBatchLog) {
+    startBatchLog(epubFilesToConvert.length);
+    showLog();
+  }
+
   async function uploadNextFile() {
     if (currentIndex >= files.length) {
       // All files processed - show summary
       if (failedFiles.length === 0) {
         progressFill.style.backgroundColor = '#4caf50';
         progressText.textContent = 'All uploads complete!';
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+
+        // Finalize batch log if in batch mode
+        if (useBatchLog) {
+          finalizeBatchLog();
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        } else {
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
       } else {
         progressFill.style.backgroundColor = '#e74c3c';
         const failedList = failedFiles.map(f => f.name).join(', ');
         progressText.textContent = `${files.length - failedFiles.length}/${files.length} uploaded. Failed: ${failedList}`;
+
+        // Add upload errors to batch log
+        if (useBatchLog) {
+          failedFiles.forEach(ff => {
+            logError(`Upload failed for ${ff.name}: ${ff.error}`);
+          });
+          finalizeBatchLog();
+        }
+
         // Only show banner if THIS upload session had failures
         // Use local failedFiles, not the global shared variable
         if (failedFiles.length > 0) {
@@ -2293,6 +2895,7 @@ function uploadFile() {
     const isEpub = file.name.toLowerCase().endsWith('.epub');
     const needsConversion = isEpub && convertEnabled;
     let conversionSucceeded = false;
+    let conversionFailed = false;  // Track if conversion actually failed
 
     const methodText = useWebSocket ? ' [WS]' : ' [HTTP]';
     const stageText = needsConversion ? 'Converting & uploading' : 'Uploading';
@@ -2308,11 +2911,23 @@ function uploadFile() {
     };
 
     const onComplete = () => {
+      // Save file log to batch if in batch mode and this file was converted
+      // Consider it successful only if conversion didn't fail
+      if (useBatchLog && needsConversion) {
+        saveToFileBatchLog(file.name, !conversionFailed && conversionSucceeded);
+      }
+
       currentIndex++;
       uploadNextFile();
     };
 
     const onError = (error) => {
+      // Save failed file log to batch if in batch mode
+      if (useBatchLog && needsConversion) {
+        logError(`Upload failed: ${error}`);
+        saveToFileBatchLog(file.name, false);
+      }
+
       failedFiles.push({ name: file.name, error: error, file: originalFile });
       currentIndex++;
       uploadNextFile();
@@ -2323,6 +2938,12 @@ function uploadFile() {
       if (needsConversion) {
         progressFill.style.backgroundColor = '#9b59b6'; // Purple for conversion
         progressText.textContent = `Converting ${file.name} (${currentIndex + 1}/${files.length})...`;
+
+        // Clear log for single file mode, or just add separator for batch mode
+        if (!useBatchLog) {
+          clearLog();
+          showLog();
+        }
 
         try {
           const convertedBlob = await convertEpubFile(file, (percent) => {
@@ -2336,6 +2957,18 @@ function uploadFile() {
           conversionSucceeded = true;
         } catch (convError) {
           console.error('Conversion error:', convError);
+          // Log the error
+          logError(`Conversion failed: ${convError.message}`);
+          log('Uploading original file instead...', 'warning', 'INFO');
+          conversionFailed = true;
+
+          // In single file mode, export error log
+          if (!useBatchLog && exportLogCheckbox && exportLogCheckbox.checked) {
+            setTimeout(() => {
+              exportLogToFile(null, false); // isBatch = false for single file
+            }, 100);
+          }
+
           // If conversion fails, try uploading original file
           progressText.textContent = `Conversion failed, uploading original ${file.name}...`;
           progressFill.style.backgroundColor = '#e67e22'; // Orange for fallback
@@ -2355,6 +2988,11 @@ function uploadFile() {
       onComplete();
     } catch (error) {
       console.error('Upload error:', error);
+      // Log upload error if conversion succeeded but upload failed
+      if (conversionSucceeded) {
+        logError(`Upload failed: ${error.message}`);
+      }
+
       if (useWebSocket && error.message === 'WebSocket connection failed') {
         // Fall back to HTTP for all subsequent uploads
         console.log('WebSocket failed, falling back to HTTP');
