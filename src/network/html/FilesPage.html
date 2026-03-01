@@ -2873,11 +2873,21 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
     const ws = new WebSocket(getWsUrl());
     let uploadStarted = false;
     let sendingChunks = false;
+    let timeoutId;
+
+    // Set 1 second timeout for WebSocket connection and response
+    timeoutId = setTimeout(() => {
+      console.log('[WS] Timeout reached, closing connection');
+      ws.close();
+      reject(new Error('WebSocket connection timeout'));
+    }, 1000);
 
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = function() {
       console.log('[WS] Connected, starting upload:', file.name);
+      // Clear timeout on successful connection
+      clearTimeout(timeoutId);
       // Send start message: START:<filename>:<size>:<path>
       ws.send(`START:${file.name}:${file.size}:${currentPath}`);
     };
@@ -2889,6 +2899,9 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
       if (msg === 'READY') {
         uploadStarted = true;
         sendingChunks = true;
+
+        // Clear timeout as connection is responsive
+        clearTimeout(timeoutId);
 
         // Small delay to let connection stabilize
         await new Promise(r => setTimeout(r, 50));
@@ -2936,12 +2949,14 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
         console.log('[WS] Server progress:', msg);
       } else if (msg === 'DONE') {
         // Show 100% when server confirms completion
+        clearTimeout(timeoutId);
         if (onProgress) onProgress(file.size, file.size);
         ws.close();
         if (onComplete) onComplete();
         resolve();
       } else if (msg.startsWith('ERROR:')) {
         const error = msg.substring(6);
+        clearTimeout(timeoutId);
         ws.close();
         if (onError) onError(error);
         reject(new Error(error));
@@ -2950,6 +2965,7 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
 
     ws.onerror = function(event) {
       console.error('[WS] Error:', event);
+      clearTimeout(timeoutId);
       if (!uploadStarted) {
         reject(new Error('WebSocket connection failed'));
       } else if (!sendingChunks) {
@@ -2962,6 +2978,7 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
 
     ws.onclose = function(event) {
       console.log('[WS] Connection closed, code:', event.code, 'reason:', event.reason);
+      clearTimeout(timeoutId);
       if (sendingChunks) {
         reject(new Error('WebSocket closed unexpectedly'));
       }
