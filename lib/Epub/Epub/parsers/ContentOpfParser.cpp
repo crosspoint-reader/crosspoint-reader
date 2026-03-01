@@ -10,7 +10,101 @@ namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
 constexpr char itemCacheFile[] = "/.items.bin";
+
+std::string trim(const std::string& value) {
+  size_t start = 0;
+  while (start < value.size() && isspace(static_cast<unsigned char>(value[start]))) {
+    start++;
+  }
+
+  size_t end = value.size();
+  while (end > start && isspace(static_cast<unsigned char>(value[end - 1]))) {
+    end--;
+  }
+
+  return value.substr(start, end - start);
+}
+
+std::string normalizeRefines(const std::string& refines) {
+  if (!refines.empty() && refines[0] == '#') {
+    return refines.substr(1);
+  }
+  return refines;
+}
+
+bool isMetadataMetaTag(const XML_Char* name) { return strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0; }
 }  // namespace
+
+void ContentOpfParser::processEpub3Meta(const std::string& property, const std::string& refines, const std::string& id,
+                                        const std::string& value) {
+  const std::string cleanValue = trim(value);
+  if (cleanValue.empty()) {
+    return;
+  }
+
+  if (property == "belongs-to-collection") {
+    epub3Collections.push_back({id, cleanValue});
+    return;
+  }
+
+  const std::string normalizedRefines = normalizeRefines(refines);
+  if (property == "group-position") {
+    epub3GroupPositions.emplace_back(normalizedRefines, cleanValue);
+    return;
+  }
+
+  if (property == "collection-type") {
+    epub3CollectionTypes.emplace_back(normalizedRefines, cleanValue);
+  }
+}
+
+void ContentOpfParser::applyEpub3Metadata() {
+  const Epub3CollectionEntry* selectedCollection = nullptr;
+
+  for (const auto& collection : epub3Collections) {
+    const std::string collectionId = normalizeRefines(collection.id);
+    bool isSeriesCollection = false;
+    for (const auto& typed : epub3CollectionTypes) {
+      if (typed.first == collectionId && typed.second == "series") {
+        isSeriesCollection = true;
+        break;
+      }
+    }
+    if (isSeriesCollection) {
+      selectedCollection = &collection;
+      break;
+    }
+  }
+
+  if (!selectedCollection && !epub3Collections.empty()) {
+    selectedCollection = &epub3Collections.front();
+  }
+
+  if (series.empty() && selectedCollection) {
+    series = selectedCollection->value;
+  }
+
+  if (seriesIndex.empty()) {
+    if (selectedCollection) {
+      const std::string selectedId = normalizeRefines(selectedCollection->id);
+      for (const auto& groupPosition : epub3GroupPositions) {
+        if (!selectedId.empty() && groupPosition.first == selectedId) {
+          seriesIndex = groupPosition.second;
+          break;
+        }
+      }
+    }
+
+    if (seriesIndex.empty()) {
+      for (const auto& groupPosition : epub3GroupPositions) {
+        if (groupPosition.first.empty()) {
+          seriesIndex = groupPosition.second;
+          break;
+        }
+      }
+    }
+  }
+}
 
 bool ContentOpfParser::setup() {
   parser = XML_ParserCreate(nullptr);
@@ -154,11 +248,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
-  if (self->state == IN_METADATA && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
+  if (self->state == IN_METADATA && isMetadataMetaTag(name)) {
     bool isCover = false;
     bool isSeries = false;
     bool isSeriesIndex = false;
     std::string metaContent;
+    std::string metaProperty;
+    std::string metaRefines;
+    std::string metaId;
 
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "name") == 0) {
@@ -171,6 +268,12 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         }
       } else if (strcmp(atts[i], "content") == 0) {
         metaContent = atts[i + 1];
+      } else if (strcmp(atts[i], "property") == 0) {
+        metaProperty = atts[i + 1];
+      } else if (strcmp(atts[i], "refines") == 0) {
+        metaRefines = atts[i + 1];
+      } else if (strcmp(atts[i], "id") == 0) {
+        metaId = atts[i + 1];
       }
     }
 
@@ -180,6 +283,18 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       self->series = metaContent;
     } else if (isSeriesIndex && !metaContent.empty()) {
       self->seriesIndex = metaContent;
+    }
+
+    if (!metaProperty.empty()) {
+      if (!metaContent.empty()) {
+        self->processEpub3Meta(metaProperty, metaRefines, metaId, metaContent);
+      } else {
+        self->activeMetaProperty = metaProperty;
+        self->activeMetaRefines = metaRefines;
+        self->activeMetaId = metaId;
+        self->activeMetaText.clear();
+        self->state = IN_META_PROPERTY;
+      }
     }
     return;
   }
@@ -352,6 +467,11 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     self->language.append(s, len);
     return;
   }
+
+  if (self->state == IN_META_PROPERTY) {
+    self->activeMetaText.append(s, len);
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -391,7 +511,18 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     return;
   }
 
+  if (self->state == IN_META_PROPERTY && isMetadataMetaTag(name)) {
+    self->processEpub3Meta(self->activeMetaProperty, self->activeMetaRefines, self->activeMetaId, self->activeMetaText);
+    self->activeMetaProperty.clear();
+    self->activeMetaRefines.clear();
+    self->activeMetaId.clear();
+    self->activeMetaText.clear();
+    self->state = IN_METADATA;
+    return;
+  }
+
   if (self->state == IN_METADATA && (strcmp(name, "metadata") == 0 || strcmp(name, "opf:metadata") == 0)) {
+    self->applyEpub3Metadata();
     self->state = IN_PACKAGE;
     return;
   }

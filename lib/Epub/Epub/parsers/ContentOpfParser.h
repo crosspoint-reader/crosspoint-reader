@@ -14,6 +14,7 @@ class ContentOpfParser final : public Print {
     START,
     IN_PACKAGE,
     IN_METADATA,
+    IN_META_PROPERTY,
     IN_BOOK_TITLE,
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
@@ -40,6 +41,18 @@ class ContentOpfParser final : public Print {
   std::vector<ItemIndexEntry> itemIndex;
   bool useItemIndex = false;
 
+  struct Epub3CollectionEntry {
+    std::string id;
+    std::string value;
+  };
+  std::vector<Epub3CollectionEntry> epub3Collections;
+  std::vector<std::pair<std::string, std::string>> epub3GroupPositions;
+  std::vector<std::pair<std::string, std::string>> epub3CollectionTypes;
+  std::string activeMetaProperty;
+  std::string activeMetaRefines;
+  std::string activeMetaId;
+  std::string activeMetaText;
+
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
   // FNV-1a hash function
@@ -55,6 +68,9 @@ class ContentOpfParser final : public Print {
   static void startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void characterData(void* userData, const XML_Char* s, int len);
   static void endElement(void* userData, const XML_Char* name);
+  void processEpub3Meta(const std::string& property, const std::string& refines, const std::string& id,
+                        const std::string& value);
+  void applyEpub3Metadata();
 
  public:
   std::string title;
