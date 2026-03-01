@@ -1707,10 +1707,26 @@
     document.getElementById('convertWarning').style.display = checked ? 'block' : 'none';
     document.getElementById('convertInfo').style.display = checked ? 'block' : 'none';
     document.getElementById('convertSettings').style.display = checked ? 'block' : 'none';
-    // Reset advanced options when toggling off
-    if (!checked) {
-      const advancedSettingsContent = document.getElementById('advancedSettingsContent');
-      if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
+
+    // Handle Advanced Mode visibility and interactivity
+    const advancedModeBtn = document.querySelector('.advanced-options-toggle');
+    const advancedSettingsContent = document.getElementById('advancedSettingsContent');
+
+    if (checked) {
+      // Enable Advanced Mode button when Optimize EPUB is checked
+      if (advancedModeBtn) {
+        advancedModeBtn.style.pointerEvents = 'auto';
+        advancedModeBtn.style.opacity = '1';
+      }
+    } else {
+      // Disable Advanced Mode button and hide content when Optimize EPUB is unchecked
+      if (advancedModeBtn) {
+        advancedModeBtn.style.pointerEvents = 'none';
+        advancedModeBtn.style.opacity = '0.5';
+      }
+      if (advancedSettingsContent) {
+        advancedSettingsContent.classList.remove('visible');
+      }
       document.getElementById('advancedOptionsArrow').classList.remove('expanded');
     }
   }
