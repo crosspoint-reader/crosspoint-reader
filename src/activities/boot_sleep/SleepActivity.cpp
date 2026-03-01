@@ -258,63 +258,6 @@ void SleepActivity::onEnter() {
   }
 }
 
-std::vector<std::string> SleepActivity::loadSleepImageCache() const {
-  std::vector<std::string> cached;
-
-  // Heap-allocate to stay within stack limits (filenames can total >256 bytes)
-  constexpr size_t CACHE_BUF_SIZE = 2048;
-  auto* buf = static_cast<char*>(malloc(CACHE_BUF_SIZE));
-  if (!buf) {
-    LOG_ERR("SLP", "malloc failed for sleep cache read");
-    return cached;
-  }
-
-  const size_t bytesRead = Storage.readFileToBuffer(SLEEP_CACHE_PATH, buf, CACHE_BUF_SIZE);
-  if (bytesRead == 0) {
-    free(buf);
-    return cached;
-  }
-
-  // Parse newline-delimited filenames from buffer
-  const char* p = buf;
-  const char* end = buf + bytesRead;
-  while (p < end) {
-    const char* lineEnd = p;
-    while (lineEnd < end && *lineEnd != '\n' && *lineEnd != '\r') {
-      lineEnd++;
-    }
-    if (lineEnd > p) {
-      cached.emplace_back(p, lineEnd - p);
-    }
-    // Skip newline chars
-    p = lineEnd;
-    while (p < end && (*p == '\n' || *p == '\r')) {
-      p++;
-    }
-  }
-
-  free(buf);
-  LOG_DBG("SLP", "Loaded %zu filenames from sleep image cache", cached.size());
-  return cached;
-}
-
-void SleepActivity::saveSleepImageCache(const std::vector<std::string>& filenames) const {
-  // Build content string; each filename is one line
-  // Use Arduino String for simplicity (one-time write, not a hot path)
-  String content;
-  content.reserve(filenames.size() * 24);  // reserve ~24 chars/filename
-  for (const auto& name : filenames) {
-    content += name.c_str();
-    content += '\n';
-  }
-  Storage.mkdir("/.crosspoint");
-  if (!Storage.writeFile(SLEEP_CACHE_PATH, content)) {
-    LOG_ERR("SLP", "Failed to write sleep image cache");
-  } else {
-    LOG_DBG("SLP", "Saved %zu filenames to sleep image cache", filenames.size());
-  }
-}
-
 void SleepActivity::renderCustomSleepScreen() const {
   SpiBusMutex::Guard guard;
   SleepCacheMutex::Guard cacheGuard;
