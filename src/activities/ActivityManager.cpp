@@ -221,6 +221,8 @@ bool ActivityManager::preventAutoSleep() const { return currentActivity && curre
 
 bool ActivityManager::isReaderActivity() const { return currentActivity && currentActivity->isReaderActivity(); }
 
+bool ActivityManager::supportsOrientation() const { return currentActivity && currentActivity->supportsOrientation(); }
+
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
 void ActivityManager::requestUpdate(bool immediate) {

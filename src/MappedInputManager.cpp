@@ -2,7 +2,6 @@
 
 #include "CrossPointSettings.h"
 #include "activities/Activity.h"
-extern Activity* currentActivity;
 
 namespace {
 using ButtonIndex = uint8_t;
@@ -22,8 +21,8 @@ constexpr SideLayoutMap kSideLayouts[] = {
 // Given a raw button index, find the corresponding "rotated" index,
 // considering display orientation and orientation support
 static uint8_t mapOrientation(uint8_t halButtonIndex) {
-  if (SETTINGS.autoBtnOrientation == CrossPointSettings::AUTO_BUTTON_ORIENTATION::NO_BUTTONS || !currentActivity ||
-      !currentActivity->supportsOrientation()) {
+  if (SETTINGS.autoBtnOrientation == CrossPointSettings::AUTO_BUTTON_ORIENTATION::NO_BUTTONS ||
+      !activityManager.supportsOrientation()) {
     return halButtonIndex;
   }
 
