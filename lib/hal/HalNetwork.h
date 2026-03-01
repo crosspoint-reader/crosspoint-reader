@@ -46,40 +46,4 @@ class HalNetwork {
    * two-condition test (status + valid IP) is applied consistently everywhere.
    */
   bool isConnected() const;
-
-  /**
-   * RAII guard: enables the network on construction, disables it on destruction.
-   *
-   * Prefer this over paired enable()/disable() calls so that the radio is
-   * guaranteed to be switched off even on early returns.
-   *
-   * Short-lived use (single function):
-   *   HalNetwork::Guard g(network);
-   *
-   * Activity lifetime (onEnter / onExit):
-   *   std::optional<HalNetwork::Guard> networkGuard_;
-   *   networkGuard_.emplace(network);  // onEnter
-   *   networkGuard_.reset();           // onExit
-   */
-  class Guard {
-   public:
-    explicit Guard(HalNetwork& net) : net_(&net) { net_->enable(); }
-    ~Guard() {
-      if (net_) net_->disable();
-    }
-    Guard(Guard&& other) noexcept : net_(other.net_) { other.net_ = nullptr; }
-    Guard& operator=(Guard&& other) noexcept {
-      if (this != &other) {
-        if (net_) net_->disable();
-        net_ = other.net_;
-        other.net_ = nullptr;
-      }
-      return *this;
-    }
-    Guard(const Guard&) = delete;
-    Guard& operator=(const Guard&) = delete;
-
-   private:
-    HalNetwork* net_;
-  };
 };

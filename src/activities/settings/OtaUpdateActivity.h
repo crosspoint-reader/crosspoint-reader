@@ -1,9 +1,5 @@
 #pragma once
 
-#include <HalNetwork.h>
-
-#include <optional>
-
 #include "activities/Activity.h"
 #include "network/OtaUpdater.h"
 
@@ -22,7 +18,6 @@ class OtaUpdateActivity : public Activity {
   // Can't initialize this to 0 or the first render doesn't happen
   static constexpr unsigned int UNINITIALIZED_PERCENTAGE = 111;
 
-  std::optional<HalNetwork::Guard> networkGuard_;
   State state = WIFI_SELECTION;
   unsigned int lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
   OtaUpdater updater;

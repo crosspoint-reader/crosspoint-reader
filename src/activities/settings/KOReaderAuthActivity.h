@@ -1,9 +1,6 @@
 #pragma once
 
-#include <HalNetwork.h>
-
 #include <functional>
-#include <optional>
 
 #include "activities/Activity.h"
 
@@ -25,7 +22,6 @@ class KOReaderAuthActivity final : public Activity {
  private:
   enum State { WIFI_SELECTION, CONNECTING, AUTHENTICATING, SUCCESS, FAILED };
 
-  std::optional<HalNetwork::Guard> networkGuard_;
   State state = WIFI_SELECTION;
   std::string statusMessage;
   std::string errorMessage;
