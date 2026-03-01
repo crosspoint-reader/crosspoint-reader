@@ -158,12 +158,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     bool isCover = false;
     bool isSeries = false;
     bool isSeriesIndex = false;
-    std::string metaName;
     std::string metaContent;
 
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "name") == 0) {
-        metaName = atts[i + 1];
         if (strcmp(atts[i + 1], "cover") == 0) {
           isCover = true;
         } else if (strcmp(atts[i + 1], "calibre:series") == 0) {

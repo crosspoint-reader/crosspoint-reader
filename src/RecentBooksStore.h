@@ -37,7 +37,7 @@ class RecentBooksStore {
                const std::string& coverBmpPath, const std::string& series = "", const std::string& seriesIndex = "");
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
-                  const std::string& coverBmpPath);
+                  const std::string& coverBmpPath, const std::string& series = "", const std::string& seriesIndex = "");
 
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }

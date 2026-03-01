@@ -17,8 +17,6 @@ class ContentOpfParser final : public Print {
     IN_BOOK_TITLE,
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
-    IN_BOOK_SERIES,
-    IN_BOOK_SERIES_INDEX,
     IN_MANIFEST,
     IN_SPINE,
     IN_GUIDE,
