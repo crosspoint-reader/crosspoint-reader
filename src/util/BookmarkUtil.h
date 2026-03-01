@@ -9,10 +9,14 @@ struct Bookmark {
 };
 
 // Utility for managing bookmarks for a given epub
+// We now keep bookmarks in-place rather than as raw pointers
+// to avoid dangling pointer bugs. std::optional lets us represent
+// an empty slot while preserving fixed indexing.
+#include <optional>
 class BookmarkUtil final {
   std::shared_ptr<Epub> epub;
   std::string epubPath;
-  std::vector<Bookmark*> bookmarks;
+  std::vector<std::optional<Bookmark>> bookmarks;
 
  public:
   explicit BookmarkUtil(const std::shared_ptr<Epub>& epub, const std::string& epubPath)
@@ -20,7 +24,7 @@ class BookmarkUtil final {
         epubPath(epubPath) {}
 
   void load(int maxBookmarks);
-  Bookmark* getBookmark(int bookmarkIndex);
+  std::optional<Bookmark> getBookmark(int bookmarkIndex);
   void deleteBookmark(int bookmarkIndex);
   // same as overriding
   Bookmark saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage);

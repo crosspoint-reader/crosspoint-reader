@@ -35,6 +35,7 @@ void EpubReaderBookmarksActivity::onEnter() {
     selectorIndex = 0;
   }
 
+  LOG_DBG("EPB", "Load %d bookmarks", getPageItems());
   bookmarkUtil.load(getPageItems());
 
   // Trigger first update
@@ -105,9 +106,12 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   for (int i = 0; i < numBookmarks; i++) {
     const int displayY = 60 + contentY + i * 30;
     const bool isSelected = (i == selectorIndex);
-    if (bookmarkUtil.doesBookmarkExist(i)) {
-      auto bookmark = bookmarkUtil.getBookmark(i);
-      auto item = epub->getTocItem(epub->getTocIndexForSpineIndex(bookmark->currentSpineIndex));
+    LOG_DBG("ERB", "Attempt show bookmark %d", i);
+    auto bookmarkOpt = bookmarkUtil.getBookmark(i);
+    if (bookmarkOpt.has_value()) {
+      auto bookmark = bookmarkOpt.value();
+      LOG_DBG("ERB", "Showing bookmark with %d, %d", bookmark.currentSpineIndex, bookmark.currentPage);
+      auto item = epub->getTocItem(epub->getTocIndexForSpineIndex(bookmark.currentSpineIndex));
 
       // Indent per TOC level while keeping content within the gutter-safe region.
       const int indentSize = contentX + 20 + (item.level - 1) * 15;
@@ -119,8 +123,9 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
       renderer.drawText(UI_10_FONT_ID, contentX, displayY, tr(STR_EMPTY_SLOT), !isSelected, EpdFontFamily::ITALIC);
     }
   }
+  LOG_DBG("ERB", "Show bookmarks done: %d", numBookmarks);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DELETE), bookmarkUtil.doesBookmarkExist(selectorIndex) ? tr(STR_OVERWRITE) : tr(STR_SAVE));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DELETE), bookmarkUtil.doesBookmarkExist(selectorIndex) ? tr(STR_OVERWRITE) : tr(STR_NEW));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

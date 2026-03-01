@@ -4,9 +4,10 @@
 
 void BookmarkUtil::load(int maxBookmarks) {
     bookmarks.clear();
-    for(int i = 0; i < maxBookmarks; i++) {
+    bookmarks.reserve(maxBookmarks);
+    for (int i = 0; i < maxBookmarks; i++) {
       FsFile f;
-      Bookmark* newBookmark = nullptr;
+      std::optional<Bookmark> newBookmark;
       if (Storage.openFileForRead("BKM", epub->getCachePath() + "/bookmark_" + std::to_string(i) + ".bin", f)) {
         uint8_t data[6];
         int dataSize = f.read(data, 6);
@@ -14,23 +15,21 @@ void BookmarkUtil::load(int maxBookmarks) {
           int currentSpineIndex = data[0] + (data[1] << 8);
           int pageNumber = data[2] + (data[3] << 8);
           LOG_DBG("BKM", "Loaded bookmark: %d, %d", currentSpineIndex, pageNumber);
-          auto aBookmark = Bookmark{currentSpineIndex, pageNumber, "Test"};
-          newBookmark = &aBookmark;
+          newBookmark = Bookmark{currentSpineIndex, pageNumber, ""};
         }
         f.close();
       }
-
-      bookmarks.push_back(newBookmark);
+      bookmarks.push_back(std::move(newBookmark));
     }
 }
 
-Bookmark* BookmarkUtil::getBookmark(int bookmarkIndex) {
+std::optional<Bookmark> BookmarkUtil::getBookmark(int bookmarkIndex) {
   return bookmarks.at(bookmarkIndex);
 }
 
 void BookmarkUtil::deleteBookmark(int bookmarkIndex) {
   Storage.remove((epub->getCachePath() + "/bookmark_" + std::to_string(bookmarkIndex) + ".bin").c_str());
-  bookmarks.at(bookmarkIndex) = nullptr;
+  bookmarks.at(bookmarkIndex) = std::nullopt;
 }
 
 Bookmark BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage) {
@@ -49,12 +48,12 @@ Bookmark BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex, in
   }
 
   // save in memory
-  auto newBookmark = Bookmark{currentSpineIndex, currentPage, "Test"};
-  bookmarks.at(bookmarkIndex) = &newBookmark;
+  Bookmark newBookmark{currentSpineIndex, currentPage, ""};
+  bookmarks.at(bookmarkIndex) = newBookmark;
 
   return newBookmark;
 }
 
 bool BookmarkUtil::doesBookmarkExist(int bookmarkIndex) {
-  return bookmarks.at(bookmarkIndex) != nullptr;
+  return bookmarks.at(bookmarkIndex).has_value();
 }
