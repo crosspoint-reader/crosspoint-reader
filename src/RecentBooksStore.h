@@ -7,6 +7,8 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
+  std::string series;
+  std::string seriesIndex;
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
@@ -32,7 +34,7 @@ class RecentBooksStore {
 
   // Add a book to the recent list (moves to front if already exists)
   void addBook(const std::string& path, const std::string& title, const std::string& author,
-               const std::string& coverBmpPath);
+               const std::string& coverBmpPath, const std::string& series = "", const std::string& seriesIndex = "");
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);

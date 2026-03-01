@@ -90,8 +90,24 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
       auto titleLines = renderer.wrappedText(SMALL_FONT_ID, recentBooks[i].title.c_str(), maxLineWidth, 3);
 
+      // Build series label: "Series Name" or "Series Name #1" (trimming ".0" suffix from index)
+      std::string seriesLabel;
+      if (!recentBooks[i].series.empty()) {
+        seriesLabel = recentBooks[i].series;
+        if (!recentBooks[i].seriesIndex.empty()) {
+          std::string idx = recentBooks[i].seriesIndex;
+          if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
+            idx = idx.substr(0, idx.size() - 2);
+          }
+          seriesLabel += " #" + idx;
+        }
+      }
+      auto seriesTrunc = seriesLabel.empty() ? std::string{}
+                                             : renderer.truncatedText(SMALL_FONT_ID, seriesLabel.c_str(), maxLineWidth);
+
       const int titleLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-      const int dynamicBlockHeight = static_cast<int>(titleLines.size()) * titleLineHeight;
+      const int dynamicBlockHeight =
+          static_cast<int>(titleLines.size()) * titleLineHeight + (seriesTrunc.empty() ? 0 : titleLineHeight);
       // Add a little padding below the text inside the selection box just like the top padding (5 + hPaddingSelection)
       const int dynamicTitleBoxHeight = dynamicBlockHeight + hPaddingInSelection + 5;
 
@@ -112,6 +128,9 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       for (const auto& line : titleLines) {
         renderer.drawText(SMALL_FONT_ID, tileX + hPaddingInSelection, currentY, line.c_str(), true);
         currentY += titleLineHeight;
+      }
+      if (!seriesTrunc.empty()) {
+        renderer.drawText(SMALL_FONT_ID, tileX + hPaddingInSelection, currentY, seriesTrunc.c_str(), true);
       }
     }
   } else {

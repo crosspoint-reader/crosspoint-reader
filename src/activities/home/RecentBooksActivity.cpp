@@ -101,7 +101,17 @@ void RecentBooksActivity::render(RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
-        [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
+        [this](int index) { return recentBooks[index].title; },
+        [this](int index) {
+          const auto& book = recentBooks[index];
+          if (book.series.empty()) return book.author;
+          std::string idx = book.seriesIndex;
+          if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
+            idx = idx.substr(0, idx.size() - 2);
+          }
+          std::string seriesLabel = book.series + (idx.empty() ? "" : " #" + idx);
+          return book.author.empty() ? seriesLabel : book.author + " \xc2\xb7 " + seriesLabel;
+        },
         [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
   }
 

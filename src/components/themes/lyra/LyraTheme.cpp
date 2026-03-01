@@ -487,10 +487,27 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     auto titleLines = renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textWidth, 3, EpdFontFamily::BOLD);
 
     auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
+
+    // Build series label: "Series Name" or "Series Name #1" (trimming ".0" suffix from index)
+    std::string seriesLabel;
+    if (!book.series.empty()) {
+      seriesLabel = book.series;
+      if (!book.seriesIndex.empty()) {
+        std::string idx = book.seriesIndex;
+        if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
+          idx = idx.substr(0, idx.size() - 2);
+        }
+        seriesLabel += " #" + idx;
+      }
+    }
+    auto series =
+        seriesLabel.empty() ? std::string{} : renderer.truncatedText(UI_10_FONT_ID, seriesLabel.c_str(), textWidth);
+
     const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
     const int titleBlockHeight = titleLineHeight * static_cast<int>(titleLines.size());
     const int authorHeight = book.author.empty() ? 0 : (renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2);
-    const int totalBlockHeight = titleBlockHeight + authorHeight;
+    const int seriesHeight = series.empty() ? 0 : renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
+    const int totalBlockHeight = titleBlockHeight + authorHeight + seriesHeight;
     int titleY = tileY + tileHeight / 2 - totalBlockHeight / 2;
     const int textX = tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing;
     for (const auto& line : titleLines) {
@@ -500,6 +517,10 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     if (!book.author.empty()) {
       titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
       renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
+    }
+    if (!series.empty()) {
+      titleY += renderer.getLineHeight(UI_10_FONT_ID);
+      renderer.drawText(UI_10_FONT_ID, textX, titleY, series.c_str(), true);
     }
   } else {
     drawEmptyRecents(renderer, rect);

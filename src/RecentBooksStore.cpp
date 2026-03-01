@@ -22,7 +22,8 @@ constexpr int MAX_RECENT_BOOKS = 10;
 RecentBooksStore RecentBooksStore::instance;
 
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
-                               const std::string& coverBmpPath) {
+                               const std::string& coverBmpPath, const std::string& series,
+                               const std::string& seriesIndex) {
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
@@ -31,7 +32,7 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
+  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath, series, seriesIndex});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -74,7 +75,8 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
   if (StringUtils::checkFileExtension(lastBookFileName, ".epub")) {
     Epub epub(path, "/.crosspoint");
     epub.load(false, true);
-    return RecentBook{path, epub.getTitle(), epub.getAuthor(), epub.getThumbBmpPath()};
+    return RecentBook{
+        path, epub.getTitle(), epub.getAuthor(), epub.getThumbBmpPath(), epub.getSeries(), epub.getSeriesIndex()};
   } else if (StringUtils::checkFileExtension(lastBookFileName, ".xtch") ||
              StringUtils::checkFileExtension(lastBookFileName, ".xtc")) {
     // Handle XTC file

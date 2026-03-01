@@ -482,6 +482,21 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   if (hasContinueReading) {
     const std::string& lastBookTitle = recentBooks[0].title;
     const std::string& lastBookAuthor = recentBooks[0].author;
+    const std::string& lastBookSeries = recentBooks[0].series;
+    const std::string& lastBookSeriesIndex = recentBooks[0].seriesIndex;
+
+    // Build series label: "Series Name" or "Series Name #1" (trimming ".0" suffix from index)
+    std::string seriesLabel;
+    if (!lastBookSeries.empty()) {
+      seriesLabel = lastBookSeries;
+      if (!lastBookSeriesIndex.empty()) {
+        std::string idx = lastBookSeriesIndex;
+        if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
+          idx = idx.substr(0, idx.size() - 2);
+        }
+        seriesLabel += " #" + idx;
+      }
+    }
 
     // Invert text colors based on selection state:
     // - With cover: selected = white text on black box, unselected = black text on white box
@@ -494,6 +509,9 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     if (!lastBookAuthor.empty()) {
       totalTextHeight += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
     }
+    if (!seriesLabel.empty()) {
+      totalTextHeight += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
+    }
 
     // Vertically center the title block within the card
     int titleYStart = bookY + (bookHeight - totalTextHeight) / 2;
@@ -501,6 +519,9 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     const auto truncatedAuthor = lastBookAuthor.empty()
                                      ? std::string{}
                                      : renderer.truncatedText(UI_10_FONT_ID, lastBookAuthor.c_str(), bookWidth - 40);
+    const auto truncatedSeries = seriesLabel.empty()
+                                     ? std::string{}
+                                     : renderer.truncatedText(UI_10_FONT_ID, seriesLabel.c_str(), bookWidth - 40);
 
     // If cover image was rendered, draw box behind title and author
     if (coverRendered) {
@@ -517,6 +538,12 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedAuthor.c_str());
         if (authorWidth > maxTextWidth) {
           maxTextWidth = authorWidth;
+        }
+      }
+      if (!truncatedSeries.empty()) {
+        const int seriesWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedSeries.c_str());
+        if (seriesWidth > maxTextWidth) {
+          maxTextWidth = seriesWidth;
         }
       }
 
@@ -539,6 +566,11 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     if (!truncatedAuthor.empty()) {
       titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
       renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedAuthor.c_str(), !bookSelected);
+    }
+
+    if (!truncatedSeries.empty()) {
+      titleYStart += renderer.getLineHeight(UI_10_FONT_ID);
+      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedSeries.c_str(), !bookSelected);
     }
 
     // "Continue Reading" label at the bottom
