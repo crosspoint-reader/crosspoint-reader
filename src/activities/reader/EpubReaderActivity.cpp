@@ -147,17 +147,29 @@ void EpubReaderActivity::loop() {
 
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const int currentPage = section ? section->currentPage + 1 : 0;
-    const int totalPages = section ? section->pageCount : 0;
+    // Snapshot reader state under render lock. This avoids racing with the
+    // render task while it may rebuild/reset the current section.
+    int menuSpineIndex = 0;
+    int menuCurrentPage = 0;
+    int menuTotalPages = 0;
+    {
+      RenderLock lock(*this);
+      menuSpineIndex = currentSpineIndex;
+      if (section) {
+        menuCurrentPage = section->currentPage + 1;
+        menuTotalPages = section->pageCount;
+      }
+    }
+
     float bookProgress = 0.0f;
-    if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
-      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-      bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+    if (epub && epub->getBookSize() > 0 && menuTotalPages > 0) {
+      const float chapterProgress = static_cast<float>(menuCurrentPage - 1) / static_cast<float>(menuTotalPages);
+      bookProgress = epub->calculateProgress(menuSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     exitActivity();
     enterNewActivity(new EpubReaderMenuActivity(
-        this->renderer, this->mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
+        this->renderer, this->mappedInput, epub->getTitle(), menuCurrentPage, menuTotalPages, bookProgressPercent,
         SETTINGS.orientation, [this](const uint8_t orientation) { onReaderMenuBack(orientation); },
         [this](EpubReaderMenuActivity::MenuAction action) { onReaderMenuConfirm(action); }));
   }
