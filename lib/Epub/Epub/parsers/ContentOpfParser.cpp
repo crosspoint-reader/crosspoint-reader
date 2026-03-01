@@ -280,9 +280,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     if (isCover) {
       self->coverItemId = metaContent;
     } else if (isSeries && !metaContent.empty()) {
-      self->series = metaContent;
+      self->series = trim(metaContent);
     } else if (isSeriesIndex && !metaContent.empty()) {
-      self->seriesIndex = metaContent;
+      self->seriesIndex = trim(metaContent);
     }
 
     if (!metaProperty.empty()) {
