@@ -338,7 +338,12 @@ void dangerZoneAutoConnect() {
     dzWebServer.reset();
   }
 
-  // Start RSS feed sync
+  // Start RSS feed sync — skip if Up or Down is held at connect time
+  gpio.update();
+  if (gpio.isPressed(HalGPIO::BTN_UP) || gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    LOG_INF("DZ", "Button held at WiFi connect — suppressing RSS feed sync");
+    RssFeedSync::suppressSync();
+  }
   RssFeedSync::startSync();
 }
 

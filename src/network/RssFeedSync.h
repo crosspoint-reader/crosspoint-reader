@@ -12,8 +12,12 @@ enum class State {
   DONE,        // All files processed — briefly shown then → IDLE
 };
 
-/// Start background sync task. No-op if feed URL empty, WiFi not connected, or already running.
+/// Start background sync task. No-op if feed URL empty, WiFi not connected, already running, or suppressed.
 void startSync();
+
+/// Suppress the next startSync() call(s) for durationMs milliseconds.
+/// Call this when the user holds a button at WiFi connect time to skip the automatic feed check.
+void suppressSync(unsigned long durationMs = 60000);
 
 /// Current sync state.
 State getState();

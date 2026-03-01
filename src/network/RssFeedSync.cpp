@@ -26,7 +26,8 @@ TaskHandle_t syncTaskHandle = nullptr;
 RssFeedSync::State s_state = RssFeedSync::State::IDLE;
 int s_dlCurrent = 0;
 int s_dlTotal   = 0;
-unsigned long s_doneTime = 0;  // millis() when DONE was set, for auto-clear
+unsigned long s_doneTime = 0;       // millis() when DONE was set, for auto-clear
+unsigned long s_suppressUntilMs = 0;  // millis() until sync is suppressed (button-hold skip)
 
 static void setState(RssFeedSync::State st) { s_state = st; }
 
@@ -544,6 +545,12 @@ void syncTask(void*) {
 namespace RssFeedSync {
 
 void startSync() {
+  // Guard: suppressed by user (button held at WiFi connect time)
+  if (millis() < s_suppressUntilMs) {
+    LOG_INF(TAG, "Feed sync suppressed by user request — skipping");
+    return;
+  }
+
   // Guard: feed URL must be configured
   if (strlen(SETTINGS.feedUrl) == 0) return;
 
@@ -556,6 +563,11 @@ void startSync() {
   s_state = RssFeedSync::State::FETCHING;  // set immediately so indicator lights before task starts
   s_dlCurrent = 0; s_dlTotal = 0;
   xTaskCreate(syncTask, "FeedSync", 16384, nullptr, 1, &syncTaskHandle);  // 16KB: HTTPS+Expat+std::string need headroom
+}
+
+void suppressSync(unsigned long durationMs) {
+  s_suppressUntilMs = millis() + durationMs;
+  LOG_INF(TAG, "Feed sync suppressed for %lums", durationMs);
 }
 
 State getState() {
