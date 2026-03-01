@@ -2224,7 +2224,7 @@ const DEFAULT_MAX_WIDTH = 480;
 const DEFAULT_MAX_HEIGHT = 800;
 const DEFAULT_JPEG_QUALITY = 85;
 const DEFAULT_ENABLE_GRAYSCALE = true;
-const OVERLAP = 0.15; // 15% overlap for split images
+const OVERLAP = 0.15; // 15% overlap for split images (fixed - reducing overlap creates MORE parts)
 
 // Dynamic conversion settings (updated by UI)
 let MAX_WIDTH = DEFAULT_MAX_WIDTH;
@@ -2694,6 +2694,124 @@ function applyGrayscale(ctx, width, height) {
   ctx.putImageData(imageData, 0, 0);
 }
 
+// ============================================================================
+// Better Crop: Calculate optimal scale size to minimize image splits
+// ============================================================================
+
+/**
+ * Smart split calculation: balance between minimizing parts and maintaining reasonable part sizes
+ * Strategy:
+ * 1. First part: from start to maxDim+overlap
+ * 2. Last part: from end backwards by maxDim+overlap
+ * 3. If gap is small AND part sizes are reasonable, use 2 parts
+ * 4. Otherwise, add middle parts as needed
+ * @param {number} totalDimension - Total dimension to split (height or width)
+ * @param {number} maxDim - Maximum dimension per part (480px)
+ * @returns {Array} - Array of {start, end} positions for each part
+ */
+function calculateSmartSplitPositions(totalDimension, maxDim) {
+  const overlap = OVERLAP; // 0.15 (15%)
+  const overlapPx = Math.round(maxDim * overlap); // 72px
+  const step = maxDim - overlapPx; // 408px
+
+  // Calculate how many parts with standard approach
+  const standardParts = Math.ceil((totalDimension - overlapPx) / step);
+
+  // For very long images (3+ parts), use standard approach with good overlap
+  if (standardParts >= 3) {
+    const parts = [];
+    for (let i = 0; i < standardParts; i++) {
+      let pos = i * step;
+      if (i === standardParts - 1) pos = totalDimension - maxDim;
+      pos = Math.max(0, Math.min(pos, totalDimension - maxDim));
+      parts.push({ start: pos, end: Math.min(pos + maxDim, totalDimension) });
+    }
+    return parts;
+  }
+
+  // For 1-2 parts, use smart positioning
+  // First part: from start
+  const firstPart = { start: 0, end: Math.min(maxDim, totalDimension) };
+
+  // Case: Single part covers everything
+  if (firstPart.end >= totalDimension) {
+    return [firstPart];
+  }
+
+  // Last part: from end backwards
+  const lastPart = {
+    start: Math.max(0, totalDimension - maxDim),
+    end: totalDimension
+  };
+
+  // Check if first and last overlap
+  const gapBetween = lastPart.start - firstPart.end;
+
+  // If parts overlap or gap is very small, use 2 parts with adjusted sizes
+  if (gapBetween <= overlapPx) {
+    // Calculate balanced 2-part split
+    const partSize = Math.ceil(totalDimension / 2);
+
+    // Only use 2 parts if each part is reasonable (not too large)
+    const maxAllowedPartSize = maxDim + overlapPx * 2; // Allow some flexibility: up to ~552px
+
+    if (partSize <= maxAllowedPartSize) {
+      return [
+        { start: 0, end: partSize },
+        { start: totalDimension - partSize, end: totalDimension }
+      ];
+    }
+  }
+
+  // Otherwise, use standard 2-part approach with overlap
+  return [
+    { start: 0, end: maxDim },
+    { start: totalDimension - maxDim, end: totalDimension }
+  ];
+}
+
+/**
+ * Calculate optimal scale size - accept 3 parts for very long images rather than reduce too much
+ * @param {number} estimatedScaledDimension - The estimated dimension after scaling
+ * @returns {object} - { scaleSize, overlapPx, estimatedParts }
+ */
+function calculateOptimalScaleParams(estimatedScaledDimension) {
+  const maxDim = MAX_WIDTH; // 480
+  const overlap = OVERLAP; // 0.15 (15%)
+  const overlapPx = Math.round(maxDim * overlap); // 72px
+  const step = maxDim - overlapPx; // 408px
+
+  // Calculate how many parts with smart positioning
+  const positions = calculateSmartSplitPositions(estimatedScaledDimension, maxDim);
+  const estimatedParts = positions.length;
+
+  // Keep scale at MAX_HEIGHT (800px) - let smart split handle the number of parts
+  // Only reduce scale if we would generate 4+ parts
+  let targetScaleSize = MAX_HEIGHT; // 800 by default
+
+  if (estimatedParts >= 4) {
+    // For very long images, reduce scale moderately
+    // Target: 3 parts max
+    const targetParts = 3;
+    const idealPartSize = estimatedScaledDimension / targetParts;
+    const maxPartSize = maxDim + overlapPx; // Maximum reasonable part size
+
+    if (idealPartSize > maxPartSize) {
+      targetScaleSize = Math.round(MAX_HEIGHT * (maxPartSize / idealPartSize));
+      // Ensure we don't go too small (minimum 70% of MAX_HEIGHT)
+      targetScaleSize = Math.max(Math.round(MAX_HEIGHT * 0.70), targetScaleSize);
+    }
+  }
+
+  return {
+    scaleSize: targetScaleSize,
+    overlap: overlap,
+    overlapPx: overlapPx,
+    step: step,
+    estimatedParts: estimatedParts
+  };
+}
+
 // Process single image - returns array of {data, suffix} objects
 const IMAGE_LOAD_TIMEOUT_MS = 30000; // 30 second timeout for image loading
 async function processImage(data, imageState = 0, imagePath = '') {
@@ -2726,9 +2844,13 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // Scale width to 800px, cut horizontally if height > 480px, rotate 90° CW
       // ========================================================================
       if (imageState === 1) {
-        // Step 1: Scale width to MAX_HEIGHT (800px)
-        const scale = MAX_HEIGHT / origW;
-        const scaledW = MAX_HEIGHT;
+        // Better Crop: Calculate optimal scale parameters to minimize splits
+        const estimatedScaledH = Math.round(origH * (MAX_HEIGHT / origW));
+        const cropParams = calculateOptimalScaleParams(estimatedScaledH);
+
+        // Step 1: Scale width using optimal scale size
+        const scale = cropParams.scaleSize / origW;
+        const scaledW = cropParams.scaleSize;
         const scaledH = Math.round(origH * scale);
 
         const scaledCanvas = document.createElement('canvas');
@@ -2774,19 +2896,20 @@ async function processImage(data, imageState = 0, imagePath = '') {
             meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 1 }
           });
         } else {
-          // Cut horizontally with overlap, then rotate each part based on handedness
+          // Smart split: prioritize first and last parts, minimize middle parts
           const parts = [];
           const maxH = MAX_WIDTH;  // 480
-          const overlapPx = Math.round(maxH * OVERLAP);
-          const step = maxH - overlapPx;
-          const numParts = Math.ceil((scaledH - overlapPx) / step);
+          const overlapPx = cropParams.overlapPx;
           const isClockwise = HANDEDNESS === 'right';
 
+          // Calculate smart split positions
+          const splitPositions = calculateSmartSplitPositions(scaledH, maxH);
+          const numParts = splitPositions.length;
+
           for (let i = 0; i < numParts; i++) {
-            let y = i * step;
-            if (i === numParts - 1) y = scaledH - maxH;
-            y = Math.max(0, Math.min(y, scaledH - maxH));
-            const partH = Math.min(maxH, scaledH - y);
+            const pos = splitPositions[i];
+            const y = pos.start;
+            const partH = pos.end - pos.start;
 
             // Extract horizontal strip
             const partCanvas = document.createElement('canvas');
@@ -2835,10 +2958,14 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // Scale height to 800px, cut vertically if width > 480px, NO rotation
       // ========================================================================
       else if (imageState === 2) {
-        // Step 1: Scale height to MAX_HEIGHT (800px)
-        const scale = MAX_HEIGHT / origH;
+        // Better Crop: Calculate optimal scale parameters to minimize splits
+        const estimatedScaledW = Math.round(origW * (MAX_HEIGHT / origH));
+        const cropParams = calculateOptimalScaleParams(estimatedScaledW);
+
+        // Step 1: Scale height using optimal scale size
+        const scale = cropParams.scaleSize / origH;
         const scaledW = Math.round(origW * scale);
-        const scaledH = MAX_HEIGHT;
+        const scaledH = cropParams.scaleSize;
 
         const scaledCanvas = document.createElement('canvas');
         scaledCanvas.width = scaledW;
@@ -2861,18 +2988,19 @@ async function processImage(data, imageState = 0, imagePath = '') {
             meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: scaledW, finalH: scaledH, finalSize: arrBuf.byteLength, imageState: 2 }
           });
         } else {
-          // Cut vertically with overlap, NO rotation
+          // Smart split: prioritize first and last parts, minimize middle parts
           const parts = [];
           const maxW = MAX_WIDTH;  // 480
-          const overlapPx = Math.round(maxW * OVERLAP);
-          const step = maxW - overlapPx;
-          const numParts = Math.ceil((scaledW - overlapPx) / step);
+          const overlapPx = cropParams.overlapPx;
+
+          // Calculate smart split positions
+          const splitPositions = calculateSmartSplitPositions(scaledW, maxW);
+          const numParts = splitPositions.length;
 
           for (let i = 0; i < numParts; i++) {
-            let x = i * step;
-            if (i === numParts - 1) x = scaledW - maxW;
-            x = Math.max(0, Math.min(x, scaledW - maxW));
-            const partW = Math.min(maxW, scaledW - x);
+            const pos = splitPositions[i];
+            const x = pos.start;
+            const partW = pos.end - pos.start;
 
             const partCanvas = document.createElement('canvas');
             partCanvas.width = partW;
@@ -2898,9 +3026,13 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // ========================================================================
       else if (needsRotation) {
         // LIGHT NOVEL MODE: Rotate and split wide images
-        // Step 1: Scale WIDTH to MAX_HEIGHT (800px)
-        const scale = MAX_HEIGHT / origW;
-        const scaledW = MAX_HEIGHT;
+        // Better Crop: Calculate optimal scale parameters to minimize splits
+        const estimatedScaledH = Math.round(origH * (MAX_HEIGHT / origW));
+        const cropParams = calculateOptimalScaleParams(estimatedScaledH);
+
+        // Step 1: Scale WIDTH using optimal scale size
+        const scale = cropParams.scaleSize / origW;
+        const scaledW = cropParams.scaleSize;
         const scaledH = Math.round(origH * scale);
 
         const scaledCanvas = document.createElement('canvas');
@@ -2951,49 +3083,29 @@ async function processImage(data, imageState = 0, imagePath = '') {
             meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 0 }
           });
         } else {
-          // Split vertically with overlap
+          // Smart split: prioritize first and last parts, minimize middle parts
           const parts = [];
           const maxW = MAX_WIDTH;
-          const overlapPx = Math.round(maxW * OVERLAP);
-          const step = maxW - overlapPx;
-          const numParts = Math.ceil((rotW - overlapPx) / step);
+          const overlapPx = cropParams.overlapPx;
 
-          if (isClockwise) {
-            // For clockwise: cut from right to left (top to bottom after rotation)
-            for (let i = 0; i < numParts; i++) {
-              let x = rotW - maxW - (i * step);
-              if (i === numParts - 1) x = 0;
-              x = Math.max(0, x);
-              const partW = Math.min(maxW, rotW - x);
+          // Calculate smart split positions
+          const splitPositions = calculateSmartSplitPositions(rotW, maxW);
+          const numParts = splitPositions.length;
 
-              const partCanvas = document.createElement('canvas');
-              partCanvas.width = partW;
-              partCanvas.height = rotH;
-              const partCtx = partCanvas.getContext('2d');
-              partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
+          for (let i = 0; i < numParts; i++) {
+            const pos = splitPositions[i];
+            const x = pos.start;
+            const partW = pos.end - pos.start;
 
-              const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-              const arrBuf = await blob.arrayBuffer();
-              parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
-            }
-          } else {
-            // For counter-clockwise: cut from left to right (top to bottom after rotation)
-            for (let i = 0; i < numParts; i++) {
-              let x = i * step;
-              if (i === numParts - 1) x = rotW - maxW;
-              x = Math.max(0, Math.min(x, rotW - maxW));
-              const partW = Math.min(maxW, rotW - x);
+            const partCanvas = document.createElement('canvas');
+            partCanvas.width = partW;
+            partCanvas.height = rotH;
+            const partCtx = partCanvas.getContext('2d');
+            partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
 
-              const partCanvas = document.createElement('canvas');
-              partCanvas.width = partW;
-              partCanvas.height = rotH;
-              const partCtx = partCanvas.getContext('2d');
-              partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
-
-              const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-              const arrBuf = await blob.arrayBuffer();
-              parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
-            }
+            const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+            const arrBuf = await blob.arrayBuffer();
+            parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
           }
           const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
           resolve({
