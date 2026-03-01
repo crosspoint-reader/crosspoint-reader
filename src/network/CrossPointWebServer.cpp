@@ -11,12 +11,12 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "RssFeedSync.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
-#include "html/DangerZonePageHtml.generated.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -137,7 +137,6 @@ void CrossPointWebServer::begin() {
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
-  server->on("/api/read", HTTP_GET, [this] { handleReadText(); });
 
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
@@ -156,7 +155,6 @@ void CrossPointWebServer::begin() {
 
   // Settings endpoints
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
-  server->on("/danger-zone", HTTP_GET, [this] { handleDangerZonePage(); });
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
 
@@ -164,12 +162,25 @@ void CrossPointWebServer::begin() {
   server->on("/api/feed-url", HTTP_GET, [this] { handleGetFeedUrl(); });
   server->on("/api/feed-url", HTTP_POST, [this] { handlePostFeedUrl(); });
 
+  // Feed sync trigger
+  server->on("/api/feed/sync", HTTP_POST, [this] { handlePostFeedSync(); });
+
+  // Danger Zone endpoints
+  server->on("/api/reboot", HTTP_POST, [this] { handlePostReboot(); });
+  server->on("/api/danger-zone/status", HTTP_GET, [this] { handleGetDangerZoneStatus(); });
+  server->on("/api/screenshot-tour", HTTP_POST, [this] { handlePostScreenshotTour(); });
+  server->on("/api/flash", HTTP_POST, [this] { handlePostFlash(); });
+  server->on("/api/firmware-status", HTTP_GET, [this] { handleGetFirmwareStatus(); });
+  server->on("/api/boot-log", HTTP_GET, [this] { handleGetLog("/boot.log"); });
+  server->on("/api/feed/log", HTTP_GET, [this] { handleGetLog("/feed-sync.log"); });
+
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
-  // Collect WebDAV headers and register handler
-  const char* davHeaders[] = {"Depth", "Destination", "Overwrite", "If", "Lock-Token", "Timeout"};
-  server->collectHeaders(davHeaders, 6);
+  // Collect WebDAV headers and Danger Zone auth header
+  const char* davHeaders[] = {"Depth", "Destination", "Overwrite", "If", "Lock-Token", "Timeout",
+                               "X-Danger-Zone-Password"};
+  server->collectHeaders(davHeaders, 7);
   server->addHandler(new WebDAVHandler());  // Note: WebDAVHandler will be deleted by WebServer when server is stopped
   LOG_DBG("WEB", "WebDAV handler initialized");
 
@@ -363,12 +374,23 @@ void CrossPointWebServer::handleStatus() const {
 
   JsonDocument doc;
   doc["version"] = CROSSPOINT_VERSION;
+  doc["build"] = __DATE__ " " __TIME__;
+  // Reset reason (useful for diagnosing OTA rollbacks and crashes)
+  const esp_reset_reason_t rr = esp_reset_reason();
+  const char* rrStr = (rr == ESP_RST_PANIC)    ? "panic"    :
+                      (rr == ESP_RST_INT_WDT)  ? "int_wdt"  :
+                      (rr == ESP_RST_TASK_WDT) ? "task_wdt" :
+                      (rr == ESP_RST_WDT)      ? "wdt"      :
+                      (rr == ESP_RST_BROWNOUT) ? "brownout" :
+                      (rr == ESP_RST_SW)       ? "sw"       :
+                      (rr == ESP_RST_POWERON)  ? "poweron"  :
+                      (rr == ESP_RST_DEEPSLEEP)? "deepsleep": "other";
+  doc["resetReason"] = rrStr;
   doc["ip"] = ipAddr;
   doc["mode"] = apMode ? "AP" : "STA";
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
-  doc["dangerZoneEnabled"] = SETTINGS.dangerZoneEnabled ? true : false;
 
   String json;
   serializeJson(doc, json);
@@ -557,63 +579,6 @@ void CrossPointWebServer::handleDownload() const {
 }
 
 // Diagnostic counters for upload performance analysis
-
-void CrossPointWebServer::handleReadText() const {
-  if (!server->hasArg("path")) {
-    server->send(400, "text/plain", "Missing path");
-    return;
-  }
-
-  String itemPath = server->arg("path");
-  if (itemPath.isEmpty() || itemPath == "/") {
-    server->send(400, "text/plain", "Invalid path");
-    return;
-  }
-  if (!itemPath.startsWith("/")) {
-    itemPath = "/" + itemPath;
-  }
-
-  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (itemName.startsWith(".")) {
-    server->send(403, "text/plain", "Cannot access system files");
-    return;
-  }
-
-  if (!Storage.exists(itemPath.c_str())) {
-    server->send(404, "text/plain", "File not found");
-    return;
-  }
-
-  FsFile file = Storage.open(itemPath.c_str());
-  if (!file || file.isDirectory()) {
-    if (file) file.close();
-    server->send(400, "text/plain", "Not a file");
-    return;
-  }
-
-  const size_t fileSize = file.size();
-  constexpr size_t MAX_TEXT_SIZE = 32768;  // 32KB max for text viewer
-  if (fileSize > MAX_TEXT_SIZE) {
-    file.close();
-    server->send(413, "text/plain", "File too large for text viewer (max 32KB)");
-    return;
-  }
-
-  // Read entire file into a buffer and send as text/plain
-  String content;
-  content.reserve(fileSize + 1);
-  uint8_t buf[256];
-  while (file.available()) {
-    int n = file.read(buf, sizeof(buf));
-    if (n <= 0) break;
-    content.concat(reinterpret_cast<const char*>(buf), n);
-  }
-  file.close();
-
-  server->sendHeader("Cache-Control", "no-cache");
-  server->send(200, "text/plain; charset=utf-8", content);
-}
-
 static unsigned long uploadStartTime = 0;
 static unsigned long totalWriteTime = 0;
 static size_t writeCount = 0;
@@ -780,6 +745,15 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearEpubCacheIfNeeded(filePath);
+
+        // Auto-flash: if firmware.bin was uploaded to root and Danger Zone is enabled,
+        // trigger install immediately without requiring a manual flash command.
+        if (state.fileName == "firmware.bin" && (state.path == "/" || state.path == "") &&
+            SETTINGS.dangerZoneEnabled) {
+          LOG_DBG("WEB", "[UPLOAD] firmware.bin uploaded with DZ enabled — auto-triggering flash");
+          extern volatile bool dzFlashRequested;
+          dzFlashRequested = true;
+        }
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -1144,11 +1118,6 @@ void CrossPointWebServer::handleSettingsPage() const {
   LOG_DBG("WEB", "Served settings page");
 }
 
-void CrossPointWebServer::handleDangerZonePage() const {
-  sendHtmlContent(server.get(), DangerZonePageHtml, sizeof(DangerZonePageHtml));
-  LOG_DBG("WEB", "Served danger zone page");
-}
-
 void CrossPointWebServer::handleGetSettings() const {
   auto settings = getSettingsList();
 
@@ -1163,7 +1132,6 @@ void CrossPointWebServer::handleGetSettings() const {
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
-    if (s.deviceOnly) continue;  // Skip device-only settings
 
     doc.clear();
     doc["key"] = s.key;
@@ -1252,7 +1220,6 @@ void CrossPointWebServer::handlePostSettings() {
 
   for (auto& s : settings) {
     if (!s.key) continue;
-    if (s.deviceOnly) continue;  // Skip device-only settings
     if (!doc[s.key].is<JsonVariant>()) continue;
 
     switch (s.type) {
@@ -1345,6 +1312,11 @@ void CrossPointWebServer::handlePostFeedUrl() {
 
   SETTINGS.saveToFile();
   server->send(200, "text/plain", "Feed settings updated");
+}
+
+void CrossPointWebServer::handlePostFeedSync() const {
+  RssFeedSync::startSync();
+  server->send(200, "text/plain", "Feed sync triggered");
 }
 
 // WebSocket callback trampoline
@@ -1495,4 +1467,97 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
     default:
       break;
   }
+}
+
+// ─── Danger Zone ──────────────────────────────────────────────────────────────
+
+// Flags checked by main loop (defined in main.cpp)
+extern volatile bool dzScreenshotTourRequested;
+extern volatile bool dzFlashRequested;
+
+bool CrossPointWebServer::checkDangerZoneAuth() const {
+  if (!SETTINGS.dangerZoneEnabled) return false;
+  if (SETTINGS.dangerZonePassword[0] == '\0') return false;
+
+  // Check X-Danger-Zone-Password header first, then ?password= query param
+  String pw;
+  if (server->hasHeader("X-Danger-Zone-Password")) {
+    pw = server->header("X-Danger-Zone-Password");
+  } else if (server->hasArg("password")) {
+    pw = server->arg("password");
+  }
+  return pw.length() > 0 && pw == SETTINGS.dangerZonePassword;
+}
+
+void CrossPointWebServer::handlePostReboot() {
+  if (!checkDangerZoneAuth()) {
+    server->send(403, "text/plain", "Forbidden: Danger Zone not enabled or bad password");
+    return;
+  }
+  server->send(200, "text/plain", "Rebooting...");
+  delay(200);  // Allow response to be sent
+  SETTINGS.saveToFile();
+  ESP.restart();
+}
+
+void CrossPointWebServer::handleGetLog(const char* path) const {
+  FsFile f = Storage.open(path);
+  if (!f || f.isDirectory()) {
+    server->send(404, "text/plain", "Log not found");
+    return;
+  }
+  const size_t size = f.size();
+  std::string content;
+  content.reserve(std::min(size, (size_t)8192));
+  // Read last 8KB max
+  if (size > 8192) f.seek(size - 8192);
+  char buf[256];
+  while (f.available()) {
+    const int n = f.read((uint8_t*)buf, sizeof(buf) - 1);
+    if (n <= 0) break;
+    buf[n] = '\0';
+    content += buf;
+  }
+  f.close();
+  server->send(200, "text/plain", content.c_str());
+}
+
+void CrossPointWebServer::handleGetDangerZoneStatus() const {
+  char buf[128];
+  snprintf(buf, sizeof(buf), "{\"enabled\":%s,\"passwordSet\":%s}",
+           SETTINGS.dangerZoneEnabled ? "true" : "false",
+           (SETTINGS.dangerZonePassword[0] != '\0') ? "true" : "false");
+  server->send(200, "application/json", buf);
+}
+
+void CrossPointWebServer::handlePostScreenshotTour() {
+  if (!checkDangerZoneAuth()) {
+    server->send(403, "text/plain", "Forbidden: Danger Zone not enabled or bad password");
+    return;
+  }
+  // Signal the main loop to run the screenshot tour.  WiFi will be disconnected
+  // during the tour, so we respond immediately and let the main loop handle it.
+  dzScreenshotTourRequested = true;
+  server->send(200, "text/plain", "Screenshot tour starting. WiFi will reconnect when done.");
+}
+
+void CrossPointWebServer::handlePostFlash() {
+  if (!checkDangerZoneAuth()) {
+    server->send(403, "text/plain", "Forbidden: Danger Zone not enabled or bad password");
+    return;
+  }
+  if (!Storage.exists("/firmware.bin")) {
+    server->send(404, "text/plain", "No /firmware.bin found on SD card");
+    return;
+  }
+  // Signal the main loop to flash firmware.  Device will reboot after flashing.
+  dzFlashRequested = true;
+  server->send(200, "text/plain", "Flashing firmware. Device will reboot when done.");
+}
+
+void CrossPointWebServer::handleGetFirmwareStatus() const {
+  const bool exists = Storage.exists("/firmware.bin");
+  char buf[64];
+  snprintf(buf, sizeof(buf), "{\"firmwareReady\":%s}", exists ? "true" : "false");
+  server->send(200, "application/json", buf);
 }
