@@ -463,13 +463,46 @@ static void handleRecent() {
   for (const auto& book : RECENT_BOOKS.getBooks()) {
     if (!first) logSerial.write(',');
     first = false;
+
+    // Resolve cover BMP path (same lookup order as handleCover)
+    std::string coverPath = book.coverBmpPath;
+    if (coverPath.empty()) {
+      core::FeatureModules::tryGetDocumentCoverPath(String(book.path.c_str()), coverPath);
+    }
+
     JsonDocument entry;
     entry["path"] = book.path.c_str();
     entry["title"] = book.title.c_str();
     entry["author"] = book.author.c_str();
     entry["last_position"] = "";         // not yet persisted
     entry["last_opened"] = (uint32_t)0;  // not yet persisted
-    serializeJson(entry, logSerial);
+
+    if (coverPath.empty()) {
+      serializeJson(entry, logSerial);
+    } else {
+      // Serialize metadata to a temp string, strip trailing '}', then stream
+      // cover data inline so the app receives everything in one response.
+      String metaJson;
+      serializeJson(entry, metaJson);
+      // Remove the closing '}' so we can append the cover field
+      logSerial.write(metaJson.c_str(), metaJson.length() - 1);
+      logSerial.print(F(",\"cover\":\""));
+
+      FsFile coverFile;
+      bool opened = false;
+      {
+        SpiBusMutex::Guard guard;
+        opened = Storage.openFileForRead("USB", coverPath.c_str(), coverFile);
+      }
+      if (opened) {
+        streamFileBase64(coverFile);
+        {
+          SpiBusMutex::Guard guard;
+          coverFile.close();
+        }
+      }
+      logSerial.print(F("\"}"));
+    }
   }
   logSerial.print(F("]}\n"));
 }

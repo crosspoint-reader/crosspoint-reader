@@ -73,6 +73,9 @@ void OtaUpdateActivity::otaWorkerLoop() {
         if (res != OtaUpdater::OK) {
           LOG_ERR("OTA", "Update check failed: %d", res);
           state = FAILED;
+        } else if (!updater.isUpdateNewer()) {
+          LOG_INF("OTA", "No new update available");
+          state = NO_UPDATE;
         } else {
           state = WAITING_CONFIRMATION;
         }
