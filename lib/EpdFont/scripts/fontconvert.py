@@ -137,6 +137,33 @@ def norm_floor(val):
 def norm_ceil(val):
     return int(math.ceil(val / (1 << 6)))
 
+# Fixed-point (fp4) output conventions (must match EpdFontData.h / fp4 namespace):
+#
+#   advanceX    12.4 unsigned fixed-point (uint16_t).
+#               12 integer bits, 4 fractional bits = 1/16-pixel resolution.
+#               Encoded from FreeType's 16.16 linearHoriAdvance.
+#
+#   kernMatrix  4.4 signed fixed-point (int8_t).
+#               4 integer bits, 4 fractional bits = 1/16-pixel resolution.
+#               Range: -8.0 to +7.9375 pixels.
+#               Encoded from font design-unit kerning values.
+#
+# Both share 4 fractional bits so the renderer can add them directly into a
+# single int32_t accumulator and defer rounding until pixel placement.
+
+def fp4_from_ft16_16(val):
+    """Convert FreeType 16.16 fixed-point to 12.4 fixed-point with rounding."""
+    return (val + (1 << 11)) >> 12
+
+def fp4_from_design_units(du, scale):
+    """Convert a font design-unit value to 4.4 fixed-point, clamped to int8_t.
+
+    Multiplies by scale (ppem / units_per_em) and shifts into 4 fractional
+    bits.  The result is rounded to nearest and clamped to [-128, 127].
+    """
+    raw = round(du * scale * 16)
+    return max(-128, min(127, raw))
+
 def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
@@ -270,7 +297,9 @@ for i_start, i_end in intervals:
         glyph = GlyphProps(
             width = bitmap.width,
             height = bitmap.rows,
-            advance_x = norm_floor(face.glyph.advance.x),
+            # We use linearHoriAdvance (16.16 fixed-point, unhinted) instead of
+            # advance.x (26.6 fixed-point, grid-fitted to whole pixels by hinter)
+            advance_x = fp4_from_ft16_16(face.glyph.linearHoriAdvance),
             left = face.glyph.bitmap_left,
             top = face.glyph.bitmap_top,
             data_length = len(packed),
@@ -406,15 +435,14 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
 
     font.close()
 
-    # Scale design-unit values to pixels
+    # Scale design-unit kerning values to 4.4 fixed-point pixels.
     scale = ppem / units_per_em
-    result = {}  # (leftCp, rightCp) -> adjust
+    result = {}  # (leftCp, rightCp) -> 4.4 fixed-point adjust
     for (lg, rg), du in raw_kern.items():
         lcp = glyph_to_cp[lg]
         rcp = glyph_to_cp[rg]
-        adjust = int(math.floor(du * scale))
+        adjust = fp4_from_design_units(du, scale)
         if adjust != 0:
-            adjust = max(-128, min(127, adjust))
             result[(lcp, rcp)] = adjust
     return result
 
