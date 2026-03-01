@@ -10,6 +10,13 @@
 #include <Logging.h>
 #include <SPI.h>
 #include <Update.h>
+#include <esp_ota_ops.h>
+
+// Run before global constructors to prevent OTA rollback even if a global crashes
+__attribute__((constructor(101))) static void earlyMarkOtaValid() {
+  esp_ota_mark_app_valid_cancel_rollback();
+}
+
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -32,19 +39,29 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "activities/reader/ReaderActivity.h"
-#include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 #include "util/ScreenCapture.h"
+#include "WifiCredentialStore.h"
+#include "network/CrossPointWebServer.h"
+#include "network/RssFeedSync.h"
+#include <WiFi.h>
+#include <ESPmDNS.h>
 
 HalDisplay display;
 HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
+
+// Danger Zone: background web server (lives outside activity lifecycle)
+static std::unique_ptr<CrossPointWebServer> dzWebServer;
+static bool dzWifiConnected = false;
+volatile bool dzScreenshotTourRequested = false;
+volatile bool dzFlashRequested = false;
 FontDecompressor fontDecompressor;
 
 // Fonts
@@ -201,6 +218,18 @@ void waitForPowerRelease() {
 // Enter deep sleep mode
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+
+  // Shut down Danger Zone background web server if running
+  if (dzWebServer) {
+    dzWebServer->stop();
+    dzWebServer.reset();
+    dzWifiConnected = false;
+    UITheme::setHttpServerActive(false);
+    UITheme::setNetworkStatus(false, false);
+    WiFi.disconnect(false);
+    WiFi.mode(WIFI_OFF);
+  }
+
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
   APP_STATE.saveToFile();
 
@@ -247,6 +276,69 @@ void setupDisplayAndFonts() {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
+// Danger Zone: attempt auto-connect to last known WiFi, start web server + feed sync.
+// Non-blocking: returns quickly regardless of outcome. Logs result.
+void dangerZoneAutoConnect() {
+  if (!SETTINGS.dangerZoneEnabled) return;
+  if (SETTINGS.dangerZonePassword[0] == '\0') {
+    LOG_DBG("DZ", "Danger Zone enabled but no password set — skipping auto-connect");
+    return;
+  }
+
+  WIFI_STORE.loadFromFile();
+  const auto& lastSsid = WIFI_STORE.getLastConnectedSsid();
+  if (lastSsid.empty()) {
+    LOG_DBG("DZ", "No last connected SSID — skipping auto-connect");
+    return;
+  }
+
+  const auto* cred = WIFI_STORE.findCredential(lastSsid);
+  if (!cred) {
+    LOG_DBG("DZ", "No saved password for '%s' — skipping", lastSsid.c_str());
+    return;
+  }
+
+  LOG_INF("DZ", "Auto-connecting to '%s'...", lastSsid.c_str());
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+
+  // Block up to 15 seconds for connection
+  constexpr unsigned long TIMEOUT_MS = 15000;
+  const unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < TIMEOUT_MS) {
+    delay(100);
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    LOG_ERR("DZ", "Auto-connect failed (status=%d)", WiFi.status());
+    WiFi.mode(WIFI_OFF);
+    return;
+  }
+
+  dzWifiConnected = true;
+  LOG_INF("DZ", "Connected! IP=%s", WiFi.localIP().toString().c_str());
+
+  UITheme::setNetworkStatus(true, false);
+
+  // Start mDNS
+  MDNS.begin("crosspoint");
+
+  // Start web server
+  dzWebServer.reset(new CrossPointWebServer());
+  dzWebServer->begin();
+  if (dzWebServer->isRunning()) {
+    UITheme::setHttpServerActive(true);
+    LOG_INF("DZ", "Web server started on port 80");
+  } else {
+    LOG_ERR("DZ", "Web server failed to start");
+    dzWebServer.reset();
+  }
+
+  // Start RSS feed sync
+  RssFeedSync::startSync();
+}
+
 void setup() {
   t1 = millis();
 
@@ -273,7 +365,43 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
+  // DEBUG: force Danger Zone on so OpenClaw can troubleshoot remotely
+  SETTINGS.dangerZoneEnabled = true;
+  strncpy(SETTINGS.dangerZonePassword, "1234", sizeof(SETTINGS.dangerZonePassword) - 1);
   I18N.loadSettings();
+
+  // Boot log: write early so any subsequent crash is detectable
+  {
+    const esp_reset_reason_t resetReason = esp_reset_reason();
+    const char* resetStr = (resetReason == ESP_RST_PANIC)    ? "panic"    :
+                           (resetReason == ESP_RST_INT_WDT)  ? "int_wdt"  :
+                           (resetReason == ESP_RST_TASK_WDT) ? "task_wdt" :
+                           (resetReason == ESP_RST_WDT)      ? "wdt"      :
+                           (resetReason == ESP_RST_BROWNOUT) ? "brownout" :
+                           (resetReason == ESP_RST_SW)       ? "sw"       :
+                           (resetReason == ESP_RST_POWERON)  ? "poweron"  :
+                           (resetReason == ESP_RST_DEEPSLEEP)? "deepsleep": "other";
+    FsFile bootLog;
+    // Rotate log if over 2KB
+    {
+      FsFile check = Storage.open("/boot.log");
+      if (check && check.size() > 2048) {
+        check.close();
+        Storage.remove("/boot.log.bak");
+        Storage.rename("/boot.log", "/boot.log.bak");
+      } else if (check) {
+        check.close();
+      }
+    }
+    if ((bootLog = Storage.open("/boot.log", O_RDWR | O_CREAT | O_AT_END))) {
+      char buf[160];
+      snprintf(buf, sizeof(buf), "version=%s reset=%s heap=%u uptime=%lu\n",
+               CROSSPOINT_VERSION, resetStr, ESP.getFreeHeap(), millis());
+      bootLog.print(buf);
+      bootLog.close();
+      LOG_INF("MAIN", "Boot: version=%s reset=%s", CROSSPOINT_VERSION, resetStr);
+    }
+  }
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
@@ -383,17 +511,17 @@ void setup() {
             drawUpdateScreen(pct);
           }
         });
+        // HalFile is Print-only (not Stream), so read+write in chunks
         size_t written = 0;
-        uint8_t buf[512];
+        uint8_t buf[4096];
         while (written < fileSize) {
-          const int bytesRead = firmwareFile.read(buf, sizeof(buf));
+          const size_t toRead = min(sizeof(buf), fileSize - written);
+          const int bytesRead = firmwareFile.read(buf, toRead);
           if (bytesRead <= 0) break;
-          const size_t updateWritten = Update.write(buf, bytesRead);
-          if (updateWritten != (size_t)bytesRead) {
-            LOG_ERR("MAIN", "Update.write short: %u read, %u written", bytesRead, updateWritten);
-            break;
-          }
-          written += updateWritten;
+          const size_t bytesWritten = Update.write(buf, bytesRead);
+          if (bytesWritten != static_cast<size_t>(bytesRead)) break;
+          written += bytesWritten;
+          yield();  // Feed watchdog during long SD read
         }
         firmwareFile.close();
         if (written == fileSize && Update.end()) {
@@ -403,13 +531,13 @@ void setup() {
           LOG_INF("MAIN", "Firmware update complete, restarting...");
           ESP.restart();
         } else {
-          const char* updateErr = Update.errorString();  // capture BEFORE abort clears it
           Update.abort();
-          char errMsg[96];
+          char errMsg[80];
+          const char* updateErr = Update.errorString();
           if (written != fileSize) {
-            snprintf(errMsg, sizeof(errMsg), "short write %u/%u", (unsigned)written, (unsigned)fileSize);
+            snprintf(errMsg, sizeof(errMsg), "short write %u/%u: %s", (unsigned)written, (unsigned)fileSize, updateErr);
           } else {
-            snprintf(errMsg, sizeof(errMsg), "end() failed: %s (wrote %u)", updateErr, (unsigned)written);
+            snprintf(errMsg, sizeof(errMsg), "finalize failed: %s", updateErr);
           }
           LOG_ERR("MAIN", "Firmware update failed: %s", errMsg);
           showError(errMsg, fileSize, written);
@@ -443,6 +571,9 @@ void setup() {
     APP_STATE.saveToFile();
     activityManager.goToReader(path);
   }
+
+  // Danger Zone: auto-connect WiFi + start web server + feed sync
+  dangerZoneAutoConnect();
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
@@ -590,6 +721,88 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+
+  // Danger Zone: service background web server when running outside CrossPointWebServerActivity
+  if (dzWebServer && dzWebServer->isRunning()) {
+    dzWebServer->handleClient();
+  }
+
+  // Danger Zone: handle screenshot tour request from API
+  if (dzScreenshotTourRequested) {
+    dzScreenshotTourRequested = false;
+
+    // Stop DZ web server and WiFi before the tour (tour changes activities)
+    if (dzWebServer) {
+      dzWebServer->stop();
+      dzWebServer.reset();
+      UITheme::setHttpServerActive(false);
+    }
+    UITheme::setNetworkStatus(false, false);
+    WiFi.disconnect(false);
+    WiFi.mode(WIFI_OFF);
+    dzWifiConnected = false;
+
+    // Run the screenshot tour (skipping WiFi/network activities)
+    runScreenshotTour();
+
+    // Auto-reconnect WiFi and restart web server
+    dangerZoneAutoConnect();
+
+    // Return to home screen
+    activityManager.goHome();
+  }
+
+  // Danger Zone: handle flash firmware request from API
+  if (dzFlashRequested) {
+    dzFlashRequested = false;
+
+    if (!Storage.exists("/firmware.bin")) {
+      LOG_ERR("DZ", "Flash requested but /firmware.bin not found");
+    } else {
+      LOG_INF("DZ", "Flashing firmware from /firmware.bin via API...");
+
+      // Stop DZ web server before flashing (OTA disables flash cache)
+      if (dzWebServer) {
+        dzWebServer->stop();
+        dzWebServer.reset();
+        UITheme::setHttpServerActive(false);
+      }
+      UITheme::setNetworkStatus(false, false);
+      WiFi.disconnect(false);
+      WiFi.mode(WIFI_OFF);
+      dzWifiConnected = false;
+
+      FsFile firmwareFile = Storage.open("/firmware.bin");
+      if (firmwareFile) {
+        const size_t fileSize = firmwareFile.size();
+        if (fileSize > 0 && Update.begin(fileSize, U_FLASH)) {
+          size_t written = 0;
+          uint8_t buf[512];
+          while (written < fileSize) {
+            const int bytesRead = firmwareFile.read(buf, sizeof(buf));
+            if (bytesRead <= 0) break;
+            const size_t bytesWritten = Update.write(buf, bytesRead);
+            if (bytesWritten != static_cast<size_t>(bytesRead)) break;
+            written += bytesWritten;
+          }
+          firmwareFile.close();
+          if (written == fileSize && Update.end()) {
+            Storage.remove("/firmware.bin");
+            LOG_INF("DZ", "Firmware flash complete, restarting...");
+            ESP.restart();
+          } else {
+            Update.abort();
+            LOG_ERR("DZ", "Firmware flash failed: written=%u/%u", (unsigned)written, (unsigned)fileSize);
+          }
+        } else {
+          firmwareFile.close();
+          LOG_ERR("DZ", "Update.begin() failed: %s", Update.errorString());
+        }
+      }
+      // If flash failed, reconnect WiFi so the device is still reachable
+      dangerZoneAutoConnect();
+    }
+  }
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {
