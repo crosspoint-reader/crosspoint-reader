@@ -1883,6 +1883,9 @@
     const rotateAndCropSelect = document.getElementById('rotateAndCropSelect');
     const files = fileInput.files;
 
+    // Update dropdown options based on file count
+    updateRotateAndCropOptions();
+
     uploadBtn.disabled = !(files.length > 0);
 
     if (files.length > 0) {
@@ -1914,6 +1917,32 @@
 
       // For OFF mode or non-EPUB files
       uploadBtn.disabled = false;
+    }
+  }
+
+  function updateRotateAndCropOptions() {
+    const select = document.getElementById('rotateAndCropSelect');
+    const fileInput = document.getElementById('fileInput');
+    if (!select || !fileInput) return;
+
+    const files = fileInput.files;
+    const manualOption = select.querySelector('option[value="manual"]');
+
+    if (files.length > 1) {
+      // Hide Manual Picker option for multiple files
+      if (manualOption) {
+        manualOption.style.display = 'none';
+        // Reset to OFF if Manual was selected
+        if (select.value === 'manual') {
+          select.value = 'off';
+          updateRotateAndCropMode();
+        }
+      }
+    } else {
+      // Show Manual Picker option for single file
+      if (manualOption) {
+        manualOption.style.display = '';
+      }
     }
   }
 
