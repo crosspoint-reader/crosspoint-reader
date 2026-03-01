@@ -12,8 +12,9 @@
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 
-class Activity;    // forward declaration
-class RenderLock;  // forward declaration
+class Activity;             // forward declaration
+class RenderLock;           // forward declaration
+class CrossPointWebServer;  // forward declaration
 
 /**
  * ActivityManager
@@ -80,6 +81,7 @@ class ActivityManager {
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goHome();
+  void goToNotes();
 
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);
@@ -96,6 +98,16 @@ class ActivityManager {
   // If immediate is true, the update will be triggered immediately.
   // Otherwise, it will be deferred until the end of the current loop iteration.
   void requestUpdate(bool immediate = false);
+
+  // Background web server: runs silently alongside any activity, serving HTTP
+  // requests without showing any UI. Used for WiFi auto-connect after sleep.
+  void startBackgroundWebServer(std::unique_ptr<CrossPointWebServer>&& server);
+  void stopBackgroundWebServer();
+  bool hasBackgroundWebServer() const;
+  CrossPointWebServer* getBackgroundWebServer() const;
+
+ protected:
+  std::unique_ptr<CrossPointWebServer> backgroundServer;
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp

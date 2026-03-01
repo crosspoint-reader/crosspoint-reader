@@ -8,6 +8,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "FeatureManifest.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "ScreenComponents.h"
@@ -22,7 +23,117 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
+constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
+
+#if ENABLE_MARKDOWN
+// Return true if the string consists solely of >= 3 repetitions of `ch` (with optional spaces).
+bool isHorizontalRule(const std::string& s, char ch) {
+  int count = 0;
+  for (char c : s) {
+    if (c == ch) {
+      count++;
+    } else if (c != ' ') {
+      return false;
+    }
+  }
+  return count >= 3;
+}
+
+// Pre-process a single raw source line for markdown block-level elements.
+// Inline markers (**bold**, *italic*, etc.) are left as-is in the text so that
+// word-wrap width measurements stay accurate; they are stripped at render time.
+TxtReaderActivity::StyledLine processMarkdownLine(const std::string& raw) {
+  TxtReaderActivity::StyledLine result;
+
+  // --- Heading detection: count leading '#' chars followed by a space ---
+  int hashCount = 0;
+  while (hashCount < static_cast<int>(raw.size()) && raw[hashCount] == '#') {
+    hashCount++;
+  }
+  if (hashCount > 0 && hashCount < static_cast<int>(raw.size()) && raw[hashCount] == ' ') {
+    result.style = EpdFontFamily::BOLD;
+    result.text = raw.substr(hashCount + 1);
+    return result;
+  }
+
+  // --- Horizontal rule: a line of >=3 dashes, asterisks, or underscores ---
+  if (isHorizontalRule(raw, '-') || isHorizontalRule(raw, '*') || isHorizontalRule(raw, '_')) {
+    result.isHRule = true;
+    return result;
+  }
+
+  // --- Blockquote: strip leading "> " or ">" ---
+  if (raw.size() >= 2 && raw[0] == '>' && raw[1] == ' ') {
+    result.text = raw.substr(2);
+  } else if (!raw.empty() && raw[0] == '>') {
+    result.text = raw.substr(1);
+  } else {
+    result.text = raw;
+  }
+  return result;
+}
+
+// Strip common inline markdown markers from a display string for rendering.
+// Called at render time so word-wrap measurements (done on raw text) stay consistent.
+std::string stripInlineMarkdown(const std::string& input) {
+  std::string out;
+  out.reserve(input.size());
+  const size_t n = input.size();
+  size_t i = 0;
+  while (i < n) {
+    // ** bold ** or __ bold __
+    if (i + 1 < n && ((input[i] == '*' && input[i + 1] == '*') || (input[i] == '_' && input[i + 1] == '_'))) {
+      const char m = input[i];
+      const size_t start = i + 2;
+      // Find matching closing marker
+      size_t end = input.find({m, m}, start);
+      if (end != std::string::npos) {
+        out += input.substr(start, end - start);
+        i = end + 2;
+        continue;
+      }
+    }
+    // * italic * or _ italic _ (single marker)
+    if ((input[i] == '*' || input[i] == '_') && (i == 0 || (input[i - 1] != '*' && input[i - 1] != '_'))) {
+      const char m = input[i];
+      const size_t start = i + 1;
+      size_t end = start;
+      while (end < n && input[end] != m) {
+        end++;
+      }
+      if (end < n) {
+        out += input.substr(start, end - start);
+        i = end + 1;
+        continue;
+      }
+    }
+    // `code`
+    if (input[i] == '`') {
+      const size_t start = i + 1;
+      size_t end = input.find('`', start);
+      if (end != std::string::npos) {
+        out += input.substr(start, end - start);
+        i = end + 1;
+        continue;
+      }
+    }
+    // [link text](url)
+    if (input[i] == '[') {
+      const size_t textEnd = input.find(']', i + 1);
+      if (textEnd != std::string::npos && textEnd + 1 < n && input[textEnd + 1] == '(') {
+        const size_t urlEnd = input.find(')', textEnd + 2);
+        if (urlEnd != std::string::npos) {
+          out += input.substr(i + 1, textEnd - i - 1);
+          i = urlEnd + 1;
+          continue;
+        }
+      }
+    }
+    out += input[i++];
+  }
+  return out;
+}
+#endif  // ENABLE_MARKDOWN
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -48,6 +159,13 @@ void TxtReaderActivity::onEnter() {
       break;
     default:
       break;
+  }
+
+  // Detect markdown mode from file extension (only when built with markdown support)
+  if constexpr (FeatureManifest::hasMarkdown()) {
+    const std::string& path = txt->getPath();
+    isMarkdown = path.size() >= 3 && path.compare(path.size() - 3, 3, ".md") == 0;
+    LOG_DBG("TRS", "File: %s, markdown mode: %s", path.c_str(), isMarkdown ? "yes" : "no");
   }
 
   txt->setupCacheDir();
@@ -174,7 +292,7 @@ void TxtReaderActivity::buildPageIndex() {
   GUI.drawPopup(renderer, tr(STR_INDEXING));
 
   while (offset < fileSize) {
-    std::vector<std::string> tempLines;
+    std::vector<StyledLine> tempLines;
     size_t nextOffset = offset;
 
     if (!loadPageAtOffset(offset, tempLines, nextOffset)) {
@@ -201,7 +319,7 @@ void TxtReaderActivity::buildPageIndex() {
   LOG_DBG("TRS", "Built page index: %d pages", totalPages);
 }
 
-bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset) {
+bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<StyledLine>& outLines, size_t& nextOffset) {
   outLines.clear();
   size_t fileSize = 0;
   size_t chunkSize = 0;
@@ -253,35 +371,56 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     bool hasCR = (lineContentLen > 0 && buffer[pos + lineContentLen - 1] == '\r');
     size_t displayLen = hasCR ? lineContentLen - 1 : lineContentLen;
 
-    // Extract line content for display (without CR/LF)
-    std::string line(reinterpret_cast<char*>(buffer + pos), displayLen);
+    // Extract raw line content (without CR/LF)
+    std::string rawLine(reinterpret_cast<char*>(buffer + pos), displayLen);
 
-    // Track position within this source line (in bytes from pos)
+    // Apply markdown block-level preprocessing if needed.
+    // Inline markers (**, *, `code`, etc.) are left in the text here and stripped at render
+    // time, so word-wrap width measurements remain accurate.
+    StyledLine processed;
+    if (isMarkdown) {
+      processed = processMarkdownLine(rawLine);
+    } else {
+      processed.text = rawLine;
+    }
+
+    // Horizontal rules occupy exactly one display line; advance past raw line and continue.
+    if (processed.isHRule) {
+      outLines.push_back(processed);
+      pos = lineEnd + 1;
+      continue;
+    }
+
+    std::string& lineText = processed.text;
+    const EpdFontFamily::Style lineStyle = processed.style;
+
+    // Track position within this source line (in bytes from pos) for non-markdown mode.
     size_t lineBytePos = 0;
 
     // Word wrap if needed
-    while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
-      int lineWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+    while (!lineText.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
+      int lineWidth = renderer.getTextWidth(cachedFontId, lineText.c_str(), lineStyle);
 
       if (lineWidth <= viewportWidth) {
-        outLines.push_back(line);
+        outLines.push_back({lineText, lineStyle, false});
         lineBytePos = displayLen;  // Consumed entire display content
-        line.clear();
+        lineText.clear();
         break;
       }
 
       // Find break point
-      size_t breakPos = line.length();
-      while (breakPos > 0 && renderer.getTextWidth(cachedFontId, line.substr(0, breakPos).c_str()) > viewportWidth) {
+      size_t breakPos = lineText.length();
+      while (breakPos > 0 &&
+             renderer.getTextWidth(cachedFontId, lineText.substr(0, breakPos).c_str(), lineStyle) > viewportWidth) {
         // Try to break at space
-        size_t spacePos = line.rfind(' ', breakPos - 1);
+        size_t spacePos = lineText.rfind(' ', breakPos - 1);
         if (spacePos != std::string::npos && spacePos > 0) {
           breakPos = spacePos;
         } else {
           // Break at character boundary for UTF-8
           breakPos--;
           // Make sure we don't break in the middle of a UTF-8 sequence
-          while (breakPos > 0 && (line[breakPos] & 0xC0) == 0x80) {
+          while (breakPos > 0 && (lineText[breakPos] & 0xC0) == 0x80) {
             breakPos--;
           }
         }
@@ -291,24 +430,28 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
         breakPos = 1;
       }
 
-      outLines.push_back(line.substr(0, breakPos));
+      outLines.push_back({lineText.substr(0, breakPos), lineStyle, false});
 
       // Skip space at break point
       size_t skipChars = breakPos;
-      if (breakPos < line.length() && line[breakPos] == ' ') {
+      if (breakPos < lineText.length() && lineText[breakPos] == ' ') {
         skipChars++;
       }
       lineBytePos += skipChars;
-      line = line.substr(skipChars);
+      lineText = lineText.substr(skipChars);
     }
 
-    // Determine how much of the source buffer we consumed
-    if (line.empty()) {
-      // Fully consumed this source line, move past the newline
+    // Determine how much of the source buffer we consumed.
+    // In markdown mode, always advance past the full raw line — inline stripping means
+    // lineBytePos would be measured in cleaned-text bytes, which don't map to raw positions.
+    if (isMarkdown || lineText.empty()) {
       pos = lineEnd + 1;
+      if (!lineText.empty()) {
+        // Markdown: page filled before finishing a long wrapped line; remaining text is skipped.
+        break;
+      }
     } else {
-      // Partially consumed - page is full mid-line
-      // Move pos to where we stopped in the line (NOT past the line)
+      // Plain text, partial line — page is full mid-line
       pos = pos + lineBytePos;
       break;
     }
@@ -316,7 +459,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
   // Ensure we make progress even if calculations go wrong
   if (pos == 0 && !outLines.empty()) {
-    // Fallback: at minimum, consume something to avoid infinite loop
     pos = 1;
   }
 
@@ -373,11 +515,20 @@ void TxtReaderActivity::renderPage() {
   const int lineHeight = renderer.getLineHeight(cachedFontId);
   const int contentWidth = viewportWidth;
 
-  // Render text lines with alignment
+  // Render text lines with alignment.
+  // Inline markdown markers are stripped from each line before rendering so that
+  // `**bold**` displays as `bold` while word-wrap measurements (done on the raw text)
+  // remain unaffected.
   auto renderLines = [&]() {
     int y = cachedOrientedMarginTop;
-    for (const auto& line : currentPageLines) {
-      if (!line.empty()) {
+    for (const auto& sline : currentPageLines) {
+      if (sline.isHRule) {
+        // Draw a horizontal rule across the content width, centred in the line slot
+        const int midY = y + lineHeight / 2;
+        renderer.drawLine(cachedOrientedMarginLeft, midY, cachedOrientedMarginLeft + contentWidth, midY, true);
+      } else if (!sline.text.empty()) {
+        // Strip inline markers at render time so alignment widths are based on display text
+        const std::string display = isMarkdown ? stripInlineMarkdown(sline.text) : sline.text;
         int x = cachedOrientedMarginLeft;
 
         // Apply text alignment
@@ -387,22 +538,21 @@ void TxtReaderActivity::renderPage() {
             // x already set to left margin
             break;
           case CrossPointSettings::CENTER_ALIGN: {
-            int textWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+            int textWidth = renderer.getTextWidth(cachedFontId, display.c_str(), sline.style);
             x = cachedOrientedMarginLeft + (contentWidth - textWidth) / 2;
             break;
           }
           case CrossPointSettings::RIGHT_ALIGN: {
-            int textWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+            int textWidth = renderer.getTextWidth(cachedFontId, display.c_str(), sline.style);
             x = cachedOrientedMarginLeft + contentWidth - textWidth;
             break;
           }
           case CrossPointSettings::JUSTIFIED:
             // For plain text, justified is treated as left-aligned
-            // (true justification would require word spacing adjustments)
             break;
         }
 
-        renderer.drawText(cachedFontId, x, y, line.c_str());
+        renderer.drawText(cachedFontId, x, y, display.c_str(), true, sline.style);
       }
       y += lineHeight;
     }
@@ -495,6 +645,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   // - int32_t: font ID (to invalidate cache on font change)
   // - int32_t: screen margin (to invalidate cache on margin change)
   // - uint8_t: paragraph alignment (to invalidate cache on alignment change)
+  // - uint8_t: markdown flag (1 = markdown mode, 0 = plain text)
   // - uint32_t: total pages count
   // - N * uint32_t: page offsets
 
@@ -571,6 +722,14 @@ bool TxtReaderActivity::loadPageIndexCache() {
     return false;
   }
 
+  uint8_t markdownFlag;
+  serialization::readPod(f, markdownFlag);
+  if (static_cast<bool>(markdownFlag) != isMarkdown) {
+    LOG_DBG("TRS", "Cache markdown flag mismatch, rebuilding");
+    f.close();
+    return false;
+  }
+
   uint32_t numPages;
   serialization::readPod(f, numPages);
 
@@ -608,6 +767,7 @@ void TxtReaderActivity::savePageIndexCache() const {
   serialization::writePod(f, static_cast<int32_t>(cachedFontId));
   serialization::writePod(f, static_cast<int32_t>(cachedScreenMargin));
   serialization::writePod(f, cachedParagraphAlignment);
+  serialization::writePod(f, static_cast<uint8_t>(isMarkdown ? 1 : 0));
   serialization::writePod(f, static_cast<uint32_t>(pageOffsets.size()));
 
   // Write page offsets

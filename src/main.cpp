@@ -19,6 +19,7 @@
 #include "RecentBooksStore.h"
 #include "UsbSerialProtocol.h"
 #include "WifiCredentialStore.h"
+#include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/RenderLock.h"
 #include "components/UITheme.h"
@@ -27,6 +28,7 @@
 #include "core/features/FeatureModules.h"
 #include "fontIds.h"
 #include "network/BackgroundWebServer.h"
+#include "network/BackgroundWifiService.h"
 #include "util/ButtonNavigator.h"
 #include "util/FactoryResetUtils.h"
 #include "util/ScreenshotUtil.h"
@@ -209,6 +211,10 @@ void applyPendingFactoryReset() {
 }
 }  // namespace
 
+// True if BG_WIFI.start() was called this wake — used by enterDeepSleep() to
+// decide whether to update the WiFi auto-connect backoff counters.
+static bool wifiAutoConnectAttempted = false;
+
 void verifyPowerButtonDuration() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
     return;
@@ -253,6 +259,27 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+
+  // Update WiFi auto-connect backoff before sleeping (only if we attempted this wake)
+  if (wifiAutoConnectAttempted) {
+    const bool hadActivity = BG_WIFI.hadApiActivity();
+    BG_WIFI.stop();
+    if (hadActivity) {
+      // Successful sync: reset backoff — try again next wake
+      APP_STATE.wifiAutoConnectBackoffLevel = 0;
+      APP_STATE.wifiAutoConnectSkipCount = 0;
+      LOG_DBG("MAIN", "WiFi had API activity — backoff reset");
+    } else {
+      // No push/pull received: increase backoff exponentially (cap at level 4 = 15 skips)
+      if (APP_STATE.wifiAutoConnectBackoffLevel < 4) {
+        APP_STATE.wifiAutoConnectBackoffLevel++;
+      }
+      APP_STATE.wifiAutoConnectSkipCount = (1U << APP_STATE.wifiAutoConnectBackoffLevel) - 1U;
+      LOG_DBG("MAIN", "WiFi no API activity — backoff level %d, next skip: %d", APP_STATE.wifiAutoConnectBackoffLevel,
+              APP_STATE.wifiAutoConnectSkipCount);
+    }
+  }
+
   APP_STATE.saveToFile();
 
   activityManager.goToSleep();
@@ -342,14 +369,16 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
+  const bool wokeFromSleep = (gpio.getWakeupReason() == HalGPIO::WakeupReason::PowerButton);
+
   switch (gpio.getWakeupReason()) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
       verifyPowerButtonDuration();
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
-      LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-      powerManager.startDeepSleep(gpio);
+      // USB power connected: stay awake so user can access the file server
+      LOG_DBG("MAIN", "Wakeup reason: After USB Power - staying awake for file transfer");
       break;
     case HalGPIO::WakeupReason::AfterFlash:
     case HalGPIO::WakeupReason::Other:
@@ -375,6 +404,27 @@ void setup() {
     APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
     activityManager.goToReader(path);
+  }
+
+  // WiFi auto-connect on wake from sleep (background, silent)
+  if (wokeFromSleep && SETTINGS.wifiAutoConnect) {
+    if (APP_STATE.wifiAutoConnectSkipCount > 0) {
+      // Still in backoff — consume one skip cycle
+      APP_STATE.wifiAutoConnectSkipCount--;
+      APP_STATE.saveToFile();
+      LOG_DBG("MAIN", "WiFi auto-connect skipped (backoff remaining: %d)", APP_STATE.wifiAutoConnectSkipCount);
+    } else {
+      // Attempt silent background connect using last known credentials
+      const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
+      if (!lastSsid.empty()) {
+        const auto* cred = WIFI_STORE.findCredential(lastSsid);
+        if (cred) {
+          LOG_DBG("MAIN", "Starting background WiFi auto-connect to: %s", lastSsid.c_str());
+          BG_WIFI.start(cred->ssid.c_str(), cred->password.c_str());
+          wifiAutoConnectAttempted = true;
+        }
+      }
+    }
   }
 
   waitForPowerRelease();

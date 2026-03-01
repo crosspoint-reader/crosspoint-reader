@@ -26,6 +26,7 @@ class CrossPointSettings {
     COVER = 3,
     BLANK = 4,
     COVER_CUSTOM = 5,
+    TRANSPARENT = 6,
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
@@ -235,6 +236,8 @@ class CrossPointSettings {
   // Network identity — used for mDNS hostname, DHCP hostname, and AP SSID.
   // Only [a-z0-9-] chars; max 24 chars. Empty = fall back to last-4-MAC.
   char deviceName[32] = "";
+  // Auto-connect to last WiFi network on wake from sleep and run web server in background
+  uint8_t wifiAutoConnect = 0;
 
   ~CrossPointSettings() = default;
 

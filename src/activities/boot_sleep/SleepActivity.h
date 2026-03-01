@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 #include "../Activity.h"
 
@@ -19,4 +20,12 @@ class SleepActivity final : public Activity {
   void renderCustomSleepScreen() const;
   void renderBitmapSleepScreen(const Bitmap& bitmap) const;
   void renderImageSleepScreen(const std::string& imagePath) const;
+  void renderTransparentSleepScreen() const;
+
+  void drawLockIcon(int cx, int cy) const;
+
+  // Sleep image cache helpers
+  static constexpr const char* SLEEP_CACHE_PATH = "/.crosspoint/sleep_cache.txt";
+  std::vector<std::string> loadSleepImageCache() const;
+  void saveSleepImageCache(const std::vector<std::string>& filenames) const;
 };

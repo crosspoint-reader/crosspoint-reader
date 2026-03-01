@@ -17,6 +17,7 @@
 #include "WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/BackgroundWifiService.h"
 #include "util/NetworkNames.h"
 #include "util/TimeSync.h"
 
@@ -39,6 +40,12 @@ void CrossPointWebServerActivity::onEnter() {
   Activity::onEnter();
 
   LOG_DBG("WEBACT", "Free heap at onEnter: %d bytes", ESP.getFreeHeap());
+
+  // Stop any background WiFi service — it would conflict on port 80
+  if (BG_WIFI.isRunning()) {
+    LOG_DBG("WEBACT", "Stopping background WiFi service for foreground use");
+    BG_WIFI.stop();
+  }
 
   // Reset state
   state = WebServerActivityState::MODE_SELECTION;

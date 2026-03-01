@@ -9,7 +9,9 @@
 #include "core/features/FeatureModules.h"
 #include "home/HomeActivity.h"
 #include "home/MyLibraryActivity.h"
+#include "home/NotesActivity.h"
 #include "home/RecentBooksActivity.h"
+#include "network/CrossPointWebServer.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/SettingsActivity.h"
@@ -57,6 +59,11 @@ void ActivityManager::loop() {
   if (currentActivity) {
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     currentActivity->loop();
+  }
+
+  // Pump the background web server if running (handles Calibre/KOReader auto-sync)
+  if (backgroundServer && backgroundServer->isRunning()) {
+    backgroundServer->handleClient();
   }
 
   while (pendingAction != PendingAction::None) {
@@ -180,6 +187,8 @@ void ActivityManager::goToRecentBooks() {
   replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
 }
 
+void ActivityManager::goToNotes() { replaceActivity(std::make_unique<NotesActivity>(renderer, mappedInput)); }
+
 void ActivityManager::goToBrowser() {
   replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput));
 }
@@ -274,7 +283,28 @@ bool ActivityManager::preventAutoSleep() const { return currentActivity && curre
 
 bool ActivityManager::isReaderActivity() const { return currentActivity && currentActivity->isReaderActivity(); }
 
-bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
+bool ActivityManager::skipLoopDelay() const {
+  if (backgroundServer && backgroundServer->isRunning()) return true;
+  return currentActivity && currentActivity->skipLoopDelay();
+}
+
+void ActivityManager::startBackgroundWebServer(std::unique_ptr<CrossPointWebServer>&& server) {
+  stopBackgroundWebServer();
+  backgroundServer = std::move(server);
+  LOG_DBG("ACT", "Background web server started");
+}
+
+void ActivityManager::stopBackgroundWebServer() {
+  if (backgroundServer) {
+    backgroundServer->stop();
+    backgroundServer.reset();
+    LOG_DBG("ACT", "Background web server stopped");
+  }
+}
+
+bool ActivityManager::hasBackgroundWebServer() const { return backgroundServer && backgroundServer->isRunning(); }
+
+CrossPointWebServer* ActivityManager::getBackgroundWebServer() const { return backgroundServer.get(); }
 
 bool ActivityManager::blocksBackgroundServer() const {
   return currentActivity && currentActivity->blocksBackgroundServer();

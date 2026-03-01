@@ -493,6 +493,7 @@ void HomeActivity::loop() {
         core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::OpdsBrowser, hasOpdsUrl) ? idx++ : -1;
     const int todoIdx =
         core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false) ? idx++ : -1;
+    const int notesIdx = idx++;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
 
@@ -504,6 +505,8 @@ void HomeActivity::loop() {
       onOpdsBrowserOpen();
     } else if (selectorIndex == todoIdx) {
       onTodoOpen();
+    } else if (selectorIndex == notesIdx) {
+      onNotesOpen();
     } else if (selectorIndex == fileTransferIdx) {
       onFileTransferOpen();
     } else if (selectorIndex == settingsIdx) {
@@ -815,3 +818,5 @@ void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
 
 void HomeActivity::onTodoOpen() { activityManager.goToTodo(); }
+
+void HomeActivity::onNotesOpen() { activityManager.goToNotes(); }

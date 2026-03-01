@@ -414,6 +414,7 @@ void CrossPointWebServer::handleNotFound() const {
 }
 
 void CrossPointWebServer::handleStatus() const {
+  requestCount++;
   // Get correct IP based on AP vs STA mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
   const bool staConnected = WiFi.status() == WL_CONNECTED;
@@ -838,6 +839,7 @@ void CrossPointWebServer::handleFileListData() const {
 }
 
 void CrossPointWebServer::handleDownload() const {
+  requestCount++;
   if (!server->hasArg("path")) {
     server->send(400, "text/plain", "Missing path");
     return;
@@ -1163,6 +1165,7 @@ void CrossPointWebServer::handleUpload() {
 }
 
 void CrossPointWebServer::handleUploadPost() {
+  requestCount++;
   if (uploadSuccess) {
     server->send(200, "text/plain", "File uploaded successfully: " + uploadFileName);
   } else {

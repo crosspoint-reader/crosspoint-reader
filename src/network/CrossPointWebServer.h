@@ -60,13 +60,20 @@ class CrossPointWebServer {
   // Get the port number
   uint16_t getPort() const { return port; }
 
+  // Count of meaningful API requests (status checks, uploads, downloads)
+  uint32_t getRequestCount() const { return requestCount; }
+
+  // Returns true if any push/pull API request was received since the server started
+  bool hadApiActivity() const { return requestCount > 0; }
+
  private:
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;
   bool running = false;
   bool apMode = false;  // true when running in AP mode, false for STA mode
   uint16_t port = 80;
-  uint16_t wsPort = 81;  // WebSocket port
+  uint16_t wsPort = 81;               // WebSocket port
+  mutable uint32_t requestCount = 0;  // Incremented on status/upload/download
   CrossPointUdpType udp;
   bool udpActive = false;
 

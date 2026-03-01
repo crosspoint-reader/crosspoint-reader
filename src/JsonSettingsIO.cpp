@@ -21,6 +21,8 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["lastSleepImage"] = s.lastSleepImage;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
+  doc["wifiAutoConnectSkipCount"] = s.wifiAutoConnectSkipCount;
+  doc["wifiAutoConnectBackoffLevel"] = s.wifiAutoConnectBackoffLevel;
 
   String json;
   serializeJson(doc, json);
@@ -39,6 +41,8 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.lastSleepImage = doc["lastSleepImage"] | (uint8_t)0;
   s.readerActivityLoadCount = doc["readerActivityLoadCount"] | (uint8_t)0;
   s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
+  s.wifiAutoConnectSkipCount = doc["wifiAutoConnectSkipCount"] | (uint8_t)0;
+  s.wifiAutoConnectBackoffLevel = doc["wifiAutoConnectBackoffLevel"] | (uint8_t)0;
   return true;
 }
 
@@ -98,6 +102,7 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["installedOtaBundle"] = s.installedOtaBundle;
   doc["installedOtaFeatureFlags"] = s.installedOtaFeatureFlags;
   doc["deviceName"] = s.deviceName;
+  doc["wifiAutoConnect"] = s.wifiAutoConnect;
 
   String json;
   serializeJson(doc, json);
@@ -190,6 +195,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   s.darkMode = doc["darkMode"] | (uint8_t)0;
   s.embeddedStyle = doc["embeddedStyle"] | (uint8_t)1;
   s.usbMscPromptOnConnect = doc["usbMscPromptOnConnect"] | (uint8_t)0;
+  s.wifiAutoConnect = doc["wifiAutoConnect"] | (uint8_t)0;
 
   const char* url = doc["opdsServerUrl"] | "";
   strncpy(s.opdsServerUrl, url, sizeof(s.opdsServerUrl) - 1);

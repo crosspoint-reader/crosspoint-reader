@@ -17,6 +17,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
+#include "network/BackgroundWifiService.h"
 
 namespace {
 
@@ -244,11 +245,73 @@ void SleepActivity::onEnter() {
     return;
   }
 
+  // Transparent mode: preserve current screen content, just overlay lock icon
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT) {
+    return renderTransparentSleepScreen();
+  }
+
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
       return renderCustomSleepScreen();
     default:
       return renderDefaultSleepScreen();
+  }
+}
+
+std::vector<std::string> SleepActivity::loadSleepImageCache() const {
+  std::vector<std::string> cached;
+
+  // Heap-allocate to stay within stack limits (filenames can total >256 bytes)
+  constexpr size_t CACHE_BUF_SIZE = 2048;
+  auto* buf = static_cast<char*>(malloc(CACHE_BUF_SIZE));
+  if (!buf) {
+    LOG_ERR("SLP", "malloc failed for sleep cache read");
+    return cached;
+  }
+
+  const size_t bytesRead = Storage.readFileToBuffer(SLEEP_CACHE_PATH, buf, CACHE_BUF_SIZE);
+  if (bytesRead == 0) {
+    free(buf);
+    return cached;
+  }
+
+  // Parse newline-delimited filenames from buffer
+  const char* p = buf;
+  const char* end = buf + bytesRead;
+  while (p < end) {
+    const char* lineEnd = p;
+    while (lineEnd < end && *lineEnd != '\n' && *lineEnd != '\r') {
+      lineEnd++;
+    }
+    if (lineEnd > p) {
+      cached.emplace_back(p, lineEnd - p);
+    }
+    // Skip newline chars
+    p = lineEnd;
+    while (p < end && (*p == '\n' || *p == '\r')) {
+      p++;
+    }
+  }
+
+  free(buf);
+  LOG_DBG("SLP", "Loaded %zu filenames from sleep image cache", cached.size());
+  return cached;
+}
+
+void SleepActivity::saveSleepImageCache(const std::vector<std::string>& filenames) const {
+  // Build content string; each filename is one line
+  // Use Arduino String for simplicity (one-time write, not a hot path)
+  String content;
+  content.reserve(filenames.size() * 24);  // reserve ~24 chars/filename
+  for (const auto& name : filenames) {
+    content += name.c_str();
+    content += '\n';
+  }
+  Storage.mkdir("/.crosspoint");
+  if (!Storage.writeFile(SLEEP_CACHE_PATH, content)) {
+    LOG_ERR("SLP", "Failed to write sleep image cache");
+  } else {
+    LOG_DBG("SLP", "Saved %zu filenames to sleep image cache", filenames.size());
   }
 }
 
@@ -270,6 +333,9 @@ void SleepActivity::renderCustomSleepScreen() const {
           return;
         }
         file.close();
+        // File in cache is invalid - delete cache so it's rebuilt next time
+        LOG_WRN("SLP", "Cached image invalid, clearing cache");
+        Storage.remove(SLEEP_CACHE_PATH);
       }
     } else {
       renderImageSleepScreen(pinnedPath);
@@ -347,6 +413,34 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
 
   renderDefaultSleepScreen();
+}
+
+void SleepActivity::drawLockIcon(const int cx, const int cy) const {
+  // White background badge so icon is visible over any content
+  renderer.fillRect(cx - 13, cy - 13, 26, 22, false);
+
+  // Shackle (U-shape above body): two vertical lines + horizontal top
+  renderer.drawLine(cx - 5, cy - 1, cx - 5, cy - 10);
+  renderer.drawLine(cx + 5, cy - 1, cx + 5, cy - 10);
+  renderer.drawLine(cx - 5, cy - 10, cx + 5, cy - 10);
+
+  // Body: filled black rectangle with white interior
+  renderer.fillRect(cx - 9, cy, 18, 12, true);
+  renderer.fillRect(cx - 8, cy + 1, 16, 10, false);
+
+  // Keyhole slot (small black mark in center of body)
+  renderer.fillRect(cx - 1, cy + 3, 3, 5, true);
+}
+
+void SleepActivity::renderTransparentSleepScreen() const {
+  // Preserve current e-ink content: do NOT clear the screen.
+  // Just draw a small lock icon in the bottom status bar area.
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  drawLockIcon(pageWidth / 2, pageHeight - 14);
+
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderDefaultSleepScreen() const {

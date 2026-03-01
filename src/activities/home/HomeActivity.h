@@ -40,6 +40,7 @@ class HomeActivity final : public Activity {
   std::vector<RecentBook> recentBooks;
   void onContinueReading();
   void onMyLibraryOpen();
+  void onNotesOpen();
   void onSettingsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
