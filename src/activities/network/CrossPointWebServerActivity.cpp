@@ -294,6 +294,15 @@ void CrossPointWebServerActivity::stopWebServer() {
 }
 
 void CrossPointWebServerActivity::loop() {
+  // If a DZ firmware flash was requested, exit cleanly first so onExit() stops
+  // the web server and disconnects WiFi before the main loop kills WiFi.
+  // Without this, killing WiFi while the TCP stack is live causes a panic.
+  extern volatile bool dzFlashRequested;
+  if (dzFlashRequested) {
+    onGoHome();
+    return;
+  }
+
   // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
     // Handle DNS requests for captive portal (AP mode only)
