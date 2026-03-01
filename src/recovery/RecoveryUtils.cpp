@@ -1,9 +1,10 @@
 #include "RecoveryUtils.h"
 
 #include <Logging.h>
-#include <esp_system.h>
-#include <esp_partition.h>
 #include <esp_ota_ops.h>
+#include <esp_partition.h>
+#include <esp_system.h>
+
 #include <cassert>
 
 namespace Recovery {
@@ -18,7 +19,8 @@ void getPartitions(const esp_partition_t*& appPartition, const esp_partition_t*&
   }
 
   LOG_INF("REC", "App partition: address=0x%08x, size=0x%08x", appPartition->address, appPartition->size);
-  LOG_INF("REC", "Recovery partition: address=0x%08x, size=0x%08x", recoveryPartition->address, recoveryPartition->size);
+  LOG_INF("REC", "Recovery partition: address=0x%08x, size=0x%08x", recoveryPartition->address,
+          recoveryPartition->size);
 }
 
 void reboot(bool toRecovery) {
@@ -33,4 +35,4 @@ void reboot(bool toRecovery) {
   esp_restart();
 }
 
-}; // namespace Recovery
+};  // namespace Recovery

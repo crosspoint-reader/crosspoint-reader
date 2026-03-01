@@ -1,3 +1,4 @@
+#ifndef RECOVERY
 #include <Arduino.h>
 #include <Epub.h>
 #include <FontDecompressor.h>
@@ -15,15 +16,6 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "activities/boot_sleep/BootActivity.h"
-#include "activities/boot_sleep/SleepActivity.h"
-#include "activities/util/FullScreenMessageActivity.h"
-#include "components/UITheme.h"
-#include "fontIds.h"
-#include "util/ButtonNavigator.h"
-
-#include <Epub.h>
-
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -42,14 +34,12 @@ ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 
 // Fonts
-#ifndef RECOVERY
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
 EpdFont bookerly14BoldFont(&bookerly_14_bold);
 EpdFont bookerly14ItalicFont(&bookerly_14_italic);
 EpdFont bookerly14BoldItalicFont(&bookerly_14_bolditalic);
 EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
                                    &bookerly14BoldItalicFont);
-#endif
 #ifndef OMIT_FONTS
 EpdFont bookerly12RegularFont(&bookerly_12_regular);
 EpdFont bookerly12BoldFont(&bookerly_12_bold);
@@ -202,12 +192,6 @@ void enterDeepSleep() {
 
   powerManager.startDeepSleep(gpio);
 }
-#else   // RECOVERY
-void onGoToRecovery() {
-  exitActivity();
-  enterNewActivity(new RecoveryActivity(renderer, mappedInputManager));
-}
-#endif  // RECOVERY
 
 void setupDisplayAndFonts() {
   display.begin();
@@ -220,9 +204,7 @@ void setupDisplayAndFonts() {
     LOG_ERR("MAIN", "Font decompressor init failed");
   }
   renderer.setFontDecompressor(&fontDecompressor);
-#ifndef RECOVERY
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
-#endif  // RECOVERY
 #ifndef OMIT_FONTS
   renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
   renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
@@ -270,7 +252,7 @@ void setup() {
 
   SETTINGS.loadFromFile();
   I18N.loadSettings();
-
+  KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
@@ -299,8 +281,6 @@ void setup() {
 
   activityManager.goToBoot();
 
-#ifndef RECOVERY
-  KOREADER_STORE.loadFromFile();
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
@@ -317,9 +297,6 @@ void setup() {
     APP_STATE.saveToFile();
     activityManager.goToReader(path);
   }
-#else   // RECOVERY
-  onGoToRecovery();
-#endif  // RECOVERY
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
@@ -424,3 +401,12 @@ void loop() {
     }
   }
 }
+
+#else  // RECOVERY
+#include "recovery/RecoveryMode.h"
+RecoveryMode recoveryMode;
+
+void setup() { recoveryMode.setup(); }
+
+void loop() { recoveryMode.loop(); }
+#endif  // RECOVERY
