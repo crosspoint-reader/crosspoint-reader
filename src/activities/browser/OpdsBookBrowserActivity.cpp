@@ -7,7 +7,6 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
-#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -142,7 +141,9 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_OPDS_BROWSER), true, EpdFontFamily::BOLD);
+  // Show server name in header if available, otherwise generic title
+  const char* headerTitle = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, headerTitle, true, EpdFontFamily::BOLD);
 
   if (state == BrowserState::CHECK_WIFI) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
@@ -228,22 +229,21 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 }
 
 void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
-  const char* serverUrl = SETTINGS.opdsServerUrl;
-  if (strlen(serverUrl) == 0) {
+  if (server.url.empty()) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_NO_SERVER_URL);
     requestUpdate();
     return;
   }
 
-  std::string url = UrlUtils::buildUrl(serverUrl, path);
+  std::string url = UrlUtils::buildUrl(server.url, path);
   LOG_DBG("OPDS", "Fetching: %s", url.c_str());
 
   OpdsParser parser;
 
   {
     OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream)) {
+    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
       state = BrowserState::ERROR;
       errorMessage = tr(STR_FETCH_FEED_FAILED);
       requestUpdate();
@@ -314,7 +314,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   requestUpdate(true);
 
   // Build full download URL
-  std::string downloadUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, book.href);
+  std::string downloadUrl = UrlUtils::buildUrl(server.url, book.href);
 
   // Create sanitized filename: "Title - Author.epub" or just "Title.epub" if no author
   std::string baseName = book.title;
@@ -325,12 +325,14 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
-  const auto result =
-      HttpDownloader::downloadToFile(downloadUrl, filename, [this](const size_t downloaded, const size_t total) {
+  const auto result = HttpDownloader::downloadToFile(
+      downloadUrl, filename,
+      [this](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
         requestUpdate(true);  // Force update to refresh progress bar
-      });
+      },
+      server.username, server.password);
 
   if (result == HttpDownloader::OK) {
     LOG_DBG("OPDS", "Download complete: %s", filename.c_str());
