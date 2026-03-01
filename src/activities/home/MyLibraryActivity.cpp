@@ -119,9 +119,7 @@ void MyLibraryActivity::onEnter() {
   loadFiles();
   selectorIndex = 0;
   // skips input check if back is still held when exiting from reader activity
-  if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
-    skipNextButtonCheck = true;
-  }
+  skipNextButtonCheck = mappedInput.isPressed(MappedInputManager::Button::Back);
   requestUpdate();
 }
 
