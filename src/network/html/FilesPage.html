@@ -349,23 +349,6 @@
     .advanced-setting-row:first-child {
       margin-top: 0;
     }
-    .setting-row-inline {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .setting-info {
-      flex: 1;
-    }
-    .setting-select {
-      padding: 6px 12px;
-      border-radius: 4px;
-      border: 1px solid var(--border-color);
-      background: var(--card-bg);
-      color: var(--font-color);
-      min-width: 140px;
-    }
     .setting-row-header {
       display: flex;
       justify-content: space-between;
@@ -587,6 +570,140 @@
     .handedness-btn small {
       font-size: 0.85em;
       opacity: 0.8;
+    }
+    /* Image Picker Grid Styles */
+    .image-picker-section {
+      margin-top: 15px;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      max-height: 350px;
+      overflow-y: auto;
+    }
+    .image-picker-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .image-picker-title {
+      font-size: 0.85em;
+      font-weight: 600;
+      color: var(--title-color);
+    }
+    .image-picker-count {
+      font-size: 0.75em;
+      color: var(--label-color);
+    }
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 8px;
+    }
+    .image-item {
+      position: relative;
+      border: 2px solid var(--border-color);
+      border-radius: 6px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--card-bg);
+    }
+    .image-item:hover {
+      border-color: var(--accent-color);
+      transform: scale(1.02);
+    }
+    .image-item.state-0 {
+      border-color: var(--border-color);
+    }
+    .image-item.state-1 {
+      border-color: #3498db;
+      background: rgba(52, 152, 219, 0.1);
+    }
+    .image-item.state-2 {
+      border-color: #e74c3c;
+      background: rgba(231, 76, 60, 0.1);
+    }
+    .image-item img {
+      width: 100%;
+      height: 80px;
+      object-fit: contain;
+      display: block;
+      background: #fff;
+    }
+    .image-state-badge {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.65em;
+      font-weight: 600;
+      color: white;
+    }
+    .state-0 .image-state-badge {
+      background: var(--label-color);
+    }
+    .state-1 .image-state-badge {
+      background: #3498db;
+    }
+    .state-2 .image-state-badge {
+      background: #e74c3c;
+    }
+    .image-name {
+      font-size: 0.65em;
+      color: var(--label-color);
+      padding: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: center;
+    }
+    .image-picker-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      justify-content: flex-end;
+    }
+    .image-picker-btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.85em;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .image-picker-btn.primary {
+      background: var(--accent-color);
+      color: white;
+    }
+    .image-picker-btn.primary:hover {
+      background: var(--accent-hover-color);
+    }
+    .image-picker-btn.secondary {
+      background: var(--border-color);
+      color: var(--font-color);
+    }
+    .image-picker-btn.secondary:hover {
+      background: var(--label-color);
+      color: white;
+    }
+    .state-legend {
+      display: flex;
+      gap: 12px;
+      font-size: 0.7em;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
     }
     .file-info {
       color: var(--label-color);
@@ -1212,6 +1329,10 @@
           </span>
         </div>
 
+        <div id="convertInfo" style="display:none; margin-bottom: 10px; font-size: 0.9em;">
+        ℹ️ Optimization will resize images and convert to grayscale.
+        </div>
+
         <div class="convert-settings" id="convertSettings" style="display:none;">
           <span>⚫ True-Grayscale</span>
           <span>📏 Max 480×800px</span>
@@ -1253,38 +1374,39 @@
             </div>
           </div>
           -->
-          <!-- Rotate & Crop Mode -->
-          <div class="advanced-setting-row setting-row-inline">
-            <div class="setting-info">
-              <div class="setting-title">📖 Rotate & Crop</div>
-              <div class="setting-desc">Choose image processing mode</div>
-            </div>
-            <select id="rotateAndCropSelect" class="setting-select" onchange="updateRotateAndCropMode()">
-              <option value="off">OFF</option>
-              <option value="lightNovel">Light Novel</option>
-              <option value="manual">Manual Picker</option>
-            </select>
-          </div>
-          <!-- Handedness options (shown when Light Novel Mode is selected) -->
-          <div class="handedness-buttons" id="handednessOptions" style="display: none; margin-top: 12px;">
-            <button class="handedness-btn" id="handednessLeft" data-value="left" onclick="setHandedness('left')">
-              <span style="float: right;">✋</span><span>Left-handed<br><small>(Counter-clockwise)</small></span>
-            </button>
-            <button class="handedness-btn active" id="handednessRight" data-value="right" onclick="setHandedness('right')">
-              <span style="float: left;">🤚</span><span>Right-handed<br><small>(Clockwise)</small></span>
-            </button>
-          </div>
-          <!-- Conversion Log Export -->
-          <div class="advanced-setting-row" style="margin-top: 12px;">
+          <!-- Light Novel Mode -->
+          <div class="advanced-setting-row">
             <div class="setting-toggle">
               <div>
-                <div class="setting-title">📥 Auto-download Conversion Log</div>
-                <div class="setting-desc">Export detailed log with statistics</div>
+                <div class="setting-title">📖 Light Novel Mode</div>
+                <div class="setting-desc">Rotate wide images 90° and split into pages for vertical reading</div>
               </div>
               <label class="toggle-switch">
-                <input type="checkbox" id="export-log-checkbox">
+                <input type="checkbox" id="lightNovelToggle" onchange="toggleLightNovelMode()">
                 <span class="toggle-slider"></span>
               </label>
+            </div>
+            <!-- Handedness options (shown when Light Novel Mode is on) -->
+            <div class="handedness-buttons" id="handednessOptions" style="display:none; margin-top: 12px;">
+              <button class="handedness-btn" id="handednessLeft" data-value="left" onclick="setHandedness('left')">
+                <span style="float: right;">✋</span><span>Left-handed<br><small>(Counter-clockwise)</small></span>
+              </button>
+              <button class="handedness-btn active" id="handednessRight" data-value="right" onclick="setHandedness('right')">
+                <span style="float: left;">🤚</span><span>Right-handed<br><small>(Clockwise)</small></span>
+              </button>
+            </div>
+            <!-- Conversion Log Export -->
+            <div class="advanced-setting-row" style="margin-top: 12px;">
+              <div class="setting-toggle">
+                <div>
+                  <div class="setting-title">📥 Auto-download Conversion Log</div>
+                  <div class="setting-desc">Export detailed log with statistics</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="export-log-checkbox">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
           </div><!-- advanced-settings-content -->
@@ -1305,44 +1427,30 @@
         </div>
         <div class="log-container" id="log-container"></div>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- Image Picker Modal -->
-<div class="modal-overlay" id="imagePickerModal">
-  <div class="modal">
-    <button class="modal-close" onclick="closeImagePickerModal()">&times;</button>
-    <h3>🖼️ Image Picker</h3>
-    <p class="file-info">Select image processing for each image:</p>
-
-    <div class="image-picker-section" id="imagePickerSection">
-      <div class="image-picker-header">
-        <div class="image-picker-title">Images in EPUB</div>
-        <div class="image-picker-count" id="imagePickerCount"></div>
-      </div>
-      <div class="image-grid" id="imageGrid"></div>
-      <div class="image-picker-actions">
-        <button class="image-picker-btn secondary" onclick="selectAllImages()">Select All</button>
-        <button class="image-picker-btn secondary" onclick="deselectAllImages()">Deselect All</button>
-        <button class="image-picker-btn secondary" onclick="resetAllImageStates()">Reset All</button>
-        <button class="image-picker-btn primary" onclick="startConversionWithImageStates()">Start Conversion</button>
-      </div>
-      <div class="selection-info" id="selectionInfo">
-        Selected: <span id="selectedCount">0</span> / <span id="totalCount">0</span> images
-      </div>
-      <div class="state-legend">
-        <div class="legend-item">
-          <div class="legend-color" style="background:var(--border-color)"></div>
-          <span>Normal (no processing)</span>
+      <!-- Image Picker Section -->
+      <div class="image-picker-section" id="imagePickerSection" style="display:none;">
+        <div class="image-picker-header">
+          <span class="image-picker-title">🖼️ Image Processing Options</span>
+          <span class="image-picker-count" id="imagePickerCount">0 images</span>
         </div>
-        <div class="legend-item">
-          <div class="legend-color" style="background:#3498db"></div>
-          <span>H-Split (rotate after cut)</span>
+        <div class="state-legend">
+          <div class="legend-item">
+            <div class="legend-color" style="background:var(--label-color)"></div>
+            <span>Normal (click to cycle)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#3498db"></div>
+            <span>H-Split (rotate after cut)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#e74c3c"></div>
+            <span>V-Split (no rotation)</span>
+          </div>
         </div>
-        <div class="legend-item">
-          <div class="legend-color" style="background:#e74c3c"></div>
-          <span>V-Split (no rotation)</span>
+        <div class="image-grid" id="imageGrid"></div>
+        <div class="image-picker-actions">
+          <button class="image-picker-btn secondary" onclick="resetAllImageStates()">Reset All</button>
+          <button class="image-picker-btn primary" onclick="startConversionWithImageStates()">Start Conversion</button>
         </div>
       </div>
     </div>
@@ -1412,47 +1520,6 @@
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
 
-  // Network status monitoring
-  let isNetworkOnline = navigator.onLine;
-  let networkRetryTimeout = null;
-  let pendingRetries = [];
-
-  // Add network status listeners
-  window.addEventListener('online', () => {
-    console.log('[Network] Online event fired');
-    isNetworkOnline = true;
-
-    // Clear any existing retry timeout
-    if (networkRetryTimeout) {
-      clearTimeout(networkRetryTimeout);
-      networkRetryTimeout = null;
-    }
-
-    // Show network restored message
-    showNotification('Network connection restored', 'success');
-
-    // Process pending retries
-    if (pendingRetries.length > 0) {
-      showNotification(`Retrying ${pendingRetries.length} failed uploads...`, 'info');
-      processPendingRetries();
-    }
-  });
-
-  window.addEventListener('offline', () => {
-    console.log('[Network] Offline event fired');
-    isNetworkOnline = false;
-    showNotification('Network connection lost', 'warning');
-
-    // Cancel any pending retry attempts
-    if (networkRetryTimeout) {
-      clearTimeout(networkRetryTimeout);
-      networkRetryTimeout = null;
-    }
-  });
-
-  // Initialize network status
-  console.log('[Network] Initial status:', isNetworkOnline ? 'online' : 'offline');
-
   function escapeHtml(unsafe) {
     return unsafe
       .replaceAll("&", "&amp;")
@@ -1460,54 +1527,6 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
-  }
-
-  function showNotification(message, type = 'info') {
-    // Create notification element if it doesn't exist
-    let notification = document.getElementById('notification');
-    if (!notification) {
-      notification = document.createElement('div');
-      notification.id = 'notification';
-      notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        border-radius: 4px;
-        color: white;
-        font-weight: 500;
-        z-index: 10000;
-        max-width: 300px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        transition: all 0.3s ease;
-      `;
-      document.body.appendChild(notification);
-    }
-
-    // Set styles based on type
-    const styles = {
-      'success': 'background-color: #27ae60;',
-      'error': 'background-color: #e74c3c;',
-      'warning': 'background-color: #f39c12;',
-      'info': 'background-color: #3498db;'
-    };
-    notification.style.cssText += styles[type] || styles['info'];
-    notification.textContent = message;
-
-    // Show notification
-    notification.style.opacity = '1';
-    notification.style.transform = 'translateX(0)';
-
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-      notification.style.opacity = '0';
-      notification.style.transform = 'translateX(100%)';
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
-        }
-      }, 300);
-    }, 5000);
   }
 
   function formatFileSize(bytes) {
@@ -1644,67 +1663,20 @@
     JPEG_QUALITY = 85;
     HANDEDNESS = 'right';
 
-    // Reset UI controls to default state (with null checks)
-    const convertCheckbox = document.getElementById('convertBeforeUpload');
-    if (convertCheckbox) convertCheckbox.checked = false;
-    const exportLogCheckbox = document.getElementById('export-log-checkbox');
-    if (exportLogCheckbox) exportLogCheckbox.checked = false;
-    const convertInfo = document.getElementById('convertInfo');
-    if (convertInfo) convertInfo.style.display = 'none';
-    const convertSettings = document.getElementById('convertSettings');
-    if (convertSettings) convertSettings.style.display = 'none';
-    const convertWarning = document.getElementById('convertWarning');
-    if (convertWarning) convertWarning.style.display = 'none';
-    const rotateAndCropSelect = document.getElementById('rotateAndCropSelect');
-    if (rotateAndCropSelect) rotateAndCropSelect.value = 'off';
-
-    // Reset Advanced Mode visibility
-    const advancedModeBtn = document.querySelector('.advanced-options-toggle');
-    const advancedSettingsContent = document.getElementById('advancedSettingsContent');
-    if (advancedModeBtn) {
-      advancedModeBtn.style.pointerEvents = 'none';
-      advancedModeBtn.style.opacity = '0.5';
-    }
-    if (advancedSettingsContent) {
-      advancedSettingsContent.classList.remove('visible');
-    }
-    const arrow = document.getElementById('advancedOptionsArrow');
-    if (arrow) arrow.classList.remove('expanded');
-
-    // Hide handedness options
-    const handednessOptions = document.getElementById('handednessOptions');
-    if (handednessOptions) handednessOptions.style.display = 'none';
-
     // Hide log section from previous session
     const logSection = document.getElementById('log-section');
     if (logSection) logSection.classList.remove('visible');
     const logContainer = document.getElementById('log-container');
     if (logContainer) logContainer.innerHTML = '';
 
-    // Reset progress bar and text
-    const progressFill = document.getElementById('progress-fill');
-    const progressText = document.getElementById('progress-text');
-    if (progressFill) {
-      progressFill.style.width = '0%';
-      progressFill.style.backgroundColor = '#27ae60';
-      progressFill.classList.add('no-transition');
-      setTimeout(() => progressFill.classList.remove('no-transition'), 50);
-    }
-    if (progressText) {
-      progressText.textContent = 'Ready to upload';
-    }
-
     document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
     document.getElementById('uploadModal').classList.add('open');
-
-    // Reset upload button based on current file selection
-    resetUploadButton();
   }
 
   function closeUploadModal() {
     document.getElementById('uploadModal').classList.remove('open');
     document.getElementById('fileInput').value = '';
-    resetUploadButton();
+    document.getElementById('uploadBtn').disabled = true;
     document.getElementById('progress-container').style.display = 'none';
     document.getElementById('progress-fill').style.width = '0%';
     document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
@@ -1738,37 +1710,15 @@
     document.getElementById('convertWarning').style.display = checked ? 'block' : 'none';
     document.getElementById('convertInfo').style.display = checked ? 'block' : 'none';
     document.getElementById('convertSettings').style.display = checked ? 'block' : 'none';
-
-    // Handle Advanced Mode visibility and interactivity
-    const advancedModeBtn = document.querySelector('.advanced-options-toggle');
-    const advancedSettingsContent = document.getElementById('advancedSettingsContent');
-
-    if (checked) {
-      // Enable Advanced Mode button when Optimize EPUB is checked
-      if (advancedModeBtn) {
-        advancedModeBtn.style.pointerEvents = 'auto';
-        advancedModeBtn.style.opacity = '1';
-      }
-    } else {
-      // Disable Advanced Mode button and hide content when Optimize EPUB is unchecked
-      if (advancedModeBtn) {
-        advancedModeBtn.style.pointerEvents = 'none';
-        advancedModeBtn.style.opacity = '0.5';
-      }
-      if (advancedSettingsContent) {
-        advancedSettingsContent.classList.remove('visible');
-      }
+    // Reset advanced options when toggling off
+    if (!checked) {
+      const advancedSettingsContent = document.getElementById('advancedSettingsContent');
+      if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
       document.getElementById('advancedOptionsArrow').classList.remove('expanded');
     }
   }
 
   function toggleAdvancedOptions() {
-    // Prevent toggling if Optimize EPUB is not enabled
-    const convertEnabled = document.getElementById('convertBeforeUpload').checked;
-    if (!convertEnabled) {
-      return; // Don't allow toggling Advanced Mode when Optimize EPUB is off
-    }
-
     const content = document.getElementById('advancedSettingsContent');
     const arrow = document.getElementById('advancedOptionsArrow');
     content.classList.toggle('visible');
@@ -1815,6 +1765,189 @@
     ENABLE_LIGHT_NOVEL_MODE = enabled;
     // Show/hide handedness options
     document.getElementById('handednessOptions').style.display = enabled ? 'block' : 'none';
+  }
+
+  // ============================================================================
+  // Image Picker Functions
+  // ============================================================================
+
+  /**
+   * Extract images from EPUB for preview
+   * Returns array of {path, name, dataUrl, width, height}
+   */
+  async function extractImagesForPreview(file) {
+    const zip = await JSZip.loadAsync(file);
+    const images = [];
+    const imageExtensions = ['.png', '.gif', '.webp', '.bmp', '.jpg', '.jpeg'];
+
+    for (const [path, fileObj] of Object.entries(zip.files)) {
+      if (fileObj.dir) continue;
+
+      const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
+      if (imageExtensions.includes(ext)) {
+        const data = await fileObj.async('arraybuffer');
+        const blob = new Blob([data]);
+        const dataUrl = URL.createObjectURL(blob);
+
+        // Get dimensions
+        const dims = await getImageDimensions(data);
+
+        images.push({
+          path: path,
+          name: path.split('/').pop(),
+          dataUrl: dataUrl,
+          width: dims.width,
+          height: dims.height
+        });
+      }
+    }
+
+    return images;
+  }
+
+  /**
+   * Get image dimensions from array buffer
+   */
+  function getImageDimensions(data) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(new Blob([data]));
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ width: img.width, height: img.height });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve({ width: 0, height: 0 });
+      };
+      img.src = url;
+    });
+  }
+
+  /**
+   * Show image picker after EPUB file selection
+   */
+  async function showImagePicker(file) {
+    // Check if JSZip is available
+    if (typeof JSZip === 'undefined') {
+      console.error('JSZip not loaded');
+      alert('JSZip library not available. Conversion will proceed without image picker.');
+      startConversionWithImageStates();
+      return;
+    }
+
+    const pickerSection = document.getElementById('imagePickerSection');
+    const imageGrid = document.getElementById('imageGrid');
+    const countDisplay = document.getElementById('imagePickerCount');
+
+    // Reset state
+    imageStates = {};
+    epubImagesCache = [];
+    pendingConversionFile = file;
+
+    // Extract images
+    try {
+      const images = await extractImagesForPreview(file);
+      epubImagesCache = images;
+
+      // Initialize all states to 0 (Normal)
+      images.forEach(img => {
+        imageStates[img.path] = 0;
+      });
+
+      // Build UI
+      renderImageGrid();
+      countDisplay.textContent = `${images.length} image${images.length !== 1 ? 's' : ''}`;
+
+      // Show picker, hide upload button temporarily
+      pickerSection.style.display = 'block';
+      document.getElementById('uploadBtn').style.display = 'none';
+
+    } catch (error) {
+      console.error('Failed to extract images:', error);
+      alert('Failed to preview images: ' + error.message + '\n\nConversion will proceed normally.');
+      // Fallback: start conversion directly
+      startConversionWithImageStates();
+    }
+  }
+
+  /**
+   * Render the image grid with current states
+   */
+  function renderImageGrid() {
+    const imageGrid = document.getElementById('imageGrid');
+    imageGrid.innerHTML = '';
+
+    const stateLabels = ['', 'H-Split', 'V-Split'];
+    const stateClasses = ['state-0', 'state-1', 'state-2'];
+
+    epubImagesCache.forEach(img => {
+      const state = imageStates[img.path] || 0;
+
+      const item = document.createElement('div');
+      item.className = `image-item ${stateClasses[state]}`;
+      item.onclick = () => cycleImageState(img.path);
+      item.title = `Click to cycle: ${stateLabels[state] || 'Normal'}`;
+
+      item.innerHTML = `
+        <span class="image-state-badge">${stateLabels[state] || '•'}</span>
+        <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
+        <div class="image-name">${img.name}</div>
+      `;
+
+      imageGrid.appendChild(item);
+    });
+  }
+
+  /**
+   * Cycle state for a single image: 0 -> 1 -> 2 -> 0
+   */
+  function cycleImageState(imagePath) {
+    const currentState = imageStates[imagePath] || 0;
+    imageStates[imagePath] = (currentState + 1) % 3;
+    renderImageGrid();
+  }
+
+  /**
+   * Reset all image states to 0 (Normal)
+   */
+  function resetAllImageStates() {
+    for (const path of Object.keys(imageStates)) {
+      imageStates[path] = 0;
+    }
+    renderImageGrid();
+  }
+
+  /**
+   * Start conversion with configured image states
+   */
+  function startConversionWithImageStates() {
+    const pickerSection = document.getElementById('imagePickerSection');
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    // Hide picker
+    pickerSection.style.display = 'none';
+
+    // Show upload button and trigger upload
+    uploadBtn.style.display = 'block';
+    uploadBtn.disabled = false;
+    uploadFile();
+  }
+
+  /**
+   * Get processing state for an image path
+   * Returns 0 (Normal), 1 (H-Split), or 2 (V-Split)
+   */
+  function getImageState(imagePath) {
+    return imageStates[imagePath] || 0;
+  }
+
+  /**
+   * Get state label for logging
+   */
+  function getStateLabel(state) {
+    const labels = ['Normal', 'H-Split', 'V-Split'];
+    return labels[state] || 'Normal';
   }
 
   // Initialize quality settings handlers
@@ -1950,265 +2083,34 @@
   function validateFile() {
     const fileInput = document.getElementById('fileInput');
     const uploadBtn = document.getElementById('uploadBtn');
-    const rotateAndCropSelect = document.getElementById('rotateAndCropSelect');
     const files = fileInput.files;
-
-    // Update dropdown options based on file count
-    updateRotateAndCropOptions();
-
-    uploadBtn.disabled = !(files.length > 0);
 
     if (files.length > 0) {
       const convertEnabled = document.getElementById('convertBeforeUpload').checked;
-      const mode = rotateAndCropSelect ? rotateAndCropSelect.value : 'off';
 
-      // Check if single EPUB with conversion enabled and Manual Picker mode
+      // Check if single EPUB with conversion enabled - show image picker
       if (files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
-        if (mode === 'manual') {
-          // Show image picker for manual mode
-          uploadBtn.disabled = true;
-          showImagePicker(files[0])
-            .catch(err => {
-              console.error('Image picker error:', err);
-              alert('Failed to show image picker: ' + err.message);
-            })
-            .finally(() => {
-              // Always re-enable button on completion or error
-              resetUploadButton();
-            });
-          return;
-        } else if (mode === 'lightNovel') {
-          // Light Novel mode - automatic processing, no picker
-          console.log('Light Novel mode: Automatic image processing');
-          uploadBtn.disabled = false;
-          return;
+        // Show picker (async - don't wait for completion)
+        showImagePicker(files[0]).catch(err => {
+          console.error('Image picker error:', err);
+        });
+        uploadBtn.disabled = true;
+        return;
+      }
+
+      // If multiple files with conversion, inform user about batch mode
+      if (files.length > 1 && convertEnabled) {
+        const epubCount = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.epub')).length;
+        if (epubCount > 0) {
+          console.log(`Batch mode: ${epubCount} EPUB(s) will use Auto mode (Light Novel Mode)`);
         }
       }
 
-      // For OFF mode or non-EPUB files
       uploadBtn.disabled = false;
-    }
-  }
-
-  function updateRotateAndCropOptions() {
-    const select = document.getElementById('rotateAndCropSelect');
-    const fileInput = document.getElementById('fileInput');
-    if (!select || !fileInput) return;
-
-    const files = fileInput.files;
-    const manualOption = select.querySelector('option[value="manual"]');
-
-    if (files.length > 1) {
-      // Hide Manual Picker option for multiple files
-      if (manualOption) {
-        manualOption.style.display = 'none';
-        // Reset to OFF if Manual was selected
-        if (select.value === 'manual') {
-          select.value = 'off';
-          updateRotateAndCropMode();
-        }
-      }
     } else {
-      // Show Manual Picker option for single file
-      if (manualOption) {
-        manualOption.style.display = '';
-      }
+      uploadBtn.disabled = true;
     }
   }
-
-  function cleanupAfterFailedUpload() {
-    // Reset any global state
-    imageStates = {};
-    imagePickerVisible = false;
-
-    // Close modal if open
-    closeUploadModal();
-  }
-
-  function resetUploadButton() {
-    const uploadBtn = document.getElementById('uploadBtn');
-    const fileInput = document.getElementById('fileInput');
-    if (uploadBtn && fileInput) {
-      uploadBtn.disabled = !(fileInput.files.length > 0);
-    }
-  }
-
-// Image Picker functions
-let imageStates = {};
-let imagePickerVisible = false;
-
-/**
- * Show image picker for manual image selection
- */
-async function showImagePicker(file) {
-  // Check if JSZip is available
-  if (typeof JSZip === 'undefined') {
-    console.error('JSZip not loaded');
-    alert('JSZip library not available. Conversion will proceed without image picker.');
-    return;
-  }
-
-  const pickerSection = document.getElementById('imagePickerSection');
-  const imagePickerModal = document.getElementById('imagePickerModal');
-  if (!pickerSection || !imagePickerModal) {
-    console.error('Image picker elements not found');
-    return;
-  }
-
-  // Reset state
-  imageStates = {};
-  imagePickerVisible = true;
-
-  try {
-    // Extract images from EPUB
-    const zip = await JSZip.loadAsync(file);
-    const imageFiles = [];
-
-    zip.forEach((relativePath, file) => {
-      const fileName = relativePath.toLowerCase();
-      if (fileName.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/)) {
-        imageFiles.push({ path: relativePath, file: file });
-      }
-    });
-
-    if (imageFiles.length === 0) {
-      alert('No images found in EPUB file');
-      imagePickerVisible = false;
-      return;
-    }
-
-    // Initialize all states to 0 (Normal)
-    imageFiles.forEach(img => {
-      imageStates[img.path] = 0;
-    });
-
-    // Update counts
-    const imagePickerCount = document.getElementById('imagePickerCount');
-    const selectedCount = document.getElementById('selectedCount');
-    const totalCount = document.getElementById('totalCount');
-    if (imagePickerCount) imagePickerCount.textContent = imageFiles.length;
-    if (selectedCount) selectedCount.textContent = '0';
-    if (totalCount) totalCount.textContent = imageFiles.length;
-
-    // Render the image grid
-    renderImageGrid();
-
-    // Show image picker modal
-    imagePickerModal.classList.add('open');
-
-  } catch (error) {
-    console.error('Failed to extract images:', error);
-    alert('Failed to preview images: ' + error.message);
-    imagePickerVisible = false;
-  }
-}
-
-/**
- * Cycle image state (0=Normal, 1=H-Split, 2=V-Split)
- */
-function cycleImageState(imagePath) {
-  imageStates[imagePath] = (imageStates[imagePath] + 1) % 3;
-  renderImageGrid();
-  updateSelectionInfo();
-}
-
-/**
- * Render image grid
- */
-function renderImageGrid() {
-  const imageGrid = document.getElementById('imageGrid');
-  if (!imageGrid) return;
-
-  imageGrid.innerHTML = '';
-
-  const stateLabels = ['Normal', 'H-Split', 'V-Split'];
-  const stateClasses = ['state-0', 'state-1', 'state-2'];
-
-  Object.entries(imageStates).forEach(([path, state]) => {
-    const item = document.createElement('div');
-    item.className = `image-item ${stateClasses[state]}`;
-    item.onclick = () => cycleImageState(path);
-    item.title = `Click to cycle: ${stateLabels[state]}`;
-
-    const img = document.createElement('img');
-    img.src = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80"><rect width="100" height="80" fill="%23f0f0f0"/><text x="50" y="40" text-anchor="middle" font-size="12">${path.split('/').pop()}</text></svg>')}`;
-    item.appendChild(img);
-
-    const badge = document.createElement('div');
-    badge.className = 'image-state-badge';
-    badge.textContent = stateLabels[state].substring(0, 1);
-    item.appendChild(badge);
-
-    const name = document.createElement('div');
-    name.className = 'image-name';
-    name.textContent = path.split('/').pop();
-    item.appendChild(name);
-
-    imageGrid.appendChild(item);
-  });
-}
-
-/**
- * Reset all image states to Normal
- */
-function resetAllImageStates() {
-  Object.keys(imageStates).forEach(key => {
-    imageStates[key] = 0;
-  });
-  renderImageGrid();
-  updateSelectionInfo();
-}
-
-/**
- * Select all images (set to state 1 - H-Split)
- */
-function selectAllImages() {
-  Object.keys(imageStates).forEach(key => {
-    imageStates[key] = 1;
-  });
-  renderImageGrid();
-  updateSelectionInfo();
-}
-
-/**
- * Deselect all images (set to state 0 - Normal)
- */
-function deselectAllImages() {
-  Object.keys(imageStates).forEach(key => {
-    imageStates[key] = 0;
-  });
-  renderImageGrid();
-  updateSelectionInfo();
-}
-
-/**
- * Update selection info display
- */
-function updateSelectionInfo() {
-  const selectedCount = document.getElementById('selectedCount');
-  if (selectedCount) {
-    const selected = Object.values(imageStates).filter(s => s > 0).length;
-    selectedCount.textContent = selected;
-  }
-}
-
-/**
- * Start conversion with selected image states
- */
-function startConversionWithImageStates() {
-  const pickerModal = document.getElementById('imagePickerModal');
-  const uploadBtn = document.getElementById('uploadBtn');
-
-  if (pickerModal) {
-    pickerModal.classList.remove('open');
-  }
-
-  imagePickerVisible = false;
-  if (uploadBtn) {
-    uploadBtn.disabled = false;
-  }
-  uploadFile();
-}
 
 let failedUploadsGlobal = [];
 let wsConnection = null;
@@ -2233,6 +2135,14 @@ let JPEG_QUALITY = DEFAULT_JPEG_QUALITY;
 let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
 let ENABLE_LIGHT_NOVEL_MODE = false;
 let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
+
+// ============================================================================
+// Image Picker State Management
+// ============================================================================
+
+let imageStates = {};        // Map: imagePath -> state (0=Normal, 1=H-Split, 2=V-Split)
+let epubImagesCache = [];    // Cache of extracted images for preview
+let pendingConversionFile = null;  // File awaiting conversion after image selection
 
 // ============================================================================
 // Enhanced Logging System
@@ -2314,11 +2224,17 @@ function log(message, type = '', tag = '') {
 }
 
 // Log image processing details
-function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize, wasSplit = false, splitCount = 0, partsInfo = null) {
+function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize, wasSplit = false, splitCount = 0, partsInfo = null, imageState = 0) {
   const saved = origSize - newSize;
   const savedPct = ((saved / origSize) * 100).toFixed(0);
   const dims = `${origW}×${origH}`;
   const newDims = `${newW}×${newH}`;
+
+  // Get state label and color
+  const stateLabels = ['', 'H-Split', 'V-Split'];
+  const stateColors = ['', '#3498db', '#e74c3c'];
+  const stateLabel = stateLabels[imageState] || '';
+  const stateColor = stateColors[imageState] || '';
 
   if (wasSplit) {
     conversionStats.splits++;
@@ -2331,16 +2247,18 @@ function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize,
       ).join(', ');
     }
     const savedInfo = saved > 0 ? `, <span style="color:#27ae60">-${savedPct}%</span>` : '';
-    log(`<strong>${name}</strong> <span class="log-detail">(${dims} ${origFormat.toUpperCase()}, ${formatBytes(origSize)}) → ${splitCount} parts${savedInfo}</span>`, '', 'SPLIT');
+    const stateIndicator = imageState > 0 ? ` <span style="color:${stateColor};font-weight:600;">[${stateLabel}]</span>` : '';
+    log(`<strong>${name}</strong>${stateIndicator} <span class="log-detail">(${dims} ${origFormat.toUpperCase()}, ${formatBytes(origSize)}) → ${splitCount} parts${savedInfo}</span>`, '', 'SPLIT');
     if (partsDetail) {
       log(`<span class="log-detail" style="margin-left: 20px;">↳ ${partsDetail}</span>`, '', '');
     }
   } else {
     conversionStats.images++;
+    const stateIndicator = imageState > 0 ? ` <span style="color:${stateColor};font-weight:600;">[${stateLabel}]</span>` : '';
     const detail = saved > 0
       ? `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(origSize)} → ${formatBytes(newSize)}, <span style="color:#27ae60">-${savedPct}%</span>)</span>`
       : `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(newSize)})</span>`;
-    log(`<strong>${name}</strong> ${detail}`, '', 'CONVERT');
+    log(`<strong>${name}</strong>${stateIndicator} ${detail}`, '', 'CONVERT');
   }
 }
 
@@ -2679,7 +2597,7 @@ function applyGrayscale(ctx, width, height) {
 
 // Process single image - returns array of {data, suffix} objects
 const IMAGE_LOAD_TIMEOUT_MS = 30000; // 30 second timeout for image loading
-async function processImage(data) {
+async function processImage(data, imageState = 0, imagePath = '') {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(new Blob([data]));
     const img = new Image();
@@ -2695,12 +2613,173 @@ async function processImage(data) {
       URL.revokeObjectURL(url);
       const origW = img.width, origH = img.height;
 
-      // Check if Light Novel Mode should apply
+      // imageState: 0=Normal, 1=H-Split, 2=V-Split
+      // Use manual state if set, otherwise fall back to auto Light Novel Mode
+      const useManualState = imageState !== 0;
+
+      // Check if Light Novel Mode should apply (only for auto mode)
       const isHorizontal = origW > origH;
       const exceedsScreen = origW > MAX_WIDTH || origH > MAX_HEIGHT;
-      const needsRotation = isHorizontal && exceedsScreen && ENABLE_LIGHT_NOVEL_MODE;
+      const needsRotation = !useManualState && isHorizontal && exceedsScreen && ENABLE_LIGHT_NOVEL_MODE;
 
-      if (needsRotation) {
+      // ========================================================================
+      // STATE 1: H-Split (Horizontal Split)
+      // Scale width to 800px, cut horizontally if height > 480px, rotate 90° CW
+      // ========================================================================
+      if (imageState === 1) {
+        // Step 1: Scale width to MAX_HEIGHT (800px)
+        const scale = MAX_HEIGHT / origW;
+        const scaledW = MAX_HEIGHT;
+        const scaledH = Math.round(origH * scale);
+
+        const scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = scaledW;
+        scaledCanvas.height = scaledH;
+        const scaledCtx = scaledCanvas.getContext('2d');
+        scaledCtx.imageSmoothingEnabled = true;
+        scaledCtx.imageSmoothingQuality = 'high';
+        scaledCtx.fillStyle = '#FFF';
+        scaledCtx.fillRect(0, 0, scaledW, scaledH);
+        scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
+
+        // Step 2: Check if we need to cut horizontally (if height > MAX_WIDTH)
+        if (scaledH <= MAX_WIDTH) {
+          // No horizontal cut needed - just rotate the whole image
+          const rotW = scaledH;
+          const rotH = scaledW;
+
+          const rotCanvas = document.createElement('canvas');
+          rotCanvas.width = rotW;
+          rotCanvas.height = rotH;
+          const rotCtx = rotCanvas.getContext('2d');
+          rotCtx.fillStyle = '#FFF';
+          rotCtx.fillRect(0, 0, rotW, rotH);
+          rotCtx.translate(rotW, 0);
+          rotCtx.rotate(Math.PI / 2);
+          rotCtx.drawImage(scaledCanvas, 0, 0);
+          applyGrayscale(rotCtx, rotW, rotH);
+
+          const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: rotW, height: rotH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 1 }
+          });
+        } else {
+          // Cut horizontally with overlap, then rotate each part
+          const parts = [];
+          const maxH = MAX_WIDTH;  // 480
+          const overlapPx = Math.round(maxH * OVERLAP);
+          const step = maxH - overlapPx;
+          const numParts = Math.ceil((scaledH - overlapPx) / step);
+
+          for (let i = 0; i < numParts; i++) {
+            let y = i * step;
+            if (i === numParts - 1) y = scaledH - maxH;
+            y = Math.max(0, Math.min(y, scaledH - maxH));
+            const partH = Math.min(maxH, scaledH - y);
+
+            // Extract horizontal strip
+            const partCanvas = document.createElement('canvas');
+            partCanvas.width = scaledW;
+            partCanvas.height = partH;
+            const partCtx = partCanvas.getContext('2d');
+            partCtx.drawImage(scaledCanvas, 0, y, scaledW, partH, 0, 0, scaledW, partH);
+
+            // Rotate this strip 90° CW
+            const rotW = partH;
+            const rotH = scaledW;
+
+            const rotCanvas = document.createElement('canvas');
+            rotCanvas.width = rotW;
+            rotCanvas.height = rotH;
+            const rotCtx = rotCanvas.getContext('2d');
+            rotCtx.fillStyle = '#FFF';
+            rotCtx.fillRect(0, 0, rotW, rotH);
+            rotCtx.translate(rotW, 0);
+            rotCtx.rotate(Math.PI / 2);
+            rotCtx.drawImage(partCanvas, 0, 0);
+            applyGrayscale(rotCtx, rotW, rotH);
+
+            const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+            const arrBuf = await blob.arrayBuffer();
+            parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: rotW, height: rotH, size: arrBuf.byteLength });
+          }
+
+          const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
+          resolve({
+            parts: parts,
+            meta: { origW, origH, origSize, wasSplit: true, rotated: true, splitCount: numParts, splitDirection: 'horizontal', finalW: parts[0].width, finalH: parts[0].height, finalSize: totalSize, imageState: 1 }
+          });
+        }
+      }
+      // ========================================================================
+      // STATE 2: V-Split (Vertical Split)
+      // Scale height to 800px, cut vertically if width > 480px, NO rotation
+      // ========================================================================
+      else if (imageState === 2) {
+        // Step 1: Scale height to MAX_HEIGHT (800px)
+        const scale = MAX_HEIGHT / origH;
+        const scaledW = Math.round(origW * scale);
+        const scaledH = MAX_HEIGHT;
+
+        const scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = scaledW;
+        scaledCanvas.height = scaledH;
+        const scaledCtx = scaledCanvas.getContext('2d');
+        scaledCtx.imageSmoothingEnabled = true;
+        scaledCtx.imageSmoothingQuality = 'high';
+        scaledCtx.fillStyle = '#FFF';
+        scaledCtx.fillRect(0, 0, scaledW, scaledH);
+        scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
+        applyGrayscale(scaledCtx, scaledW, scaledH);
+
+        // Step 2: Check if we need to cut vertically (if width > MAX_WIDTH)
+        if (scaledW <= MAX_WIDTH) {
+          // No vertical cut needed
+          const blob = await new Promise(res => scaledCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: scaledW, height: scaledH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: scaledW, finalH: scaledH, finalSize: arrBuf.byteLength, imageState: 2 }
+          });
+        } else {
+          // Cut vertically with overlap, NO rotation
+          const parts = [];
+          const maxW = MAX_WIDTH;  // 480
+          const overlapPx = Math.round(maxW * OVERLAP);
+          const step = maxW - overlapPx;
+          const numParts = Math.ceil((scaledW - overlapPx) / step);
+
+          for (let i = 0; i < numParts; i++) {
+            let x = i * step;
+            if (i === numParts - 1) x = scaledW - maxW;
+            x = Math.max(0, Math.min(x, scaledW - maxW));
+            const partW = Math.min(maxW, scaledW - x);
+
+            const partCanvas = document.createElement('canvas');
+            partCanvas.width = partW;
+            partCanvas.height = scaledH;
+            const partCtx = partCanvas.getContext('2d');
+            partCtx.drawImage(scaledCanvas, x, 0, partW, scaledH, 0, 0, partW, scaledH);
+
+            const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+            const arrBuf = await blob.arrayBuffer();
+            parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: scaledH, size: arrBuf.byteLength });
+          }
+
+          const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
+          resolve({
+            parts: parts,
+            meta: { origW, origH, origSize, wasSplit: true, rotated: false, splitCount: numParts, splitDirection: 'vertical', finalW: parts[0].width, finalH: parts[0].height, finalSize: totalSize, imageState: 2 }
+          });
+        }
+      }
+      // ========================================================================
+      // STATE 0 (Normal) or Auto Mode
+      // Use existing logic: Auto Light Novel Mode or normal scaling
+      // ========================================================================
+      else if (needsRotation) {
         // LIGHT NOVEL MODE: Rotate and split wide images
         // Step 1: Scale WIDTH to MAX_HEIGHT (800px)
         const scale = MAX_HEIGHT / origW;
@@ -2752,7 +2831,7 @@ async function processImage(data) {
           const arrBuf = await blob.arrayBuffer();
           resolve({
             parts: [{ data: arrBuf, suffix: '', width: rotW, height: rotH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength }
+            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 0 }
           });
         } else {
           // Split vertically with overlap
@@ -2802,7 +2881,7 @@ async function processImage(data) {
           const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
           resolve({
             parts: parts,
-            meta: { origW, origH, origSize, wasSplit: true, rotated: true, splitCount: numParts, finalW: rotW, finalH: rotH, finalSize: totalSize }
+            meta: { origW, origH, origSize, wasSplit: true, rotated: true, splitCount: numParts, finalW: rotW, finalH: rotH, finalSize: totalSize, imageState: 0 }
           });
         }
       } else {
@@ -2824,7 +2903,7 @@ async function processImage(data) {
           const arrBuf = await blob.arrayBuffer();
           resolve({
             parts: [{ data: arrBuf, suffix: '', width: origW, height: origH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: origW, finalH: origH, finalSize: arrBuf.byteLength }
+            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: origW, finalH: origH, finalSize: arrBuf.byteLength, imageState: 0 }
           });
         } else {
           // Scale to fit 480x800
@@ -2847,7 +2926,7 @@ async function processImage(data) {
           const arrBuf = await blob.arrayBuffer();
           resolve({
             parts: [{ data: arrBuf, suffix: '', width: newW, height: newH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: newW, finalH: newH, finalSize: arrBuf.byteLength }
+            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: newW, finalH: newH, finalSize: arrBuf.byteLength, imageState: 0 }
           });
         }
       }
@@ -2905,7 +2984,8 @@ async function convertEpubFile(file, progressCallback) {
 
     if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/)) {
       const data = await fileObj.async('arraybuffer');
-      const result = await processImage(data);
+      const imageState = getImageState(path);
+      const result = await processImage(data, imageState, path);
       const parts = result.parts;
       const meta = result.meta;
 
@@ -2915,7 +2995,7 @@ async function convertEpubFile(file, progressCallback) {
       // Log image processing
       const imgName = path.split('/').pop();
       const origFormat = path.split('.').pop();
-      logImage(imgName, meta.origW, meta.origH, origFormat, meta.origSize, meta.finalW, meta.finalH, meta.finalSize, meta.wasSplit, meta.splitCount || 0, parts);
+      logImage(imgName, meta.origW, meta.origH, origFormat, meta.origSize, meta.finalW, meta.finalH, meta.finalSize, meta.wasSplit, meta.splitCount || 0, parts, meta.imageState || 0);
 
       totalImageSize += meta.origSize;
       totalNewSize += meta.finalSize;
@@ -3144,21 +3224,11 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
     const ws = new WebSocket(getWsUrl());
     let uploadStarted = false;
     let sendingChunks = false;
-    let timeoutId;
-
-    // Set 1 second timeout for WebSocket connection and response
-    timeoutId = setTimeout(() => {
-      console.log('[WS] Timeout reached, closing connection');
-      ws.close();
-      reject(new Error('WebSocket connection timeout'));
-    }, 1000);
 
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = function() {
       console.log('[WS] Connected, starting upload:', file.name);
-      // Clear timeout on successful connection
-      clearTimeout(timeoutId);
       // Send start message: START:<filename>:<size>:<path>
       ws.send(`START:${file.name}:${file.size}:${currentPath}`);
     };
@@ -3170,9 +3240,6 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
       if (msg === 'READY') {
         uploadStarted = true;
         sendingChunks = true;
-
-        // Clear timeout as connection is responsive
-        clearTimeout(timeoutId);
 
         // Small delay to let connection stabilize
         await new Promise(r => setTimeout(r, 50));
@@ -3199,8 +3266,8 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
             ws.send(buffer);
             offset += chunkSize;
 
-            // Update local progress - this shows sending progress
-            // Server PROGRESS messages will provide accurate received progress
+            // Update local progress with real transfer progress
+            // Server will confirm 100% with DONE message
             if (onProgress) {
               onProgress(offset, totalSize);
             }
@@ -3215,22 +3282,17 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
           reject(err);
         }
       } else if (msg.startsWith('PROGRESS:')) {
-        // Server confirmed progress - update UI with actual server progress
-        // This gives accurate progress indication from the server's perspective
-        const progressValue = parseInt(msg.substring(9), 10);
-        if (!isNaN(progressValue) && onProgress) {
-          onProgress(progressValue, totalSize);
-        }
+        // Server confirmed progress - log for debugging but don't update UI
+        // (local progress is smoother, server progress causes jumping)
+        console.log('[WS] Server progress:', msg);
       } else if (msg === 'DONE') {
         // Show 100% when server confirms completion
-        clearTimeout(timeoutId);
         if (onProgress) onProgress(file.size, file.size);
         ws.close();
         if (onComplete) onComplete();
         resolve();
       } else if (msg.startsWith('ERROR:')) {
         const error = msg.substring(6);
-        clearTimeout(timeoutId);
         ws.close();
         if (onError) onError(error);
         reject(new Error(error));
@@ -3239,7 +3301,6 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
 
     ws.onerror = function(event) {
       console.error('[WS] Error:', event);
-      clearTimeout(timeoutId);
       if (!uploadStarted) {
         reject(new Error('WebSocket connection failed'));
       } else if (!sendingChunks) {
@@ -3252,7 +3313,6 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
 
     ws.onclose = function(event) {
       console.log('[WS] Connection closed, code:', event.code, 'reason:', event.reason);
-      clearTimeout(timeoutId);
       if (sendingChunks) {
         reject(new Error('WebSocket closed unexpectedly'));
       }
@@ -3294,31 +3354,6 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
 
     xhr.send(formData);
   });
-}
-
-function updateRotateAndCropMode() {
-  const select = document.getElementById('rotateAndCropSelect');
-  const handednessOptions = document.getElementById('handednessOptions');
-
-  if (!select) return;
-
-  const mode = select.value;
-
-  // Update global variables
-  ENABLE_LIGHT_NOVEL_MODE = mode === 'lightNovel';
-
-  // Show/hide handedness options (for both Light Novel and Manual Picker modes)
-  if (handednessOptions) {
-    handednessOptions.style.display = (mode === 'lightNovel' || mode === 'manual') ? 'block' : 'none';
-  }
-
-  // If mode is 'manual', trigger validateFile to show image picker
-  if (mode === 'manual' && document.getElementById('fileInput').files.length > 0) {
-    validateFile();
-  }
-
-  // Reset upload button state when mode changes
-  resetUploadButton();
 }
 
 function uploadFile() {
@@ -3443,72 +3478,7 @@ function uploadFile() {
         saveToFileBatchLog(file.name, false);
       }
 
-      // Export log in single file mode when conversion failed and upload also failed
-      // or when conversion succeeded but upload failed
-      if (!useBatchLog && exportLogCheckbox && exportLogCheckbox.checked) {
-        // Export log if conversion was attempted (regardless of success/failure)
-        if (needsConversion) {
-          setTimeout(() => {
-            exportLogToFile(null, false); // isBatch = false for single file
-          }, 100);
-        }
-      }
-
       failedFiles.push({ name: file.name, error: error, file: originalFile });
-
-      // If network error, check if we should retry or mark as failed
-      if (error.includes('connection failed') || error.includes('Network error') ||
-          error.includes('timeout') || error.includes('disconnected') ||
-          error.includes('WebSocket connection timeout') ||
-          error.includes('WebSocket closed unexpectedly') ||
-          error.includes('WebSocket closed during') ||
-          (error.includes('WebSocket') && error.includes('failed'))) {
-        if (isNetworkOnline) {
-          // Network is currently online, treat as a hard failure
-          console.log(`[Network] Network error with online status: ${error}`);
-
-          // Add all remaining files to failed list
-          const remainingFiles = files.slice(currentIndex + 1);
-          remainingFiles.forEach(remainingFile => {
-            failedFiles.push({
-              name: remainingFile.name,
-              error: 'Network error - upload interrupted',
-              file: remainingFile
-            });
-          });
-
-          // Show retry banner immediately with all failed files
-          failedUploadsGlobal = failedUploadsGlobal.concat(failedFiles);
-          closeUploadModal();
-          showFailedUploadsBanner();
-          cleanupAfterFailedUpload();
-        } else {
-          // Network is offline, schedule retries for all failed files
-          console.log(`[Network] Network offline, scheduling retries for ${failedFiles.length + 1} files`);
-
-          // Add current file to pending retries
-          addToPendingRetries(originalFile, error);
-
-          // Add all remaining files to pending retries
-          const remainingFiles = files.slice(currentIndex + 1);
-          remainingFiles.forEach(remainingFile => {
-            addToPendingRetries(remainingFile, 'Network error - upload interrupted');
-          });
-
-          // Show notification about offline uploads
-          showNotification(`Network offline - ${failedFiles.length + remainingFiles.length} uploads will be retried when connection is restored`, 'warning');
-
-          // Close modal and reset
-          closeUploadModal();
-
-          // If we have pending retries, schedule a retry attempt
-          if (pendingRetries.length > 0) {
-            scheduleRetryRetry(originalFile, error);
-          }
-        }
-        return;
-      }
-
       currentIndex++;
       uploadNextFile();
     };
@@ -3596,14 +3566,9 @@ function uploadFile() {
 function showFailedUploadsBanner() {
   const banner = document.getElementById('failedUploadsBanner');
   const filesList = document.getElementById('failedFilesList');
-
-  if (!banner || !filesList) {
-    console.error('Failed uploads banner elements not found');
-    return;
-  }
-
+  
   filesList.innerHTML = '';
-
+  
   failedUploadsGlobal.forEach((failedFile, index) => {
     const item = document.createElement('div');
     item.className = 'failed-file-item';
@@ -3616,11 +3581,11 @@ function showFailedUploadsBanner() {
     `;
     filesList.appendChild(item);
   });
-
+  
   // Ensure retry all button is visible
   const retryAllBtn = banner.querySelector('.retry-all-btn');
   if (retryAllBtn) retryAllBtn.style.display = '';
-
+  
   banner.classList.add('show');
 }
 
@@ -3841,73 +3806,6 @@ function retryAllFailedUploads() {
 
   function closeMoveModal() {
     document.getElementById('moveModal').classList.remove('open');
-  }
-
-  function closeImagePickerModal() {
-    const pickerModal = document.getElementById('imagePickerModal');
-    if (pickerModal) {
-      pickerModal.classList.remove('open');
-    }
-    imagePickerVisible = false;
-  }
-
-  // Network-aware retry functions
-  function addToPendingRetries(file, error) {
-    if (!isNetworkOnline) {
-      pendingRetries.push({ file, error, timestamp: Date.now() });
-      console.log(`[Network] Added to pending retries: ${file.name}, total pending: ${pendingRetries.length}`);
-    }
-  }
-
-  function processPendingRetries() {
-    if (pendingRetries.length === 0 || !isNetworkOnline) return;
-
-    console.log(`[Network] Processing ${pendingRetries.length} pending retries...`);
-
-    // Clear the pending retries array
-    const retriesToProcess = [...pendingRetries];
-    pendingRetries = [];
-
-    // Process each retry
-    retriesToProcess.forEach(retry => {
-      console.log(`[Network] Retrying: ${retry.file.name}`);
-
-      // Create a DataTransfer for this single file
-      const dt = new DataTransfer();
-      dt.items.add(retry.file);
-
-      const fileInput = document.getElementById('fileInput');
-      fileInput.files = dt.files;
-
-      // Trigger upload immediately
-      openUploadModal();
-      validateFile();
-    });
-  }
-
-  function scheduleRetryRetry(file, error) {
-    addToPendingRetries(file, error);
-
-    // Show a message about scheduled retry
-    showNotification(`Will retry "${file.name}" when network is restored`, 'info');
-
-    // If we're offline, schedule a retry check every 30 seconds
-    if (!isNetworkOnline && !networkRetryTimeout) {
-      networkRetryTimeout = setTimeout(() => {
-        console.log('[Network] Checking for network restoration...');
-        networkRetryTimeout = null;
-
-        // Check if network is back online
-        if (navigator.onLine) {
-          console.log('[Network] Network detected during retry check');
-          isNetworkOnline = true;
-          processPendingRetries();
-        } else {
-          // Schedule another check
-          scheduleRetryRetry(file, error);
-        }
-      }, 30000); // 30 seconds
-    }
   }
 
   function confirmMove() {
