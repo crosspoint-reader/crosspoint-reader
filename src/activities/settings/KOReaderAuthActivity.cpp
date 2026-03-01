@@ -12,8 +12,6 @@
 #include "fontIds.h"
 
 void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
-  exitActivity();
-
   if (!success) {
     {
       RenderLock lock(*this);
@@ -51,7 +49,7 @@ void KOReaderAuthActivity::performAuthentication() {
 }
 
 void KOReaderAuthActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   // Turn on WiFi
   WiFi.mode(WIFI_STA);
@@ -74,12 +72,12 @@ void KOReaderAuthActivity::onEnter() {
   }
 
   // Launch WiFi selection
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
 void KOReaderAuthActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Turn off wifi
   WiFi.disconnect(false);
@@ -88,10 +86,10 @@ void KOReaderAuthActivity::onExit() {
   delay(100);
 }
 
-void KOReaderAuthActivity::render(Activity::RenderLock&&) {
+void KOReaderAuthActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -115,15 +113,10 @@ void KOReaderAuthActivity::render(Activity::RenderLock&&) {
 }
 
 void KOReaderAuthActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (state == SUCCESS || state == FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      onComplete();
+      finish();
     }
   }
 }
