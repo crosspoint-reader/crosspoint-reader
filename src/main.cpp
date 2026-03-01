@@ -777,13 +777,15 @@ void loop() {
         const size_t fileSize = firmwareFile.size();
         if (fileSize > 0 && Update.begin(fileSize, U_FLASH)) {
           size_t written = 0;
-          uint8_t buf[512];
+          uint8_t buf[4096];
           while (written < fileSize) {
-            const int bytesRead = firmwareFile.read(buf, sizeof(buf));
+            const size_t toRead = min(sizeof(buf), fileSize - written);
+            const int bytesRead = firmwareFile.read(buf, toRead);
             if (bytesRead <= 0) break;
             const size_t bytesWritten = Update.write(buf, bytesRead);
             if (bytesWritten != static_cast<size_t>(bytesRead)) break;
             written += bytesWritten;
+            yield();  // Feed watchdog during long SD read
           }
           firmwareFile.close();
           if (written == fileSize && Update.end()) {
@@ -792,11 +794,26 @@ void loop() {
             ESP.restart();
           } else {
             Update.abort();
-            LOG_ERR("DZ", "Firmware flash failed: written=%u/%u", (unsigned)written, (unsigned)fileSize);
+            const char* updateErr = Update.errorString();
+            char errMsg[120];
+            if (written != fileSize) {
+              snprintf(errMsg, sizeof(errMsg), "short write %u/%u: %s", (unsigned)written, (unsigned)fileSize, updateErr);
+            } else {
+              snprintf(errMsg, sizeof(errMsg), "end() failed: %s (wrote %u)", updateErr, (unsigned)written);
+            }
+            LOG_ERR("DZ", "Firmware flash failed: %s", errMsg);
+            // Write error to SD log for later retrieval
+            FsFile logFile;
+            if (Storage.openFileForWrite("DZ", "/ota_error.log", logFile)) {
+              logFile.print(errMsg);
+              logFile.close();
+            }
           }
         } else {
           firmwareFile.close();
-          LOG_ERR("DZ", "Update.begin() failed: %s", Update.errorString());
+          char errMsg[80];
+          snprintf(errMsg, sizeof(errMsg), "begin failed: %s", Update.errorString());
+          LOG_ERR("DZ", "Update.begin() failed: %s", errMsg);
         }
       }
       // If flash failed, reconnect WiFi so the device is still reachable
