@@ -61,9 +61,14 @@ class CrossPointWebServerActivity final : public Activity {
   void startWebServer();
   void stopWebServer();
 
+  // When true, onEnter() skips mode/WiFi selection and starts the server immediately
+  // using the already-established WiFi connection (e.g. after DZ auto-connect on boot).
+  bool preConnected = false;
+
  public:
-  explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("CrossPointWebServer", renderer, mappedInput) {}
+  explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                       bool preConnected = false)
+      : Activity("CrossPointWebServer", renderer, mappedInput), preConnected(preConnected) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

@@ -202,6 +202,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
             state = WifiSelectionState::NETWORK_LIST;
           } else {
             enteredPassword = std::get<KeyboardResult>(result.data).text;
+            // state will be updated in next loop iteration
           }
         });
   } else {
@@ -472,7 +473,6 @@ void WifiSelectionActivity::render(RenderLock&&) {
   // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
   // from the keyboard subactivity back to the main activity
   if (state == WifiSelectionState::PASSWORD_ENTRY) {
-    requestUpdateAndWait();
     return;
   }
 

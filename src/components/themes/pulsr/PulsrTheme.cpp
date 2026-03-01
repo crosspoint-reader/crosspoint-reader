@@ -113,19 +113,28 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
     // ─────────────────────────────────────────────────────────────────────────
     {
       const int seg0Top = zoneTop;
-      // Determine pill height: divide segment evenly among up to 3 pills
-      constexpr int MAX_PILLS  = 3;
+      // Determine pill height: divide segment evenly among up to 4 pills
+      constexpr int MAX_PILLS  = 4;
       const int totalGap = PILL_GAP * (MAX_PILLS - 1);
       const int pillH    = (segH - SEG_MARGIN * 2 - totalGap) / MAX_PILLS;
 
-      // Helper lambda: draw one pill at the given slot index (0=top)
-      // Returns the y of the next slot.
       int pillY = seg0Top + SEG_MARGIN;
 
       // PWR pill — always shown, grey background, black "PWR" label
       renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, Color::LightGray);
       {
         const char* lbl = "PWR";
+        const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
+        const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+        renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, lbl, /*black=*/true);
+      }
+      pillY += pillH + PILL_GAP;
+
+      // WIFI pill — pulsing while DZ is attempting auto-connect on boot
+      if (UITheme::isWifiAutoConnecting()) {
+        const Color wifiColor = (millis() / 500) % 2 == 0 ? Color::White : Color::DarkGray;
+        renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, wifiColor);
+        const char* lbl = "WIFI";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
         const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
         renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, lbl, /*black=*/true);
@@ -172,7 +181,7 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
           // Show "DZ" warning pill when Danger Zone is active and feed is idle
           showPill = true;
           feedColor = ((millis() / 800) % 2 == 0 ? Color::White : Color::DarkGray);
-          pillLabel = "DZ";
+          pillLabel = "DZON";
         }
         if (showPill && pillLabel) {
           renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, feedColor);

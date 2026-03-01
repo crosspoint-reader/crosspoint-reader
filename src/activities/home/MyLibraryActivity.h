@@ -11,7 +11,6 @@
 class MyLibraryActivity final : public Activity {
  private:
   // Deletion
-  bool pendingSubActivityExit = false;
   void clearFileMetadata(const std::string& fullPath);
 
   ButtonNavigator buttonNavigator;

@@ -268,8 +268,8 @@ void setupDisplayAndFonts() {
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
   renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(PULSR_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(PULSR_12_FONT_ID, ui12FontFamily);
+  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
   renderer.insertFont(PULSR_10_FONT_ID, pulsr10FontFamily);
   renderer.insertFont(PULSR_12_FONT_ID, pulsr12FontFamily);
@@ -299,6 +299,7 @@ void dangerZoneAutoConnect() {
   }
 
   LOG_INF("DZ", "Auto-connecting to '%s'...", lastSsid.c_str());
+  UITheme::setWifiAutoConnecting(true);
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
@@ -309,6 +310,8 @@ void dangerZoneAutoConnect() {
   while (WiFi.status() != WL_CONNECTED && millis() - start < TIMEOUT_MS) {
     delay(100);
   }
+
+  UITheme::setWifiAutoConnecting(false);
 
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("DZ", "Auto-connect failed (status=%d)", WiFi.status());
@@ -574,6 +577,16 @@ void setup() {
 
   // Danger Zone: auto-connect WiFi + start web server + feed sync
   dangerZoneAutoConnect();
+  if (dzWifiConnected) {
+    // Hand off to the web server activity in pre-connected mode.
+    // Stop the DZ background server first — the activity will start its own.
+    if (dzWebServer) {
+      dzWebServer->stop();
+      dzWebServer.reset();
+    }
+    activityManager.replaceActivity(
+        std::make_unique<CrossPointWebServerActivity>(renderer, mappedInputManager, /*preConnected=*/true));
+  }
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
