@@ -148,13 +148,55 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
     const int indH = segH - IND_MARGIN * 2;
     constexpr int IND_R = 6;
 
-    if (RssFeedSync::isSyncing()) {
-      // Pulse white/grey while syncing
-      const Color syncColor = ((millis() / 600) % 2 == 0 ? Color::White : Color::LightGray);
-      renderer.fillRoundedRect(indX, indY, indW, indH, IND_R, syncColor);
-    } else {
-      // Idle: dim outline only (draw border without fill)
-      renderer.drawRoundedRect(indX, indY, indW, indH, 1, IND_R, /*black=*/false);
+      // HTTP pill — only when web server is active
+      if (UITheme::isHttpServerActive()) {
+        const Color httpColor = UITheme::isNetworkTransferring()
+            ? ((millis() / 600) % 2 == 0 ? Color::White : Color::LightGray)
+            : Color::LightGray;
+        renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, httpColor);
+        const char* lbl = "HTTP";
+        const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
+        const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+        renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, lbl, /*black=*/true);
+      }
+      pillY += pillH + PILL_GAP;
+
+      // FEED pill — colour + label reflect sync state; falls back to DZ pill when idle
+      {
+        const auto feedState = RssFeedSync::getState();
+        Color feedColor = Color::Black;  // invisible (IDLE/DONE)
+        bool showPill = false;
+        const char* pillLabel = nullptr;
+        switch (feedState) {
+          case RssFeedSync::State::FETCHING:
+            feedColor = Color::LightGray; showPill = true; break;
+          case RssFeedSync::State::PARSING:
+            feedColor = ((millis() / 500) % 2 == 0 ? Color::LightGray : Color::DarkGray);
+            showPill = true; break;
+          case RssFeedSync::State::DOWNLOADING:
+            feedColor = ((millis() / 400) % 2 == 0 ? Color::White : Color::LightGray);
+            showPill = true; break;
+          case RssFeedSync::State::ERROR:
+            feedColor = Color::White; showPill = true; break;
+          case RssFeedSync::State::DONE:
+            feedColor = Color::LightGray; showPill = true; break;
+          default: break;
+        }
+        if (showPill) {
+          pillLabel = RssFeedSync::getStatusLabel();
+        } else if (SETTINGS.dangerZoneEnabled) {
+          // Show "DZ" warning pill when Danger Zone is active and feed is idle
+          showPill = true;
+          feedColor = ((millis() / 800) % 2 == 0 ? Color::White : Color::DarkGray);
+          pillLabel = "DZON";
+        }
+        if (showPill && pillLabel) {
+          renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, feedColor);
+          const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, pillLabel);
+          const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+          renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, pillLabel, /*black=*/true);
+        }
+      }
     }
 
     // Centered "FEED" label — white text (visible on both dark bg and lit pill)
