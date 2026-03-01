@@ -80,21 +80,19 @@ static uint8_t lookupKernClass(const EpdKernClassEntry* entries, const uint16_t 
   if (!entries || count == 0 || cp > 0xFFFF) {
     return 0;
   }
+
   const auto target = static_cast<uint16_t>(cp);
-  int left = 0;
-  int right = static_cast<int>(count) - 1;
-  while (left <= right) {
-    const int mid = left + (right - left) / 2;
-    const uint16_t midCp = entries[mid].codepoint;
-    if (midCp == target) {
-      return entries[mid].classId;
-    }
-    if (midCp < target) {
-      left = mid + 1;
-    } else {
-      right = mid - 1;
-    }
+  const auto* end = entries + count;
+
+  // lower_bound: exact-key lookup. Finds the first entry with codepoint >= target,
+  // then the equality check confirms an exact match exists.
+  const auto it = std::lower_bound(
+      entries, end, target, [](const EpdKernClassEntry& entry, uint16_t value) { return entry.codepoint < value; });
+
+  if (it != end && it->codepoint == target) {
+    return it->classId;
   }
+
   return 0;
 }
 
@@ -117,21 +115,17 @@ uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) con
   }
 
   const uint32_t key = (leftCp << 16) | rightCp;
-  int left = 0;
-  int right = static_cast<int>(count) - 1;
+  const auto* end = pairs + count;
 
-  while (left <= right) {
-    const int mid = left + (right - left) / 2;
-    const uint32_t midKey = pairs[mid].pair;
-    if (midKey == key) {
-      return pairs[mid].ligatureCp;
-    }
-    if (midKey < key) {
-      left = mid + 1;
-    } else {
-      right = mid - 1;
-    }
+  // lower_bound: exact-key lookup. Finds the first entry with pair >= key,
+  // then the equality check confirms an exact match exists.
+  const auto it =
+      std::lower_bound(pairs, end, key, [](const EpdLigaturePair& pair, uint32_t value) { return pair.pair < value; });
+
+  if (it != end && it->pair == key) {
+    return it->ligatureCp;
   }
+
   return 0;
 }
 
@@ -154,29 +148,25 @@ uint32_t EpdFont::applyLigatures(uint32_t cp, const char*& text) const {
 }
 
 const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
-  const EpdUnicodeInterval* intervals = data->intervals;
   const int count = data->intervalCount;
-
   if (count == 0) return nullptr;
 
-  // Binary search for O(log n) lookup instead of O(n)
-  // Critical for Korean fonts with many unicode intervals
-  int left = 0;
-  int right = count - 1;
+  const EpdUnicodeInterval* intervals = data->intervals;
+  const auto* end = intervals + count;
 
-  while (left <= right) {
-    const int mid = left + (right - left) / 2;
-    const EpdUnicodeInterval* interval = &intervals[mid];
+  // upper_bound: range lookup. Finds the first interval with first > cp, so the
+  // interval just before it is the last one with first <= cp. That's the only
+  // candidate that could contain cp. Then we verify cp <= candidate.last.
+  const auto it = std::upper_bound(
+      intervals, end, cp, [](uint32_t value, const EpdUnicodeInterval& interval) { return value < interval.first; });
 
-    if (cp < interval->first) {
-      right = mid - 1;
-    } else if (cp > interval->last) {
-      left = mid + 1;
-    } else {
-      // Found: cp >= interval->first && cp <= interval->last
-      return &data->glyph[interval->offset + (cp - interval->first)];
+  if (it != intervals) {
+    const auto& interval = *(it - 1);
+    if (cp <= interval.last) {
+      return &data->glyph[interval.offset + (cp - interval.first)];
     }
   }
+
   if (cp != REPLACEMENT_GLYPH) {
     return getGlyph(REPLACEMENT_GLYPH);
   }
