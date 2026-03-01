@@ -14,6 +14,7 @@ class EpubReaderBookmarksActivity final : public Activity {
   BookmarkUtil bookmarkUtil;
   int currentSpineIndex = 0;
   int currentPage = 0;
+  int pageCount = 0;
   int selectorIndex = 0;
 
   // Number of items that fit on a page, derived from logical screen height.
@@ -23,12 +24,13 @@ class EpubReaderBookmarksActivity final : public Activity {
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                               const std::shared_ptr<Epub>& epub, const std::string& epubPath,
-                                              const int currentSpineIndex, const int currentPage)
+                                              const int currentSpineIndex, const int currentPage, const int pageCount)
       : Activity("EpubReaderBookmarks", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),
         currentSpineIndex(currentSpineIndex),
         currentPage(currentPage),
+        pageCount(pageCount),
         bookmarkUtil(BookmarkUtil(epub, epubPath)) {}
   void onEnter() override;
   void onExit() override;

@@ -435,12 +435,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
-
-      // TODO: Change activity
       const int currentPage = section ? section->currentPage : 0;
+      const int pageCount = section ? section->pageCount : 0;
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                 currentPage), progressChangeResultHandler);
+                                                 currentPage, pageCount), progressChangeResultHandler);
     }
   }
 }

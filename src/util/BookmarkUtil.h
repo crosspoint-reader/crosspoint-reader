@@ -5,7 +5,7 @@
 struct BookmarkItem {
   int currentSpineIndex;
   int currentPage;
-  std::string summary;
+  int pageCount;
 };
 
 // Utility for managing bookmarks for a given epub
@@ -27,7 +27,7 @@ class BookmarkUtil final {
   std::optional<BookmarkItem> getBookmark(int bookmarkIndex);
   void deleteBookmark(int bookmarkIndex);
   // same as overriding
-  BookmarkItem saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage);
+  BookmarkItem saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage, int pageCount);
   bool doesBookmarkExist(int bookmarkIndex);
 
 };

@@ -14,8 +14,10 @@ void BookmarkUtil::load(int maxBookmarks) {
         if (dataSize == 4 || dataSize == 6) {
           int currentSpineIndex = data[0] + (data[1] << 8);
           int pageNumber = data[2] + (data[3] << 8);
-          LOG_DBG("BKM", "Loaded bookmark: %d, %d", currentSpineIndex, pageNumber);
-          newBookmark = BookmarkItem{currentSpineIndex, pageNumber, ""};
+          int pageCount = data[4] + (data[5] << 8);
+          
+          LOG_DBG("BKM", "Loaded bookmark: %d, %d/%d", currentSpineIndex, pageNumber, pageCount);
+          newBookmark = BookmarkItem{currentSpineIndex, pageNumber, pageCount};
         }
         f.close();
       }
@@ -32,7 +34,7 @@ void BookmarkUtil::deleteBookmark(int bookmarkIndex) {
   bookmarks.at(bookmarkIndex) = std::nullopt;
 }
 
-BookmarkItem BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage) {
+BookmarkItem BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage, int pageCount) {
   FsFile f;
   if (Storage.openFileForWrite("BKM", epub->getCachePath() + "/bookmark_" + std::to_string(bookmarkIndex) + ".bin", f)) {
     uint8_t data[6];
@@ -40,6 +42,8 @@ BookmarkItem BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex
     data[1] = (currentSpineIndex >> 8) & 0xFF;
     data[2] = currentPage & 0xFF;
     data[3] = (currentPage >> 8) & 0xFF;
+    data[4] = pageCount & 0xFF;
+    data[5] = (pageCount >> 8) & 0xFF;
     f.write(data, 6);
     f.close();
     LOG_DBG("BKM", "Bookmark saved: Chapter %d, Page %d", currentSpineIndex, currentPage);
@@ -48,7 +52,7 @@ BookmarkItem BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex
   }
 
   // save in memory
-  BookmarkItem newBookmark{currentSpineIndex, currentPage, ""};
+  BookmarkItem newBookmark{currentSpineIndex, currentPage, pageCount};
   bookmarks.at(bookmarkIndex) = newBookmark;
 
   return newBookmark;

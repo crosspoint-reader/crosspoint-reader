@@ -63,7 +63,7 @@ void EpubReaderBookmarksActivity::loop() {
     requestUpdate();
     return; // return to not process navigator input
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Right)) { // Set
-    bookmarkUtil.saveBookmark(selectorIndex, currentSpineIndex, currentPage);
+    bookmarkUtil.saveBookmark(selectorIndex, currentSpineIndex, currentPage, pageCount);
     requestUpdate();
     return; // return to not process navigator input
   }
@@ -116,7 +116,9 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
       [this](int index) { 
         if (bookmarkUtil.doesBookmarkExist(index)) {
           auto bookmark = bookmarkUtil.getBookmark(index).value();
-          return std::to_string(bookmark.currentPage + 1);
+          const float chapterProgress = static_cast<float>(bookmark.currentPage) / static_cast<float>(bookmark.pageCount);
+          float bookProgress = epub->calculateProgress(bookmark.currentSpineIndex, chapterProgress) * 100.0f;
+          return std::to_string(bookmark.currentPage + 1) + "/" + std::to_string(bookmark.pageCount) + " - " + std::to_string(static_cast<int>(bookProgress)) + "%";
         } else {
           return std::string();
         }
