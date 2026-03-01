@@ -108,8 +108,11 @@ void MyLibraryActivity::onEnter() {
   // Corrects basePath if basepath points to a file instead of directory
   if (isSupportedFormat(basepath)) {
     const auto lastSlash = basepath.find_last_of("/");
-    if (lastSlash != std::string::npos && lastSlash != 0) {
-      basepath = basepath.substr(0, lastSlash);
+    // handles root path file
+    if (lastSlash == std::string::npos || lastSlash == 0) {
+      basepath = "/";
+    } else {
+      basepath.resize(lastSlash);
     }
   }
 
@@ -299,7 +302,7 @@ size_t MyLibraryActivity::findEntry(const std::string& name) const {
   return 0;
 }
 
-bool MyLibraryActivity::isSupportedFormat(const std::string fileName) {
+bool MyLibraryActivity::isSupportedFormat(const std::string& fileName) {
   return StringUtils::checkFileExtension(fileName, ".epub") || StringUtils::checkFileExtension(fileName, ".xtch") ||
          StringUtils::checkFileExtension(fileName, ".xtc") || StringUtils::checkFileExtension(fileName, ".txt") ||
          StringUtils::checkFileExtension(fileName, ".md") || StringUtils::checkFileExtension(fileName, ".bmp");

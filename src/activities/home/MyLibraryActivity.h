@@ -27,7 +27,7 @@ class MyLibraryActivity final : public Activity {
   void loadFiles();
   size_t findEntry(const std::string& name) const;
 
-  bool isSupportedFormat(const std::string fileName);
+  bool isSupportedFormat(const std::string& fileName);
 
  public:
   explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/")
