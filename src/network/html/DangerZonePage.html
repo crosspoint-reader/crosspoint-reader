@@ -64,14 +64,18 @@
   async function dzFeedSync(){const p=pw();if(!p)return;const r=await fetch('/api/feed/sync',{method:'POST',headers:auth(p)});r.ok?showMsg('Feed sync triggered',true):showMsg('Failed: '+await r.text(),false);}
   async function init(){
     try{
-      const res=await fetch('/api/status');const data=await res.json();
-      const enabled=data.dangerZoneEnabled===true||data.dangerZoneEnabled===1;
+      const res=await fetch('/api/danger-zone/status');const data=await res.json();
       document.getElementById('dz-nav').style.display='';
-      if(enabled){
+      if(data.enabled){
         document.getElementById('dz-main').style.display='';
-        const fr=await fetch('/api/files?path=/');const files=await fr.json();
-        const fw=files.find(f=>f.name==='firmware.bin');
-        if(fw){document.getElementById('firmware-card').style.display='';document.getElementById('firmware-info').textContent='Size: '+(fw.size/1024/1024).toFixed(2)+' MB - ready to flash';document.getElementById('btn-flash').style.display='';}
+        const fr=await fetch('/api/firmware-status');const fw=await fr.json();
+        if(fw.firmwareReady){
+          document.getElementById('firmware-card').style.display='';
+          let info='Size: '+(fw.fileSize/1024/1024).toFixed(2)+' MB';
+          if(fw.version)info+=' — version '+fw.version;
+          document.getElementById('firmware-info').textContent=info;
+          document.getElementById('btn-flash').style.display='';
+        }
       }else{document.getElementById('dz-disabled').style.display='';}
     }catch(e){document.getElementById('dz-disabled').style.display='';}
   }

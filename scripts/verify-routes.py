@@ -46,6 +46,7 @@ REQUIRED_ROUTES = [
     ("HTTP_POST", "/api/feed/sync"),
     ("HTTP_GET",  "/api/feed/log"),
     # Danger Zone
+    ("HTTP_GET",  "/danger-zone"),
     ("HTTP_GET",  "/api/danger-zone/status"),
     ("HTTP_POST", "/api/flash"),
     ("HTTP_POST", "/api/reboot"),

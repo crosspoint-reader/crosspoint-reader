@@ -16,6 +16,7 @@
 #include "WebDAVHandler.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/DangerZonePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "util/StringUtils.h"
 
@@ -166,6 +167,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/feed/sync", HTTP_POST, [this] { handlePostFeedSync(); });
 
   // Danger Zone endpoints
+  server->on("/danger-zone", HTTP_GET, [this] { handleDangerZonePage(); });
   server->on("/api/reboot", HTTP_POST, [this] { handlePostReboot(); });
   server->on("/api/danger-zone/status", HTTP_GET, [this] { handleGetDangerZoneStatus(); });
   server->on("/api/screenshot-tour", HTTP_POST, [this] { handlePostScreenshotTour(); });
@@ -1531,6 +1533,11 @@ void CrossPointWebServer::handleGetLog(const char* path) const {
   server->send(200, "text/plain", content.c_str());
 }
 
+void CrossPointWebServer::handleDangerZonePage() const {
+  sendHtmlContent(server.get(), DangerZonePageHtml, sizeof(DangerZonePageHtml));
+  LOG_DBG("WEB", "Served Danger Zone page");
+}
+
 void CrossPointWebServer::handleGetDangerZoneStatus() const {
   char buf[128];
   snprintf(buf, sizeof(buf), "{\"enabled\":%s,\"passwordSet\":%s}",
@@ -1565,8 +1572,23 @@ void CrossPointWebServer::handlePostFlash() {
 }
 
 void CrossPointWebServer::handleGetFirmwareStatus() const {
-  const bool exists = Storage.exists("/firmware.bin");
-  char buf[64];
-  snprintf(buf, sizeof(buf), "{\"firmwareReady\":%s}", exists ? "true" : "false");
+  FsFile file = Storage.open("/firmware.bin");
+  if (!file) {
+    server->send(200, "application/json", "{\"firmwareReady\":false}");
+    return;
+  }
+  const size_t fSize = file.fileSize();
+  file.close();
+
+  // Read companion version file written by upload tooling
+  char version[64] = "";
+  int vLen = static_cast<int>(Storage.readFileToBuffer("/firmware.version", version, sizeof(version)));
+  // Trim trailing whitespace
+  while (vLen > 0 && (version[vLen - 1] == '\n' || version[vLen - 1] == '\r' || version[vLen - 1] == ' '))
+    version[--vLen] = '\0';
+
+  char buf[192];
+  snprintf(buf, sizeof(buf), "{\"firmwareReady\":true,\"fileSize\":%u,\"version\":\"%s\"}",
+           static_cast<unsigned>(fSize), version);
   server->send(200, "application/json", buf);
 }

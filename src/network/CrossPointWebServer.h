@@ -97,7 +97,6 @@ class CrossPointWebServer {
   void handleFileList() const;
   void handleFileListData() const;
   void handleDownload() const;
-  void handleReadText() const;
   void handleUpload(UploadState& state) const;
   void handleUploadPost(UploadState& state) const;
   void handleCreateFolder() const;
@@ -107,11 +106,25 @@ class CrossPointWebServer {
 
   // Settings handlers
   void handleSettingsPage() const;
-  void handleDangerZonePage() const;
   void handleGetSettings() const;
   void handlePostSettings();
 
   // Feed URL handlers
   void handleGetFeedUrl() const;
   void handlePostFeedUrl();
+
+  // Feed sync trigger
+  void handlePostFeedSync() const;
+
+  // Danger Zone endpoints
+  void handleDangerZonePage() const;
+  void handlePostReboot();
+  void handleGetDangerZoneStatus() const;
+  void handlePostScreenshotTour();
+  void handlePostFlash();
+  void handleGetFirmwareStatus() const;
+  void handleGetLog(const char* path) const;
+
+  // Check Danger Zone password from request header or query param
+  bool checkDangerZoneAuth() const;
 };
