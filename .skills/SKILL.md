@@ -982,14 +982,14 @@ curl -s "http://192.168.0.234/api/status" | jq .version
 - **Version string is injected at build time** via `scripts/git_version.py` pre-script — always run `strings firmware.bin | grep "^1\."` to confirm the right SHA is baked in before uploading
 - **Feed server auto-picks up `firmware.bin`** — updating the file is enough, the RSS feed reflects it immediately
 - **Reader does not auto-connect** to WiFi on boot until Danger Zone is enabled + password set
-- **`/api/feed/sync`, `/api/flash`, `/api/reboot`** are all Danger Zone endpoints (require Basic Auth password)
+- **`/api/feed/sync`, `/api/flash`, `/api/reboot`** are all Danger Zone endpoints (require `X-Danger-Zone-Password` header)
 - **Multiple flashes in one session**: each build produces a new `firmware.bin`; always verify SHA after upload before triggering flash
 
 ### Danger Zone Setup (one-time on device)
 1. Settings → SYST tab → toggle **Danger Zone** ON
 2. Tap **Danger Zone Password** → set a password
 3. After reboot, device auto-connects and web server runs in background
-4. All DZ endpoints require: `-u "anyuser:YOUR_PASSWORD"`
+4. All DZ endpoints require: `-H "X-Danger-Zone-Password: YOUR_PASSWORD"` (NOT Basic Auth)
 
 ### Full Automated Loop (once Danger Zone active)
 ```bash
@@ -999,7 +999,7 @@ strings .pio/build/default/firmware.bin | grep "^1\." && \
 cp .pio/build/default/firmware.bin ~/clawd/crosspoint-feed/firmware/firmware.bin && \
 echo "$SHA" > ~/clawd/crosspoint-feed/firmware/.version && \
 curl -X POST "http://192.168.0.234/upload?path=/" -F "file=@.pio/build/default/firmware.bin" && \
-curl -X POST "http://192.168.0.234/api/reboot" -u "chip:PASSWORD" && \
-sleep 30 && \
+curl -X POST "http://192.168.0.234/api/reboot" -H "X-Danger-Zone-Password: YOUR_PASSWORD" && \
+sleep 45 && \
 curl -s "http://192.168.0.234/api/status" | jq .version
 ```
