@@ -1264,27 +1264,27 @@
               <option value="lightNovel">Light Novel</option>
               <option value="manual">Manual Picker</option>
             </select>
-            <!-- Handedness options (shown when Light Novel Mode is selected) -->
-            <div class="handedness-buttons" id="handednessOptions" style="display: none; margin-top: 12px;">
-              <button class="handedness-btn" id="handednessLeft" data-value="left" onclick="setHandedness('left')">
-                <span style="float: right;">✋</span><span>Left-handed<br><small>(Counter-clockwise)</small></span>
-              </button>
-              <button class="handedness-btn active" id="handednessRight" data-value="right" onclick="setHandedness('right')">
-                <span style="float: left;">🤚</span><span>Right-handed<br><small>(Clockwise)</small></span>
-              </button>
-            </div>
-            <!-- Conversion Log Export -->
-            <div class="advanced-setting-row" style="margin-top: 12px;">
-              <div class="setting-toggle">
-                <div>
-                  <div class="setting-title">📥 Auto-download Conversion Log</div>
-                  <div class="setting-desc">Export detailed log with statistics</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="export-log-checkbox">
-                  <span class="toggle-slider"></span>
-                </label>
+          </div>
+          <!-- Handedness options (shown when Light Novel Mode is selected) -->
+          <div class="handedness-buttons" id="handednessOptions" style="display: none; margin-top: 12px;">
+            <button class="handedness-btn" id="handednessLeft" data-value="left" onclick="setHandedness('left')">
+              <span style="float: right;">✋</span><span>Left-handed<br><small>(Counter-clockwise)</small></span>
+            </button>
+            <button class="handedness-btn active" id="handednessRight" data-value="right" onclick="setHandedness('right')">
+              <span style="float: left;">🤚</span><span>Right-handed<br><small>(Clockwise)</small></span>
+            </button>
+          </div>
+          <!-- Conversion Log Export -->
+          <div class="advanced-setting-row" style="margin-top: 12px;">
+            <div class="setting-toggle">
+              <div>
+                <div class="setting-title">📥 Auto-download Conversion Log</div>
+                <div class="setting-desc">Export detailed log with statistics</div>
               </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="export-log-checkbox">
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
           </div><!-- advanced-settings-content -->
@@ -1644,6 +1644,37 @@
     JPEG_QUALITY = 85;
     HANDEDNESS = 'right';
 
+    // Reset UI controls to default state (with null checks)
+    const convertCheckbox = document.getElementById('convertBeforeUpload');
+    if (convertCheckbox) convertCheckbox.checked = false;
+    const exportLogCheckbox = document.getElementById('export-log-checkbox');
+    if (exportLogCheckbox) exportLogCheckbox.checked = false;
+    const convertInfo = document.getElementById('convertInfo');
+    if (convertInfo) convertInfo.style.display = 'none';
+    const convertSettings = document.getElementById('convertSettings');
+    if (convertSettings) convertSettings.style.display = 'none';
+    const convertWarning = document.getElementById('convertWarning');
+    if (convertWarning) convertWarning.style.display = 'none';
+    const rotateAndCropSelect = document.getElementById('rotateAndCropSelect');
+    if (rotateAndCropSelect) rotateAndCropSelect.value = 'off';
+
+    // Reset Advanced Mode visibility
+    const advancedModeBtn = document.querySelector('.advanced-options-toggle');
+    const advancedSettingsContent = document.getElementById('advancedSettingsContent');
+    if (advancedModeBtn) {
+      advancedModeBtn.style.pointerEvents = 'none';
+      advancedModeBtn.style.opacity = '0.5';
+    }
+    if (advancedSettingsContent) {
+      advancedSettingsContent.classList.remove('visible');
+    }
+    const arrow = document.getElementById('advancedOptionsArrow');
+    if (arrow) arrow.classList.remove('expanded');
+
+    // Hide handedness options
+    const handednessOptions = document.getElementById('handednessOptions');
+    if (handednessOptions) handednessOptions.style.display = 'none';
+
     // Hide log section from previous session
     const logSection = document.getElementById('log-section');
     if (logSection) logSection.classList.remove('visible');
@@ -1732,6 +1763,12 @@
   }
 
   function toggleAdvancedOptions() {
+    // Prevent toggling if Optimize EPUB is not enabled
+    const convertEnabled = document.getElementById('convertBeforeUpload').checked;
+    if (!convertEnabled) {
+      return; // Don't allow toggling Advanced Mode when Optimize EPUB is off
+    }
+
     const content = document.getElementById('advancedSettingsContent');
     const arrow = document.getElementById('advancedOptionsArrow');
     content.classList.toggle('visible');
@@ -2012,8 +2049,9 @@ async function showImagePicker(file) {
   }
 
   const pickerSection = document.getElementById('imagePickerSection');
-  if (!pickerSection) {
-    console.error('Image picker section not found');
+  const imagePickerModal = document.getElementById('imagePickerModal');
+  if (!pickerSection || !imagePickerModal) {
+    console.error('Image picker elements not found');
     return;
   }
 
@@ -2044,14 +2082,19 @@ async function showImagePicker(file) {
       imageStates[img.path] = 0;
     });
 
-    // Show image picker section
-    pickerSection.style.display = 'block';
+    // Update counts
+    const imagePickerCount = document.getElementById('imagePickerCount');
+    const selectedCount = document.getElementById('selectedCount');
+    const totalCount = document.getElementById('totalCount');
+    if (imagePickerCount) imagePickerCount.textContent = imageFiles.length;
+    if (selectedCount) selectedCount.textContent = '0';
+    if (totalCount) totalCount.textContent = imageFiles.length;
 
-    // Update UI
-    const uploadModal = document.querySelector('.upload-modal');
-    if (uploadModal) {
-      uploadModal.style.display = 'none';
-    }
+    // Render the image grid
+    renderImageGrid();
+
+    // Show image picker modal
+    imagePickerModal.classList.add('open');
 
   } catch (error) {
     console.error('Failed to extract images:', error);
@@ -2066,6 +2109,7 @@ async function showImagePicker(file) {
 function cycleImageState(imagePath) {
   imageStates[imagePath] = (imageStates[imagePath] + 1) % 3;
   renderImageGrid();
+  updateSelectionInfo();
 }
 
 /**
@@ -2112,17 +2156,51 @@ function resetAllImageStates() {
     imageStates[key] = 0;
   });
   renderImageGrid();
+  updateSelectionInfo();
+}
+
+/**
+ * Select all images (set to state 1 - H-Split)
+ */
+function selectAllImages() {
+  Object.keys(imageStates).forEach(key => {
+    imageStates[key] = 1;
+  });
+  renderImageGrid();
+  updateSelectionInfo();
+}
+
+/**
+ * Deselect all images (set to state 0 - Normal)
+ */
+function deselectAllImages() {
+  Object.keys(imageStates).forEach(key => {
+    imageStates[key] = 0;
+  });
+  renderImageGrid();
+  updateSelectionInfo();
+}
+
+/**
+ * Update selection info display
+ */
+function updateSelectionInfo() {
+  const selectedCount = document.getElementById('selectedCount');
+  if (selectedCount) {
+    const selected = Object.values(imageStates).filter(s => s > 0).length;
+    selectedCount.textContent = selected;
+  }
 }
 
 /**
  * Start conversion with selected image states
  */
 function startConversionWithImageStates() {
-  const pickerSection = document.getElementById('imagePickerSection');
+  const pickerModal = document.getElementById('imagePickerModal');
   const uploadBtn = document.getElementById('uploadBtn');
 
-  if (pickerSection) {
-    pickerSection.style.display = 'none';
+  if (pickerModal) {
+    pickerModal.classList.remove('open');
   }
 
   imagePickerVisible = false;
@@ -3121,8 +3199,8 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
             ws.send(buffer);
             offset += chunkSize;
 
-            // Update local progress with real transfer progress
-            // Server will confirm 100% with DONE message
+            // Update local progress - this shows sending progress
+            // Server PROGRESS messages will provide accurate received progress
             if (onProgress) {
               onProgress(offset, totalSize);
             }
@@ -3137,9 +3215,12 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
           reject(err);
         }
       } else if (msg.startsWith('PROGRESS:')) {
-        // Server confirmed progress - log for debugging but don't update UI
-        // (local progress is smoother, server progress causes jumping)
-        console.log('[WS] Server progress:', msg);
+        // Server confirmed progress - update UI with actual server progress
+        // This gives accurate progress indication from the server's perspective
+        const progressValue = parseInt(msg.substring(9), 10);
+        if (!isNaN(progressValue) && onProgress) {
+          onProgress(progressValue, totalSize);
+        }
       } else if (msg === 'DONE') {
         // Show 100% when server confirms completion
         clearTimeout(timeoutId);
@@ -3362,12 +3443,25 @@ function uploadFile() {
         saveToFileBatchLog(file.name, false);
       }
 
+      // Export log in single file mode when conversion failed and upload also failed
+      // or when conversion succeeded but upload failed
+      if (!useBatchLog && exportLogCheckbox && exportLogCheckbox.checked) {
+        // Export log if conversion was attempted (regardless of success/failure)
+        if (needsConversion) {
+          setTimeout(() => {
+            exportLogToFile(null, false); // isBatch = false for single file
+          }, 100);
+        }
+      }
+
       failedFiles.push({ name: file.name, error: error, file: originalFile });
 
       // If network error, check if we should retry or mark as failed
       if (error.includes('connection failed') || error.includes('Network error') ||
           error.includes('timeout') || error.includes('disconnected') ||
           error.includes('WebSocket connection timeout') ||
+          error.includes('WebSocket closed unexpectedly') ||
+          error.includes('WebSocket closed during') ||
           (error.includes('WebSocket') && error.includes('failed'))) {
         if (isNetworkOnline) {
           // Network is currently online, treat as a hard failure
@@ -3750,9 +3844,9 @@ function retryAllFailedUploads() {
   }
 
   function closeImagePickerModal() {
-    const pickerSection = document.getElementById('imagePickerSection');
-    if (pickerSection) {
-      pickerSection.style.display = 'none';
+    const pickerModal = document.getElementById('imagePickerModal');
+    if (pickerModal) {
+      pickerModal.classList.remove('open');
     }
     imagePickerVisible = false;
   }
