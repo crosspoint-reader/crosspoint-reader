@@ -80,7 +80,17 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
 void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   // If coming from a book, start in that book's folder; otherwise start from root
   auto initialPath = fromBookPath.empty() ? "/" : extractFolderPath(fromBookPath);
-  activityManager.goToMyLibrary(std::move(initialPath));
+  std::string fileName = "";
+
+  // Extracts file name from fromBookPath to be used for retaining book selection
+  const auto lastDotPos = fromBookPath.find_last_of(".");
+  if (lastDotPos != std::string::npos) {
+    const auto lastSlashPos = fromBookPath.find_last_of("/");
+    if (lastSlashPos != std::string::npos && lastSlashPos + 1 < fromBookPath.size()) {
+      fileName = fromBookPath.substr(lastSlashPos + 1);
+    }
+  }
+  activityManager.goToMyLibrary(std::move(initialPath), std::move(fileName));
 }
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {

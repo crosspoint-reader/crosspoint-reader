@@ -17,18 +17,23 @@ class MyLibraryActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
+  bool skipNextButtonCheck = false;
 
   // Files state
   std::string basepath = "/";
   std::vector<std::string> files;
+  std::string lastSelectedFile = "";
 
   // Data loading
   void loadFiles();
   size_t findEntry(const std::string& name) const;
 
  public:
-  explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/")
-      : Activity("MyLibrary", renderer, mappedInput), basepath(initialPath.empty() ? "/" : std::move(initialPath)) {}
+  explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",
+                             std::string lastSelectedFile = "")
+      : Activity("MyLibrary", renderer, mappedInput),
+        basepath(initialPath.empty() ? "/" : std::move(initialPath)),
+        lastSelectedFile(std::move(lastSelectedFile)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

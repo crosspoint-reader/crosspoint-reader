@@ -169,8 +169,8 @@ void ActivityManager::goToFileTransfer() {
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
 
-void ActivityManager::goToMyLibrary(std::string path) {
-  replaceActivity(std::make_unique<MyLibraryActivity>(renderer, mappedInput, std::move(path)));
+void ActivityManager::goToMyLibrary(std::string path, std::string fileName) {
+  replaceActivity(std::make_unique<MyLibraryActivity>(renderer, mappedInput, std::move(path), std::move(fileName)));
 }
 
 void ActivityManager::goToRecentBooks() {

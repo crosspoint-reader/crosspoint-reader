@@ -109,7 +109,14 @@ void MyLibraryActivity::onEnter() {
 
   loadFiles();
   selectorIndex = 0;
+  // skips input check if back is still held when exiting from reader activity
+  if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
+    skipNextButtonCheck = true;
+  }
 
+  if (!lastSelectedFile.empty()) {
+    selectorIndex = findEntry(lastSelectedFile);
+  }
   requestUpdate();
 }
 
@@ -127,6 +134,16 @@ void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
 }
 
 void MyLibraryActivity::loop() {
+  // skips input check until back is released when returning from reader activity
+  if (skipNextButtonCheck) {
+    const bool backCleared = !mappedInput.isPressed(MappedInputManager::Button::Back) &&
+                             !mappedInput.wasReleased(MappedInputManager::Button::Back);
+    if (backCleared) {
+      skipNextButtonCheck = false;
+    }
+    return;
+  }
+
   // Long press BACK (1s+) goes to root folder
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
       basepath != "/") {
