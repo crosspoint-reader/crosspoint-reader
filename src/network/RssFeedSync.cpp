@@ -373,6 +373,17 @@ void syncTask(void*) {
   LOG_INF(TAG, "Feed sync started");
   setState(RssFeedSync::State::FETCHING);
 
+  // Open feed log file — overwrites each run so /api/feed/log shows the latest sync.
+  HalFile logFile;
+  Storage.openFileForWrite(TAG, "/.crosspoint/feed-sync.log", logFile);
+  auto feedLog = [&](const char* msg) {
+    if (!logFile.isOpen()) return;
+    logFile.print(msg);
+    logFile.print("\n");
+    logFile.flush();
+  };
+  feedLog("--- sync start ---");
+
   // Wait for WiFi stack to be fully routed. WL_CONNECTED can fire before
   // DHCP/DNS/default-route are ready, causing immediate TCP failures.
   for (int attempt = 0; attempt < 10; attempt++) {
@@ -382,6 +393,11 @@ void syncTask(void*) {
 
   const std::string feedUrl = SETTINGS.feedUrl;
   LOG_INF(TAG, "Feed URL: %s", feedUrl.c_str());
+  {
+    char buf[160];
+    snprintf(buf, sizeof(buf), "url: %s", feedUrl.c_str());
+    feedLog(buf);
+  }
 
   // 2. Load last sync timestamp — skip items older than this
   const uint32_t lastSync = loadLastSyncTime();
@@ -477,6 +493,8 @@ void syncTask(void*) {
     setState(RssFeedSync::State::PARSING);
     if (!HttpDownloader::fetchUrl(feedUrl, stream)) {
       LOG_ERR(TAG, "FETCH FAILED url=%s heap=%lu", feedUrl.c_str(), (unsigned long)ESP.getFreeHeap());
+      feedLog("FETCH FAILED");
+      logFile.close();
       setState(RssFeedSync::State::ERROR);
       syncTaskHandle = nullptr;
       vTaskDelete(nullptr);
@@ -489,6 +507,8 @@ void syncTask(void*) {
   if (rssParser.error()) {
     LOG_ERR(TAG, "XML parse error in feed");
     LOG_ERR(TAG, "XML parse error in feed");
+    feedLog("XML PARSE ERROR");
+    logFile.close();
     setState(RssFeedSync::State::ERROR);
     syncTaskHandle = nullptr;
     vTaskDelete(nullptr);
@@ -501,6 +521,12 @@ void syncTask(void*) {
 
   LOG_DBG(TAG, "Feed sync complete");
   LOG_INF(TAG, "Sync complete - %d files downloaded", s_dlCurrent);
+  {
+    char buf[48];
+    snprintf(buf, sizeof(buf), "done: %d files", s_dlCurrent);
+    feedLog(buf);
+  }
+  logFile.close();
   s_doneTime = millis();
   setState(RssFeedSync::State::DONE);
   syncTaskHandle = nullptr;

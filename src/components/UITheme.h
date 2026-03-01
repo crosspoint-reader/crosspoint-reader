@@ -34,6 +34,10 @@ class UITheme {
   static void setHttpServerActive(bool active);
   static bool isHttpServerActive();
 
+  // WiFi auto-connect state — set while DZ is attempting to rejoin WiFi on boot.
+  static void setWifiAutoConnecting(bool connecting);
+  static bool isWifiAutoConnecting();
+
   // Shared received-files list (HTTP uploads + feed downloads)
   static void addReceivedFile(const std::string& name);
   static const std::vector<std::string>& getReceivedFiles();

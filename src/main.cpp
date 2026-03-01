@@ -299,6 +299,7 @@ void dangerZoneAutoConnect() {
   }
 
   LOG_INF("DZ", "Auto-connecting to '%s'...", lastSsid.c_str());
+  UITheme::setWifiAutoConnecting(true);
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
@@ -309,6 +310,8 @@ void dangerZoneAutoConnect() {
   while (WiFi.status() != WL_CONNECTED && millis() - start < TIMEOUT_MS) {
     delay(100);
   }
+
+  UITheme::setWifiAutoConnecting(false);
 
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("DZ", "Auto-connect failed (status=%d)", WiFi.status());
