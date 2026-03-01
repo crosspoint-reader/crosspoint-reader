@@ -156,18 +156,32 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
   if (self->state == IN_METADATA && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
     bool isCover = false;
-    std::string coverItemId;
+    bool isSeries = false;
+    bool isSeriesIndex = false;
+    std::string metaName;
+    std::string metaContent;
 
     for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "name") == 0 && strcmp(atts[i + 1], "cover") == 0) {
-        isCover = true;
+      if (strcmp(atts[i], "name") == 0) {
+        metaName = atts[i + 1];
+        if (strcmp(atts[i + 1], "cover") == 0) {
+          isCover = true;
+        } else if (strcmp(atts[i + 1], "calibre:series") == 0) {
+          isSeries = true;
+        } else if (strcmp(atts[i + 1], "calibre:series_index") == 0) {
+          isSeriesIndex = true;
+        }
       } else if (strcmp(atts[i], "content") == 0) {
-        coverItemId = atts[i + 1];
+        metaContent = atts[i + 1];
       }
     }
 
     if (isCover) {
-      self->coverItemId = coverItemId;
+      self->coverItemId = metaContent;
+    } else if (isSeries && !metaContent.empty()) {
+      self->series = metaContent;
+    } else if (isSeriesIndex && !metaContent.empty()) {
+      self->seriesIndex = metaContent;
     }
     return;
   }
