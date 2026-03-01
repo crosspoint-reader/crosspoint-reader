@@ -92,9 +92,7 @@ void MyLibraryActivity::loadFiles() {
       files.emplace_back(std::string(name) + "/");
     } else {
       auto filename = std::string(name);
-      if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
-          StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
-          StringUtils::checkFileExtension(filename, ".md") || StringUtils::checkFileExtension(filename, ".bmp")) {
+      if (isSupportedFormat(filename)) {
         files.emplace_back(filename);
       }
     }
@@ -106,6 +104,14 @@ void MyLibraryActivity::loadFiles() {
 
 void MyLibraryActivity::onEnter() {
   Activity::onEnter();
+
+  // Corrects basePath if basepath points to a file instead of directory
+  if (isSupportedFormat(basepath)) {
+    const auto lastSlash = basepath.find_last_of("/");
+    if (lastSlash != std::string::npos && lastSlash != 0) {
+      basepath = basepath.substr(0, lastSlash);
+    }
+  }
 
   loadFiles();
   selectorIndex = 0;
@@ -291,4 +297,10 @@ size_t MyLibraryActivity::findEntry(const std::string& name) const {
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i;
   return 0;
+}
+
+bool MyLibraryActivity::isSupportedFormat(const std::string fileName) {
+  return StringUtils::checkFileExtension(fileName, ".epub") || StringUtils::checkFileExtension(fileName, ".xtch") ||
+         StringUtils::checkFileExtension(fileName, ".xtc") || StringUtils::checkFileExtension(fileName, ".txt") ||
+         StringUtils::checkFileExtension(fileName, ".md") || StringUtils::checkFileExtension(fileName, ".bmp");
 }
