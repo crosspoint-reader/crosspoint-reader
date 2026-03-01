@@ -5,11 +5,13 @@
 
 #include "../Activity.h"
 #include "util/ButtonNavigator.h"
+#include "../../util/BookmarkUtil.h"
 
 class EpubReaderBookmarksActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   std::string epubPath;
   ButtonNavigator buttonNavigator;
+  BookmarkUtil bookmarkUtil;
   int currentSpineIndex = 0;
   int currentPage = 0;
   int selectorIndex = 0;
@@ -17,9 +19,6 @@ class EpubReaderBookmarksActivity final : public Activity {
   // Number of items that fit on a page, derived from logical screen height.
   // This adapts automatically when switching between portrait and landscape.
   int getPageItems() const;
-
-  // Total TOC items count
-  int getTotalItems() const;
 
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -29,14 +28,10 @@ class EpubReaderBookmarksActivity final : public Activity {
         epub(epub),
         epubPath(epubPath),
         currentSpineIndex(currentSpineIndex),
-        currentPage(currentPage) {}
+        currentPage(currentPage),
+        bookmarkUtil(BookmarkUtil(epub, epubPath)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-
-  void loadBookmark(int bookmarkIndex);
-  void deleteBookmark(int bookmarkIndex);
-  // same as overriding
-  void saveBookmark(int bookmarkIndex);
 };
