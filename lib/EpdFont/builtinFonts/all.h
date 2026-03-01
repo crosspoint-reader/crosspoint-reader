@@ -51,7 +51,5 @@
 #include <builtinFonts/opendyslexic_8_regular.h>
 #include <builtinFonts/ubuntu_10_bold.h>
 #include <builtinFonts/ubuntu_10_regular.h>
-#include <builtinFonts/ubuntu_10_italic.h>
 #include <builtinFonts/ubuntu_12_bold.h>
 #include <builtinFonts/ubuntu_12_regular.h>
-#include <builtinFonts/ubuntu_12_italic.h>

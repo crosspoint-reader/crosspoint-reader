@@ -120,7 +120,6 @@ echo "#define UI_10_FONT_ID ($(
 ruby -rdigest -e 'puts [
   "./ubuntu_10_regular.h",
   "./ubuntu_10_bold.h",
-  "./ubuntu_10_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
@@ -128,7 +127,6 @@ echo "#define UI_12_FONT_ID ($(
 ruby -rdigest -e 'puts [
   "./ubuntu_12_regular.h",
   "./ubuntu_12_bold.h",
-  "./ubuntu_12_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
