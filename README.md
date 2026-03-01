@@ -1,188 +1,123 @@
-# CrossPoint OpenClaw
+# CrossPoint OpenClaw — AI-Curated E-Reader
 
-Firmware for the **Xteink X4** e-paper display reader (unaffiliated with Xteink).
-Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
+This is a fork of [CrossPoint Reader](CROSSPOINT-README.md) that extends it with **AI-driven content delivery**: an RSS feed pipeline that lets a personal AI agent (OpenClaw/Chip) automatically generate, package, and push content — news digests, EPUBs, markdown articles, sleep screen art, and firmware updates — directly to the device over WiFi.
 
-CrossPoint Reader is a purpose-built firmware designed to be a drop-in, fully open-source replacement for the official 
-Xteink firmware. It aims to match or improve upon the standard EPUB reading experience.
-
-![](./docs/images/cover.jpg)
-
-## Motivation
-
-E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited 
-customisation. The **Xteink X4** is an affordable, e-paper device, however the official firmware remains closed.
-CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truely unlock the device's
-potential.
-
-CrossPoint Reader aims to:
-* Provide a **fully open-source alternative** to the official firmware.
-* Offer a **document reader** capable of handling EPUB content on constrained hardware.
-* Support **customisable font, layout, and display** options.
-* Run purely on the **Xteink X4 hardware**.
-
-This project is **not affiliated with Xteink**; it's built as a community project.
-
-## Features & Usage
-
-- [x] EPUB parsing and rendering (EPUB 2 and EPUB 3)
-- [x] Image support within EPUB
-- [x] Saved reading position
-- [x] File explorer with file picker
-  - [x] Basic EPUB picker from root directory
-  - [x] Support nested folders
-  - [ ] EPUB picker with cover art
-- [x] Custom sleep screen
-  - [x] Cover sleep screen
-- [x] Wifi book upload
-- [x] Wifi OTA updates
-- [x] KOReader Sync integration for cross-device reading progress
-- [x] Configurable font, layout, and display options
-  - [ ] User provided fonts
-  - [ ] Full UTF support
-- [x] Screen rotation
-
-Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
-
-See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint, including the
-[KOReader Sync quick setup](./USER_GUIDE.md#365-koreader-sync-quick-setup).
-
-For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
-
-## Installing
-
-### Web (latest firmware)
-
-1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
-2. Go to https://xteink.dve.al/ and click "Flash CrossPoint firmware"
-
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
-
-### Web (specific firmware version)
-
-1. Connect your Xteink X4 to your computer via USB-C
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
-3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
-
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
-
-### Manual
-
-See [Development](#development) below.
-
-## Development
-
-### Prerequisites
-
-* **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
-* Python 3.8+
-* USB-C cable for flashing the ESP32-C3
-* Xteink X4
-
-### Checking out the code
-
-CrossPoint uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
-
-```
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
-
-# Or, if you've already cloned without --recursive:
-git submodule update --init --recursive
-```
-
-### Flashing your device
-
-Connect your Xteink X4 to your computer via USB-C and run the following command.
-
-```sh
-pio run --target upload
-```
-### Debugging
-
-After flashing the new features, it’s recommended to capture detailed logs from the serial port.
-
-First, make sure all required Python packages are installed:
-
-```python
-python3 -m pip install pyserial colorama matplotlib
-```
-after that run the script:
-```sh
-# For Linux
-# This was tested on Debian and should work on most Linux systems.
-python3 scripts/debugging_monitor.py
-
-# For macOS
-python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
-```
-Minor adjustments may be required for Windows.
-
-## Internals
-
-CrossPoint Reader is pretty aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only
-has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based
-on this constraint.
-
-### Data caching
-
-The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the 
-cache. This cache directory exists at `.crosspoint` on the SD card. The structure is as follows:
-
-
-```
-.crosspoint/
-├── epub_12471232/       # Each EPUB is cached to a subdirectory named `epub_<hash>`
-│   ├── progress.bin     # Stores reading progress (chapter, page, etc.)
-│   ├── cover.bmp        # Book cover image (once generated)
-│   ├── book.bin         # Book metadata (title, author, spine, table of contents, etc.)
-│   └── sections/        # All chapter data is stored in the sections subdirectory
-│       ├── 0.bin        # Chapter data (screen count, all text layout info, etc.)
-│       ├── 1.bin        #     files are named by their index in the spine
-│       └── ...
-│
-└── epub_189013891/
-```
-
-Deleting the `.crosspoint` directory will clear the entire cache. 
-
-Due the way it's currently implemented, the cache is not automatically cleared when a book is deleted and moving a book
-file will use a new cache directory, resetting the reading progress.
-
-For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
-
-## Contributing
-
-Contributions are very welcome!
-
-If you are new to the codebase, start with the [contributing docs](./docs/contributing/README.md).
-
-If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
-If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
-
-Everyone here is a volunteer, so please be respectful and patient. For more details on our goverance and community 
-principles, please see [GOVERNANCE.md](GOVERNANCE.md).
-
-### To submit a contribution:
-
-1. Fork the repo
-2. Create a branch (`feature/dithering-improvement`)
-3. Make changes
-4. Submit a PR
+![Home screen](docs/images/screenshots/home.png)
 
 ---
 
-CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 hardware**.
+## What this fork adds
 
-Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
-was making CrossPoint.
+### RSS Feed Sync
 
-## Fonts & Typefaces
+The device polls an RSS feed server and automatically downloads new content to the SD card. Supported content types delivered via feed:
 
-CrossPoint bundles several open-source typefaces:
+| Type | Extension | Notes |
+|------|-----------|-------|
+| EPUB books | `.epub` | Full e-reader support |
+| Articles / news | `.md`, `.txt` | Rendered natively |
+| Sleep screen art | `.bmp` | Displayed on sleep |
+| Firmware updates | `.bin` | Flashed on next boot |
 
-- **[Ubuntu](https://design.ubuntu.com/font)** by [Dalton Maag](https://www.daltonmaag.com/) — used as the UI font for the Pulsr theme. Licensed under the [Ubuntu Font Licence 1.0](https://ubuntu.com/legal/font-licence).
-- **[Noto Sans](https://fonts.google.com/noto/specimen/Noto+Sans)** by Google — licensed under the [SIL Open Font Licence 1.1](https://openfontlicense.org/).
-- **[OpenDyslexic](https://opendyslexic.org/)** by Abbie Gonzalez — licensed under the [SIL Open Font Licence 1.1](https://openfontlicense.org/).
-- **Bookerly** by Amazon — included from the [upstream CrossPoint Reader project](https://github.com/crosspoint-reader/crosspoint-reader).
+The feed server runs anywhere on your local network (or internet). A simple Python HTTP server with an RSS XML feed is all that's needed. Scripts are included in `scripts/` for pushing content.
+
+### Danger Zone — Remote OTA & Auto-Connect
+
+The **Danger Zone** (enabled in Settings → SYST) unlocks remote management:
+
+- **Auto-connect on boot**: device rejoins known WiFi automatically, no manual interaction needed
+- **Background web server**: file upload, EPUB management, and feed sync all accessible via browser while reading
+- **Remote OTA flash**: push new firmware to the SD card and it flashes on next sleep/wake
+- **QR code on boot**: device lands on the file transfer screen after auto-connect, ready to receive content
+
+![File transfer screen with QR code](docs/images/screenshots/file_transfer.png) ![System settings — Danger Zone toggle](docs/images/screenshots/settings_syst.png)
+
+### Web Interface
+
+Once connected, the full web interface is accessible from any browser on the network:
+
+![Web interface — file manager](docs/images/wifi/webserver_files.png) ![Web interface — upload](docs/images/wifi/webserver_upload.png)
+
+### OpenClaw / Chip Integration
+
+**OpenClaw** is a personal AI agent (Claude Sonnet, running as `claude-code`) that acts as the content brain for the device. It:
+
+- Generates daily news digests as markdown files and pushes them via RSS
+- Summarises and packages articles into readable `.md` or `.epub` files
+- Creates sleep screen artwork (`.bmp`) tailored to the reader's preferences
+- Monitors the feed server and triggers firmware updates autonomously
+- Runs the full build → deploy → flash → verify loop without human intervention
+
+The reader becomes a **passive delivery target**: Chip generates content on a schedule, the device syncs on boot, and new reading material appears automatically.
+
+---
+
+## How it works end to end
+
+```
+OpenClaw/Chip (AI agent)
+    │
+    │  generates content, builds firmware
+    ▼
+Feed Server (Python HTTP, local network)
+    │  serves RSS feed + files at http://192.168.x.x:8090/feed.xml
+    ▼
+CrossPoint Device (ESP32-C3, Xteink X4)
+    │  syncs on boot, downloads new items to SD card
+    │  flashes firmware on sleep/wake if firmware.bin present
+    ▼
+Reader (you)
+    opens new articles, books, and art — automatically delivered
+```
+
+---
+
+## Setup
+
+### 1. Flash CrossPoint OpenClaw firmware
+
+Follow the standard CrossPoint flashing instructions in [CROSSPOINT-README.md](CROSSPOINT-README.md#installing), or use the web flasher at https://xteink.dve.al/ with a firmware build from this fork.
+
+### 2. Enable Danger Zone
+
+On the device:
+1. Settings → SYST tab → toggle **Danger Zone** ON
+2. Tap **Danger Zone Password** → set a password
+3. Reboot
+
+After reboot, the device auto-connects to WiFi and shows the QR code screen.
+
+### 3. Start a feed server
+
+```bash
+# Minimal feed server (Python)
+cd /path/to/your/feed/content
+python3 -m http.server 8090
+```
+
+See `scripts/reader-push-news.py` for pushing news items, and `docs/rss-content-feeds.md` for the full feed format spec.
+
+### 4. Configure the feed URL on the device
+
+Settings → NETW → Feed URL → `http://192.168.x.x:8090/feed.xml`
+
+---
+
+## Screenshots
+
+| | | |
+|---|---|---|
+| ![Home](docs/images/screenshots/home.png) | ![Reader](docs/images/screenshots/reader.png) | ![Browse](docs/images/screenshots/browse.png) |
+| Home screen | Reading | File browser |
+| ![Network](docs/images/screenshots/network_mode.png) | ![WiFi scan](docs/images/screenshots/wifi_scan.png) | ![Settings](docs/images/screenshots/settings.png) |
+| Network mode | WiFi selection | Settings |
+
+---
+
+## Original CrossPoint documentation
+
+For hardware specs, standard EPUB reader features, development setup, contributing guidelines, and the full internals writeup, see **[CROSSPOINT-README.md](CROSSPOINT-README.md)**.
+
+---
+
+*CrossPoint OpenClaw is not affiliated with Xteink. Built on top of the open-source [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) project.*
