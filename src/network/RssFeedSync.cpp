@@ -435,20 +435,26 @@ void syncTask(void*) {
         LOG_DBG(TAG, "Skipping %s item '%s': missing enclosure/path", type.c_str(), item.guid.c_str());
         return;
       }
-      ensureParentDir(item.crosspointPath);
-      auto result = HttpDownloader::downloadToFile(item.enclosureUrl, item.crosspointPath);
+      // crosspointPath is a destination directory (ends with '/'); append filename from URL.
+      std::string destPath = item.crosspointPath;
+      if (!destPath.empty() && destPath.back() == '/') {
+        const auto lastSlash = item.enclosureUrl.rfind('/');
+        if (lastSlash != std::string::npos) {
+          destPath += item.enclosureUrl.substr(lastSlash + 1);
+        }
+      }
+      ensureParentDir(destPath);
+      auto result = HttpDownloader::downloadToFile(item.enclosureUrl, destPath);
       if (result != HttpDownloader::OK) {
-        LOG_ERR(TAG, "Download failed for %s → %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str());
-        LOG_ERR(TAG, "Download failed: %s -> %s", item.enclosureUrl.c_str(), item.crosspointPath.c_str());
+        LOG_ERR(TAG, "Download failed: %s -> %s", item.enclosureUrl.c_str(), destPath.c_str());
         return;
       }
       s_dlCurrent++;
-      LOG_INF(TAG, "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, item.crosspointPath.c_str(), (unsigned long)ESP.getFreeHeap());
+      LOG_INF(TAG, "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, destPath.c_str(), (unsigned long)ESP.getFreeHeap());
       // addReceivedFile called here = after file close, correct
       // Extract filename and add to shared received-files list for display
-      const std::string& path = item.crosspointPath;
-      const auto slash = path.rfind('/');
-      UITheme::addReceivedFile(slash == std::string::npos ? path : path.substr(slash + 1));
+      const auto slash = destPath.rfind('/');
+      UITheme::addReceivedFile(slash == std::string::npos ? destPath : destPath.substr(slash + 1));
 
     } else if (type == "firmware") {
       if (SETTINGS.feedAllowFirmware == 0) {
