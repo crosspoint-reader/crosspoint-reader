@@ -2,7 +2,7 @@
 #include <Epub.h>
 #include <vector>
 
-struct Bookmark {
+struct BookmarkItem {
   int currentSpineIndex;
   int currentPage;
   std::string summary;
@@ -16,7 +16,7 @@ struct Bookmark {
 class BookmarkUtil final {
   std::shared_ptr<Epub> epub;
   std::string epubPath;
-  std::vector<std::optional<Bookmark>> bookmarks;
+  std::vector<std::optional<BookmarkItem>> bookmarks;
 
  public:
   explicit BookmarkUtil(const std::shared_ptr<Epub>& epub, const std::string& epubPath)
@@ -24,10 +24,10 @@ class BookmarkUtil final {
         epubPath(epubPath) {}
 
   void load(int maxBookmarks);
-  std::optional<Bookmark> getBookmark(int bookmarkIndex);
+  std::optional<BookmarkItem> getBookmark(int bookmarkIndex);
   void deleteBookmark(int bookmarkIndex);
   // same as overriding
-  Bookmark saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage);
+  BookmarkItem saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage);
   bool doesBookmarkExist(int bookmarkIndex);
 
 };

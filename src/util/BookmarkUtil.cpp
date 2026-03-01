@@ -7,7 +7,7 @@ void BookmarkUtil::load(int maxBookmarks) {
     bookmarks.reserve(maxBookmarks);
     for (int i = 0; i < maxBookmarks; i++) {
       FsFile f;
-      std::optional<Bookmark> newBookmark;
+      std::optional<BookmarkItem> newBookmark;
       if (Storage.openFileForRead("BKM", epub->getCachePath() + "/bookmark_" + std::to_string(i) + ".bin", f)) {
         uint8_t data[6];
         int dataSize = f.read(data, 6);
@@ -15,7 +15,7 @@ void BookmarkUtil::load(int maxBookmarks) {
           int currentSpineIndex = data[0] + (data[1] << 8);
           int pageNumber = data[2] + (data[3] << 8);
           LOG_DBG("BKM", "Loaded bookmark: %d, %d", currentSpineIndex, pageNumber);
-          newBookmark = Bookmark{currentSpineIndex, pageNumber, ""};
+          newBookmark = BookmarkItem{currentSpineIndex, pageNumber, ""};
         }
         f.close();
       }
@@ -23,7 +23,7 @@ void BookmarkUtil::load(int maxBookmarks) {
     }
 }
 
-std::optional<Bookmark> BookmarkUtil::getBookmark(int bookmarkIndex) {
+std::optional<BookmarkItem> BookmarkUtil::getBookmark(int bookmarkIndex) {
   return bookmarks.at(bookmarkIndex);
 }
 
@@ -32,7 +32,7 @@ void BookmarkUtil::deleteBookmark(int bookmarkIndex) {
   bookmarks.at(bookmarkIndex) = std::nullopt;
 }
 
-Bookmark BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage) {
+BookmarkItem BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage) {
   FsFile f;
   if (Storage.openFileForWrite("BKM", epub->getCachePath() + "/bookmark_" + std::to_string(bookmarkIndex) + ".bin", f)) {
     uint8_t data[6];
@@ -48,7 +48,7 @@ Bookmark BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex, in
   }
 
   // save in memory
-  Bookmark newBookmark{currentSpineIndex, currentPage, ""};
+  BookmarkItem newBookmark{currentSpineIndex, currentPage, ""};
   bookmarks.at(bookmarkIndex) = newBookmark;
 
   return newBookmark;
