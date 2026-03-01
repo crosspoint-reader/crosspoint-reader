@@ -2743,7 +2743,8 @@ async function processImage(data, imageState = 0, imagePath = '') {
 
         // Step 2: Check if we need to cut horizontally (if height > MAX_WIDTH)
         if (scaledH <= MAX_WIDTH) {
-          // No horizontal cut needed - just rotate the whole image
+          // No horizontal cut needed - just rotate the whole image based on handedness
+          const isClockwise = HANDEDNESS === 'right';
           const rotW = scaledH;
           const rotH = scaledW;
 
@@ -2753,8 +2754,16 @@ async function processImage(data, imageState = 0, imagePath = '') {
           const rotCtx = rotCanvas.getContext('2d');
           rotCtx.fillStyle = '#FFF';
           rotCtx.fillRect(0, 0, rotW, rotH);
-          rotCtx.translate(rotW, 0);
-          rotCtx.rotate(Math.PI / 2);
+
+          if (isClockwise) {
+            // Rotate 90° clockwise (right-handed)
+            rotCtx.translate(rotW, 0);
+            rotCtx.rotate(Math.PI / 2);
+          } else {
+            // Rotate 90° counter-clockwise (left-handed)
+            rotCtx.translate(0, rotH);
+            rotCtx.rotate(-Math.PI / 2);
+          }
           rotCtx.drawImage(scaledCanvas, 0, 0);
           applyGrayscale(rotCtx, rotW, rotH);
 
@@ -2765,12 +2774,13 @@ async function processImage(data, imageState = 0, imagePath = '') {
             meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 1 }
           });
         } else {
-          // Cut horizontally with overlap, then rotate each part
+          // Cut horizontally with overlap, then rotate each part based on handedness
           const parts = [];
           const maxH = MAX_WIDTH;  // 480
           const overlapPx = Math.round(maxH * OVERLAP);
           const step = maxH - overlapPx;
           const numParts = Math.ceil((scaledH - overlapPx) / step);
+          const isClockwise = HANDEDNESS === 'right';
 
           for (let i = 0; i < numParts; i++) {
             let y = i * step;
@@ -2785,7 +2795,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
             const partCtx = partCanvas.getContext('2d');
             partCtx.drawImage(scaledCanvas, 0, y, scaledW, partH, 0, 0, scaledW, partH);
 
-            // Rotate this strip 90° CW
+            // Rotate this strip based on handedness
             const rotW = partH;
             const rotH = scaledW;
 
@@ -2795,8 +2805,16 @@ async function processImage(data, imageState = 0, imagePath = '') {
             const rotCtx = rotCanvas.getContext('2d');
             rotCtx.fillStyle = '#FFF';
             rotCtx.fillRect(0, 0, rotW, rotH);
-            rotCtx.translate(rotW, 0);
-            rotCtx.rotate(Math.PI / 2);
+
+            if (isClockwise) {
+              // Rotate 90° clockwise (right-handed)
+              rotCtx.translate(rotW, 0);
+              rotCtx.rotate(Math.PI / 2);
+            } else {
+              // Rotate 90° counter-clockwise (left-handed)
+              rotCtx.translate(0, rotH);
+              rotCtx.rotate(-Math.PI / 2);
+            }
             rotCtx.drawImage(partCanvas, 0, 0);
             applyGrayscale(rotCtx, rotW, rotH);
 
