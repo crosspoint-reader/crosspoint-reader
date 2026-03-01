@@ -378,11 +378,15 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<StyledLine>&
     // Inline markers (**, *, `code`, etc.) are left in the text here and stripped at render
     // time, so word-wrap width measurements remain accurate.
     StyledLine processed;
+#if ENABLE_MARKDOWN
     if (isMarkdown) {
       processed = processMarkdownLine(rawLine);
     } else {
       processed.text = rawLine;
     }
+#else
+    processed.text = rawLine;
+#endif
 
     // Horizontal rules occupy exactly one display line; advance past raw line and continue.
     if (processed.isHRule) {
@@ -528,7 +532,11 @@ void TxtReaderActivity::renderPage() {
         renderer.drawLine(cachedOrientedMarginLeft, midY, cachedOrientedMarginLeft + contentWidth, midY, true);
       } else if (!sline.text.empty()) {
         // Strip inline markers at render time so alignment widths are based on display text
+#if ENABLE_MARKDOWN
         const std::string display = isMarkdown ? stripInlineMarkdown(sline.text) : sline.text;
+#else
+        const std::string& display = sline.text;
+#endif
         int x = cachedOrientedMarginLeft;
 
         // Apply text alignment

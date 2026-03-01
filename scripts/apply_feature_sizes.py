@@ -28,7 +28,7 @@ def patch_python_feature_size(content: str, feature: str, new_size_kb: int) -> t
     """Replace size_kb=NNNN in a Feature() constructor keyed by feature name."""
     # Match: 'feature_name': Feature(\n  ...\n  size_kb=NNNN
     pattern = re.compile(
-        rf"('{re.escape(feature)}':\s*Feature\(.*?size_kb=)(\d+)",
+        rf"('{re.escape(feature)}':\s*Feature\(.*?size_kb=)(-?\d+)",
         re.DOTALL,
     )
     new_content, count = pattern.subn(rf"\g<1>{new_size_kb}", content)
@@ -46,7 +46,7 @@ def patch_html_feature_size(content: str, feature: str, new_size_kb: int) -> tup
     """Replace sizeKb: NNNN in the JS FEATURES object keyed by feature name."""
     # Match: feature_name: {\n  sizeKb: NNNN
     pattern = re.compile(
-        rf"({re.escape(feature)}:\s*\{{\s*\n\s*sizeKb:\s*)(\d+)",
+        rf"({re.escape(feature)}:\s*\{{\s*\n\s*sizeKb:\s*)(-?\d+)",
     )
     new_content, count = pattern.subn(rf"\g<1>{new_size_kb}", content)
     return new_content, count > 0
