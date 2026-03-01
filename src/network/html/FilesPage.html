@@ -1949,7 +1949,10 @@ async function showImagePicker(file) {
     pickerSection.style.display = 'block';
 
     // Update UI
-    document.querySelector('.upload-modal').style.display = 'none';
+    const uploadModal = document.querySelector('.upload-modal');
+    if (uploadModal) {
+      uploadModal.style.display = 'none';
+    }
 
   } catch (error) {
     console.error('Failed to extract images:', error);
@@ -2024,7 +2027,9 @@ function startConversionWithImageStates() {
   }
 
   imagePickerVisible = false;
-  uploadBtn.disabled = false;
+  if (uploadBtn) {
+    uploadBtn.disabled = false;
+  }
   uploadFile();
 }
 
@@ -3392,9 +3397,14 @@ function uploadFile() {
 function showFailedUploadsBanner() {
   const banner = document.getElementById('failedUploadsBanner');
   const filesList = document.getElementById('failedFilesList');
-  
+
+  if (!banner || !filesList) {
+    console.error('Failed uploads banner elements not found');
+    return;
+  }
+
   filesList.innerHTML = '';
-  
+
   failedUploadsGlobal.forEach((failedFile, index) => {
     const item = document.createElement('div');
     item.className = 'failed-file-item';
@@ -3407,11 +3417,11 @@ function showFailedUploadsBanner() {
     `;
     filesList.appendChild(item);
   });
-  
+
   // Ensure retry all button is visible
   const retryAllBtn = banner.querySelector('.retry-all-btn');
   if (retryAllBtn) retryAllBtn.style.display = '';
-  
+
   banner.classList.add('show');
 }
 
