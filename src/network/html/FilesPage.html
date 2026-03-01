@@ -1640,7 +1640,7 @@
   function closeUploadModal() {
     document.getElementById('uploadModal').classList.remove('open');
     document.getElementById('fileInput').value = '';
-    document.getElementById('uploadBtn').disabled = true;
+    resetUploadButton();
     document.getElementById('progress-container').style.display = 'none';
     document.getElementById('progress-fill').style.width = '0%';
     document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
@@ -1877,12 +1877,16 @@
       if (files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
         if (mode === 'manual') {
           // Show image picker for manual mode
-          showImagePicker(files[0]).catch(err => {
-            console.error('Image picker error:', err);
-            // Fallback to upload without picker
-            uploadBtn.disabled = false;
-          });
           uploadBtn.disabled = true;
+          showImagePicker(files[0])
+            .catch(err => {
+              console.error('Image picker error:', err);
+              alert('Failed to show image picker: ' + err.message);
+            })
+            .finally(() => {
+              // Always re-enable button on completion or error
+              resetUploadButton();
+            });
           return;
         } else if (mode === 'lightNovel') {
           // Light Novel mode - automatic processing, no picker
@@ -1894,6 +1898,14 @@
 
       // For OFF mode or non-EPUB files
       uploadBtn.disabled = false;
+    }
+  }
+
+  function resetUploadButton() {
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInput = document.getElementById('fileInput');
+    if (uploadBtn && fileInput) {
+      uploadBtn.disabled = !(fileInput.files.length > 0);
     }
   }
 
@@ -3136,6 +3148,9 @@ function updateRotateAndCropMode() {
   if (mode === 'manual' && document.getElementById('fileInput').files.length > 0) {
     validateFile();
   }
+
+  // Reset upload button state when mode changes
+  resetUploadButton();
 }
 
 function uploadFile() {
