@@ -8,6 +8,7 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include "BookFinishedCache.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -17,7 +18,9 @@
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/ReaderStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
@@ -75,18 +78,25 @@ void EpubReaderActivity::onEnter() {
 
   epub->setupCacheDir();
 
+  bool loadedFinishedFromProgress = false;
+  bool hasFinishedInProgress = false;
+
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
-    int dataSize = f.read(data, 6);
-    if (dataSize == 4 || dataSize == 6) {
+    uint8_t data[7];
+    int dataSize = f.read(data, 7);
+    if (dataSize == 4 || dataSize == 6 || dataSize == 7) {
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
       cachedSpineIndex = currentSpineIndex;
       LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
     }
-    if (dataSize == 6) {
+    if (dataSize == 6 || dataSize == 7) {
       cachedChapterTotalPageCount = data[4] + (data[5] << 8);
+    }
+    if (dataSize == 7) {
+      loadedFinishedFromProgress = (data[6] != 0);
+      hasFinishedInProgress = true;
     }
     f.close();
   }
@@ -105,12 +115,53 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  // Reading stats: begin session
+  sessionStartMs = millis();
+  sessionWordsRead = 0;
+  sessionPagesRead = 0;
+  lastTrackedSpineIndex = -1;
+  lastTrackedPageNumber = -1;
+  bookFinishedThisSession = false;
+  bookStats = BookStats{};
+  bookStats.loadFromFile(epub->getCachePath() + "/stats.json");
+  if (hasFinishedInProgress) {
+    bookStats.finished = bookStats.finished || loadedFinishedFromProgress;
+  }
+  bookWasFinishedOnEnter = bookStats.finished;
+  BOOK_FINISHED_CACHE.put(epub->getPath(), bookStats.finished);
+
   // Trigger first update
   requestUpdate();
 }
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  BOOK_FINISHED_CACHE.saveIfDirty();
+
+  // Reading stats: commit session to disk
+  if (epub) {
+    const uint32_t sessionSeconds = static_cast<uint32_t>((millis() - sessionStartMs) / 1000);
+    const bool isFirstSession = (bookStats.sessionsCount == 0);
+    bookStats.totalReadingSeconds += sessionSeconds;
+    bookStats.totalPagesRead += sessionPagesRead;
+    bookStats.totalWordsRead += sessionWordsRead;
+    bookStats.sessionsCount++;
+    bookStats.saveToFile(epub->getCachePath() + "/stats.json");
+
+    GlobalStats global;
+    global.loadFromFile();
+    global.totalReadingSeconds += sessionSeconds;
+    global.totalPagesRead += sessionPagesRead;
+    global.totalWordsRead += sessionWordsRead;
+    if (isFirstSession) {
+      global.booksStarted++;
+    }
+    if (bookFinishedThisSession && !bookWasFinishedOnEnter) {
+      global.booksFinished++;
+    }
+    global.saveToFile();
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -411,6 +462,28 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::STATISTICS: {
+      const uint32_t sessionSeconds = static_cast<uint32_t>((millis() - sessionStartMs) / 1000);
+
+      // Merge current session into display-only copies so the stats screen reflects
+      // the full picture including the session in progress.
+      BookStats displayBook = bookStats;
+      displayBook.totalReadingSeconds += sessionSeconds;
+      displayBook.totalPagesRead += sessionPagesRead;
+      displayBook.totalWordsRead += sessionWordsRead;
+      displayBook.sessionsCount++;
+
+      GlobalStats displayGlobal;
+      displayGlobal.loadFromFile();
+      displayGlobal.totalReadingSeconds += sessionSeconds;
+      displayGlobal.totalPagesRead += sessionPagesRead;
+      displayGlobal.totalWordsRead += sessionWordsRead;
+
+      startActivityForResult(std::make_unique<ReaderStatsActivity>(renderer, mappedInput, displayBook, displayGlobal,
+                                                                   sessionSeconds, sessionPagesRead, sessionWordsRead),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : 0;
@@ -534,6 +607,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
+    if (!bookStats.finished) {
+      bookStats.finished = true;
+      bookStats.saveToFile(epub->getCachePath() + "/stats.json");
+      BOOK_FINISHED_CACHE.put(epub->getPath(), true);
+      BOOK_FINISHED_CACHE.saveIfDirty();
+      saveProgress(currentSpineIndex, 0, 0);
+    }
+    bookFinishedThisSession = true;
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
@@ -650,6 +731,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
 
+    const bool pageChanged =
+        (currentSpineIndex != lastTrackedSpineIndex || section->currentPage != lastTrackedPageNumber);
+    if (pageChanged) {
+      sessionPagesRead++;
+      sessionWordsRead += static_cast<uint32_t>(p->wordCount());
+      lastTrackedSpineIndex = currentSpineIndex;
+      lastTrackedPageNumber = section->currentPage;
+    }
+
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
@@ -666,14 +756,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   FsFile f;
   if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
-    data[0] = currentSpineIndex & 0xFF;
-    data[1] = (currentSpineIndex >> 8) & 0xFF;
+    uint8_t data[7];
+    data[0] = spineIndex & 0xFF;
+    data[1] = (spineIndex >> 8) & 0xFF;
     data[2] = currentPage & 0xFF;
     data[3] = (currentPage >> 8) & 0xFF;
     data[4] = pageCount & 0xFF;
     data[5] = (pageCount >> 8) & 0xFF;
-    f.write(data, 6);
+    data[6] = bookStats.finished ? 1 : 0;
+    f.write(data, 7);
     f.close();
     LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d", spineIndex, currentPage);
   } else {

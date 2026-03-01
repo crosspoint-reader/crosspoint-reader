@@ -54,6 +54,16 @@ void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, co
   }
 }
 
+size_t Page::wordCount() const {
+  size_t count = 0;
+  for (const auto& el : elements) {
+    if (el->getTag() == TAG_PageLine) {
+      count += static_cast<const PageLine*>(el.get())->getBlock()->wordCount();
+    }
+  }
+  return count;
+}
+
 bool Page::serialize(FsFile& file) const {
   const uint16_t count = elements.size();
   serialization::writePod(file, count);

@@ -4,6 +4,7 @@
 #include <Epub/Section.h>
 
 #include "EpubReaderMenuActivity.h"
+#include "ReadingStats.h"
 #include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
@@ -24,6 +25,16 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+
+  // Reading statistics
+  unsigned long sessionStartMs = 0;
+  uint32_t sessionWordsRead = 0;
+  uint32_t sessionPagesRead = 0;
+  int lastTrackedSpineIndex = -1;
+  int lastTrackedPageNumber = -1;
+  bool bookFinishedThisSession = false;
+  bool bookWasFinishedOnEnter = false;
+  BookStats bookStats;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

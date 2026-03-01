@@ -7,13 +7,16 @@
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "ReadingStats.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/reader/ReaderStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -52,6 +55,7 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_STATISTICS, SettingAction::ReadingStats));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Reset selection to first category
@@ -187,6 +191,20 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::ReadingStats: {
+        GlobalStats global;
+        global.loadFromFile();
+        BookStats lastBook;
+        if (!APP_STATE.openEpubPath.empty()) {
+          const std::string cachePath =
+              "/.crosspoint/epub_" + std::to_string(std::hash<std::string>{}(APP_STATE.openEpubPath));
+          lastBook.loadFromFile(cachePath + "/stats.json");
+        }
+        startActivityForResult(
+            std::make_unique<ReaderStatsActivity>(renderer, mappedInput, lastBook, global, 0, 0, 0, false),
+            resultHandler);
+        break;
+      }
       case SettingAction::None:
         // Do nothing
         break;

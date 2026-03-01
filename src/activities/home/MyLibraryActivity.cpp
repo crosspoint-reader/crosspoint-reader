@@ -6,8 +6,10 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <functional>
 
 #include "../util/ConfirmationActivity.h"
+#include "BookFinishedCache.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -71,6 +73,7 @@ void sortFileList(std::vector<std::string>& strs) {
 
 void MyLibraryActivity::loadFiles() {
   files.clear();
+  filesFinished.clear();
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
@@ -102,6 +105,30 @@ void MyLibraryActivity::loadFiles() {
   }
   root.close();
   sortFileList(files);
+
+  filesFinished.reserve(files.size());
+  for (const auto& entry : files) {
+    if (entry.back() != '/' && StringUtils::checkFileExtension(entry, ".epub")) {
+      filesFinished.push_back(-1);
+    } else {
+      filesFinished.push_back(0);
+    }
+  }
+}
+
+bool MyLibraryActivity::isFileFinished(size_t index) {
+  if (index >= files.size() || index >= filesFinished.size()) {
+    return false;
+  }
+
+  if (filesFinished[index] == -1) {
+    bool isFinished = false;
+    const std::string fullPath = (basepath == "/") ? ("/" + files[index]) : (basepath + "/" + files[index]);
+    BOOK_FINISHED_CACHE.resolve(fullPath, isFinished);
+    filesFinished[index] = isFinished ? 1 : 0;
+  }
+
+  return filesFinished[index] == 1;
 }
 
 void MyLibraryActivity::onEnter() {
@@ -115,7 +142,9 @@ void MyLibraryActivity::onEnter() {
 
 void MyLibraryActivity::onExit() {
   Activity::onExit();
+  BOOK_FINISHED_CACHE.saveIfDirty();
   files.clear();
+  filesFinished.clear();
 }
 
 void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
@@ -261,8 +290,25 @@ void MyLibraryActivity::render(RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); });
+        [this](int index) {
+          if (index < 0 || static_cast<size_t>(index) >= files.size()) {
+            return std::string();
+          }
+
+          const size_t safeIndex = static_cast<size_t>(index);
+          std::string name = getFileName(files[safeIndex]);
+          if (isFileFinished(safeIndex)) {
+            name += " [✓]";
+          }
+          return name;
+        },
+        nullptr,
+        [this](int index) {
+          if (index < 0 || static_cast<size_t>(index) >= files.size()) {
+            return UIIcon::File;
+          }
+          return UITheme::getFileIcon(files[static_cast<size_t>(index)]);
+        });
   }
 
   // Help text

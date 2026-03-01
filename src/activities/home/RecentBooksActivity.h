@@ -1,6 +1,7 @@
 #pragma once
 #include <I18n.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -17,6 +18,8 @@ class RecentBooksActivity final : public Activity {
 
   // Recent tab state
   std::vector<RecentBook> recentBooks;
+  std::vector<int8_t> recentBooksFinished;
+  bool isBookFinished(size_t index);
 
   // Data loading
   void loadRecentBooks();

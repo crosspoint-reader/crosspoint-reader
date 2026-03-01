@@ -5,7 +5,9 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <functional>
 
+#include "BookFinishedCache.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -14,20 +16,43 @@
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
+
+bool isSupportedEbookExtension(const std::string& path) {
+  return StringUtils::checkFileExtension(path, ".epub") || StringUtils::checkFileExtension(path, ".xtch") ||
+         StringUtils::checkFileExtension(path, ".xtc");
+}
 }  // namespace
 
 void RecentBooksActivity::loadRecentBooks() {
   recentBooks.clear();
+  recentBooksFinished.clear();
   const auto& books = RECENT_BOOKS.getBooks();
   recentBooks.reserve(books.size());
+  recentBooksFinished.reserve(books.size());
 
   for (const auto& book : books) {
     // Skip if file no longer exists
     if (!Storage.exists(book.path.c_str())) {
       continue;
     }
+
     recentBooks.push_back(book);
+    recentBooksFinished.push_back(isSupportedEbookExtension(book.path) ? -1 : 0);
   }
+}
+
+bool RecentBooksActivity::isBookFinished(size_t index) {
+  if (index >= recentBooks.size() || index >= recentBooksFinished.size()) {
+    return false;
+  }
+
+  if (recentBooksFinished[index] == -1) {
+    bool isFinished = false;
+    BOOK_FINISHED_CACHE.resolve(recentBooks[index].path, isFinished);
+    recentBooksFinished[index] = isFinished ? 1 : 0;
+  }
+
+  return recentBooksFinished[index] == 1;
 }
 
 void RecentBooksActivity::onEnter() {
@@ -42,7 +67,9 @@ void RecentBooksActivity::onEnter() {
 
 void RecentBooksActivity::onExit() {
   Activity::onExit();
+  BOOK_FINISHED_CACHE.saveIfDirty();
   recentBooks.clear();
+  recentBooksFinished.clear();
 }
 
 void RecentBooksActivity::loop() {
@@ -101,8 +128,29 @@ void RecentBooksActivity::render(RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
-        [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
-        [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
+        [this](int index) {
+          if (index < 0 || static_cast<size_t>(index) >= recentBooks.size()) {
+            return std::string();
+          }
+
+          const size_t safeIndex = static_cast<size_t>(index);
+          if (isBookFinished(safeIndex)) {
+            return recentBooks[safeIndex].title + " [✓]";
+          }
+          return recentBooks[safeIndex].title;
+        },
+        [this](int index) {
+          if (index < 0 || static_cast<size_t>(index) >= recentBooks.size()) {
+            return std::string();
+          }
+          return recentBooks[static_cast<size_t>(index)].author;
+        },
+        [this](int index) {
+          if (index < 0 || static_cast<size_t>(index) >= recentBooks.size()) {
+            return UIIcon::File;
+          }
+          return UITheme::getFileIcon(recentBooks[static_cast<size_t>(index)].path);
+        });
   }
 
   // Help text
