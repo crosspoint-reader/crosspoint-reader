@@ -185,3 +185,4 @@ CrossPoint bundles several open-source typefaces:
 - **[Ubuntu](https://design.ubuntu.com/font)** by [Dalton Maag](https://www.daltonmaag.com/) — used as the UI font for the Pulsr theme. Licensed under the [Ubuntu Font Licence 1.0](https://ubuntu.com/legal/font-licence).
 - **[Noto Sans](https://fonts.google.com/noto/specimen/Noto+Sans)** by Google — licensed under the [SIL Open Font Licence 1.1](https://openfontlicense.org/).
 - **[OpenDyslexic](https://opendyslexic.org/)** by Abbie Gonzalez — licensed under the [SIL Open Font Licence 1.1](https://openfontlicense.org/).
+- **Bookerly** by Amazon — a proprietary typeface included from the [upstream CrossPoint Reader project](https://github.com/crosspoint-reader/crosspoint-reader).
