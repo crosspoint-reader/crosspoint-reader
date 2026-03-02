@@ -388,9 +388,6 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
-  // DEBUG: force Danger Zone on so OpenClaw can troubleshoot remotely
-  SETTINGS.dangerZoneEnabled = true;
-  strncpy(SETTINGS.dangerZonePassword, "1234", sizeof(SETTINGS.dangerZonePassword) - 1);
   I18N.loadSettings();
 
   // Boot log: write early so any subsequent crash is detectable
