@@ -31,4 +31,7 @@ bool isFeedActive();
 /// Returns true while actively downloading files.
 bool isSyncing();
 
+/// Download progress: current item index and total (0 if unknown).
+void getProgress(int& current, int& total);
+
 }  // namespace RssFeedSync

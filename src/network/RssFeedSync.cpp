@@ -132,6 +132,8 @@ class RssParser final : public Print {
   using ItemCallback = std::function<void(const RssItem&)>;
   void setItemCallback(ItemCallback cb) { itemCallback = std::move(cb); }
 
+  uint32_t getChannelItemCount() const { return channelItemCount; }
+
  private:
   // Check if the local part of a namespace-qualified name matches.
   // With XML_ParserCreateNS, names come as "nsuri|localname" or just "localname".
@@ -170,7 +172,14 @@ class RssParser final : public Print {
       return;
     }
 
-    if (!self->inItem) return;
+    if (!self->inItem) {
+      // Channel-level elements (before first item or between items)
+      if (nameEqualsNS(name, "crosspoint", "itemCount")) {
+        self->activeField = Field::ItemCount;
+        self->currentText.clear();
+      }
+      return;
+    }
 
     if (nameEquals(name, "guid")) {
       self->activeField = Field::Guid;
@@ -211,7 +220,14 @@ class RssParser final : public Print {
       return;
     }
 
-    if (!self->inItem) return;
+    if (!self->inItem) {
+      // Channel-level element ending
+      if (self->activeField == Field::ItemCount && !self->currentText.empty()) {
+        self->channelItemCount = static_cast<uint32_t>(strtoul(self->currentText.c_str(), nullptr, 10));
+      }
+      self->activeField = Field::None;
+      return;
+    }
 
     switch (self->activeField) {
       case Field::Guid:
@@ -245,13 +261,14 @@ class RssParser final : public Print {
     }
   }
 
-  enum class Field { None, Guid, Title, Description, PubDate, CrosspointType, CrosspointPath };
+  enum class Field { None, Guid, Title, Description, PubDate, CrosspointType, CrosspointPath, ItemCount };
 
   XML_Parser parser = nullptr;
   bool errorOccurred = false;
   bool stopped = false;
   bool inItem = false;
   Field activeField = Field::None;
+  uint32_t channelItemCount = 0;
   std::string currentText;
   RssItem currentItem;
   ItemCallback itemCallback;
@@ -418,6 +435,11 @@ void syncTask(void*) {
   rssParser.setItemCallback([&](const RssItem& item) {
     if (reachedOldItems) return;
 
+    // Pick up channel-level item count once it's parsed (channel header precedes items)
+    if (s_dlTotal == 0 && rssParser.getChannelItemCount() > 0) {
+      s_dlTotal = static_cast<int>(rssParser.getChannelItemCount());
+    }
+
     const uint32_t itemTime = parseRfc2822(item.pubDate);
     if (itemTime > 0 && itemTime <= lastSync) {
       reachedOldItems = true;
@@ -483,6 +505,9 @@ void syncTask(void*) {
       }
       LOG_DBG(TAG, "Firmware downloaded — will apply on next boot");
       if (SETTINGS.dangerZoneEnabled) {
+        // Persist the current watermark NOW before reboot — new firmware reads this file on
+        // first boot so it doesn't re-download the entire feed (SD card survives OTA flash).
+        if (itemTime > lastSync) saveLastSyncTime(itemTime);
         LOG_DBG(TAG, "Danger Zone enabled — auto-triggering flash");
         dzFlashRequested = true;
       }
@@ -585,6 +610,7 @@ State getState() {
 }
 bool isFeedActive() { return s_state != RssFeedSync::State::IDLE && s_state != RssFeedSync::State::DONE && s_state != RssFeedSync::State::ERROR; }
 bool isSyncing()    { return s_state == RssFeedSync::State::DOWNLOADING; }
+void getProgress(int& current, int& total) { current = s_dlCurrent; total = s_dlTotal; }
 
 const char* getStatusLabel() {
   switch (s_state) {

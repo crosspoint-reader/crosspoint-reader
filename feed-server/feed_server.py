@@ -124,9 +124,15 @@ def build_feed(content_dir: Path, feed_url: str, feed_title: str) -> str:
       <guid>{file_guid(f)}</guid>
     </item>"""))
 
-    # Sort ALL items newest-first -- required by reader's timestamp-based dedup
-    dated.sort(key=lambda x: x[0], reverse=True)
+    # Firmware items always first, then everything else newest-first
+    firmware_items = [(t, xml) for t, xml in dated if "<crosspoint:type>firmware</crosspoint:type>" in xml]
+    other_items = [(t, xml) for t, xml in dated if "<crosspoint:type>firmware</crosspoint:type>" not in xml]
+    other_items.sort(key=lambda x: x[0], reverse=True)
+    dated = firmware_items + other_items
     items_xml = "\n".join(xml for _, xml in dated)
+
+    # Total downloadable item count (all items with enclosures: files, images, firmware)
+    item_count = sum(1 for _, xml in dated if "<enclosure" in xml)
 
     now = fmt_date(datetime.now(timezone.utc))
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -136,6 +142,7 @@ def build_feed(content_dir: Path, feed_url: str, feed_title: str) -> str:
     <link>{feed_url}/feed.xml</link>
     <description>CrossPoint content feed</description>
     <lastBuildDate>{now}</lastBuildDate>
+    <crosspoint:itemCount>{item_count}</crosspoint:itemCount>
 {items_xml}
   </channel>
 </rss>"""

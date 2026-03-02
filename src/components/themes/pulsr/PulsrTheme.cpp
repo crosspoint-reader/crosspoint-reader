@@ -7,6 +7,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 
@@ -184,10 +185,30 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
           pillLabel = "DZON";
         }
         if (showPill && pillLabel) {
-          renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, feedColor);
-          const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, pillLabel);
-          const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
-          renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, pillLabel, /*black=*/true);
+          if (feedState == RssFeedSync::State::DOWNLOADING) {
+            // Progress bar pill: light-gray background, dark-gray fill, "N/total" counter
+            int dlCurrent = 0, dlTotal = 0;
+            RssFeedSync::getProgress(dlCurrent, dlTotal);
+            renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, Color::LightGray);
+            if (dlTotal > 0 && dlCurrent > 0) {
+              const int fillW = std::max(PILL_R * 2, (dlCurrent * pillW) / dlTotal);
+              renderer.fillRoundedRect(pillX, pillY, std::min(fillW, pillW), pillH, PILL_R, Color::DarkGray);
+            }
+            char countBuf[10];
+            if (dlTotal > 0) {
+              snprintf(countBuf, sizeof(countBuf), "%d/%d", dlCurrent, dlTotal);
+            } else {
+              snprintf(countBuf, sizeof(countBuf), "#%d", dlCurrent);
+            }
+            const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, countBuf);
+            const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+            renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, countBuf, /*black=*/true);
+          } else {
+            renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, feedColor);
+            const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, pillLabel);
+            const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+            renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, pillLabel, /*black=*/true);
+          }
         }
       }
     }
