@@ -422,8 +422,8 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     file.getName(name, sizeof(name));
     auto fileName = String(name);
 
-    // Skip hidden items (starting with ".")
-    bool shouldHide = fileName.startsWith(".");
+    // Skip hidden items (starting with "."), unless Danger Zone is active
+    bool shouldHide = fileName.startsWith(".") && !SETTINGS.dangerZoneEnabled;
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
