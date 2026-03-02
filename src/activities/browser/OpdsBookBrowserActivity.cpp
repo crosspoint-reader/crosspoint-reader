@@ -316,10 +316,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL
   std::string downloadUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, book.href);
 
-  // Create sanitized filename: "Title - Author.epub" or just "Title.epub" if no author
+  // Create sanitized filename: "Author - Title.epub" or just "Title.epub" if no author
   std::string baseName = book.title;
   if (!book.author.empty()) {
-    baseName += " - " + book.author;
+    baseName = book.author + " - " + baseName;
   }
   std::string filename = "/" + StringUtils::sanitizeFilename(baseName) + ".epub";
 
