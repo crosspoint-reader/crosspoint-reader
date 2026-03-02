@@ -20,6 +20,7 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
+constexpr uint32_t MAX_CACHE_PAGES = 65535;   // Sanity cap to prevent unbounded reserve()
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -608,6 +609,24 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
     return false;
   }
 
+  // Apply the reader orientation so margins match what the reader would produce
+  switch (SETTINGS.orientation) {
+    case CrossPointSettings::ORIENTATION::PORTRAIT:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
+      break;
+    case CrossPointSettings::ORIENTATION::INVERTED:
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+      break;
+    default:
+      break;
+  }
+
   // Compute layout values that match what initializeReader() produces
   const int fontId = SETTINGS.getReaderFontId();
   const uint8_t screenMargin = SETTINGS.screenMargin;
@@ -674,7 +693,7 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
 
   uint32_t numPages;
   serialization::readPod(cacheFile, numPages);
-  if (numPages == 0) {
+  if (numPages == 0 || numPages > MAX_CACHE_PAGES) {
     cacheFile.close();
     return false;
   }
@@ -694,7 +713,7 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   if (Storage.openFileForRead("SLP", txt.getCachePath() + "/progress.bin", progFile)) {
     uint8_t data[4];
     if (progFile.read(data, 4) == 4) {
-      savedPage = data[0] + (data[1] << 8);
+      savedPage = (int)((uint32_t)data[0] | ((uint32_t)data[1] << 8));
     }
     progFile.close();
   }

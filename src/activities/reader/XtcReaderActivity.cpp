@@ -365,7 +365,7 @@ bool XtcReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   if (Storage.openFileForRead("SLP", xtc.getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
-      savedPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+      savedPage = (uint32_t)data[0] | ((uint32_t)data[1] << 8) | ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
     }
     f.close();
   }

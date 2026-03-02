@@ -846,8 +846,8 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   if (Storage.openFileForRead("SLP", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
     if (f.read(data, 6) == 6) {
-      spineIndex = data[0] | (data[1] << 8);
-      pageNumber = data[2] | (data[3] << 8);
+      spineIndex = (int)((uint32_t)data[0] | ((uint32_t)data[1] << 8));
+      pageNumber = (int)((uint32_t)data[2] | ((uint32_t)data[3] << 8));
     }
     f.close();
   }
