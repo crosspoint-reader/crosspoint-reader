@@ -129,16 +129,31 @@
 
     <div class="card" id="feed-card" style="display:none">
       <h2>RSS Feed</h2>
-      <button id="sync-btn" onclick="syncFeed()" style="
-        padding: 10px 24px;
-        background-color: var(--accent-color);
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1em;
-      ">Sync Feed</button>
-      <span id="sync-status" style="margin-left: 12px; color: var(--label-color)"></span>
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+        <button id="sync-btn" onclick="syncFeed()" style="
+          padding: 10px 24px;
+          background-color: var(--accent-color);
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 1em;
+        ">Sync Feed</button>
+        <span id="sync-status" style="color: var(--label-color)"></span>
+      </div>
+      <details id="feed-log-details" style="margin-top:14px">
+        <summary style="cursor:pointer; color:var(--label-color); font-size:0.9em; user-select:none"
+                 onclick="loadFeedLog()">Feed Sync Log ▾</summary>
+        <div style="display:flex; justify-content:flex-end; margin:6px 0 4px">
+          <button onclick="loadFeedLog()" style="
+            padding:4px 10px; font-size:0.82em; background:var(--accent-color);
+            color:white; border:none; border-radius:4px; cursor:pointer">Refresh</button>
+        </div>
+        <pre id="feed-log-content" style="
+          background:#1e1e1e; color:#d4d4d4; padding:10px; border-radius:4px;
+          font-size:0.78em; max-height:240px; overflow-y:auto; white-space:pre-wrap;
+          word-break:break-all; margin:0">(click to load)</pre>
+      </details>
     </div>
 
     <div id="flash-card" style="display:none; background:#fff3cd; border:1px solid #ffc107;
@@ -226,6 +241,24 @@
         status.textContent = 'Error';
       }
       setTimeout(() => { btn.disabled = false; status.textContent = ''; }, 3000);
+    }
+
+    let feedLogLoaded = false;
+    async function loadFeedLog() {
+      if (feedLogLoaded && !document.getElementById('feed-log-details').open) return;
+      const el = document.getElementById('feed-log-content');
+      el.textContent = 'Loading...';
+      try {
+        const r = await fetch('/api/feed/log');
+        if (r.status === 404) { el.textContent = '(no log yet)'; }
+        else if (!r.ok) { el.textContent = 'Error: ' + r.status; }
+        else {
+          const txt = await r.text();
+          el.textContent = txt || '(empty)';
+          el.scrollTop = el.scrollHeight;
+          feedLogLoaded = true;
+        }
+      } catch (e) { el.textContent = 'Error: ' + e.message; }
     }
 
     async function checkFirmware() {
