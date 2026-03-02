@@ -32,9 +32,20 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  // Check if we have a /sleep directory
-  auto dir = Storage.open("/sleep");
+  // Check if we have a /.sleep (preferred) or /sleep directory
+  const char* sleepDir = nullptr;
+  auto dir = Storage.open("/.sleep");
   if (dir && dir.isDirectory()) {
+    sleepDir = "/.sleep";
+  } else {
+    if (dir) dir.close();
+    dir = Storage.open("/sleep");
+    if (dir && dir.isDirectory()) {
+      sleepDir = "/sleep";
+    }
+  }
+
+  if (sleepDir) {
     std::vector<std::string> files;
     char name[500];
     // collect all valid BMP files
@@ -74,10 +85,10 @@ void SleepActivity::renderCustomSleepScreen() const {
       }
       APP_STATE.lastSleepImage = randomFileIndex;
       APP_STATE.saveToFile();
-      const auto filename = "/sleep/" + files[randomFileIndex];
+      const auto filename = std::string(sleepDir) + "/" + files[randomFileIndex];
       FsFile file;
       if (Storage.openFileForRead("SLP", filename, file)) {
-        LOG_DBG("SLP", "Randomly loading: /sleep/%s", files[randomFileIndex].c_str());
+        LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
         delay(100);
         Bitmap bitmap(file, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {

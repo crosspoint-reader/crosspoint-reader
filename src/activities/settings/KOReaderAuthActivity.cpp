@@ -51,23 +51,9 @@ void KOReaderAuthActivity::performAuthentication() {
 void KOReaderAuthActivity::onEnter() {
   Activity::onEnter();
 
-  // Turn on WiFi
-  WiFi.mode(WIFI_STA);
-
   // Check if already connected
   if (WiFi.status() == WL_CONNECTED) {
-    state = AUTHENTICATING;
-    statusMessage = tr(STR_AUTHENTICATING);
-    requestUpdate();
-
-    // Perform authentication in a separate task
-    xTaskCreate(
-        [](void* param) {
-          auto* self = static_cast<KOReaderAuthActivity*>(param);
-          self->performAuthentication();
-          vTaskDelete(nullptr);
-        },
-        "AuthTask", 4096, this, 1, nullptr);
+    onWifiSelectionComplete(true);
     return;
   }
 
