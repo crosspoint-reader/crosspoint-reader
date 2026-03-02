@@ -92,7 +92,7 @@ void TxtReaderActivity::jumpToPercent(int percent) {
 void TxtReaderActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Calculate current book progress as an integer
-    const int initialPercent = totalPages > 0 ? (currentPage * 100 / totalPages) : 0;
+    const int initialPercent = (totalPages > 1) ? (currentPage * 100 / (totalPages - 1)) : 0;
 
     startActivityForResult(std::make_unique<ReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
                            [this](const ActivityResult& result) {
