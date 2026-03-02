@@ -280,10 +280,11 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
     return std::nullopt;
   }
 
+  const uint32_t fileSize = f.size();
   f.seek(HEADER_SIZE - sizeof(uint32_t));
   uint32_t anchorMapOffset;
   serialization::readPod(f, anchorMapOffset);
-  if (anchorMapOffset == 0) {
+  if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
     f.close();
     return std::nullopt;
   }
