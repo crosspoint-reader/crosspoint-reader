@@ -180,7 +180,7 @@ void EpubReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    activityManager.goToMyLibrary(epub ? epub->getPath() : "");
+    activityManager.goToFileBrowser(epub ? epub->getPath() : "");
     return;
   }
 

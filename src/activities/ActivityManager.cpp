@@ -5,8 +5,8 @@
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
-#include "home/MyLibraryActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
@@ -37,6 +37,15 @@ void ActivityManager::renderTaskLoop() {
     if (currentActivity) {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       currentActivity->render(std::move(lock));
+    }
+    // Notify any task blocked in requestUpdateAndWait() that the render is done.
+    TaskHandle_t waiter = nullptr;
+    taskENTER_CRITICAL(nullptr);
+    waiter = waitingTaskHandle;
+    waitingTaskHandle = nullptr;
+    taskEXIT_CRITICAL(nullptr);
+    if (waiter) {
+      xTaskNotify(waiter, 1, eIncrement);
     }
   }
 }
@@ -160,8 +169,8 @@ void ActivityManager::goToFileTransfer() {
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
 
-void ActivityManager::goToMyLibrary(std::string path) {
-  replaceActivity(std::make_unique<MyLibraryActivity>(renderer, mappedInput, std::move(path)));
+void ActivityManager::goToFileBrowser(std::string path) {
+  replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
 void ActivityManager::goToRecentBooks() {
@@ -225,6 +234,36 @@ void ActivityManager::requestUpdate(bool immediate) {
     requestedUpdate = true;
   }
 }
+void ActivityManager::requestUpdateAndWait() {
+  if (!renderTaskHandle) {
+    return;
+  }
+
+  // Atomic section to perform checks
+  taskENTER_CRITICAL(nullptr);
+  auto currTaskHandler = xTaskGetCurrentTaskHandle();
+  auto mutexHolder = xSemaphoreGetMutexHolder(renderingMutex);
+  bool isRenderTask = (currTaskHandler == renderTaskHandle);
+  bool alreadyWaiting = (waitingTaskHandle != nullptr);
+  bool holdingRenderLock = (mutexHolder == currTaskHandler);
+  if (!alreadyWaiting && !isRenderTask && !holdingRenderLock) {
+    waitingTaskHandle = currTaskHandler;
+  }
+  taskEXIT_CRITICAL(nullptr);
+
+  // Render task cannot call requestUpdateAndWait() or it will cause a deadlock
+  assert(!isRenderTask && "Render task cannot call requestUpdateAndWait()");
+
+  // There should never be the case where 2 tasks are waiting for a render at the same time
+  assert(!alreadyWaiting && "Already waiting for a render to complete");
+
+  // Cannot call while holding RenderLock or it will cause a deadlock
+  assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
+
+  xTaskNotify(renderTaskHandle, 1, eIncrement);
+  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+}
+
 // RenderLock
 
 RenderLock::RenderLock() {
