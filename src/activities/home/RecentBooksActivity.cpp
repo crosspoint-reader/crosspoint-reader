@@ -104,12 +104,8 @@ void RecentBooksActivity::render(RenderLock&&) {
         [this](int index) { return recentBooks[index].title; },
         [this](int index) {
           const auto& book = recentBooks[index];
-          if (book.series.empty()) return book.author;
-          std::string idx = book.seriesIndex;
-          if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
-            idx.resize(idx.size() - 2);
-          }
-          std::string seriesLabel = book.series + (idx.empty() ? "" : " #" + idx);
+          const auto seriesLabel = StringUtils::formatSeriesLabel(book.series, book.seriesIndex);
+          if (seriesLabel.empty()) return book.author;
           return book.author.empty() ? seriesLabel : book.author + " \xc2\xb7 " + seriesLabel;
         },
         [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });

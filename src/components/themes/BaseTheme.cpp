@@ -569,7 +569,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     }
 
     if (!truncatedSeries.empty()) {
-      titleYStart += renderer.getLineHeight(UI_10_FONT_ID);
+      titleYStart += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
       renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedSeries.c_str(), !bookSelected);
     }
 

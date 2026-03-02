@@ -519,7 +519,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
     }
     if (!series.empty()) {
-      titleY += renderer.getLineHeight(UI_10_FONT_ID);
+      titleY += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
       renderer.drawText(UI_10_FONT_ID, textX, titleY, series.c_str(), true);
     }
   } else {

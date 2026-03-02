@@ -45,6 +45,15 @@ std::string sanitizeFilename(const std::string& name, size_t maxBytes) {
   return result.empty() ? "book" : result;
 }
 
+std::string formatSeriesLabel(const std::string& series, const std::string& seriesIndex) {
+  if (series.empty()) return {};
+  std::string idx = seriesIndex;
+  if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
+    idx.resize(idx.size() - 2);
+  }
+  return series + (idx.empty() ? "" : " #" + idx);
+}
+
 bool checkFileExtension(const std::string& fileName, const char* extension) {
   if (fileName.length() < strlen(extension)) {
     return false;
