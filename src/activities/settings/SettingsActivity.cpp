@@ -15,6 +15,7 @@
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "WifiCredentialStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -48,7 +49,13 @@ void SettingsActivity::onEnter() {
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CAT_FEED_SYNC, SettingAction::FeedSync));
+  systemSettings.push_back(
+      SettingInfo::DynamicString(StrId::STR_WIFI_NETWORK,
+                                 [] { return WIFI_STORE.getLastConnectedSsid().empty()
+                                          ? std::string("(none)")
+                                          : WIFI_STORE.getLastConnectedSsid(); },
+                                 [](const std::string&) {})
+          .withDeviceOnly());
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
