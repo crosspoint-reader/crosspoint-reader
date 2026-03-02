@@ -15,6 +15,7 @@
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
+constexpr std::array<const char*, 6> SUPPORTED_FORMATS = {".epub", ".xtch", ".xtc", ".txt", ".md", ".bmp"};
 }  // namespace
 
 void sortFileList(std::vector<std::string>& strs) {
@@ -301,7 +302,10 @@ size_t FileBrowserActivity::findEntry(const std::string& name) const {
 }
 
 bool FileBrowserActivity::isSupportedFormat(const std::string& fileName) {
-  return StringUtils::checkFileExtension(fileName, ".epub") || StringUtils::checkFileExtension(fileName, ".xtch") ||
-         StringUtils::checkFileExtension(fileName, ".xtc") || StringUtils::checkFileExtension(fileName, ".txt") ||
-         StringUtils::checkFileExtension(fileName, ".md") || StringUtils::checkFileExtension(fileName, ".bmp");
+  for (size_t i = 0; i < SUPPORTED_FORMATS.size(); i++) {
+    if (StringUtils::checkFileExtension(fileName, SUPPORTED_FORMATS[i])) {
+      return true;
+    }
+  }
+  return false;
 }
