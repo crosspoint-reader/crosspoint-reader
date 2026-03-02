@@ -56,6 +56,30 @@ jobs:
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 
+  native-tests:
+    name: Native unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Run native tests
+        run: pio test -e native
+
   verify-routes:
     name: API route coverage
     runs-on: ubuntu-latest
@@ -123,6 +147,7 @@ jobs:
       - build
       - clang-format
       - cppcheck
+      - native-tests
       - verify-routes
     if: always()
     runs-on: ubuntu-latest

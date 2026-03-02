@@ -173,7 +173,17 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       destPtr[info.stringMaxLen - 1] = '\0';
     } else {
       const uint8_t fieldDefault = s.*(info.valuePtr);  // struct-initializer default, read before we overwrite it
-      uint8_t v = doc[info.key] | fieldDefault;
+      JsonVariant raw = doc[info.key];
+      uint8_t v;
+      if (raw.isNull()) {
+        // Key absent from JSON — use default and flag for resave so the key is written on next save.
+        v = fieldDefault;
+        if (needsResave) *needsResave = true;
+      } else {
+        // Use .as<uint8_t>() rather than operator| so that JSON booleans (true/false) convert
+        // correctly to 1/0.  operator| in ArduinoJson 7 rejects type mismatches (bool ≠ uint8_t).
+        v = raw.as<uint8_t>();
+      }
       if (info.type == SettingType::ENUM) {
         v = clamp(v, (uint8_t)info.enumValues.size(), fieldDefault);
       } else if (info.type == SettingType::TOGGLE) {
