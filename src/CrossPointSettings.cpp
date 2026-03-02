@@ -316,9 +316,9 @@ int CrossPointSettings::getReaderFontId() const {
         default:
           return NOTOSANS_14_FONT_ID;
         case LARGE:
-          return NOTOSANS_16_FONT_ID;
-        case EXTRA_LARGE:
           return NOTOSANS_18_FONT_ID;
+        case EXTRA_LARGE:
+          return NOTOSANS_20_FONT_ID;
       }
     case OPENDYSLEXIC:
       switch (fontSize) {
