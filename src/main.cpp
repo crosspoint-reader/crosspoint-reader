@@ -31,6 +31,7 @@
 #include "network/BackgroundWifiService.h"
 #include "util/ButtonNavigator.h"
 #include "util/FactoryResetUtils.h"
+#include "util/FirmwareUpdateUtil.h"
 #include "util/ScreenshotUtil.h"
 
 HalDisplay display;
@@ -389,6 +390,10 @@ void setup() {
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
   setupDisplayAndFonts();
+
+  if (FirmwareUpdateUtil::checkForLocalUpdate()) {
+    FirmwareUpdateUtil::performLocalUpdate(renderer);
+  }
 
   activityManager.goToBoot();
 

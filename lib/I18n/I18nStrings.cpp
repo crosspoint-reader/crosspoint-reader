@@ -873,6 +873,7 @@ const char* const STRINGS_EN[] = {
     "Language",
     "Select Wallpaper",
     "Factory Reset",
+    "Switch to TRMNL",
     "Clear Reading Cache",
     "Calibre",
     "Username",
@@ -1326,6 +1327,7 @@ const char* const STRINGS_ES[] = {
     "Restablecimiento de f\xC3"
     "\xA1"
     "brica",
+    "Switch to TRMNL",
     "Borrar cach\xC3"
     "\xA9"
     " de lectura",
@@ -2076,6 +2078,7 @@ const char* const STRINGS_FR[] = {
     "R\xC3"
     "\xA9"
     "initialisation d'usine",
+    "Switch to TRMNL",
     "Vider le cache de lecture",
     "Calibre",
     "Nom d\xE2"
@@ -2763,6 +2766,7 @@ const char* const STRINGS_DE[] = {
     "Sprache",
     "Bildauswahl Standby",
     "Werksreset",
+    "Switch to TRMNL",
     "Lese-Cache leeren",
     "Calibre",
     "Benutzername",
@@ -3789,6 +3793,7 @@ const char* const STRINGS_CS[] = {
     " nastaven\xC3"
     "\xAD"
     "",
+    "Switch to TRMNL",
     "Vymazat mezipam\xC4"
     "\x9B"
     "\xC5"
@@ -5059,6 +5064,7 @@ const char* const STRINGS_PO[] = {
     "o de f\xC3"
     "\xA1"
     "brica",
+    "Switch to TRMNL",
     "Limpar cache de leitura",
     "Calibre",
     "Nome de usu\xC3"
@@ -8947,6 +8953,7 @@ const char* const STRINGS_RU[] = {
     "\xD0"
     "\xBA"
     "",
+    "Switch to TRMNL",
     "\xD0"
     "\x9E"
     "\xD1"
@@ -14672,6 +14679,7 @@ const char* const STRINGS_SV[] = {
     "terst\xC3"
     "\xA4"
     "llning",
+    "Switch to TRMNL",
     "Rensa Eboksl\xC3"
     "\xA4"
     "sarens cache",
@@ -15611,6 +15619,7 @@ const char* const STRINGS_RO[] = {
     "Resetare fabric\xC4"
     "\x83"
     "",
+    "Switch to TRMNL",
     "Goli\xC5"
     "\xA3"
     "i cache-ul de lectur\xC4"
@@ -16461,6 +16470,7 @@ const char* const STRINGS_CA[] = {
     " de f\xC3"
     "\xA0"
     "brica",
+    "Switch to TRMNL",
     "Esborra la mem\xC3"
     "\xB2"
     "ria cau de lectura",
@@ -20877,6 +20887,7 @@ const char* const STRINGS_UK[] = {
     "\xD1"
     "\x85"
     "",
+    "Switch to TRMNL",
     "\xD0"
     "\x9E"
     "\xD1"
@@ -30447,6 +30458,7 @@ const char* const STRINGS_BE[] = {
     "\xD0"
     "\xB4"
     "",
+    "Switch to TRMNL",
     "\xD0"
     "\x90"
     "\xD1"
@@ -35956,6 +35968,7 @@ const char* const STRINGS_IT[] = {
     "Lingua",
     "Seleziona sfondo",
     "Ripristino di fabbrica",
+    "Switch to TRMNL",
     "Svuota cache di lettura",
     "Calibre",
     "Nome utente",
@@ -36646,6 +36659,7 @@ const char* const STRINGS_PL[] = {
     "\xC4"
     "\x87"
     " ustawienia fabryczne",
+    "Switch to TRMNL",
     "Wyczy\xC5"
     "\x9B"
     "\xC4"
@@ -37600,6 +37614,7 @@ const char* const STRINGS_FI[] = {
     "Kieli",
     "Valitse taustakuva",
     "Tehdasasetukset",
+    "Switch to TRMNL",
     "Tyhjenn\xC3"
     "\xA4"
     " lukuv\xC3"
@@ -38418,6 +38433,7 @@ const char* const STRINGS_DA[] = {
     "\xA6"
     "lg baggrundsbillede",
     "Fabriksindstillinger",
+    "Switch to TRMNL",
     "Ryd l\xC3"
     "\xA6"
     "secache",
@@ -38886,6 +38902,7 @@ const char* const STRINGS_NL[] = {
     "Taal",
     "Achtergrond selecteren",
     "Factory Reset",
+    "Switch to TRMNL",
     "Leescache wissen",
     "Calibre",
     "Gebruikersnaam",
