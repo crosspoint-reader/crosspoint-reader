@@ -1,5 +1,7 @@
 #include "TxtReaderActivity.h"
 
+#include <time.h>
+
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -435,6 +437,21 @@ void TxtReaderActivity::renderStatusBar() const {
   if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
     title = txt->getTitle();
   }
+  // Append current time to title if system clock is synced
+  {
+    struct tm timeinfo = {};
+    if (getLocalTime(&timeinfo) && timeinfo.tm_year >= 120) {  // year >= 2020 sanity check
+      char timeStr[8];
+      strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
+      if (title.empty()) {
+        title = timeStr;
+      } else {
+        title += "  ";
+        title += timeStr;
+      }
+    }
+  }
+
   GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
 }
 
