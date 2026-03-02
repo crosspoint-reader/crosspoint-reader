@@ -1,5 +1,7 @@
 #include "CrossPointWebServer.h"
 
+#include <memory>
+
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
@@ -578,14 +580,20 @@ void CrossPointWebServer::handleDownload() const {
 
   // Stream in chunks so large files (e.g. firmware.bin) don't overflow the TCP
   // send buffer or trigger the watchdog.
+  // NOTE: buf is heap-allocated (not stack) to avoid overflowing loopTask's 8 KB stack.
   NetworkClient client = server->client();
-  uint8_t buf[4096];
+  static const size_t BUF_SIZE = 4096;
+  std::unique_ptr<uint8_t[]> buf(new uint8_t[BUF_SIZE]);
+  if (!buf) {
+    file.close();
+    return;
+  }
   size_t remaining = fileSize;
   while (remaining > 0 && client.connected()) {
-    const size_t toRead = min(sizeof(buf), remaining);
-    const int bytesRead = file.read(buf, toRead);
+    const size_t toRead = min(BUF_SIZE, remaining);
+    const int bytesRead = file.read(buf.get(), toRead);
     if (bytesRead <= 0) break;
-    const size_t sent = client.write(buf, bytesRead);
+    const size_t sent = client.write(buf.get(), bytesRead);
     if (sent == 0) break;  // Client disconnected
     remaining -= sent;
     esp_task_wdt_reset();  // Feed watchdog during large transfers
