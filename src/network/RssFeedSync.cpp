@@ -26,8 +26,9 @@ TaskHandle_t syncTaskHandle = nullptr;
 RssFeedSync::State s_state = RssFeedSync::State::IDLE;
 int s_dlCurrent = 0;
 int s_dlTotal   = 0;
-unsigned long s_doneTime = 0;       // millis() when DONE was set, for auto-clear
-unsigned long s_suppressUntilMs = 0;  // millis() until sync is suppressed (button-hold skip)
+unsigned long s_doneTime = 0;         // millis() when DONE was set, for auto-clear
+unsigned long s_suppressStartMs = 0;  // millis() when suppressSync() was called (0 = not suppressed)
+unsigned long s_suppressDurationMs = 0;
 
 static void setState(RssFeedSync::State st) { s_state = st; }
 
@@ -546,7 +547,7 @@ namespace RssFeedSync {
 
 void startSync() {
   // Guard: suppressed by user (button held at WiFi connect time)
-  if (millis() < s_suppressUntilMs) {
+  if (s_suppressStartMs != 0 && (millis() - s_suppressStartMs) < s_suppressDurationMs) {
     LOG_INF(TAG, "Feed sync suppressed by user request — skipping");
     return;
   }
@@ -566,7 +567,8 @@ void startSync() {
 }
 
 void suppressSync(unsigned long durationMs) {
-  s_suppressUntilMs = millis() + durationMs;
+  s_suppressStartMs = millis();
+  s_suppressDurationMs = durationMs;
   LOG_INF(TAG, "Feed sync suppressed for %lums", durationMs);
 }
 
