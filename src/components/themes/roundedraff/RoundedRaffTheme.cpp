@@ -184,7 +184,6 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
     if (!coverRendered) {
       std::string coverPath = book.coverBmpPath;
       bool hasCover = true;
-      int tileX = RoundedRaffMetrics::values.contentSidePadding;
       if (coverPath.empty()) {
         hasCover = false;
       } else {
