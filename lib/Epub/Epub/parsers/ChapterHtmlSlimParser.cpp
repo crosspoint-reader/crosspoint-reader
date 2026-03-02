@@ -278,8 +278,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
                 int displayWidth = 0;
                 int displayHeight = 0;
-                const float emSize =
-                    static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+                const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
                 CssStyle imgStyle = self->cssParser ? self->cssParser->resolveStyle("img", classAttr) : CssStyle{};
                 // Merge inline style (e.g. style="height: 2em") so it overrides stylesheet rules
                 if (!styleAttr.empty()) {
@@ -505,7 +504,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
-  const float emSize = static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+  const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
   const auto userAlignmentBlockStyle = BlockStyle::fromCssStyle(
       cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
 

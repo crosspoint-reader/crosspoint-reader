@@ -1,4 +1,5 @@
 #pragma once
+
 #include <functional>
 #include <string>
 #include <vector>
@@ -7,8 +8,11 @@
 #include "RecentBooksStore.h"
 #include "util/ButtonNavigator.h"
 
-class MyLibraryActivity final : public Activity {
+class FileBrowserActivity final : public Activity {
  private:
+  // Deletion
+  void clearFileMetadata(const std::string& fullPath);
+
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
@@ -22,8 +26,8 @@ class MyLibraryActivity final : public Activity {
   size_t findEntry(const std::string& name) const;
 
  public:
-  explicit MyLibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/")
-      : Activity("MyLibrary", renderer, mappedInput), basepath(initialPath.empty() ? "/" : std::move(initialPath)) {}
+  explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/")
+      : Activity("FileBrowser", renderer, mappedInput), basepath(initialPath.empty() ? "/" : std::move(initialPath)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
