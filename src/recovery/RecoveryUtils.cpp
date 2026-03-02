@@ -12,6 +12,7 @@ namespace Recovery {
 void getPartitions(const esp_partition_t*& appPartition, const esp_partition_t*& recoveryPartition) {
   appPartition = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr);
   recoveryPartition = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, nullptr);
+  auto* bootPartition = esp_ota_get_boot_partition();
 
   if (appPartition == nullptr || recoveryPartition == nullptr) {
     LOG_ERR("REC", "Failed to find app or recovery partition");
@@ -21,6 +22,9 @@ void getPartitions(const esp_partition_t*& appPartition, const esp_partition_t*&
   LOG_INF("REC", "App partition: address=0x%08x, size=0x%08x", appPartition->address, appPartition->size);
   LOG_INF("REC", "Recovery partition: address=0x%08x, size=0x%08x", recoveryPartition->address,
           recoveryPartition->size);
+  if (bootPartition != nullptr) {
+    LOG_INF("REC", "Current boot partition: address=0x%08x, size=0x%08x", bootPartition->address, bootPartition->size);
+  }
 }
 
 void reboot(bool toRecovery) {

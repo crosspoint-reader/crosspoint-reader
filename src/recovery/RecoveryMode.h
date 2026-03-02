@@ -11,6 +11,7 @@ class RecoveryMode final {
     ERROR_SDCARD,
     IDLE,
     FLASHING,
+    RESTART_TO_NORMAL,
   } state = State::IDLE;
 
  public:
