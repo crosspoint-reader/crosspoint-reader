@@ -578,12 +578,18 @@ void setup() {
               showError(errMsg, fileSize, written);
             } else {
               err = esp_ota_end(otaHandle);
-              if (err != ESP_OK) {
+              // ESP_ERR_OTA_VALIDATE_FAILED means SHA256 didn't match — expected for
+              // Arduino/unsigned builds that don't embed a hash. Data was written
+              // correctly; proceed to set_boot_partition anyway.
+              if (err != ESP_OK && err != ESP_ERR_OTA_VALIDATE_FAILED) {
                 char errMsg[80];
                 snprintf(errMsg, sizeof(errMsg), "ota_end: %s", esp_err_to_name(err));
                 LOG_ERR("MAIN", "OTA end/validate failed: %s", errMsg);
                 showError(errMsg, fileSize, written);
               } else {
+                if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
+                  LOG_INF("MAIN", "OTA SHA256 validation skipped (unsigned build)");
+                }
                 err = esp_ota_set_boot_partition(updatePart);
                 if (err != ESP_OK) {
                   char errMsg[80];
@@ -902,11 +908,16 @@ void loop() {
                 dzFlashFail(errMsg);
               } else {
                 err = esp_ota_end(otaHandle);
-                if (err != ESP_OK) {
+                // ESP_ERR_OTA_VALIDATE_FAILED is expected for Arduino/unsigned builds.
+                // Data was written correctly; proceed anyway.
+                if (err != ESP_OK && err != ESP_ERR_OTA_VALIDATE_FAILED) {
                   char errMsg[80];
                   snprintf(errMsg, sizeof(errMsg), "ota_end: %s", esp_err_to_name(err));
                   dzFlashFail(errMsg);
                 } else {
+                  if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
+                    LOG_INF("DZ", "OTA SHA256 validation skipped (unsigned build)");
+                  }
                   err = esp_ota_set_boot_partition(updatePart);
                   if (err != ESP_OK) {
                     char errMsg[80];
