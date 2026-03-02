@@ -2,6 +2,3 @@
 CONFIG_ESP32C3_REV_MIN=0
 CONFIG_ESP32C3_REV_MIN_FULL=0
 
-# Increase loopTask stack from 8KB to 16KB to accommodate EPUB OPF parsing
-# (Expat uses ~400B/frame; ContentOpfParser call chains overflow 8KB on large EPUBs)
-CONFIG_ARDUINO_LOOP_STACK_SIZE=16384
