@@ -231,25 +231,23 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
 
     // ─────────────────────────────────────────────────────────────────────────
     // Seg 1 & 2: Up/Down — white filled triangles near the dividing line
-    // The triangles point toward the divider between seg1 and seg2.
+    // Base close to divider, tip pointing away.  Sized ~= pill width.
     // ─────────────────────────────────────────────────────────────────────────
     {
       const int divY   = zoneTop + segH * 2;  // divider between seg1 and seg2
-      constexpr int TRI_H = 7;   // triangle height (base→tip)
-      constexpr int TRI_W = 10;  // triangle half-width at base
-      constexpr int GAP  = 5;    // gap from divider to tip
-      const int cx     = LEFT_W / 2;
+      constexpr int TRI_H = 22;  // triangle height (tip→base)
+      constexpr int TRI_W = 30;  // triangle half-width at base (~= pill width / 2)
+      constexpr int GAP   = 8;   // gap from divider to base
+      const int cx = LEFT_W / 2;
 
-      // Up triangle: tip points up, base GAP above divider
-      // tip at (cx, divY - GAP - TRI_H), base at divY - GAP
+      // Up triangle: base near divider, tip above
       for (int row = 0; row < TRI_H; row++) {
         const int hw = (TRI_W * row) / TRI_H;
         const int y  = divY - GAP - TRI_H + row;
         renderer.drawLine(cx - hw, y, cx + hw, y, /*black=*/false);
       }
 
-      // Down triangle: tip points down, base GAP below divider
-      // tip at (cx, divY + GAP + TRI_H), base at divY + GAP
+      // Down triangle: base near divider, tip below
       for (int row = 0; row < TRI_H; row++) {
         const int hw = (TRI_W * row) / TRI_H;
         const int y  = divY + GAP + TRI_H - row;
@@ -538,32 +536,41 @@ void PulsrTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const 
       return *s == '\0' && *l == '\0';
     };
 
-    constexpr int TH = 6;  // triangle height
-    constexpr int TW = 9;  // triangle half-width at base
+    // Pill-sized triangles: ~26px major axis, ~16px half-minor axis.
+    // Up/Down use horizontal scanlines (tip at top/bottom, wider at base).
+    // Left/Right use horizontal scanlines too, but base is anchored to the
+    // nearest zone divider so both arrows point toward each other, mirroring
+    // how the sidebar Up/Down triangles flank the horizontal dividing line.
+    constexpr int TH = 26;  // major axis (height for ▲▼, width for ◀▶)
+    constexpr int TW = 14;  // half minor axis (half-width for ▲▼, half-height for ◀▶)
+    constexpr int TD = 6;   // gap from zone edge for left/right anchor
 
     if (labelIs("up")) {
-      // Tip up
+      // Tip up, base down, centered
       for (int row = 0; row < TH; row++) {
         const int hw = (TW * row) / TH;
-        renderer.drawLine(cx - hw, cy + row - TH/2, cx + hw, cy + row - TH/2, /*black=*/false);
+        renderer.drawLine(cx - hw, cy - TH/2 + row, cx + hw, cy - TH/2 + row, /*black=*/false);
       }
     } else if (labelIs("down")) {
-      // Tip down
+      // Tip down, base up, centered
       for (int row = 0; row < TH; row++) {
         const int hw = (TW * row) / TH;
-        renderer.drawLine(cx - hw, cy - row + TH/2, cx + hw, cy - row + TH/2, /*black=*/false);
+        renderer.drawLine(cx - hw, cy + TH/2 - row, cx + hw, cy + TH/2 - row, /*black=*/false);
       }
     } else if (labelIs("left")) {
-      // Tip left
-      for (int col = 0; col < TH; col++) {
-        const int hh = (TW * col) / TH;
-        renderer.drawLine(cx + col - TH/2, cy - hh, cx + col - TH/2, cy + hh, /*black=*/false);
+      // Tip left, base anchored near RIGHT edge of zone (nearest divider)
+      // Drawn with horizontal scanlines: at center row full width, tapering to point at left.
+      const int baseX = x + btnW - TD;
+      for (int j = -TW; j <= TW; j++) {
+        const int w = TH * (TW - abs(j)) / TW;
+        renderer.drawLine(baseX - w, cy + j, baseX, cy + j, /*black=*/false);
       }
     } else if (labelIs("right")) {
-      // Tip right
-      for (int col = 0; col < TH; col++) {
-        const int hh = (TW * col) / TH;
-        renderer.drawLine(cx - col + TH/2, cy - hh, cx - col + TH/2, cy + hh, /*black=*/false);
+      // Tip right, base anchored near LEFT edge of zone (nearest divider)
+      const int baseX = x + TD;
+      for (int j = -TW; j <= TW; j++) {
+        const int w = TH * (TW - abs(j)) / TW;
+        renderer.drawLine(baseX, cy + j, baseX + w, cy + j, /*black=*/false);
       }
     } else {
       // Default: uppercase text label
