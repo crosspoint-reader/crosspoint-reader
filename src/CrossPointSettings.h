@@ -5,18 +5,18 @@
 #include <iosfwd>
 
 class CrossPointSettings {
- private:
-  // Private constructor for singleton
+ public:
   CrossPointSettings() = default;
 
-  // Static instance
-  static CrossPointSettings instance;
-
- public:
   // Delete copy constructor and assignment
   CrossPointSettings(const CrossPointSettings&) = delete;
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
+ private:
+  // Static instance
+  static CrossPointSettings instance;
+
+ public:
   enum SLEEP_SCREEN_MODE {
     DARK = 0,
     LIGHT = 1,

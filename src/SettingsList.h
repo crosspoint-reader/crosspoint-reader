@@ -6,7 +6,7 @@
 
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
-#include "activities/settings/SettingsActivity.h"
+#include "SettingInfo.h"
 
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).

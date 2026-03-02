@@ -1,0 +1,7 @@
+{
+  "name": "hal",
+  "version": "1.0.0",
+  "description": "Hardware Abstraction Layer for Xteink X4 (ESP32-C3)",
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"]
+}

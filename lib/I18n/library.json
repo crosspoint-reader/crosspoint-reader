@@ -1,0 +1,7 @@
+{
+  "name": "I18n",
+  "version": "1.0.0",
+  "description": "Internationalization support for Xteink X4 (ESP32-C3)",
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"]
+}
