@@ -54,6 +54,17 @@ def get_base_version(project_dir):
     return config.get('crosspoint', 'version')
 
 
+def get_git_sha(project_dir):
+    """Return the short git SHA for the current HEAD commit."""
+    try:
+        return subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            text=True, stderr=subprocess.PIPE, cwd=project_dir
+        ).strip()
+    except Exception:
+        return 'unknown'
+
+
 def inject_version(env):
     # Only applies to the dev (default) environment; release envs set the
     # version via build_flags in platformio.ini and are unaffected.
@@ -63,10 +74,14 @@ def inject_version(env):
     project_dir = env['PROJECT_DIR']
     base_version = get_base_version(project_dir)
     branch = get_git_branch(project_dir)
+    sha = get_git_sha(project_dir)
     version_string = f'{base_version}-dev+{branch}'
 
-    env.Append(CPPDEFINES=[('CROSSPOINT_VERSION', f'\\"{version_string}\\"')])
-    print(f'CrossPoint build version: {version_string}')
+    env.Append(CPPDEFINES=[
+        ('CROSSPOINT_VERSION', f'\\"{version_string}\\"'),
+        ('CROSSPOINT_GIT_SHA', f'\\"{sha}\\"'),
+    ])
+    print(f'CrossPoint build version: {version_string} (sha: {sha})')
 
 
 # PlatformIO/SCons entry point — Import and env are SCons builtins injected at runtime.

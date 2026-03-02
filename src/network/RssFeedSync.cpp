@@ -499,6 +499,25 @@ void syncTask(void*) {
         LOG_DBG(TAG, "Skipping firmware item '%s': missing enclosure", item.guid.c_str());
         return;
       }
+      // Skip if this firmware GUID references the currently running build (prevents flash loops).
+      // Feed GUID is "firmware-{sha}" (e.g. "firmware-00430dd"); CROSSPOINT_GIT_SHA is the short
+      // SHA baked in at compile time.  If the GUID contains our SHA, we're already running it.
+      if (strstr(item.guid.c_str(), CROSSPOINT_GIT_SHA) != nullptr) {
+        LOG_INF(TAG, "Skip firmware: GUID %s matches running SHA " CROSSPOINT_GIT_SHA, item.guid.c_str());
+        if (itemTime > 0) oldestSuccess = itemTime;
+        return;
+      }
+      // Skip if firmware.bin already on SD with matching size (e.g. after reboot before flash ran)
+      if (Storage.exists("/firmware.bin") && item.enclosureLength > 0) {
+        HalFile f = Storage.open("/firmware.bin");
+        const size_t sz = f.fileSize();
+        f.close();
+        if (sz == static_cast<size_t>(item.enclosureLength)) {
+          LOG_INF(TAG, "Skip firmware: /firmware.bin exists, size matches (%u)", static_cast<unsigned>(sz));
+          if (itemTime > 0) oldestSuccess = itemTime;
+          return;
+        }
+      }
       if (HttpDownloader::downloadToFile(item.enclosureUrl, "/firmware.bin") != HttpDownloader::OK) {
         LOG_ERR(TAG, "Firmware download failed: %s", item.enclosureUrl.c_str());
         return;
