@@ -141,9 +141,21 @@
       <span id="sync-status" style="margin-left: 12px; color: var(--label-color)"></span>
     </div>
 
-    <div class="card" id="flash-card" style="display:none">
-      <h2>Firmware Update</h2>
-      <p style="color: var(--label-color); margin: 0 0 12px 0">A firmware.bin file is ready on the SD card.</p>
+    <div id="flash-card" style="display:none; background:#fff3cd; border:1px solid #ffc107;
+         border-radius:8px; padding:16px; margin-bottom:16px">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start">
+        <div>
+          <div style="font-weight:bold; font-size:1.1em; margin-bottom:6px">
+            ⚡ Firmware update ready
+          </div>
+          <div id="flash-info" style="color:#856404; margin-bottom:12px; font-size:0.95em">
+            Sleep/wake to install
+          </div>
+        </div>
+        <button onclick="document.getElementById('flash-card').style.display='none'" style="
+          background:none; border:none; cursor:pointer; font-size:1.2em;
+          color:#856404; padding:0 0 0 12px; line-height:1">✕</button>
+      </div>
       <button id="flash-btn" onclick="flashFirmware()" style="
         padding: 10px 24px;
         background-color: #e74c3c;
@@ -152,7 +164,7 @@
         border-radius: 4px;
         cursor: pointer;
         font-size: 1em;
-      ">Flash Firmware</button>
+      ">Flash Now</button>
       <span id="flash-status" style="margin-left: 12px; color: var(--label-color)"></span>
     </div>
 
@@ -221,7 +233,13 @@
         const r = await fetch('/api/firmware-status');
         if (!r.ok) return;
         const d = await r.json();
-        if (d.firmwareReady) document.getElementById('flash-card').style.display = '';
+        if (d.firmwareReady) {
+          let info = 'Sleep/wake to install';
+          if (d.fileSize) info += ' • ' + (d.fileSize / 1024 / 1024).toFixed(2) + ' MB';
+          if (d.version) info += ' • ' + d.version;
+          document.getElementById('flash-info').textContent = info;
+          document.getElementById('flash-card').style.display = '';
+        }
       } catch (e) {}
     }
 
