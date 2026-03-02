@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "ReaderPercentSelectionActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -73,7 +74,36 @@ void TxtReaderActivity::onExit() {
   txt.reset();
 }
 
+void TxtReaderActivity::jumpToPercent(int percent) {
+  if (totalPages <= 0) return;
+
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+
+  int targetPage = (percent * (totalPages - 1)) / 100;
+
+  if (targetPage != currentPage) {
+    currentPage = targetPage;
+    requestUpdate();
+    LOG_DBG("TRS", "Jumped to percent %d%% (Page %d/%d)", percent, currentPage + 1, totalPages);
+  }
+}
+
 void TxtReaderActivity::loop() {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    // Calculate current book progress as an integer
+    const int initialPercent = totalPages > 0 ? (currentPage * 100 / totalPages) : 0;
+
+    startActivityForResult(std::make_unique<ReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               int targetPercent = std::get<PercentResult>(result.data).percent;
+                               jumpToPercent(targetPercent);
+                             }
+                           });
+    return;
+  }
+
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
     activityManager.goToFileBrowser(txt ? txt->getPath() : "");

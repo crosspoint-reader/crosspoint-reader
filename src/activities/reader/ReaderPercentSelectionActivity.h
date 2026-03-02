@@ -4,12 +4,12 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
-class EpubReaderPercentSelectionActivity final : public Activity {
+class ReaderPercentSelectionActivity final : public Activity {
  public:
   // Slider-style percent selector for jumping within a book.
-  explicit EpubReaderPercentSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                              const int initialPercent)
-      : Activity("EpubReaderPercentSelection", renderer, mappedInput), percent(initialPercent) {}
+  explicit ReaderPercentSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                          const int initialPercent)
+      : Activity("ReaderPercentSelection", renderer, mappedInput), percent(initialPercent) {}
 
   void onEnter() override;
   void onExit() override;

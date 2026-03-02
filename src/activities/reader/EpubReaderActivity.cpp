@@ -12,11 +12,11 @@
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
-#include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
+#include "ReaderPercentSelectionActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -346,13 +346,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
       }
       const int initialPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-      startActivityForResult(
-          std::make_unique<EpubReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              jumpToPercent(std::get<PercentResult>(result.data).percent);
-            }
-          });
+      startActivityForResult(std::make_unique<ReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 jumpToPercent(std::get<PercentResult>(result.data).percent);
+                               }
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {

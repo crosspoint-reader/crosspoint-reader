@@ -41,6 +41,9 @@ class TxtReaderActivity final : public Activity {
   void saveProgress() const;
   void loadProgress();
 
+ private:
+  void jumpToPercent(int percent);
+
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)
       : Activity("TxtReader", renderer, mappedInput), txt(std::move(txt)) {}
