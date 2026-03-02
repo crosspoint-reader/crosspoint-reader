@@ -65,8 +65,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   esp_err_t esp_err;
   JsonDocument doc;
 
+  const char* url = (releaseUrl != nullptr) ? releaseUrl : latestReleaseUrl;
   esp_http_client_config_t client_config = {
-      .url = latestReleaseUrl,
+      .url = url,
       .event_handler = event_handler,
       /* Default HTTP client buffer size 512 byte only */
       .buffer_size = 8192,

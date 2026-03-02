@@ -11,6 +11,7 @@ class OtaUpdater {
   size_t processedSize = 0;
   size_t totalSize = 0;
   bool render = false;
+  const char* releaseUrl = nullptr;
 
  public:
   enum OtaUpdaterError {
@@ -31,7 +32,7 @@ class OtaUpdater {
 
   bool getRender() const { return render; }
 
-  OtaUpdater() = default;
+  explicit OtaUpdater(const char* releaseUrl = nullptr) : releaseUrl(releaseUrl) {}
   bool isUpdateNewer() const;
   const std::string& getLatestVersion() const;
   OtaUpdaterError checkForUpdate();

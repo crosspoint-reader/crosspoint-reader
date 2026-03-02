@@ -23,6 +23,7 @@ enum class SettingAction {
   Network,
   ClearCache,
   CheckForUpdates,
+  CheckForClawUpdates,
   Language,
   DangerZonePassword,
 };
