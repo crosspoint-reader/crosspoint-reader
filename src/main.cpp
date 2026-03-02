@@ -9,6 +9,8 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <SdCardFontManager.h>
+#include <SdCardFontRegistry.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -38,6 +40,8 @@ HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 FontDecompressor fontDecompressor;
+SdCardFontRegistry fontRegistry;
+SdCardFontManager sdFontManager;
 Activity* currentActivity;
 
 // Fonts
@@ -213,10 +217,43 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
+// Ensure the correct SD card font family is loaded based on current settings.
+// Called before entering the reader or after settings change.
+void ensureSdFontLoaded() {
+  const char* wantedFamily = SETTINGS.sdFontFamilyName;
+  const std::string& currentFamily = sdFontManager.currentFamilyName();
+
+  if (wantedFamily[0] == '\0') {
+    // No SD font wanted — unload if any is loaded
+    if (!currentFamily.empty()) {
+      sdFontManager.unloadAll(renderer);
+    }
+    return;
+  }
+
+  // Already loaded the right family
+  if (currentFamily == wantedFamily) return;
+
+  // Need to switch families
+  if (!currentFamily.empty()) {
+    sdFontManager.unloadAll(renderer);
+  }
+
+  const auto* family = fontRegistry.findFamily(wantedFamily);
+  if (family) {
+    sdFontManager.loadFamily(*family, renderer);
+    LOG_DBG("MAIN", "Loaded SD font family: %s", wantedFamily);
+  } else {
+    LOG_DBG("MAIN", "SD font family not found: %s (clearing)", wantedFamily);
+    SETTINGS.sdFontFamilyName[0] = '\0';
+  }
+}
+
 void onGoHome();
 void onGoToMyLibraryWithPath(const std::string& path);
 void onGoToRecentBooks();
 void onGoToReader(const std::string& initialEpubPath) {
+  ensureSdFontLoaded();
   const std::string bookPath = initialEpubPath;  // Copy before exitActivity() invalidates the reference
   exitActivity();
   enterNewActivity(new ReaderActivity(renderer, mappedInputManager, bookPath, onGoHome, onGoToMyLibraryWithPath));
@@ -258,6 +295,39 @@ void onGoHome() {
                                     onGoToSettings, onGoToFileTransfer, onGoToBrowser));
 }
 
+// Map fontSize enum (SMALL=0, MEDIUM=1, LARGE=2, EXTRA_LARGE=3) to point sizes.
+// SD card fonts use the standard sizes: 12, 14, 16, 18.
+static constexpr uint8_t FONT_SIZE_TO_PT[] = {12, 14, 16, 18};
+static constexpr int FONT_SIZE_TO_PT_COUNT = sizeof(FONT_SIZE_TO_PT) / sizeof(FONT_SIZE_TO_PT[0]);
+
+// Callback for CrossPointSettings to resolve SD card font IDs at runtime
+int resolveSdFontId(const char* familyName, uint8_t fontSizeEnum) {
+  if (fontSizeEnum >= FONT_SIZE_TO_PT_COUNT) return 0;
+  uint8_t ptSize = FONT_SIZE_TO_PT[fontSizeEnum];
+
+  int fontId = sdFontManager.getFontId(familyName, ptSize, 0);
+  if (fontId != 0) return fontId;
+
+  // Requested size not available — find closest available size
+  const auto* family = fontRegistry.findFamily(familyName);
+  if (!family) return 0;
+
+  auto sizes = family->availableSizes();
+  if (sizes.empty()) return 0;
+
+  // Find closest size
+  uint8_t bestSize = sizes[0];
+  int bestDiff = abs(static_cast<int>(ptSize) - static_cast<int>(bestSize));
+  for (uint8_t s : sizes) {
+    int diff = abs(static_cast<int>(ptSize) - static_cast<int>(s));
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestSize = s;
+    }
+  }
+  return sdFontManager.getFontId(familyName, bestSize, 0);
+}
+
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();
@@ -286,6 +356,25 @@ void setupDisplayAndFonts() {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+
+  // Discover SD card font families
+  fontRegistry.discover();
+
+  // Register SD font ID resolver so CrossPointSettings can look up font IDs
+  SETTINGS.sdFontIdResolver = resolveSdFontId;
+
+  // If user has a saved SD font selection, load it
+  if (SETTINGS.sdFontFamilyName[0] != '\0') {
+    const auto* family = fontRegistry.findFamily(SETTINGS.sdFontFamilyName);
+    if (family) {
+      sdFontManager.loadFamily(*family, renderer);
+      LOG_DBG("MAIN", "Loaded SD card font family: %s", SETTINGS.sdFontFamilyName);
+    } else {
+      LOG_DBG("MAIN", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
+      SETTINGS.sdFontFamilyName[0] = '\0';
+    }
+  }
+
   LOG_DBG("MAIN", "Fonts setup");
 }
 

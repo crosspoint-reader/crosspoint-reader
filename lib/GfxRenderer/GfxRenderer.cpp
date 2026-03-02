@@ -2,6 +2,7 @@
 
 #include <FontDecompressor.h>
 #include <Logging.h>
+#include <SdCardFont.h>
 #include <Utf8.h>
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -21,9 +22,23 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
 
 void GfxRenderer::clearFontCache() {
   if (fontDecompressor) fontDecompressor->clearCache();
+  for (auto& [id, font] : sdCardFonts_) {
+    font->clearCache();
+  }
 }
 
 void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style) {
+  // SD card font prewarm path
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
+    int missed = it->second->prewarm(utf8Text);
+    if (missed > 0) {
+      LOG_DBG("GFX", "prewarmFontCache(SD): %d glyph(s) not found", missed);
+    }
+    return;
+  }
+
+  // Standard compressed font prewarm path
   if (!fontDecompressor || fontMap.count(fontId) == 0) return;
   const EpdFontData* data = fontMap.at(fontId).getData(style);
   if (!data || !data->groups) return;
@@ -34,12 +49,31 @@ void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, EpdFontFami
   }
 }
 
+void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text) const {
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
+    // Metadata-only: loads glyph metrics (advanceX) without bitmap data.
+    // Saves ~50-100KB heap vs full prewarm — layout only needs advance widths.
+    int missed = it->second->prewarm(utf8Text, /*metadataOnly=*/true);
+    it->second->logStats("layout");
+    if (missed > 0) {
+      LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
+    }
+  }
+}
+
 void GfxRenderer::logFontStats(const char* label) {
   if (fontDecompressor) fontDecompressor->logStats(label);
+  for (auto& [id, font] : sdCardFonts_) {
+    font->logStats(label);
+  }
 }
 
 void GfxRenderer::resetFontStats() {
   if (fontDecompressor) fontDecompressor->resetStats();
+  for (auto& [id, font] : sdCardFonts_) {
+    font->resetStats();
+  }
 }
 
 // --- FontPrewarmScope implementation ---

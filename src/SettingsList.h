@@ -1,17 +1,100 @@
 #pragma once
 
 #include <I18n.h>
+#include <SdCardFontRegistry.h>
 
+#include <cstring>
 #include <vector>
 
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "activities/settings/SettingsActivity.h"
 
+// Number of built-in font families (Bookerly, NotoSans, OpenDyslexic)
+static constexpr uint8_t BUILTIN_FONT_COUNT = 3;
+
+// Build the font family setting dynamically. When registry is non-null, SD card fonts
+// are appended after the built-in fonts. Otherwise only built-in fonts are listed.
+inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
+  // Built-in font labels (StrId)
+  std::vector<StrId> enumValues = {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC};
+  // Runtime string labels for SD card fonts
+  std::vector<std::string> enumStringValues;
+
+  // Reserve: first BUILTIN_FONT_COUNT entries use StrId, rest use strings
+  if (registry) {
+    for (const auto& family : registry->getFamilies()) {
+      enumStringValues.push_back(family.name);
+    }
+  }
+
+  // Capture the SD font count for the lambdas
+  const int sdFontCount = static_cast<int>(enumStringValues.size());
+
+  // Total option count = built-in + SD card families
+  // For the combined enumStringValues: we need all entries as strings (built-in names + SD names)
+  // The render code checks enumStringValues first, then enumValues. So we build enumStringValues
+  // with all options when SD fonts are present.
+  std::vector<std::string> allStringValues;
+  if (sdFontCount > 0) {
+    allStringValues.push_back(I18N.get(StrId::STR_BOOKERLY));
+    allStringValues.push_back(I18N.get(StrId::STR_NOTO_SANS));
+    allStringValues.push_back(I18N.get(StrId::STR_OPEN_DYSLEXIC));
+    for (auto& name : enumStringValues) {
+      allStringValues.push_back(name);
+    }
+  }
+
+  SettingInfo s;
+  s.nameId = StrId::STR_FONT_FAMILY;
+  s.type = SettingType::ENUM;
+  s.enumValues = std::move(enumValues);
+  s.enumStringValues = std::move(allStringValues);
+  s.key = "fontFamily";
+  s.category = StrId::STR_CAT_READER;
+
+  // Capture registry families by copy for the lambdas
+  std::vector<std::string> sdFamilyNames;
+  if (registry) {
+    for (const auto& f : registry->getFamilies()) {
+      sdFamilyNames.push_back(f.name);
+    }
+  }
+
+  s.valueGetter = [sdFamilyNames]() -> uint8_t {
+    // If an SD card font is selected, find its index
+    if (SETTINGS.sdFontFamilyName[0] != '\0') {
+      for (int i = 0; i < static_cast<int>(sdFamilyNames.size()); i++) {
+        if (sdFamilyNames[i] == SETTINGS.sdFontFamilyName) {
+          return static_cast<uint8_t>(BUILTIN_FONT_COUNT + i);
+        }
+      }
+      // SD font name not found in registry — fall through to built-in
+    }
+    return SETTINGS.fontFamily < BUILTIN_FONT_COUNT ? SETTINGS.fontFamily : 0;
+  };
+
+  s.valueSetter = [sdFamilyNames](uint8_t v) {
+    if (v < BUILTIN_FONT_COUNT) {
+      SETTINGS.fontFamily = v;
+      SETTINGS.sdFontFamilyName[0] = '\0';
+    } else {
+      int sdIdx = v - BUILTIN_FONT_COUNT;
+      if (sdIdx >= 0 && sdIdx < static_cast<int>(sdFamilyNames.size())) {
+        strncpy(SETTINGS.sdFontFamilyName, sdFamilyNames[sdIdx].c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
+        SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
+      }
+    }
+  };
+
+  return s;
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
-inline std::vector<SettingInfo> getSettingsList() {
+// Pass registry to include SD card fonts in the font family setting.
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
   return {
       // --- Display ---
       SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
@@ -42,9 +125,7 @@ inline std::vector<SettingInfo> getSettingsList() {
                           StrId::STR_CAT_DISPLAY),
 
       // --- Reader ---
-      SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                        {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC}, "fontFamily",
-                        StrId::STR_CAT_READER),
+      buildFontFamilySetting(registry),
       SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
                         {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE}, "fontSize",
                         StrId::STR_CAT_READER),

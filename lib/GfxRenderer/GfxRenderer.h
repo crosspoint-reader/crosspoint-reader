@@ -4,6 +4,7 @@
 #include <HalDisplay.h>
 
 class FontDecompressor;
+class SdCardFont;
 
 #include <cstring>
 #include <map>
@@ -41,6 +42,7 @@ class GfxRenderer {
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   FontDecompressor* fontDecompressor = nullptr;
+  std::map<int, SdCardFont*> sdCardFonts_;  // fontId -> SdCardFont*
 
   // Font prewarm scan state. Mutable because drawText() is const — pragmatic
   // compromise to avoid cascading non-const signature changes through the codebase.
@@ -71,9 +73,16 @@ class GfxRenderer {
   // Setup
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
+  void removeFont(int fontId) { fontMap.erase(fontId); }
   void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
+  void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
+  void unregisterSdCardFont(int fontId) { sdCardFonts_.erase(fontId); }
+  void clearSdCardFonts() { sdCardFonts_.clear(); }
   void clearFontCache();
   void prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
+  // Ensure SD card font glyph data is loaded for the given text. Called from layout code
+  // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
+  void ensureSdCardFontReady(int fontId, const char* utf8Text) const;
   void logFontStats(const char* label = "render");
   void resetFontStats();
 

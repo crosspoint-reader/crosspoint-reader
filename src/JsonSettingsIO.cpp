@@ -76,6 +76,9 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["uiTheme"] = s.uiTheme;
   doc["fadingFix"] = s.fadingFix;
   doc["embeddedStyle"] = s.embeddedStyle;
+  if (s.sdFontFamilyName[0] != '\0') {
+    doc["sdFontFamilyName"] = s.sdFontFamilyName;
+  }
 
   String json;
   serializeJson(doc, json);
@@ -131,6 +134,10 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   s.uiTheme = doc["uiTheme"] | (uint8_t)S::LYRA;
   s.fadingFix = doc["fadingFix"] | (uint8_t)0;
   s.embeddedStyle = doc["embeddedStyle"] | (uint8_t)1;
+
+  const char* sfn = doc["sdFontFamilyName"] | "";
+  strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);
+  s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
 
   const char* url = doc["opdsServerUrl"] | "";
   strncpy(s.opdsServerUrl, url, sizeof(s.opdsServerUrl) - 1);

@@ -79,7 +79,7 @@ class CrossPointSettings {
   // Swapped: Next, Previous
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTON_LAYOUT_COUNT };
 
-  // Font family options
+  // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
   // Font size options
   enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3, FONT_SIZE_COUNT };
@@ -174,11 +174,19 @@ class CrossPointSettings {
   uint8_t fadingFix = 0;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // SD card font family name (empty = use built-in fontFamily)
+  char sdFontFamilyName[32] = "";
 
   ~CrossPointSettings() = default;
 
   // Get singleton instance
   static CrossPointSettings& getInstance() { return instance; }
+
+  // Callback to resolve SD card font IDs. Set by main.cpp after font manager is initialized.
+  // Signature: int callback(const char* familyName, uint8_t fontSize)
+  // Returns font ID or 0 if not found.
+  using SdFontIdResolver = int (*)(const char* familyName, uint8_t fontSize);
+  SdFontIdResolver sdFontIdResolver = nullptr;
 
   uint16_t getPowerButtonDuration() const {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
