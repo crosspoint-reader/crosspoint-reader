@@ -18,7 +18,7 @@ extern volatile bool dzFlashRequested;
 namespace {
 
 constexpr const char* TAG = "FEED";
-constexpr const char* SYNC_TIME_FILE = "/.crosspoint/feed-sync-time.bin";  // stores uint32_t epoch of last processed item
+constexpr const char* SYNC_TIME_FILE = "/feed_sync_time.txt";  // decimal Unix epoch of last processed item; SD-persistent across reflashes
 constexpr const char* NEWS_FILE = "/News.md";
 constexpr size_t NEWS_MAX_SIZE = 50 * 1024;
 
@@ -42,8 +42,9 @@ struct RssItem {
   std::string description;
   std::string pubDate;
   std::string enclosureUrl;
-  std::string crosspointType;  // "file", "image", "news", "firmware"
-  std::string crosspointPath;  // target path on SD card
+  uint32_t enclosureLength = 0;   // from enclosure length="" attribute; 0 = unknown
+  std::string crosspointType;     // "file", "image", "news", "firmware"
+  std::string crosspointPath;     // target path on SD card
 };
 
 // ---------------------------------------------------------------------------
@@ -186,6 +187,8 @@ class RssParser final : public Print {
     } else if (nameEquals(name, "enclosure")) {
       const char* url = findAttribute(atts, "url");
       if (url) self->currentItem.enclosureUrl = url;
+      const char* len = findAttribute(atts, "length");
+      if (len) self->currentItem.enclosureLength = static_cast<uint32_t>(strtoul(len, nullptr, 10));
     } else if (nameEqualsNS(name, "crosspoint", "type")) {
       self->activeField = Field::CrosspointType;
       self->currentText.clear();
@@ -274,7 +277,7 @@ class RssParserStream : public Stream {
 };
 
 // ---------------------------------------------------------------------------
-// GUID dedup helpers
+// Sync timestamp helpers  (stored as decimal Unix epoch in /feed_sync_time.txt)
 // ---------------------------------------------------------------------------
 
 // Parse RFC 2822 "Fri, 27 Feb 2026 18:00:11 +0000" → Unix epoch seconds. Returns 0 on failure.
@@ -298,20 +301,16 @@ static uint32_t parseRfc2822(const std::string& s) {
 }
 
 static uint32_t loadLastSyncTime() {
-  FsFile file;
-  if (!Storage.openFileForRead(TAG, SYNC_TIME_FILE, file)) return 0;
-  uint32_t t = 0;
-  file.read(reinterpret_cast<uint8_t*>(&t), sizeof(t));
-  file.close();
-  return t;
+  char buf[16] = {};
+  const size_t n = Storage.readFileToBuffer(SYNC_TIME_FILE, buf, sizeof(buf));
+  if (n == 0) return 0;
+  return static_cast<uint32_t>(strtoul(buf, nullptr, 10));
 }
 
 static void saveLastSyncTime(uint32_t t) {
-  Storage.mkdir("/.crosspoint");
-  FsFile file;
-  if (!Storage.openFileForWrite(TAG, SYNC_TIME_FILE, file)) return;
-  file.write(reinterpret_cast<const uint8_t*>(&t), sizeof(t));
-  file.close();
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(t));
+  Storage.writeFile(SYNC_TIME_FILE, String(buf));
 }
 
 // ---------------------------------------------------------------------------
@@ -445,16 +444,27 @@ void syncTask(void*) {
           destPath += item.enclosureUrl.substr(lastSlash + 1);
         }
       }
+      // Skip if already on SD card with matching size (guard against reflash / partial downloads).
+      if (Storage.exists(destPath.c_str())) {
+        HalFile existingFile = Storage.open(destPath.c_str());
+        const size_t existingSize = existingFile.fileSize();
+        existingFile.close();
+        const bool sizeOk = (item.enclosureLength == 0) || (existingSize == static_cast<size_t>(item.enclosureLength));
+        if (sizeOk) {
+          LOG_DBG(TAG, "Skip (exists, size ok %u): %s", static_cast<unsigned>(existingSize), destPath.c_str());
+          if (itemTime > 0) oldestSuccess = itemTime;
+          return;
+        }
+        LOG_INF(TAG, "Re-download (size %u != expected %u): %s",
+                static_cast<unsigned>(existingSize), static_cast<unsigned>(item.enclosureLength), destPath.c_str());
+      }
       ensureParentDir(destPath);
-      auto result = HttpDownloader::downloadToFile(item.enclosureUrl, destPath);
-      if (result != HttpDownloader::OK) {
+      if (HttpDownloader::downloadToFile(item.enclosureUrl, destPath) != HttpDownloader::OK) {
         LOG_ERR(TAG, "Download failed: %s -> %s", item.enclosureUrl.c_str(), destPath.c_str());
         return;
       }
       s_dlCurrent++;
       LOG_INF(TAG, "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, destPath.c_str(), (unsigned long)ESP.getFreeHeap());
-      // addReceivedFile called here = after file close, correct
-      // Extract filename and add to shared received-files list for display
       const auto slash = destPath.rfind('/');
       UITheme::addReceivedFile(slash == std::string::npos ? destPath : destPath.substr(slash + 1));
 
@@ -467,9 +477,7 @@ void syncTask(void*) {
         LOG_DBG(TAG, "Skipping firmware item '%s': missing enclosure", item.guid.c_str());
         return;
       }
-      auto result = HttpDownloader::downloadToFile(item.enclosureUrl, "/firmware.bin");
-      if (result != HttpDownloader::OK) {
-        LOG_ERR(TAG, "Firmware download failed: %s", item.enclosureUrl.c_str());
+      if (HttpDownloader::downloadToFile(item.enclosureUrl, "/firmware.bin") != HttpDownloader::OK) {
         LOG_ERR(TAG, "Firmware download failed: %s", item.enclosureUrl.c_str());
         return;
       }
@@ -513,7 +521,6 @@ void syncTask(void*) {
   LOG_INF(TAG, "Free heap after fetch: %lu bytes", (unsigned long)ESP.getFreeHeap());
 
   if (rssParser.error()) {
-    LOG_ERR(TAG, "XML parse error in feed");
     LOG_ERR(TAG, "XML parse error in feed");
     feedLog("XML PARSE ERROR");
     logFile.close();
