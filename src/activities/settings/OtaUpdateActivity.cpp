@@ -1,8 +1,8 @@
 #include "OtaUpdateActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalNetwork.h>
 #include <I18n.h>
-#include <WiFi.h>
 
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -55,7 +55,7 @@ void OtaUpdateActivity::onEnter() {
 
   // Turn on WiFi immediately
   LOG_DBG("OTA", "Turning on WiFi...");
-  WiFi.mode(WIFI_STA);
+  network.enable();
 
   // Launch WiFi selection subactivity
   LOG_DBG("OTA", "Launching WifiSelectionActivity...");
@@ -67,10 +67,7 @@ void OtaUpdateActivity::onExit() {
   Activity::onExit();
 
   // Turn off wifi
-  WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
-  delay(100);              // Allow disconnect frame to be sent
-  WiFi.mode(WIFI_OFF);
-  delay(100);  // Allow WiFi hardware to fully power down
+  network.disable();
 }
 
 void OtaUpdateActivity::render(RenderLock&&) {

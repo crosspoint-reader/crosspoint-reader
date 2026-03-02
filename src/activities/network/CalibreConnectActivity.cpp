@@ -2,6 +2,7 @@
 
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
+#include <HalNetwork.h>
 #include <I18n.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
@@ -31,7 +32,7 @@ void CalibreConnectActivity::onEnter() {
   lastProcessedCompleteAt = 0;
   exitRequested = false;
 
-  if (WiFi.status() != WL_CONNECTED) {
+  if (!network.isConnected()) {
     startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
@@ -55,10 +56,7 @@ void CalibreConnectActivity::onExit() {
   MDNS.end();
 
   delay(50);
-  WiFi.disconnect(false);
-  delay(30);
-  WiFi.mode(WIFI_OFF);
-  delay(30);
+  network.disable();
 }
 
 void CalibreConnectActivity::onWifiSelectionComplete(const bool connected) {

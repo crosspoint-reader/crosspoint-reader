@@ -2,10 +2,10 @@
 
 #include <Epub.h>
 #include <GfxRenderer.h>
+#include <HalNetwork.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
-#include <WiFi.h>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -40,7 +40,7 @@ void OpdsBookBrowserActivity::onExit() {
   Activity::onExit();
 
   // Turn off WiFi when exiting
-  WiFi.mode(WIFI_OFF);
+  network.disable();
 
   entries.clear();
   navigationHistory.clear();
@@ -57,7 +57,7 @@ void OpdsBookBrowserActivity::loop() {
   if (state == BrowserState::ERROR) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       // Check if WiFi is still connected
-      if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+      if (network.isConnected()) {
         // WiFi connected - just retry fetching the feed
         LOG_DBG("OPDS", "Retry: WiFi connected, retrying fetch");
         state = BrowserState::LOADING;
@@ -351,7 +351,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
 void OpdsBookBrowserActivity::checkAndConnectWifi() {
   // Already connected? Verify connection is valid by checking IP
-  if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+  if (network.isConnected()) {
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
     requestUpdate();
@@ -382,8 +382,7 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     LOG_DBG("OPDS", "WiFi selection cancelled/failed");
     // Force disconnect to ensure clean state for next retry
     // This prevents stale connection status from interfering
-    WiFi.disconnect();
-    WiFi.mode(WIFI_OFF);
+    network.disable();
     state = BrowserState::ERROR;
     errorMessage = tr(STR_WIFI_CONN_FAILED);
     requestUpdate();

@@ -1,9 +1,9 @@
 #include "KOReaderSyncActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalNetwork.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <WiFi.h>
 #include <esp_sntp.h>
 
 #include "KOReaderCredentialStore.h"
@@ -39,14 +39,11 @@ void syncTimeWithNTP() {
     LOG_DBG("KOSync", "NTP sync timeout, using fallback");
   }
 }
-void wifiOff() {
+void turnWifiOff() {
   if (esp_sntp_enabled()) {
     esp_sntp_stop();
   }
-  WiFi.disconnect(false);
-  delay(100);
-  WiFi.mode(WIFI_OFF);
-  delay(100);
+  network.disable();
 }
 }  // namespace
 
@@ -173,7 +170,7 @@ void KOReaderSyncActivity::performUpload() {
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   if (result != KOReaderSyncClient::OK) {
-    wifiOff();
+    turnWifiOff();
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -183,7 +180,7 @@ void KOReaderSyncActivity::performUpload() {
     return;
   }
 
-  wifiOff();
+  turnWifiOff();
   {
     RenderLock lock(*this);
     state = UPLOAD_COMPLETE;
@@ -202,7 +199,7 @@ void KOReaderSyncActivity::onEnter() {
   }
 
   // Check if already connected (e.g. from settings page auth)
-  if (WiFi.status() == WL_CONNECTED) {
+  if (network.isConnected()) {
     LOG_DBG("KOSync", "Already connected to WiFi");
     state = SYNCING;
     statusMessage = tr(STR_SYNCING_TIME);
@@ -235,7 +232,7 @@ void KOReaderSyncActivity::onEnter() {
 void KOReaderSyncActivity::onExit() {
   Activity::onExit();
 
-  wifiOff();
+  turnWifiOff();
 }
 
 void KOReaderSyncActivity::render(RenderLock&&) {
@@ -377,7 +374,8 @@ void KOReaderSyncActivity::loop() {
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (selectedOption == 0) {
-        // Wifi will be turned off in onExit()
+        // Apply remote progress — WiFi no longer needed
+        turnWifiOff();
         setResult(SyncResult{remotePosition.spineIndex, remotePosition.pageNumber});
         finish();
       } else if (selectedOption == 1) {

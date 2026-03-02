@@ -1,12 +1,12 @@
 #include "HalPowerManager.h"
 
 #include <Logging.h>
-#include <WiFi.h>
 #include <esp_sleep.h>
 
 #include <cassert>
 
 #include "HalGPIO.h"
+#include "HalNetwork.h"
 
 HalPowerManager powerManager;  // Singleton instance
 
@@ -22,9 +22,8 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     return;  // invalid state
   }
 
-  auto wifiMode = WiFi.getMode();
-  if (wifiMode != WIFI_MODE_NULL) {
-    // Wifi is active, force disabling power saving
+  if (network.isActive()) {
+    // Network interface is active — keep CPU at full speed
     enabled = false;
   }
 
