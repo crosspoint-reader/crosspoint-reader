@@ -310,8 +310,9 @@ void teardownDangerZone(const char* reason = "reading", bool disableFlag = false
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
 
-  // Shut down Danger Zone background web server if running
-  teardownDangerZone("sleep");
+  // Note: teardownDangerZone is NOT called here. It is called explicitly by
+  // the inactivity-timeout path before enterDeepSleep(). The manual sleep
+  // button leaves DZ running so it stays accessible after wake.
 
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
   APP_STATE.saveToFile();
