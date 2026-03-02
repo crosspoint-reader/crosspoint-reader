@@ -1,6 +1,6 @@
 #include "JpegToBmpConverter.h"
 
-#include <EInkDisplay.h>
+#include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>

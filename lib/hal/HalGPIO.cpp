@@ -8,12 +8,7 @@
 // Global HalGPIO instance
 HalGPIO gpio;
 
-namespace {
-constexpr char HW_NAMESPACE[] = "cphw";
-constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";  // 0=auto, 1=x4, 2=x3
-constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";    // 0=unknown, 1=x4, 2=x3
-
-enum class NvsDeviceValue : uint8_t { Unknown = 0, X4 = 1, X3 = 2 };
+namespace X3GPIO {
 
 struct X3ProbeResult {
   bool bq27220 = false;
@@ -117,6 +112,15 @@ X3ProbeResult runX3ProbePass() {
   return result;
 }
 
+}  // namespace X3GPIO
+
+namespace {
+constexpr char HW_NAMESPACE[] = "cphw";
+constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";  // 0=auto, 1=x4, 2=x3
+constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";    // 0=unknown, 1=x4, 2=x3
+
+enum class NvsDeviceValue : uint8_t { Unknown = 0, X4 = 1, X3 = 2 };
+
 NvsDeviceValue readNvsDeviceValue(const char* key, NvsDeviceValue defaultValue) {
   Preferences prefs;
   if (!prefs.begin(HW_NAMESPACE, true)) {
@@ -159,9 +163,9 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
   }
 
   // No cache yet: run active X3 fingerprint probe and persist result.
-  const X3ProbeResult pass1 = runX3ProbePass();
+  const X3GPIO::X3ProbeResult pass1 = X3GPIO::runX3ProbePass();
   delay(2);
-  const X3ProbeResult pass2 = runX3ProbePass();
+  const X3GPIO::X3ProbeResult pass2 = X3GPIO::runX3ProbePass();
 
   const uint8_t score1 = pass1.score();
   const uint8_t score2 = pass2.score();
@@ -262,7 +266,7 @@ bool HalGPIO::isUsbConnected() const {
     // Positive current means charging.
     for (uint8_t attempt = 0; attempt < 2; ++attempt) {
       int16_t currentMa = 0;
-      if (readBQ27220CurrentMA(&currentMa)) {
+      if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
         return currentMa > 0;
       }
       delay(2);

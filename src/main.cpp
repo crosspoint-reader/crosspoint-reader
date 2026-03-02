@@ -112,10 +112,6 @@ EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
-namespace {
-constexpr bool kAlwaysEnableSerialOnX3 = false;
-}
-
 EpdFont ui10RegularFont(&ubuntu_10_regular);
 EpdFont ui10BoldFont(&ubuntu_10_bold);
 EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
@@ -229,16 +225,15 @@ void setup() {
   gpio.begin();
   powerManager.begin();
 
-  // X3 can force serial always-on to keep debugging stable.
-  // X4 keeps USB-gated serial startup.
-  const bool shouldStartSerial = gpio.deviceIsX3() ? kAlwaysEnableSerialOnX3 : gpio.isUsbConnected();
-  if (shouldStartSerial) {
+#ifdef ENABLE_SERIAL_LOG
+  if (gpio.isUsbConnected()) {
     Serial.begin(115200);
     const unsigned long start = millis();
     while (!Serial && (millis() - start) < 500) {
       delay(10);
     }
   }
+#endif
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
