@@ -173,7 +173,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/screenshot-tour", HTTP_POST, [this] { handlePostScreenshotTour(); });
   server->on("/api/flash", HTTP_POST, [this] { handlePostFlash(); });
   server->on("/api/firmware-status", HTTP_GET, [this] { handleGetFirmwareStatus(); });
-  server->on("/api/boot-log", HTTP_GET, [this] { handleGetLog("/boot.log"); });
+  server->on("/api/boot-log", HTTP_GET, [this] { handleGetLog("/.crosspoint/boot.log"); });
   server->on("/api/feed/log", HTTP_GET, [this] { handleGetLog("/.crosspoint/feed-sync.log"); });
 
   server->onNotFound([this] { handleNotFound(); });

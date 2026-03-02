@@ -18,7 +18,7 @@ extern volatile bool dzFlashRequested;
 namespace {
 
 constexpr const char* TAG = "FEED";
-constexpr const char* SYNC_TIME_FILE = "/feed_sync_time.txt";  // decimal Unix epoch of last processed item; SD-persistent across reflashes
+constexpr const char* SYNC_TIME_FILE = "/.crosspoint/feed_sync_time.txt";  // decimal Unix epoch of last processed item; SD-persistent across reflashes
 constexpr const char* NEWS_FILE = "/News.md";
 constexpr size_t NEWS_MAX_SIZE = 50 * 1024;
 

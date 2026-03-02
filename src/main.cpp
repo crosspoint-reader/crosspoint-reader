@@ -392,19 +392,20 @@ void setup() {
                            (resetReason == ESP_RST_SW)       ? "sw"       :
                            (resetReason == ESP_RST_POWERON)  ? "poweron"  :
                            (resetReason == ESP_RST_DEEPSLEEP)? "deepsleep": "other";
+    Storage.mkdir("/.crosspoint");  // ensure hidden dir exists before writing logs
     FsFile bootLog;
     // Rotate log if over 2KB
     {
-      FsFile check = Storage.open("/boot.log");
+      FsFile check = Storage.open("/.crosspoint/boot.log");
       if (check && check.size() > 2048) {
         check.close();
-        Storage.remove("/boot.log.bak");
-        Storage.rename("/boot.log", "/boot.log.bak");
+        Storage.remove("/.crosspoint/boot.log.bak");
+        Storage.rename("/.crosspoint/boot.log", "/.crosspoint/boot.log.bak");
       } else if (check) {
         check.close();
       }
     }
-    if ((bootLog = Storage.open("/boot.log", O_RDWR | O_CREAT | O_AT_END))) {
+    if ((bootLog = Storage.open("/.crosspoint/boot.log", O_RDWR | O_CREAT | O_AT_END))) {
       char buf[160];
       snprintf(buf, sizeof(buf), "version=%s reset=%s heap=%u uptime=%lu\n",
                CROSSPOINT_VERSION, resetStr, ESP.getFreeHeap(), millis());
@@ -469,8 +470,8 @@ void setup() {
 
     auto logOtaError = [](const char* msg, size_t fileSize = 0, size_t written = 0) -> bool {
       FsFile logFile;
-      if (!Storage.openFileForWrite("MAIN", "/ota_error.log", logFile)) {
-        LOG_ERR("MAIN", "OTA: could not open /ota_error.log for writing");
+      if (!Storage.openFileForWrite("MAIN", "/.crosspoint/ota_error.log", logFile)) {
+        LOG_ERR("MAIN", "OTA: could not open /.crosspoint/ota_error.log for writing");
         return false;
       }
       logFile.print("OTA error: ");
@@ -495,7 +496,7 @@ void setup() {
       renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 30, "Firmware update failed", true, EpdFontFamily::BOLD);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2, msg);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 20,
-                                logged ? "Error saved to /ota_error.log" : "Could not write /ota_error.log");
+                                logged ? "Error saved to /.crosspoint/ota_error.log" : "Could not write /.crosspoint/ota_error.log");
       renderer.displayBuffer(HalDisplay::FULL_REFRESH);
       delay(15000);
     };
@@ -824,7 +825,7 @@ void loop() {
             LOG_ERR("DZ", "Firmware flash failed: %s", errMsg);
             // Write error to SD log for later retrieval
             FsFile logFile;
-            if (Storage.openFileForWrite("DZ", "/ota_error.log", logFile)) {
+            if (Storage.openFileForWrite("DZ", "/.crosspoint/ota_error.log", logFile)) {
               logFile.print(errMsg);
               logFile.close();
             }
