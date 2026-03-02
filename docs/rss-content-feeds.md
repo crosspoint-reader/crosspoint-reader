@@ -1,5 +1,21 @@
 # Building a CrossPoint Content RSS Feed
 
+## Why RSS?
+
+CrossPoint added RSS feed support so that an AI assistant (like [OpenClaw](https://openclaw.ai)) can deliver a fully personalized set of content to the device automatically — not just eBooks, but anything the reader can display or act on.
+
+The feed is the bridge between your home server (or any web host) and the reader. Each time the device connects to WiFi, it checks the feed and downloads only new items. Because the feed is standard RSS 2.0 with a lightweight custom namespace, any server or script can generate it.
+
+**What the feed can deliver:**
+- **eBooks** — EPUBs, Markdown, plain text (fiction, articles, trip guides)
+- **Sleep screens** — BMP wallpaper images shown when the device is idle
+- **News** — structured JSON news items rendered natively
+- **Firmware updates** — signed OTA firmware binaries, delivered and flashed automatically
+
+This means OpenClaw (or any automation) can run overnight and wake up the reader with fresh content: a new short story, today's AI digest, a trip poster, and the latest firmware — all without any manual file transfer.
+
+---
+
 This guide explains how to build a personalized RSS content feed for CrossPoint devices — EPUBs, sleep screen images, news stories, and more. The goal is that you (or an AI assistant like Claude Code or OpenClaw) can implement a custom feed server from this document alone.
 
 ---

@@ -51,6 +51,34 @@ pio run
 pio run --target upload
 ```
 
+### Safe USB Flash (Recommended for Development)
+
+For development, use `scripts/crosspoint-flash.py` — a safe OTA-aware flash script that always writes to the **inactive** partition and preserves the running firmware as a fallback:
+
+```bash
+# Prerequisites: esptool installed in a venv on the machine with USB access
+pip install esptool   # or use an existing venv
+
+# Check which partition is active (no flash)
+python3 scripts/crosspoint-flash.py --status --port /dev/cu.usbmodem101
+
+# Build and flash safely (from repo root, on Linux/Mac with NUC + iMac setup)
+scripts/flash-crosspoint.sh
+
+# Or flash a pre-built binary directly
+python3 scripts/crosspoint-flash.py .pio/build/default/firmware.bin --port /dev/cu.usbmodem101
+```
+
+**What it does:**
+1. Reads `otadata` to determine which partition (app0/app1) is currently active
+2. Flashes new firmware to the **inactive** partition only
+3. Updates `otadata` to boot from the new partition
+4. Resets the device
+
+**Safety:** If the new firmware crashes before calling `esp_ota_mark_app_valid_cancel_rollback()`, the ESP-IDF bootloader automatically rolls back to the previous partition. The old firmware is never overwritten.
+
+> ⚠️ **Always commit before flashing.** The feed server serves firmware identified by SHA. If you flash uncommitted code (same SHA as parent commit), the feed will re-download and re-flash the old firmware on next sync, undoing your work. `flash-crosspoint.sh` enforces this with a pre-flight check.
+
 ### SD Card OTA (Preferred After First Flash)
 
 Once the device has CrossPoint firmware, you never need USB again. Copy firmware to the SD card instead:
@@ -69,7 +97,7 @@ ls -lh "$SDCARD/firmware.bin"   # verify it landed
 udisksctl unmount -b /dev/sdX   # eject safely
 ```
 
-On next boot, the device detects `/firmware.bin`, shows a progress bar, flashes itself, deletes the file, and reboots into new firmware. Clean.
+On next boot, the device detects `/firmware.bin`, flashes to the **inactive** partition, updates `otadata`, deletes the file, and reboots. If the new firmware fails, the bootloader rolls back automatically.
 
 ---
 

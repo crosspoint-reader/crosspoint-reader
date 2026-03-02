@@ -119,9 +119,9 @@ def build_feed(content_dir: Path, feed_url: str, feed_title: str) -> str:
       <title>{title}</title>
       <crosspoint:type>{rule['type']}</crosspoint:type>
       <crosspoint:path>{dest_path}</crosspoint:path>
-      <enclosure url="{url}" type="{mime}" length="{f.stat().st_size}"/>
+      <enclosure url="{escape_xml(url)}" type="{mime}" length="{f.stat().st_size}"/>
       <pubDate>{fmt_date(dt)}</pubDate>
-      <guid>{file_guid(f)}</guid>
+      <guid>{escape_xml(file_guid(f))}</guid>
     </item>"""))
 
     # Firmware items always first, then everything else newest-first
