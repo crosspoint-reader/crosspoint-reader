@@ -483,7 +483,7 @@ void loop() {
       return;
     }
 
-    if (SETTINGS.usbMscPromptOnConnect && usbConnected && !usbConnectedLast &&
+    if (SETTINGS.usbMscPromptOnConnect && usbConnected && logSerial && !usbConnectedLast &&
         usbMscSessionState == UsbMscSessionState::Idle) {
       usbMscSessionState = UsbMscSessionState::Prompt;
       usbMscScreenNeedsRedraw = true;
