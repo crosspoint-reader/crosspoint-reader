@@ -76,7 +76,7 @@ class RssParser final : public Print {
   size_t write(uint8_t c) override { return write(&c, 1); }
 
   size_t write(const uint8_t* data, size_t length) override {
-    if (errorOccurred) return length;
+    if (errorOccurred || stopped) return length;  // parser freed on stop — nothing to do
 
     XML_SetUserData(parser, this);
     XML_SetElementHandler(parser, onStartElement, onEndElement);
@@ -123,9 +123,16 @@ class RssParser final : public Print {
 
   bool error() const { return errorOccurred; }
 
-  // Abort parsing early (e.g. once we've seen all new items — no need to read the rest)
+  // Abort parsing early (e.g. once we've seen all new items — no need to read the rest).
+  // Frees the Expat parser immediately to reclaim its internal state memory.
   void stopParsing() {
-    if (parser) XML_StopParser(parser, XML_FALSE);
+    if (parser) {
+      XML_StopParser(parser, XML_FALSE);
+      XML_SetElementHandler(parser, nullptr, nullptr);
+      XML_SetCharacterDataHandler(parser, nullptr);
+      XML_ParserFree(parser);
+      parser = nullptr;
+    }
     stopped = true;
   }
 
