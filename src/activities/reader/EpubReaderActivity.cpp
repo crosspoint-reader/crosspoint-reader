@@ -1,5 +1,7 @@
 #include "EpubReaderActivity.h"
 
+#include <time.h>
+
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FsHelpers.h>
@@ -773,6 +775,21 @@ void EpubReaderActivity::renderStatusBar() const {
 
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
     title = epub->getTitle();
+  }
+
+  // Append current time to title if system clock is synced
+  {
+    struct tm timeinfo = {};
+    if (getLocalTime(&timeinfo) && timeinfo.tm_year >= 120) {  // year >= 2020 sanity check
+      char timeStr[8];
+      strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
+      if (title.empty()) {
+        title = timeStr;
+      } else {
+        title += "  ";
+        title += timeStr;
+      }
+    }
   }
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
