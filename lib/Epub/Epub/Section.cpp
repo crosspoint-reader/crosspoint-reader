@@ -237,9 +237,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 
   // Write anchor-to-page map for fragment navigation (e.g. footnote targets)
   const uint32_t anchorMapOffset = file.position();
-  const auto& anchorMap = visitor.getAnchorPageMap();
-  serialization::writePod(file, static_cast<uint16_t>(anchorMap.size()));
-  for (const auto& [anchor, page] : anchorMap) {
+  const auto& anchors = visitor.getAnchors();
+  serialization::writePod(file, static_cast<uint16_t>(anchors.size()));
+  for (const auto& [anchor, page] : anchors) {
     serialization::writeString(file, anchor);
     serialization::writePod(file, page);
   }
@@ -274,10 +274,10 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   return page;
 }
 
-std::map<std::string, uint16_t> Section::readAnchorMap(const std::string& sectionPath) {
+std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
   FsFile f;
-  if (!Storage.openFileForRead("SCT", sectionPath, f)) {
-    return {};
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
   }
 
   f.seek(HEADER_SIZE - sizeof(uint32_t));
@@ -285,21 +285,23 @@ std::map<std::string, uint16_t> Section::readAnchorMap(const std::string& sectio
   serialization::readPod(f, anchorMapOffset);
   if (anchorMapOffset == 0) {
     f.close();
-    return {};
+    return std::nullopt;
   }
 
   f.seek(anchorMapOffset);
   uint16_t count;
   serialization::readPod(f, count);
-  std::map<std::string, uint16_t> result;
   for (uint16_t i = 0; i < count; i++) {
     std::string key;
     uint16_t page;
     serialization::readString(f, key);
     serialization::readPod(f, page);
-    result.emplace(std::move(key), page);
+    if (key == anchor) {
+      f.close();
+      return page;
+    }
   }
 
   f.close();
-  return result;
+  return std::nullopt;
 }

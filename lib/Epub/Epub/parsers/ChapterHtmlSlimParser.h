@@ -4,7 +4,6 @@
 
 #include <climits>
 #include <functional>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -72,7 +71,7 @@ class ChapterHtmlSlimParser {
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
-  std::map<std::string, uint16_t> anchorPageMap;
+  std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
 
   // Footnote link tracking
@@ -124,5 +123,5 @@ class ChapterHtmlSlimParser {
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
-  const std::map<std::string, uint16_t>& getAnchorPageMap() const { return anchorPageMap; }
+  const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 };

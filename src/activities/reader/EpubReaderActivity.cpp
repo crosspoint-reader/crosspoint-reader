@@ -594,12 +594,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
 
     if (!pendingAnchor.empty()) {
-      const auto anchorMap =
-          Section::readAnchorMap(epub->getCachePath() + "/sections/" + std::to_string(currentSpineIndex) + ".bin");
-      auto it = anchorMap.find(pendingAnchor);
-      if (it != anchorMap.end()) {
-        section->currentPage = it->second;
-        LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), it->second);
+      if (const auto page = section->getPageForAnchor(pendingAnchor)) {
+        section->currentPage = *page;
+        LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), *page);
       } else {
         LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
       }

@@ -135,7 +135,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
 
       if (!pendingAnchorId.empty()) {
-        anchorPageMap[pendingAnchorId] = static_cast<uint16_t>(completedPageCount);
+        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
         pendingAnchorId.clear();
       }
       return;
@@ -145,7 +145,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   }
   // Record deferred anchor after previous block is flushed
   if (!pendingAnchorId.empty()) {
-    anchorPageMap[pendingAnchorId] = static_cast<uint16_t>(completedPageCount);
+    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
     pendingAnchorId.clear();
   }
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
@@ -164,7 +164,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // Extract class, style, and id attributes
   std::string classAttr;
   std::string styleAttr;
-  std::string idAttr;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
@@ -172,15 +171,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
-        idAttr = atts[i + 1];
+        // Defer recording until startNewTextBlock, after previous block is flushed to pages
+        self->pendingAnchorId = atts[i + 1];
       }
     }
-  }
-
-  // Defer anchor recording until after any previous text block is flushed to pages
-  // (startNewTextBlock → makePages may complete pages and change completedPageCount)
-  if (!idAttr.empty()) {
-    self->pendingAnchorId = idAttr;
   }
 
   auto centeredBlockStyle = BlockStyle();
@@ -1005,7 +999,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   if (currentTextBlock) {
     makePages();
     if (!pendingAnchorId.empty()) {
-      anchorPageMap[pendingAnchorId] = static_cast<uint16_t>(completedPageCount);
+      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
     }
     completePageFn(std::move(currentPage));
