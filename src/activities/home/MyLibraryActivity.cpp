@@ -7,6 +7,7 @@
 
 #include <algorithm>
 
+#include "../browser/FileViewerActivity.h"
 #include "../util/ConfirmationActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -188,7 +189,12 @@ void MyLibraryActivity::loop() {
         selectorIndex = 0;
         requestUpdate();
       } else {
-        onSelectBook(basepath + entry);
+        const std::string fullPath = basepath + entry;
+        if (StringUtils::isTextViewableFile(entry)) {
+          startActivityForResult(std::make_unique<FileViewerActivity>(renderer, mappedInput, fullPath), [](auto){});
+        } else {
+          onSelectBook(fullPath);
+        }
       }
     }
     return;
@@ -266,9 +272,15 @@ void MyLibraryActivity::render(RenderLock&&) {
         [this](int index) { return UITheme::getFileIcon(files[index]); });
   }
 
-  // Help text
+  // Help text — show VIEW for text files, OPEN for everything else
+  const bool selectedIsText = !files.empty() &&
+      selectorIndex < files.size() &&
+      !files[selectorIndex].empty() &&
+      files[selectorIndex].back() != '/' &&
+      StringUtils::isTextViewableFile(files[selectorIndex]);
   const auto labels =
-      mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK), files.empty() ? "" : tr(STR_OPEN),
+      mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK),
+                            files.empty() ? "" : (selectedIsText ? tr(STR_PREVIEW) : tr(STR_OPEN)),
                             files.empty() ? "" : tr(STR_DIR_UP), files.empty() ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

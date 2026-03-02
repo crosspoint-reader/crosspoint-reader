@@ -290,6 +290,16 @@ void SettingsActivity::render(RenderLock&&) {
     renderer.drawText(SMALL_FONT_ID, hintX, hintY, hint, /*black=*/true);
   }
 
+  // Version string in black at the bottom of the content area
+  {
+    const char* ver = CROSSPOINT_VERSION;
+    const int vw = renderer.getTextWidth(SMALL_FONT_ID, ver);
+    const int vh = renderer.getTextHeight(SMALL_FONT_ID);
+    const int vx = (pageWidth - vw) / 2;
+    const int vy = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - vh - 4;
+    renderer.drawText(SMALL_FONT_ID, vx, vy, ver, /*black=*/true);
+  }
+
   // Draw help text
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

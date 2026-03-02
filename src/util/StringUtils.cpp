@@ -71,4 +71,11 @@ bool checkFileExtension(const String& fileName, const char* extension) {
   return localFile.endsWith(localExtension);
 }
 
+bool isTextViewableFile(const std::string& fileName) {
+  return checkFileExtension(fileName, ".log") ||
+         checkFileExtension(fileName, ".txt") ||
+         checkFileExtension(fileName, ".json") ||
+         checkFileExtension(fileName, ".bak");
+}
+
 }  // namespace StringUtils

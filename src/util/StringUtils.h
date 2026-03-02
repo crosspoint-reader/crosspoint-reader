@@ -18,5 +18,7 @@ std::string sanitizeFilename(const std::string& name, size_t maxBytes = 100);
  */
 bool checkFileExtension(const std::string& fileName, const char* extension);
 bool checkFileExtension(const String& fileName, const char* extension);
+// Returns true for plain-text file types that should be viewed inline rather than opened as books.
+bool isTextViewableFile(const std::string& fileName);
 
 }  // namespace StringUtils

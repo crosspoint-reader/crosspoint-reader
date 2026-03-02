@@ -12,6 +12,9 @@
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
+// StringUtils namespace needed for isTextViewableFile
+using namespace StringUtils;
+
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
@@ -23,9 +26,11 @@ void RecentBooksActivity::loadRecentBooks() {
 
   for (const auto& book : books) {
     // Skip if file no longer exists
-    if (!Storage.exists(book.path.c_str())) {
-      continue;
-    }
+    if (!Storage.exists(book.path.c_str())) continue;
+    // Skip plain-text/log/system files — they don't belong in the reading history
+    const auto slash = book.path.rfind('/');
+    const std::string name = (slash == std::string::npos) ? book.path : book.path.substr(slash + 1);
+    if (StringUtils::isTextViewableFile(name)) continue;
     recentBooks.push_back(book);
   }
 }

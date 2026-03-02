@@ -230,25 +230,31 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Seg 1: Up button — "↑" arrow centred in segment
+    // Seg 1 & 2: Up/Down — white filled triangles near the dividing line
+    // The triangles point toward the divider between seg1 and seg2.
     // ─────────────────────────────────────────────────────────────────────────
     {
-      const int seg1CentreY = zoneTop + segH + segH / 2;
-      const char* lbl = "^";   // up-arrow glyph (PULSR font)
-      const int lw = renderer.getTextWidth(PULSR_12_FONT_ID, lbl);
-      const int lh = renderer.getTextHeight(PULSR_12_FONT_ID);
-      renderer.drawText(PULSR_12_FONT_ID, (LEFT_W - lw) / 2, seg1CentreY - lh / 2, lbl, /*black=*/false);
-    }
+      const int divY   = zoneTop + segH * 2;  // divider between seg1 and seg2
+      constexpr int TRI_H = 7;   // triangle height (base→tip)
+      constexpr int TRI_W = 10;  // triangle half-width at base
+      constexpr int GAP  = 5;    // gap from divider to tip
+      const int cx     = LEFT_W / 2;
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Seg 2: Down button — "↓" arrow centred in segment
-    // ─────────────────────────────────────────────────────────────────────────
-    {
-      const int seg2CentreY = zoneTop + segH * 2 + segH / 2;
-      const char* lbl = "v";   // down-arrow glyph (PULSR font)
-      const int lw = renderer.getTextWidth(PULSR_12_FONT_ID, lbl);
-      const int lh = renderer.getTextHeight(PULSR_12_FONT_ID);
-      renderer.drawText(PULSR_12_FONT_ID, (LEFT_W - lw) / 2, seg2CentreY - lh / 2, lbl, /*black=*/false);
+      // Up triangle: tip points up, base GAP above divider
+      // tip at (cx, divY - GAP - TRI_H), base at divY - GAP
+      for (int row = 0; row < TRI_H; row++) {
+        const int hw = (TRI_W * row) / TRI_H;
+        const int y  = divY - GAP - TRI_H + row;
+        renderer.drawLine(cx - hw, y, cx + hw, y, /*black=*/false);
+      }
+
+      // Down triangle: tip points down, base GAP below divider
+      // tip at (cx, divY + GAP + TRI_H), base at divY + GAP
+      for (int row = 0; row < TRI_H; row++) {
+        const int hw = (TRI_W * row) / TRI_H;
+        const int y  = divY + GAP + TRI_H - row;
+        renderer.drawLine(cx - hw, y, cx + hw, y, /*black=*/false);
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -514,24 +520,63 @@ void PulsrTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const 
     renderer.drawLine(lx, barY, lx, barY + barH - 1, /*black=*/false);
   }
 
-  // White uppercase label centered in each zone
+  // White labels or directional triangles centered in each zone
   for (int i = 0; i < BTN_COUNT; i++) {
     if (labels[i] == nullptr || labels[i][0] == '\0') continue;
 
-    // Uppercase copy
-    char upper[32];
-    int c = 0;
-    for (; labels[i][c] && c < 31; c++) {
-      upper[c] = (labels[i][c] >= 'a' && labels[i][c] <= 'z') ? labels[i][c] - 32 : labels[i][c];
-    }
-    upper[c] = '\0';
-
     const int x  = LEFT_W + i * btnW;
-    const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, upper);
-    const int th = renderer.getTextHeight(PULSR_10_FONT_ID);
-    const int tx = x + (btnW - tw) / 2;
-    const int ty = barY + (barH - th) / 2;
-    renderer.drawText(PULSR_10_FONT_ID, tx, ty, upper, /*black=*/false);
+    const int cy = barY + barH / 2;  // vertical centre of bar
+    const int cx = x + btnW / 2;     // horizontal centre of zone
+
+    // Check for direction labels and draw filled triangles instead of text
+    // Compare case-insensitively against the English direction strings
+    auto labelIs = [&](const char* s) {
+      const char* l = labels[i];
+      for (; *s && *l; s++, l++) {
+        if ((*s | 32) != (*l | 32)) return false;
+      }
+      return *s == '\0' && *l == '\0';
+    };
+
+    constexpr int TH = 6;  // triangle height
+    constexpr int TW = 9;  // triangle half-width at base
+
+    if (labelIs("up")) {
+      // Tip up
+      for (int row = 0; row < TH; row++) {
+        const int hw = (TW * row) / TH;
+        renderer.drawLine(cx - hw, cy + row - TH/2, cx + hw, cy + row - TH/2, /*black=*/false);
+      }
+    } else if (labelIs("down")) {
+      // Tip down
+      for (int row = 0; row < TH; row++) {
+        const int hw = (TW * row) / TH;
+        renderer.drawLine(cx - hw, cy - row + TH/2, cx + hw, cy - row + TH/2, /*black=*/false);
+      }
+    } else if (labelIs("left")) {
+      // Tip left
+      for (int col = 0; col < TH; col++) {
+        const int hh = (TW * col) / TH;
+        renderer.drawLine(cx + col - TH/2, cy - hh, cx + col - TH/2, cy + hh, /*black=*/false);
+      }
+    } else if (labelIs("right")) {
+      // Tip right
+      for (int col = 0; col < TH; col++) {
+        const int hh = (TW * col) / TH;
+        renderer.drawLine(cx - col + TH/2, cy - hh, cx - col + TH/2, cy + hh, /*black=*/false);
+      }
+    } else {
+      // Default: uppercase text label
+      char upper[32];
+      int c = 0;
+      for (; labels[i][c] && c < 31; c++) {
+        upper[c] = (labels[i][c] >= 'a' && labels[i][c] <= 'z') ? labels[i][c] - 32 : labels[i][c];
+      }
+      upper[c] = '\0';
+      const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, upper);
+      const int th = renderer.getTextHeight(PULSR_10_FONT_ID);
+      renderer.drawText(PULSR_10_FONT_ID, cx - tw/2, cy - th/2, upper, /*black=*/false);
+    }
   }
 
   renderer.setOrientation(origOri);
