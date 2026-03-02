@@ -51,6 +51,9 @@ __attribute__((constructor(101))) static void earlyMarkOtaValid() {
 #include <WiFi.h>
 #include <ESPmDNS.h>
 
+// Expose the compile-time version string to other translation units (e.g. PulsrTheme).
+extern "C" const char* getVersionString() { return CROSSPOINT_VERSION; }
+
 HalDisplay display;
 HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
@@ -273,7 +276,6 @@ void setupDisplayAndFonts() {
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
   renderer.insertFont(PULSR_10_FONT_ID, pulsr10FontFamily);
   renderer.insertFont(PULSR_12_FONT_ID, pulsr12FontFamily);
-  GfxRenderer::setVersionOverlay(SMALL_FONT_ID, CROSSPOINT_VERSION);
   LOG_DBG("MAIN", "Fonts setup");
 }
 
@@ -462,7 +464,6 @@ void setup() {
       char pctStr[8];
       snprintf(pctStr, sizeof(pctStr), "%d%%", pct);
       renderer.drawCenteredText(SMALL_FONT_ID, barY + barH + 8, pctStr);
-      renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, CROSSPOINT_VERSION);
       renderer.displayBuffer();
     };
 

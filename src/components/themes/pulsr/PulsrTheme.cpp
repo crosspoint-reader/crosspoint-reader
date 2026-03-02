@@ -1,6 +1,8 @@
 #include "PulsrTheme.h"
 
 #include <Bitmap.h>
+
+extern "C" const char* getVersionString();
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
@@ -75,6 +77,20 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
 
   // ── 2. Top bar strip ────────────────────────────────────────────────────────
   renderer.fillRect(LEFT_W, 0, W - LEFT_W, TOP_H, /*black=*/true);
+
+  // ── Version string — right-aligned in top bar, white text ──────────────────
+  {
+    extern const char* getVersionString();
+    const char* ver = getVersionString();
+    if (ver && ver[0] != '\0') {
+      constexpr int margin = 8;
+      const int vw = renderer.getTextWidth(SMALL_FONT_ID, ver);
+      const int vh = renderer.getTextHeight(SMALL_FONT_ID);
+      const int vx = W - vw - margin;
+      const int vy = (TOP_H - vh) / 2;
+      renderer.drawText(SMALL_FONT_ID, vx, vy, ver, /*black=*/false);
+    }
+  }
 
   // ── 3. Bottom bar strip ─────────────────────────────────────────────────────
   renderer.fillRect(LEFT_W, H - TOP_H, W - LEFT_W, TOP_H, /*black=*/true);

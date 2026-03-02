@@ -833,15 +833,6 @@ void GfxRenderer::setVersionOverlay(int fontId, const char* version) {
 }
 
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
-  // Draw version string in bottom-left corner for debugging visibility on screencaps.
-  if (s_versionFontId != -1 && s_versionStr[0] != '\0') {
-    constexpr int margin = 4;
-    const int th = getTextHeight(s_versionFontId);
-    const int y  = getScreenHeight() - th - margin;
-    const int tw = getTextWidth(s_versionFontId, s_versionStr);
-    fillRect(margin - 1, y - 1, tw + 2, th + 2, false);  // white background patch
-    drawText(s_versionFontId, margin, y, s_versionStr, true);
-  }
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   display.displayBuffer(refreshMode, fadingFix);
