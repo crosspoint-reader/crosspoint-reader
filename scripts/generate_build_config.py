@@ -91,19 +91,19 @@ FEATURES = {
     'web_pokedex_plugin': Feature(
         name='Web Pokedex Plugin',
         flag='ENABLE_WEB_POKEDEX_PLUGIN',
-        size_kb=4,
+        size_kb=7,
         description='Browser-side Pokemon wallpaper generator at /plugins/pokedex'
     ),
     'epub_support': Feature(
         name='EPUB Support',
         flag='ENABLE_EPUB_SUPPORT',
-        size_kb=142,
+        size_kb=145,
         description='EPUB e-book reader with CSS and chapter navigation'
     ),
     'hyphenation': Feature(
         name='Hyphenation',
         flag='ENABLE_HYPHENATION',
-        size_kb=456,
+        size_kb=458,
         description='Language-aware hyphenation for justified EPUB text'
     ),
     'xtc_support': Feature(
