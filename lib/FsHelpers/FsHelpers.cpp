@@ -1,8 +1,11 @@
 #include "FsHelpers.h"
 
+#include <cstring>
 #include <vector>
 
-std::string FsHelpers::normalisePath(const std::string& path) {
+namespace FsHelpers {
+
+std::string normalisePath(const std::string& path) {
   std::vector<std::string> components;
   std::string component;
 
@@ -37,3 +40,25 @@ std::string FsHelpers::normalisePath(const std::string& path) {
 
   return result;
 }
+
+bool checkFileExtension(std::string_view fileName, const char* extension) {
+  const size_t extLen = strlen(extension);
+  if (fileName.length() < extLen) {
+    return false;
+  }
+
+  const size_t offset = fileName.length() - extLen;
+  for (size_t i = 0; i < extLen; i++) {
+    if (tolower(static_cast<unsigned char>(fileName[offset + i])) !=
+        tolower(static_cast<unsigned char>(extension[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool checkFileExtension(const String& fileName, const char* extension) {
+  return checkFileExtension(std::string_view{fileName.c_str(), fileName.length()}, extension);
+}
+
+}  // namespace FsHelpers
