@@ -8,11 +8,22 @@
 void FullScreenMessageActivity::onEnter() {
   Activity::onEnter();
 
-  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = (renderer.getScreenHeight() - height) / 2;
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  auto lines = renderer.wrappedText(UI_10_FONT_ID, text.c_str(), renderer.getScreenWidth() - 48, 5, style);
+  if (lines.empty()) {
+    lines.emplace_back(text);
+  }
+  const int totalHeight = static_cast<int>(lines.size()) * (lineHeight + 4);
+  int top = (renderer.getScreenHeight() - totalHeight) / 2;
+  if (top < 40) {
+    top = 40;
+  }
 
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_10_FONT_ID, top, text.c_str(), true, style);
+  for (const auto& line : lines) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, line.c_str(), true, style);
+    top += lineHeight + 4;
+  }
   renderer.displayBuffer(refreshMode);
 }
 

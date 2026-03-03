@@ -63,7 +63,7 @@ class ActivityManager {
   explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput);
   ~ActivityManager();
 
-  void begin();
+  bool begin();
   void loop();
 
   // Will replace currentActivity and drop all activities on stack

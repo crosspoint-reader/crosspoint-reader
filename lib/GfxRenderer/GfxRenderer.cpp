@@ -3,7 +3,6 @@
 #include <Logging.h>
 #include <Utf8.h>
 
-#include <cassert>
 #include <cmath>
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -21,12 +20,13 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
   return &fontData->bitmap[glyph->dataOffset];
 }
 
-void GfxRenderer::begin() {
+bool GfxRenderer::begin() {
   frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
     LOG_ERR("GFX", "!! No framebuffer");
-    assert(false);
+    return false;
   }
+  return true;
 }
 
 void GfxRenderer::insertFont(const int fontId, IEpdFont* font) { fontMap.insert({fontId, font}); }

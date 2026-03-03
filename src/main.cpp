@@ -1,6 +1,5 @@
 #include <Arduino.h>
-#include <EpdFont.h>
-#include <FontDecompressor.h>
+#include <EpdFontFamily.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
@@ -9,9 +8,9 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
-#include <builtinFonts/all.h>
 
 #include <cstring>
+#include <string>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -26,6 +25,7 @@
 #include "core/CoreBootstrap.h"
 #include "core/features/FeatureLifecycle.h"
 #include "core/features/FeatureModules.h"
+#include "core/fonts/BuiltinFontRegistry.h"
 #include "fontIds.h"
 #include "network/BackgroundWebServer.h"
 #include "network/BackgroundWifiService.h"
@@ -39,101 +39,7 @@ HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
-FontDecompressor fontDecompressor;
 BackgroundWebServer& backgroundServer = BackgroundWebServer::getInstance();
-
-// Fonts
-EpdFont bookerly14RegularFont(&bookerly_14_regular);
-EpdFont bookerly14BoldFont(&bookerly_14_bold);
-EpdFont bookerly14ItalicFont(&bookerly_14_italic);
-EpdFont bookerly14BoldItalicFont(&bookerly_14_bolditalic);
-EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
-                                   &bookerly14BoldItalicFont);
-#if ENABLE_BOOKERLY_FONTS
-EpdFont bookerly12RegularFont(&bookerly_12_regular);
-EpdFont bookerly12BoldFont(&bookerly_12_bold);
-EpdFont bookerly12ItalicFont(&bookerly_12_italic);
-EpdFont bookerly12BoldItalicFont(&bookerly_12_bolditalic);
-EpdFontFamily bookerly12FontFamily(&bookerly12RegularFont, &bookerly12BoldFont, &bookerly12ItalicFont,
-                                   &bookerly12BoldItalicFont);
-EpdFont bookerly16RegularFont(&bookerly_16_regular);
-EpdFont bookerly16BoldFont(&bookerly_16_bold);
-EpdFont bookerly16ItalicFont(&bookerly_16_italic);
-EpdFont bookerly16BoldItalicFont(&bookerly_16_bolditalic);
-EpdFontFamily bookerly16FontFamily(&bookerly16RegularFont, &bookerly16BoldFont, &bookerly16ItalicFont,
-                                   &bookerly16BoldItalicFont);
-EpdFont bookerly18RegularFont(&bookerly_18_regular);
-EpdFont bookerly18BoldFont(&bookerly_18_bold);
-EpdFont bookerly18ItalicFont(&bookerly_18_italic);
-EpdFont bookerly18BoldItalicFont(&bookerly_18_bolditalic);
-EpdFontFamily bookerly18FontFamily(&bookerly18RegularFont, &bookerly18BoldFont, &bookerly18ItalicFont,
-                                   &bookerly18BoldItalicFont);
-#endif  // ENABLE_BOOKERLY_FONTS
-
-#if ENABLE_NOTOSANS_FONTS
-EpdFont notosans12RegularFont(&notosans_12_regular);
-EpdFont notosans12BoldFont(&notosans_12_bold);
-EpdFont notosans12ItalicFont(&notosans_12_italic);
-EpdFont notosans12BoldItalicFont(&notosans_12_bolditalic);
-EpdFontFamily notosans12FontFamily(&notosans12RegularFont, &notosans12BoldFont, &notosans12ItalicFont,
-                                   &notosans12BoldItalicFont);
-EpdFont notosans14RegularFont(&notosans_14_regular);
-EpdFont notosans14BoldFont(&notosans_14_bold);
-EpdFont notosans14ItalicFont(&notosans_14_italic);
-EpdFont notosans14BoldItalicFont(&notosans_14_bolditalic);
-EpdFontFamily notosans14FontFamily(&notosans14RegularFont, &notosans14BoldFont, &notosans14ItalicFont,
-                                   &notosans14BoldItalicFont);
-EpdFont notosans16RegularFont(&notosans_16_regular);
-EpdFont notosans16BoldFont(&notosans_16_bold);
-EpdFont notosans16ItalicFont(&notosans_16_italic);
-EpdFont notosans16BoldItalicFont(&notosans_16_bolditalic);
-EpdFontFamily notosans16FontFamily(&notosans16RegularFont, &notosans16BoldFont, &notosans16ItalicFont,
-                                   &notosans16BoldItalicFont);
-EpdFont notosans18RegularFont(&notosans_18_regular);
-EpdFont notosans18BoldFont(&notosans_18_bold);
-EpdFont notosans18ItalicFont(&notosans_18_italic);
-EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
-EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
-                                   &notosans18BoldItalicFont);
-#endif  // ENABLE_NOTOSANS_FONTS
-
-#if ENABLE_OPENDYSLEXIC_FONTS
-EpdFont opendyslexic8RegularFont(&opendyslexic_8_regular);
-EpdFont opendyslexic8BoldFont(&opendyslexic_8_bold);
-EpdFont opendyslexic8ItalicFont(&opendyslexic_8_italic);
-EpdFont opendyslexic8BoldItalicFont(&opendyslexic_8_bolditalic);
-EpdFontFamily opendyslexic8FontFamily(&opendyslexic8RegularFont, &opendyslexic8BoldFont, &opendyslexic8ItalicFont,
-                                      &opendyslexic8BoldItalicFont);
-EpdFont opendyslexic10RegularFont(&opendyslexic_10_regular);
-EpdFont opendyslexic10BoldFont(&opendyslexic_10_bold);
-EpdFont opendyslexic10ItalicFont(&opendyslexic_10_italic);
-EpdFont opendyslexic10BoldItalicFont(&opendyslexic_10_bolditalic);
-EpdFontFamily opendyslexic10FontFamily(&opendyslexic10RegularFont, &opendyslexic10BoldFont, &opendyslexic10ItalicFont,
-                                       &opendyslexic10BoldItalicFont);
-EpdFont opendyslexic12RegularFont(&opendyslexic_12_regular);
-EpdFont opendyslexic12BoldFont(&opendyslexic_12_bold);
-EpdFont opendyslexic12ItalicFont(&opendyslexic_12_italic);
-EpdFont opendyslexic12BoldItalicFont(&opendyslexic_12_bolditalic);
-EpdFontFamily opendyslexic12FontFamily(&opendyslexic12RegularFont, &opendyslexic12BoldFont, &opendyslexic12ItalicFont,
-                                       &opendyslexic12BoldItalicFont);
-EpdFont opendyslexic14RegularFont(&opendyslexic_14_regular);
-EpdFont opendyslexic14BoldFont(&opendyslexic_14_bold);
-EpdFont opendyslexic14ItalicFont(&opendyslexic_14_italic);
-EpdFont opendyslexic14BoldItalicFont(&opendyslexic_14_bolditalic);
-EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic14BoldFont, &opendyslexic14ItalicFont,
-                                       &opendyslexic14BoldItalicFont);
-#endif  // ENABLE_OPENDYSLEXIC_FONTS
-
-EpdFont smallFont(&notosans_8_regular);
-EpdFontFamily smallFontFamily(&smallFont);
-
-EpdFont ui10RegularFont(&ubuntu_10_regular);
-EpdFont ui10BoldFont(&ubuntu_10_bold);
-EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
-
-EpdFont ui12RegularFont(&ubuntu_12_regular);
-EpdFont ui12BoldFont(&ubuntu_12_bold);
-EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 
 unsigned long t1 = 0;
 unsigned long t2 = 0;
@@ -142,6 +48,7 @@ namespace {
 constexpr char kCrossPointDataDir[] = "/.crosspoint";
 constexpr char kFactoryResetMarkerFile[] = "/.factory-reset-pending";
 constexpr char kUsbMscSessionMarkerFile[] = "/.crosspoint/usb-msc-active";
+constexpr uint32_t kSafeModeSleepHoldMs = 1500;
 
 enum class UsbMscSessionState { Idle, Prompt, Active };
 
@@ -150,6 +57,49 @@ bool usbConnectedLast = false;
 UsbSerialProtocol usbSerialProtocol;
 bool usbMscScreenNeedsRedraw = false;
 bool usbMscRemountPending = false;
+bool safeModeActive = false;
+bool activityManagerReady = false;
+bool displayAndFontsReady = false;
+
+void renderSafeModeScreen(const char* message) {
+  if (!renderer.getFrameBuffer()) {
+    return;
+  }
+
+  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int bodyLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int bodyMaxWidth = renderer.getScreenWidth() - 48;
+  const auto detailLines = renderer.wrappedText(UI_10_FONT_ID, message, bodyMaxWidth, 4);
+  const int detailHeight = static_cast<int>(detailLines.size()) * (bodyLineHeight + 4);
+
+  int y = (renderer.getScreenHeight() - (titleLineHeight + 16 + detailHeight + bodyLineHeight + 12)) / 2;
+  if (y < 40) {
+    y = 40;
+  }
+
+  renderer.clearScreen();
+  renderer.drawCenteredText(UI_12_FONT_ID, y, "Safe Mode", true, EpdFontFamily::BOLD);
+  y += titleLineHeight + 16;
+
+  for (const auto& line : detailLines) {
+    renderer.drawCenteredText(UI_10_FONT_ID, y, line.c_str(), true);
+    y += bodyLineHeight + 4;
+  }
+
+  renderer.drawCenteredText(UI_10_FONT_ID, y + 12, "Hold power to sleep", true);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+}
+
+void enterSafeMode(const char* message) {
+  safeModeActive = true;
+  LOG_ERR("SAFE", "Entering safe mode: %s", message);
+  if (activityManagerReady) {
+    activityManager.goToFullScreenMessage(std::string("Safe mode: ") + message, EpdFontFamily::BOLD);
+    activityManager.loop();
+    return;
+  }
+  renderSafeModeScreen(message);
+}
 
 void renderUsbMscPrompt() {
   renderer.clearScreen();
@@ -292,41 +242,36 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
-void setupDisplayAndFonts() {
+bool setupDisplayAndFonts() {
+  if (displayAndFontsReady) {
+    return true;
+  }
+
   display.begin();
-  renderer.begin();
-  activityManager.begin();
+  if (!renderer.begin()) {
+    LOG_ERR("MAIN", "Renderer initialization failed");
+    safeModeActive = true;
+    return false;
+  }
+
+  core::BuiltinFontRegistry::registerUiFonts(renderer);
   LOG_DBG("MAIN", "Display initialized");
 
-  if (!fontDecompressor.init()) {
-    LOG_ERR("MAIN", "Font decompressor init failed");
+  if (!activityManager.begin()) {
+    enterSafeMode("UI startup failed");
+    return false;
   }
-  renderer.setFontDecompressor(&fontDecompressor);
-  renderer.insertFontFamily(BOOKERLY_14_FONT_ID, &bookerly14FontFamily);
-#if ENABLE_BOOKERLY_FONTS
-  renderer.insertFontFamily(BOOKERLY_12_FONT_ID, &bookerly12FontFamily);
-  renderer.insertFontFamily(BOOKERLY_16_FONT_ID, &bookerly16FontFamily);
-  renderer.insertFontFamily(BOOKERLY_18_FONT_ID, &bookerly18FontFamily);
-#endif  // ENABLE_BOOKERLY_FONTS
-#if ENABLE_NOTOSANS_FONTS
-  renderer.insertFontFamily(NOTOSANS_12_FONT_ID, &notosans12FontFamily);
-  renderer.insertFontFamily(NOTOSANS_14_FONT_ID, &notosans14FontFamily);
-  renderer.insertFontFamily(NOTOSANS_16_FONT_ID, &notosans16FontFamily);
-  renderer.insertFontFamily(NOTOSANS_18_FONT_ID, &notosans18FontFamily);
-#endif  // ENABLE_NOTOSANS_FONTS
-#if ENABLE_OPENDYSLEXIC_FONTS
-  renderer.insertFontFamily(OPENDYSLEXIC_8_FONT_ID, &opendyslexic8FontFamily);
-  renderer.insertFontFamily(OPENDYSLEXIC_10_FONT_ID, &opendyslexic10FontFamily);
-  renderer.insertFontFamily(OPENDYSLEXIC_12_FONT_ID, &opendyslexic12FontFamily);
-  renderer.insertFontFamily(OPENDYSLEXIC_14_FONT_ID, &opendyslexic14FontFamily);
-#endif  // ENABLE_OPENDYSLEXIC_FONTS
-  renderer.insertFontFamily(UI_10_FONT_ID, &ui10FontFamily);
-  renderer.insertFontFamily(UI_12_FONT_ID, &ui12FontFamily);
-  renderer.insertFontFamily(SMALL_FONT_ID, &smallFontFamily);
+  activityManagerReady = true;
+
+  if (!core::BuiltinFontRegistry::registerAllFonts(renderer)) {
+    enterSafeMode("Font initialization failed");
+    return false;
+  }
 
   core::FeatureLifecycle::onFontSetup(renderer);
-
+  displayAndFontsReady = true;
   LOG_DBG("MAIN", "Fonts setup");
+  return true;
 }
 
 void setup() {
@@ -347,8 +292,9 @@ void setup() {
 
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
-    setupDisplayAndFonts();
-    activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
+    if (setupDisplayAndFonts()) {
+      enterSafeMode("SD card unavailable");
+    }
     return;
   }
 
@@ -389,7 +335,9 @@ void setup() {
 
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
-  setupDisplayAndFonts();
+  if (!setupDisplayAndFonts()) {
+    return;
+  }
 
   if (FirmwareUpdateUtil::checkForLocalUpdate()) {
     FirmwareUpdateUtil::performLocalUpdate(renderer);
@@ -442,6 +390,18 @@ void loop() {
   static unsigned long lastActivityTime = millis();
   static bool screenshotButtonsReleased = true;
 
+  if (safeModeActive) {
+    gpio.update();
+    if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() > kSafeModeSleepHoldMs) {
+      if (renderer.getFrameBuffer()) {
+        display.deepSleep();
+      }
+      powerManager.startDeepSleep(gpio);
+    }
+    delay(50);
+    return;
+  }
+
   gpio.update();
   renderer.setFadingFix(SETTINGS.fadingFix);
 
@@ -473,8 +433,7 @@ void loop() {
       Storage.remove(kUsbMscSessionMarkerFile);
       if (!Storage.begin()) {
         LOG_ERR("USBMSC", "SD remount failed after USB MSC exit");
-        activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
-        activityManager.loop();
+        enterSafeMode("SD card remount failed");
         usbConnectedLast = usbConnected;
         return;
       }

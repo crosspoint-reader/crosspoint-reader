@@ -2,6 +2,7 @@
 
 #include <HalPowerManager.h>
 #include <HalStorage.h>
+#include <Logging.h>
 
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
@@ -21,20 +22,43 @@
 
 ActivityManager::ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
-  assert(renderingMutex != nullptr && "Failed to create rendering mutex");
+  if (renderingMutex == nullptr) {
+    LOG_ERR("ACT", "Failed to create rendering mutex");
+    return;
+  }
   stackActivities.reserve(10);
 }
 
-ActivityManager::~ActivityManager() { assert(false); }
+ActivityManager::~ActivityManager() {
+  if (renderTaskHandle != nullptr) {
+    vTaskDelete(renderTaskHandle);
+    renderTaskHandle = nullptr;
+  }
+  if (renderingMutex != nullptr) {
+    vSemaphoreDelete(renderingMutex);
+    renderingMutex = nullptr;
+  }
+}
 
-void ActivityManager::begin() {
+bool ActivityManager::begin() {
+  if (renderTaskHandle != nullptr) {
+    return true;
+  }
+  if (renderingMutex == nullptr) {
+    LOG_ERR("ACT", "Cannot create render task without a rendering mutex");
+    return false;
+  }
   xTaskCreate(&renderTaskTrampoline, "ActivityManagerRender",
               8192,              // Stack size
               this,              // Parameters
               1,                 // Priority
               &renderTaskHandle  // Task handle
   );
-  assert(renderTaskHandle != nullptr && "Failed to create render task");
+  if (renderTaskHandle == nullptr) {
+    LOG_ERR("ACT", "Failed to create render task");
+    return false;
+  }
+  return true;
 }
 
 void ActivityManager::renderTaskTrampoline(void* param) {

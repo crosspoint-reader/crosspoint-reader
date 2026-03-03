@@ -61,7 +61,7 @@ class GfxRenderer {
   static constexpr int VIEWABLE_MARGIN_LEFT = 3;
 
   // Setup
-  void begin();  // must be called right after display.begin()
+  bool begin();  // must be called right after display.begin()
   void insertFont(int fontId, IEpdFont* font);
   void insertFontFamily(int fontId, EpdFontFamily* fontFamily);
   void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
