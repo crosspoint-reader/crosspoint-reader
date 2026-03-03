@@ -1,6 +1,9 @@
 #pragma once
 
+#include <vector>
+
 #include "activities/Activity.h"
+#include "activities/settings/SettingsActivity.h"
 #include "util/ButtonNavigator.h"
 
 /**
@@ -21,5 +24,7 @@ class CalibreSettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectedIndex = 0;
+  std::vector<StrId> fileFolderSettingEnums;
   void handleSelection();
+  std::vector<StrId> getFileFolderSetting();
 };

@@ -2,6 +2,7 @@
 
 #include <Epub.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
@@ -318,10 +319,17 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   // Create sanitized filename: "Title - Author.epub" or just "Title.epub" if no author
   std::string baseName = book.title;
-  if (!book.author.empty()) {
+  std::string folder = "/";
+
+  if (!StringUtils::sanitizeFilename(book.author).empty()) {
     baseName += " - " + book.author;
+
+    if (SETTINGS.opdsFileFolder == CrossPointSettings::OPDS_FOL_AUTHORS) {
+      folder += StringUtils::sanitizeFilename(book.author) + "/";
+      Storage.ensureDirectoryExists(folder.c_str());
+    }
   }
-  std::string filename = "/" + StringUtils::sanitizeFilename(baseName) + ".epub";
+  std::string filename = folder + StringUtils::sanitizeFilename(baseName) + ".epub";
 
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 

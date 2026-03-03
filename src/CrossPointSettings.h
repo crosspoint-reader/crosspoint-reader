@@ -134,6 +134,9 @@ class CrossPointSettings {
   // UI Theme
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2 };
 
+  // OPDS File Folder Formatting
+  enum OPDS_FILE_FOLDERS { OPDS_FOL_NONE = 0, OPDS_FOL_AUTHORS = 1, OPDS_FILE_FOLDERS_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -182,6 +185,8 @@ class CrossPointSettings {
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";
   char opdsPassword[64] = "";
+  uint8_t opdsFileFolder = OPDS_FOL_NONE;
+
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons

@@ -115,6 +115,11 @@ inline const std::vector<SettingInfo>& getSettingsList() {
       SettingInfo::String(StrId::STR_PASSWORD, SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword), "opdsPassword",
                           StrId::STR_OPDS_BROWSER)
           .withObfuscated(),
+
+      SettingInfo::Enum(StrId::STR_OPDS_FILE_FOLDER, &CrossPointSettings::opdsFileFolder,
+                        {StrId::STR_OPDS_FILE_FOL_NONE, StrId::STR_OPDS_FILE_FOL_AUTHOR}, "opdsFileFolder",
+                        StrId::STR_OPDS_BROWSER),
+
       // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
       SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                           "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),

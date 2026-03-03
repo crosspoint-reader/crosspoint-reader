@@ -4,16 +4,20 @@
 #include <I18n.h>
 
 #include <cstring>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "SettingsList.h"
+#include "activities/settings/SettingsActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 3;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_CALIBRE_WEB_URL, StrId::STR_USERNAME, StrId::STR_PASSWORD};
+constexpr int MENU_ITEMS = 4;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_CALIBRE_WEB_URL, StrId::STR_USERNAME, StrId::STR_PASSWORD,
+                                     StrId::STR_OPDS_FILE_FOLDER};
 }  // namespace
 
 void CalibreSettingsActivity::onEnter() {
@@ -85,7 +89,22 @@ void CalibreSettingsActivity::handleSelection() {
                                SETTINGS.saveToFile();
                              }
                            });
+  } else if (selectedIndex == 3) {
+    SETTINGS.opdsFileFolder =
+        (SETTINGS.opdsFileFolder + 1) % static_cast<uint8_t>(CalibreSettingsActivity::getFileFolderSetting().size());
+    SETTINGS.saveToFile();
+    requestUpdate();
   }
+}
+
+std::vector<StrId> CalibreSettingsActivity::getFileFolderSetting() {
+  if (fileFolderSettingEnums.size() == 0) {
+    fileFolderSettingEnums =
+        (*std::find_if(getSettingsList().begin(), getSettingsList().end(), [](const SettingInfo& s) {
+          return strcmp(s.key, "opdsFileFolder") == 0;
+        })).enumValues;
+  }
+  return fileFolderSettingEnums;
 }
 
 void CalibreSettingsActivity::render(RenderLock&&) {
@@ -114,6 +133,9 @@ void CalibreSettingsActivity::render(RenderLock&&) {
                                                      : std::string(tr(STR_NOT_SET));
         } else if (index == 2) {
           return (strlen(SETTINGS.opdsPassword) > 0) ? std::string("******") : std::string(tr(STR_NOT_SET));
+        } else if (index == 3) {
+          const uint8_t value = SETTINGS.opdsFileFolder;
+          return std::string(I18N.get(CalibreSettingsActivity::getFileFolderSetting()[value]));
         }
         return std::string(tr(STR_NOT_SET));
       },
