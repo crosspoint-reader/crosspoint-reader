@@ -22,6 +22,7 @@
 #include "src/activities/todo/TodoPlannerStorage.h"
 #include "src/util/InputValidation.h"
 #include "src/util/PathUtils.h"
+#include "src/util/UsbMscPrompt.h"
 
 // Mock ESP implementation
 MockESP ESP;
@@ -558,6 +559,31 @@ void testForkDriftCoverNavigation() {
   std::cout << "ForkDrift cover grid navigation tests passed!" << std::endl;
 }
 
+void testUsbMscPromptGate() {
+  std::cout << "Testing USB MSC prompt host gating..." << std::endl;
+
+  assert(!UsbMscPrompt::shouldShowOnUsbConnect(
+      /*promptEnabled=*/true, /*usbConnected=*/true, /*usbConnectedLast=*/false, /*hostSupportsUsbSerial=*/false,
+      /*sessionIdle=*/true));
+  assert(!UsbMscPrompt::shouldShowOnUsbConnect(
+      /*promptEnabled=*/true, /*usbConnected=*/false, /*usbConnectedLast=*/false, /*hostSupportsUsbSerial=*/true,
+      /*sessionIdle=*/true));
+  assert(!UsbMscPrompt::shouldShowOnUsbConnect(
+      /*promptEnabled=*/true, /*usbConnected=*/true, /*usbConnectedLast=*/true, /*hostSupportsUsbSerial=*/true,
+      /*sessionIdle=*/true));
+  assert(!UsbMscPrompt::shouldShowOnUsbConnect(
+      /*promptEnabled=*/false, /*usbConnected=*/true, /*usbConnectedLast=*/false, /*hostSupportsUsbSerial=*/true,
+      /*sessionIdle=*/true));
+  assert(!UsbMscPrompt::shouldShowOnUsbConnect(
+      /*promptEnabled=*/true, /*usbConnected=*/true, /*usbConnectedLast=*/false, /*hostSupportsUsbSerial=*/true,
+      /*sessionIdle=*/false));
+  assert(UsbMscPrompt::shouldShowOnUsbConnect(
+      /*promptEnabled=*/true, /*usbConnected=*/true, /*usbConnectedLast=*/false, /*hostSupportsUsbSerial=*/true,
+      /*sessionIdle=*/true));
+
+  std::cout << "USB MSC prompt host gating tests passed!" << std::endl;
+}
+
 int main() {
   testPathNormalisation();
   testMarkdownLimits();
@@ -568,6 +594,7 @@ int main() {
   testSettingsTruncatedLoad();
   testPathUtilsSecurity();
   testForkDriftCoverNavigation();
+  testUsbMscPromptGate();
   std::cout << "All Host Tests Passed!" << std::endl;
   return 0;
 }

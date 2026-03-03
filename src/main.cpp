@@ -33,6 +33,7 @@
 #include "util/FactoryResetUtils.h"
 #include "util/FirmwareUpdateUtil.h"
 #include "util/ScreenshotUtil.h"
+#include "util/UsbMscPrompt.h"
 
 HalDisplay display;
 HalGPIO gpio;
@@ -467,6 +468,7 @@ void loop() {
 
   if (core::FeatureModules::hasCapability(core::Capability::UsbMassStorage)) {
     const bool usbConnected = gpio.isUsbConnected();
+    const bool hostSupportsUsbSerial = static_cast<bool>(logSerial);
 
     if (usbMscRemountPending) {
       usbMscRemountPending = false;
@@ -483,8 +485,9 @@ void loop() {
       return;
     }
 
-    if (SETTINGS.usbMscPromptOnConnect && usbConnected && !usbConnectedLast &&
-        usbMscSessionState == UsbMscSessionState::Idle) {
+    if (UsbMscPrompt::shouldShowOnUsbConnect(SETTINGS.usbMscPromptOnConnect != 0, usbConnected, usbConnectedLast,
+                                             hostSupportsUsbSerial,
+                                             usbMscSessionState == UsbMscSessionState::Idle)) {
       usbMscSessionState = UsbMscSessionState::Prompt;
       usbMscScreenNeedsRedraw = true;
     }
