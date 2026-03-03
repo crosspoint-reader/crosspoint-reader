@@ -380,7 +380,7 @@ void MyLibraryActivity::render(RenderLock&&) {
       renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   if (getCurrentItemCount() == 0) {
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_BOOKS_FOUND));
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
   } else {
     if (core::FeatureModules::hasCapability(core::Capability::VisualCoverPicker) && viewMode == ViewMode::Grid) {
       renderGrid();

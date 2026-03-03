@@ -69,7 +69,7 @@ void XtcReaderActivity::loop() {
 
   // Long press BACK (1s+) goes directly to home
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    activityManager.goToMyLibrary(xtc ? xtc->getPath() : "");
+    activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
     return;
   }
 

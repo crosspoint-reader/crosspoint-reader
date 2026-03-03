@@ -76,6 +76,15 @@ void ActivityManager::renderTaskLoop() {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       currentActivity->render(std::move(lock));
     }
+    // Notify any task blocked in requestUpdateAndWait() that the render is done.
+    TaskHandle_t waiter = nullptr;
+    taskENTER_CRITICAL(nullptr);
+    waiter = waitingTaskHandle;
+    waitingTaskHandle = nullptr;
+    taskEXIT_CRITICAL(nullptr);
+    if (waiter) {
+      xTaskNotify(waiter, 1, eIncrement);
+    }
   }
 }
 
@@ -202,6 +211,8 @@ void ActivityManager::goToFileTransfer() {
 }
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
+
+void ActivityManager::goToFileBrowser(std::string path) { goToMyLibrary(std::move(path)); }
 
 void ActivityManager::goToMyLibrary(std::string path) {
   replaceActivity(std::make_unique<MyLibraryActivity>(renderer, mappedInput, std::move(path)));
@@ -363,6 +374,30 @@ void ActivityManager::requestUpdate(bool immediate) {
     // This is to avoid multiple updates being requested in the same loop
     requestedUpdate = true;
   }
+}
+
+void ActivityManager::requestUpdateAndWait() {
+  if (!renderTaskHandle) {
+    return;
+  }
+
+  taskENTER_CRITICAL(nullptr);
+  const auto currTaskHandler = xTaskGetCurrentTaskHandle();
+  const auto mutexHolder = xSemaphoreGetMutexHolder(renderingMutex);
+  const bool isRenderTask = (currTaskHandler == renderTaskHandle);
+  const bool alreadyWaiting = (waitingTaskHandle != nullptr);
+  const bool holdingRenderLock = (mutexHolder == currTaskHandler);
+  if (!alreadyWaiting && !isRenderTask && !holdingRenderLock) {
+    waitingTaskHandle = currTaskHandler;
+  }
+  taskEXIT_CRITICAL(nullptr);
+
+  assert(!isRenderTask && "Render task cannot call requestUpdateAndWait()");
+  assert(!alreadyWaiting && "Already waiting for a render to complete");
+  assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
+
+  xTaskNotify(renderTaskHandle, 1, eIncrement);
+  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 // RenderLock
 

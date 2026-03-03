@@ -171,9 +171,19 @@ std::string getSleepSourcePath(const uint8_t sourceMode) {
     case CrossPointSettings::SLEEP_SCREEN_SOURCE::SLEEP_SOURCE_POKEDEX:
       return "/sleep/pokedex";
     case CrossPointSettings::SLEEP_SCREEN_SOURCE::SLEEP_SOURCE_ALL:
-    case CrossPointSettings::SLEEP_SCREEN_SOURCE::SLEEP_SOURCE_SLEEP:
-    default:
       return "/sleep";
+    case CrossPointSettings::SLEEP_SCREEN_SOURCE::SLEEP_SOURCE_SLEEP:
+    default: {
+      auto hiddenDir = Storage.open("/.sleep");
+      if (hiddenDir && hiddenDir.isDirectory()) {
+        hiddenDir.close();
+        return "/.sleep";
+      }
+      if (hiddenDir) {
+        hiddenDir.close();
+      }
+      return "/sleep";
+    }
   }
 }
 

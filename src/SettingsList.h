@@ -175,7 +175,8 @@ inline std::vector<SettingInfo> getSettingsList() {
     list.push_back(SettingInfo::String(StrId::STR_USERNAME, SETTINGS.opdsUsername, sizeof(SETTINGS.opdsUsername),
                                        "opdsUsername", StrId::STR_OPDS_BROWSER));
     list.push_back(SettingInfo::String(StrId::STR_PASSWORD, SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword),
-                                       "opdsPassword", StrId::STR_OPDS_BROWSER));
+                                       "opdsPassword", StrId::STR_OPDS_BROWSER)
+                       .withObfuscated());
   }
 
   return list;

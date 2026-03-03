@@ -51,6 +51,10 @@ class ActivityManager {
   static void renderTaskTrampoline(void* param);
   [[noreturn]] virtual void renderTaskLoop();
 
+  // Set by requestUpdateAndWait(); read and cleared by the render task after render completes.
+  // Note: only one waiting task is supported at a time.
+  TaskHandle_t waitingTaskHandle = nullptr;
+
   // Mutex to protect rendering operations from race conditions
   // Must only be used via RenderLock
   SemaphoreHandle_t renderingMutex = nullptr;
@@ -72,6 +76,7 @@ class ActivityManager {
   // goTo... functions are convenient wrapper for replaceActivity()
   void goToFileTransfer();
   void goToSettings();
+  void goToFileBrowser(std::string path = {});
   void goToMyLibrary(std::string path = {});
   void goToRecentBooks();
   void goToBrowser();
@@ -98,6 +103,10 @@ class ActivityManager {
   // If immediate is true, the update will be triggered immediately.
   // Otherwise, it will be deferred until the end of the current loop iteration.
   void requestUpdate(bool immediate = false);
+
+  // Trigger a render and block until it completes.
+  // Must NOT be called from the render task or while holding a RenderLock.
+  void requestUpdateAndWait();
 
   // Background web server: runs silently alongside any activity, serving HTTP
   // requests without showing any UI. Used for WiFi auto-connect after sleep.

@@ -192,6 +192,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
             state = WifiSelectionState::NETWORK_LIST;
           } else {
             enteredPassword = std::get<KeyboardResult>(result.data).text;
+            // state will be updated in next loop iteration
           }
         });
   } else {
