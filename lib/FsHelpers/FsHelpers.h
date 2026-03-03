@@ -13,7 +13,7 @@ std::string normalisePath(const std::string& path);
  */
 bool checkFileExtension(std::string_view fileName, const char* extension);
 inline bool checkFileExtension(const String& fileName, const char* extension) {
-    return checkFileExtension(std::string_view{fileName.c_str(), fileName.length()}, extension);
+  return checkFileExtension(std::string_view{fileName.c_str(), fileName.length()}, extension);
 }
 
 // Check for either .jpg or .jpeg extension (case-insensitive)
