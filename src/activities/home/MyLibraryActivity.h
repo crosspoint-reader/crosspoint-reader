@@ -8,6 +8,13 @@
 #include "RecentBooksStore.h"
 #include "util/ButtonNavigator.h"
 
+struct FileEntry {
+  std::string name;      // display name (no leading path, no trailing '/' on dirs)
+  std::string realPath;  // non-empty only for virtual entries (e.g. /Feed); otherwise basepath+name
+  uint32_t modTime;      // FAT packed (date<<16|time); higher = newer; 0 if unavailable
+  bool isDirectory;
+};
+
 class MyLibraryActivity final : public Activity {
  private:
   // Deletion
@@ -19,7 +26,8 @@ class MyLibraryActivity final : public Activity {
 
   // Files state
   std::string basepath = "/";
-  std::vector<std::string> files;
+  std::vector<FileEntry> files;
+  bool sortByDate = true;  // true = newest first; false = alphabetical
 
   // Data loading
   void loadFiles();

@@ -16,59 +16,83 @@
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
+// Left button held shorter than this is treated as a sort-toggle tap;
+// longer holds fall through to ButtonNavigator for navigation-up.
+constexpr unsigned long SORT_TAP_MS = 300;
 }  // namespace
 
-void sortFileList(std::vector<std::string>& strs) {
-  std::sort(begin(strs), end(strs), [](const std::string& str1, const std::string& str2) {
-    // Directories first
-    bool isDir1 = str1.back() == '/';
-    bool isDir2 = str2.back() == '/';
-    if (isDir1 != isDir2) return isDir1;
+// ---------------------------------------------------------------------------
+// Sorting helpers
+// ---------------------------------------------------------------------------
 
-    // Start naive natural sort
-    const char* s1 = str1.c_str();
-    const char* s2 = str2.c_str();
-
-    // Iterate while both strings have characters
-    while (*s1 && *s2) {
-      // Check if both are at the start of a number
-      if (isdigit(*s1) && isdigit(*s2)) {
-        // Skip leading zeros and track them
-        const char* start1 = s1;
-        const char* start2 = s2;
-        while (*s1 == '0') s1++;
-        while (*s2 == '0') s2++;
-
-        // Count digits to compare lengths first
-        int len1 = 0, len2 = 0;
-        while (isdigit(s1[len1])) len1++;
-        while (isdigit(s2[len2])) len2++;
-
-        // Different length so return smaller integer value
-        if (len1 != len2) return len1 < len2;
-
-        // Same length so compare digit by digit
-        for (int i = 0; i < len1; i++) {
-          if (s1[i] != s2[i]) return s1[i] < s2[i];
-        }
-
-        // Numbers equal so advance pointers
-        s1 += len1;
-        s2 += len2;
-      } else {
-        // Regular case-insensitive character comparison
-        char c1 = tolower(*s1);
-        char c2 = tolower(*s2);
-        if (c1 != c2) return c1 < c2;
-        s1++;
-        s2++;
+static bool naturalLess(const std::string& str1, const std::string& str2) {
+  const char* s1 = str1.c_str();
+  const char* s2 = str2.c_str();
+  while (*s1 && *s2) {
+    if (isdigit(*s1) && isdigit(*s2)) {
+      while (*s1 == '0') s1++;
+      while (*s2 == '0') s2++;
+      int len1 = 0, len2 = 0;
+      while (isdigit(s1[len1])) len1++;
+      while (isdigit(s2[len2])) len2++;
+      if (len1 != len2) return len1 < len2;
+      for (int i = 0; i < len1; i++) {
+        if (s1[i] != s2[i]) return s1[i] < s2[i];
       }
+      s1 += len1;
+      s2 += len2;
+    } else {
+      char c1 = tolower(*s1);
+      char c2 = tolower(*s2);
+      if (c1 != c2) return c1 < c2;
+      s1++;
+      s2++;
     }
+  }
+  return *s1 == '\0' && *s2 != '\0';
+}
 
-    // One string is prefix of other
-    return *s1 == '\0' && *s2 != '\0';
+static void sortFileListByName(std::vector<FileEntry>& entries) {
+  std::sort(entries.begin(), entries.end(), [](const FileEntry& a, const FileEntry& b) {
+    if (a.isDirectory != b.isDirectory) return a.isDirectory;
+    return naturalLess(a.name, b.name);
   });
 }
+
+static void sortFileListByDate(std::vector<FileEntry>& entries) {
+  std::sort(entries.begin(), entries.end(), [](const FileEntry& a, const FileEntry& b) {
+    if (a.isDirectory != b.isDirectory) return a.isDirectory;
+    if (a.modTime != b.modTime) return a.modTime > b.modTime;  // newest first
+    return naturalLess(a.name, b.name);  // tie-break alphabetically
+  });
+}
+
+// ---------------------------------------------------------------------------
+// File loading helpers
+// ---------------------------------------------------------------------------
+
+// Returns packed FAT date+time (date<<16|time) for an open file, or 0 on failure.
+static uint32_t getFileModTime(HalFile& file) {
+  uint16_t d = 0, t = 0;
+  if (file.getModifyDateTime(&d, &t)) {
+    return (static_cast<uint32_t>(d) << 16) | t;
+  }
+  return 0;
+}
+
+static bool isSupportedFile(const std::string& filename) {
+  return StringUtils::checkFileExtension(filename, ".epub") ||
+         StringUtils::checkFileExtension(filename, ".xtch") ||
+         StringUtils::checkFileExtension(filename, ".xtc") ||
+         StringUtils::checkFileExtension(filename, ".txt") ||
+         StringUtils::checkFileExtension(filename, ".md") ||
+         StringUtils::checkFileExtension(filename, ".bmp") ||
+         StringUtils::checkFileExtension(filename, ".log");
+}
+
+// ---------------------------------------------------------------------------
+// MyLibraryActivity implementation
+// ---------------------------------------------------------------------------
 
 void MyLibraryActivity::loadFiles() {
   files.clear();
@@ -78,7 +102,6 @@ void MyLibraryActivity::loadFiles() {
     if (root) root.close();
     return;
   }
-
   root.rewindDirectory();
 
   char name[500];
@@ -88,30 +111,34 @@ void MyLibraryActivity::loadFiles() {
       file.close();
       continue;
     }
-
     if (file.isDirectory()) {
-      files.emplace_back(std::string(name) + "/");
+      const uint32_t modTime = getFileModTime(file);
+      file.close();
+      files.push_back({std::string(name), {}, modTime, true});
     } else {
-      auto filename = std::string(name);
-      if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
-          StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
-          StringUtils::checkFileExtension(filename, ".md") || StringUtils::checkFileExtension(filename, ".bmp") ||
-          StringUtils::checkFileExtension(filename, ".log")) {
-        files.emplace_back(filename);
+      const std::string filename(name);
+      if (isSupportedFile(filename)) {
+        const uint32_t modTime = getFileModTime(file);
+        file.close();
+        files.push_back({filename, {}, modTime, false});
+      } else {
+        file.close();
       }
     }
-    file.close();
   }
   root.close();
-  sortFileList(files);
+
+  if (sortByDate) {
+    sortFileListByDate(files);
+  } else {
+    sortFileListByName(files);
+  }
 }
 
 void MyLibraryActivity::onEnter() {
   Activity::onEnter();
-
   loadFiles();
   selectorIndex = 0;
-
   requestUpdate();
 }
 
@@ -121,11 +148,17 @@ void MyLibraryActivity::onExit() {
 }
 
 void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
-  // Only clear cache for .epub files
   if (StringUtils::checkFileExtension(fullPath, ".epub")) {
     Epub(fullPath, "/.crosspoint").clearCache();
     LOG_DBG("MyLibrary", "Cleared metadata cache for: %s", fullPath.c_str());
   }
+}
+
+// Build the full open path for an entry (uses realPath for virtual entries).
+static std::string entryFullPath(const std::string& basepath, const FileEntry& entry) {
+  if (!entry.realPath.empty()) return entry.realPath;
+  if (basepath.back() == '/') return basepath + entry.name;
+  return basepath + "/" + entry.name;
 }
 
 void MyLibraryActivity::loop() {
@@ -142,16 +175,11 @@ void MyLibraryActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (files.empty()) return;
+    const FileEntry& entry = files[selectorIndex];
 
-    const std::string& entry = files[selectorIndex];
-    bool isDirectory = (entry.back() == '/');
-
-    if (mappedInput.getHeldTime() >= GO_HOME_MS && !isDirectory) {
-      // --- LONG PRESS ACTION: DELETE FILE ---
-      std::string cleanBasePath = basepath;
-      if (cleanBasePath.back() != '/') cleanBasePath += "/";
-      const std::string fullPath = cleanBasePath + entry;
-
+    if (mappedInput.getHeldTime() >= GO_HOME_MS && !entry.isDirectory) {
+      // --- LONG PRESS: DELETE FILE ---
+      const std::string fullPath = entryFullPath(basepath, entry);
       auto handler = [this, fullPath](const ActivityResult& res) {
         if (!res.isCancelled) {
           LOG_DBG("MyLibrary", "Attempting to delete: %s", fullPath.c_str());
@@ -162,10 +190,8 @@ void MyLibraryActivity::loop() {
             if (files.empty()) {
               selectorIndex = 0;
             } else if (selectorIndex >= files.size()) {
-              // Move selection to the new "last" item
               selectorIndex = files.size() - 1;
             }
-
             requestUpdate(true);
           } else {
             LOG_ERR("MyLibrary", "Failed to delete file: %s", fullPath.c_str());
@@ -174,46 +200,39 @@ void MyLibraryActivity::loop() {
           LOG_DBG("MyLibrary", "Delete cancelled by user");
         }
       };
-
-      std::string heading = tr(STR_DELETE) + std::string("? ");
-
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
+      startActivityForResult(
+          std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), entry.name),
+          handler);
       return;
-    } else {
-      // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
-      if (basepath.back() != '/') basepath += "/";
+    }
 
-      if (isDirectory) {
-        basepath += entry.substr(0, entry.length() - 1);
-        loadFiles();
-        selectorIndex = 0;
-        requestUpdate();
+    // --- SHORT PRESS: OPEN / NAVIGATE ---
+    if (entry.isDirectory) {
+      if (basepath.back() != '/') basepath += "/";
+      basepath += entry.name;
+      loadFiles();
+      selectorIndex = 0;
+      requestUpdate();
+    } else {
+      const std::string fullPath = entryFullPath(basepath, entry);
+      if (StringUtils::isTextViewableFile(entry.name)) {
+        startActivityForResult(std::make_unique<FileViewerActivity>(renderer, mappedInput, fullPath), [](auto) {});
       } else {
-        const std::string fullPath = basepath + entry;
-        if (StringUtils::isTextViewableFile(entry)) {
-          startActivityForResult(std::make_unique<FileViewerActivity>(renderer, mappedInput, fullPath), [](auto){});
-        } else {
-          onSelectBook(fullPath);
-        }
+        onSelectBook(fullPath);
       }
     }
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    // Short press: go up one directory, or go home if at root
     if (mappedInput.getHeldTime() < GO_HOME_MS) {
       if (basepath != "/") {
         const std::string oldPath = basepath;
-
         basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
         if (basepath.empty()) basepath = "/";
         loadFiles();
-
-        const auto pos = oldPath.find_last_of('/');
-        const std::string dirName = oldPath.substr(pos + 1) + "/";
+        const std::string dirName = oldPath.substr(oldPath.find_last_of('/') + 1);
         selectorIndex = findEntry(dirName);
-
         requestUpdate();
       } else {
         onGoHome();
@@ -221,34 +240,43 @@ void MyLibraryActivity::loop() {
     }
   }
 
-  int listSize = static_cast<int>(files.size());
+  // Left short tap (< SORT_TAP_MS) toggles sort order.
+  // Longer Left presses fall through to ButtonNavigator for navigation-up.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left) && mappedInput.getHeldTime() < SORT_TAP_MS) {
+    sortByDate = !sortByDate;
+    if (sortByDate) {
+      sortFileListByDate(files);
+    } else {
+      sortFileListByName(files);
+    }
+    selectorIndex = 0;
+    requestUpdate();
+    return;
+  }
+
+  const int listSize = static_cast<int>(files.size());
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });
-
   buttonNavigator.onPreviousRelease([this, listSize] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });
-
   buttonNavigator.onNextContinuous([this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
-
   buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
 }
 
-std::string getFileName(std::string filename) {
-  if (filename.back() == '/') {
-    return filename.substr(0, filename.length() - 1);
-  }
-  const auto pos = filename.rfind('.');
-  return filename.substr(0, pos);
+static std::string getDisplayName(const FileEntry& entry) {
+  if (entry.isDirectory) return entry.name;
+  const auto pos = entry.name.rfind('.');
+  return (pos != std::string::npos) ? entry.name.substr(0, pos) : entry.name;
 }
 
 void MyLibraryActivity::render(RenderLock&&) {
@@ -266,29 +294,28 @@ void MyLibraryActivity::render(RenderLock&&) {
   if (files.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
   } else {
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); });
+    GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
+                 [this](int index) { return getDisplayName(files[index]); }, nullptr,
+                 [this](int index) { return UITheme::getFileIcon(files[index].name + (files[index].isDirectory ? "/" : "")); });
   }
 
-  // Help text — show VIEW for text files, OPEN for everything else
-  const bool selectedIsText = !files.empty() &&
-      selectorIndex < files.size() &&
-      !files[selectorIndex].empty() &&
-      files[selectorIndex].back() != '/' &&
-      StringUtils::isTextViewableFile(files[selectorIndex]);
+  // Btn3 (Left): sort toggle — shows what pressing Left will switch TO
+  const char* sortLabel = sortByDate ? tr(STR_SORT_NAME) : tr(STR_SORT_DATE);
+  const bool selectedIsText = !files.empty() && selectorIndex < files.size() &&
+                              !files[selectorIndex].isDirectory &&
+                              StringUtils::isTextViewableFile(files[selectorIndex].name);
   const auto labels =
       mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK),
-                            files.empty() ? "" : (selectedIsText ? tr(STR_PREVIEW) : tr(STR_OPEN)),
-                            files.empty() ? "" : tr(STR_DIR_UP), files.empty() ? "" : tr(STR_DIR_DOWN));
+                            files.empty() ? "" : (selectedIsText ? tr(STR_PREVIEW) : tr(STR_OPEN)), sortLabel,
+                            files.empty() ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }
 
 size_t MyLibraryActivity::findEntry(const std::string& name) const {
-  for (size_t i = 0; i < files.size(); i++)
-    if (files[i] == name) return i;
+  for (size_t i = 0; i < files.size(); i++) {
+    if (files[i].name == name) return i;
+  }
   return 0;
 }
