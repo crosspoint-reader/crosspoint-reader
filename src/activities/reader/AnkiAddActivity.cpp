@@ -4,6 +4,8 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include <ctime>
+
 #include "ScreenComponents.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
