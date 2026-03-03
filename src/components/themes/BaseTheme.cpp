@@ -12,6 +12,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 // Internal constants
 namespace {
@@ -485,18 +486,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     const std::string& lastBookSeries = recentBooks[0].series;
     const std::string& lastBookSeriesIndex = recentBooks[0].seriesIndex;
 
-    // Build series label: "Series Name" or "Series Name #1" (trimming ".0" suffix from index)
-    std::string seriesLabel;
-    if (!lastBookSeries.empty()) {
-      seriesLabel = lastBookSeries;
-      if (!lastBookSeriesIndex.empty()) {
-        std::string idx = lastBookSeriesIndex;
-        if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
-          idx.resize(idx.size() - 2);
-        }
-        seriesLabel += " #" + idx;
-      }
-    }
+    const auto seriesLabel = StringUtils::formatSeriesLabel(lastBookSeries, lastBookSeriesIndex);
 
     // Invert text colors based on selection state:
     // - With cover: selected = white text on black box, unselected = black text on white box
@@ -569,7 +559,10 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     }
 
     if (!truncatedSeries.empty()) {
-      titleYStart += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
+      titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
+      if (!truncatedAuthor.empty()) {
+        titleYStart += renderer.getLineHeight(UI_10_FONT_ID);
+      }
       renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedSeries.c_str(), !bookSelected);
     }
 

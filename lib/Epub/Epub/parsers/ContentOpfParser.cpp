@@ -37,27 +37,43 @@ bool isMetadataMetaTag(const XML_Char* name) { return strcmp(name, "meta") == 0 
 
 void ContentOpfParser::processEpub3Meta(const std::string& property, const std::string& refines, const std::string& id,
                                         const std::string& value) {
-  const std::string cleanValue = trim(value);
+  std::string cleanValue = trim(value);
   if (cleanValue.empty()) {
     return;
   }
 
   if (property == "belongs-to-collection") {
-    epub3Collections.push_back({id, cleanValue});
+    epub3Collections.push_back({id, std::move(cleanValue)});
     return;
   }
 
-  const std::string normalizedRefines = normalizeRefines(refines);
+  std::string normalizedRefines = normalizeRefines(refines);
   if (property == "group-position") {
-    epub3GroupPositions.emplace_back(normalizedRefines, cleanValue);
+    epub3GroupPositions.push_back({std::move(normalizedRefines), std::move(cleanValue)});
     return;
   }
 
   if (property == "collection-type") {
-    epub3CollectionTypes.emplace_back(normalizedRefines, cleanValue);
+    epub3CollectionTypes.push_back({std::move(normalizedRefines), std::move(cleanValue)});
   }
 }
 
+// Apply EPUB3 belongs-to-collection metadata collected during parsing.
+// Selects a collection to use as the series, preferring one explicitly typed as
+// "series", and resolves the series index from the matching group-position.
+//
+// Example OPF with an explicit collection-type:
+//   <meta property="belongs-to-collection" id="col1">The Stormlight Archive</meta>
+//   <meta property="collection-type" refines="#col1">series</meta>
+//   <meta property="group-position"  refines="#col1">2</meta>
+//
+// Example OPF without collection-type (treated as series by default):
+//   <meta property="belongs-to-collection" id="col1">Harry Potter</meta>
+//   <meta property="group-position"         refines="#col1">3</meta>
+//
+// Example OPF with a bare group-position (no refines, no id — fallback):
+//   <meta property="belongs-to-collection">Discworld</meta>
+//   <meta property="group-position">12</meta>
 void ContentOpfParser::applyEpub3Metadata() {
   const Epub3CollectionEntry* selectedCollection = nullptr;
 

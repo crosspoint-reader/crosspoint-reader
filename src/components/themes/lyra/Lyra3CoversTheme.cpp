@@ -11,6 +11,7 @@
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 // Internal constants
 namespace {
@@ -90,18 +91,7 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
       auto titleLines = renderer.wrappedText(SMALL_FONT_ID, recentBooks[i].title.c_str(), maxLineWidth, 3);
 
-      // Build series label: "Series Name" or "Series Name #1" (trimming ".0" suffix from index)
-      std::string seriesLabel;
-      if (!recentBooks[i].series.empty()) {
-        seriesLabel = recentBooks[i].series;
-        if (!recentBooks[i].seriesIndex.empty()) {
-          std::string idx = recentBooks[i].seriesIndex;
-          if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
-            idx.resize(idx.size() - 2);
-          }
-          seriesLabel += " #" + idx;
-        }
-      }
+      const auto seriesLabel = StringUtils::formatSeriesLabel(recentBooks[i].series, recentBooks[i].seriesIndex);
       auto seriesTrunc = seriesLabel.empty() ? std::string{}
                                              : renderer.truncatedText(SMALL_FONT_ID, seriesLabel.c_str(), maxLineWidth);
 

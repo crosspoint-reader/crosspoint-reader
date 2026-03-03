@@ -26,6 +26,7 @@
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 // Internal constants
 namespace {
@@ -488,18 +489,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
     auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
 
-    // Build series label: "Series Name" or "Series Name #1" (trimming ".0" suffix from index)
-    std::string seriesLabel;
-    if (!book.series.empty()) {
-      seriesLabel = book.series;
-      if (!book.seriesIndex.empty()) {
-        std::string idx = book.seriesIndex;
-        if (idx.size() >= 3 && idx.substr(idx.size() - 2) == ".0") {
-          idx.resize(idx.size() - 2);
-        }
-        seriesLabel += " #" + idx;
-      }
-    }
+    const auto seriesLabel = StringUtils::formatSeriesLabel(book.series, book.seriesIndex);
     auto series =
         seriesLabel.empty() ? std::string{} : renderer.truncatedText(UI_10_FONT_ID, seriesLabel.c_str(), textWidth);
 
@@ -519,7 +509,10 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
     }
     if (!series.empty()) {
-      titleY += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
+      titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
+      if (!book.author.empty()) {
+        titleY += renderer.getLineHeight(UI_10_FONT_ID);
+      }
       renderer.drawText(UI_10_FONT_ID, textX, titleY, series.c_str(), true);
     }
   } else {
