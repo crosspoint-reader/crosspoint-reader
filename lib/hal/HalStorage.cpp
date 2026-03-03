@@ -149,6 +149,7 @@ size_t HalFile::write(uint8_t b) { HAL_FILE_WRAPPED_CALL(write, b); }
 bool HalFile::rename(const char* newPath) { HAL_FILE_WRAPPED_CALL(rename, newPath); }
 bool HalFile::isDirectory() const { HAL_FILE_FORWARD_CALL(isDirectory, ); }  // already thread-safe, no need to wrap
 void HalFile::rewindDirectory() { HAL_FILE_WRAPPED_CALL(rewindDirectory, ); }
+bool HalFile::getModifyDateTime(uint16_t* pdate, uint16_t* ptime) { HAL_FILE_WRAPPED_CALL(getModifyDateTime, pdate, ptime); }
 bool HalFile::close() { HAL_FILE_WRAPPED_CALL(close, ); }
 HalFile HalFile::openNextFile() {
   HalStorage::StorageLock lock;
