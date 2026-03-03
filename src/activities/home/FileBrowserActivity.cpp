@@ -92,9 +92,9 @@ void FileBrowserActivity::loadFiles() {
       files.emplace_back(std::string(name) + "/");
     } else {
       std::string_view filename{name};
-      if (FsHelpers::checkFileExtension(filename, ".epub") || FsHelpers::checkFileExtension(filename, ".xtch") ||
-          FsHelpers::checkFileExtension(filename, ".xtc") || FsHelpers::checkFileExtension(filename, ".txt") ||
-          FsHelpers::checkFileExtension(filename, ".md") || FsHelpers::hasBmpExtension(filename)) {
+      if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
+          FsHelpers::checkFileExtension(filename, ".txt") || FsHelpers::checkFileExtension(filename, ".md") ||
+          FsHelpers::hasBmpExtension(filename)) {
         files.emplace_back(filename);
       }
     }
@@ -120,7 +120,7 @@ void FileBrowserActivity::onExit() {
 
 void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
   // Only clear cache for .epub files
-  if (FsHelpers::checkFileExtension(fullPath, ".epub")) {
+  if (FsHelpers::hasEpubExtension(fullPath)) {
     Epub(fullPath, "/.crosspoint").clearCache();
     LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
   }

@@ -799,14 +799,14 @@ bool WebDAVHandler::getOverwrite(WebServer& s) const {
 }
 
 void WebDAVHandler::clearEpubCacheIfNeeded(const String& path) const {
-  if (FsHelpers::checkFileExtension(path, ".epub")) {
+  if (FsHelpers::hasEpubExtension(path)) {
     Epub(path.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("DAV", "Cleared epub cache for: %s", path.c_str());
   }
 }
 
 String WebDAVHandler::getMimeType(const String& path) const {
-  if (FsHelpers::checkFileExtension(path, ".epub")) return "application/epub+zip";
+  if (FsHelpers::hasEpubExtension(path)) return "application/epub+zip";
   if (FsHelpers::checkFileExtension(path, ".pdf")) return "application/pdf";
   if (FsHelpers::checkFileExtension(path, ".txt")) return "text/plain";
   if (FsHelpers::checkFileExtension(path, ".html") || FsHelpers::checkFileExtension(path, ".htm")) return "text/html";
@@ -814,9 +814,9 @@ String WebDAVHandler::getMimeType(const String& path) const {
   if (FsHelpers::checkFileExtension(path, ".js")) return "application/javascript";
   if (FsHelpers::checkFileExtension(path, ".json")) return "application/json";
   if (FsHelpers::checkFileExtension(path, ".xml")) return "application/xml";
-  if (FsHelpers::hasJpgExtension({path.c_str(), path.length()})) return "image/jpeg";
-  if (FsHelpers::hasPngExtension({path.c_str(), path.length()})) return "image/png";
-  if (FsHelpers::hasGifExtension({path.c_str(), path.length()})) return "image/gif";
+  if (FsHelpers::hasJpgExtension(path)) return "image/jpeg";
+  if (FsHelpers::hasPngExtension(path)) return "image/png";
+  if (FsHelpers::hasGifExtension(path)) return "image/gif";
   if (FsHelpers::checkFileExtension(path, ".svg")) return "image/svg+xml";
   if (FsHelpers::checkFileExtension(path, ".zip")) return "application/zip";
   if (FsHelpers::checkFileExtension(path, ".gz")) return "application/gzip";

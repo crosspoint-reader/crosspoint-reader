@@ -43,7 +43,7 @@ unsigned long wsLastCompleteAt = 0;
 // Helper function to clear epub cache after upload
 void clearEpubCacheIfNeeded(const String& filePath) {
   // Only clear cache for .epub files
-  if (FsHelpers::checkFileExtension(filePath, ".epub")) {
+  if (FsHelpers::hasEpubExtension(filePath)) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
   }
@@ -390,11 +390,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
   root.close();
 }
 
-bool CrossPointWebServer::isEpubFile(const String& filename) const {
-  String lower = filename;
-  lower.toLowerCase();
-  return lower.endsWith(".epub");
-}
+bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHelpers::hasEpubExtension(filename); }
 
 void CrossPointWebServer::handleFileList() const {
   sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));

@@ -228,8 +228,7 @@ void SleepActivity::renderCoverSleepScreen() const {
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
 
   // Check if the current book is XTC, TXT, or EPUB
-  if (FsHelpers::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
-      FsHelpers::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
+  if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
     // Handle XTC file
     Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastXtc.load()) {
@@ -257,7 +256,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastTxt.getCoverBmpPath();
-  } else if (FsHelpers::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
+  } else if (FsHelpers::hasEpubExtension(APP_STATE.openEpubPath)) {
     // Handle EPUB file
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
     // Skip loading css since we only need metadata here

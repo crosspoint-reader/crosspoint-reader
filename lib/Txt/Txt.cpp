@@ -41,7 +41,7 @@ std::string Txt::getTitle() const {
   std::string filename = (lastSlash != std::string::npos) ? filepath.substr(lastSlash + 1) : filepath;
 
   // Remove .txt extension
-  if (filename.length() >= 4 && filename.substr(filename.length() - 4) == ".txt") {
+  if (FsHelpers::checkFileExtension(filename, ".txt")) {
     filename = filename.substr(0, filename.length() - 4);
   }
 

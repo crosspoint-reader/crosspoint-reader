@@ -58,10 +58,6 @@ bool checkFileExtension(std::string_view fileName, const char* extension) {
   return true;
 }
 
-bool checkFileExtension(const String& fileName, const char* extension) {
-  return checkFileExtension(std::string_view{fileName.c_str(), fileName.length()}, extension);
-}
-
 bool hasJpgExtension(std::string_view fileName) {
   return checkFileExtension(fileName, ".jpg") || checkFileExtension(fileName, ".jpeg");
 }
@@ -71,5 +67,11 @@ bool hasPngExtension(std::string_view fileName) { return checkFileExtension(file
 bool hasBmpExtension(std::string_view fileName) { return checkFileExtension(fileName, ".bmp"); }
 
 bool hasGifExtension(std::string_view fileName) { return checkFileExtension(fileName, ".gif"); }
+
+bool hasEpubExtension(std::string_view fileName) { return checkFileExtension(fileName, ".epub"); }
+
+bool hasXtcExtension(std::string_view fileName) {
+  return checkFileExtension(fileName, ".xtc") || checkFileExtension(fileName, ".xtch");
+}
 
 }  // namespace FsHelpers

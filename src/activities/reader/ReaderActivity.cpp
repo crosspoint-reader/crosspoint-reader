@@ -21,9 +21,7 @@ std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
   return filePath.substr(0, lastSlash);
 }
 
-bool ReaderActivity::isXtcFile(const std::string& path) {
-  return FsHelpers::checkFileExtension(path, ".xtc") || FsHelpers::checkFileExtension(path, ".xtch");
-}
+bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
   return FsHelpers::checkFileExtension(path, ".txt") ||

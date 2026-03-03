@@ -78,8 +78,7 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
   if (filename.back() == '/') {
     return Folder;
   }
-  if (FsHelpers::checkFileExtension(filename, ".epub") || FsHelpers::checkFileExtension(filename, ".xtch") ||
-      FsHelpers::checkFileExtension(filename, ".xtc")) {
+  if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename)) {
     return Book;
   }
   if (FsHelpers::checkFileExtension(filename, ".txt") || FsHelpers::checkFileExtension(filename, ".md")) {

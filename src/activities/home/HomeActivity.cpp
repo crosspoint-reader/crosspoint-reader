@@ -61,7 +61,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       if (!Storage.exists(coverPath.c_str())) {
         // If epub, try to load the metadata for title/author and cover
-        if (FsHelpers::checkFileExtension(book.path, ".epub")) {
+        if (FsHelpers::hasEpubExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
           // Skip loading css since we only need metadata here
           epub.load(false, true);
@@ -79,8 +79,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           }
           coverRendered = false;
           requestUpdate();
-        } else if (FsHelpers::checkFileExtension(book.path, ".xtch") ||
-                   FsHelpers::checkFileExtension(book.path, ".xtc")) {
+        } else if (FsHelpers::hasXtcExtension(book.path)) {
           // Handle XTC file
           Xtc xtc(book.path, "/.crosspoint");
           if (xtc.load()) {
