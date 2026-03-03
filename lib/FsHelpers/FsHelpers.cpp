@@ -1,5 +1,6 @@
 #include "FsHelpers.h"
 
+#include <cctype>
 #include <cstring>
 #include <vector>
 
@@ -60,5 +61,15 @@ bool checkFileExtension(std::string_view fileName, const char* extension) {
 bool checkFileExtension(const String& fileName, const char* extension) {
   return checkFileExtension(std::string_view{fileName.c_str(), fileName.length()}, extension);
 }
+
+bool hasJpgExtension(std::string_view fileName) {
+  return checkFileExtension(fileName, ".jpg") || checkFileExtension(fileName, ".jpeg");
+}
+
+bool hasPngExtension(std::string_view fileName) { return checkFileExtension(fileName, ".png"); }
+
+bool hasBmpExtension(std::string_view fileName) { return checkFileExtension(fileName, ".bmp"); }
+
+bool hasGifExtension(std::string_view fileName) { return checkFileExtension(fileName, ".gif"); }
 
 }  // namespace FsHelpers
