@@ -55,7 +55,7 @@ FEATURES = {
     'markdown': Feature(
         name='Markdown/Obsidian',
         flag='ENABLE_MARKDOWN',
-        size_kb=201,
+        size_kb=199,
         description='Markdown and Obsidian vault reading support'
     ),
     'integrations': Feature(
@@ -97,7 +97,7 @@ FEATURES = {
     'epub_support': Feature(
         name='EPUB Support',
         flag='ENABLE_EPUB_SUPPORT',
-        size_kb=143,
+        size_kb=142,
         description='EPUB e-book reader with CSS and chapter navigation'
     ),
     'hyphenation': Feature(
