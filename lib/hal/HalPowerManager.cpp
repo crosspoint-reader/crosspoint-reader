@@ -63,6 +63,7 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
     gpio.update();
   }
   esp_sleep_config_gpio_isolate();
+  gpio_deep_sleep_hold_en();
   gpio_hold_en(GPIO_SPIWP);
   pinMode(InputManager::POWER_BUTTON_PIN, INPUT_PULLUP);
   // Arm the wakeup trigger *after* the button is released
