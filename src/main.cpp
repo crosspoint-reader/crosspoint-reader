@@ -67,7 +67,7 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
   OtaEntry entry;
   entry.seq   = newSeq;
   memset(entry.label, 0xFF, sizeof(entry.label));
-  entry.state = 0x00000001;  // ESP_OTA_IMG_VALID
+  entry.state = 0x00000002;  // ESP_OTA_IMG_VALID (0x1 = PENDING_VERIFY, 0x2 = VALID)
   // crc32_le over the 28-byte body — same as zlib.crc32 in the flash script
   // bootloader uses esp_rom_crc32_le(UINT32_MAX, data, 28) — must match exactly
   entry.crc = crc32_le(0xFFFFFFFF, (const uint8_t*)&entry, 28);
