@@ -944,120 +944,18 @@ void loop() {
     activityManager.goHome();
   }
 
-  // Danger Zone: handle flash firmware request from API
+  // Danger Zone: handle flash firmware request from API.
+  // Rather than doing an in-process OTA (which is unreliable while WiFi is active),
+  // we leave firmware.bin on the SD card and reboot.  The boot-time OTA path in
+  // setup() detects /firmware.bin and flashes it reliably from a clean state.
   if (dzFlashRequested) {
     dzFlashRequested = false;
 
     if (!Storage.exists("/firmware.bin")) {
-      LOG_ERR("DZ", "Flash requested but /firmware.bin not found");
+      LOG_ERR("DZ", "Flash requested but /firmware.bin not found on SD");
     } else {
-      LOG_INF("DZ", "Flashing firmware from /firmware.bin via API...");
-
-      // Stop DZ web server before flashing (OTA disables flash cache)
-      if (dzWebServer) {
-        dzWebServer->stop();
-        dzWebServer.reset();
-        UITheme::setHttpServerActive(false);
-      }
-      UITheme::setNetworkStatus(false, false);
-      WiFi.disconnect(false);
-      WiFi.mode(WIFI_OFF);
-      dzWifiConnected = false;
-
-      FsFile firmwareFile = Storage.open("/firmware.bin");
-      if (firmwareFile) {
-        const size_t fileSize = firmwareFile.size();
-        if (fileSize == 0) {
-          firmwareFile.close();
-          LOG_ERR("DZ", "firmware.bin is empty — deleting");
-          Storage.remove("/firmware.bin");
-        } else {
-          // Use ESP-IDF OTA API: write to the INACTIVE partition only.
-          const esp_partition_t* runningPart = esp_ota_get_running_partition();
-          const esp_partition_t* updatePart  = esp_ota_get_next_update_partition(nullptr);
-          LOG_INF("DZ", "OTA: running=%s@0x%lx  target=%s@0x%lx",
-                  runningPart ? runningPart->label : "?",
-                  runningPart ? (unsigned long)runningPart->address : 0UL,
-                  updatePart  ? updatePart->label  : "?",
-                  updatePart  ? (unsigned long)updatePart->address  : 0UL);
-
-          auto dzFlashFail = [&](const char* errMsg) {
-            LOG_ERR("DZ", "Flash failed: %s", errMsg);
-            FsFile logFile;
-            if (Storage.openFileForWrite("DZ", "/.crosspoint/ota_error.log", logFile)) {
-              logFile.print(errMsg);
-              logFile.close();
-            }
-            Storage.remove("/firmware.bin");
-          };
-
-          if (!updatePart) {
-            firmwareFile.close();
-            dzFlashFail("no update partition found");
-          } else {
-            esp_ota_handle_t otaHandle = 0;
-            esp_err_t err = esp_ota_begin(updatePart, OTA_SIZE_UNKNOWN, &otaHandle);
-            if (err != ESP_OK) {
-              firmwareFile.close();
-              char errMsg[80];
-              snprintf(errMsg, sizeof(errMsg), "ota_begin: %s", esp_err_to_name(err));
-              dzFlashFail(errMsg);
-            } else {
-              size_t written = 0;
-              bool writeOk = true;
-              uint8_t buf[4096];
-              while (written < fileSize) {
-                const size_t toRead = min(sizeof(buf), fileSize - written);
-                const int bytesRead = firmwareFile.read(buf, toRead);
-                if (bytesRead <= 0) { writeOk = false; break; }
-                err = esp_ota_write(otaHandle, buf, static_cast<size_t>(bytesRead));
-                if (err != ESP_OK) { writeOk = false; break; }
-                written += static_cast<size_t>(bytesRead);
-                yield();  // Feed watchdog during long SD read
-              }
-              firmwareFile.close();
-
-              if (!writeOk || written != fileSize) {
-                esp_ota_abort(otaHandle);
-                char errMsg[120];
-                if (!writeOk) {
-                  snprintf(errMsg, sizeof(errMsg), "ota_write at %u/%u: %s",
-                           (unsigned)written, (unsigned)fileSize, esp_err_to_name(err));
-                } else {
-                  snprintf(errMsg, sizeof(errMsg), "short read %u/%u",
-                           (unsigned)written, (unsigned)fileSize);
-                }
-                dzFlashFail(errMsg);
-              } else {
-                err = esp_ota_end(otaHandle);
-                // ESP_ERR_OTA_VALIDATE_FAILED is expected for Arduino/unsigned builds.
-                // Data was written correctly; proceed anyway.
-                if (err != ESP_OK && err != ESP_ERR_OTA_VALIDATE_FAILED) {
-                  char errMsg[80];
-                  snprintf(errMsg, sizeof(errMsg), "ota_end: %s", esp_err_to_name(err));
-                  dzFlashFail(errMsg);
-                } else {
-                  if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
-                    LOG_INF("DZ", "OTA SHA256 validation skipped (unsigned build)");
-                  }
-                  err = forceSetBootPartition(updatePart);
-                  if (err != ESP_OK) {
-                    char errMsg[80];
-                    snprintf(errMsg, sizeof(errMsg), "set_boot: %s", esp_err_to_name(err));
-                    dzFlashFail(errMsg);
-                  } else {
-                    Storage.remove("/firmware.bin");
-                    LOG_INF("DZ", "Firmware flash complete, restarting...");
-                    ESP.restart();
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      // If flash failed, reconnect WiFi so the device is still reachable
-      dangerZoneAutoConnect();
+      LOG_INF("DZ", "firmware.bin ready — rebooting to install via boot-time OTA...");
+      ESP.restart();
     }
   }
 
