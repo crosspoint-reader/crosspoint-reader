@@ -9,6 +9,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <FsDateTime.h>
 #include <Update.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
@@ -408,6 +409,14 @@ void dangerZoneAutoConnect() {
 
   dzWifiConnected = true;
   LOG_INF("DZ", "Connected! IP=%s", WiFi.localIP().toString().c_str());
+
+  configTime(0, 0, "pool.ntp.org");
+  { time_t t = 0; int tries = 0; while (time(&t) < 1000000000L && tries++ < 30) delay(100); }
+  FsDateTime::setCallback([](uint16_t* date, uint16_t* tv) {
+    time_t now = ::time(nullptr); struct tm tm; localtime_r(&now, &tm);
+    *date = FS_DATE(tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday);
+    *tv   = FS_TIME(tm.tm_hour, tm.tm_min, tm.tm_sec);
+  });
 
   UITheme::setNetworkStatus(true, false);
 
