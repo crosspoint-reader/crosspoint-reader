@@ -21,7 +21,7 @@ int computeAverageAdvanceX(const EpdFontData* data) {
 
     const uint32_t span = interval.last - interval.first + 1;
     for (uint32_t j = 0; j < span; j++) {
-      const uint8_t advanceX = data->glyph[interval.offset + j].advanceX;
+      const uint16_t advanceX = data->glyph[interval.offset + j].advanceX;
       if (advanceX == 0) {
         continue;
       }
@@ -33,7 +33,7 @@ int computeAverageAdvanceX(const EpdFontData* data) {
   if (glyphCount == 0) {
     return 8;
   }
-  return std::max(1, static_cast<int>(advanceTotal / glyphCount));
+  return std::max(1, fp4::toPixel(static_cast<int32_t>(advanceTotal / glyphCount)));
 }
 
 uint8_t lookupKernClass(const EpdKernClassEntry* entries, const uint16_t count, const uint32_t cp) {
@@ -71,17 +71,22 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     return;
   }
 
-  int cursorX = startX;
-  const int cursorY = startY;
+  int32_t cursorXFP = fp4::fromPixel(startX);
   int averageAdvanceX = 0;
   bool averageAdvanceComputed = false;
   int lastBaseX = startX;
-  int lastBaseAdvance = 0;
+  int lastBaseAdvanceFP = 0;
   int lastBaseTop = 0;
   bool hasBaseGlyph = false;
   constexpr int MIN_COMBINING_GAP_PX = 1;
   uint32_t cp;
+  uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
+    const bool isCombining = utf8IsCombiningMark(cp);
+    if (!isCombining) {
+      cp = applyLigatures(cp, string);
+    }
+
     const EpdGlyph* glyph = getGlyph(cp);
     if (!glyph) {
       if (!averageAdvanceComputed) {
@@ -89,13 +94,13 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
         averageAdvanceComputed = true;
       }
       LOG_WRN("EPF", "Missing glyph U+%04lX; advancing by %dpx", static_cast<unsigned long>(cp), averageAdvanceX);
-      if (!utf8IsCombiningMark(cp)) {
-        cursorX += averageAdvanceX;
+      if (!isCombining) {
+        cursorXFP += fp4::fromPixel(averageAdvanceX);
+        prevCp = 0;
       }
       continue;
     }
 
-    const bool isCombining = utf8IsCombiningMark(cp);
     int raiseBy = 0;
     if (isCombining && hasBaseGlyph) {
       const int currentGap = glyph->top - glyph->height - lastBaseTop;
@@ -104,8 +109,14 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       }
     }
 
-    const int glyphBaseX = (isCombining && hasBaseGlyph) ? (lastBaseX + lastBaseAdvance / 2) : cursorX;
-    const int glyphBaseY = cursorY - raiseBy;
+    if (!isCombining && prevCp != 0) {
+      cursorXFP += getKerning(prevCp, cp);
+    }
+
+    const int cursorXPixels = fp4::toPixel(cursorXFP);
+    const int glyphBaseX =
+        (isCombining && hasBaseGlyph) ? (lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2)) : cursorXPixels;
+    const int glyphBaseY = startY - raiseBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
     *maxX = std::max(*maxX, glyphBaseX + glyph->left + glyph->width);
@@ -113,11 +124,12 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     *maxY = std::max(*maxY, glyphBaseY + glyph->top);
 
     if (!isCombining) {
-      lastBaseX = cursorX;
-      lastBaseAdvance = glyph->advanceX;
+      lastBaseX = cursorXPixels;
+      lastBaseAdvanceFP = glyph->advanceX;
       lastBaseTop = glyph->top;
       hasBaseGlyph = true;
-      cursorX += glyph->advanceX;
+      cursorXFP += glyph->advanceX;
+      prevCp = cp;
     }
   }
 }
@@ -137,7 +149,7 @@ bool EpdFont::hasPrintableChars(const char* string) const {
   return w > 0 || h > 0;
 }
 
-int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
+int EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
   if (!data->kernMatrix) {
     return 0;
   }

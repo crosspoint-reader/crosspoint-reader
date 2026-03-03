@@ -160,7 +160,7 @@ void SdFont::getTextBounds(const char* string, const int startX, const int start
     return;
   }
 
-  int cursorX = startX;
+  int32_t cursorXFP = fp4::fromPixel(startX);
   const int cursorY = startY;
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
@@ -174,11 +174,12 @@ void SdFont::getTextBounds(const char* string, const int startX, const int start
       continue;
     }
 
+    const int cursorX = fp4::toPixel(cursorXFP);
     *minX = std::min(*minX, cursorX + glyph->left);
     *maxX = std::max(*maxX, cursorX + glyph->left + glyph->width);
     *minY = std::min(*minY, cursorY + glyph->top - glyph->height);
     *maxY = std::max(*maxY, cursorY + glyph->top);
-    cursorX += glyph->advanceX;
+    cursorXFP += glyph->advanceX;
   }
 }
 

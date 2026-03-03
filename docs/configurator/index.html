@@ -1819,12 +1819,15 @@
           <div>
             <div class="companion-title">Grayscale Pokedex Wallpaper</div>
             <div class="companion-desc">
-              Generate wallpapers from Pokemon data. The current shipped version lives at
-              <code>/plugins/pokedex</code> on the device. Use the static page only as a fallback when no device host is
-              available.
+              Generate wallpapers from Pokemon data in the browser, download them, and copy them into
+              <code>/sleep/pokedex</code>. The device-hosted page at <code>/plugins/pokedex</code> is optional when you
+              want direct upload from a running CrossPoint web server.
             </div>
           </div>
           <div class="actions">
+            <a class="btn btn-outline" href="../plugins/x4-pokedex-grayscale/" target="_blank" rel="noopener">
+              Open Web Generator
+            </a>
             <a
               class="btn btn-outline"
               id="open-pokedex-plugin"
@@ -1834,9 +1837,6 @@
               rel="noopener"
             >
               Open on Device
-            </a>
-            <a class="btn btn-outline" href="../plugins/x4-pokedex-grayscale/" target="_blank" rel="noopener">
-              Static Fallback
             </a>
           </div>
         </div>

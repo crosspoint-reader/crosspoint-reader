@@ -139,10 +139,10 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 
   const int yPos = y + font->getFontData()->ascender;
-  int xpos = x;
+  int32_t xPosFP = fp4::fromPixel(x);
   int lastBaseX = x;
   int lastBaseY = yPos;
-  int lastBaseAdvance = 0;
+  int lastBaseAdvanceFP = 0;
   int lastBaseTop = 0;
   bool hasBaseGlyph = false;
   constexpr int MIN_COMBINING_GAP_PX = 1;
@@ -165,7 +165,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
         }
       }
 
-      int combiningX = lastBaseX + lastBaseAdvance / 2;
+      int combiningX = lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2);
       int combiningY = lastBaseY - raiseBy;
       renderChar(*font, cp, &combiningX, &combiningY, black);
       continue;
@@ -174,7 +174,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     if (!isCombining) {
       cp = font->applyLigatures(cp, text);
       if (prevBaseCp != 0) {
-        xpos += font->getKerning(prevBaseCp, cp);
+        xPosFP += font->getKerning(prevBaseCp, cp);
       }
     }
 
@@ -183,15 +183,25 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       glyph = font->getGlyph(REPLACEMENT_GLYPH);
     }
     if (!isCombining) {
-      lastBaseX = xpos;
+      lastBaseX = fp4::toPixel(xPosFP);
       lastBaseY = yPos;
-      lastBaseAdvance = glyph ? glyph->advanceX : 0;
+      lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
       lastBaseTop = glyph ? glyph->top : 0;
       hasBaseGlyph = true;
       prevBaseCp = cp;
     }
 
-    renderChar(*font, cp, &xpos, &yPos, black);
+    int drawX = fp4::toPixel(xPosFP);
+    int drawY = yPos;
+    renderChar(*font, cp, &drawX, &drawY, black);
+    if (!isCombining) {
+      if (glyph) {
+        xPosFP += glyph->advanceX;
+      } else {
+        xPosFP += fp4::fromPixel(drawX - lastBaseX);
+        prevBaseCp = 0;
+      }
+    }
   }
 }
 
@@ -921,7 +931,7 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
   }
 
   const EpdGlyph* glyph = font->getGlyph(' ');
-  return glyph ? glyph->advanceX : 0;
+  return glyph ? fp4::toPixel(glyph->advanceX) : 0;
 }
 
 int GfxRenderer::getSpaceKernAdjust(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
@@ -936,7 +946,7 @@ int GfxRenderer::getSpaceKernAdjust(const int fontId, const uint32_t leftCp, con
   }
 
   const EpdFontFamily& family = *fontFamilyIt->second;
-  return family.getKerning(leftCp, ' ', style) + family.getKerning(' ', rightCp, style);
+  return fp4::toPixel(family.getKerning(leftCp, ' ', style) + family.getKerning(' ', rightCp, style));
 }
 
 int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
@@ -950,7 +960,7 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
     return 0;
   }
 
-  return fontFamilyIt->second->getKerning(leftCp, rightCp, style);
+  return fp4::toPixel(fontFamilyIt->second->getKerning(leftCp, rightCp, style));
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text) const {
@@ -972,26 +982,28 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const EpdFo
 
   uint32_t cp;
   uint32_t prevCp = 0;
-  int width = 0;
+  int32_t widthFP = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     const bool isCombining = utf8IsCombiningMark(cp);
-    if (!isCombining) {
-      cp = font->applyLigatures(cp, text);
-      if (prevCp != 0) {
-        width += font->getKerning(prevCp, cp);
-      }
+    if (isCombining) {
+      continue;
+    }
+
+    cp = font->applyLigatures(cp, text);
+    if (prevCp != 0) {
+      widthFP += font->getKerning(prevCp, cp);
     }
 
     const EpdGlyph* glyph = font->getGlyph(cp);
     if (!glyph) {
       glyph = font->getGlyph(REPLACEMENT_GLYPH);
     }
-    if (glyph && !isCombining) {
-      width += glyph->advanceX;
+    if (glyph) {
+      widthFP += glyph->advanceX;
       prevCp = cp;
     }
   }
-  return width;
+  return fp4::toPixel(widthFP);
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
@@ -1079,11 +1091,9 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   // For 90° clockwise rotation:
   // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
   // Text reads from bottom to top.
-  int xPos = x;
-  int yPos = y;
-  int lastBaseX = x;
+  int32_t yPosFP = fp4::fromPixel(y);
   int lastBaseY = y;
-  int lastBaseAdvance = 0;
+  int lastBaseAdvanceFP = 0;
   int lastBaseTop = 0;
   bool hasBaseGlyph = false;
   constexpr int MIN_COMBINING_GAP_PX = 1;
@@ -1146,7 +1156,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     if (!isCombining) {
       cp = font->applyLigatures(cp, text);
       if (prevBaseCp != 0) {
-        yPos -= font->getKerning(prevBaseCp, cp);
+        yPosFP -= font->getKerning(prevBaseCp, cp);
       }
     }
 
@@ -1158,28 +1168,26 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       continue;
     }
 
-    int drawX = xPos;
-    int drawY = yPos;
+    int drawX = x;
+    int drawY = fp4::toPixel(yPosFP);
     if (isCombining && hasBaseGlyph) {
       int raiseBy = 0;
       const int currentGap = glyph->top - glyph->height - lastBaseTop;
       if (currentGap < MIN_COMBINING_GAP_PX) {
         raiseBy = MIN_COMBINING_GAP_PX - currentGap;
       }
-      drawX = lastBaseX - raiseBy;
-      drawY = lastBaseY - lastBaseAdvance / 2;
+      drawX -= raiseBy;
+      drawY = lastBaseY - fp4::toPixel(lastBaseAdvanceFP / 2);
     }
     drawGlyphRotated(glyph, drawX, drawY);
 
     if (!isCombining) {
-      lastBaseX = xPos;
-      lastBaseY = yPos;
-      lastBaseAdvance = glyph->advanceX;
+      lastBaseY = drawY;
+      lastBaseAdvanceFP = glyph->advanceX;
       lastBaseTop = glyph->top;
       hasBaseGlyph = true;
       prevBaseCp = cp;
-      // Move to next character position (going up, so decrease Y).
-      yPos -= glyph->advanceX;
+      yPosFP -= glyph->advanceX;
     }
   }
 }
@@ -1308,7 +1316,7 @@ void GfxRenderer::renderChar(const IEpdFont& font, const uint32_t cp, int* x, co
     // Advance by space width as a reasonable fallback so subsequent glyphs aren't stacked.
     if (!utf8IsCombiningMark(cp)) {
       const EpdGlyph* spaceGlyph = font.getGlyph(' ');
-      *x += spaceGlyph ? spaceGlyph->advanceX : 8;
+      *x += spaceGlyph ? fp4::toPixel(spaceGlyph->advanceX) : 8;
     }
     return;
   }
@@ -1359,7 +1367,7 @@ void GfxRenderer::renderChar(const IEpdFont& font, const uint32_t cp, int* x, co
   }
 
   if (!utf8IsCombiningMark(cp)) {
-    *x += glyph->advanceX;
+    *x += fp4::toPixel(glyph->advanceX);
   }
 }
 

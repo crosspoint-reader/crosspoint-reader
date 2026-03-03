@@ -8,7 +8,10 @@ CrossPoint-specific constraints in this variant:
 - Locked resolution: `480 x 800` (XTEink X4)
 - Grayscale sprite rendering is always enabled
 - Single-image `.bmp` export is always used
-- Batch-generation and multi-device controls are hidden
+- Browser-first workflow for generating assets outside the device
+
+This page is a supported primary workflow for users who generate wallpapers on the web and then copy them to the SD card.
+It is not just a fallback for the device-hosted `/plugins/pokedex` page.
 
 Open `index.html` in a browser and generate wallpapers for the `/sleep/pokedex/` folder.
 The generated `.bmp` files should be copied to `sleep/pokedex` on the SD card.

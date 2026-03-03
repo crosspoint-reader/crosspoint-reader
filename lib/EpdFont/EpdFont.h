@@ -13,7 +13,7 @@ class EpdFont : public IEpdFont {
   void getTextDimensions(const char* string, int* w, int* h) const override;
   bool hasPrintableChars(const char* string) const override;
   const EpdGlyph* getGlyph(uint32_t cp) const override;
-  int8_t getKerning(uint32_t leftCp, uint32_t rightCp) const override;
+  int getKerning(uint32_t leftCp, uint32_t rightCp) const override;
   uint32_t applyLigatures(uint32_t cp, const char*& text) const override;
   const EpdFontData* getFontData() const override { return data; }
 };

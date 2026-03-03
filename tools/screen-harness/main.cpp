@@ -63,23 +63,61 @@ void drawHomeMock(GfxRenderer& renderer) {
   renderer.clearScreen();
   drawHeader(renderer, "Home");
 
-  renderer.drawRoundedRect(18, 56, 444, 184, 2, 8, true);
-  renderer.drawText(UI_10_FONT_ID, 30, 70, "Continue reading", true, EpdFontFamily::BOLD);
-  renderer.drawText(SMALL_FONT_ID, 30, 95, "The Left Hand of Darkness", true);
-  renderer.drawText(SMALL_FONT_ID, 30, 116, "by Ursula K. Le Guin", true);
-  renderer.drawRect(354, 72, 90, 144, 1, true);
-  renderer.drawCenteredText(SMALL_FONT_ID, 228, "42% complete", true);
+  // ForkDrift layout: 3×2 book-cover grid + 2×2 button menu.
+  // Mirrors ForkDriftTheme geometry: contentSidePadding=20, hPadding=8,
+  // homeCoverHeight=120, homeCoverTileHeight=380 (2 rows × 190 px each).
+  constexpr int pad = 20;
+  constexpr int hPad = 8;
+  constexpr int tileW = (480 - 2 * pad) / 3;  // 146 px per column
+  constexpr int tileH = 190;                  // singleRowH = homeCoverTileHeight / 2
+  constexpr int coverH = 120;
+  constexpr int gridStartY = 56;
 
-  renderer.drawRoundedRect(18, 254, 444, 44, 2, 8, true);
-  renderer.drawText(UI_10_FONT_ID, 30, 270, "My Library", true, EpdFontFamily::BOLD);
+  struct Book {
+    const char* title;
+    const char* author;
+  };
+  static constexpr Book books[6] = {
+      {"Left Hand of Darkness", "Le Guin"}, {"Dune", "Frank Herbert"},        {"Foundation", "Isaac Asimov"},
+      {"Neuromancer", "W. Gibson"},         {"Name of the Wind", "Rothfuss"}, {"Ancillary Justice", "Ann Leckie"},
+  };
 
-  renderer.drawRoundedRect(18, 306, 444, 44, 1, 8, true);
-  renderer.drawText(UI_10_FONT_ID, 30, 322, "File Transfer", true);
+  for (int i = 0; i < 6; i++) {
+    const int col = i % 3;
+    const int row = i / 3;
+    const int tileX = pad + col * tileW;
+    const int tileY = gridStartY + row * tileH;
 
-  renderer.drawRoundedRect(18, 358, 444, 44, 1, 8, true);
-  renderer.drawText(UI_10_FONT_ID, 30, 374, "Settings", true);
+    // Cover placeholder: outline + dark fill for lower two-thirds (mimics real cover rendering)
+    renderer.drawRect(tileX + hPad, tileY + hPad, tileW - 2 * hPad, coverH, true);
+    renderer.fillRect(tileX + hPad, tileY + hPad + coverH / 3, tileW - 2 * hPad, 2 * coverH / 3, true);
 
-  renderer.drawButtonHints(UI_10_FONT_ID, "Back", "Open", "Up", "Down");
+    const int titleY = tileY + coverH + hPad + 4;
+    renderer.drawText(UI_10_FONT_ID, tileX + hPad, titleY, books[i].title, true);
+    renderer.drawText(SMALL_FONT_ID, tileX + hPad, titleY + 16, books[i].author, true);
+  }
+
+  // 2×2 button menu below the cover grid.
+  // menuStartY = gridStartY + 2×tileH + verticalSpacing(16) = 452
+  // menuH = 800 - menuStartY - verticalSpacing(16) - buttonHintsHeight(40) = 292
+  constexpr int menuStartY = gridStartY + 2 * tileH + 16;
+  constexpr int menuH = 800 - menuStartY - 16 - 40;
+  constexpr int menuSpacing = 8;
+  constexpr int btnW = (480 - 2 * pad - menuSpacing) / 2;  // 216
+  constexpr int btnH = (menuH - menuSpacing) / 2;          // 142
+
+  static constexpr const char* menuLabels[4] = {"My Library", "Agenda", "File Transfer", "Settings"};
+  for (int i = 0; i < 4; i++) {
+    const int col = i % 2;
+    const int row = i / 2;
+    const int x = pad + col * (btnW + menuSpacing);
+    const int y = menuStartY + row * (btnH + menuSpacing);
+    renderer.drawRoundedRect(x, y, btnW, btnH, (i == 0) ? 2 : 1, 6, true);
+    renderer.drawRect(x + 14, y + (btnH - 24) / 2, 24, 24, true);  // icon placeholder
+    renderer.drawText(UI_10_FONT_ID, x + 46, y + (btnH - 14) / 2, menuLabels[i], true);
+  }
+
+  renderer.drawButtonHints(UI_10_FONT_ID, "", "Select", "Up", "Down");
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
@@ -87,23 +125,41 @@ void drawSettingsMock(GfxRenderer& renderer) {
   renderer.clearScreen();
   drawHeader(renderer, "Settings");
 
-  renderer.drawText(SMALL_FONT_ID, 24, 60, "Display", true, EpdFontFamily::BOLD);
-  renderer.drawRoundedRect(24, 78, 432, 42, 1, 6, true);
-  renderer.drawText(UI_10_FONT_ID, 34, 92, "UI Theme", true);
-  renderer.drawText(UI_10_FONT_ID, 356, 92, "Lyra", true, EpdFontFamily::BOLD);
+  // Inline helpers to avoid repeating boilerplate for each row.
+  // Groups: Reading(4), Display(3), Network(2), Sleep(2), About(2) = 13 rows.
+  // Each row: 42 px tall, 4 px gap between rows, 10 px gap before group label.
+  // Final row ends at Y=758, filling the screen up to the button hints.
+  const auto drawGroupLabel = [&](int y, const char* label) {
+    renderer.drawText(SMALL_FONT_ID, 24, y, label, true, EpdFontFamily::BOLD);
+  };
+  const auto drawRow = [&](int y, const char* label, const char* value) {
+    renderer.drawRoundedRect(24, y, 432, 42, 1, 6, true);
+    renderer.drawText(UI_10_FONT_ID, 34, y + 14, label, true);
+    renderer.drawText(UI_10_FONT_ID, 300, y + 14, value, true, EpdFontFamily::BOLD);
+  };
 
-  renderer.drawRoundedRect(24, 126, 432, 42, 1, 6, true);
-  renderer.drawText(UI_10_FONT_ID, 34, 140, "Refresh Frequency", true);
-  renderer.drawText(UI_10_FONT_ID, 332, 140, "5 pages", true, EpdFontFamily::BOLD);
+  drawGroupLabel(60, "Reading");
+  drawRow(76, "Font Family", "Bookerly");
+  drawRow(122, "Font Size", "14 pt");
+  drawRow(168, "Line Spacing", "Normal");
+  drawRow(214, "Screen Margin", "Medium");
 
-  renderer.drawText(SMALL_FONT_ID, 24, 190, "Buttons", true, EpdFontFamily::BOLD);
-  renderer.drawRoundedRect(24, 208, 432, 42, 1, 6, true);
-  renderer.drawText(UI_10_FONT_ID, 34, 222, "Select on Power", true);
-  renderer.drawText(UI_10_FONT_ID, 360, 222, "On", true, EpdFontFamily::BOLD);
+  drawGroupLabel(266, "Display");
+  drawRow(282, "UI Theme", "ForkDrift");
+  drawRow(328, "E-Ink Refresh", "5 pages");
+  drawRow(374, "Orientation", "Portrait");
 
-  renderer.drawRoundedRect(24, 256, 432, 42, 1, 6, true);
-  renderer.drawText(UI_10_FONT_ID, 34, 270, "Dual Side Layout", true);
-  renderer.drawText(UI_10_FONT_ID, 330, 270, "Forced", true, EpdFontFamily::BOLD);
+  drawGroupLabel(426, "Network");
+  drawRow(442, "WiFi Network", "HomeNetwork");
+  drawRow(488, "Auto-Connect", "On");
+
+  drawGroupLabel(540, "Sleep");
+  drawRow(556, "Sleep Screen", "Custom");
+  drawRow(602, "Source Folder", "/sleep");
+
+  drawGroupLabel(654, "About");
+  drawRow(670, "Device Name", "crosspoint");
+  drawRow(716, "Firmware", "v0.9.2");
 
   renderer.drawButtonHints(UI_10_FONT_ID, "Back", "Edit", "Prev", "Next");
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -111,14 +167,59 @@ void drawSettingsMock(GfxRenderer& renderer) {
 
 void drawFactoryResetMock(GfxRenderer& renderer) {
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, "Factory Reset", true, EpdFontFamily::BOLD);
+  drawHeader(renderer, "Factory Reset");
 
-  const int centerY = renderer.getScreenHeight() / 2;
-  renderer.drawCenteredText(UI_10_FONT_ID, centerY - 90, "This will erase all CrossPoint data.", true);
-  renderer.drawCenteredText(UI_10_FONT_ID, centerY - 55, "Settings, WiFi, reading state,", true);
-  renderer.drawCenteredText(UI_10_FONT_ID, centerY - 25, "sync credentials, and cache", true);
-  renderer.drawCenteredText(UI_10_FONT_ID, centerY + 5, "will be reset.", true);
-  renderer.drawCenteredText(UI_10_FONT_ID, centerY + 45, "Books on the SD card are kept.", true, EpdFontFamily::BOLD);
+  // Large warning card fills most of the screen, with Cancel/Reset buttons inside.
+  // Avoids the previous layout where content only appeared in a small band at screen center.
+  renderer.drawRoundedRect(20, 56, 440, 580, 2, 8, true);
+
+  int y = 76;  // cardY + 20
+
+  renderer.drawCenteredText(UI_12_FONT_ID, y, "Permanent Action", true, EpdFontFamily::BOLD);
+  y += 34;  // 110
+
+  renderer.drawLine(34, y, 446, y);
+  y += 16;  // 126
+
+  renderer.drawCenteredText(UI_10_FONT_ID, y, "The following data will be erased:", true);
+  y += 26;  // 152
+
+  static constexpr const char* erased[] = {
+      "• Settings and preferences",
+      "• WiFi and network credentials",
+      "• Reading progress and bookmarks",
+      "• Daily notes and todo entries",
+      "• Feature store configuration",
+      "• Anki cards and study data",
+      "• Cover image cache",
+      "• EPUB layout cache",
+  };
+  for (const char* item : erased) {
+    renderer.drawText(UI_10_FONT_ID, 38, y, item, true);
+    y += 22;
+  }
+  // After 8 items × 22 px: y = 152 + 176 = 328
+
+  y += 10;  // 338
+  renderer.drawLine(34, y, 446, y);
+  y += 16;  // 354
+
+  renderer.drawCenteredText(UI_10_FONT_ID, y, "Books and files on the SD card", true, EpdFontFamily::BOLD);
+  y += 24;  // 378
+  renderer.drawCenteredText(UI_10_FONT_ID, y, "will NOT be deleted.", true, EpdFontFamily::BOLD);
+  y += 34;  // 412
+
+  renderer.drawLine(34, y, 446, y);
+  y += 16;  // 428
+
+  renderer.drawCenteredText(UI_10_FONT_ID, y, "This action cannot be undone.", true);
+  y += 34;  // 462
+
+  // Cancel / Reset buttons
+  renderer.drawRoundedRect(34, y, 190, 48, 1, 6, true);
+  renderer.drawText(UI_10_FONT_ID, 90, y + 17, "Cancel", true);
+  renderer.drawRoundedRect(236, y, 190, 48, 2, 6, true);
+  renderer.drawText(UI_10_FONT_ID, 282, y + 17, "Reset Device", true, EpdFontFamily::BOLD);
 
   renderer.drawButtonHints(UI_10_FONT_ID, "Cancel", "Reset", "", "");
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
