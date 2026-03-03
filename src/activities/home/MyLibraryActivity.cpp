@@ -6,6 +6,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cstdlib>
 
 #include "../browser/FileViewerActivity.h"
 #include "../util/ConfirmationActivity.h"
@@ -19,6 +20,14 @@ constexpr unsigned long GO_HOME_MS = 1000;
 // Left button held shorter than this is treated as a sort-toggle tap;
 // longer holds fall through to ButtonNavigator for navigation-up.
 constexpr unsigned long SORT_TAP_MS = 300;
+// Virtual path used as basepath when browsing the /Feed/ folder.
+// Does not correspond to a real SD card directory.
+constexpr const char* VIRTUAL_FEED_PATH = "/Feed";
+// Persistent manifest: one full SD path per line, written by RssFeedSync.
+constexpr const char* FEED_MANIFEST_FILE = "/.crosspoint/feed_manifest.txt";
+// Internal (non-translated) name used in FileEntry for the virtual feed dir.
+// findEntry() compares against this so results are language-independent.
+constexpr const char* FEED_ENTRY_NAME = "Feed";
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -97,12 +106,76 @@ static bool isSupportedFile(const std::string& filename) {
 void MyLibraryActivity::loadFiles() {
   files.clear();
 
+  // Virtual /Feed folder: parse the manifest and list those files.
+  // Manifest contains one full SD path per line, written by RssFeedSync on each sync.
+  if (basepath == VIRTUAL_FEED_PATH) {
+    // Use heap-allocated buffer (> 256 bytes per CLAUDE.md malloc rules)
+    constexpr size_t MANIFEST_BUF = 4096;
+    auto* rawBuf = static_cast<char*>(malloc(MANIFEST_BUF));
+    if (!rawBuf) {
+      LOG_ERR("MyLibrary", "malloc failed for feed manifest (%u bytes)", static_cast<unsigned>(MANIFEST_BUF));
+      return;
+    }
+    const size_t bytesRead = Storage.readFileToBuffer(FEED_MANIFEST_FILE, rawBuf, MANIFEST_BUF);
+
+    // Parse newline-delimited paths
+    char pathBuf[256];
+    size_t pathPos = 0;
+    for (size_t i = 0; i <= bytesRead; i++) {
+      const char c = (i < bytesRead) ? rawBuf[i] : '\n';
+      if (c == '\n' || c == '\r') {
+        if (pathPos > 0) {
+          pathBuf[pathPos] = '\0';
+          const std::string fullPath(pathBuf);
+          if (isSupportedFile(fullPath) && Storage.exists(fullPath.c_str())) {
+            const auto slash = fullPath.rfind('/');
+            const std::string fname = (slash != std::string::npos) ? fullPath.substr(slash + 1) : fullPath;
+            uint32_t modTime = 0;
+            HalFile f = Storage.open(fullPath.c_str());
+            if (f) {
+              modTime = getFileModTime(f);
+              f.close();
+            }
+            files.push_back({fname, fullPath, modTime, false});
+          }
+          pathPos = 0;
+        }
+      } else if (pathPos < sizeof(pathBuf) - 1) {
+        pathBuf[pathPos++] = c;
+      }
+    }
+    free(rawBuf);
+    rawBuf = nullptr;
+
+    if (sortByDate) {
+      sortFileListByDate(files);
+    } else {
+      sortFileListByName(files);
+    }
+    return;
+  }
+
+  // Regular directory listing
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
     if (root) root.close();
     return;
   }
   root.rewindDirectory();
+
+  // Inject virtual Feed/ entry at root when the manifest file is non-empty.
+  // The Feed folder shows files received during the most recent RSS sync.
+  if (basepath == "/") {
+    HalFile mf = Storage.open(FEED_MANIFEST_FILE);
+    if (mf && mf.fileSize() > 0) {
+      const uint32_t feedMod = getFileModTime(mf);
+      mf.close();
+      // Store the internal English name so findEntry() works across languages
+      files.push_back({FEED_ENTRY_NAME, VIRTUAL_FEED_PATH, feedMod, true});
+    } else {
+      if (mf) mf.close();
+    }
+  }
 
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
@@ -154,7 +227,7 @@ void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
   }
 }
 
-// Build the full open path for an entry (uses realPath for virtual entries).
+// Build the full open path for an entry (uses realPath for virtual /Feed entries).
 static std::string entryFullPath(const std::string& basepath, const FileEntry& entry) {
   if (!entry.realPath.empty()) return entry.realPath;
   if (basepath.back() == '/') return basepath + entry.name;
@@ -208,8 +281,14 @@ void MyLibraryActivity::loop() {
 
     // --- SHORT PRESS: OPEN / NAVIGATE ---
     if (entry.isDirectory) {
-      if (basepath.back() != '/') basepath += "/";
-      basepath += entry.name;
+      if (entry.realPath.empty()) {
+        // Regular directory: append name to basepath
+        if (basepath.back() != '/') basepath += "/";
+        basepath += entry.name;
+      } else {
+        // Virtual directory (Feed): use the stored virtual path as the new basepath
+        basepath = entry.realPath;
+      }
       loadFiles();
       selectorIndex = 0;
       requestUpdate();
@@ -273,10 +352,24 @@ void MyLibraryActivity::loop() {
   });
 }
 
+// Returns display name: translates the virtual feed folder; strips extension from files.
 static std::string getDisplayName(const FileEntry& entry) {
-  if (entry.isDirectory) return entry.name;
+  if (entry.isDirectory) {
+    if (!entry.realPath.empty() && entry.realPath == VIRTUAL_FEED_PATH) {
+      return tr(STR_FEED_FOLDER);
+    }
+    return entry.name;
+  }
   const auto pos = entry.name.rfind('.');
   return (pos != std::string::npos) ? entry.name.substr(0, pos) : entry.name;
+}
+
+static UIIcon fileEntryIcon(const FileEntry& entry) {
+  if (entry.isDirectory) {
+    if (!entry.realPath.empty() && entry.realPath == VIRTUAL_FEED_PATH) return UIIcon::Recent;
+    return UIIcon::Folder;
+  }
+  return UITheme::getFileIcon(entry.name);
 }
 
 void MyLibraryActivity::render(RenderLock&&) {
@@ -286,7 +379,14 @@ void MyLibraryActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  std::string folderName = (basepath == "/") ? "Browse" : basepath.substr(basepath.rfind('/') + 1);
+  std::string folderName;
+  if (basepath == "/") {
+    folderName = "Browse";
+  } else if (basepath == VIRTUAL_FEED_PATH) {
+    folderName = tr(STR_FEED_FOLDER);
+  } else {
+    folderName = basepath.substr(basepath.rfind('/') + 1);
+  }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
@@ -296,7 +396,7 @@ void MyLibraryActivity::render(RenderLock&&) {
   } else {
     GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
                  [this](int index) { return getDisplayName(files[index]); }, nullptr,
-                 [this](int index) { return UITheme::getFileIcon(files[index].name + (files[index].isDirectory ? "/" : "")); });
+                 [this](int index) { return fileEntryIcon(files[index]); });
   }
 
   // Btn3 (Left): sort toggle — shows what pressing Left will switch TO

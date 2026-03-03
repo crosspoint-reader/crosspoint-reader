@@ -19,6 +19,7 @@ namespace {
 
 constexpr const char* TAG = "FEED";
 constexpr const char* SYNC_TIME_FILE = "/.crosspoint/feed_sync_time.txt";  // decimal Unix epoch of last processed item; SD-persistent across reflashes
+constexpr const char* FEED_MANIFEST_FILE = "/.crosspoint/feed_manifest.txt";  // full paths of files received in the last sync (one per line)
 constexpr const char* NEWS_FILE = "/News.md";
 constexpr size_t NEWS_MAX_SIZE = 50 * 1024;
 
@@ -422,6 +423,11 @@ void syncTask(void*) {
   };
   feedLog("--- sync start ---");
 
+  // Open feed manifest — records the full path of every file downloaded this run.
+  // Truncates the previous manifest so Browse → Feed only shows the latest sync.
+  HalFile manifestFile;
+  Storage.openFileForWrite(TAG, FEED_MANIFEST_FILE, manifestFile);
+
   // Wait for WiFi stack to be fully routed. WL_CONNECTED can fire before
   // DHCP/DNS/default-route are ready, causing immediate TCP failures.
   for (int attempt = 0; attempt < 10; attempt++) {
@@ -509,6 +515,12 @@ void syncTask(void*) {
       LOG_INF(TAG, "Downloaded [%d]: %s (heap: %lu)", s_dlCurrent, destPath.c_str(), (unsigned long)ESP.getFreeHeap());
       const auto slash = destPath.rfind('/');
       UITheme::addReceivedFile(slash == std::string::npos ? destPath : destPath.substr(slash + 1));
+      // Append to manifest so Browse → Feed virtual folder surfaces this file
+      if (manifestFile.isOpen()) {
+        manifestFile.print(destPath.c_str());
+        manifestFile.print("\n");
+        manifestFile.flush();
+      }
 
     } else if (type == "firmware") {
       if (SETTINGS.feedAllowFirmware == 0) {
@@ -576,6 +588,7 @@ void syncTask(void*) {
       LOG_ERR(TAG, "FETCH FAILED url=%s heap=%lu", feedUrl.c_str(), (unsigned long)ESP.getFreeHeap());
       feedLog("FETCH FAILED");
       logFile.close();
+      if (manifestFile.isOpen()) manifestFile.close();
       setState(RssFeedSync::State::ERROR);
       syncTaskHandle = nullptr;
       vTaskDelete(nullptr);
@@ -589,6 +602,7 @@ void syncTask(void*) {
     LOG_ERR(TAG, "XML parse error in feed");
     feedLog("XML PARSE ERROR");
     logFile.close();
+    if (manifestFile.isOpen()) manifestFile.close();
     setState(RssFeedSync::State::ERROR);
     syncTaskHandle = nullptr;
     vTaskDelete(nullptr);
@@ -607,6 +621,7 @@ void syncTask(void*) {
     feedLog(buf);
   }
   logFile.close();
+  if (manifestFile.isOpen()) manifestFile.close();
   s_doneTime = millis();
   setState(RssFeedSync::State::DONE);
   syncTaskHandle = nullptr;
