@@ -91,7 +91,7 @@ FEATURES = {
     'web_pokedex_plugin': Feature(
         name='Web Pokedex Plugin',
         flag='ENABLE_WEB_POKEDEX_PLUGIN',
-        size_kb=7,
+        size_kb=8,
         description='Browser-side Pokemon wallpaper generator at /plugins/pokedex'
     ),
     'epub_support': Feature(
@@ -512,7 +512,7 @@ def resolve_profile_name(profile_name: str) -> str:
 
 def calculate_size(enabled_features: Dict[str, bool]) -> float:
     """Calculate estimated firmware size in MB."""
-    base_size_mb = 2.59  # Lean profile size baseline (measured)
+    base_size_mb = 2.60  # Lean profile size baseline (measured)
 
     for feature_key, enabled in enabled_features.items():
         if enabled:
