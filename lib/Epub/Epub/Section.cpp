@@ -71,9 +71,8 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     uint8_t version;
     serialization::readPod(file, version);
     if (version != SECTION_FILE_VERSION) {
-      file.close();
       LOG_ERR("SCT", "Deserialization failed: Unknown version %u", version);
-      clearCache();
+      clearCache();  // closes file before removal
       return false;
     }
 
@@ -97,21 +96,50 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
         extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
         viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight ||
         hyphenationEnabled != fileHyphenationEnabled || embeddedStyle != fileEmbeddedStyle) {
-      file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
-      clearCache();
+      clearCache();  // closes file before removal
       return false;
     }
   }
 
   serialization::readPod(file, pageCount);
-  file.close();
-  LOG_DBG("SCT", "Deserialization succeeded: %d pages", pageCount);
+
+  // Sanity check: same upper bound used by TextBlock::deserialize for word count
+  if (pageCount > 10000) {
+    LOG_ERR("SCT", "Deserialization failed: page count %u exceeds maximum", pageCount);
+    clearCache();
+    return false;
+  }
+
+  // Load LUT into memory (file is now positioned at the lutOffset field)
+  uint32_t lutOffset;
+  serialization::readPod(file, lutOffset);
+  lut.resize(pageCount);
+  if (!file.seek(lutOffset)) {
+    LOG_ERR("SCT", "Deserialization failed: seek to LUT offset %u failed", lutOffset);
+    clearCache();
+    return false;
+  }
+  for (uint32_t& pos : lut) {
+    serialization::readPod(file, pos);
+    if (pos < HEADER_SIZE || pos >= lutOffset) {
+      LOG_ERR("SCT", "Deserialization failed: LUT entry %u out of range [%u, %u)", pos, HEADER_SIZE, lutOffset);
+      clearCache();
+      return false;
+    }
+  }
+  // File is intentionally left open; subsequent loadPageFromSectionFile() calls
+  // seek within this handle instead of re-opening the file each time.
+  LOG_DBG("SCT", "Deserialization succeeded: %d pages, LUT cached", pageCount);
   return true;
 }
 
-// Your updated class method (assuming you are using the 'SD' object, which is a wrapper for a specific filesystem)
-bool Section::clearCache() const {
+bool Section::clearCache() {
+  file.close();  // Must be closed before removal on FAT32
+  lut.clear();
+  pageCount = 0;
+  currentPage = 0;
+
   if (!Storage.exists(filePath.c_str())) {
     LOG_DBG("SCT", "Cache does not exist, no action needed");
     return true;
@@ -242,23 +270,36 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   if (cssParser) {
     cssParser->clear();
   }
+
+  // Cache the LUT in memory and open the file for reading so that
+  // subsequent loadPageFromSectionFile() calls can seek directly without re-opening.
+  if (!Storage.openFileForRead("SCT", filePath, file)) {
+    LOG_ERR("SCT", "Failed to open section file for reading after creation");
+    return false;
+  }
+  this->lut = std::move(lut);
   return true;
 }
 
 std::unique_ptr<Page> Section::loadPageFromSectionFile() {
-  if (!Storage.openFileForRead("SCT", filePath, file)) {
+  if (currentPage < 0 || currentPage >= static_cast<int>(lut.size())) {
+    LOG_ERR("SCT", "loadPageFromSectionFile: page %d out of LUT range (%u entries)", currentPage,
+            static_cast<uint32_t>(lut.size()));
     return nullptr;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t));
-  uint32_t lutOffset;
-  serialization::readPod(file, lutOffset);
-  file.seek(lutOffset + sizeof(uint32_t) * currentPage);
-  uint32_t pagePos;
-  serialization::readPod(file, pagePos);
-  file.seek(pagePos);
+  if (!file) {
+    // Safety fallback: file was closed unexpectedly; reopen
+    LOG_ERR("SCT", "loadPageFromSectionFile: file not open, reopening");
+    if (!Storage.openFileForRead("SCT", filePath, file)) {
+      return nullptr;
+    }
+  }
 
-  auto page = Page::deserialize(file);
-  file.close();
-  return page;
+  if (!file.seek(lut[currentPage])) {
+    LOG_ERR("SCT", "loadPageFromSectionFile: seek to page %d offset %u failed", currentPage, lut[currentPage]);
+    return nullptr;
+  }
+  return Page::deserialize(file);
+  // File is intentionally NOT closed; stays open for the next page load
 }
