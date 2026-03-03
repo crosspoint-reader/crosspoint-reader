@@ -3,6 +3,7 @@
 #include <memory>
 
 #include <ArduinoJson.h>
+#include "../RecentBooksStore.h"
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -138,6 +139,7 @@ void CrossPointWebServer::begin() {
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
+  server->on("/api/reading-state", HTTP_GET, [this] { handleGetReadingState(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
@@ -395,6 +397,70 @@ void CrossPointWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleGetReadingState() const {
+  JsonDocument doc;
+
+  // Get the most recently opened book
+  const auto& recentBooks = RECENT_BOOKS.getBooks();
+  if (recentBooks.empty()) {
+    doc["file"] = nullptr;
+    doc["title"] = nullptr;
+    doc["author"] = nullptr;
+    doc["position"] = nullptr;
+    doc["spineIndex"] = nullptr;
+    doc["currentPage"] = nullptr;
+    doc["pageCount"] = nullptr;
+    doc["lastOpened"] = nullptr;
+  } else {
+    const auto& book = recentBooks.front();
+    doc["file"] = book.path;
+    doc["title"] = book.title;
+    doc["author"] = book.author;
+
+    // Try to read progress.bin from the epub cache directory
+    // Cache path convention: /.crosspoint/cache/<sanitized-path>/progress.bin
+    // Derive cache path the same way EpubReaderActivity does
+    std::string cachePath = "/.crosspoint/cache" + book.path;
+    // Replace slashes and dots for the cache dir name
+    for (char& c : cachePath) {
+      if (c == '.' && &c != cachePath.data()) c = '_';
+    }
+    cachePath += "/progress.bin";
+
+    FsFile f;
+    if (Storage.openFileForRead("RDS", cachePath, f)) {
+      uint8_t data[6] = {0};
+      f.read(data, 6);
+      f.close();
+      const int spineIndex  = data[0] | (data[1] << 8);
+      const int currentPage = data[2] | (data[3] << 8);
+      const int pageCount   = data[4] | (data[5] << 8);
+      doc["spineIndex"]  = spineIndex;
+      doc["currentPage"] = currentPage;
+      doc["pageCount"]   = pageCount;
+      // Rough position as 0.0–1.0 float based on page within chapter
+      if (pageCount > 0) {
+        doc["position"] = static_cast<float>(currentPage) / static_cast<float>(pageCount);
+      } else {
+        doc["position"] = nullptr;
+      }
+    } else {
+      doc["spineIndex"]  = nullptr;
+      doc["currentPage"] = nullptr;
+      doc["pageCount"]   = nullptr;
+      doc["position"]    = nullptr;
+    }
+    doc["lastOpened"] = nullptr;  // timestamp not stored in recent.bin yet
+  }
+
+  // Include last-updated timestamp (millis since boot as proxy)
+  doc["uptimeMs"] = millis();
 
   String json;
   serializeJson(doc, json);
