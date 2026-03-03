@@ -1573,6 +1573,25 @@
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
 
+  // Network status monitoring
+  let isNetworkOnline = navigator.onLine;
+
+  // Add network status listeners
+  window.addEventListener('online', () => {
+    console.log('[Network] Online event fired');
+    isNetworkOnline = true;
+    showNotification('Network connection restored', 'success');
+  });
+
+  window.addEventListener('offline', () => {
+    console.log('[Network] Offline event fired');
+    isNetworkOnline = false;
+    showNotification('Network connection lost', 'warning');
+  });
+
+  // Initialize network status
+  console.log('[Network] Initial status:', isNetworkOnline ? 'online' : 'offline');
+
   function escapeHtml(unsafe) {
     return unsafe
       .replaceAll("&", "&amp;")
@@ -1580,6 +1599,54 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  function showNotification(message, type = 'info') {
+    // Create notification element if it doesn't exist
+    let notification = document.getElementById('notification');
+    if (!notification) {
+      notification = document.createElement('div');
+      notification.id = 'notification';
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 4px;
+        color: white;
+        font-weight: 500;
+        z-index: 10000;
+        max-width: 300px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        transition: all 0.3s ease;
+      `;
+      document.body.appendChild(notification);
+    }
+
+    // Set styles based on type
+    const styles = {
+      'success': 'background-color: #27ae60;',
+      'error': 'background-color: #e74c3c;',
+      'warning': 'background-color: #f39c12;',
+      'info': 'background-color: #3498db;'
+    };
+    notification.style.cssText += styles[type] || styles['info'];
+    notification.textContent = message;
+
+    // Show notification
+    notification.style.opacity = '1';
+    notification.style.transform = 'translateX(0)';
+
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      notification.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 300);
+    }, 5000);
   }
 
   function formatFileSize(bytes) {
@@ -4031,6 +4098,29 @@ function uploadFile() {
       }
 
       failedFiles.push({ name: file.name, error: error, file: originalFile });
+
+      // If network error, mark all remaining files as failed and show retry banner
+      if (error.includes('connection failed') || error.includes('Network error') ||
+          error.includes('timeout') || error.includes('disconnected')) {
+        console.log(`[Network] Network error detected: ${error}`);
+
+        // Add all remaining files to failed list
+        const remainingFiles = files.slice(currentIndex + 1);
+        remainingFiles.forEach(remainingFile => {
+          failedFiles.push({
+            name: remainingFile.name,
+            error: 'Network error - upload interrupted',
+            file: remainingFile
+          });
+        });
+
+        // Show retry banner immediately with all failed files
+        failedUploadsGlobal = failedUploadsGlobal.concat(failedFiles);
+        closeUploadModal();
+        showFailedUploadsBanner();
+        return; // Stop processing
+      }
+
       currentIndex++;
       uploadNextFile();
     };
@@ -4173,20 +4263,20 @@ function retrySingleUpload(index) {
 
 function retryAllFailedUploads() {
   if (failedUploadsGlobal.length === 0) return;
-  
+
   // Create a DataTransfer with all failed files
   const dt = new DataTransfer();
   failedUploadsGlobal.forEach(failedFile => {
     dt.items.add(failedFile.file);
   });
-  
+
   const fileInput = document.getElementById('fileInput');
   fileInput.files = dt.files;
-  
+
   // Clear failed files list
   failedUploadsGlobal = [];
   dismissFailedUploads();
-  
+
   // Open modal and trigger upload
   openUploadModal();
   validateFile();
