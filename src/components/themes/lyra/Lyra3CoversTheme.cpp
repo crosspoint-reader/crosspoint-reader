@@ -60,6 +60,8 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
               hasCover = false;
             }
             file.close();
+          } else {
+            hasCover = false;
           }
         }
         // Draw either way
