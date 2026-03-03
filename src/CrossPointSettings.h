@@ -153,6 +153,12 @@ class CrossPointSettings {
     RELEASE_LATEST_SUCCESSFUL_FACTORY_RESET = 3,
     RELEASE_CHANNEL_COUNT
   };
+  enum BACKGROUND_SERVER_MODE {
+    BACKGROUND_SERVER_NEVER = 0,
+    BACKGROUND_SERVER_ON_CHARGE = 1,
+    BACKGROUND_SERVER_ALWAYS = 2,
+    BACKGROUND_SERVER_MODE_COUNT
+  };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
@@ -216,7 +222,7 @@ class CrossPointSettings {
   uint8_t longPressChapterSkip = 1;
   // Use book's embedded CSS styles for EPUB rendering
   uint8_t embeddedStyle = 1;
-  // Background web server while charging (USB connected)
+  // Persisted background server flag for charge-only and always-on modes.
   uint8_t backgroundServerOnCharge = 0;
   // Deprecated: persisted for backward compat, not consumed at runtime
   uint8_t todoFallbackCover = 0;
@@ -237,13 +243,43 @@ class CrossPointSettings {
   // Network identity — used for mDNS hostname, DHCP hostname, and AP SSID.
   // Only [a-z0-9-] chars; max 24 chars. Empty = fall back to last-4-MAC.
   char deviceName[32] = "";
-  // Auto-connect to last WiFi network on wake from sleep and run web server in background
+  // Persisted background server flag for always-on mode while the device is awake.
   uint8_t wifiAutoConnect = 0;
 
   ~CrossPointSettings() = default;
 
   // Get singleton instance
   static CrossPointSettings& getInstance() { return instance; }
+
+  uint8_t getBackgroundServerMode() const {
+    if (wifiAutoConnect) {
+      return BACKGROUND_SERVER_ALWAYS;
+    }
+    if (backgroundServerOnCharge) {
+      return BACKGROUND_SERVER_ON_CHARGE;
+    }
+    return BACKGROUND_SERVER_NEVER;
+  }
+
+  void setBackgroundServerMode(const uint8_t mode) {
+    switch (mode) {
+      case BACKGROUND_SERVER_ALWAYS:
+        backgroundServerOnCharge = 1;
+        wifiAutoConnect = 1;
+        break;
+      case BACKGROUND_SERVER_ON_CHARGE:
+        backgroundServerOnCharge = 1;
+        wifiAutoConnect = 0;
+        break;
+      case BACKGROUND_SERVER_NEVER:
+      default:
+        backgroundServerOnCharge = 0;
+        wifiAutoConnect = 0;
+        break;
+    }
+  }
+
+  bool keepsBackgroundServerOnWifiWhileAwake() const { return getBackgroundServerMode() == BACKGROUND_SERVER_ALWAYS; }
 
   uint16_t getPowerButtonDuration() const {
     // Dual-side front layout uses short power taps for Confirm/Back.

@@ -5,10 +5,12 @@
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/BackgroundWifiService.h"
 #include "util/NetworkNames.h"
 
 void CalibreConnectActivity::onEnter() {
@@ -25,6 +27,10 @@ void CalibreConnectActivity::onEnter() {
   lastCompleteAt = 0;
   lastProcessedCompleteAt = 0;
   exitRequested = false;
+
+  if (BG_WIFI.isRunning()) {
+    BG_WIFI.stop(true);
+  }
 
   if (WiFi.status() != WL_CONNECTED) {
     startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
@@ -48,6 +54,10 @@ void CalibreConnectActivity::onExit() {
 
   stopWebServer();
   MDNS.end();
+
+  if (SETTINGS.keepsBackgroundServerOnWifiWhileAwake() && WiFi.status() == WL_CONNECTED) {
+    return;
+  }
 
   delay(50);
   WiFi.disconnect(false);

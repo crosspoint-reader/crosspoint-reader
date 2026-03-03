@@ -8,6 +8,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <WiFi.h>
 
 #include <cstring>
 #include <string>
@@ -167,6 +168,45 @@ void applyPendingFactoryReset() {
 // decide whether to update the WiFi auto-connect backoff counters.
 static bool wifiAutoConnectAttempted = false;
 
+bool hasStaWifiConnection() {
+  const wifi_mode_t wifiMode = WiFi.getMode();
+  if ((wifiMode & WIFI_MODE_STA) == 0) {
+    return false;
+  }
+  return WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0);
+}
+
+void reconcileBackgroundWifiServer() {
+  const bool backgroundWifiEnabled = core::FeatureModules::hasCapability(core::Capability::BackgroundServer) &&
+                                     SETTINGS.keepsBackgroundServerOnWifiWhileAwake();
+  const bool blockedByActivity = activityManager.blocksBackgroundServer();
+  const bool staConnected = hasStaWifiConnection();
+  const bool autoConnectInFlight = BG_WIFI.isRunning() && wifiAutoConnectAttempted && !staConnected;
+
+  if (backgroundServer.isRunning()) {
+    return;
+  }
+
+  if (!backgroundWifiEnabled || blockedByActivity) {
+    if (BG_WIFI.isRunning()) {
+      BG_WIFI.stop(blockedByActivity);
+    }
+    return;
+  }
+
+  if (staConnected) {
+    if (!BG_WIFI.isRunning()) {
+      LOG_DBG("MAIN", "WiFi connected; starting background file server");
+      BG_WIFI.startUsingCurrentConnection();
+    }
+    return;
+  }
+
+  if (!autoConnectInFlight && BG_WIFI.isRunning()) {
+    BG_WIFI.stop(true);
+  }
+}
+
 void verifyPowerButtonDuration() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
     return;
@@ -215,7 +255,9 @@ void enterDeepSleep() {
   // Update WiFi auto-connect backoff before sleeping (only if we attempted this wake)
   if (wifiAutoConnectAttempted) {
     const bool hadActivity = BG_WIFI.hadApiActivity();
-    BG_WIFI.stop();
+    if (BG_WIFI.isRunning()) {
+      BG_WIFI.stop();
+    }
     if (hadActivity) {
       // Successful sync: reset backoff — try again next wake
       APP_STATE.wifiAutoConnectBackoffLevel = 0;
@@ -230,6 +272,8 @@ void enterDeepSleep() {
       LOG_DBG("MAIN", "WiFi no API activity — backoff level %d, next skip: %d", APP_STATE.wifiAutoConnectBackoffLevel,
               APP_STATE.wifiAutoConnectSkipCount);
     }
+  } else if (BG_WIFI.isRunning()) {
+    BG_WIFI.stop();
   }
 
   APP_STATE.saveToFile();
@@ -361,7 +405,7 @@ void setup() {
   }
 
   // WiFi auto-connect on wake from sleep (background, silent)
-  if (wokeFromSleep && SETTINGS.wifiAutoConnect) {
+  if (wokeFromSleep && SETTINGS.keepsBackgroundServerOnWifiWhileAwake()) {
     if (APP_STATE.wifiAutoConnectSkipCount > 0) {
       // Still in backoff — consume one skip cycle
       APP_STATE.wifiAutoConnectSkipCount--;
@@ -445,8 +489,7 @@ void loop() {
     }
 
     if (UsbMscPrompt::shouldShowOnUsbConnect(SETTINGS.usbMscPromptOnConnect != 0, usbConnected, usbConnectedLast,
-                                             hostSupportsUsbSerial,
-                                             usbMscSessionState == UsbMscSessionState::Idle)) {
+                                             hostSupportsUsbSerial, usbMscSessionState == UsbMscSessionState::Idle)) {
       usbMscSessionState = UsbMscSessionState::Prompt;
       usbMscScreenNeedsRedraw = true;
     }
@@ -491,10 +534,14 @@ void loop() {
 
   {
     const bool usbConn = gpio.isUsbConnected();
+    const bool suppressUsbBackgroundServer = BG_WIFI.isRunning();
     const bool allowRun = core::FeatureModules::hasCapability(core::Capability::BackgroundServer) &&
-                          SETTINGS.backgroundServerOnCharge && usbConn && !activityManager.blocksBackgroundServer();
+                          SETTINGS.backgroundServerOnCharge && usbConn && !activityManager.blocksBackgroundServer() &&
+                          !suppressUsbBackgroundServer;
     backgroundServer.loop(usbConn, allowRun);
   }
+
+  reconcileBackgroundWifiServer();
 
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep() ||
       backgroundServer.shouldPreventAutoSleep()) {

@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <esp_ota_ops.h>
 
+#include <cstring>
+
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
@@ -17,10 +19,15 @@
 #include "StatusBarSettingsActivity.h"
 #include "ValidateSleepImagesActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "core/features/FeatureModules.h"
 #include "fontIds.h"
+
+namespace {
+constexpr char kBackgroundServerModeKey[] = "backgroundServerMode";
+}
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -195,6 +202,13 @@ void SettingsActivity::toggleCurrentSetting() {
   }
 
   const auto& setting = (*currentSettings)[selectedSetting];
+  const auto persistSettings = [this] {
+    SETTINGS.enforceButtonLayoutConstraints();
+    renderer.setDarkMode(SETTINGS.darkMode);
+    if (!SETTINGS.saveToFile()) {
+      LOG_WRN("SETTINGS", "Failed to persist settings to SD card");
+    }
+  };
 
   // Sleep source only applies when custom sleep screen mode is enabled.
   if (setting.valuePtr == &CrossPointSettings::sleepScreenSource &&
@@ -222,21 +236,42 @@ void SettingsActivity::toggleCurrentSetting() {
     const uint8_t maxIndex = static_cast<uint8_t>(values.size() - 1);
     const uint8_t normalizedValue = (currentValue > maxIndex) ? 0 : currentValue;
     const uint8_t newValue = (normalizedValue + 1) % static_cast<uint8_t>(values.size());
+    const auto applyEnumValue = [this](const SettingInfo& targetSetting, const uint8_t value) {
+      if (targetSetting.valueSetter) {
+        targetSetting.valueSetter(value);
+      } else if (targetSetting.valuePtr) {
+        SETTINGS.*(targetSetting.valuePtr) = value;
+      }
 
-    if (setting.valueSetter) {
-      setting.valueSetter(newValue);
-    } else if (setting.valuePtr) {
-      SETTINGS.*(setting.valuePtr) = newValue;
+      if (targetSetting.valuePtr == &CrossPointSettings::frontButtonLayout) {
+        SETTINGS.applyFrontButtonLayoutPreset(
+            static_cast<CrossPointSettings::FRONT_BUTTON_LAYOUT>(SETTINGS.frontButtonLayout));
+      }
+
+      if (targetSetting.valuePtr == &CrossPointSettings::fontFamily) {
+        core::FeatureModules::onFontFamilySettingChanged(value);
+      }
+    };
+    const bool requiresBatteryWarning = setting.key != nullptr && strcmp(setting.key, kBackgroundServerModeKey) == 0 &&
+                                        normalizedValue != CrossPointSettings::BACKGROUND_SERVER_ALWAYS &&
+                                        newValue == CrossPointSettings::BACKGROUND_SERVER_ALWAYS;
+
+    if (requiresBatteryWarning) {
+      startActivityForResult(
+          std::make_unique<ConfirmationActivity>(renderer, mappedInput,
+                                                 std::string(I18N.get(StrId::STR_BACKGROUND_SERVER_WARNING_TITLE)),
+                                                 std::string(I18N.get(StrId::STR_BACKGROUND_SERVER_WARNING_BODY))),
+          [this, setting, newValue, applyEnumValue, persistSettings](const ActivityResult& result) {
+            if (!result.isCancelled) {
+              applyEnumValue(setting, newValue);
+              persistSettings();
+            }
+            requestUpdate();
+          });
+      return;
     }
 
-    if (setting.valuePtr == &CrossPointSettings::frontButtonLayout) {
-      SETTINGS.applyFrontButtonLayoutPreset(
-          static_cast<CrossPointSettings::FRONT_BUTTON_LAYOUT>(SETTINGS.frontButtonLayout));
-    }
-
-    if (setting.valuePtr == &CrossPointSettings::fontFamily) {
-      core::FeatureModules::onFontFamilySettingChanged(newValue);
-    }
+    applyEnumValue(setting, newValue);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
@@ -328,11 +363,7 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
-  SETTINGS.enforceButtonLayoutConstraints();
-  renderer.setDarkMode(SETTINGS.darkMode);
-  if (!SETTINGS.saveToFile()) {
-    LOG_WRN("SETTINGS", "Failed to persist settings to SD card");
-  }
+  persistSettings();
 }
 
 void SettingsActivity::render(RenderLock&&) {

@@ -15,37 +15,49 @@ BackgroundWifiService BackgroundWifiService::instance;
 struct WifiTaskParams {
   char ssid[64];
   char password[64];
+  bool useCurrentConnection = false;
 };
 
 void BackgroundWifiService::taskEntry(void* arg) {
   auto* params = static_cast<WifiTaskParams*>(arg);
-  instance.run(params->ssid, params->password);
+  instance.run(params->ssid, params->password, params->useCurrentConnection);
   delete params;
 }
 
-void BackgroundWifiService::run(const char* ssid, const char* password) {
-  LOG_DBG("BGWIFI", "Starting background WiFi, SSID: %s", ssid);
+void BackgroundWifiService::run(const char* ssid, const char* password, const bool useCurrentConnection) {
+  wifiOwned = false;
 
-  // ── Connect ──────────────────────────────────────────────────────────────
-  WiFi.mode(WIFI_STA);
-  if (password && password[0] != '\0') {
-    WiFi.begin(ssid, password);
-  } else {
-    WiFi.begin(ssid);
-  }
-
-  const unsigned long connectDeadline = millis() + CONNECT_TIMEOUT_MS;
-  while (WiFi.status() != WL_CONNECTED && millis() < connectDeadline) {
-    if (stopRequested) {
-      LOG_DBG("BGWIFI", "Stop requested during connect");
+  if (useCurrentConnection) {
+    LOG_DBG("BGWIFI", "Starting background web server on existing WiFi connection");
+    if (WiFi.status() != WL_CONNECTED || WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
+      LOG_DBG("BGWIFI", "Existing WiFi connection unavailable");
       goto cleanup;
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
+  } else {
+    LOG_DBG("BGWIFI", "Starting background WiFi, SSID: %s", ssid);
 
-  if (WiFi.status() != WL_CONNECTED) {
-    LOG_DBG("BGWIFI", "Connection timed out");
-    goto cleanup;
+    // ── Connect ────────────────────────────────────────────────────────────
+    wifiOwned = true;
+    WiFi.mode(WIFI_STA);
+    if (password && password[0] != '\0') {
+      WiFi.begin(ssid, password);
+    } else {
+      WiFi.begin(ssid);
+    }
+
+    const unsigned long connectDeadline = millis() + CONNECT_TIMEOUT_MS;
+    while (WiFi.status() != WL_CONNECTED && millis() < connectDeadline) {
+      if (stopRequested) {
+        LOG_DBG("BGWIFI", "Stop requested during connect");
+        goto cleanup;
+      }
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    if (WiFi.status() != WL_CONNECTED || WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
+      LOG_DBG("BGWIFI", "Connection timed out");
+      goto cleanup;
+    }
   }
 
   {
@@ -69,12 +81,18 @@ void BackgroundWifiService::run(const char* ssid, const char* password) {
     // ── Service loop ──────────────────────────────────────────────────────
     while (!stopRequested) {
       esp_task_wdt_reset();
+
+      if (WiFi.status() != WL_CONNECTED || WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
+        LOG_DBG("BGWIFI", "WiFi disconnected; stopping background server");
+        break;
+      }
+
       server->handleClient();
       requestCount = server->getRequestCount();  // Propagate to volatile field
       vTaskDelay(pdMS_TO_TICKS(1));              // Yield to scheduler
     }
 
-    LOG_DBG("BGWIFI", "Stop requested; shutting down. Requests served: %lu", requestCount);
+    LOG_DBG("BGWIFI", "Background task stopping. Requests served: %lu", requestCount);
 
     server->stop();
     delete server;
@@ -82,11 +100,16 @@ void BackgroundWifiService::run(const char* ssid, const char* password) {
   }
 
 cleanup:
-  WiFi.disconnect(false);
-  delay(30);
-  WiFi.mode(WIFI_OFF);
-  delay(30);
+  if (wifiOwned && !(stopRequested && keepWifiOnStop)) {
+    WiFi.disconnect(false);
+    delay(30);
+    WiFi.mode(WIFI_OFF);
+    delay(30);
+  }
+
   connected = false;
+  wifiOwned = false;
+  keepWifiOnStop = false;
 
   // Signal stop() that we've exited, then self-delete
   taskHandle = nullptr;
@@ -100,7 +123,9 @@ void BackgroundWifiService::start(const char* ssid, const char* password) {
   }
 
   stopRequested = false;
+  keepWifiOnStop = false;
   connected = false;
+  wifiOwned = false;
   requestCount = 0;
 
   // Heap-allocate params so the pointers remain valid after this function returns
@@ -109,6 +134,7 @@ void BackgroundWifiService::start(const char* ssid, const char* password) {
   params->ssid[sizeof(params->ssid) - 1] = '\0';
   strncpy(params->password, password ? password : "", sizeof(params->password) - 1);
   params->password[sizeof(params->password) - 1] = '\0';
+  params->useCurrentConnection = false;
 
   const BaseType_t result =
       xTaskCreate(&BackgroundWifiService::taskEntry, "bgwifi", TASK_STACK, params, 1, &taskHandle);
@@ -122,12 +148,42 @@ void BackgroundWifiService::start(const char* ssid, const char* password) {
   }
 }
 
-void BackgroundWifiService::stop() {
+void BackgroundWifiService::startUsingCurrentConnection() {
+  if (taskHandle != nullptr) {
+    LOG_DBG("BGWIFI", "Already running, ignoring startUsingCurrentConnection()");
+    return;
+  }
+
+  stopRequested = false;
+  keepWifiOnStop = false;
+  connected = false;
+  wifiOwned = false;
+  requestCount = 0;
+
+  auto* params = new WifiTaskParams();
+  params->ssid[0] = '\0';
+  params->password[0] = '\0';
+  params->useCurrentConnection = true;
+
+  const BaseType_t result =
+      xTaskCreate(&BackgroundWifiService::taskEntry, "bgwifi", TASK_STACK, params, 1, &taskHandle);
+
+  if (result != pdPASS) {
+    LOG_ERR("BGWIFI", "Failed to create task (heap: %d bytes free)", ESP.getFreeHeap());
+    delete params;
+    taskHandle = nullptr;
+  } else {
+    LOG_DBG("BGWIFI", "Background WiFi task started on existing connection");
+  }
+}
+
+void BackgroundWifiService::stop(const bool keepWifi) {
   if (taskHandle == nullptr) {
     return;
   }
 
   LOG_DBG("BGWIFI", "Requesting stop...");
+  keepWifiOnStop = keepWifi;
   stopRequested = true;
 
   // Wait for the task to exit (max 3 seconds)
@@ -143,8 +199,12 @@ void BackgroundWifiService::stop() {
     vTaskDelete(taskHandle);
     taskHandle = nullptr;
     connected = false;
-    WiFi.disconnect(false);
-    WiFi.mode(WIFI_OFF);
+    if (wifiOwned && !keepWifi) {
+      WiFi.disconnect(false);
+      WiFi.mode(WIFI_OFF);
+    }
+    wifiOwned = false;
+    keepWifiOnStop = false;
   }
 
   LOG_DBG("BGWIFI", "Stopped. Total requests served: %lu", requestCount);

@@ -25,12 +25,14 @@ class BackgroundWifiService {
   CrossPointWebServer* server = nullptr;
   TaskHandle_t taskHandle = nullptr;
   volatile bool stopRequested = false;
+  volatile bool keepWifiOnStop = false;
   volatile bool connected = false;
+  volatile bool wifiOwned = false;
   volatile uint32_t requestCount = 0;
 
   // FreeRTOS task entry point
   static void taskEntry(void* arg);
-  void run(const char* ssid, const char* password);
+  void run(const char* ssid, const char* password, bool useCurrentConnection);
 
   // Stack size: 4096 bytes — WiFi connect + WebServer + handler parsing
   static constexpr uint32_t TASK_STACK = 4096;
@@ -46,8 +48,12 @@ class BackgroundWifiService {
   // Start background WiFi + web server (no-op if already running)
   void start(const char* ssid, const char* password);
 
-  // Stop server and disconnect WiFi, blocks until task ends (<200ms)
-  void stop();
+  // Start the background web server using the current STA connection.
+  void startUsingCurrentConnection();
+
+  // Stop the background task. If keepWifi is true, preserve the current STA
+  // connection so a foreground activity can reuse it.
+  void stop(bool keepWifi = false);
 
   bool isRunning() const { return taskHandle != nullptr; }
   bool isConnected() const { return connected; }

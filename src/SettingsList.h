@@ -109,8 +109,6 @@ inline std::vector<SettingInfo> getSettingsList() {
       SettingInfo::Enum(StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
                         {StrId::STR_MIN_1, StrId::STR_MIN_5, StrId::STR_MIN_10, StrId::STR_MIN_15, StrId::STR_MIN_30},
                         "sleepTimeout", StrId::STR_CAT_SYSTEM),
-      SettingInfo::Toggle(StrId::STR_WIFI_AUTOCONNECT, &CrossPointSettings::wifiAutoConnect, "wifiAutoConnect",
-                          StrId::STR_CAT_SYSTEM),
   };
 
   if (core::FeatureModules::hasCapability(core::Capability::TrmnlSwitch)) {
@@ -128,9 +126,10 @@ inline std::vector<SettingInfo> getSettingsList() {
   }
 
   if (core::FeatureModules::hasCapability(core::Capability::BackgroundServer)) {
-    list.push_back(SettingInfo::Toggle(StrId::STR_BACKGROUND_SERVER_ON_CHARGE,
-                                       &CrossPointSettings::backgroundServerOnCharge, "backgroundServerOnCharge",
-                                       StrId::STR_CAT_SYSTEM));
+    list.push_back(SettingInfo::DynamicEnum(
+        StrId::STR_BACKGROUND_SERVER, {StrId::STR_NEVER, StrId::STR_ONLY_ON_CHARGE, StrId::STR_ALWAYS},
+        [] { return SETTINGS.getBackgroundServerMode(); },
+        [](uint8_t value) { SETTINGS.setBackgroundServerMode(value); }, "backgroundServerMode", StrId::STR_CAT_SYSTEM));
   }
 
   // Device name for mDNS/DHCP/AP SSID. Editable on-device via keyboard (STRING handler).

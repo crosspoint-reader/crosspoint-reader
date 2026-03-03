@@ -409,6 +409,10 @@ void CrossPointSettings::validateAndClamp() {
   statusBarBookProgressPercentage = statusBarBookProgressPercentage ? 1 : 0;
   statusBarBattery = statusBarBattery ? 1 : 0;
   backgroundServerOnCharge = backgroundServerOnCharge ? 1 : 0;
+  wifiAutoConnect = wifiAutoConnect ? 1 : 0;
+  if (wifiAutoConnect) {
+    backgroundServerOnCharge = 1;
+  }
   usbMscPromptOnConnect = usbMscPromptOnConnect ? 1 : 0;
 
   // Sanitize deviceName: keep only [a-z0-9-], lowercase, max 24 usable chars.

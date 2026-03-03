@@ -331,6 +331,10 @@
   let allSettings = [];
   let originalValues = {};
   let touchedFields = {};
+  const BACKGROUND_SERVER_MODE_KEY = 'backgroundServerMode';
+  const BACKGROUND_SERVER_MODE_ALWAYS = 2;
+  const BACKGROUND_SERVER_ALWAYS_WARNING =
+    'Always keeps WiFi and the file server active while the device is awake. This uses much more battery.';
   const SETTING_DISPLAY_NAMES = {
     usbMscPromptOnConnect: 'USB Mass Storage Prompt'
   };
@@ -363,7 +367,10 @@
     }
 
     if (setting.type === 'enum') {
-      let html = '<select id="' + id + '" onchange="markChanged(\'' + setting.key + '\')">';
+      const lastValueAttr = setting.key === BACKGROUND_SERVER_MODE_KEY
+        ? ' data-last-value="' + setting.value + '"'
+        : '';
+      let html = '<select id="' + id + '"' + lastValueAttr + ' onchange="markChanged(\'' + setting.key + '\')">';
       setting.options.forEach(function(opt, idx) {
         const selected = idx === setting.value ? ' selected' : '';
         html += '<option value="' + idx + '"' + selected + '>' + escapeHtml(opt) + '</option>';
@@ -409,6 +416,20 @@
   }
 
   function markChanged(key) {
+    if (key === BACKGROUND_SERVER_MODE_KEY) {
+      const el = document.getElementById('setting-' + key);
+      if (el) {
+        const previousValue = parseInt(el.dataset.lastValue || originalValues[key] || 0, 10);
+        const nextValue = parseInt(el.value, 10);
+        if (nextValue === BACKGROUND_SERVER_MODE_ALWAYS && previousValue !== BACKGROUND_SERVER_MODE_ALWAYS) {
+          if (!confirm(BACKGROUND_SERVER_ALWAYS_WARNING)) {
+            el.value = String(previousValue);
+            return;
+          }
+        }
+        el.dataset.lastValue = String(nextValue);
+      }
+    }
     if (key) touchedFields[key] = true;
     document.getElementById('saveBtn').disabled = false;
     if (key === 'sleepScreen') onSleepScreenChange();
@@ -527,6 +548,10 @@
       // Update original values to new values
       for (const key in changes) {
         originalValues[key] = changes[key];
+        if (key === BACKGROUND_SERVER_MODE_KEY) {
+          const el = document.getElementById('setting-' + key);
+          if (el) el.dataset.lastValue = String(changes[key]);
+        }
         delete touchedFields[key];
       }
 

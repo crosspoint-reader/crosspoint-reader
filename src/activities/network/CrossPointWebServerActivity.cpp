@@ -11,6 +11,7 @@
 #include <cstddef>
 
 #include "CalibreConnectActivity.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
 #include "ScreenComponents.h"
@@ -34,6 +35,8 @@ constexpr uint16_t DNS_PORT = 53;
 // Task shutdown timeout
 constexpr int TASK_EXIT_TIMEOUT_MS = 500;
 constexpr int TASK_EXIT_POLL_MS = 10;
+
+bool hasStaWifiConnection() { return WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0); }
 }  // namespace
 
 void CrossPointWebServerActivity::onEnter() {
@@ -44,7 +47,7 @@ void CrossPointWebServerActivity::onEnter() {
   // Stop any background WiFi service — it would conflict on port 80
   if (BG_WIFI.isRunning()) {
     LOG_DBG("WEBACT", "Stopping background WiFi service for foreground use");
-    BG_WIFI.stop();
+    BG_WIFI.stop(true);
   }
 
   // Reset state
@@ -91,6 +94,12 @@ void CrossPointWebServerActivity::onExit() {
 
   // Brief wait for LWIP stack to flush pending packets
   delay(50);
+
+  if (!isApMode && SETTINGS.keepsBackgroundServerOnWifiWhileAwake() && hasStaWifiConnection()) {
+    LOG_DBG("WEBACT", "Preserving WiFi connection for background file server");
+    LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
+    return;
+  }
 
   // Disconnect WiFi gracefully
   if (isApMode) {
@@ -142,6 +151,13 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     // STA mode - launch WiFi selection
     LOG_DBG("WEBACT", "Turning on WiFi (STA mode)...");
     WiFi.mode(WIFI_STA);
+
+    if (hasStaWifiConnection()) {
+      connectedIP = WiFi.localIP().toString().c_str();
+      connectedSSID = WiFi.SSID().c_str();
+      onWifiSelectionComplete(true);
+      return;
+    }
 
     state = WebServerActivityState::WIFI_SELECTION;
     LOG_DBG("WEBACT", "Launching WifiSelectionActivity...");

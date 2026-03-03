@@ -435,7 +435,7 @@ const char* const CHARACTER_SETS[] = {
     "\xC3"
     "\xBC"
     "",  // Català
-    " !\"%'()*+,-./012345:=?ABCDEFHIJKLMNOPQRSTUWX[\\]abcdefhiklmnoprstuvwxyz|\xC2"
+    " !\"%'()*+,-./012345:=?ABCDEFHIJKLMNOPQRSTUWX[\\]abcdefghiklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xD0"
     "\x86"
@@ -1105,7 +1105,11 @@ const char* const STRINGS_EN[] = {
     "Embedded Style",
     "OPDS Server URL",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Validate Sleep Images",
     "Device Name",
     "Footnotes",
@@ -1741,7 +1745,11 @@ const char* const STRINGS_ES[] = {
     "Estilo integrado",
     "URL del servidor OPDS",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Validate Sleep Images",
     "Device Name",
     "Pie de p\xC3"
@@ -2601,7 +2609,11 @@ const char* const STRINGS_FR[] = {
     "",
     "URL du serveur OPDS",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Valider les images de veille",
     "Device Name",
     "Footnotes",
@@ -3139,7 +3151,11 @@ const char* const STRINGS_DE[] = {
     "Eingebetteter Stil",
     "OPDS-Server-URL",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Schlafbilder validieren",
     "Device Name",
     "Footnotes",
@@ -4839,7 +4855,11 @@ const char* const STRINGS_CS[] = {
     " styl",
     "URL serveru OPDS",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Ov\xC4"
     "\x9B"
     "\xC5"
@@ -5550,7 +5570,11 @@ const char* const STRINGS_PO[] = {
     "Estilo embutido",
     "URL do servidor OPDS",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Validar imagens de sono",
     "Device Name",
     "Footnotes",
@@ -14310,7 +14334,11 @@ const char* const STRINGS_RU[] = {
     "\xB0"
     "",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "\xD0"
     "\x9F"
     "\xD1"
@@ -15240,7 +15268,11 @@ const char* const STRINGS_SV[] = {
     "ddad stil",
     "OPDS-serveradress",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Validera vilol\xC3"
     "\xA4"
     "gesbilder",
@@ -16290,6 +16322,7 @@ const char* const STRINGS_RO[] = {
     "Mod \xC3"
     "\xAE"
     "ntunecat",
+    "Background Server",
     "Server \xC3"
     "\xAE"
     "n fundal la \xC3"
@@ -16297,6 +16330,9 @@ const char* const STRINGS_RO[] = {
     "nc\xC4"
     "\x83"
     "rcare",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Validare imagini repaus",
     "Device Name",
     "Footnotes",
@@ -16980,9 +17016,13 @@ const char* const STRINGS_CA[] = {
     "Estil incrustat",
     "URL del servidor OPDS",
     "Mode fosc",
+    "Background Server",
     "Servidor en segon pla en c\xC3"
     "\xA0"
     "rrega",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Valida imatges de rep\xC3"
     "\xB2"
     "s",
@@ -26866,6 +26906,7 @@ const char* const STRINGS_UK[] = {
     "\xD0"
     "\xBC"
     "",
+    "Background Server",
     "\xD0"
     "\xA4"
     "\xD0"
@@ -26913,6 +26954,9 @@ const char* const STRINGS_UK[] = {
     "\xD1"
     "\x96"
     "",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "\xD0"
     "\x9F"
     "\xD0"
@@ -35954,6 +35998,7 @@ const char* const STRINGS_BE[] = {
     "\xD0"
     "\xBC"
     "",
+    "Background Server",
     "\xD0"
     "\xA4"
     "\xD0"
@@ -35999,6 +36044,9 @@ const char* const STRINGS_BE[] = {
     "\xD1"
     "\x8B"
     "",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "\xD0"
     "\x9F"
     "\xD1"
@@ -36447,7 +36495,11 @@ const char* const STRINGS_IT[] = {
     "Modalit\xC3"
     "\xA0"
     " scura",
+    "Background Server",
     "Server in background in carica",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Convalida immagini sospensione",
     "Device Name",
     "Footnotes",
@@ -37531,9 +37583,13 @@ const char* const STRINGS_PL[] = {
     "Style wbudowane w EPUB",
     "URL serwera OPDS",
     "Tryb ciemny",
+    "Background Server",
     "Serwer w tle podczas \xC5"
     "\x82"
     "adowania",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Waliduj obrazy u\xC5"
     "\x9B"
     "pienia",
@@ -38395,7 +38451,11 @@ const char* const STRINGS_FI[] = {
     "Upotettu tyyli",
     "OPDS-palvelimen osoite",
     "Tumma tila",
+    "Background Server",
     "Taustapalvelin latauksessa",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Validoi lepotilan\xC3"
     "\xA4"
     "ytt\xC3"
@@ -39013,7 +39073,11 @@ const char* const STRINGS_DA[] = {
     "M\xC3"
     "\xB8"
     "rk tilstand",
+    "Background Server",
     "Baggrundserver under opladning",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Valider hvile-billeder",
     "Device Name",
     "Footnotes",
@@ -39389,7 +39453,11 @@ const char* const STRINGS_NL[] = {
     "Ingebedde stijl",
     "OPDS-server URL",
     "Dark Mode",
+    "Background Server",
     "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
     "Validate Sleep Images",
     "Device Name",
     "Voetnoten",
