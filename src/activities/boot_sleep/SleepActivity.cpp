@@ -242,7 +242,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
-  } else if (FsHelpers::checkFileExtension(APP_STATE.openEpubPath, ".txt")) {
+  } else if (FsHelpers::hasTxtExtension(APP_STATE.openEpubPath)) {
     // Handle TXT file - looks for cover image in the same folder
     Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastTxt.load()) {
