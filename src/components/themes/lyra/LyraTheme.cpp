@@ -26,6 +26,7 @@
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
 #include "components/icons/bookmark.h"
+#include "components/icons/bookmark_filled.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -79,6 +80,8 @@ const uint8_t* iconForName(UIIcon icon, int size) {
         return HotspotIcon;
       case UIIcon::Bookmark:
         return BookmarkIcon;
+      case UIIcon::BookmarkFilled:
+        return BookmarkFilledIcon;
       default:
         return nullptr;
     }

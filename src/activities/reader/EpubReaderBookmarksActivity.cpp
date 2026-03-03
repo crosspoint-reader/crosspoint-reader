@@ -117,7 +117,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
         } else {
           return std::string();
         }
-      }, [](int index) { return UIIcon::Bookmark; });
+      }, [this](int index) { return bookmarkUtil.doesBookmarkExist(index) ? UIIcon::BookmarkFilled : UIIcon::Bookmark; });
 
   const bool doesSelectedBookmarkExist = bookmarkUtil.doesBookmarkExist(selectorIndex);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), doesSelectedBookmarkExist ? tr(STR_OPEN) : "-", tr(STR_DELETE), doesSelectedBookmarkExist ? tr(STR_OVERWRITE) : tr(STR_NEW));
