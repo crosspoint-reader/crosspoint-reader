@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CrossPoint Reader - Pokedex Plugin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
   <style>
     :root {
       --black: #000;
@@ -234,7 +237,9 @@
       <div>
         <label for="fontMode">Text Font</label>
         <select id="fontMode">
-          <option value="mono" selected>Monospace</option>
+          <option value="mono" selected>Monospace (System)</option>
+          <option value="pixel">Pixel (Press Start 2P)</option>
+          <option value="vintage">Vintage (VT323)</option>
           <option value="display">Serif Display</option>
           <option value="sans">Sans Serif</option>
           <option value="custom">Custom</option>
@@ -265,9 +270,11 @@
         <label>Bottom Panel Content</label>
         <div class="row">
           <label><input id="showFlavor" type="checkbox" checked /> Flavor text</label>
-          <label><input id="showHp" type="checkbox" /> HP bars</label>
+          <label><input id="showHp" type="checkbox" /> HP/Stats</label>
           <label><input id="showEvolution" type="checkbox" /> Evolution</label>
+          <label><input id="showAbilities" type="checkbox" /> Abilities</label>
         </div>
+        <p class="hint">HP/Stats works best if Flavor or Evolution/Abilities is disabled.</p>
       </div>
 
       <div>
@@ -319,10 +326,16 @@
       <p class="hint">
         This page does all rendering in your browser. The device is only used for file storage via <code>/upload</code>.
       </p>
-      <p class="hint">
-        Upstream acknowledgments:
-        <a href="https://m86-tech.github.io/BOOX-Pokedex-Wallpaper-Generator/" target="_blank" rel="noopener noreferrer">BOOX Pokedex Wallpaper Generator</a>.
-      </p>
+      
+      <div class="card" style="margin: 12px 0; border-style: dashed; background: var(--gray-10);">
+        <p class="hint" style="font-weight: bold; color: var(--black);">
+          Credits & Acknowledgments:
+        </p>
+        <p class="hint">
+          Based on the excellent <a href="https://m86-tech.github.io/BOOX-Pokedex-Wallpaper-Generator/" target="_blank" rel="noopener noreferrer">BOOX Pokedex Wallpaper Generator</a> by m86-tech. 
+          Adapted for CrossPoint Reader and XTEink X4.
+        </p>
+      </div>
     </div>
 
     <div class="canvas-wrap">
@@ -361,6 +374,7 @@
   const showFlavorInput = document.getElementById("showFlavor");
   const showHpInput = document.getElementById("showHp");
   const showEvolutionInput = document.getElementById("showEvolution");
+  const showAbilitiesInput = document.getElementById("showAbilities");
   const batchGensSelect = document.getElementById("batchGens");
   const batchTypeSelect = document.getElementById("batchType");
   const batchPreviewBtn = document.getElementById("batchPreviewBtn");
@@ -460,6 +474,8 @@
   }
 
   function getFontFamily() {
+    if (fontModeSelect.value === "pixel") return "'Press Start 2P', cursive";
+    if (fontModeSelect.value === "vintage") return "'VT323', monospace";
     if (fontModeSelect.value === "display") return "Georgia, 'Times New Roman', Times, serif";
     if (fontModeSelect.value === "sans") return "Arial, Helvetica, sans-serif";
     if (fontModeSelect.value === "custom" && customFontInput.value.trim()) return customFontInput.value.trim();
@@ -475,6 +491,7 @@
       showFlavor: showFlavorInput.checked,
       showHp: showHpInput.checked,
       showEvolution: showEvolutionInput.checked,
+      showAbilities: showAbilitiesInput.checked,
       fontFamily: getFontFamily(),
     };
   }
@@ -499,21 +516,32 @@
   }
 
   function drawHpBars(pokemon, startY, fontFamily) {
-    const wanted = { hp: "HP", attack: "ATK", defense: "DEF", speed: "SPD" };
+    const wanted = { 
+      hp: "HP", 
+      attack: "ATK", 
+      defense: "DEF", 
+      "special-attack": "SATK", 
+      "special-defense": "SDEF", 
+      speed: "SPD" 
+    };
     const stats = (pokemon.stats || []).filter(function(entry) { return wanted[entry.stat && entry.stat.name]; });
     let y = startY;
+    const isPixel = fontFamily.includes("Press Start 2P");
+    const barW = isPixel ? 140 : 180;
+    const barX = isPixel ? 130 : 96;
+
     for (let i = 0; i < stats.length; i++) {
       const stat = stats[i];
       const key = stat.stat.name;
       const value = Math.max(0, Math.min(255, stat.base_stat || 0));
       ctx.fillStyle = "#111111";
-      ctx.font = "bold 16px " + fontFamily;
+      ctx.font = "bold " + (isPixel ? "12px" : "16px") + " " + fontFamily;
       ctx.fillText(wanted[key], 36, y);
       ctx.strokeStyle = "#111111";
-      ctx.strokeRect(96, y - 14, 180, 12);
+      ctx.strokeRect(barX, y - 14, barW, 12);
       ctx.fillStyle = "#111111";
-      ctx.fillRect(96, y - 14, Math.round((value / 255) * 180), 12);
-      y += 22;
+      ctx.fillRect(barX, y - 14, Math.round((value / 255) * barW), 12);
+      y += (isPixel ? 18 : 22);
     }
     return y;
   }
@@ -524,6 +552,7 @@
     const paper = isBlack ? "#000000" : "#ffffff";
     const panel = isBlack ? "#ffffff" : "#111111";
     const panelText = isBlack ? "#000000" : "#ffffff";
+    const isPixel = options.fontFamily.includes("Press Start 2P");
 
     ctx.fillStyle = paper;
     ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -542,9 +571,9 @@
     ctx.fillStyle = panel;
     ctx.fillRect(24, 24, SCREEN_WIDTH - 48, 82);
     ctx.fillStyle = panelText;
-    ctx.font = "bold 34px " + options.fontFamily;
+    ctx.font = (isPixel ? "24px" : "bold 34px") + " " + options.fontFamily;
     ctx.fillText("#" + String(pokemon.id).padStart(4, "0"), 42, 62);
-    ctx.font = "bold 30px " + options.fontFamily;
+    ctx.font = (isPixel ? "22px" : "bold 30px") + " " + options.fontFamily;
     ctx.fillText(titleCase(pokemon.name), 42, 92);
 
     const spriteMax = Math.round(320 * options.spriteScale);
@@ -564,18 +593,18 @@
     ctx.fillStyle = panel;
     ctx.fillRect(24, 540, SCREEN_WIDTH - 48, 48);
     ctx.fillStyle = panelText;
-    ctx.font = "bold 24px " + options.fontFamily;
+    ctx.font = (isPixel ? "16px" : "bold 24px") + " " + options.fontFamily;
     ctx.fillText(typeNames || "Unknown", 36, 571);
 
     let currentY = 620;
     ctx.fillStyle = ink;
     if (options.showFlavor) {
-      ctx.font = "18px " + options.fontFamily;
+      ctx.font = (isPixel ? "12px" : "18px") + " " + options.fontFamily;
       const wrapped = wrapText(flavorText || "No flavor text available for this Pokemon.", SCREEN_WIDTH - 72, MAX_FLAVOR_TEXT_LINES);
       for (let i = 0; i < wrapped.length; i++) {
-        ctx.fillText(wrapped[i], 36, currentY + (i * 24));
+        ctx.fillText(wrapped[i], 36, currentY + (i * (isPixel ? 18 : 24)));
       }
-      currentY += (wrapped.length * 24) + 10;
+      currentY += (wrapped.length * (isPixel ? 18 : 24)) + 10;
     }
 
     if (options.showHp) {
@@ -584,17 +613,21 @@
 
     if (options.showEvolution) {
       const text = evolutionNames.length ? ("Evolution: " + evolutionNames.join(" > ")) : "Evolution: Unknown";
-      ctx.font = "16px " + options.fontFamily;
+      ctx.font = (isPixel ? "10px" : "16px") + " " + options.fontFamily;
       const evoLines = wrapText(text, SCREEN_WIDTH - 72, MAX_EVOLUTION_TEXT_LINES);
       for (let i = 0; i < evoLines.length; i++) {
-        ctx.fillText(evoLines[i], 36, currentY + (i * 20));
+        ctx.fillText(evoLines[i], 36, currentY + (i * (isPixel ? 16 : 20)));
       }
+      currentY += (evoLines.length * (isPixel ? 16 : 20)) + 6;
+    }
+
+    if (options.showAbilities) {
+      const abilities = (pokemon.abilities || []).map(function(a) { return titleCase(a.ability.name); }).join(", ");
+      ctx.font = (isPixel ? "10px" : "16px") + " " + options.fontFamily;
+      ctx.fillText("Ability: " + abilities, 36, currentY);
     }
 
     if (options.spriteOverlay) drawSprite();
-
-    ctx.font = "16px " + options.fontFamily;
-    ctx.fillText("CrossPoint / sleep/pokedex", 36, 776);
 
     applyGrayscale();
   }
@@ -831,6 +864,13 @@
   randomBtn.addEventListener("click", setRandomPokemon);
   batchPreviewBtn.addEventListener("click", previewBatchStart);
   batchUploadBtn.addEventListener("click", runBatchUpload);
+  
+  // Re-render preview when settings change
+  [artStyleSelect, fontModeSelect, bgStyleSelect, spriteScaleInput, spriteOverlayInput, 
+   showFlavorInput, showHpInput, showEvolutionInput, showAbilitiesInput].forEach(el => {
+    el.addEventListener("change", renderCurrentPokemon);
+  });
+
   spriteScaleInput.addEventListener("input", function() {
     spriteScaleLabel.textContent = "Current scale: " + (parseFloat(spriteScaleInput.value) || 1.0).toFixed(1) + "x";
   });
