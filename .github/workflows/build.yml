@@ -146,12 +146,12 @@ jobs:
           path: artifact/
           retention-days: 30
 
-  # ── Build (latest channel): gh_latest env, fork-drift only ─────
+  # ── Build (latest channel): gh_latest env, any branch push ─────
   build-latest:
     needs: validate
     if: >-
-      !startsWith(github.ref, 'refs/tags/')
-      && github.ref == 'refs/heads/fork-drift'
+      github.event_name == 'push'
+      && !startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
@@ -214,12 +214,12 @@ jobs:
             .pio/build/gh_latest/partitions.bin
           retention-days: 7
 
-  # ── Publish: update rolling latest channel (5 variants + shared partitions) on fork-drift push ─
+  # ── Publish: update rolling latest channel (5 variants + shared partitions) on any branch push ─
   publish-latest:
     needs: [build, build-latest]
     if: >-
-      !startsWith(github.ref, 'refs/tags/')
-      && github.ref == 'refs/heads/fork-drift'
+      github.event_name == 'push'
+      && !startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
