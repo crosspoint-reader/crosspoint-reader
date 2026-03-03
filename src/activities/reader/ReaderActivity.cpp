@@ -28,7 +28,7 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
          FsHelpers::checkFileExtension(path, ".md");  // Treat .md as txt files (until we have a markdown reader)
 }
 
-bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::checkFileExtension(path, ".bmp"); }
+bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
