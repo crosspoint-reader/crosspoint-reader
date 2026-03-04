@@ -16,11 +16,14 @@
 #include <rom/crc.h>
 
 // Mark the running OTA partition as VALID in otadata.
-// esp_ota_mark_app_valid_cancel_rollback() has a flash-corruption bug: it writes
-// VALID(0x2) over PENDING_VERIFY(0x1) WITHOUT erasing first. Flash can only clear bits,
-// so 0x1 AND 0x2 = 0x0, CRC is recomputed for 0x2 but flash has 0x0 → CRC mismatch →
-// bootloader rejects entry → rolls back on next boot.
-// Fix: erase the sector then write VALID state, so bits can be set correctly.
+//
+// Strategy: write a new VALID entry with seq+2 to the ALTERNATE otadata sector.
+// We never erase or touch the active sector (the bootloader's current reference point).
+// The alternate sector is only erased if it still holds old/stale data.
+//
+// Why seq+2: otadata has 2 sectors, and the bootloader picks the entry with the
+// highest valid seq where (seq-1) % numOta == partIdx. Adding 2 keeps the same
+// partition index (mod 2) while making the new entry win over the old one.
 __attribute__((constructor(101))) static void earlyMarkOtaValid() {
   const esp_partition_t* otaPart = esp_partition_find_first(
     ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
@@ -48,21 +51,31 @@ __attribute__((constructor(101))) static void earlyMarkOtaValid() {
   esp_partition_read(otaPart, 0,           &e[0], ENTRY_SIZE);
   esp_partition_read(otaPart, SECTOR_SIZE, &e[1], ENTRY_SIZE);
 
+  // Find the active sector (the one that points to the running partition)
+  int activeSector = -1;
   for (int s = 0; s < 2; s++) {
     if (e[s].seq == 0xFFFFFFFF) continue;
     if ((e[s].seq - 1) % numOta != partIdx) continue;
     if (e[s].state == OTA_IMG_VALID) return;  // already valid, nothing to do
-
-    // Erase + rewrite with VALID state so flash bits are set correctly
-    e[s].state = OTA_IMG_VALID;
-    e[s].crc   = ~crc32_le(0u, (const uint8_t*)&e[s], 28);
-    uint32_t off = (uint32_t)s * SECTOR_SIZE;
-    if (esp_partition_erase_range(otaPart, off, SECTOR_SIZE) == ESP_OK) {
-      esp_partition_write(otaPart, off, &e[s], ENTRY_SIZE);
-    }
-    return;
+    activeSector = s;
+    break;
   }
-  // No entry found for running partition — nothing to do (e.g. direct-flash to app0)
+  if (activeSector < 0) return;  // no entry for running partition (e.g. direct-flash)
+
+  // Write the VALID entry to the ALTERNATE sector — never touch the active one
+  int altSector = 1 - activeSector;
+  OtaEntry newEntry = e[activeSector];
+  newEntry.seq   = e[activeSector].seq + 2;  // same partIdx, higher seq → wins
+  newEntry.state = OTA_IMG_VALID;
+  newEntry.crc   = ~crc32_le(0u, (const uint8_t*)&newEntry, 28);
+  uint32_t altOff = (uint32_t)altSector * SECTOR_SIZE;
+
+  // Only erase the alternate sector if it contains stale data (not already empty)
+  if (e[altSector].seq != 0xFFFFFFFF) {
+    if (esp_partition_erase_range(otaPart, altOff, SECTOR_SIZE) != ESP_OK) return;
+  }
+  esp_partition_write(otaPart, altOff, &newEntry, ENTRY_SIZE);
+  // No return needed — nothing to do (e.g. direct-flash to app0)
 }
 
 // Direct OTA data partition write — bypasses esp_ota_set_boot_partition()'s image
