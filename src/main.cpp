@@ -15,73 +15,6 @@
 #include <esp_partition.h>
 #include <rom/crc.h>
 
-// Mark the running OTA partition as VALID in otadata.
-//
-// Strategy: write a new VALID entry with seq+2 to the ALTERNATE otadata sector.
-// We never erase or touch the active sector (the bootloader's current reference point).
-// The alternate sector is only erased if it still holds old/stale data.
-//
-// Why seq+2: otadata has 2 sectors, and the bootloader picks the entry with the
-// highest valid seq where (seq-1) % numOta == partIdx. Adding 2 keeps the same
-// partition index (mod 2) while making the new entry win over the old one.
-__attribute__((constructor(101))) static void earlyMarkOtaValid() {
-  const esp_partition_t* otaPart = esp_partition_find_first(
-    ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
-  if (!otaPart) return;
-  const esp_partition_t* runPart = esp_ota_get_running_partition();
-  if (!runPart) return;
-
-  static constexpr size_t ENTRY_SIZE = 32;
-  static constexpr size_t SECTOR_SIZE = 0x1000;
-  static constexpr uint32_t OTA_IMG_VALID = 0x00000002;  // ESP_OTA_IMG_VALID (not 0x1 = PENDING_VERIFY)
-
-  struct __attribute__((packed)) OtaEntry {
-    uint32_t seq;
-    uint8_t  label[20];
-    uint32_t state;
-    uint32_t crc;
-  };
-  static_assert(sizeof(OtaEntry) == ENTRY_SIZE, "");
-
-  uint32_t partIdx = runPart->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0;
-  uint32_t numOta  = 2;
-
-  OtaEntry e[2];
-  memset(e, 0xFF, sizeof(e));
-  esp_partition_read(otaPart, 0,           &e[0], ENTRY_SIZE);
-  esp_partition_read(otaPart, SECTOR_SIZE, &e[1], ENTRY_SIZE);
-
-  // Find the active sector (the one that points to the running partition)
-  int activeSector = -1;
-  for (int s = 0; s < 2; s++) {
-    if (e[s].seq == 0xFFFFFFFF) continue;
-    if ((e[s].seq - 1) % numOta != partIdx) continue;
-    // Check both state AND CRC validity — a VALID entry with wrong CRC is still
-    // rejected by the bootloader, so we must fix it even if state looks correct.
-    uint32_t storedCrc   = e[s].crc;
-    uint32_t expectedCrc = crc32_le(0xFFFFFFFF, (const uint8_t*)&e[s], 4);
-    if (e[s].state == OTA_IMG_VALID && storedCrc == expectedCrc) return;
-    activeSector = s;
-    break;
-  }
-  if (activeSector < 0) return;  // no entry for running partition (e.g. direct-flash)
-
-  // Write the VALID entry to the ALTERNATE sector — never touch the active one
-  int altSector = 1 - activeSector;
-  OtaEntry newEntry = e[activeSector];
-  newEntry.seq   = e[activeSector].seq + 2;  // same partIdx, higher seq → wins
-  newEntry.state = OTA_IMG_VALID;
-  newEntry.crc   = crc32_le(0xFFFFFFFF, (const uint8_t*)&newEntry, 4);  // seq field only
-  uint32_t altOff = (uint32_t)altSector * SECTOR_SIZE;
-
-  // Only erase the alternate sector if it contains stale data (not already empty)
-  if (e[altSector].seq != 0xFFFFFFFF) {
-    if (esp_partition_erase_range(otaPart, altOff, SECTOR_SIZE) != ESP_OK) return;
-  }
-  esp_partition_write(otaPart, altOff, &newEntry, ENTRY_SIZE);
-  // No return needed — nothing to do (e.g. direct-flash to app0)
-}
-
 // Direct OTA data partition write — bypasses esp_ota_set_boot_partition()'s image
 // validation, which fails for Arduino/unsigned builds lacking an embedded SHA256.
 // Replicates the same otadata format as crosspoint-flash.py's make_entry().
@@ -131,8 +64,8 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
   entry.seq   = newSeq;
   memset(entry.label, 0xFF, sizeof(entry.label));
   // state: 0x1 = ESP_OTA_IMG_PENDING_VERIFY. The bootloader will boot this once;
-  // earlyMarkOtaValid() (constructor 101) upgrades to 0x2 (VALID) on successful boot,
-  // preventing rollback on all subsequent boots.
+  // esp_ota_mark_app_valid_cancel_rollback() in setup() upgrades to 0x2 (VALID)
+  // on successful boot, preventing rollback on all subsequent boots.
   entry.state = 0x00000001;
   // CRC32 over the seq field only (4 bytes).
   // Bootloader validates: esp_rom_crc32_le(UINT32_MAX, &entry.seq, 4) == entry.crc
@@ -511,8 +444,8 @@ void dangerZoneAutoConnect() {
 
 void setup() {
   // MUST be first — confirms OTA firmware is healthy, cancels any pending rollback.
-  // earlyMarkOtaValid() (constructor 101) already wrote a VALID otadata entry before
-  // setup() runs, so this call is a belt-and-suspenders guard for the standard path.
+  // Converts the PENDING_VERIFY otadata entry (written by crosspoint-flash.py or
+  // forceSetBootPartition) to VALID, preventing bootloader rollback on next boot.
   esp_ota_mark_app_valid_cancel_rollback();
 
   t1 = millis();
