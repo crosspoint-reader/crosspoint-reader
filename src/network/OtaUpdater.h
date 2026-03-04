@@ -36,5 +36,5 @@ class OtaUpdater {
   bool isUpdateNewer() const;
   const std::string& getLatestVersion() const;
   OtaUpdaterError checkForUpdate();
-  OtaUpdaterError installUpdate();
+  OtaUpdaterError installUpdate(std::function<void()> onProgress = nullptr);
 };
