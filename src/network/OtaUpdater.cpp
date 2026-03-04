@@ -200,7 +200,7 @@ bool OtaUpdater::isUpdateNewer() const {
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onProgress) {
   if (!isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
@@ -244,9 +244,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
   do {
     esp_err = esp_https_ota_perform(ota_handle);
     processedSize = esp_https_ota_get_image_len_read(ota_handle);
-    /* Sent signal to  OtaUpdateActivity */
     render = true;
-    delay(100);  // TODO: should we replace this with something better?
+    if (onProgress) onProgress();
+    delay(100);
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 
   /* Return back to default power saving for WiFi in case of failing */
