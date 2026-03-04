@@ -19,6 +19,16 @@ struct FileInfo {
 
 class CrossPointWebServer {
  public:
+  enum class ClawUpdateState { IDLE, CHECKING, DOWNLOADING, READY, ERROR };
+  struct ClawUpdateProgress {
+    ClawUpdateState state = ClawUpdateState::IDLE;
+    size_t downloaded = 0;
+    size_t total = 0;
+    std::string version;
+    std::string error;
+  };
+  static ClawUpdateProgress getClawUpdateProgress();
+
   struct WsUploadStatus {
     bool inProgress = false;
     size_t received = 0;

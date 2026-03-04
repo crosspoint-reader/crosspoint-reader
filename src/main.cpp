@@ -387,6 +387,23 @@ void setup() {
       LOG_INF("MAIN", "New firmware version: %s", newVersion);
     }
 
+    // Skip install if firmware.bin is the same version already running
+    if (strcmp(newVersion, CROSSPOINT_VERSION) == 0) {
+      LOG_INF("MAIN", "firmware.bin is same version (%s) — skipping install, deleting file", CROSSPOINT_VERSION);
+      Storage.remove("/firmware.bin");
+      renderer.clearScreen();
+      renderer.drawCenteredText(PULSR_10_FONT_ID, renderer.getScreenHeight() / 2 - 20,
+                                "Firmware already up to date", true, EpdFontFamily::BOLD);
+      char verBuf[80];
+      snprintf(verBuf, sizeof(verBuf), "Running: %s", CROSSPOINT_VERSION);
+      renderer.drawCenteredText(SMALL_FONT_ID, renderer.getScreenHeight() / 2 + 10, verBuf);
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      delay(3000);
+      renderer.clearScreen();
+      renderer.displayBuffer(HalDisplay::FULL_REFRESH);  // wipe message before activity manager starts
+      return;
+    }
+
     drawUpdateScreen(0);
 
     FsFile firmwareFile = Storage.open("/firmware.bin");
