@@ -354,20 +354,20 @@
         <section class="card control-block">
           <label for="artStyle">Art Style</label>
           <select id="artStyle">
-            <option value="official" selected>Official Artwork</option>
-            <option value="home">Pokemon Home</option>
-            <option value="pixel">Classic Pixel</option>
+            <option value="pixel" selected>Classic Pixel</option>
+            <option value="official">Official Artwork</option>
             <option value="dream">Dream World</option>
+            <option value="home">3D Render</option>
           </select>
         </section>
 
         <section class="card control-block">
           <label for="fontMode">Text Font</label>
           <select id="fontMode">
-            <option value="mono" selected>Monospace (System)</option>
-            <option value="pixel">Pixel (Press Start 2P)</option>
-            <option value="vintage">Vintage (VT323)</option>
-            <option value="clean">Pixelify Sans</option>
+            <option value="vintage" selected>VT323 (Retro)</option>
+            <option value="clean">Pixelify Sans (Clean)</option>
+            <option value="mono">Courier New</option>
+            <option value="pixel">Press Start 2P</option>
             <option value="display">Serif Display</option>
             <option value="sans">Sans Serif</option>
             <option value="custom">Custom Stack</option>
@@ -378,17 +378,17 @@
         <section class="card control-block">
           <label for="bgStyle">Background</label>
           <select id="bgStyle">
-            <option value="white" selected>All White</option>
-            <option value="black">All Black</option>
-            <option value="diagonal">Classic Diagonal</option>
             <option value="type">Dynamic Type Accent</option>
+            <option value="diagonal" selected>Classic Diagonal</option>
+            <option value="white">All White</option>
+            <option value="black">All Black</option>
           </select>
         </section>
 
         <section class="card control-block">
           <label for="spriteScale">Sprite Size</label>
-          <input id="spriteScale" type="range" min="0.6" max="2.2" step="0.1" value="1.0" />
-          <p class="hint" id="spriteScaleLabel">Current scale: 1.0x</p>
+          <input id="spriteScale" type="range" min="0.5" max="3.0" step="0.1" value="1.2" />
+          <p class="hint" id="spriteScaleLabel">Current scale: 1.2x</p>
           <div class="option-grid">
             <label><input id="boldText" type="checkbox" checked /> Bold text</label>
             <label><input id="spriteOverlay" type="checkbox" /> Sprite over text layer</label>
@@ -566,6 +566,7 @@
 
     const pokemonBundleCache = new Map();
     const spriteCache = new Map();
+    const spriteBoundsCache = new Map();
     let lastRendered = null;
 
     function setStatus(message, isError) {
@@ -685,18 +686,6 @@
       return lines;
     }
 
-    function applyGrayscale() {
-      const imageData = ctx.getImageData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const gray = Math.round((data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000);
-        data[i] = gray;
-        data[i + 1] = gray;
-        data[i + 2] = gray;
-      }
-      ctx.putImageData(imageData, 0, 0);
-    }
-
     function getFontFamily() {
       if (fontModeSelect.value === "pixel") return "'Press Start 2P', cursive";
       if (fontModeSelect.value === "vintage") return "'VT323', monospace";
@@ -756,6 +745,76 @@
       }
 
       return names;
+    }
+
+    function getSpriteBounds(sprite) {
+      const key = sprite.currentSrc || sprite.src || (String(sprite.naturalWidth || sprite.width) + "x" + String(sprite.naturalHeight || sprite.height));
+      if (spriteBoundsCache.has(key)) {
+        return spriteBoundsCache.get(key);
+      }
+
+      const width = sprite.naturalWidth || sprite.width;
+      const height = sprite.naturalHeight || sprite.height;
+      const tc = document.createElement("canvas");
+      tc.width = width;
+      tc.height = height;
+      const tctx = tc.getContext("2d", { willReadFrequently: true });
+      tctx.drawImage(sprite, 0, 0, width, height);
+
+      const data = tctx.getImageData(0, 0, width, height).data;
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const alpha = data[((y * width) + x) * 4 + 3];
+          if (alpha <= 8) continue;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+
+      const bounds = maxX >= minX
+        ? { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 }
+        : { x: 0, y: 0, width: width, height: height };
+      spriteBoundsCache.set(key, bounds);
+      return bounds;
+    }
+
+    function drawGrayscaleSprite(targetCtx, sprite, bounds, x, y, width, height, pixelated) {
+      const drawWidth = Math.max(1, Math.round(width));
+      const drawHeight = Math.max(1, Math.round(height));
+      const tc = document.createElement("canvas");
+      tc.width = drawWidth;
+      tc.height = drawHeight;
+      const tctx = tc.getContext("2d", { willReadFrequently: true });
+      tctx.imageSmoothingEnabled = !pixelated;
+      tctx.drawImage(
+        sprite,
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+        0,
+        0,
+        drawWidth,
+        drawHeight
+      );
+
+      const imageData = tctx.getImageData(0, 0, drawWidth, drawHeight);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = Math.round((data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000);
+        data[i] = gray;
+        data[i + 1] = gray;
+        data[i + 2] = gray;
+      }
+      tctx.putImageData(imageData, 0, 0);
+      targetCtx.drawImage(tc, Math.round(x), Math.round(y));
     }
 
     async function getSpriteForPokemon(pokemon, style) {
@@ -885,17 +944,18 @@
       ctx.font = getFontSpec(isPixel ? 18 : 30, options.fontFamily, options.boldText);
       ctx.fillText(titleCase(pokemon.name), 42, 90);
 
-      const spriteMax = Math.round(320 * options.spriteScale);
-      const scale = Math.min(spriteMax / sprite.width, spriteMax / sprite.height, 1.0);
-      const spriteW = Math.round(sprite.width * scale);
-      const spriteH = Math.round(sprite.height * scale);
+      const spriteBounds = getSpriteBounds(sprite);
+      const baseSpriteSize = options.artStyle === "pixel" ? 220 : 280;
+      const spriteTarget = Math.max(96, Math.round(baseSpriteSize * options.spriteScale));
+      const scale = Math.min(spriteTarget / spriteBounds.width, spriteTarget / spriteBounds.height);
+      const spriteW = Math.max(1, Math.round(spriteBounds.width * scale));
+      const spriteH = Math.max(1, Math.round(spriteBounds.height * scale));
       const spriteX = Math.round((SCREEN_WIDTH - spriteW) / 2);
-      const spriteY = 170;
-      const spriteFrameColor = isBlack ? "#222222" : (isType ? "#ececec" : "#f0f0f0");
+      const spriteCenterY = 330;
+      const spriteY = Math.round(spriteCenterY - (spriteH / 2));
+      const pixelatedSprite = options.artStyle === "pixel";
       const drawSprite = function() {
-        ctx.fillStyle = spriteFrameColor;
-        ctx.fillRect(spriteX - 18, spriteY - 18, spriteW + 36, spriteH + 36);
-        ctx.drawImage(sprite, spriteX, spriteY, spriteW, spriteH);
+        drawGrayscaleSprite(ctx, sprite, spriteBounds, spriteX, spriteY, spriteW, spriteH, pixelatedSprite);
       };
 
       if (!options.spriteOverlay) {
@@ -952,7 +1012,6 @@
         drawSprite();
       }
 
-      applyGrayscale();
     }
 
     function canvasToBmpBlob() {
