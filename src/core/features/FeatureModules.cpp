@@ -16,6 +16,7 @@
 
 #include "CrossPointSettings.h"
 #include "SpiBusMutex.h"
+#include "activities/home/RecentBooksActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #if ENABLE_EPUB_SUPPORT
 #include "activities/reader/EpubReaderActivity.h"
@@ -242,6 +243,8 @@ bool FeatureModules::hasCapability(const Capability capability) {
       return isEnabled("markdown");
     case Capability::OtaUpdates:
       return isEnabled("ota_updates");
+    case Capability::PokemonParty:
+      return isEnabled("pokemon_party");
     case Capability::TodoPlanner:
       return isEnabled("todo_planner");
     case Capability::TrmnlSwitch:
@@ -517,6 +520,8 @@ bool FeatureModules::supportsSettingAction(const SettingAction action) {
       return hasCapability(Capability::KoreaderSync);
     case SettingAction::OPDSBrowser:
       return hasCapability(Capability::CalibreSync);
+    case SettingAction::PokemonParty:
+      return hasCapability(Capability::PokemonParty);
     case SettingAction::CheckForUpdates:
       return hasCapability(Capability::OtaUpdates);
     case SettingAction::SwitchToTrmnl:
@@ -546,6 +551,8 @@ Activity* FeatureModules::createSettingsSubActivity(const SettingAction action, 
       return new ClearCacheActivity(renderer, mappedInput);
     case SettingAction::FactoryReset:
       return new FactoryResetActivity(renderer, mappedInput, onComplete);
+    case SettingAction::PokemonParty:
+      return new RecentBooksActivity(renderer, mappedInput);
     case SettingAction::KOReaderSync:
 #if ENABLE_INTEGRATIONS && ENABLE_KOREADER_SYNC
       return new KOReaderSettingsActivity(renderer, mappedInput);
@@ -989,6 +996,8 @@ bool FeatureModules::shouldRegisterWebRoute(const WebOptionalRoute route) {
   switch (route) {
     case WebOptionalRoute::PokedexPluginPage:
       return hasCapability(Capability::WebPokedexPlugin);
+    case WebOptionalRoute::PokemonPartyApi:
+      return hasCapability(Capability::PokemonParty);
     case WebOptionalRoute::WallpaperPluginPage:
       return hasCapability(Capability::WebWallpaperPlugin);
     case WebOptionalRoute::AnkiPluginPage:

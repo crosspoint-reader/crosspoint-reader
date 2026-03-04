@@ -264,6 +264,31 @@ Adds an optional browser-side wallpaper generator page at `/plugins/pokedex`:
 
 ---
 
+### Pokemon Party
+
+**Flag:** `ENABLE_POKEMON_PARTY`
+**Size Impact:** ~4KB
+**Default:** Disabled
+**Depends on:** `ENABLE_WEB_POKEDEX_PLUGIN`
+
+Builds on the web Pokedex plugin and recent-books cache to create a lightweight
+Pokemon companion layer:
+
+- Adds per-book `pokemon.json` sidecars in the existing book cache
+- Exposes `GET`/`PUT`/`DELETE /api/book-pokemon`
+- Extends `/api/recent` with saved Pokemon metadata plus real cached progress
+- Turns recent books into a six-slot party surface in the Fork Drift home flow
+
+**When disabled:**
+- `/api/book-pokemon` routes are not registered
+- The device Settings `Pokedex` shortcut is hidden
+- `/plugins/pokedex` remains just the wallpaper/plugin surface when the web plugin is enabled
+
+**Use case:** Enable when you want recent books to behave like a Pokemon party,
+with reading progress driving level and evolution state.
+
+---
+
 ## Build Profiles
 
 ### Lean Profile
@@ -281,6 +306,7 @@ uv run python scripts/generate_build_config.py --profile lean
 - ✗ Background Server
 - ✗ Home Media Picker
 - ✗ Web Pokedex Plugin
+- ✗ Pokemon Party
 
 **Best for:**
 - Devices with very limited flash space
@@ -307,6 +333,7 @@ uv run python scripts/generate_build_config.py --profile standard
 - ✓ Background Server
 - ✓ Home Media Picker
 - ✗ Web Pokedex Plugin
+- ✗ Pokemon Party
 
 **Best for:**
 - Most users
@@ -317,7 +344,7 @@ uv run python scripts/generate_build_config.py --profile standard
 
 ### Full Profile
 
-**Size:** ~6.4MB (all optional modules, tight fit)
+**Size:** ~6.4MB (feature-rich build, tight fit)
 
 ```bash
 uv run python scripts/generate_build_config.py --profile full
@@ -333,9 +360,14 @@ uv run python scripts/generate_build_config.py --profile full
 - ✓ Background Server
 - ✓ Home Media Picker
 - ✓ Web Pokedex Plugin
+- ✗ Pokemon Party
+
+**Note:** `Pokemon Party` is available for custom builds but is not enabled in
+the stock `full` profile. Enable it explicitly if you want the recent-books
+party flow.
 
 **Best for:**
-- Users who want all features
+- Users who want most built-in features
 - Devices with adequate flash space remaining
 - Power users who use Markdown/Obsidian
 

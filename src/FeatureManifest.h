@@ -30,6 +30,7 @@ class FeatureManifest {
   static constexpr bool hasBackgroundServer() { return ENABLE_BACKGROUND_SERVER != 0; }
   static constexpr bool hasHomeMediaPicker() { return ENABLE_HOME_MEDIA_PICKER != 0; }
   static constexpr bool hasWebPokedexPlugin() { return ENABLE_WEB_POKEDEX_PLUGIN != 0; }
+  static constexpr bool hasPokemonParty() { return ENABLE_POKEMON_PARTY != 0; }
   static constexpr bool hasWebWallpaperPlugin() { return ENABLE_WEB_WALLPAPER_PLUGIN != 0; }
   static constexpr bool hasAnkiSupport() { return ENABLE_ANKI_SUPPORT != 0; }
   static constexpr bool hasTrmnlSwitch() { return ENABLE_TRMNL_SWITCH != 0; }

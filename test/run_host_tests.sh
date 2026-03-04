@@ -39,8 +39,10 @@ g++ -std=c++20 -O2 \
   "$ROOT_DIR/lib/Markdown/MarkdownParser.cpp" \
   "$ROOT_DIR/src/core/features/FeatureCatalog.cpp" \
   "$ROOT_DIR/src/util/ForkDriftNavigation.cpp" \
+  "$ROOT_DIR/src/util/BookProgressDataStore.cpp" \
   "$ROOT_DIR/src/util/InputValidation.cpp" \
   "$ROOT_DIR/src/util/PathUtils.cpp" \
+  "$ROOT_DIR/src/util/PokemonBookDataStore.cpp" \
   "$ROOT_DIR/src/CrossPointSettings.cpp" \
   "$ROOT_DIR/test/mock/JsonSettingsIO.cpp" \
   "$BUILD_DIR/md4c.o" \

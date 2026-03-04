@@ -58,6 +58,7 @@ class HomeActivity final : public Activity {
   void loadRecentCovers(int coverHeight);
   void openSelectedBook();
   void rebuildMenuLayout();
+  bool isPokemonPartyHomeMode() const;
   std::string getMenuItemLabel(int index) const;
   bool drawCoverAt(const std::string& coverPath, int x, int y, int width, int height) const;
 

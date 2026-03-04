@@ -127,12 +127,42 @@ void ForkDriftTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const
 void ForkDriftTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                     const std::function<std::string(int index)>& buttonLabel,
                                     const std::function<UIIcon(int index)>& rowIcon) const {
+  if (buttonCount <= 0) {
+    return;
+  }
+
   const int pad = ForkDriftMetrics::values.contentSidePadding;
   const int availableW = rect.width - 2 * pad;
   const int availableH = rect.height;
+  constexpr int iconSize = 24;
+
+  if (buttonCount == 1) {
+    const int tileW = availableW;
+    const int tileH = std::min(72, availableH);
+    const int x = rect.x + pad;
+    const int y = rect.y + std::max(0, (availableH - tileH) / 2);
+    const bool selected = selectedIndex == 0;
+
+    if (selected) {
+      renderer.fillRoundedRect(x, y, tileW, tileH, cornerRadius, Color::LightGray);
+    }
+
+    const std::string label = buttonLabel(0);
+    const UIIcon icon = rowIcon ? rowIcon(0) : UIIcon::Settings;
+    const uint8_t* iconBmp = iconFor(icon, iconSize);
+    int textX = x + 12;
+    if (iconBmp) {
+      renderer.drawIcon(iconBmp, x + 12, y + (tileH - iconSize) / 2, iconSize, iconSize);
+      textX += iconSize + hPadding;
+    }
+    const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+    const int textY = y + (tileH - lineH) / 2;
+    renderer.drawText(UI_10_FONT_ID, textX, textY, label.c_str(), true);
+    return;
+  }
+
   const int tileW = (availableW - ForkDriftMetrics::values.menuSpacing) / buttonCols;
   const int tileH = (availableH - ForkDriftMetrics::values.menuSpacing) / buttonRows;
-  constexpr int iconSize = 24;
 
   for (int i = 0; i < std::min(buttonCount, buttonCols * buttonRows); i++) {
     const int col = i % buttonCols;

@@ -73,6 +73,11 @@ on:
         required: false
         type: boolean
         default: false
+      pokemon_party:
+        description: 'Pokemon Party metadata API (~4KB, requires Web Pokedex Plugin)'
+        required: false
+        type: boolean
+        default: false
       epub_support:
         description: 'EPUB Support (~157KB)'
         required: false
@@ -186,6 +191,7 @@ jobs:
           [ "${{ inputs.background_server }}" == "true" ] && CMD+=(--enable background_server) || CMD+=(--disable background_server)
           [ "${{ inputs.home_media_picker }}" == "true" ] && CMD+=(--enable home_media_picker) || CMD+=(--disable home_media_picker)
           [ "${{ inputs.web_pokedex_plugin }}" == "true" ] && CMD+=(--enable web_pokedex_plugin) || CMD+=(--disable web_pokedex_plugin)
+          [ "${{ inputs.pokemon_party }}" == "true" ] && CMD+=(--enable pokemon_party) || CMD+=(--disable pokemon_party)
           [ "${{ inputs.epub_support }}" == "true" ] && CMD+=(--enable epub_support) || CMD+=(--disable epub_support)
           [ "${{ inputs.hyphenation }}" == "true" ] && CMD+=(--enable hyphenation) || CMD+=(--disable hyphenation)
           [ "${{ inputs.xtc_support }}" == "true" ] && CMD+=(--enable xtc_support) || CMD+=(--disable xtc_support)

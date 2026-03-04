@@ -42,6 +42,7 @@ FEATURES = [
     'background_server',
     'home_media_picker',
     'web_pokedex_plugin',
+    'pokemon_party',
     'epub_support',
     'hyphenation',
     'xtc_support',

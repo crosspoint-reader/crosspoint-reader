@@ -20,6 +20,7 @@ namespace core {
 
 enum class WebOptionalRoute {
   PokedexPluginPage,
+  PokemonPartyApi,
   WallpaperPluginPage,
   AnkiPluginPage,
   UserFontsApi,
@@ -45,6 +46,7 @@ enum class Capability {
   LyraTheme,
   MarkdownSupport,
   OtaUpdates,
+  PokemonParty,
   TodoPlanner,
   TrmnlSwitch,
   UsbMassStorage,

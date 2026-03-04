@@ -96,7 +96,7 @@ class HalStorage {
 
   // Unused in tests but referenced by CrossPointSettings.h surface
   bool exists(const char* path) { return files_.count(path) > 0; }
-  bool remove(const char*) { return true; }
+  bool remove(const char* path) { return files_.erase(path) > 0; }
 
   static HalStorage& getInstance() {
     static HalStorage inst;

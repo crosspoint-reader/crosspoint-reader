@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -12,7 +13,9 @@
 #include "lib/Serialization/Serialization.h"
 #include "src/core/features/FeatureCatalog.h"
 #include "src/fontIds.h"
+#include "src/util/BookProgressDataStore.h"
 #include "src/util/ForkDriftNavigation.h"
+#include "src/util/PokemonBookDataStore.h"
 #include "test/mock/Arduino.h"
 #include "test/mock/HalStorage.h"
 #include "test/mock/SpiBusMutex.h"
@@ -134,12 +137,14 @@ void testFeatureCatalogApi() {
 
   assert(core::FeatureCatalog::isEnabled("epub_support") == (ENABLE_EPUB_SUPPORT != 0));
   assert(core::FeatureCatalog::isEnabled("home_media_picker") == (ENABLE_HOME_MEDIA_PICKER != 0));
+  assert(core::FeatureCatalog::isEnabled("pokemon_party") == (ENABLE_POKEMON_PARTY != 0));
   assert(core::FeatureCatalog::isEnabled("missing_feature") == false);
   assert(core::FeatureCatalog::find("missing_feature") == nullptr);
 
   const String json = core::FeatureCatalog::toJson();
   assert(!json.isEmpty());
   assert(json.indexOf("\"epub_support\":") != -1);
+  assert(json.indexOf("\"pokemon_party\":") != -1);
   assert(json.indexOf("\"todo_planner\":") != -1);
 
   const String buildString = core::FeatureCatalog::buildString();
@@ -150,6 +155,236 @@ void testFeatureCatalogApi() {
   assert(dependencyError.isEmpty());
 
   std::cout << "Core feature catalog API tests passed!" << std::endl;
+}
+
+void testPokemonBookDataStore() {
+  std::cout << "Testing Pokemon book data storage..." << std::endl;
+
+  Storage.reset();
+
+  std::string cachePath;
+  assert(PokemonBookDataStore::resolveCachePath("/books/demo.epub", cachePath));
+  assert(cachePath.find("/.crosspoint/epub_") == 0);
+  assert(PokemonBookDataStore::supportsBookPath("/books/demo.xtc"));
+  assert(PokemonBookDataStore::supportsBookPath("/books/demo.xtch"));
+  assert(PokemonBookDataStore::supportsBookPath("/books/demo.txt"));
+  assert(PokemonBookDataStore::supportsBookPath("/books/demo.md"));
+  assert(!PokemonBookDataStore::supportsBookPath("/books/demo.pdf"));
+
+  JsonDocument writeDoc;
+  JsonObject pokemon = writeDoc["pokemon"].to<JsonObject>();
+  pokemon["id"] = 1;
+  pokemon["name"] = "bulbasaur";
+  pokemon["starterChoice"] = true;
+
+  assert(PokemonBookDataStore::savePokemonDocument("/books/demo.epub", pokemon));
+
+  JsonDocument readDoc;
+  assert(PokemonBookDataStore::loadPokemonDocument("/books/demo.epub", readDoc));
+  assert(readDoc["pokemon"]["id"] == 1);
+  assert(std::string(readDoc["pokemon"]["name"] | "") == "bulbasaur");
+  assert(readDoc["pokemon"]["starterChoice"] == true);
+
+  assert(PokemonBookDataStore::deletePokemonDocument("/books/demo.epub"));
+  JsonDocument deletedDoc;
+  assert(!PokemonBookDataStore::loadPokemonDocument("/books/demo.epub", deletedDoc));
+
+  JsonDocument missingDoc;
+  assert(!PokemonBookDataStore::loadPokemonDocument("/books/missing.epub", missingDoc));
+
+  std::cout << "Pokemon book data storage tests passed!" << std::endl;
+}
+
+namespace {
+std::string buildCachePath(const char* prefix, const std::string& bookPath) {
+  return std::string("/.crosspoint/") + prefix + std::to_string(std::hash<std::string>{}(bookPath));
+}
+
+void writeTxtIndexFile(const std::string& path, uint32_t totalPages, uint8_t markdownFlag = 0) {
+  FsFile f;
+  assert(Storage.openFileForWrite("TST", path, f));
+  serialization::writePod(f, static_cast<uint32_t>(0x54585449));
+  serialization::writePod(f, static_cast<uint8_t>(3));
+  serialization::writePod(f, static_cast<uint32_t>(0));
+  serialization::writePod(f, static_cast<int32_t>(480));
+  serialization::writePod(f, static_cast<int32_t>(20));
+  serialization::writePod(f, static_cast<int32_t>(0));
+  serialization::writePod(f, static_cast<int32_t>(0));
+  serialization::writePod(f, static_cast<uint8_t>(0));
+  serialization::writePod(f, markdownFlag);
+  serialization::writePod(f, totalPages);
+  f.close();
+}
+
+void writeMarkdownSectionFile(const std::string& path, uint16_t pageCount) {
+  FsFile f;
+  assert(Storage.openFileForWrite("TST", path, f));
+  serialization::writePod(f, static_cast<uint8_t>(1));
+  serialization::writePod(f, static_cast<int>(0));
+  serialization::writePod(f, 1.0f);
+  serialization::writePod(f, false);
+  serialization::writePod(f, static_cast<uint8_t>(0));
+  serialization::writePod(f, static_cast<uint16_t>(480));
+  serialization::writePod(f, static_cast<uint16_t>(800));
+  serialization::writePod(f, false);
+  serialization::writePod(f, static_cast<uint32_t>(1024));
+  serialization::writePod(f, pageCount);
+  serialization::writePod(f, static_cast<uint32_t>(0));
+  f.close();
+}
+
+void writeEpubBookCache(const std::string& path, const std::vector<uint32_t>& cumulativeSizes) {
+  FsFile f;
+  assert(Storage.openFileForWrite("TST", path, f));
+  serialization::writePod(f, static_cast<uint8_t>(5));
+  serialization::writePod(f, static_cast<uint32_t>(0));
+  serialization::writePod(f, static_cast<uint16_t>(cumulativeSizes.size()));
+  serialization::writePod(f, static_cast<uint16_t>(0));
+  for (int i = 0; i < 5; ++i) {
+    serialization::writeString(f, std::string());
+  }
+  for (size_t i = 0; i < cumulativeSizes.size(); ++i) {
+    serialization::writePod(f, static_cast<uint32_t>(0));
+  }
+  for (size_t i = 0; i < cumulativeSizes.size(); ++i) {
+    serialization::writeString(f, std::string("chapter-") + std::to_string(i));
+    serialization::writePod(f, cumulativeSizes[i]);
+    serialization::writePod(f, static_cast<int16_t>(-1));
+  }
+  f.close();
+}
+
+void writeXtcHeaderFile(const std::string& path, uint16_t pageCount) {
+  FsFile f;
+  assert(Storage.openFileForWrite("TST", path, f));
+  serialization::writePod(f, static_cast<uint32_t>(0x00435458));
+  serialization::writePod(f, static_cast<uint8_t>(1));
+  serialization::writePod(f, static_cast<uint8_t>(0));
+  serialization::writePod(f, pageCount);
+  serialization::writePod(f, static_cast<uint8_t>(0));
+  serialization::writePod(f, static_cast<uint8_t>(0));
+  serialization::writePod(f, static_cast<uint8_t>(0));
+  serialization::writePod(f, static_cast<uint8_t>(0));
+  serialization::writePod(f, static_cast<uint32_t>(0));
+  serialization::writePod(f, static_cast<uint64_t>(0));
+  serialization::writePod(f, static_cast<uint64_t>(0));
+  serialization::writePod(f, static_cast<uint64_t>(0));
+  serialization::writePod(f, static_cast<uint64_t>(0));
+  serialization::writePod(f, static_cast<uint32_t>(0));
+  serialization::writePod(f, static_cast<uint32_t>(0));
+  f.close();
+}
+}  // namespace
+
+void testBookProgressDataStore() {
+  std::cout << "Testing book progress data storage..." << std::endl;
+
+  Storage.reset();
+
+  {
+    const std::string bookPath = "/books/demo.txt";
+    const std::string cachePath = buildCachePath("txt_", bookPath);
+
+    FsFile progressFile;
+    assert(Storage.openFileForWrite("TST", cachePath + "/progress.bin", progressFile));
+    const uint8_t progressBytes[4] = {9, 0, 0, 0};
+    progressFile.write(progressBytes, sizeof(progressBytes));
+    progressFile.close();
+    writeTxtIndexFile(cachePath + "/index.bin", 40);
+
+    BookProgressDataStore::ProgressData progress;
+    assert(BookProgressDataStore::loadProgress(bookPath, progress));
+    assert(progress.kind == BookProgressDataStore::BookKind::Txt);
+    assert(progress.page == 10);
+    assert(progress.pageCount == 40);
+    assert(std::fabs(progress.percent - 25.0f) < 0.01f);
+    assert(BookProgressDataStore::formatPositionLabel(progress) == "10/40 25%");
+  }
+
+  {
+    const std::string bookPath = "/books/demo.md";
+    const std::string cachePath = buildCachePath("md_", bookPath);
+
+    FsFile progressFile;
+    assert(Storage.openFileForWrite("TST", cachePath + "/progress.bin", progressFile));
+    const uint8_t progressBytes[4] = {4, 0, 0, 0};
+    progressFile.write(progressBytes, sizeof(progressBytes));
+    progressFile.close();
+    writeMarkdownSectionFile(cachePath + "/md_section.bin", 20);
+
+    BookProgressDataStore::ProgressData progress;
+    assert(BookProgressDataStore::loadProgress(bookPath, progress));
+    assert(progress.kind == BookProgressDataStore::BookKind::Markdown);
+    assert(progress.page == 5);
+    assert(progress.pageCount == 20);
+    assert(std::fabs(progress.percent - 25.0f) < 0.01f);
+  }
+
+  {
+    const std::string bookPath = "/books/fallback.md";
+    const std::string cachePath = buildCachePath("txt_", bookPath);
+
+    FsFile progressFile;
+    assert(Storage.openFileForWrite("TST", cachePath + "/progress.bin", progressFile));
+    const uint8_t progressBytes[4] = {1, 0, 0, 0};
+    progressFile.write(progressBytes, sizeof(progressBytes));
+    progressFile.close();
+    writeTxtIndexFile(cachePath + "/index.bin", 10, 1);
+
+    BookProgressDataStore::ProgressData progress;
+    assert(BookProgressDataStore::loadProgress(bookPath, progress));
+    assert(progress.kind == BookProgressDataStore::BookKind::Markdown);
+    assert(progress.page == 2);
+    assert(progress.pageCount == 10);
+    assert(std::fabs(progress.percent - 20.0f) < 0.01f);
+  }
+
+  {
+    const std::string bookPath = "/books/demo.epub";
+    const std::string cachePath = buildCachePath("epub_", bookPath);
+
+    FsFile progressFile;
+    assert(Storage.openFileForWrite("TST", cachePath + "/progress.bin", progressFile));
+    const uint8_t progressBytes[6] = {1, 0, 4, 0, 10, 0};
+    progressFile.write(progressBytes, sizeof(progressBytes));
+    progressFile.close();
+    writeEpubBookCache(cachePath + "/book.bin", {100, 300, 600});
+
+    BookProgressDataStore::ProgressData progress;
+    assert(BookProgressDataStore::loadProgress(bookPath, progress));
+    assert(progress.kind == BookProgressDataStore::BookKind::Epub);
+    assert(progress.spineIndex == 1);
+    assert(progress.page == 5);
+    assert(progress.pageCount == 10);
+    assert(std::fabs(progress.percent - 33.33f) < 0.02f);
+    assert(BookProgressDataStore::formatPositionLabel(progress) == "Ch 2 5/10 33%");
+  }
+
+  {
+    const std::string bookPath = "/books/demo.xtc";
+    const std::string cachePath = buildCachePath("xtc_", bookPath);
+
+    FsFile progressFile;
+    assert(Storage.openFileForWrite("TST", cachePath + "/progress.bin", progressFile));
+    const uint8_t progressBytes[4] = {49, 0, 0, 0};
+    progressFile.write(progressBytes, sizeof(progressBytes));
+    progressFile.close();
+    writeXtcHeaderFile(bookPath, 100);
+
+    BookProgressDataStore::ProgressData progress;
+    assert(BookProgressDataStore::loadProgress(bookPath, progress));
+    assert(progress.kind == BookProgressDataStore::BookKind::Xtc);
+    assert(progress.page == 50);
+    assert(progress.pageCount == 100);
+    assert(std::fabs(progress.percent - 50.0f) < 0.01f);
+  }
+
+  BookProgressDataStore::ProgressData missingProgress;
+  assert(!BookProgressDataStore::loadProgress("/books/missing.epub", missingProgress));
+  assert(BookProgressDataStore::supportsBookPath("/books/demo.epub"));
+  assert(!BookProgressDataStore::supportsBookPath("/books/demo.pdf"));
+
+  std::cout << "Book progress data storage tests passed!" << std::endl;
 }
 
 // ── New tests ─────────────────────────────────────────────────────────────
@@ -590,6 +825,8 @@ int main() {
   testTodoPlannerStorageSelection();
   testInputValidation();
   testFeatureCatalogApi();
+  testPokemonBookDataStore();
+  testBookProgressDataStore();
   testSettingsRoundTrip();
   testSettingsTruncatedLoad();
   testPathUtilsSecurity();

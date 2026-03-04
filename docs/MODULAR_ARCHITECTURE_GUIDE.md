@@ -145,6 +145,7 @@ Behavior:
 | Calibre Sync | `ENABLE_CALIBRE_SYNC` | ~17KB | ✅ Stable | `ENABLE_INTEGRATIONS` |
 | Background Server | `ENABLE_BACKGROUND_SERVER` | ~4KB | ✅ Stable | None |
 | Web Pokedex Plugin | `ENABLE_WEB_POKEDEX_PLUGIN` | ~34KB | ✅ Stable | None |
+| Pokemon Party | `ENABLE_POKEMON_PARTY` | ~4KB | ✅ Stable | `ENABLE_WEB_POKEDEX_PLUGIN` |
 
 ## Testing Strategy
 

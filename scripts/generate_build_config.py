@@ -94,6 +94,12 @@ FEATURES = {
         size_kb=11,
         description='Browser-side Pokemon wallpaper generator at /plugins/pokedex'
     ),
+    'pokemon_party': Feature(
+        name='Pokemon Party',
+        flag='ENABLE_POKEMON_PARTY',
+        size_kb=4,
+        description='Per-book Pokemon metadata and REST API for recent-book party views'
+    ),
     'epub_support': Feature(
         name='EPUB Support',
         flag='ENABLE_EPUB_SUPPORT',
@@ -264,6 +270,13 @@ FEATURE_METADATA = {
         implemented=True,
         stable=True,
         requires=['image_sleep'],
+        conflicts=[],
+        recommends=[]
+    ),
+    'pokemon_party': FeatureMetadata(
+        implemented=True,
+        stable=True,
+        requires=['web_pokedex_plugin'],
         conflicts=[],
         recommends=[]
     ),

@@ -10,6 +10,11 @@ This document describes all HTTP and WebSocket endpoints available on the CrossP
     - [GET `/api/status` - Device Status](#get-apistatus---device-status)
     - [GET `/api/plugins` - Compile-Time Feature Manifest](#get-apiplugins---compile-time-feature-manifest)
     - [GET `/api/files` - List Files](#get-apifiles---list-files)
+    - [GET `/api/recent` - Recent Books](#get-apirecent---recent-books)
+    - [GET `/api/book-progress` - Book Progress](#get-apibook-progress---book-progress)
+    - [GET `/api/book-pokemon` - Book Pokemon Metadata](#get-apibook-pokemon---book-pokemon-metadata)
+    - [PUT `/api/book-pokemon` - Save Book Pokemon Metadata](#put-apibook-pokemon---save-book-pokemon-metadata)
+    - [DELETE `/api/book-pokemon` - Clear Book Pokemon Metadata](#delete-apibook-pokemon---clear-book-pokemon-metadata)
     - [POST `/api/todo/entry` - Add TODO or Agenda Entry](#post-apitodoentry---add-todo-or-agenda-entry)
     - [GET `/api/todo/today` - Read Daily Planner Entries](#get-apitodotoday---read-daily-planner-entries)
     - [POST `/api/todo/today` - Save Daily Planner Entries](#post-apitodotoday---save-daily-planner-entries)
@@ -156,6 +161,254 @@ curl "http://crosspoint.local/api/files?path=/Books"
 **Notes:**
 - Hidden files (starting with `.`) are automatically filtered out
 - System folders (`System Volume Information`, `XTCache`) are hidden
+
+---
+
+### GET `/api/recent` - Recent Books
+
+Returns the current recent-books list with derived reading progress. When the
+Pokemon Party module is compiled in and a book has an assignment, the same
+response also includes the saved Pokemon metadata for that book.
+
+**Request:**
+```bash
+curl http://crosspoint.local/api/recent
+```
+
+**Response (200 OK, example):**
+```json
+[
+  {
+    "path": "/Books/MyBook.epub",
+    "title": "My Book",
+    "author": "A. Author",
+    "last_position": "Ch 3 4/12 27%",
+    "last_opened": 0,
+    "hasCover": true,
+    "progress": {
+      "format": "epub",
+      "percent": 27.32,
+      "page": 4,
+      "pageCount": 12,
+      "position": "Ch 3 4/12 27%",
+      "spineIndex": 2
+    },
+    "pokemon": {
+      "id": 4,
+      "name": "charmander"
+    }
+  }
+]
+```
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `path` | string | Absolute SD path of the recent book |
+| `title` | string | Cached display title |
+| `author` | string | Cached author |
+| `last_position` | string | Human-readable cached progress label, or `""` when no progress is cached |
+| `last_opened` | number | Compatibility placeholder, currently always `0` |
+| `hasCover` | boolean | `true` when the recent-book cache already has a cover BMP |
+| `progress` | object or `null` | Derived progress payload from the book cache |
+| `pokemon` | object | Saved Pokemon metadata when `ENABLE_POKEMON_PARTY` is enabled and the book has an assignment |
+
+**`progress` fields:**
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `format` | string | One of `epub`, `txt`, `markdown`, or `xtc` |
+| `percent` | number | Reading progress percentage, rounded to 2 decimals |
+| `page` | number | Current 1-based display page |
+| `pageCount` | number | Total pages for the current section/book |
+| `position` | string | Same formatted progress label used by `last_position` |
+| `spineIndex` | number | EPUB-only 0-based spine/chapter index |
+
+**Notes:**
+- `pokemon` is omitted entirely unless the Pokemon Party API is compiled in and
+  metadata exists for that book.
+- Supported cached progress sources are `.epub`, `.txt`, `.md`, `.xtc`, and `.xtch`.
+
+---
+
+### GET `/api/book-progress` - Book Progress
+
+Returns normalized cached progress for a single supported book file.
+
+**Request:**
+```bash
+curl "http://crosspoint.local/api/book-progress?path=/Books/MyBook.epub"
+```
+
+**Query Parameters:**
+
+| Parameter | Required | Description |
+| --------- | -------- | ----------- |
+| `path` | Yes | Absolute SD path to a supported book |
+
+**Response (200 OK, example):**
+```json
+{
+  "path": "/Books/MyBook.epub",
+  "progress": {
+    "format": "epub",
+    "percent": 27.32,
+    "page": 4,
+    "pageCount": 12,
+    "position": "Ch 3 4/12 27%",
+    "spineIndex": 2
+  }
+}
+```
+
+If no cached progress exists yet, the endpoint still returns `200 OK` with:
+
+```json
+{
+  "path": "/Books/MyBook.epub",
+  "progress": null
+}
+```
+
+**Error Responses:**
+
+| Status | Body | Cause |
+| ------ | ---- | ----- |
+| 400 | `Missing path` | `path` parameter missing |
+| 400 | `Invalid path` | Path fails SD path validation |
+| 400 | `Unsupported book type` | File extension is not one of `.epub`, `.txt`, `.md`, `.xtc`, `.xtch` |
+| 403 | `Cannot access protected items` | Path targets protected storage |
+| 404 | `Book not found` | File does not exist |
+
+**Notes:**
+- `page` is always 1-based for display.
+- `spineIndex` is present only for EPUB progress and remains 0-based.
+
+---
+
+### GET `/api/book-pokemon` - Book Pokemon Metadata
+
+Returns saved Pokemon metadata for a single supported book.
+
+This route is only registered when `ENABLE_POKEMON_PARTY` is enabled. When the
+feature is disabled the route does not exist and the webserver returns `404`.
+
+**Request:**
+```bash
+curl "http://crosspoint.local/api/book-pokemon?path=/Books/MyBook.epub"
+```
+
+**Response (200 OK, example):**
+```json
+{
+  "path": "/Books/MyBook.epub",
+  "pokemon": {
+    "id": 25,
+    "name": "pikachu",
+    "types": ["electric"],
+    "evolutionChain": [
+      {"id": 172, "name": "pichu", "minLevel": null, "trigger": "friendship"},
+      {"id": 25, "name": "pikachu", "minLevel": null, "trigger": null},
+      {"id": 26, "name": "raichu", "minLevel": null, "trigger": "use-item"}
+    ]
+  }
+}
+```
+
+If the book has no assignment yet, the endpoint returns `200 OK` with
+`"pokemon": null`.
+
+**Error Responses:**
+
+| Status | Body | Cause |
+| ------ | ---- | ----- |
+| 400 | `Missing path` | `path` parameter missing |
+| 400 | `Invalid path` | Path fails SD path validation |
+| 400 | `Unsupported book type` | File extension is not one of `.epub`, `.txt`, `.md`, `.xtc`, `.xtch` |
+| 403 | `Cannot access protected items` | Path targets protected storage |
+| 404 | `Book not found` | File does not exist |
+
+---
+
+### PUT `/api/book-pokemon` - Save Book Pokemon Metadata
+
+Stores or replaces Pokemon metadata for a supported book. The payload is saved
+in the book's cache sidecar (`pokemon.json`).
+
+This route is only registered when `ENABLE_POKEMON_PARTY` is enabled.
+
+**Request:**
+```bash
+curl -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/Books/MyBook.epub","pokemon":{"id":1,"name":"bulbasaur","types":["grass","poison"]}}' \
+  http://crosspoint.local/api/book-pokemon
+```
+
+**JSON Body:**
+
+| Field | Required | Description |
+| ----- | -------- | ----------- |
+| `path` | Yes | Absolute SD path to a supported book |
+| `pokemon` | Yes | Arbitrary JSON object to persist as the book's Pokemon metadata |
+
+**Response (200 OK):**
+```json
+{
+  "ok": true,
+  "path": "/Books/MyBook.epub",
+  "pokemon": {
+    "id": 1,
+    "name": "bulbasaur",
+    "types": ["grass", "poison"]
+  }
+}
+```
+
+**Error Responses:**
+
+| Status | Body | Cause |
+| ------ | ---- | ----- |
+| 400 | `Missing body` | No request body was sent |
+| 400 | `Invalid JSON body` | Request body is not valid JSON |
+| 400 | `Missing path` | `path` missing or empty |
+| 400 | `Missing pokemon object` | `pokemon` is absent or not an object |
+| 400 | `Invalid path` | Path fails SD path validation |
+| 400 | `Unsupported book type` | File extension is not one of `.epub`, `.txt`, `.md`, `.xtc`, `.xtch` |
+| 403 | `Cannot access protected items` | Path targets protected storage |
+| 404 | `Book not found` | File does not exist |
+| 500 | `Failed to save pokemon data` | Sidecar write failed |
+
+---
+
+### DELETE `/api/book-pokemon` - Clear Book Pokemon Metadata
+
+Deletes the saved Pokemon assignment for a supported book.
+
+This route is only registered when `ENABLE_POKEMON_PARTY` is enabled.
+
+**Request:**
+```bash
+curl -X DELETE "http://crosspoint.local/api/book-pokemon?path=/Books/MyBook.epub"
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true,
+  "path": "/Books/MyBook.epub"
+}
+```
+
+**Error Responses:**
+
+| Status | Body | Cause |
+| ------ | ---- | ----- |
+| 400 | `Missing path` | `path` parameter missing |
+| 400 | `Invalid path` | Path fails SD path validation |
+| 400 | `Unsupported book type` | File extension is not one of `.epub`, `.txt`, `.md`, `.xtc`, `.xtch` |
+| 403 | `Cannot access protected items` | Path targets protected storage |
+| 404 | `Book not found` | File does not exist |
+| 500 | `Failed to delete pokemon data` | Sidecar delete failed |
 
 ---
 

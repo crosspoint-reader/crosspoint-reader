@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 
 #include "CrossPointSettings.h"
@@ -24,9 +25,11 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "util/AnkiStore.h"
+#include "util/BookProgressDataStore.h"
 #include "util/DateUtils.h"
 #include "util/InputValidation.h"
 #include "util/PathUtils.h"
+#include "util/PokemonBookDataStore.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -119,6 +122,17 @@ void appendTodoItemFromLine(JsonArray& array, std::string line) {
   }
 }
 
+void appendProgressJson(JsonObject target, const BookProgressDataStore::ProgressData& progress) {
+  target["format"] = BookProgressDataStore::kindName(progress.kind);
+  target["percent"] = std::round(progress.percent * 100.0f) / 100.0f;
+  target["page"] = progress.page;
+  target["pageCount"] = progress.pageCount;
+  target["position"] = BookProgressDataStore::formatPositionLabel(progress);
+  if (progress.spineIndex >= 0) {
+    target["spineIndex"] = progress.spineIndex;
+  }
+}
+
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -203,6 +217,11 @@ void CrossPointWebServer::begin() {
   if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::PokedexPluginPage)) {
     server->on("/plugins/pokedex", HTTP_GET, [this] { handlePokedexPluginPage(); });
   }
+  if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::PokemonPartyApi)) {
+    server->on("/api/book-pokemon", HTTP_GET, [this] { handleGetBookPokemon(); });
+    server->on("/api/book-pokemon", HTTP_PUT, [this] { handlePutBookPokemon(); });
+    server->on("/api/book-pokemon", HTTP_DELETE, [this] { handleDeleteBookPokemon(); });
+  }
   if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::WallpaperPluginPage)) {
     server->on("/plugins/wallpaper", HTTP_GET, [this] { handleWallpaperPluginPage(); });
   }
@@ -226,6 +245,7 @@ void CrossPointWebServer::begin() {
   }
 
   // API endpoints for web UI (recent books, cover images, sleep cover picker)
+  server->on("/api/book-progress", HTTP_GET, [this] { handleGetBookProgress(); });
   server->on("/api/recent", HTTP_GET, [this] { handleRecentBooks(); });
   server->on("/api/cover", HTTP_GET, [this] { handleCover(); });
   server->on("/api/sleep-images", HTTP_GET, [this] { handleSleepImages(); });
@@ -2088,13 +2108,12 @@ void CrossPointWebServer::handleFontUploadPost() {
 
 void CrossPointWebServer::handleRecentBooks() const {
   const auto& books = RECENT_BOOKS.getBooks();
+  const bool includePokemon = core::FeatureModules::hasCapability(core::Capability::PokemonParty);
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
 
@@ -2107,19 +2126,222 @@ void CrossPointWebServer::handleRecentBooks() const {
     doc["last_opened"] = 0;
     doc["hasCover"] = !book.coverBmpPath.empty();
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) continue;
+    BookProgressDataStore::ProgressData progress;
+    if (BookProgressDataStore::loadProgress(book.path, progress)) {
+      doc["last_position"] = BookProgressDataStore::formatPositionLabel(progress);
+      appendProgressJson(doc["progress"].to<JsonObject>(), progress);
+    } else {
+      doc["progress"] = nullptr;
+    }
+
+    if (includePokemon) {
+      JsonDocument pokemonDoc;
+      if (PokemonBookDataStore::loadPokemonDocument(book.path, pokemonDoc) && pokemonDoc["pokemon"].is<JsonObject>()) {
+        doc["pokemon"] = pokemonDoc["pokemon"];
+      }
+    }
 
     if (seenFirst) {
       server->sendContent(",");
     } else {
       seenFirst = true;
     }
+
+    String output;
+    serializeJson(doc, output);
     server->sendContent(output);
   }
 
   server->sendContent("]");
   server->sendContent("");
+}
+
+void CrossPointWebServer::handleGetBookProgress() const {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+
+  String bookPath = PathUtils::urlDecode(server->arg("path"));
+  if (!PathUtils::isValidSdPath(bookPath)) {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+
+  bookPath = PathUtils::normalizePath(bookPath);
+  if (pathContainsProtectedItem(bookPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
+    return;
+  }
+
+  if (!Storage.exists(bookPath.c_str())) {
+    server->send(404, "text/plain", "Book not found");
+    return;
+  }
+
+  if (!BookProgressDataStore::supportsBookPath(bookPath.c_str())) {
+    server->send(400, "text/plain", "Unsupported book type");
+    return;
+  }
+
+  JsonDocument response;
+  response["path"] = bookPath;
+
+  BookProgressDataStore::ProgressData progress;
+  if (BookProgressDataStore::loadProgress(bookPath.c_str(), progress)) {
+    appendProgressJson(response["progress"].to<JsonObject>(), progress);
+  } else {
+    response["progress"] = nullptr;
+  }
+
+  String json;
+  serializeJson(response, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleGetBookPokemon() const {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+
+  String bookPath = PathUtils::urlDecode(server->arg("path"));
+  if (!PathUtils::isValidSdPath(bookPath)) {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+
+  bookPath = PathUtils::normalizePath(bookPath);
+  if (pathContainsProtectedItem(bookPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
+    return;
+  }
+
+  if (!Storage.exists(bookPath.c_str())) {
+    server->send(404, "text/plain", "Book not found");
+    return;
+  }
+
+  if (!PokemonBookDataStore::supportsBookPath(bookPath.c_str())) {
+    server->send(400, "text/plain", "Unsupported book type");
+    return;
+  }
+
+  JsonDocument response;
+  response["path"] = bookPath;
+
+  JsonDocument pokemonDoc;
+  if (PokemonBookDataStore::loadPokemonDocument(bookPath.c_str(), pokemonDoc) &&
+      pokemonDoc["pokemon"].is<JsonObject>()) {
+    response["pokemon"] = pokemonDoc["pokemon"];
+  } else {
+    response["pokemon"] = nullptr;
+  }
+
+  String json;
+  serializeJson(response, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handlePutBookPokemon() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing body");
+    return;
+  }
+
+  JsonDocument request;
+  if (deserializeJson(request, server->arg("plain"))) {
+    server->send(400, "text/plain", "Invalid JSON body");
+    return;
+  }
+
+  const String rawPath = request["path"] | "";
+  if (rawPath.isEmpty()) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+
+  if (!request["pokemon"].is<JsonObject>()) {
+    server->send(400, "text/plain", "Missing pokemon object");
+    return;
+  }
+
+  if (!PathUtils::isValidSdPath(rawPath)) {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+
+  const String bookPath = PathUtils::normalizePath(rawPath);
+  if (pathContainsProtectedItem(bookPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
+    return;
+  }
+
+  if (!Storage.exists(bookPath.c_str())) {
+    server->send(404, "text/plain", "Book not found");
+    return;
+  }
+
+  if (!PokemonBookDataStore::supportsBookPath(bookPath.c_str())) {
+    server->send(400, "text/plain", "Unsupported book type");
+    return;
+  }
+
+  if (!PokemonBookDataStore::savePokemonDocument(bookPath.c_str(), request["pokemon"])) {
+    server->send(500, "text/plain", "Failed to save pokemon data");
+    return;
+  }
+
+  JsonDocument response;
+  response["ok"] = true;
+  response["path"] = bookPath;
+  response["pokemon"] = request["pokemon"];
+
+  String json;
+  serializeJson(response, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleDeleteBookPokemon() {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+
+  String bookPath = PathUtils::urlDecode(server->arg("path"));
+  if (!PathUtils::isValidSdPath(bookPath)) {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+
+  bookPath = PathUtils::normalizePath(bookPath);
+  if (pathContainsProtectedItem(bookPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
+    return;
+  }
+
+  if (!Storage.exists(bookPath.c_str())) {
+    server->send(404, "text/plain", "Book not found");
+    return;
+  }
+
+  if (!PokemonBookDataStore::supportsBookPath(bookPath.c_str())) {
+    server->send(400, "text/plain", "Unsupported book type");
+    return;
+  }
+
+  if (!PokemonBookDataStore::deletePokemonDocument(bookPath.c_str())) {
+    server->send(500, "text/plain", "Failed to delete pokemon data");
+    return;
+  }
+
+  JsonDocument response;
+  response["ok"] = true;
+  response["path"] = bookPath;
+
+  String json;
+  serializeJson(response, json);
+  server->send(200, "application/json", json);
 }
 
 void CrossPointWebServer::handleCover() const {

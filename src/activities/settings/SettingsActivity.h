@@ -18,6 +18,7 @@ enum class SettingAction {
   CustomiseStatusBar,
   KOReaderSync,
   OPDSBrowser,
+  PokemonParty,
   Network,
   ClearCache,
   CheckForUpdates,

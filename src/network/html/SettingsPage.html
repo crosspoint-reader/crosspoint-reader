@@ -294,6 +294,17 @@
     </div>
   </div>
 
+  <div class="card" id="pokedex-container" style="display:none;">
+    <h2 id="pokedex-title">Pokedex</h2>
+    <p id="pokedex-description" style="font-size:0.8em; color:var(--gray-4); margin-bottom:10px;">
+      Generate Pokedex sleep wallpapers and upload them to <code>/sleep/pokedex</code>.
+    </p>
+    <div style="text-align: center; margin-top: 10px;">
+      <a class="save-btn" id="pokedex-link" href="/plugins/pokedex"
+         style="display:inline-block; padding:8px 20px; font-size:0.8em; text-decoration:none;">Open Pokedex</a>
+    </div>
+  </div>
+
   <div class="card" id="wifi-container" style="display:none;">
     <h2>WiFi Setup</h2>
     <div id="wifi-networks">
@@ -335,6 +346,7 @@
   const BACKGROUND_SERVER_MODE_ALWAYS = 2;
   const BACKGROUND_SERVER_ALWAYS_WARNING =
     'Always keeps WiFi and the file server active while the device is awake. This uses much more battery.';
+  const POKEDEX_PLUGIN_PATH = '/plugins/pokedex';
   const SETTING_DISPLAY_NAMES = {
     usbMscPromptOnConnect: 'USB Mass Storage Prompt'
   };
@@ -440,12 +452,37 @@
     return SETTING_DISPLAY_NAMES[setting.key] || setting.name || '';
   }
 
+  function updatePokedexCard(features) {
+    const card = document.getElementById('pokedex-container');
+    const title = document.getElementById('pokedex-title');
+    const description = document.getElementById('pokedex-description');
+    const link = document.getElementById('pokedex-link');
+    if (!card || !title || !description || !link) return;
+
+    const hasPokedex = !!(features && features.web_pokedex_plugin);
+    const hasPokemonParty = !!(features && features.pokemon_party);
+
+    if (!hasPokedex) {
+      card.style.display = 'none';
+      return;
+    }
+
+    title.textContent = hasPokemonParty ? 'Pokemon Party' : 'Pokedex';
+    description.innerHTML = hasPokemonParty
+      ? 'Open the Pokedex plugin to assign Pokemon to the first 6 recent books, inspect reading-based levels, and generate sleep wallpapers.'
+      : 'Generate Pokedex sleep wallpapers and upload them to <code>/sleep/pokedex</code>.';
+    link.href = POKEDEX_PLUGIN_PATH;
+    link.textContent = hasPokemonParty ? 'Open Party Tools' : 'Open Pokedex';
+    card.style.display = 'block';
+  }
+
   async function loadSettings() {
     try {
       // Check features first to see if we should show WiFi setup
       const featResponse = await fetch('/api/plugins');
       if (featResponse.ok) {
         const features = await featResponse.json();
+        updatePokedexCard(features);
         if (features.web_wifi_setup) {
           document.getElementById('wifi-container').style.display = 'block';
         }

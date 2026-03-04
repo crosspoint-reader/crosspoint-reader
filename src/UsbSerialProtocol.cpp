@@ -17,6 +17,7 @@
 #include "activities/todo/TodoPlannerStorage.h"
 #include "core/features/FeatureModules.h"
 #include "esp_ota_ops.h"
+#include "util/BookProgressDataStore.h"
 #include "util/DateUtils.h"
 #include "util/PathUtils.h"
 
@@ -474,8 +475,13 @@ static void handleRecent() {
     entry["path"] = book.path.c_str();
     entry["title"] = book.title.c_str();
     entry["author"] = book.author.c_str();
-    entry["last_position"] = "";         // not yet persisted
+    entry["last_position"] = "";
     entry["last_opened"] = (uint32_t)0;  // not yet persisted
+
+    BookProgressDataStore::ProgressData progress;
+    if (BookProgressDataStore::loadProgress(book.path, progress)) {
+      entry["last_position"] = BookProgressDataStore::formatPositionLabel(progress);
+    }
 
     if (coverPath.empty()) {
       serializeJson(entry, logSerial);

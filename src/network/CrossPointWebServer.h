@@ -154,6 +154,10 @@ class CrossPointWebServer {
 
   // API handlers for web UI
   void handleRecentBooks() const;
+  void handleGetBookProgress() const;
+  void handleGetBookPokemon() const;
+  void handlePutBookPokemon();
+  void handleDeleteBookPokemon();
   void handleCover() const;
   void handleSleepImages() const;
   void handleSleepCoverGet() const;

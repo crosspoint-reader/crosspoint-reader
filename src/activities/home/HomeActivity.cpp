@@ -57,9 +57,25 @@ std::string HomeActivity::fallbackAuthor(const RecentBook& book) {
   return "";
 }
 
+bool HomeActivity::isPokemonPartyHomeMode() const {
+  return SETTINGS.uiTheme == CrossPointSettings::FORK_DRIFT &&
+         core::FeatureModules::hasCapability(core::Capability::PokemonParty);
+}
+
 void HomeActivity::rebuildMenuLayout() {
   const bool forkDrift = SETTINGS.uiTheme == CrossPointSettings::FORK_DRIFT;
   if (forkDrift) {
+    if (isPokemonPartyHomeMode()) {
+      menuOpenBookIndex = -1;
+      menuMyLibraryIndex = -1;
+      menuOpdsIndex = -1;
+      menuTodoIndex = -1;
+      menuAnkiIndex = -1;
+      menuFileTransferIndex = -1;
+      menuSettingsIndex = 0;
+      menuItemCount = 1;
+      return;
+    }
     menuOpenBookIndex = -1;
     int idx = 0;
     menuMyLibraryIndex = idx++;
@@ -188,6 +204,12 @@ void HomeActivity::openSelectedBook() {
 }
 
 std::string HomeActivity::getMenuItemLabel(const int index) const {
+  if (isPokemonPartyHomeMode()) {
+    if (index == menuSettingsIndex) {
+      return "Settings";
+    }
+    return "";
+  }
   if (index == menuOpenBookIndex) {
     return recentBooks.empty() ? "Open Book (empty)" : "Open Book";
   }
@@ -355,29 +377,37 @@ void HomeActivity::loop() {
     const bool upPressed = mappedInput.wasPressed(MappedInputManager::Button::Up);
     const bool downPressed = mappedInput.wasPressed(MappedInputManager::Button::Down);
     const bool forkDrift = SETTINGS.uiTheme == CrossPointSettings::FORK_DRIFT;
+    const bool pokemonPartyHomeMode = isPokemonPartyHomeMode();
+
+    if (pokemonPartyHomeMode && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      activityManager.goToRecentBooks();
+      return;
+    }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (forkDrift) {
         if (inButtonGrid) {
-          if (selectedMenuIndex == menuMyLibraryIndex) {
-            onMyLibraryOpen();
-            return;
-          }
-          if (selectedMenuIndex == menuTodoIndex) {
-            onTodoOpen();
-            return;
-          }
-          if (selectedMenuIndex == menuAnkiIndex) {
-            onAnkiOpen();
-            return;
-          }
-          if (selectedMenuIndex == menuFileTransferIndex) {
-            onFileTransferOpen();
-            return;
-          }
           if (selectedMenuIndex == menuSettingsIndex) {
             onSettingsOpen();
             return;
+          }
+          if (!pokemonPartyHomeMode) {
+            if (selectedMenuIndex == menuMyLibraryIndex) {
+              onMyLibraryOpen();
+              return;
+            }
+            if (selectedMenuIndex == menuTodoIndex) {
+              onTodoOpen();
+              return;
+            }
+            if (selectedMenuIndex == menuAnkiIndex) {
+              onAnkiOpen();
+              return;
+            }
+            if (selectedMenuIndex == menuFileTransferIndex) {
+              onFileTransferOpen();
+              return;
+            }
           }
         } else if (!recentBooks.empty()) {
           openSelectedBook();
@@ -423,7 +453,7 @@ void HomeActivity::loop() {
       if (inButtonGrid) {
         constexpr int btnCols = 2;
         constexpr int btnRows = 2;
-        if (leftPressed || rightPressed) {
+        if (!pokemonPartyHomeMode && (leftPressed || rightPressed)) {
           int col = selectedMenuIndex % btnCols;
           int row = selectedMenuIndex / btnCols;
           if (leftPressed)
@@ -434,16 +464,17 @@ void HomeActivity::loop() {
           requestUpdate();
         }
         if (upPressed) {
-          int row = selectedMenuIndex / 2;
-          if (row == 0) {
+          const int row = selectedMenuIndex / 2;
+          if (row == 0 && bookCount > 0) {
             inButtonGrid = false;
             selectedBookIndex = std::min(selectedBookIndex, bookCount - 1);
             selectedBookIndex = std::max(0, selectedBookIndex);
-          } else {
+            requestUpdate();
+          } else if (!pokemonPartyHomeMode && row > 0) {
             selectedMenuIndex -= 2;
             requestUpdate();
           }
-        } else if (downPressed) {
+        } else if (!pokemonPartyHomeMode && downPressed) {
           int row = selectedMenuIndex / 2;
           if (row < btnRows - 1) {
             selectedMenuIndex += 2;
@@ -562,20 +593,28 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.reserve(6);
 
     if (forkDrift) {
+      const bool pokemonPartyHomeMode = isPokemonPartyHomeMode();
       menuLabels.push_back(tr(STR_BOOKS));
       menuIcons.push_back(Folder);
-      if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false)) {
-        menuLabels.push_back("Agenda");
-        menuIcons.push_back(Text);
+      if (pokemonPartyHomeMode) {
+        menuLabels.clear();
+        menuIcons.clear();
+        menuLabels.push_back(tr(STR_SETTINGS_TITLE));
+        menuIcons.push_back(Settings);
+      } else {
+        if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false)) {
+          menuLabels.push_back("Agenda");
+          menuIcons.push_back(Text);
+        }
+        if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false)) {
+          menuLabels.push_back("Anki");
+          menuIcons.push_back(Text);  // Using Text icon as placeholder
+        }
+        menuLabels.push_back(tr(STR_FILE_TRANSFER));
+        menuIcons.push_back(Transfer);
+        menuLabels.push_back(tr(STR_SETTINGS_TITLE));
+        menuIcons.push_back(Settings);
       }
-      if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false)) {
-        menuLabels.push_back("Anki");
-        menuIcons.push_back(Text);  // Using Text icon as placeholder
-      }
-      menuLabels.push_back(tr(STR_FILE_TRANSFER));
-      menuIcons.push_back(Transfer);
-      menuLabels.push_back(tr(STR_SETTINGS_TITLE));
-      menuIcons.push_back(Settings);
     } else {
       menuLabels.push_back(recentBooks.empty() ? "Open Book (empty)" : "Open Book");
       menuIcons.push_back(Book);
@@ -606,7 +645,8 @@ void HomeActivity::render(RenderLock&&) {
         static_cast<int>(menuLabels.size()), menuSelector, [&menuLabels](const int index) { return menuLabels[index]; },
         [&menuIcons](const int index) { return menuIcons[index]; });
 
-    const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    const char* backLabel = isPokemonPartyHomeMode() ? "Party" : "";
+    const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
     constexpr int margin = 20;

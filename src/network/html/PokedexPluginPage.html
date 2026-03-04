@@ -192,12 +192,137 @@
       padding: 1px 4px;
     }
 
+    .party-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .party-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .party-slot {
+      border: 2px solid var(--black);
+      background: var(--white);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .party-book {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .party-cover {
+      width: 72px;
+      aspect-ratio: 3 / 4;
+      border: 2px solid var(--black);
+      background: var(--gray-10);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 0.72em;
+      padding: 6px;
+    }
+
+    .party-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .party-meta {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .party-book-title {
+      font-size: 0.9em;
+      font-weight: 700;
+      line-height: 1.25;
+      word-break: break-word;
+    }
+
+    .party-book-author {
+      font-size: 0.78em;
+      color: var(--gray-4);
+      word-break: break-word;
+    }
+
+    .party-book-progress {
+      font-size: 0.76em;
+      color: var(--gray-4);
+      word-break: break-word;
+      line-height: 1.35;
+    }
+
+    .party-pokemon {
+      border-top: 1px dashed var(--gray-8);
+      padding-top: 8px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .party-pokemon-name {
+      font-size: 0.82em;
+      font-weight: 700;
+    }
+
+    .party-pokemon-empty,
+    .party-pokemon-line {
+      font-size: 0.76em;
+      color: var(--gray-4);
+      line-height: 1.35;
+    }
+
+    .party-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .party-chip {
+      border: 1px solid var(--black);
+      background: var(--gray-10);
+      padding: 2px 6px;
+      font-size: 0.72em;
+    }
+
+    .party-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .party-actions .btn {
+      flex: 1 1 120px;
+    }
+
+    .party-status {
+      margin: 0 0 12px;
+    }
+
     @media (max-width: 780px) {
       .layout {
         grid-template-columns: 1fr;
       }
       canvas {
         max-width: 360px;
+      }
+      .party-header {
+        flex-direction: column;
       }
     }
   </style>
@@ -353,6 +478,18 @@
   </div>
 </div>
 
+<div class="card" id="partyCard" style="display:none;">
+  <div class="party-header">
+    <div>
+      <h1 style="font-size:1.35em; margin-bottom:4px;">Recent Books Party</h1>
+      <p class="subtitle">Your first 6 recent books are the party. Assign the current preview to save Pokemon family data in each book cache.</p>
+    </div>
+    <button class="btn secondary" id="refreshPartyBtn" type="button">Refresh Party</button>
+  </div>
+  <div class="status party-status" id="partyStatusBox">Loading recent books...</div>
+  <div class="party-grid" id="partyGrid"></div>
+</div>
+
 <script>
   const SCREEN_WIDTH = 480;
   const SCREEN_HEIGHT = 800;
@@ -422,10 +559,17 @@
   const batchTypeSelect = document.getElementById("batchType");
   const batchPreviewBtn = document.getElementById("batchPreviewBtn");
   const batchUploadBtn = document.getElementById("batchUploadBtn");
+  const partyCard = document.getElementById("partyCard");
+  const partyGrid = document.getElementById("partyGrid");
+  const partyStatusBox = document.getElementById("partyStatusBox");
+  const refreshPartyBtn = document.getElementById("refreshPartyBtn");
 
   const spriteBoundsCache = new Map();
   const speciesDefaultPokemonCache = new Map();
   let lastRendered = null;
+  let partyFeatureEnabled = false;
+  let partyBooks = [];
+  let partyBusy = false;
 
   function setStatus(message, isError) {
     statusBox.textContent = message;
@@ -434,12 +578,29 @@
   }
 
   function setBusy(isBusy) {
+    partyBusy = isBusy;
     previewBtn.disabled = isBusy;
     downloadBtn.disabled = isBusy;
     uploadBtn.disabled = isBusy;
     randomBtn.disabled = isBusy;
     batchPreviewBtn.disabled = isBusy;
     batchUploadBtn.disabled = isBusy;
+    refreshPartyBtn.disabled = isBusy;
+    syncPartyActionButtons();
+  }
+
+  function setPartyStatus(message, isError) {
+    partyStatusBox.textContent = message;
+    partyStatusBox.style.borderColor = isError ? "#000" : "#ddd";
+    partyStatusBox.style.background = isError ? "#fff" : "#f5f5f5";
+  }
+
+  function syncPartyActionButtons() {
+    Array.from(document.querySelectorAll("[data-party-action]")).forEach(function(button) {
+      const requiresRendered = button.getAttribute("data-needs-rendered") === "1";
+      const requiresAssigned = button.getAttribute("data-has-assigned") === "1";
+      button.disabled = partyBusy || (requiresRendered && !lastRendered) || !requiresAssigned;
+    });
   }
 
   function titleCase(value) {
@@ -448,8 +609,22 @@
       .replace(/\b\w/g, function(ch) { return ch.toUpperCase(); });
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function sanitizeFilename(value) {
     return String(value).toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+  }
+
+  function extractResourceId(url) {
+    const match = String(url || "").match(/\/(\d+)\/?$/);
+    return match ? parseInt(match[1], 10) : null;
   }
 
   function getPokemonFilename(id, name) {
@@ -580,7 +755,7 @@
     return "Special";
   }
 
-  function getLinearEvolutionForms(evolutionData) {
+  function getLinearEvolutionStages(evolutionData) {
     if (!evolutionData || !evolutionData.chain) return [];
     const forms = [];
     let current = evolutionData.chain;
@@ -589,12 +764,22 @@
       forms.push({
         name: current.species && current.species.name,
         url: current.species && current.species.url,
-        text: forms.length === 0 ? null : getEvolutionText(current.evolution_details && current.evolution_details[0])
+        details: forms.length === 0 ? null : (current.evolution_details && current.evolution_details[0]) || null
       });
       current = current.evolves_to && current.evolves_to.length ? current.evolves_to[0] : null;
     }
 
     return forms.filter(function(form) { return form && form.name && form.url; });
+  }
+
+  function getLinearEvolutionForms(evolutionData) {
+    return getLinearEvolutionStages(evolutionData).map(function(form) {
+      return {
+        name: form.name,
+        url: form.url,
+        text: getEvolutionText(form.details)
+      };
+    });
   }
 
   async function getDefaultPokemonForSpecies(speciesUrl) {
@@ -1126,6 +1311,310 @@
     await ensureFolder("/sleep", "pokedex");
   }
 
+  function buildPokemonAssignmentPayload(bundle) {
+    const pokemon = bundle && bundle.pokemon;
+    if (!pokemon) {
+      throw new Error("Render a Pokemon before assigning it to a book");
+    }
+
+    const species = bundle.species || null;
+    return {
+      id: pokemon.id,
+      name: pokemon.name || "",
+      speciesId: (species && species.id) || extractResourceId(species && species.url),
+      speciesName: (species && species.name) || (pokemon.name || ""),
+      types: (pokemon.types || []).map(function(entry) {
+        return entry && entry.type && entry.type.name;
+      }).filter(Boolean),
+      sprites: {
+        pixel: getSpriteUrl(pokemon, "pixel") || "",
+        official: getSpriteUrl(pokemon, "official") || "",
+        home: getSpriteUrl(pokemon, "home") || ""
+      },
+      evolutionChain: getLinearEvolutionStages(bundle.evolution).map(function(stage, index) {
+        return {
+          order: index + 1,
+          speciesId: extractResourceId(stage.url),
+          name: stage.name || "",
+          minLevel: stage.details && typeof stage.details.min_level === "number" ? stage.details.min_level : null,
+          trigger: stage.details && stage.details.trigger && stage.details.trigger.name || null,
+          text: index === 0 ? null : getEvolutionText(stage.details)
+        };
+      }),
+      assignedAt: new Date().toISOString()
+    };
+  }
+
+  function getPartyBook(path) {
+    return partyBooks.find(function(book) { return book && book.path === path; }) || null;
+  }
+
+  function getProgressState(book) {
+    const progress = book && book.progress;
+    if (!progress || typeof progress !== "object") {
+      return null;
+    }
+
+    const rawPercent = Number(progress.percent);
+    if (!Number.isFinite(rawPercent)) {
+      return null;
+    }
+
+    return {
+      percent: Math.max(0, Math.min(100, rawPercent)),
+      percentLabel: String(Math.round(Math.max(0, Math.min(100, rawPercent)))) + "%",
+      level: Math.max(1, Math.floor(Math.max(0, Math.min(100, rawPercent)))),
+      position: progress.position ? String(progress.position) : ""
+    };
+  }
+
+  function getEvolutionState(assigned, level) {
+    if (!assigned || !Array.isArray(assigned.evolutionChain) || !Number.isFinite(level)) {
+      return null;
+    }
+
+    const chain = assigned.evolutionChain.filter(Boolean);
+    if (!chain.length) {
+      return null;
+    }
+
+    let current = chain[0];
+    let next = null;
+
+    chain.slice(1).forEach(function(entry) {
+      const minLevel = entry && typeof entry.minLevel === "number" ? entry.minLevel : null;
+      if (minLevel !== null && level >= minLevel) {
+        current = entry;
+        return;
+      }
+      if (!next) {
+        next = entry;
+      }
+    });
+
+    return { current: current, next: next };
+  }
+
+  function renderParty() {
+    if (!partyFeatureEnabled) {
+      partyCard.style.display = "none";
+      return;
+    }
+
+    partyCard.style.display = "";
+
+    if (!partyBooks.length) {
+      partyGrid.innerHTML = "";
+      setPartyStatus("No recent books yet. Open a few books first and the first 6 will become the party.", false);
+      syncPartyActionButtons();
+      return;
+    }
+
+    const html = partyBooks.map(function(book, index) {
+      const title = escapeHtml(book.title || "Untitled");
+      const author = escapeHtml(book.author || "");
+      const assigned = book.pokemon || null;
+      const progress = getProgressState(book);
+      const pokemonName = assigned && assigned.name ? titleCase(assigned.name) : "";
+      const pokemonId = assigned && assigned.id ? "#" + String(assigned.id).padStart(4, "0") : "";
+      const types = assigned && Array.isArray(assigned.types) ? assigned.types.slice(0, 2) : [];
+      const chain = assigned && Array.isArray(assigned.evolutionChain) ? assigned.evolutionChain.slice(0, 3) : [];
+      const evolutionState = assigned && progress ? getEvolutionState(assigned, progress.level) : null;
+      const progressLine = progress
+        ? "Lv " + progress.level + " - " + (progress.position || progress.percentLabel)
+        : "No reading progress yet.";
+      let pokemonHtml = '<div class="party-pokemon-empty">No Pokemon assigned yet.</div>';
+
+      if (assigned) {
+        let line = "";
+        if (chain.length) {
+          line = chain.map(function(entry) {
+            const label = titleCase(entry.name || "");
+            if (entry && typeof entry.minLevel === "number") {
+              return label + " Lv " + entry.minLevel;
+            }
+            return label;
+          }).join(" -> ");
+        }
+
+        pokemonHtml = '<div class="party-pokemon-name">' + escapeHtml([pokemonId, pokemonName].filter(Boolean).join(" ")) + '</div>';
+        if (types.length) {
+          pokemonHtml += '<div class="party-chip-row">' + types.map(function(type) {
+            return '<span class="party-chip">' + escapeHtml(String(type).toUpperCase()) + '</span>';
+          }).join("") + '</div>';
+        }
+        if (progress) {
+          pokemonHtml += '<div class="party-pokemon-line">Current level: Lv ' + progress.level + ' (' + escapeHtml(progress.percentLabel) + ' read)</div>';
+        }
+        if (evolutionState && evolutionState.current) {
+          pokemonHtml += '<div class="party-pokemon-line">Current form: ' + escapeHtml(titleCase(evolutionState.current.name || pokemonName)) + '</div>';
+          if (evolutionState.next && typeof evolutionState.next.minLevel === "number") {
+            pokemonHtml += '<div class="party-pokemon-line">Next: ' +
+              escapeHtml(titleCase(evolutionState.next.name || "")) + ' at Lv ' + evolutionState.next.minLevel + '</div>';
+          } else if (progress && progress.level >= 100) {
+            pokemonHtml += '<div class="party-pokemon-line">Book complete at Lv 100.</div>';
+          } else if (!evolutionState.next) {
+            pokemonHtml += '<div class="party-pokemon-line">Final form reached.</div>';
+          }
+        }
+        if (line) {
+          pokemonHtml += '<div class="party-pokemon-line">' + escapeHtml(line) + '</div>';
+        }
+      }
+
+      return [
+        '<div class="party-slot">',
+        '  <div class="party-book">',
+        '    <div class="party-cover">',
+               book.hasCover
+                 ? '<img src="/api/cover?path=' + encodeURIComponent(book.path) + '" alt="' + title + '" loading="lazy">'
+                 : '<span>Book</span>',
+        '    </div>',
+        '    <div class="party-meta">',
+        '      <div class="party-book-title">' + (index + 1) + '. ' + title + '</div>',
+               author ? '<div class="party-book-author">' + author + '</div>' : '',
+        '      <div class="party-book-progress">' + escapeHtml(progressLine) + '</div>',
+        '    </div>',
+        '  </div>',
+        '  <div class="party-pokemon">' + pokemonHtml + '</div>',
+        '  <div class="party-actions">',
+        '    <button class="btn" data-party-action="assign" data-path="' + encodeURIComponent(book.path) + '" data-needs-rendered="1" data-has-assigned="1" type="button">Assign Current</button>',
+        '    <button class="btn secondary" data-party-action="use" data-path="' + encodeURIComponent(book.path) + '" data-has-assigned="' + (assigned ? "1" : "0") + '" type="button">Use Assigned</button>',
+        '    <button class="btn secondary" data-party-action="clear" data-path="' + encodeURIComponent(book.path) + '" data-has-assigned="' + (assigned ? "1" : "0") + '" type="button">Clear</button>',
+        '  </div>',
+        '</div>'
+      ].join("");
+    }).join("");
+
+    partyGrid.innerHTML = html;
+
+    Array.from(partyGrid.querySelectorAll("[data-party-action='assign']")).forEach(function(button) {
+      button.addEventListener("click", function() {
+        assignCurrentPokemonToBook(decodeURIComponent(button.getAttribute("data-path") || ""));
+      });
+    });
+
+    Array.from(partyGrid.querySelectorAll("[data-party-action='use']")).forEach(function(button) {
+      button.addEventListener("click", function() {
+        useAssignedPokemon(decodeURIComponent(button.getAttribute("data-path") || ""));
+      });
+    });
+
+    Array.from(partyGrid.querySelectorAll("[data-party-action='clear']")).forEach(function(button) {
+      button.addEventListener("click", function() {
+        clearAssignedPokemon(decodeURIComponent(button.getAttribute("data-path") || ""));
+      });
+    });
+
+    setPartyStatus("Party ready. Recent books are ordered by recency and capped at 6 slots.", false);
+    syncPartyActionButtons();
+  }
+
+  async function loadPartyBooks() {
+    if (!partyFeatureEnabled) {
+      partyCard.style.display = "none";
+      return;
+    }
+
+    try {
+      setPartyStatus("Loading recent books...", false);
+      const response = await fetch("/api/recent");
+      if (!response.ok) {
+        throw new Error("Recent books request failed (" + response.status + ")");
+      }
+      const books = await response.json();
+      partyBooks = Array.isArray(books) ? books.slice(0, 6) : [];
+      renderParty();
+    } catch (error) {
+      console.error(error);
+      partyGrid.innerHTML = "";
+      setPartyStatus("Could not load recent books: " + error.message, true);
+    }
+  }
+
+  async function detectPokemonPartyApi() {
+    try {
+      const response = await fetch("/api/book-pokemon");
+      return response.status !== 404;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  }
+
+  async function assignCurrentPokemonToBook(path) {
+    if (!lastRendered || !lastRendered.bundle) {
+      setPartyStatus("Preview a Pokemon first, then assign it to a book.", true);
+      return;
+    }
+
+    const book = getPartyBook(path);
+    try {
+      setBusy(true);
+      setPartyStatus("Saving Pokemon for " + (book && book.title ? book.title : path) + "...", false);
+      const response = await fetch("/api/book-pokemon", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: path,
+          pokemon: buildPokemonAssignmentPayload(lastRendered.bundle)
+        })
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      await loadPartyBooks();
+      setPartyStatus("Saved " + titleCase(lastRendered.bundle.pokemon.name) + " to " + (book && book.title ? book.title : path) + ".", false);
+    } catch (error) {
+      console.error(error);
+      setPartyStatus("Save failed: " + error.message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function useAssignedPokemon(path) {
+    const book = getPartyBook(path);
+    if (!book || !book.pokemon) {
+      setPartyStatus("This book does not have an assigned Pokemon yet.", true);
+      return;
+    }
+
+    input.value = String(book.pokemon.id || book.pokemon.name || "");
+    renderCurrentPokemon();
+  }
+
+  async function clearAssignedPokemon(path) {
+    const book = getPartyBook(path);
+    try {
+      setBusy(true);
+      setPartyStatus("Removing Pokemon for " + (book && book.title ? book.title : path) + "...", false);
+      const response = await fetch("/api/book-pokemon?path=" + encodeURIComponent(path), {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      await loadPartyBooks();
+      setPartyStatus("Pokemon removed from " + (book && book.title ? book.title : path) + ".", false);
+    } catch (error) {
+      console.error(error);
+      setPartyStatus("Delete failed: " + error.message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function bootParty() {
+    partyFeatureEnabled = await detectPokemonPartyApi();
+    if (!partyFeatureEnabled) {
+      partyCard.style.display = "none";
+      return;
+    }
+    partyCard.style.display = "";
+    await loadPartyBooks();
+  }
+
   async function renderPokemonByInput(rawInput, options) {
     const pokemon = await fetchJson("https://pokeapi.co/api/v2/pokemon/" + encodeURIComponent(rawInput.toLowerCase()));
     const species = await fetchJson(pokemon.species.url).catch(function() { return null; });
@@ -1142,11 +1631,14 @@
       throw new Error("Pokemon sprite not available");
     }
     const sprite = await loadImage(spriteUrl);
-    await drawWallpaper({ pokemon: pokemon, species: species, evolution: evolution, encounters: encounters }, sprite, options);
+    const bundle = { pokemon: pokemon, species: species, evolution: evolution, encounters: encounters };
+    await drawWallpaper(bundle, sprite, options);
     lastRendered = {
       id: pokemon.id,
       name: sanitizeFilename(pokemon.name),
+      bundle: bundle,
     };
+    syncPartyActionButtons();
     return pokemon;
   }
 
@@ -1305,6 +1797,7 @@
   randomBtn.addEventListener("click", setRandomPokemon);
   batchPreviewBtn.addEventListener("click", previewBatchStart);
   batchUploadBtn.addEventListener("click", runBatchUpload);
+  refreshPartyBtn.addEventListener("click", loadPartyBooks);
   
   // Re-render preview when settings change
   [layoutStyleSelect, artStyleSelect, fontModeSelect, bgStyleSelect, spriteScaleInput, spriteOverlayInput,
@@ -1325,6 +1818,7 @@
     }
   });
 
+  bootParty();
   renderCurrentPokemon();
 </script>
 </body>

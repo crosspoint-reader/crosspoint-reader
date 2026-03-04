@@ -65,6 +65,9 @@ void SettingsActivity::onEnter() {
   if (core::FeatureModules::supportsSettingAction(SettingAction::OPDSBrowser)) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));
   }
+  if (core::FeatureModules::supportsSettingAction(SettingAction::PokemonParty)) {
+    systemSettings.push_back(SettingInfo::Action(StrId::STR_POKEDEX, SettingAction::PokemonParty));
+  }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   if (core::FeatureModules::supportsSettingAction(SettingAction::CheckForUpdates)) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -323,6 +326,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::OPDSBrowser:
         startActivityForResult(std::make_unique<CalibreSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::PokemonParty:
+        activityManager.goToRecentBooks();
         break;
       case SettingAction::Network:
         startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);

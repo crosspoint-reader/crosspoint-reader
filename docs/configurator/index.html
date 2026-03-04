@@ -1391,6 +1391,16 @@
                     </div>
                     <div class="card-toggle"><span class="toggle-box"></span></div>
                   </label>
+                  <label class="skill-card dep-child" data-feature="pokemon_party" data-node-id="pokemon_party">
+                    <input type="checkbox" id="pokemon_party" data-feature="pokemon_party" />
+                    <div class="card-icon"><span>&#x25A3;</span></div>
+                    <div class="card-body">
+                      <div class="card-name">Pokemon Party</div>
+                      <div class="card-size"></div>
+                      <div class="card-desc">Per-book Pokemon metadata API for recent-book party views</div>
+                    </div>
+                    <div class="card-toggle"><span class="toggle-box"></span></div>
+                  </label>
                 </div>
               </div>
 
@@ -1921,6 +1931,11 @@
           flag: "ENABLE_WEB_POKEDEX_PLUGIN",
           default: false,
         },
+        pokemon_party: {
+          sizeKb: 4,
+          flag: "ENABLE_POKEMON_PARTY",
+          default: false,
+        },
         epub_support: {
           sizeKb: 145,
           flag: "ENABLE_EPUB_SUPPORT",
@@ -2003,11 +2018,12 @@
         lyra_theme: ["home_media_picker"],
         visual_cover_picker: ["home_media_picker"],
         web_pokedex_plugin: ["image_sleep"],
+        pokemon_party: ["web_pokedex_plugin"],
       };
 
       const HUB_FEATURES = {
         reader_hub: ["markdown", "xtc_support", "epub_support", "book_images", "hyphenation", "todo_planner"],
-        interface_hub: ["opendyslexic_fonts", "notosans_fonts", "bookerly_fonts", "home_media_picker", "lyra_theme", "visual_cover_picker", "image_sleep", "web_pokedex_plugin", "dark_mode", "user_fonts"],
+        interface_hub: ["opendyslexic_fonts", "notosans_fonts", "bookerly_fonts", "home_media_picker", "lyra_theme", "visual_cover_picker", "image_sleep", "web_pokedex_plugin", "pokemon_party", "dark_mode", "user_fonts"],
         network_hub: ["background_server", "web_wifi_setup", "ble_wifi_provisioning", "ota_updates", "integrations", "koreader_sync", "calibre_sync"],
         storage_hub: ["usb_mass_storage"],
       };

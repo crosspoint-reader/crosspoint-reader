@@ -138,16 +138,34 @@ Fields Android reads: `name`, `isDirectory`, `size`, `modified` (defaults to 0 i
     "path":          "/Books/book.epub",
     "title":         "Title",
     "author":        "Author",
-    "last_position": "",
+    "last_position": "Ch 3 4/12 27%",
     "last_opened":   0,
-    "hasCover":      true
+    "hasCover":      true,
+    "progress": {
+      "format":     "epub",
+      "percent":    27.32,
+      "page":       4,
+      "pageCount":  12,
+      "position":   "Ch 3 4/12 27%",
+      "spineIndex": 2
+    },
+    "pokemon": {
+      "id":   4,
+      "name": "charmander"
+    }
   }
 ]
 ```
 
-**Current status:** ✅ Implemented. Firmware now returns placeholder
-`last_position` and `last_opened` values for compatibility (`""` and `0`).
-`hasCover` remains an extra field and is harmless.
+**Current status:** ✅ Implemented. Firmware now returns real cached
+`last_position` values when progress exists and keeps `last_opened` at `0` for
+compatibility. When no progress cache exists yet, `last_position` remains `""`
+and `progress` is `null`.
+
+Android only depends on `path`, `title`, `author`, `last_position`, and
+`last_opened`. Extra fields such as `hasCover`, `progress`, and `pokemon` are
+ignored by Gson and are safe to add. `pokemon` is only present when the
+`pokemon_party` firmware module is compiled in and that book has an assignment.
 
 ---
 
@@ -453,7 +471,7 @@ terminated by `\n`.
 | `move` | `{"from":"/src","to":"/dst"}` | `{"ok":true}` |
 | `settings_get` | — | `{"ok":true,"settings":{"key":value,...}}` |
 | `settings_set` | `{"key":value,...}` | `{"ok":true}` |
-| `recent` | — | `{"ok":true,"books":[{"path":"...","title":"...","author":"...","last_position":"...","last_opened":0}]}` |
+| `recent` | — | `{"ok":true,"books":[{"path":"...","title":"...","author":"...","last_position":"1/12 8%","last_opened":0,"cover":"<base64-optional>"}]}` |
 | `cover` | `"/path/file.epub"` | `{"ok":true,"data":"<base64>"}` or `{"ok":false}` |
 | `wifi_connect` | `{"ssid":"...","password":"..."}` | `{"ok":true}` |
 | `todo_add` | `{"text":"...","type":"todo"\|"agenda"}` | `{"ok":true}` |
