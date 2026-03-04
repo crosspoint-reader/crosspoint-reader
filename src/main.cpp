@@ -15,9 +15,54 @@
 #include <esp_partition.h>
 #include <rom/crc.h>
 
-// Run before global constructors to prevent OTA rollback even if a global crashes
+// Mark the running OTA partition as VALID in otadata.
+// esp_ota_mark_app_valid_cancel_rollback() has a flash-corruption bug: it writes
+// VALID(0x2) over PENDING_VERIFY(0x1) WITHOUT erasing first. Flash can only clear bits,
+// so 0x1 AND 0x2 = 0x0, CRC is recomputed for 0x2 but flash has 0x0 → CRC mismatch →
+// bootloader rejects entry → rolls back on next boot.
+// Fix: erase the sector then write VALID state, so bits can be set correctly.
 __attribute__((constructor(101))) static void earlyMarkOtaValid() {
-  esp_ota_mark_app_valid_cancel_rollback();
+  const esp_partition_t* otaPart = esp_partition_find_first(
+    ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
+  if (!otaPart) return;
+  const esp_partition_t* runPart = esp_ota_get_running_partition();
+  if (!runPart) return;
+
+  static constexpr size_t ENTRY_SIZE = 32;
+  static constexpr size_t SECTOR_SIZE = 0x1000;
+  static constexpr uint32_t OTA_IMG_VALID = 0x00000002;  // ESP_OTA_IMG_VALID
+
+  struct __attribute__((packed)) OtaEntry {
+    uint32_t seq;
+    uint8_t  label[20];
+    uint32_t state;
+    uint32_t crc;
+  };
+  static_assert(sizeof(OtaEntry) == ENTRY_SIZE, "");
+
+  uint32_t partIdx = runPart->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0;
+  uint32_t numOta  = 2;
+
+  OtaEntry e[2];
+  memset(e, 0xFF, sizeof(e));
+  esp_partition_read(otaPart, 0,           &e[0], ENTRY_SIZE);
+  esp_partition_read(otaPart, SECTOR_SIZE, &e[1], ENTRY_SIZE);
+
+  for (int s = 0; s < 2; s++) {
+    if (e[s].seq == 0xFFFFFFFF) continue;
+    if ((e[s].seq - 1) % numOta != partIdx) continue;
+    if (e[s].state == OTA_IMG_VALID) return;  // already valid, nothing to do
+
+    // Erase + rewrite with VALID state so flash bits are set correctly
+    e[s].state = OTA_IMG_VALID;
+    e[s].crc   = ~crc32_le(0u, (const uint8_t*)&e[s], 28);
+    uint32_t off = (uint32_t)s * SECTOR_SIZE;
+    if (esp_partition_erase_range(otaPart, off, SECTOR_SIZE) == ESP_OK) {
+      esp_partition_write(otaPart, off, &e[s], ENTRY_SIZE);
+    }
+    return;
+  }
+  // No entry found for running partition — nothing to do (e.g. direct-flash to app0)
 }
 
 // Direct OTA data partition write — bypasses esp_ota_set_boot_partition()'s image
