@@ -407,7 +407,7 @@ void MyLibraryActivity::render(RenderLock&&) {
   const auto labels =
       mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK),
                             files.empty() ? "" : (selectedIsText ? tr(STR_PREVIEW) : tr(STR_OPEN)), sortLabel,
-                            files.empty() ? "" : tr(STR_DIR_DOWN));
+                            files.empty() ? "" : tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
