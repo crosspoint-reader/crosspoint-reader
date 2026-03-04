@@ -212,7 +212,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
 
   esp_http_client_config_t client_config = {
       .url = otaUrl.c_str(),
-      .timeout_ms = 15000,
+      .timeout_ms = 30000,
       /* Default HTTP client buffer size 512 byte only
        * not sufficent to handle URL redirection cases or
        * parsing of large HTTP headers.
@@ -222,6 +222,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
       .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
+      /* GitHub release assets redirect to CDN (objects.githubusercontent.com).
+       * Without this, esp_https_ota downloads 0 bytes and stalls. */
+      .max_redirection_count = 5,
   };
 
   esp_https_ota_config_t ota_config = {
