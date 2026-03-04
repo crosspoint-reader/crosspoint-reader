@@ -91,7 +91,7 @@ FEATURES = {
     'web_pokedex_plugin': Feature(
         name='Web Pokedex Plugin',
         flag='ENABLE_WEB_POKEDEX_PLUGIN',
-        size_kb=8,
+        size_kb=11,
         description='Browser-side Pokemon wallpaper generator at /plugins/pokedex'
     ),
     'epub_support': Feature(
