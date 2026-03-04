@@ -33,7 +33,7 @@ __attribute__((constructor(101))) static void earlyMarkOtaValid() {
 
   static constexpr size_t ENTRY_SIZE = 32;
   static constexpr size_t SECTOR_SIZE = 0x1000;
-  static constexpr uint32_t OTA_IMG_VALID = 0x00000002;  // ESP_OTA_IMG_VALID
+  static constexpr uint32_t OTA_IMG_VALID = 0x00000002;  // ESP_OTA_IMG_VALID (not 0x1 = PENDING_VERIFY)
 
   struct __attribute__((packed)) OtaEntry {
     uint32_t seq;
@@ -67,7 +67,7 @@ __attribute__((constructor(101))) static void earlyMarkOtaValid() {
   OtaEntry newEntry = e[activeSector];
   newEntry.seq   = e[activeSector].seq + 2;  // same partIdx, higher seq → wins
   newEntry.state = OTA_IMG_VALID;
-  newEntry.crc   = ~crc32_le(0u, (const uint8_t*)&newEntry, 28);
+  newEntry.crc   = crc32_le(0xFFFFFFFF, (const uint8_t*)&newEntry, 28);
   uint32_t altOff = (uint32_t)altSector * SECTOR_SIZE;
 
   // Only erase the alternate sector if it contains stale data (not already empty)
@@ -126,16 +126,14 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
   OtaEntry entry;
   entry.seq   = newSeq;
   memset(entry.label, 0xFF, sizeof(entry.label));
-  // state: 0x00000001 = OTA_IMG_VALID in flash-encoded form (bit-erasure semantics).
-  // crosspoint-flash.py reference uses OTA_IMG_VALID = 0x00000001. The raw ESP-IDF enum
-  // (ESP_OTA_IMG_VALID = 0x2) is NOT the flash value — don't confuse the two.
+  // state: 0x1 = ESP_OTA_IMG_PENDING_VERIFY. The bootloader will boot this once;
+  // earlyMarkOtaValid() (constructor 101) upgrades to 0x2 (VALID) on successful boot,
+  // preventing rollback on all subsequent boots.
   entry.state = 0x00000001;
   // CRC32 over first 28 bytes (seq + label + state).
-  // The bootloader validates: esp_rom_crc32_le(UINT32_MAX, data, 28) == entry.crc
-  // esp_rom_crc32_le(0xFFFFFFFF, data, n) = crc32_le(0xFFFFFFFF, data, n) [no final XOR]
-  // Python crosspoint-flash.py: zlib.crc32(data) ^ 0xFFFFFFFF
-  // = (step2 ^ 0xFFFFFFFF) ^ 0xFFFFFFFF = step2 = crc32_le(0xFFFFFFFF, data, n) ✓
-  entry.crc = ~crc32_le(0u, (const uint8_t*)&entry, 28);
+  // Bootloader validates: esp_rom_crc32_le(UINT32_MAX, data, 28) == entry.crc
+  // crosspoint-flash.py: crc = zlib.crc32(data) ^ 0xFFFFFFFF = crc32_le(0xFFFFFFFF, data, 28)
+  entry.crc = crc32_le(0xFFFFFFFF, (const uint8_t*)&entry, 28);
 
   LOG_INF("OTA", "forceSetBootPartition: part=%s seq=%lu→%lu sector=%lu",
           newPart->label, (unsigned long)maxSeq, (unsigned long)newSeq,
