@@ -536,6 +536,8 @@ void setup() {
     Storage.mkdir("/.crosspoint");  // ensure hidden dir exists before writing logs
 
     // Write current firmware version to hidden file (for scripts, feed server, etc.)
+    // Also remove legacy /firmware.version from root if it exists.
+    Storage.remove("/firmware.version");
     {
       FsFile vf = Storage.open("/.crosspoint/version.txt", O_WRONLY | O_CREAT | O_TRUNC);
       if (vf) {
