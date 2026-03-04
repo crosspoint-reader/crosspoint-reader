@@ -23,6 +23,8 @@
     .btn:hover:not(:disabled){opacity:0.85;} .btn:disabled{opacity:0.5;cursor:not-allowed;}
     #fw-status{margin-top:14px;padding:10px 14px;border-radius:6px;font-size:13px;}
     #fw-status.fw-ready{background:#d4edda;color:#155724;} #fw-status.fw-none{background:#f8d7da;color:#721c24;}
+    #claw-status{margin-top:10px;padding:10px 14px;border-radius:6px;font-size:13px;display:none;}
+    #claw-status.claw-busy{background:#fff3cd;color:#856404;} #claw-status.claw-ok{background:#d4edda;color:#155724;} #claw-status.claw-err{background:#f8d7da;color:#721c24;}
     .btn-group{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
     input[type="password"]{padding:6px 10px;border-radius:4px;border:1px solid #ccc;font-size:14px;width:200px;background:var(--card-bg);color:var(--font-color);}
     #msg{margin-top:16px;padding:10px;border-radius:6px;display:none;}
@@ -49,9 +51,11 @@
         <button class="btn btn-blue" onclick="dzFeedSync()">Sync Feed</button>
         <button class="btn btn-blue" onclick="dzScreenshot()">📷 Screenshot Tour</button>
         <button class="btn btn-orange" id="btn-flash" onclick="dzFlash()" disabled>Flash firmware.bin</button>
+        <button class="btn btn-green" id="btn-claw-update" onclick="dzClawUpdate()">⬆ Check for Claw Updates</button>
         <button class="btn btn-red" onclick="dzReboot()">Reboot</button>
       </div>
       <div id="fw-status"></div>
+      <div id="claw-status"></div>
       <div id="msg"></div>
     </div>
   </div>
@@ -63,6 +67,35 @@
   async function dzFlash(){const p=pw();if(!p)return;if(!confirm('Flash firmware.bin? Device will reboot.'))return;const r=await fetch('/api/flash',{method:'POST',headers:auth(p)});r.ok?showMsg('Flashing... device will reboot',true):showMsg('Failed: '+await r.text(),false);}
   async function dzScreenshot(){const p=pw();if(!p)return;const r=await fetch('/api/screenshot-tour',{method:'POST',headers:auth(p)});r.ok?showMsg('Screenshot tour started — WiFi will reconnect when done (~30s)',true):showMsg('Failed: '+await r.text(),false);}
   async function dzFeedSync(){const p=pw();if(!p)return;const r=await fetch('/api/feed/sync',{method:'POST',headers:auth(p)});r.ok?showMsg('Feed sync triggered',true):showMsg('Failed: '+await r.text(),false);}
+  let clawPollTimer=null;
+  async function dzClawUpdate(){
+    const p=pw();if(!p)return;
+    const btn=document.getElementById('btn-claw-update');
+    btn.disabled=true;
+    const r=await fetch('/api/claw-update',{method:'POST',headers:auth(p)});
+    if(!r.ok){showMsg('Failed: '+await r.text(),false);btn.disabled=false;return;}
+    showClawStatus('checking','Checking GitHub for latest release...');
+    clawPollTimer=setInterval(pollClawStatus,2000);
+  }
+  function showClawStatus(cls,msg){const el=document.getElementById('claw-status');el.textContent=msg;el.className='claw-'+cls;el.style.display='';}
+  async function pollClawStatus(){
+    try{
+      const r=await fetch('/api/claw-update/status');const d=await r.json();
+      if(d.state==='checking'){showClawStatus('busy','Checking GitHub for latest release...');}
+      else if(d.state==='downloading'){
+        const pct=d.total>0?Math.round(d.downloaded/d.total*100):0;
+        const mb=(d.downloaded/1024/1024).toFixed(1);const tot=(d.total/1024/1024).toFixed(1);
+        showClawStatus('busy','Downloading '+d.version+'... '+mb+' / '+tot+' MB ('+pct+'%)');
+      }else if(d.state==='ready'){
+        clearInterval(clawPollTimer);
+        showClawStatus('ok','Download complete ('+d.version+'). Flashing now — device will reboot.');
+      }else if(d.state==='error'){
+        clearInterval(clawPollTimer);
+        showClawStatus('err','Error: '+d.error);
+        document.getElementById('btn-claw-update').disabled=false;
+      }
+    }catch(e){clearInterval(clawPollTimer);showClawStatus('err','Lost connection');}
+  }
   async function init(){
     try{
       const res=await fetch('/api/danger-zone/status');const data=await res.json();

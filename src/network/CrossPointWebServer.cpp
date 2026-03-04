@@ -4,6 +4,7 @@
 
 #include <ArduinoJson.h>
 #include "../RecentBooksStore.h"
+#include "HttpDownloader.h"
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -22,6 +23,8 @@
 #include "html/DangerZonePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "util/StringUtils.h"
+
+extern volatile bool dzFlashRequested;
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -84,6 +87,103 @@ bool isProtectedItemName(const String& name) {
   }
   return false;
 }
+
+// ---- Claw update download state ----
+enum class ClawUpdateState { IDLE, CHECKING, DOWNLOADING, READY, ERROR };
+volatile ClawUpdateState s_clawState = ClawUpdateState::IDLE;
+volatile size_t s_clawDownloaded = 0;
+volatile size_t s_clawTotal = 0;
+char s_clawVersion[32] = {};
+char s_clawError[128] = {};
+TaskHandle_t s_clawTaskHandle = nullptr;
+
+constexpr char CLAW_RELEASE_API_URL[] =
+    "https://api.github.com/repos/laird/crosspoint-claw/releases/latest";
+
+void clawUpdateTask(void* /*arg*/) {
+  s_clawDownloaded = 0;
+  s_clawTotal = 0;
+  s_clawVersion[0] = '\0';
+  s_clawError[0] = '\0';
+
+  // Query GitHub API
+  std::string apiJson;
+  if (!HttpDownloader::fetchUrl(CLAW_RELEASE_API_URL, apiJson)) {
+    snprintf(s_clawError, sizeof(s_clawError), "Failed to fetch release info from GitHub");
+    s_clawState = ClawUpdateState::ERROR;
+    s_clawTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  // Parse JSON, filtering to only the fields we need
+  JsonDocument filter;
+  filter["tag_name"] = true;
+  filter["assets"][0]["name"] = true;
+  filter["assets"][0]["browser_download_url"] = true;
+  filter["assets"][0]["size"] = true;
+
+  JsonDocument doc;
+  const DeserializationError err =
+      deserializeJson(doc, apiJson, DeserializationOption::Filter(filter));
+  if (err) {
+    snprintf(s_clawError, sizeof(s_clawError), "JSON parse error: %s", err.c_str());
+    s_clawState = ClawUpdateState::ERROR;
+    s_clawTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  // Find firmware.bin asset
+  std::string firmwareUrl;
+  for (int i = 0; i < (int)doc["assets"].size(); i++) {
+    if (doc["assets"][i]["name"] == "firmware.bin") {
+      firmwareUrl = doc["assets"][i]["browser_download_url"].as<std::string>();
+      s_clawTotal = doc["assets"][i]["size"].as<size_t>();
+      break;
+    }
+  }
+  if (firmwareUrl.empty()) {
+    snprintf(s_clawError, sizeof(s_clawError), "No firmware.bin asset found in release");
+    s_clawState = ClawUpdateState::ERROR;
+    s_clawTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  const std::string tagName = doc["tag_name"].as<std::string>();
+  snprintf(s_clawVersion, sizeof(s_clawVersion), "%s", tagName.c_str());
+
+  // Download firmware to SD card (HttpDownloader follows GitHub's redirect)
+  s_clawState = ClawUpdateState::DOWNLOADING;
+  const auto result = HttpDownloader::downloadToFile(
+      firmwareUrl, "/firmware.bin",
+      [](size_t downloaded, size_t total) {
+        s_clawDownloaded = downloaded;
+        if (total > 0) s_clawTotal = total;
+      });
+
+  if (result != HttpDownloader::OK) {
+    snprintf(s_clawError, sizeof(s_clawError), "Download failed (error %d)", (int)result);
+    s_clawState = ClawUpdateState::ERROR;
+    s_clawTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  // Write version companion file so firmware-status shows the version
+  FsFile vf;
+  if (Storage.openFileForWrite("CLAWUPD", "/firmware.version", vf)) {
+    vf.print(s_clawVersion);
+    vf.close();
+  }
+
+  dzFlashRequested = true;
+  s_clawState = ClawUpdateState::READY;
+  s_clawTaskHandle = nullptr;
+  vTaskDelete(nullptr);
+}
+
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -177,6 +277,8 @@ void CrossPointWebServer::begin() {
   server->on("/api/screenshot-tour", HTTP_POST, [this] { handlePostScreenshotTour(); });
   server->on("/api/flash", HTTP_POST, [this] { handlePostFlash(); });
   server->on("/api/firmware-status", HTTP_GET, [this] { handleGetFirmwareStatus(); });
+  server->on("/api/claw-update", HTTP_POST, [this] { handlePostClawUpdate(); });
+  server->on("/api/claw-update/status", HTTP_GET, [this] { handleGetClawUpdateStatus(); });
   server->on("/api/boot-log", HTTP_GET, [this] { handleGetLog("/.crosspoint/boot.log"); });
   server->on("/api/feed/log", HTTP_GET, [this] { handleGetLog("/.crosspoint/feed-sync.log"); });
 
@@ -1681,3 +1783,35 @@ void CrossPointWebServer::handleGetFirmwareStatus() const {
            static_cast<unsigned>(fSize), version);
   server->send(200, "application/json", buf);
 }
+
+void CrossPointWebServer::handlePostClawUpdate() {
+  if (!checkDangerZoneAuth()) {
+    server->send(403, "text/plain", "Forbidden: Danger Zone not enabled or bad password");
+    return;
+  }
+  if (s_clawState == ClawUpdateState::CHECKING || s_clawState == ClawUpdateState::DOWNLOADING) {
+    server->send(409, "text/plain", "Update already in progress");
+    return;
+  }
+  s_clawState = ClawUpdateState::CHECKING;
+  xTaskCreate(clawUpdateTask, "ClawUpdate", 8192, nullptr, 1, &s_clawTaskHandle);
+  server->send(200, "text/plain", "Claw update started");
+}
+
+void CrossPointWebServer::handleGetClawUpdateStatus() const {
+  const char* stateStr;
+  switch (s_clawState) {
+    case ClawUpdateState::IDLE:        stateStr = "idle";        break;
+    case ClawUpdateState::CHECKING:    stateStr = "checking";    break;
+    case ClawUpdateState::DOWNLOADING: stateStr = "downloading"; break;
+    case ClawUpdateState::READY:       stateStr = "ready";       break;
+    case ClawUpdateState::ERROR:       stateStr = "error";       break;
+    default:                           stateStr = "unknown";     break;
+  }
+  char buf[256];
+  snprintf(buf, sizeof(buf),
+           "{\"state\":\"%s\",\"downloaded\":%zu,\"total\":%zu,\"version\":\"%s\",\"error\":\"%s\"}",
+           stateStr, (size_t)s_clawDownloaded, (size_t)s_clawTotal, s_clawVersion, s_clawError);
+  server->send(200, "application/json", buf);
+}
+

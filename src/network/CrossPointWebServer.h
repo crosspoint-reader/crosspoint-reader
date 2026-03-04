@@ -124,6 +124,8 @@ class CrossPointWebServer {
   void handlePostScreenshotTour();
   void handlePostFlash();
   void handleGetFirmwareStatus() const;
+  void handlePostClawUpdate();
+  void handleGetClawUpdateStatus() const;
   void handleGetLog(const char* path) const;
 
   // Check Danger Zone password from request header or query param
