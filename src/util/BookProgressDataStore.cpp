@@ -29,22 +29,11 @@ constexpr uint32_t kXtcMagic = 0x00435458;   // "XTC\0"
 constexpr uint32_t kXtchMagic = 0x48435458;  // "XTCH"
 
 #pragma pack(push, 1)
-struct XtcHeader {
+struct XtcHeaderPrefix {
   uint32_t magic;
   uint8_t versionMajor;
   uint8_t versionMinor;
   uint16_t pageCount;
-  uint8_t readDirection;
-  uint8_t hasMetadata;
-  uint8_t hasThumbnails;
-  uint8_t hasChapters;
-  uint32_t currentPage;
-  uint64_t metadataOffset;
-  uint64_t pageTableOffset;
-  uint64_t dataOffset;
-  uint64_t thumbOffset;
-  uint32_t chapterOffset;
-  uint32_t padding;
 };
 #pragma pack(pop)
 
@@ -259,7 +248,7 @@ bool loadXtcPageCount(const std::string& bookPath, uint32_t& outPageCount) {
     return false;
   }
 
-  XtcHeader header{};
+  XtcHeaderPrefix header{};
   const bool ok = bookFile.read(reinterpret_cast<uint8_t*>(&header), sizeof(header)) == sizeof(header);
   bookFile.close();
 
