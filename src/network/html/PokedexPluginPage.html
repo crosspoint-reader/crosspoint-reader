@@ -226,6 +226,14 @@
       </div>
 
       <div>
+        <label for="layoutStyle">Layout Style</label>
+        <select id="layoutStyle">
+          <option value="classic" selected>Classic</option>
+          <option value="boxed">Boxed Panels</option>
+        </select>
+      </div>
+
+      <div>
         <label for="artStyle">Art Style</label>
         <select id="artStyle">
           <option value="pixel" selected>Classic Pixel</option>
@@ -271,7 +279,7 @@
         <div class="row">
           <label><input id="showFlavor" type="checkbox" checked /> Flavor text</label>
           <label><input id="showHp" type="checkbox" /> HP/Stats</label>
-          <label><input id="showEvolution" type="checkbox" /> Evolution</label>
+          <label><input id="showEvolution" type="checkbox" checked /> Evolution</label>
           <label><input id="showAbilities" type="checkbox" /> Abilities</label>
         </div>
         <p class="hint">HP/Stats works best if Flavor or Evolution/Abilities is disabled.</p>
@@ -349,11 +357,43 @@
   const SCREEN_HEIGHT = 800;
   const MAX_POKEMON_ID = 1025;
   const UPLOAD_PATH = "/sleep/pokedex";
-  const MIN_SPRITE_SCALE = 0.6; // Keep sprite readable without shrinking to illegible size.
-  const MAX_SPRITE_SCALE = 2.2; // Prevent oversized sprites from consuming the bottom panel area.
+  const MIN_SPRITE_SCALE = 0.5; // Match the original companion defaults while keeping explicit bounds.
+  const MAX_SPRITE_SCALE = 3.0; // Preserve the old slider range for larger classic renders.
   const MAX_EVOLUTION_CHAIN_LENGTH = 5; // Limit branch traversal so the footer section does not overflow.
   const MAX_FLAVOR_TEXT_LINES = 4; // Keeps room for optional HP/evolution sections in the same bottom area.
   const MAX_EVOLUTION_TEXT_LINES = 2; // Prevent long evolution strings from colliding with footer branding.
+  const MAX_ABILITY_TEXT_LINES = 2;
+  const GENERATIONS = {
+    "generation-i": "Kanto",
+    "generation-ii": "Johto",
+    "generation-iii": "Hoenn",
+    "generation-iv": "Sinnoh",
+    "generation-v": "Unova",
+    "generation-vi": "Kalos",
+    "generation-vii": "Alola",
+    "generation-viii": "Galar",
+    "generation-ix": "Paldea"
+  };
+  const TYPE_ACCENTS = {
+    normal: "#a8a77a",
+    fire: "#ee8130",
+    water: "#6390f0",
+    electric: "#f7d02c",
+    grass: "#7ac74c",
+    ice: "#96d9d6",
+    fighting: "#c22e28",
+    poison: "#a33ea1",
+    ground: "#e2bf65",
+    flying: "#a98ff3",
+    psychic: "#f95587",
+    bug: "#a6b91a",
+    rock: "#b6a136",
+    ghost: "#735797",
+    dragon: "#6f35fc",
+    dark: "#705746",
+    steel: "#b7b7ce",
+    fairy: "#d685ad"
+  };
 
   const canvas = document.getElementById("previewCanvas");
   const ctx = canvas.getContext("2d");
@@ -364,6 +404,7 @@
   const uploadBtn = document.getElementById("uploadBtn");
   const randomBtn = document.getElementById("randomBtn");
   const openFolderBtn = document.getElementById("openFolderBtn");
+  const layoutStyleSelect = document.getElementById("layoutStyle");
   const artStyleSelect = document.getElementById("artStyle");
   const fontModeSelect = document.getElementById("fontMode");
   const customFontInput = document.getElementById("customFont");
@@ -381,6 +422,7 @@
   const batchUploadBtn = document.getElementById("batchUploadBtn");
 
   const spriteBoundsCache = new Map();
+  const speciesDefaultPokemonCache = new Map();
   let lastRendered = null;
 
   function setStatus(message, isError) {
@@ -471,8 +513,13 @@
     return "'Courier New', Courier, monospace";
   }
 
+  function getFontSpec(sizePx, family, bold) {
+    return (bold ? "bold " : "") + String(sizePx) + "px " + family;
+  }
+
   function getRenderOptions() {
     return {
+      layoutStyle: layoutStyleSelect.value,
       artStyle: artStyleSelect.value,
       background: bgStyleSelect.value,
       spriteScale: Math.max(MIN_SPRITE_SCALE, Math.min(MAX_SPRITE_SCALE, parseFloat(spriteScaleInput.value) || 1.0)),
@@ -502,6 +549,64 @@
       for (let i = 0; i < next.length; i++) queue.push(next[i]);
     }
     return names;
+  }
+
+  function formatLocation(locationName) {
+    if (!locationName) return "Special / Event";
+    return String(locationName)
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, function(ch) { return ch.toUpperCase(); });
+  }
+
+  function getEvolutionText(details) {
+    if (!details) return null;
+    if (details.min_level) return "Lvl " + details.min_level;
+    if (details.item && details.item.name) return titleCase(details.item.name);
+    if (details.trigger && details.trigger.name === "trade") {
+      if (details.held_item && details.held_item.name) return "Trade w/ " + titleCase(details.held_item.name);
+      return "Trade";
+    }
+    if (details.min_happiness) {
+      let label = "Friendship";
+      if (details.time_of_day) label += " (" + titleCase(details.time_of_day) + ")";
+      return label;
+    }
+    if (details.location && details.location.name) return "Loc: " + titleCase(details.location.name);
+    if (details.known_move && details.known_move.name) return "Move: " + titleCase(details.known_move.name);
+    if (details.trigger && details.trigger.name && details.trigger.name !== "level-up") return titleCase(details.trigger.name);
+    return "Special";
+  }
+
+  function getLinearEvolutionForms(evolutionData) {
+    if (!evolutionData || !evolutionData.chain) return [];
+    const forms = [];
+    let current = evolutionData.chain;
+
+    while (current && forms.length < 3) {
+      forms.push({
+        name: current.species && current.species.name,
+        url: current.species && current.species.url,
+        text: forms.length === 0 ? null : getEvolutionText(current.evolution_details && current.evolution_details[0])
+      });
+      current = current.evolves_to && current.evolves_to.length ? current.evolves_to[0] : null;
+    }
+
+    return forms.filter(function(form) { return form && form.name && form.url; });
+  }
+
+  async function getDefaultPokemonForSpecies(speciesUrl) {
+    if (!speciesUrl) return null;
+    if (speciesDefaultPokemonCache.has(speciesUrl)) {
+      return speciesDefaultPokemonCache.get(speciesUrl);
+    }
+
+    const speciesData = await fetchJson(speciesUrl);
+    const defaultVariety = (speciesData.varieties || []).find(function(entry) { return entry && entry.is_default; });
+    const pokemon = defaultVariety && defaultVariety.pokemon && defaultVariety.pokemon.url
+      ? await fetchJson(defaultVariety.pokemon.url)
+      : null;
+    speciesDefaultPokemonCache.set(speciesUrl, pokemon);
+    return pokemon;
   }
 
   function getSpriteBounds(sprite) {
@@ -574,7 +679,7 @@
     targetCtx.drawImage(tc, Math.round(x), Math.round(y));
   }
 
-  function drawHpBars(pokemon, startY, fontFamily) {
+  function drawHpBars(pokemon, startY, fontFamily, boldText) {
     const wanted = { 
       hp: "HP", 
       attack: "ATK", 
@@ -594,7 +699,8 @@
       const key = stat.stat.name;
       const value = Math.max(0, Math.min(255, stat.base_stat || 0));
       ctx.fillStyle = "#111111";
-      ctx.font = "bold " + (isPixel ? "12px" : "16px") + " " + fontFamily;
+      ctx.textAlign = "left";
+      ctx.font = getFontSpec(isPixel ? 12 : 16, fontFamily, boldText !== false);
       ctx.fillText(wanted[key], 36, y);
       ctx.strokeStyle = "#111111";
       ctx.strokeRect(barX, y - 14, barW, 12);
@@ -605,7 +711,254 @@
     return y;
   }
 
-  function drawWallpaper(pokemon, sprite, flavorText, evolutionNames, options) {
+  function drawWrappedBlock(lines, x, startY, lineHeight) {
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], x, startY + (i * lineHeight));
+    }
+  }
+
+  function drawClassicTypePills(pokemon, centerY, scaleUnit, pillBg, pillText, fontFamily, boldText) {
+    const types = (pokemon.types || []).map(function(entry) { return String(entry.type && entry.type.name || "").toUpperCase(); }).filter(Boolean);
+    if (!types.length) return;
+
+    const pillHeight = 36 * scaleUnit;
+    const fontSize = 22 * scaleUnit;
+    const spacing = 15 * scaleUnit;
+    ctx.font = getFontSpec(fontSize, fontFamily, boldText);
+    ctx.textBaseline = "middle";
+
+    const widths = types.map(function(name) {
+      return ctx.measureText(name).width + (30 * scaleUnit);
+    });
+    const totalWidth = widths.reduce(function(sum, width) { return sum + width; }, 0) + (spacing * Math.max(0, types.length - 1));
+    let startX = (SCREEN_WIDTH / 2) - (totalWidth / 2);
+
+    for (let i = 0; i < types.length; i++) {
+      const width = widths[i];
+      const radius = pillHeight / 2;
+      ctx.fillStyle = pillBg;
+      ctx.beginPath();
+      ctx.moveTo(startX + radius, centerY - (pillHeight / 2));
+      ctx.lineTo(startX + width - radius, centerY - (pillHeight / 2));
+      ctx.arc(startX + width - radius, centerY, radius, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(startX + radius, centerY + (pillHeight / 2));
+      ctx.arc(startX + radius, centerY, radius, Math.PI / 2, -Math.PI / 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = pillText;
+      ctx.textAlign = "center";
+      ctx.fillText(types[i], startX + (width / 2), centerY + 2);
+      startX += width + spacing;
+    }
+  }
+
+  function drawClassicFooter(pokemon, flavorText, startY, scaleUnit, ink, options) {
+    const lineHeight = options.fontFamily.includes("Press Start 2P") ? 18 * scaleUnit : 24 * scaleUnit;
+    let currentY = startY;
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = ink;
+
+    if (options.showFlavor) {
+      ctx.font = getFontSpec(26 * scaleUnit, options.fontFamily, true);
+      const flavorLines = wrapText(flavorText || "No Data.", SCREEN_WIDTH * 0.85, 4);
+      drawWrappedBlock(flavorLines, SCREEN_WIDTH / 2, currentY, lineHeight);
+      currentY += (flavorLines.length * lineHeight) + (12 * scaleUnit);
+    }
+
+    if (options.showHp) {
+      currentY = drawHpBars(pokemon, currentY, options.fontFamily, true) + (8 * scaleUnit);
+    }
+
+    if (options.showAbilities) {
+      ctx.textAlign = "center";
+      ctx.font = getFontSpec(18 * scaleUnit, options.fontFamily, true);
+      const abilityText = "Abilities: " + (pokemon.abilities || []).map(function(entry) {
+        return titleCase(entry.ability && entry.ability.name);
+      }).filter(Boolean).join(", ");
+      const abilityLines = wrapText(abilityText, SCREEN_WIDTH * 0.85, MAX_ABILITY_TEXT_LINES);
+      drawWrappedBlock(abilityLines, SCREEN_WIDTH / 2, currentY, 20 * scaleUnit);
+    }
+  }
+
+  async function drawClassicEvolutionRow(evolutionData, centerY, scaleUnit, ink, fontFamily) {
+    const forms = getLinearEvolutionForms(evolutionData);
+    if (forms.length < 2) {
+      return centerY;
+    }
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = ink;
+    ctx.font = getFontSpec(20 * scaleUnit, fontFamily, true);
+
+    const segmentWidth = SCREEN_WIDTH / forms.length;
+    const spriteTopOffset = 15 * scaleUnit;
+
+    for (let i = 0; i < forms.length; i++) {
+      const form = forms[i];
+      const centerX = (segmentWidth * i) + (segmentWidth / 2);
+      const evolutionPokemon = await getDefaultPokemonForSpecies(form.url).catch(function() { return null; });
+      const evolutionSprite = evolutionPokemon && evolutionPokemon.sprites && evolutionPokemon.sprites.front_default
+        ? await loadImage(evolutionPokemon.sprites.front_default).catch(function() { return null; })
+        : null;
+
+      if (evolutionSprite) {
+        const bounds = getSpriteBounds(evolutionSprite);
+        const spriteTarget = Math.floor(80 * scaleUnit);
+        const spriteScale = Math.min(spriteTarget / bounds.width, spriteTarget / bounds.height);
+        const spriteWidth = Math.max(1, Math.round(bounds.width * spriteScale));
+        const spriteHeight = Math.max(1, Math.round(bounds.height * spriteScale));
+        const spriteX = Math.round(centerX - (spriteWidth / 2));
+        const spriteY = Math.round(centerY - (spriteHeight / 2) + spriteTopOffset);
+        drawGrayscaleSprite(ctx, evolutionSprite, bounds, spriteX, spriteY, spriteWidth, spriteHeight, true);
+      }
+
+      ctx.fillStyle = ink;
+      ctx.fillText(String(form.name).toUpperCase(), centerX, centerY + (45 * scaleUnit));
+
+      if (i < forms.length - 1) {
+        const arrowX = segmentWidth * (i + 1);
+        const arrowY = centerY - (10 * scaleUnit) + spriteTopOffset;
+        const nextForm = forms[i + 1];
+
+        ctx.font = getFontSpec(30 * scaleUnit, fontFamily, true);
+        ctx.fillText("→", arrowX, arrowY);
+
+        if (nextForm.text) {
+          ctx.font = getFontSpec(18 * scaleUnit, fontFamily, false);
+          const detailY = centerY + (20 * scaleUnit) + spriteTopOffset;
+          if (nextForm.text.indexOf("w/") !== -1) {
+            const parts = nextForm.text.split("w/");
+            ctx.fillText(parts[0] + "w/", arrowX, detailY);
+            ctx.fillText(parts[1].trim(), arrowX, detailY + (15 * scaleUnit));
+          } else {
+            ctx.fillText(nextForm.text, arrowX, detailY);
+          }
+        }
+
+        ctx.font = getFontSpec(20 * scaleUnit, fontFamily, true);
+      }
+    }
+
+    return centerY + (65 * scaleUnit);
+  }
+
+  async function drawClassicWallpaper(bundle, sprite, flavorText, options) {
+    const pokemon = bundle.pokemon;
+    const species = bundle.species;
+    const evolutionData = bundle.evolution;
+    const encounters = bundle.encounters || [];
+    const scaleUnit = Math.min(SCREEN_WIDTH / 480, SCREEN_HEIGHT / 800) * 1.1;
+    const primaryType = pokemon.types && pokemon.types[0] && pokemon.types[0].type ? pokemon.types[0].type.name : "normal";
+    const accent = TYPE_ACCENTS[primaryType] || "#555555";
+    let background = "#ffffff";
+    let ink = "#111111";
+    let headerInk = "#111111";
+    let pillBg = "#111111";
+    let pillText = "#ffffff";
+    let diagonalFill = "#e5e5e5";
+
+    if (options.background === "black") {
+      background = "#000000";
+      ink = "#ffffff";
+      headerInk = "#ffffff";
+      pillBg = "#ffffff";
+      pillText = "#000000";
+      diagonalFill = "#1f1f1f";
+    } else if (options.background === "type") {
+      diagonalFill = accent;
+      pillBg = accent;
+      pillText = "#ffffff";
+      headerInk = "#ffffff";
+    }
+
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    if (options.background === "diagonal" || options.background === "type") {
+      ctx.fillStyle = diagonalFill;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(SCREEN_WIDTH, 0);
+      ctx.lineTo(SCREEN_WIDTH, SCREEN_HEIGHT * 0.4);
+      ctx.lineTo(0, SCREEN_HEIGHT * 0.2);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    let currentY = 0;
+    const titleMargin = 40 * scaleUnit;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = headerInk;
+    ctx.font = getFontSpec(48 * scaleUnit, options.fontFamily, true);
+    ctx.fillText(String(pokemon.name).toUpperCase(), SCREEN_WIDTH / 2, titleMargin);
+    ctx.font = getFontSpec(28 * scaleUnit, options.fontFamily, false);
+    ctx.fillText("№ " + String(pokemon.id).padStart(3, "0"), SCREEN_WIDTH / 2, titleMargin + (55 * scaleUnit));
+    currentY = titleMargin + (95 * scaleUnit);
+
+    const spriteBounds = getSpriteBounds(sprite);
+    const spriteTarget = Math.max(60, Math.round(Math.min(180 * scaleUnit, 350 * scaleUnit) * options.spriteScale));
+    const spriteScale = Math.min(spriteTarget / spriteBounds.width, spriteTarget / spriteBounds.height);
+    const spriteWidth = Math.max(1, Math.round(spriteBounds.width * spriteScale));
+    const spriteHeight = Math.max(1, Math.round(spriteBounds.height * spriteScale));
+    const spriteCenterY = currentY + (5 * scaleUnit) + ((180 * scaleUnit) / 2);
+    const spriteX = Math.round((SCREEN_WIDTH / 2) - (spriteWidth / 2));
+    const spriteY = Math.round(spriteCenterY - (spriteHeight / 2));
+    drawGrayscaleSprite(ctx, sprite, spriteBounds, spriteX, spriteY, spriteWidth, spriteHeight, options.artStyle === "pixel");
+    currentY = spriteCenterY + ((180 * scaleUnit) / 2);
+
+    const pillY = currentY + (15 * scaleUnit);
+    drawClassicTypePills(pokemon, pillY, scaleUnit, pillBg, pillText, options.fontFamily, true);
+    currentY = pillY + (18 * scaleUnit);
+
+    const dividerOneY = currentY + (15 * scaleUnit);
+    ctx.lineWidth = 3 * scaleUnit;
+    ctx.strokeStyle = ink;
+    ctx.beginPath();
+    ctx.moveTo(30 * scaleUnit, dividerOneY);
+    ctx.lineTo(SCREEN_WIDTH - (30 * scaleUnit), dividerOneY);
+    ctx.stroke();
+    currentY = dividerOneY;
+
+    const region = GENERATIONS[species && species.generation && species.generation.name] || "Unknown";
+    const location = encounters.length && encounters[0] && encounters[0].location_area
+      ? formatLocation(encounters[0].location_area.name)
+      : "Special / Event";
+    const dataTopY = currentY + (15 * scaleUnit);
+    const clippedLocation = location.length > 25 ? location.slice(0, 22) + "..." : location;
+
+    ctx.fillStyle = ink;
+    ctx.textAlign = "left";
+    ctx.font = getFontSpec(22 * scaleUnit, options.fontFamily, true);
+    ctx.fillText("Region: " + region, 40 * scaleUnit, dataTopY);
+    ctx.font = getFontSpec(18 * scaleUnit, options.fontFamily, true);
+    ctx.fillText("Find: " + clippedLocation, 40 * scaleUnit, dataTopY + (25 * scaleUnit));
+
+    ctx.textAlign = "right";
+    ctx.font = getFontSpec(22 * scaleUnit, options.fontFamily, true);
+    ctx.fillText("Height: " + (pokemon.height / 10).toFixed(1) + "m", SCREEN_WIDTH - (40 * scaleUnit), dataTopY);
+    ctx.fillText("Weight: " + (pokemon.weight / 10).toFixed(1) + "kg", SCREEN_WIDTH - (40 * scaleUnit), dataTopY + (25 * scaleUnit));
+    currentY = dataTopY + (25 * scaleUnit);
+
+    if (options.showEvolution) {
+      const evolutionCenterY = currentY + (55 * scaleUnit);
+      currentY = await drawClassicEvolutionRow(evolutionData, evolutionCenterY, scaleUnit, ink, options.fontFamily);
+    }
+
+    const dividerTwoY = currentY + (15 * scaleUnit);
+    ctx.beginPath();
+    ctx.moveTo(30 * scaleUnit, dividerTwoY);
+    ctx.lineTo(SCREEN_WIDTH - (30 * scaleUnit), dividerTwoY);
+    ctx.stroke();
+
+    drawClassicFooter(pokemon, flavorText, dividerTwoY + (25 * scaleUnit), scaleUnit, ink, options);
+  }
+
+  function drawBoxedWallpaper(pokemon, sprite, flavorText, evolutionNames, options) {
     const isBlack = options.background === "black";
     const ink = isBlack ? "#ffffff" : "#111111";
     const paper = isBlack ? "#000000" : "#ffffff";
@@ -669,7 +1022,7 @@
     }
 
     if (options.showHp) {
-      currentY = drawHpBars(pokemon, currentY, options.fontFamily) + 6;
+      currentY = drawHpBars(pokemon, currentY, options.fontFamily, true) + 6;
     }
 
     if (options.showEvolution) {
@@ -690,6 +1043,16 @@
 
     if (options.spriteOverlay) drawSprite();
 
+  }
+
+  async function drawWallpaper(bundle, sprite, options) {
+    const flavorText = getFlavorText(bundle.species);
+    const evolutionNames = getEvolutionNames(bundle.evolution);
+    if (options.layoutStyle === "classic") {
+      await drawClassicWallpaper(bundle, sprite, flavorText, options);
+      return;
+    }
+    drawBoxedWallpaper(bundle.pokemon, sprite, flavorText, evolutionNames, options);
   }
 
   function canvasToBmpBlob() {
@@ -752,6 +1115,7 @@
     const evolution = species && species.evolution_chain && species.evolution_chain.url
       ? await fetchJson(species.evolution_chain.url).catch(function() { return null; })
       : null;
+    const encounters = await fetchJson("https://pokeapi.co/api/v2/pokemon/" + encodeURIComponent(String(pokemon.id)) + "/encounters").catch(function() { return []; });
     const spriteUrl =
       getSpriteUrl(pokemon, options.artStyle) ||
       getSpriteUrl(pokemon, "official") ||
@@ -761,7 +1125,7 @@
       throw new Error("Pokemon sprite not available");
     }
     const sprite = await loadImage(spriteUrl);
-    drawWallpaper(pokemon, sprite, getFlavorText(species), getEvolutionNames(evolution), options);
+    await drawWallpaper({ pokemon: pokemon, species: species, evolution: evolution, encounters: encounters }, sprite, options);
     lastRendered = {
       id: pokemon.id,
       name: sanitizeFilename(pokemon.name),
@@ -926,7 +1290,7 @@
   batchUploadBtn.addEventListener("click", runBatchUpload);
   
   // Re-render preview when settings change
-  [artStyleSelect, fontModeSelect, bgStyleSelect, spriteScaleInput, spriteOverlayInput, 
+  [layoutStyleSelect, artStyleSelect, fontModeSelect, bgStyleSelect, spriteScaleInput, spriteOverlayInput,
    showFlavorInput, showHpInput, showEvolutionInput, showAbilitiesInput].forEach(el => {
     el.addEventListener("change", renderCurrentPokemon);
   });
