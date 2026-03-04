@@ -4,7 +4,7 @@
 
 class MappedInputManager {
  public:
-  enum class Button { Back, Confirm, Left, Right, Up, Down, Power, PageBack, PageForward };
+  enum class Button { Back, Confirm, Left, Right, Up, Down, Power, PageBack, PageForward, FrontPageBack, FrontPageForward };
 
   struct Labels {
     const char* btn1;
