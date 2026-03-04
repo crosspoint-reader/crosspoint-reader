@@ -832,8 +832,8 @@ void EpubReaderActivity::restoreSavedPosition() {
 
 bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer) {
   auto epub = std::make_shared<Epub>(filePath, "/.crosspoint");
-  // skip CSS (second arg) since we only need layout/section data
-  if (!epub->load(true, false)) {
+  // Load CSS when embeddedStyle is enabled, as createSectionFile may need it to rebuild the cache.
+  if (!epub->load(true, SETTINGS.embeddedStyle == 0)) {
     LOG_DBG("SLP", "EPUB: failed to load %s", filePath.c_str());
     return false;
   }
@@ -868,13 +868,19 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   const uint16_t viewportWidth = renderer.getScreenWidth() - marginLeft - marginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - marginTop - marginBottom;
 
-  // Load the cached section file (won't rebuild if cache missing — too slow for sleep)
+  // Load or rebuild the section cache. Rebuilding is needed when the cache is missing or stale
+  // (e.g. after a firmware update). A no-op popup callback avoids any UI during sleep preparation.
   auto section = std::unique_ptr<Section>(new Section(epub, spineIndex, renderer));
   if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                 SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                 viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle)) {
-    LOG_DBG("SLP", "EPUB: section cache not found for spine %d", spineIndex);
-    return false;
+    LOG_DBG("SLP", "EPUB: section cache not found for spine %d, rebuilding", spineIndex);
+    if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                                    SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                                    viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, []() {})) {
+      LOG_ERR("SLP", "EPUB: failed to rebuild section cache for spine %d", spineIndex);
+      return false;
+    }
   }
 
   if (pageNumber < 0 || pageNumber >= section->pageCount) pageNumber = 0;

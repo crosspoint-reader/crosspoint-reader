@@ -405,12 +405,17 @@ void TxtReaderActivity::renderStatusBar() const {
 void TxtReaderActivity::saveProgress() const {
   FsFile f;
   if (Storage.openFileForWrite("TRS", txt->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
+    // 6-byte format: page(2 bytes LE) + file offset(4 bytes LE)
+    // The offset lets drawCurrentPageToBuffer render without requiring index.bin.
+    const size_t offset = (currentPage < static_cast<int>(pageOffsets.size())) ? pageOffsets[currentPage] : 0;
+    uint8_t data[6];
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;
-    data[2] = 0;
-    data[3] = 0;
-    f.write(data, 4);
+    data[2] = offset & 0xFF;
+    data[3] = (offset >> 8) & 0xFF;
+    data[4] = (offset >> 16) & 0xFF;
+    data[5] = (offset >> 24) & 0xFF;
+    f.write(data, 6);
     f.close();
   }
 }
@@ -611,82 +616,79 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   const int lineHeight = renderer.getLineHeight(fontId);
   const int linesPerPage = std::max(1, vh / lineHeight);
 
-  // Load the page offset index from cache (must already exist from normal reading)
-  std::string cachePath = txt.getCachePath() + "/index.bin";
-  FsFile cacheFile;
-  if (!Storage.openFileForRead("SLP", cachePath, cacheFile)) {
-    LOG_DBG("SLP", "TXT: no page index cache");
-    return false;
-  }
-
-  uint32_t magic;
-  serialization::readPod(cacheFile, magic);
-  if (magic != CACHE_MAGIC) {
-    cacheFile.close();
-    return false;
-  }
-
-  uint8_t version;
-  serialization::readPod(cacheFile, version);
-  if (version != CACHE_VERSION) {
-    cacheFile.close();
-    return false;
-  }
-
-  uint32_t cachedFileSize;
-  serialization::readPod(cacheFile, cachedFileSize);
-  if (cachedFileSize != txt.getFileSize()) {
-    cacheFile.close();
-    return false;
-  }
-
-  int32_t cachedVw, cachedLpp, cachedFontId, cachedMargin;
-  serialization::readPod(cacheFile, cachedVw);
-  serialization::readPod(cacheFile, cachedLpp);
-  serialization::readPod(cacheFile, cachedFontId);
-  serialization::readPod(cacheFile, cachedMargin);
-  if (cachedVw != vw || cachedLpp != linesPerPage || cachedFontId != fontId || cachedMargin != screenMargin) {
-    LOG_DBG("SLP", "TXT: cache invalid (settings changed)");
-    cacheFile.close();
-    return false;
-  }
-
-  uint8_t cachedAlignment;
-  serialization::readPod(cacheFile, cachedAlignment);
-  if (cachedAlignment != paragraphAlignment) {
-    cacheFile.close();
-    return false;
-  }
-
-  uint32_t numPages;
-  serialization::readPod(cacheFile, numPages);
-  if (numPages == 0 || numPages > MAX_CACHE_PAGES) {
-    cacheFile.close();
-    return false;
-  }
-
-  // Load saved page number before reading offsets
+  // Step 1: Try to read the saved page and its file offset from progress.bin.
+  // The 6-byte format (written by saveProgress) stores: page(2) + offset(4).
+  // This lets us skip index.bin entirely, so the overlay works even when the
+  // page index cache is missing or stale (e.g. after a firmware update).
   int savedPage = 0;
-  FsFile progFile;
-  if (Storage.openFileForRead("SLP", txt.getCachePath() + "/progress.bin", progFile)) {
-    uint8_t data[4];
-    if (progFile.read(data, 4) == 4) {
-      savedPage = (int)((uint32_t)data[0] | ((uint32_t)data[1] << 8));
-    }
-    progFile.close();
-  }
-  if (savedPage < 0 || savedPage >= static_cast<int>(numPages)) savedPage = 0;
-
-  // Read offsets sequentially, retaining only the one we need
   size_t savedOffset = 0;
-  for (uint32_t i = 0; i < numPages; i++) {
-    uint32_t off;
-    serialization::readPod(cacheFile, off);
-    if (static_cast<int>(i) == savedPage) {
-      savedOffset = off;
+  bool offsetKnown = false;
+  {
+    FsFile progFile;
+    if (Storage.openFileForRead("SLP", txt.getCachePath() + "/progress.bin", progFile)) {
+      uint8_t data[6] = {0};
+      const int n = progFile.read(data, 6);
+      progFile.close();
+      if (n >= 2) {
+        savedPage = (int)((uint32_t)data[0] | ((uint32_t)data[1] << 8));
+      }
+      if (n >= 6) {
+        const uint32_t off =
+            (uint32_t)data[2] | ((uint32_t)data[3] << 8) | ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 24);
+        if (off < txt.getFileSize()) {
+          savedOffset = off;
+          offsetKnown = true;
+        }
+      }
     }
   }
-  cacheFile.close();
+
+  // Step 2: If progress.bin didn't provide the offset, fall back to index.bin.
+  if (!offsetKnown) {
+    std::string cachePath = txt.getCachePath() + "/index.bin";
+    FsFile cacheFile;
+    if (Storage.openFileForRead("SLP", cachePath, cacheFile)) {
+      uint32_t magic;
+      serialization::readPod(cacheFile, magic);
+      uint8_t version;
+      serialization::readPod(cacheFile, version);
+      uint32_t cachedFileSize;
+      serialization::readPod(cacheFile, cachedFileSize);
+      int32_t cachedVw, cachedLpp, cachedFontId, cachedMargin;
+      serialization::readPod(cacheFile, cachedVw);
+      serialization::readPod(cacheFile, cachedLpp);
+      serialization::readPod(cacheFile, cachedFontId);
+      serialization::readPod(cacheFile, cachedMargin);
+      uint8_t cachedAlignment;
+      serialization::readPod(cacheFile, cachedAlignment);
+      uint32_t numPages;
+      serialization::readPod(cacheFile, numPages);
+
+      if (magic == CACHE_MAGIC && version == CACHE_VERSION && cachedFileSize == txt.getFileSize() && cachedVw == vw &&
+          cachedLpp == linesPerPage && cachedFontId == fontId && cachedMargin == screenMargin &&
+          cachedAlignment == paragraphAlignment && numPages > 0 && numPages <= MAX_CACHE_PAGES) {
+        if (savedPage < 0 || savedPage >= static_cast<int>(numPages)) savedPage = 0;
+        for (uint32_t i = 0; i < numPages; i++) {
+          uint32_t off;
+          serialization::readPod(cacheFile, off);
+          if (static_cast<int>(i) == savedPage) {
+            savedOffset = off;
+            offsetKnown = true;
+          }
+        }
+      } else {
+        LOG_DBG("SLP", "TXT: index cache invalid or stale");
+      }
+      cacheFile.close();
+    }
+
+    // Step 3: No valid cache at all — render from the start of the file as a last resort.
+    // This shows page 1 rather than a blank screen, which is always preferable.
+    if (!offsetKnown) {
+      LOG_DBG("SLP", "TXT: no valid cache, falling back to start of file");
+      savedOffset = 0;
+    }
+  }
 
   // Load the page lines from file
   std::vector<std::string> pageLines;
