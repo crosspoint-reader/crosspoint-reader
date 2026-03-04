@@ -47,6 +47,7 @@
       <div class="setting-row"><span><strong>Password</strong></span><input type="password" id="dz-password" placeholder="Danger Zone password" /></div>
       <div class="btn-group">
         <button class="btn btn-blue" onclick="dzFeedSync()">Sync Feed</button>
+        <button class="btn btn-blue" onclick="dzScreenshot()">📷 Screenshot Tour</button>
         <button class="btn btn-orange" id="btn-flash" onclick="dzFlash()" disabled>Flash firmware.bin</button>
         <button class="btn btn-red" onclick="dzReboot()">Reboot</button>
       </div>
@@ -60,6 +61,7 @@
   function auth(p){return{'X-Danger-Zone-Password':p};}
   async function dzReboot(){const p=pw();if(!p)return;if(!confirm('Reboot the device?'))return;const r=await fetch('/api/reboot',{method:'POST',headers:auth(p)});r.ok?showMsg('Rebooting...',true):showMsg('Failed: '+await r.text(),false);}
   async function dzFlash(){const p=pw();if(!p)return;if(!confirm('Flash firmware.bin? Device will reboot.'))return;const r=await fetch('/api/flash',{method:'POST',headers:auth(p)});r.ok?showMsg('Flashing... device will reboot',true):showMsg('Failed: '+await r.text(),false);}
+  async function dzScreenshot(){const p=pw();if(!p)return;const r=await fetch('/api/screenshot-tour',{method:'POST',headers:auth(p)});r.ok?showMsg('Screenshot tour started — WiFi will reconnect when done (~30s)',true):showMsg('Failed: '+await r.text(),false);}
   async function dzFeedSync(){const p=pw();if(!p)return;const r=await fetch('/api/feed/sync',{method:'POST',headers:auth(p)});r.ok?showMsg('Feed sync triggered',true):showMsg('Failed: '+await r.text(),false);}
   async function init(){
     try{
