@@ -256,21 +256,34 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Seg 3: Battery — vertical fill bar (white fill = charged) + percentage
+    // Seg 3: CHRG pill (when USB connected) + Battery bar + percentage
     // ─────────────────────────────────────────────────────────────────────────
     {
       const int seg3Top = zoneTop + segH * 3;
       const uint16_t pct = powerManager.getBatteryPercentage();
+      const bool usbConnected = (digitalRead(20) == HIGH);
 
-      // Battery bar geometry
+      // CHRG pill at top of segment
+      constexpr int CHRG_PILL_H = 18;
+      const int chrgY = seg3Top + SEG_MARGIN;
+      if (usbConnected) {
+        renderer.fillRoundedRect(pillX, chrgY, pillW, CHRG_PILL_H, PILL_R, Color::LightGray);
+        const char* lbl = "CHRG";
+        const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
+        const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+        renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2,
+                          chrgY + (CHRG_PILL_H - lh) / 2, lbl, /*black=*/true);
+      }
+
+      // Battery bar geometry — shifted down to make room for CHRG pill
       constexpr int BAR_MARGIN_X = 18;
-      constexpr int BAR_MARGIN_TOP = 8;
       constexpr int BAR_MARGIN_BOT = 20;  // leave room for percentage text
       constexpr int BAR_R = 3;
+      const int barTopOffset = SEG_MARGIN + CHRG_PILL_H + PILL_GAP;
       const int barX = BAR_MARGIN_X;
-      const int barY = seg3Top + BAR_MARGIN_TOP;
+      const int barY = seg3Top + barTopOffset;
       const int barW = LEFT_W - BAR_MARGIN_X * 2;
-      const int barH = segH - BAR_MARGIN_TOP - BAR_MARGIN_BOT;
+      const int barH = segH - barTopOffset - BAR_MARGIN_BOT;
 
       // Outline
       renderer.drawRoundedRect(barX, barY, barW, barH, 1, BAR_R, /*black=*/false);
