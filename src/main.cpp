@@ -9,7 +9,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
-#include <FsDateTime.h>
+#include "../.pio/libdeps/default/SdFat/src/common/FsDateTime.h"  // FsDateTime::setCallback
 #include <Update.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
