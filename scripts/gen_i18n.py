@@ -587,14 +587,20 @@ def validate_manifest(
 
     manifest_codes = {e["code"] for e in entries if "code" in e}
     missing = non_core - manifest_codes
-    extra   = manifest_codes - non_core
+    extra = manifest_codes - non_core
 
     if missing:
-        print(f"WARNING: manifest.json is missing languages: {', '.join(sorted(missing))}")
+        print(
+            f"WARNING: manifest.json is missing languages: {', '.join(sorted(missing))}"
+        )
     if extra:
-        print(f"WARNING: manifest.json has extra codes not in translations/: {', '.join(sorted(extra))}")
+        print(
+            f"WARNING: manifest.json has extra codes not in translations/: {', '.join(sorted(extra))}"
+        )
     if not missing and not extra:
-        print(f"OK: manifest.json is in sync ({len(manifest_codes)} non-core languages)")
+        print(
+            f"OK: manifest.json is in sync ({len(manifest_codes)} non-core languages)"
+        )
 
 
 # ---------------------------------------------------------------------------
