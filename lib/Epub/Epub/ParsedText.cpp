@@ -550,7 +550,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
     lineXPos.push_back(xpos);
 
-    const bool nextIsContinuation = wordIdx + 1 < lineWordCount && joinsVec[lastBreakAt + wordIdx + 1] != WordJoin::SPACED;
+    const bool nextIsContinuation =
+        wordIdx + 1 < lineWordCount && joinsVec[lastBreakAt + wordIdx + 1] != WordJoin::SPACED;
     if (nextIsContinuation) {
       int advance = wordWidths[lastBreakAt + wordIdx];
       // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
