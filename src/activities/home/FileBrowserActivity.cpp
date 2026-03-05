@@ -1,4 +1,4 @@
-#include "MyLibraryActivity.h"
+#include "FileBrowserActivity.h"
 
 #include <Epub.h>
 #include <GfxRenderer.h>
@@ -69,7 +69,7 @@ void sortFileList(std::vector<std::string>& strs) {
   });
 }
 
-void MyLibraryActivity::loadFiles() {
+void FileBrowserActivity::loadFiles() {
   files.clear();
 
   auto root = Storage.open(basepath.c_str());
@@ -104,7 +104,7 @@ void MyLibraryActivity::loadFiles() {
   sortFileList(files);
 }
 
-void MyLibraryActivity::onEnter() {
+void FileBrowserActivity::onEnter() {
   Activity::onEnter();
 
   loadFiles();
@@ -113,20 +113,20 @@ void MyLibraryActivity::onEnter() {
   requestUpdate();
 }
 
-void MyLibraryActivity::onExit() {
+void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
 }
 
-void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
+void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
   // Only clear cache for .epub files
   if (StringUtils::checkFileExtension(fullPath, ".epub")) {
     Epub(fullPath, "/.crosspoint").clearCache();
-    LOG_DBG("MyLibrary", "Cleared metadata cache for: %s", fullPath.c_str());
+    LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
   }
 }
 
-void MyLibraryActivity::loop() {
+void FileBrowserActivity::loop() {
   // Long press BACK (1s+) goes to root folder
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
       basepath != "/") {
@@ -152,10 +152,10 @@ void MyLibraryActivity::loop() {
 
       auto handler = [this, fullPath](const ActivityResult& res) {
         if (!res.isCancelled) {
-          LOG_DBG("MyLibrary", "Attempting to delete: %s", fullPath.c_str());
+          LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           clearFileMetadata(fullPath);
           if (Storage.remove(fullPath.c_str())) {
-            LOG_DBG("MyLibrary", "Deleted successfully");
+            LOG_DBG("FileBrowser", "Deleted successfully");
             loadFiles();
             if (files.empty()) {
               selectorIndex = 0;
@@ -166,10 +166,10 @@ void MyLibraryActivity::loop() {
 
             requestUpdate(true);
           } else {
-            LOG_ERR("MyLibrary", "Failed to delete file: %s", fullPath.c_str());
+            LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
           }
         } else {
-          LOG_DBG("MyLibrary", "Delete cancelled by user");
+          LOG_DBG("FileBrowser", "Delete cancelled by user");
         }
       };
 
@@ -244,7 +244,7 @@ std::string getFileName(std::string filename) {
   return filename.substr(0, pos);
 }
 
-void MyLibraryActivity::render(RenderLock&&) {
+void FileBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -274,7 +274,7 @@ void MyLibraryActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-size_t MyLibraryActivity::findEntry(const std::string& name) const {
+size_t FileBrowserActivity::findEntry(const std::string& name) const {
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i;
   return 0;

@@ -28,8 +28,6 @@ void ConfirmationActivity::onEnter() {
   if (!safeHeading.empty() && !safeBody.empty()) totalHeight += spacing;
 
   startY = (renderer.getScreenHeight() - totalHeight) / 2;
-  LOG_DBG("CONF", "startY: %d", startY);
-  LOG_DBG("CONF", "Heading: %s", safeHeading.c_str());
 
   requestUpdate(true);
 }
