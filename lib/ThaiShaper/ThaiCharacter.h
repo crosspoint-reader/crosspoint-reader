@@ -23,17 +23,17 @@ namespace ThaiShaper {
 
 // Thai character types for positioning and cluster formation
 enum class ThaiCharType : uint8_t {
-  NON_THAI,        // Not a Thai character
-  CONSONANT,       // Base consonant (ก-ฮ)
-  LEADING_VOWEL,   // Vowels that display before consonant (เ แ โ ไ ใ)
-  ABOVE_VOWEL,     // Vowels above consonant (ั ิ ี ึ ื ็)
-  BELOW_VOWEL,     // Vowels below consonant (ุ ู ฺ)
-  FOLLOW_VOWEL,    // Vowels that follow consonant (ะ า ำ)
-  TONE_MARK,       // Tone marks (่ ้ ๊ ๋)
-  NIKHAHIT,        // Nikhahit (ํ) - special combining mark
-  YAMAKKAN,        // Yamakkan (์) - cancellation mark
-  THAI_DIGIT,      // Thai digits (๐-๙)
-  THAI_SYMBOL,     // Thai punctuation and symbols
+  NON_THAI,       // Not a Thai character
+  CONSONANT,      // Base consonant (ก-ฮ)
+  LEADING_VOWEL,  // Vowels that display before consonant (เ แ โ ไ ใ)
+  ABOVE_VOWEL,    // Vowels above consonant (ั ิ ี ึ ื ็)
+  BELOW_VOWEL,    // Vowels below consonant (ุ ู ฺ)
+  FOLLOW_VOWEL,   // Vowels that follow consonant (ะ า ำ)
+  TONE_MARK,      // Tone marks (่ ้ ๊ ๋)
+  NIKHAHIT,       // Nikhahit (ํ) - special combining mark
+  YAMAKKAN,       // Yamakkan (์) - cancellation mark
+  THAI_DIGIT,     // Thai digits (๐-๙)
+  THAI_SYMBOL,    // Thai punctuation and symbols
 };
 
 // Check if a codepoint is in the Thai Unicode block
