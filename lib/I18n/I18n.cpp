@@ -61,6 +61,7 @@ void I18n::setLanguage(Language lang) {
 bool I18n::setExternalLanguage(const char* code) {
   if (!code || code[0] == '\0') return false;
   if (!loadExternalLanguage(code)) return false;
+  memset(_missingExternalCode, 0, sizeof(_missingExternalCode));
   saveSettings();
   return true;
 }
@@ -98,6 +99,21 @@ const char* I18n::getCharacterSet(Language lang) {
   const auto idx = static_cast<size_t>(lang);
   if (idx >= static_cast<size_t>(Language::_CORE_COUNT)) return CHARACTER_SETS[0];
   return CHARACTER_SETS[idx];
+}
+
+bool I18n::consumeMissingExternalLanguageCode(char* outCode, size_t outCodeLen) {
+  if (!outCode || outCodeLen == 0 || _missingExternalCode[0] == '\0') return false;
+
+  strncpy(outCode, _missingExternalCode, outCodeLen - 1);
+  outCode[outCodeLen - 1] = '\0';
+  memset(_missingExternalCode, 0, sizeof(_missingExternalCode));
+  return true;
+}
+
+void I18n::markMissingExternalLanguageCode(const char* code) {
+  if (!code || code[0] == '\0') return;
+  strncpy(_missingExternalCode, code, sizeof(_missingExternalCode) - 1);
+  _missingExternalCode[sizeof(_missingExternalCode) - 1] = '\0';
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +320,14 @@ void I18n::loadSettings() {
             // Core languages occupy indices 0.._CORE_COUNT-1 in ALL_LANGUAGES
             // in the same order as the Language enum.
             _language = static_cast<Language>(i);
+            memset(_missingExternalCode, 0, sizeof(_missingExternalCode));
             LOG_DBG("I18N", "Loaded core language: %s", codeBuf);
             return;
           }
         }
         // Not a core language — attempt to load from SD card.
         if (!loadExternalLanguage(codeBuf)) {
+          markMissingExternalLanguageCode(codeBuf);
           LOG_DBG("I18N", "Language %s not on SD, defaulting to EN", codeBuf);
         }
         return;
@@ -339,6 +357,7 @@ void I18n::loadSettings() {
           for (uint8_t i = 0; i < LANGUAGE_META_COUNT; i++) {
             if (strcmp(ALL_LANGUAGES[i].code, code) == 0) {
               _language = static_cast<Language>(i);
+              memset(_missingExternalCode, 0, sizeof(_missingExternalCode));
               LOG_DBG("I18N", "Migrated legacy language %d -> %s (core)", langIdx, code);
               saveSettings();
               return;
@@ -346,9 +365,11 @@ void I18n::loadSettings() {
           }
           // Non-core: attempt to load from SD card
           if (loadExternalLanguage(code)) {
+            memset(_missingExternalCode, 0, sizeof(_missingExternalCode));
             LOG_DBG("I18N", "Migrated legacy language %d -> %s (external)", langIdx, code);
             saveSettings();
           } else {
+            markMissingExternalLanguageCode(code);
             LOG_DBG("I18N", "Legacy language %s not on SD, defaulting to EN", code);
           }
         }

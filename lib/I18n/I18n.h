@@ -49,6 +49,10 @@ class I18n {
   void saveSettings();
   void loadSettings();
 
+  // Returns true once when a saved external language code was missing on SD.
+  // The code is copied into outCode and the pending state is cleared.
+  bool consumeMissingExternalLanguageCode(char* outCode, size_t outCodeLen);
+
   // Character set for the active language (used by font renderer).
   // Returns EN character set for external languages.
   const char* getCharacterSet() const;
@@ -62,10 +66,12 @@ class I18n {
   // Parse /.crosspoint/languages/XX.yaml into _extBuffer / _extTable.
   bool loadExternalLanguage(const char* code);
   void unloadExternalLanguage();
+  void markMissingExternalLanguageCode(const char* code);
 
   Language _language = Language::EN;
   char _extCode[8] = {};                                           // active external language code, e.g. "FI"
   char _extName[48] = {};                                          // active external language native name, e.g. "Suomi"
+  char _missingExternalCode[8] = {};                               // saved external code missing on boot
   char* _extBuffer = nullptr;                                      // heap-allocated string data
   const char* _extTable[static_cast<size_t>(StrId::_COUNT)] = {};  // ptrs into _extBuffer
 };

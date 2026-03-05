@@ -15,8 +15,10 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/settings/LanguageDownloadActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ConfirmationActivity.h"
 #include "util/StringUtils.h"
 
 int HomeActivity::getMenuItemCount() const {
@@ -121,6 +123,25 @@ void HomeActivity::onEnter() {
 
   // Trigger first update
   requestUpdate();
+
+  char missingCode[8] = {};
+  if (I18N.consumeMissingExternalLanguageCode(missingCode, sizeof(missingCode))) {
+    const std::string code = missingCode;
+    const std::string heading = tr(STR_LANGUAGE);
+    const std::string body = "Saved language " + code + " is missing. Download now?";
+
+    startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, body),
+                           [this, code](const ActivityResult& res) {
+                             if (res.isCancelled) return;
+
+                             startActivityForResult(std::make_unique<LanguageDownloadActivity>(
+                                                        renderer, mappedInput, code.c_str(), code.c_str()),
+                                                    [this](const ActivityResult&) {
+                                                      // Keep HomeActivity responsive after the download flow returns.
+                                                      requestUpdate();
+                                                    });
+                           });
+  }
 }
 
 void HomeActivity::onExit() {
