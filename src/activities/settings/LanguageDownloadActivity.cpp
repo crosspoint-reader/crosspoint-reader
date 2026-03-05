@@ -22,6 +22,10 @@ static constexpr const char* LANG_DOWNLOAD_BASE =
     "jpirnay/crosspoint-reader/feat-minimal-languages/"
     "lib/I18n/translations/";
 
+static bool isValidLanguageCode(const std::string& code) {
+  return code.size() == 2 && code[0] >= 'A' && code[0] <= 'Z' && code[1] >= 'A' && code[1] <= 'Z';
+}
+
 // ---------------------------------------------------------------------------
 // WiFi callback
 // ---------------------------------------------------------------------------
@@ -49,6 +53,16 @@ void LanguageDownloadActivity::doDownload() {
     _progressPercent = 0;
   }
   requestUpdateAndWait();
+
+  if (!isValidLanguageCode(_code)) {
+    LOG_ERR("LANG_DL", "Invalid language code: %s", _code.c_str());
+    {
+      RenderLock lock(*this);
+      _state = DOWNLOAD_FAILED;
+    }
+    requestUpdate();
+    return;
+  }
 
   Storage.mkdir("/.crosspoint");
   Storage.mkdir("/.crosspoint/languages");

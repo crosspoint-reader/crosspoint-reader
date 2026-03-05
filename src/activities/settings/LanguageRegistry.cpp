@@ -9,6 +9,7 @@
 #include <cstring>
 
 static constexpr const char* MANIFEST_PATH = "/.crosspoint/languages/manifest.json";
+static constexpr size_t MAX_MANIFEST_BYTES = 8 * 1024;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -84,6 +85,10 @@ static bool hasCode(const std::vector<LanguageEntry>& list, const char* code) {
   return false;
 }
 
+static bool isValidLanguageCode(const char* code) {
+  return code && code[0] >= 'A' && code[0] <= 'Z' && code[1] >= 'A' && code[1] <= 'Z' && code[2] == '\0';
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -133,7 +138,7 @@ std::vector<LanguageEntry> LanguageRegistry::buildList() {
         readYamlMeta(file, code, sizeof(code), name, sizeof(name));
         file.close();
 
-        if (code[0] == '\0' || hasCode(list, code)) continue;
+        if (!isValidLanguageCode(code) || hasCode(list, code)) continue;
 
         LanguageEntry e{};
         strncpy(e.code, code, sizeof(e.code) - 1);
@@ -153,6 +158,13 @@ std::vector<LanguageEntry> LanguageRegistry::buildList() {
   {
     FsFile file;
     if (Storage.openFileForRead("LANG", MANIFEST_PATH, file)) {
+      const size_t manifestSize = static_cast<size_t>(file.size());
+      if (manifestSize == 0 || manifestSize > MAX_MANIFEST_BYTES) {
+        LOG_ERR("LANG_REG", "manifest.json size invalid: %zu", manifestSize);
+        file.close();
+        return list;
+      }
+
       JsonDocument doc;
       const DeserializationError err = deserializeJson(doc, file);
       file.close();
@@ -161,7 +173,7 @@ std::vector<LanguageEntry> LanguageRegistry::buildList() {
         for (JsonObject lang : doc.as<JsonArray>()) {
           const char* code = lang["code"] | "";
           const char* name = lang["name"] | "";
-          if (code[0] == '\0' || hasCode(list, code)) continue;
+          if (!isValidLanguageCode(code) || hasCode(list, code)) continue;
 
           LanguageEntry e{};
           strncpy(e.code, code, sizeof(e.code) - 1);

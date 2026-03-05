@@ -129,6 +129,15 @@ static bool readFileLine(FsFile& file, char* buf, size_t bufSize) {
     if (c != '\r') buf[pos++] = static_cast<char>(c);
   }
   buf[pos] = '\0';
+
+  // Keep parser alignment by consuming the remainder of an oversized line.
+  if (pos == bufSize - 1) {
+    uint8_t c;
+    while (file.read(&c, 1) == 1) {
+      if (c == '\n') break;
+    }
+  }
+
   return true;
 }
 
@@ -142,17 +151,15 @@ bool I18n::loadExternalLanguage(const char* code) {
     return false;
   }
 
-  char* buf = static_cast<char*>(malloc(EXT_LANG_BUF_SIZE));
-  if (!buf) {
+  char* tempBuffer = static_cast<char*>(malloc(EXT_LANG_BUF_SIZE));
+  if (!tempBuffer) {
     LOG_ERR("I18N", "Out of memory loading external language");
     file.close();
     return false;
   }
 
-  // Clear previous state before filling the new table.
-  if (_extBuffer) free(_extBuffer);
-  _extBuffer = buf;
-  memset(_extTable, 0, sizeof(_extTable));
+  const char* tempTable[static_cast<size_t>(StrId::_COUNT)] = {};
+  char tempName[sizeof(_extName)] = {};
 
   size_t bufUsed = 0;
   int strCount = 0;
@@ -168,8 +175,8 @@ bool I18n::loadExternalLanguage(const char* code) {
         if (*p == '"') {
           p++;
           size_t n = 0;
-          while (*p && *p != '"' && n < sizeof(_extName) - 1) _extName[n++] = *p++;
-          _extName[n] = '\0';
+          while (*p && *p != '"' && n < sizeof(tempName) - 1) tempName[n++] = *p++;
+          tempName[n] = '\0';
         }
       }
       continue;
@@ -199,27 +206,34 @@ bool I18n::loadExternalLanguage(const char* code) {
       if (*p == '\\' && *(p + 1)) {
         const char esc = *(p + 1);
         if (esc == 'n') {
-          buf[bufUsed++] = '\n';
+          tempBuffer[bufUsed++] = '\n';
           p += 2;
         } else if (esc == '"') {
-          buf[bufUsed++] = '"';
+          tempBuffer[bufUsed++] = '"';
           p += 2;
         } else if (esc == '\\') {
-          buf[bufUsed++] = '\\';
+          tempBuffer[bufUsed++] = '\\';
           p += 2;
         } else {
           p++;
         }  // unknown escape: skip
       } else {
-        buf[bufUsed++] = *p++;
+        tempBuffer[bufUsed++] = *p++;
       }
     }
-    buf[bufUsed++] = '\0';
+
+    if (bufUsed < EXT_LANG_BUF_SIZE) {
+      tempBuffer[bufUsed++] = '\0';
+    } else {
+      tempBuffer[EXT_LANG_BUF_SIZE - 1] = '\0';
+    }
+
+    if (strStart >= EXT_LANG_BUF_SIZE) continue;
 
     // Map key name -> StrId and store pointer
     const StrId id = strIdFromKey(key);
     if (id != StrId::_COUNT) {
-      _extTable[static_cast<size_t>(id)] = _extBuffer + strStart;
+      tempTable[static_cast<size_t>(id)] = tempBuffer + strStart;
       strCount++;
     }
   }
@@ -228,10 +242,16 @@ bool I18n::loadExternalLanguage(const char* code) {
 
   if (strCount == 0) {
     LOG_ERR("I18N", "No valid strings found in %s", path);
-    free(_extBuffer);
-    _extBuffer = nullptr;
+    free(tempBuffer);
     return false;
   }
+
+  // Commit parsed language atomically so failed loads do not destroy current state.
+  unloadExternalLanguage();
+  _extBuffer = tempBuffer;
+  memcpy(_extTable, tempTable, sizeof(_extTable));
+  strncpy(_extName, tempName, sizeof(_extName) - 1);
+  _extName[sizeof(_extName) - 1] = '\0';
 
   strncpy(_extCode, code, sizeof(_extCode) - 1);
   _extCode[sizeof(_extCode) - 1] = '\0';

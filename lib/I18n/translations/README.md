@@ -61,7 +61,7 @@ non-core languages.
 
 The file is served via GitHub's raw content URL:
 
-```
+```text
 https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/master/lib/I18n/translations/manifest.json
 ```
 

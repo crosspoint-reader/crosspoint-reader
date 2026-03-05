@@ -20,8 +20,17 @@ int LanguageSelectActivity::totalListItems() const {
 }
 
 void LanguageSelectActivity::refreshList() {
-  _languages   = LanguageRegistry::buildList();
+  _languages = LanguageRegistry::buildList();
   _hasManifest = LanguageRegistry::hasManifest();
+
+  const int total = totalListItems();
+  if (total <= 0) {
+    selectedIndex = 0;
+  } else if (selectedIndex < 0) {
+    selectedIndex = 0;
+  } else if (selectedIndex >= total) {
+    selectedIndex = total - 1;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -34,7 +43,7 @@ void LanguageSelectActivity::onEnter() {
 
   // Find the display position of the active language.
   const char* activeCode = I18N.getActiveCode();
-  selectedIndex          = 0;
+  selectedIndex = 0;
   for (int i = 0; i < static_cast<int>(_languages.size()); i++) {
     if (strcmp(_languages[i].code, activeCode) == 0) {
       selectedIndex = i;
@@ -72,16 +81,22 @@ void LanguageSelectActivity::loop() {
 }
 
 void LanguageSelectActivity::handleSelection() {
+  const int total = totalListItems();
+  if (total <= 0 || selectedIndex < 0 || selectedIndex >= total) {
+    selectedIndex = 0;
+    requestUpdate();
+    return;
+  }
+
   // "More languages..." entry (last item, only when no manifest cached).
   if (!_hasManifest && selectedIndex == static_cast<int>(_languages.size())) {
-    startActivityForResult(
-        std::make_unique<LanguageManifestFetchActivity>(renderer, mappedInput),
-        [this](const ActivityResult& res) {
-          if (!res.isCancelled) {
-            refreshList();
-            requestUpdate();
-          }
-        });
+    startActivityForResult(std::make_unique<LanguageManifestFetchActivity>(renderer, mappedInput),
+                           [this](const ActivityResult& res) {
+                             if (!res.isCancelled) {
+                               refreshList();
+                               requestUpdate();
+                             }
+                           });
     return;
   }
 
@@ -110,11 +125,10 @@ void LanguageSelectActivity::handleSelection() {
   }
 
   // Non-core language available for download.
-  startActivityForResult(
-      std::make_unique<LanguageDownloadActivity>(renderer, mappedInput, lang.code, lang.name),
-      [this](const ActivityResult& res) {
-        if (!res.isCancelled) onBack();  // language activated — leave the list
-      });
+  startActivityForResult(std::make_unique<LanguageDownloadActivity>(renderer, mappedInput, lang.code, lang.name),
+                         [this](const ActivityResult& res) {
+                           if (!res.isCancelled) onBack();  // language activated — leave the list
+                         });
 }
 
 // ---------------------------------------------------------------------------
@@ -124,26 +138,23 @@ void LanguageSelectActivity::handleSelection() {
 void LanguageSelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto  pageWidth  = renderer.getScreenWidth();
-  const auto  pageHeight = renderer.getScreenHeight();
-  const auto& metrics    = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 tr(STR_LANGUAGE));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LANGUAGE));
 
-  const int contentTop    = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   const char* activeCode = I18N.getActiveCode();
-  const int   total      = totalListItems();
+  const int total = totalListItems();
 
   GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight},
-      total, selectedIndex,
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, total, selectedIndex,
       // Row title
       [this](int index) -> std::string {
-        if (!_hasManifest && index == static_cast<int>(_languages.size()))
-          return tr(STR_GET_MORE_LANGUAGES);
+        if (!_hasManifest && index == static_cast<int>(_languages.size())) return tr(STR_GET_MORE_LANGUAGES);
         return std::string(_languages[index].name);
       },
       nullptr, nullptr,
@@ -157,8 +168,7 @@ void LanguageSelectActivity::render(RenderLock&&) {
       },
       true);
 
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

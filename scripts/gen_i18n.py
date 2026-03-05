@@ -296,7 +296,6 @@ def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -
 
 def generate_keys_header(
     language_codes: List[str],
-    language_names: List[str],
     string_keys: List[str],
     output_path: str,
 ) -> None:
@@ -360,7 +359,7 @@ def generate_keys_header(
         "  const char* key;",
         "  StrId       id;",
         "};",
-        f"constexpr uint16_t STR_ID_LOOKUP_COUNT = static_cast<uint16_t>(StrId::_COUNT);",
+        "constexpr uint16_t STR_ID_LOOKUP_COUNT = static_cast<uint16_t>(StrId::_COUNT);",
         "extern const StrIdEntry STR_ID_LOOKUP[STR_ID_LOOKUP_COUNT];",
         "StrId strIdFromKey(const char* key);  // binary search",
         "",
@@ -401,7 +400,7 @@ def generate_keys_header(
         ]
     lines += [
         "    default:",
-        f"      return i18n_strings::STRINGS_EN;  // EN fallback",
+        "      return i18n_strings::STRINGS_EN;  // EN fallback",
         "  }",
         "}",
         "",
@@ -569,7 +568,31 @@ def validate_manifest(
             print(f"WARNING: {manifest_path} is not valid JSON: {e}")
             return
 
-    manifest_codes = {e["code"] for e in entries if "code" in e}
+    if not isinstance(entries, list):
+        print(f"WARNING: {manifest_path} must contain a JSON array")
+        return
+
+    manifest_codes = set()
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            print(f"WARNING: {manifest_path}[{i}] is not an object; skipping")
+            continue
+
+        code = entry.get("code")
+        if not isinstance(code, str):
+            print(
+                f"WARNING: {manifest_path}[{i}].code is missing or not a string; skipping"
+            )
+            continue
+
+        normalized = code.upper()
+        if not re.match(r"^[A-Z]{2}$", normalized):
+            print(
+                f"WARNING: {manifest_path}[{i}].code '{code}' is not a 2-letter uppercase code; skipping"
+            )
+            continue
+
+        manifest_codes.add(normalized)
     missing = non_core - manifest_codes
     extra = manifest_codes - non_core
 
@@ -644,9 +667,7 @@ def main(
         )
 
         out = Path(output_dir)
-        generate_keys_header(
-            language_codes, language_names, string_keys, str(out / "I18nKeys.h")
-        )
+        generate_keys_header(language_codes, string_keys, str(out / "I18nKeys.h"))
         generate_strings_header(language_codes, str(out / "I18nStrings.h"))
         generate_strings_cpp(
             language_codes,
