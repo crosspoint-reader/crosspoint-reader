@@ -28,9 +28,6 @@ const StrId progressBarThicknessNames[PROGRESS_BAR_THICKNESS_ITEMS] = {
 constexpr int TITLE_ITEMS = 3;
 const StrId titleNames[TITLE_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE};
 
-const char* translatedShow = tr(STR_SHOW);
-const char* translatedHide = tr(STR_HIDE);
-
 const int widthMargin = 10;
 const int verticalPreviewPadding = 50;
 const int verticalPreviewTextPadding = 40;
@@ -61,7 +58,7 @@ void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
 
 void StatusBarSettingsActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onBack();
+    finish();
     return;
   }
 
@@ -117,7 +114,7 @@ void StatusBarSettingsActivity::handleSelection() {
   SETTINGS.saveToFile();
 }
 
-void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
+void StatusBarSettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();
@@ -135,9 +132,9 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
       [this](int index) {
         // Draw status for each setting
         if (index == 0) {
-          return SETTINGS.statusBarChapterPageCount ? translatedShow : translatedHide;
+          return SETTINGS.statusBarChapterPageCount ? tr(STR_SHOW) : tr(STR_HIDE);
         } else if (index == 1) {
-          return SETTINGS.statusBarBookProgressPercentage ? translatedShow : translatedHide;
+          return SETTINGS.statusBarBookProgressPercentage ? tr(STR_SHOW) : tr(STR_HIDE);
         } else if (index == 2) {
           return I18N.get(progressBarNames[SETTINGS.statusBarProgressBar]);
         } else if (index == 3) {
@@ -145,9 +142,9 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
         } else if (index == 4) {
           return I18N.get(titleNames[SETTINGS.statusBarTitle]);
         } else if (index == 5) {
-          return SETTINGS.statusBarBattery ? translatedShow : translatedHide;
+          return SETTINGS.statusBarBattery ? tr(STR_SHOW) : tr(STR_HIDE);
         } else {
-          return translatedHide;
+          return tr(STR_HIDE);
         }
       },
       true);
@@ -159,7 +156,7 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
   std::string title;
   if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
     title = tr(STR_EXAMPLE_BOOK);
-  } else {
+  } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = tr(STR_EXAMPLE_CHAPTER);
   }
 

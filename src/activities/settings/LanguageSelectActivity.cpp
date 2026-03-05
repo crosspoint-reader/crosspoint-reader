@@ -58,7 +58,7 @@ void LanguageSelectActivity::handleSelection() {
   onBack();
 }
 
-void LanguageSelectActivity::render(Activity::RenderLock&&) {
+void LanguageSelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -75,7 +75,7 @@ void LanguageSelectActivity::render(Activity::RenderLock&&) {
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
       [this](int index) { return I18N.getLanguageName(static_cast<Language>(SORTED_LANGUAGE_INDICES[index])); },
       nullptr, nullptr,
-      [this, currentLang](int index) { return SORTED_LANGUAGE_INDICES[index] == currentLang ? tr(STR_SET) : ""; },
+      [this, currentLang](int index) { return SORTED_LANGUAGE_INDICES[index] == currentLang ? tr(STR_SELECTED) : ""; },
       true);
 
   // Button hints
