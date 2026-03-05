@@ -569,11 +569,12 @@ for face_idx, cps in face_idx_cps.items():
         kern_map.update(extract_kerning_fonttools(font_path, face_base_cps, ppem))
 print(f"kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
 
-# 2. Extract GPOS mark anchors and bake average correction into glyph `left`.
-# For each combining mark, compute the median horizontal offset from the
-# post-advance cursor to the font's intended anchor, across all base glyphs.
-# Adjusting `left` re-centres the mark bitmap with zero runtime data cost.
-mark_left_adjustments = {}  # markCp -> pixel_adjustment
+# 2. Extract GPOS mark anchors for combining mark positioning.
+#    - Median correction per mark is baked into glyph `left` (zero data cost).
+#    - Per-base residuals (full correction minus median) are added as kern
+#      pairs, filtered to >= 1 pixel since marks render at pixel coordinates.
+all_mark_kerns = {}  # (baseCp, markCp) -> fp4_adjust
+mark_medians = {}    # markCp -> fp4_median
 for face_idx, cps in face_idx_cps.items():
     font_path = args.fontstack[face_idx]
     face_base = cps & base_cps
@@ -581,18 +582,21 @@ for face_idx, cps in face_idx_cps.items():
     if face_base and face_marks:
         mark_kerns = extract_mark_positioning(
             font_path, face_base, face_marks, cp_advance, ppem)
-        # Group adjustments per mark codepoint
+        all_mark_kerns.update(mark_kerns)
         per_mark = {}
         for (base_cp, mark_cp), fp4_adj in mark_kerns.items():
             per_mark.setdefault(mark_cp, []).append(fp4_adj)
         for mark_cp, adjs in per_mark.items():
             adjs.sort()
-            median = adjs[len(adjs) // 2]
-            px_adj = round(median / 16.0)
-            if px_adj != 0:
-                mark_left_adjustments[mark_cp] = px_adj
+            mark_medians[mark_cp] = adjs[len(adjs) // 2]
 
-# Apply the adjustment to glyph_props (modifies the `left` field)
+# Bake median into glyph `left` field
+mark_left_adjustments = {}
+for mark_cp, median_fp4 in mark_medians.items():
+    px_adj = round(median_fp4 / 16.0)
+    if px_adj != 0:
+        mark_left_adjustments[mark_cp] = px_adj
+
 if mark_left_adjustments:
     adjusted_count = 0
     for i, g in enumerate(glyph_props):
@@ -603,6 +607,22 @@ if mark_left_adjustments:
     print(f"mark positioning: adjusted `left` for {adjusted_count} combining glyphs "
           f"(median GPOS anchor correction)", file=sys.stderr)
 
+# Per-base mark residuals are added AFTER base-base class computation.
+# Instead of inflating left classes, mark adjustments reuse the existing
+# base-base left classes: for each (left_class, mark), we average the
+# residuals of all bases in that class.  This extends the matrix rightward
+# (adding mark columns) without changing left class count.
+mark_kern_map = {}  # (baseCp, markCp) -> quantized_fp4
+for (base_cp, mark_cp), fp4_adj in all_mark_kerns.items():
+    median = mark_medians.get(mark_cp, 0)
+    residual_px = round((fp4_adj - median) / 16.0)
+    if residual_px == 0:
+        continue
+    quantized = max(-128, min(127, residual_px * 16))
+    mark_kern_map[(base_cp, mark_cp)] = quantized
+print(f"mark positioning: {len(mark_kern_map)} residual pairs (quantized to 1px)",
+      file=sys.stderr)
+
 # --- Derive class-based kerning from pairs ---
 kern_left_classes = []   # list of (codepoint, classId)
 kern_right_classes = []  # list of (codepoint, classId)
@@ -610,14 +630,14 @@ kern_matrix = []         # flat list of int8_t values
 kern_left_class_count = 0
 kern_right_class_count = 0
 
-if kern_map:
+if kern_map or mark_kern_map:
+    # Step 1: Compute base-base classes (mark data excluded to avoid inflation)
     all_left_cps = {lcp for lcp, _ in kern_map}
     all_right_cps = {rcp for _, rcp in kern_map}
 
     sorted_right_cps = sorted(all_right_cps)
     sorted_left_cps = sorted(all_left_cps)
 
-    # Group left codepoints by identical adjustment row
     left_profile_to_class = {}
     left_class_map = {}
     left_class_id = 1
@@ -628,7 +648,6 @@ if kern_map:
             left_class_id += 1
         left_class_map[lcp] = left_profile_to_class[row]
 
-    # Group right codepoints by identical adjustment column
     right_profile_to_class = {}
     right_class_map = {}
     right_class_id = 1
@@ -643,24 +662,104 @@ if kern_map:
     kern_right_class_count = right_class_id - 1
 
     if kern_left_class_count > 255 or kern_right_class_count > 255:
-        print(f"WARNING: kerning class count exceeds uint8_t range "
+        print(f"WARNING: base kerning class count exceeds uint8_t range "
               f"(left={kern_left_class_count}, right={kern_right_class_count})",
               file=sys.stderr)
 
-    # Build the class x class matrix
-    kern_matrix = [0] * (kern_left_class_count * kern_right_class_count)
-    for (lcp, rcp), adjust in kern_map.items():
-        lc = left_class_map[lcp] - 1
-        rc = right_class_map[rcp] - 1
-        kern_matrix[lc * kern_right_class_count + rc] = adjust
+    print(f"kerning: {kern_left_class_count} left classes, {kern_right_class_count} right classes "
+          f"(base-base)", file=sys.stderr)
 
-    # Build sorted class entry lists
+    # Step 2: Extend with mark columns.  For each mark, average the residuals
+    # of all bases sharing the same left class.  This reuses existing left
+    # classes (no row growth) and adds one right class per unique mark column.
+    mark_right_class_map = {}
+    mark_class_cols = {}  # mark_right_classId -> column of adjustments
+    if mark_kern_map:
+        # Invert left_class_map: classId -> set of base codepoints
+        class_to_bases = {}
+        for cp, cid in left_class_map.items():
+            class_to_bases.setdefault(cid, []).append(cp)
+
+        all_mark_cps = sorted({mcp for _, mcp in mark_kern_map})
+        # For each mark, compute column: left_class -> averaged residual
+        mark_right_class_id = kern_right_class_count + 1
+        mark_col_to_class = {}
+        for mcp in all_mark_cps:
+            col = []
+            for lc_id in range(1, kern_left_class_count + 1):
+                bases = class_to_bases.get(lc_id, [])
+                vals = [mark_kern_map.get((b, mcp), 0) for b in bases]
+                nz = [v for v in vals if v != 0]
+                avg = round(sum(nz) / len(nz) / 16.0) * 16 if nz else 0
+                avg = max(-128, min(127, avg))
+                col.append(avg)
+            col_t = tuple(col)
+            if all(v == 0 for v in col_t):
+                continue
+            if col_t not in mark_col_to_class:
+                mark_col_to_class[col_t] = mark_right_class_id
+                mark_class_cols[mark_right_class_id] = col_t
+                mark_right_class_id += 1
+            mark_right_class_map[mcp] = mark_col_to_class[col_t]
+
+        # Also assign left class to bases that have mark data but no kern data
+        for (base_cp, _), _ in mark_kern_map.items():
+            if base_cp not in left_class_map:
+                zero_row = tuple(0 for _ in sorted_right_cps)
+                if zero_row not in left_profile_to_class:
+                    kern_left_class_count += 1
+                    left_profile_to_class[zero_row] = kern_left_class_count
+                left_class_map[base_cp] = left_profile_to_class[zero_row]
+
+        n_mark_right = len(mark_class_cols)
+        total_right = kern_right_class_count + n_mark_right
+        if total_right > 255:
+            print(f"WARNING: mark extension causes right class overflow "
+                  f"({kern_right_class_count}+{n_mark_right}={total_right} > 255), "
+                  f"skipping mark kerns", file=sys.stderr)
+            mark_right_class_map = {}
+            mark_class_cols = {}
+        elif kern_left_class_count > 255:
+            print(f"WARNING: mark extension causes left class overflow "
+                  f"({kern_left_class_count} > 255), skipping mark kerns",
+                  file=sys.stderr)
+            mark_right_class_map = {}
+            mark_class_cols = {}
+        else:
+            kern_right_class_count = total_right
+            print(f"  + {n_mark_right} mark right classes "
+                  f"-> {kern_left_class_count} x {kern_right_class_count} total",
+                  file=sys.stderr)
+
+    # Build the combined matrix
+    kern_matrix = [0] * (kern_left_class_count * kern_right_class_count)
+
+    # Fill base-base entries
+    for left_profile, lc_id in left_profile_to_class.items():
+        for ri, rcp in enumerate(sorted_right_cps):
+            val = left_profile[ri]
+            if val == 0:
+                continue
+            rc_id = right_class_map.get(rcp, 0)
+            if rc_id == 0:
+                continue
+            kern_matrix[(lc_id - 1) * kern_right_class_count + (rc_id - 1)] = val
+
+    # Fill mark columns
+    for mark_rc_id, col in mark_class_cols.items():
+        for lc_id_0based, val in enumerate(col):
+            if val == 0:
+                continue
+            kern_matrix[lc_id_0based * kern_right_class_count + (mark_rc_id - 1)] = val
+
+    # Build sorted class entry lists (base + mark right entries)
     kern_left_classes = sorted(left_class_map.items())
-    kern_right_classes = sorted(right_class_map.items())
+    kern_right_classes = sorted(
+        list(right_class_map.items()) + list(mark_right_class_map.items()))
 
     matrix_size = kern_left_class_count * kern_right_class_count
     entries_size = (len(kern_left_classes) + len(kern_right_classes)) * 3
-    print(f"kerning: {kern_left_class_count} left classes, {kern_right_class_count} right classes, "
+    print(f"kerning: {kern_left_class_count} x {kern_right_class_count} matrix, "
           f"{matrix_size + entries_size} bytes", file=sys.stderr)
 
 # --- Ligature pair extraction ---

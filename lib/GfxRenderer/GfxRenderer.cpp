@@ -227,8 +227,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
     if (glyph->advanceX == 0) {
       const int raiseBy = combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop);
-      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, fp4::toPixel(xPosFP), yPos - raiseBy, black,
-                                         style);
+      const int markKernFP = (prevCp != 0) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point mark adjust
+      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, fp4::toPixel(xPosFP + markKernFP),
+                                         yPos - raiseBy, black, style);
       lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
       continue;
     }
@@ -1045,8 +1046,9 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     if (glyph->advanceX == 0) {
       const int raiseBy = combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop);
-      renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x - raiseBy, fp4::toPixel(yPosFP), black,
-                                                style);
+      const int markKernFP = (prevCp != 0) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point mark adjust
+      renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x - raiseBy,
+                                                fp4::toPixel(yPosFP - markKernFP), black, style);
       lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
       continue;
     }
