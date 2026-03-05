@@ -90,7 +90,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   const WordJoin firstJoin = attachToPrevious ? WordJoin::ATTACHED : WordJoin::SPACED;
 
   if (ThaiShaper::containsThai(word.c_str())) {
-    auto segments = ThaiShaper::ThaiWordBreak::segmentWords(word.c_str());
+    auto segments = ThaiShaper::segmentWords(word.c_str());
     for (size_t i = 0; i < segments.size(); ++i) {
       if (segments[i].empty()) continue;
       words.push_back(std::move(segments[i]));
