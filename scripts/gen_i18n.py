@@ -161,8 +161,17 @@ def load_translations(
         name = data.get("_language_name")
         if not code or not name:
             raise ValueError(f"{fname}: missing _language_code or _language_name")
+        code = code.strip().upper()
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", code):
+            raise ValueError(f"{fname}: invalid _language_code '{code}'.")
         language_codes.append(code)
         language_names.append(name)
+
+    # Ensure generated abbreviations are unique
+    abbrevs = [get_lang_abbreviation(c, n) for c, n in zip(language_codes, language_names)]
+    duplicates = sorted({a for a in abbrevs if abbrevs.count(a) > 1})
+    if duplicates:
+        raise ValueError(f"Duplicate language codes: {', '.join(duplicates)}.")
 
     # String keys come from English (order matters)
     english_data = parsed[english_file]
@@ -205,32 +214,11 @@ def load_translations(
 # C++ string escaping
 # ---------------------------------------------------------------------------
 
-LANG_ABBREVIATIONS = {
-    "english": "EN",
-    "español": "ES", "espanol": "ES",
-    "italiano": "IT",
-    "svenska": "SV",
-    "français": "FR", "francais": "FR",
-    "deutsch": "DE", "german": "DE",
-    "polski": "PL",
-    "português": "PT", "portugues": "PT", "português (brasil)": "PO",
-    "中文": "ZH", "chinese": "ZH",
-    "日本語": "JA", "japanese": "JA",
-    "한국어": "KO", "korean": "KO",
-    "русский": "RU", "russian": "RU",
-    "العربية": "AR", "arabic": "AR",
-    "עברית": "HE", "hebrew": "HE",
-    "فارسی": "FA", "persian": "FA",
-    "čeština": "CS",
-}
-
-
 def get_lang_abbreviation(lang_code: str, lang_name: str) -> str:
-    """Return a 2-letter abbreviation for a language."""
-    lower = lang_name.lower()
-    if lower in LANG_ABBREVIATIONS:
-        return LANG_ABBREVIATIONS[lower]
-    return lang_code[:2].upper()
+    """ Return an abbreviation used in generated symbol names.
+    IMPORTANT: must be unique per language.
+    Prefer the language code as-is to avoid collisions (e.g. PTPT vs PTBR)."""
+    return lang_code.upper()
 
 
 def escape_cpp_string(s: str) -> List[str]:
