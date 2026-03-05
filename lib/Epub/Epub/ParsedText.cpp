@@ -4,6 +4,8 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <ThaiCharacter.h>
+#include <ThaiWordBreak.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -518,6 +520,43 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordLinkIds.reserve(newCapacity);
     wordVisibleOffsetDeltas.reserve(newCapacity);
   };
+
+  if (ThaiShaper::containsThai(word.c_str())) {
+    std::vector<size_t> breakOffsets;
+    breakOffsets.reserve(text.size());
+
+    const char* text = word.c_str();
+    const size_t len = word.size();
+    size_t tokenStart = 0;
+    while (tokenStart < len) {
+      size_t breakOffset = ThaiShaper::nextClusterBoundary(text, tokenStart);
+      if (breakOffset <= tokenStart) {
+        breakOffset = tokenStart + 1;
+        while (breakOffset < len && (static_cast<uint8_t>(text[breakOffset]) & 0xC0) == 0x80) {
+          breakOffset++;
+        }
+      }
+      breakOffsets.push_back(breakOffset);
+    }
+
+    ensureTokenCapacity(breakOffsets.size() + 1);
+    tokenStart = 0;
+    bool firstToken = true;
+    uint32_t tokenVisibleOffset = visibleTextOffset;
+    for (const size_t breakOffset : breakOffsets) {
+      const std::string_view token(word.data() + tokenStart, breakOffset - tokenStart);
+      pushToken(token, firstToken ? effectiveAttachToPrevious : false, firstToken ? effectiveNoSpaceBefore : true,
+                /*focusBoundary=*/0, tokenVisibleOffset);
+      tokenVisibleOffset += countCodepoints(token);
+      firstToken = false;
+      tokenStart = breakOffset;
+    }
+    if (tokenStart < word.size()) {
+      pushToken(std::string_view(word).substr(tokenStart), firstToken ? effectiveAttachToPrevious : false,
+                firstToken ? effectiveNoSpaceBefore : true, /*focusBoundary=*/0, tokenVisibleOffset);
+    }
+    return;
+  }
 
   if (auto breakOffsets = cjkCharacterBreakByteOffsets(word); !breakOffsets.empty()) {
     // CJK-heavy paragraphs can push hundreds of tiny tokens quickly when CSS toggles
@@ -1039,7 +1078,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     const int effectivePageWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
 
     for (size_t j = i; j < totalWordCount; ++j) {
-      // Add space before word j, unless it's the first word on the line or a continuation
+      // Add space before word j, unless it's the first word on the line or a continuation/cluster
       int gap = 0;
       if (j > static_cast<size_t>(i) && continuesVec[j]) {
         // Attached and breakable-attached boundaries both use kerning when kept on one line.
@@ -1192,7 +1231,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       break;
     }
 
-    // Don't break before a continuation word (e.g., orphaned "?" after "question").
+    // Don't break before an ATTACHED word (e.g., orphaned "?" after "question").
     // Backtrack to the start of the continuation group so the whole group moves to the next line.
     while (currentIndex > lineStart + 1 && currentIndex < wordWidths.size() &&
            !TokenBoundary::allowsBreak(continuesVec[currentIndex], noSpaceBeforeVec[currentIndex])) {

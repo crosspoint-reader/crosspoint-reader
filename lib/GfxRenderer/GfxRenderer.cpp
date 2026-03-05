@@ -16,6 +16,7 @@
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
 #include "GlyphBitmap.h"
+#include "lib/ThaiShaper/ThaiCharacter.h"
 
 namespace {
 constexpr int trackingBetween(const uint32_t leftCp, const uint32_t rightCp, const int8_t tracking) {
@@ -737,7 +738,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     // marks stay centered, raised above the base or (kasra) at their
     // font-native position. Fonts without their glyphs — the built-ins — miss
     // the getGlyph lookup and skip them, as before.
-    if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
+    if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp) || ThaiShaper::isThaiCombining(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
       const auto anchor = combiningMark::anchorFor(cp);
@@ -746,6 +747,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       const int combiningX = combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
                                                        combiningGlyph->left, combiningGlyph->width);
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
+      lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
       continue;
     }
 
@@ -2127,6 +2129,10 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       if (BidiUtils::isTransparentMark(cp)) {
         continue;
       }
+      // Thai combining marks (tone markers and some vowels) are zero-advance overlays in drawText — no width.
+      if (ThaiShaper::isThaiCombining(cp)) {
+        continue;
+      }
       int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
       if (!utf8IsCombiningMark(cp)) {
         if (advFP == 0) {
@@ -2155,6 +2161,10 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     // RTL vowel marks (niqqud/harakat) are zero-advance overlays in drawText — no width.
     if (BidiUtils::isTransparentMark(cp)) {
+      continue;
+    }
+    // Thai combining marks (tone markers and some vowels) are zero-advance overlays in drawText — no width.
+    if (ThaiShaper::isThaiCombining(cp)) {
       continue;
     }
     if (utf8IsCombiningMark(cp)) {
@@ -2251,7 +2261,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     // marks stay centered, raised above the base or (kasra) at their
     // font-native position. Fonts without their glyphs — the built-ins — miss
     // the getGlyph lookup and skip them, as before.
-    if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
+    if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp) || ThaiShaper::isThaiCombining(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
       const auto anchor = combiningMark::anchorFor(cp);
@@ -2261,6 +2271,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       const int combiningY = combiningMark::anchorOverRotated90CW(anchor, lastBaseY, lastBaseLeft, lastBaseWidth,
                                                                   combiningGlyph->left, combiningGlyph->width);
       renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
       continue;
     }
 
