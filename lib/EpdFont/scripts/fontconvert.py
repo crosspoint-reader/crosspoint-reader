@@ -325,16 +325,21 @@ for index, glyph in enumerate(all_glyphs):
 # kern table and the GPOS 'kern' feature (PairPos lookups, including
 # Extension wrappers).
 
-COMBINING_MARKS_START = 0x0300
-COMBINING_MARKS_END = 0x036F
 all_codepoints = [g.code_point for g in glyph_props]
-kernable_codepoints = set(cp for cp in all_codepoints
-                          if not (COMBINING_MARKS_START <= cp <= COMBINING_MARKS_END))
+all_codepoints_set = set(all_codepoints)
 
-# Map each kernable codepoint to the font-stack index that serves it
+# Build lookup: codepoint -> advance_x (12.4 fixed-point)
+cp_advance = {g.code_point: g.advance_x for g in glyph_props}
+
+# Combining marks (advanceX == 0) participate in mark positioning (encoded as
+# kern entries) but not in regular letter kerning.
+combining_cps = set(cp for cp in all_codepoints if cp_advance.get(cp, 0) == 0 and cp > 0x20)
+base_cps = set(cp for cp in all_codepoints if cp not in combining_cps)
+
+# Map each codepoint to the font-stack index that serves it
 # (same priority logic as load_glyph).
 cp_to_face_idx = {}
-for cp in kernable_codepoints:
+for cp in all_codepoints_set:
     for face_idx, f in enumerate(font_stack):
         if f.get_char_index(cp) > 0:
             cp_to_face_idx[cp] = face_idx
@@ -446,17 +451,157 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
             result[(lcp, rcp)] = adjust
     return result
 
+
+def extract_mark_positioning(font_path, base_cps_for_face, mark_cps_for_face,
+                             cp_advance_map, ppem):
+    """Extract GPOS MarkBasePos (lookup type 4) anchor data and convert to
+    horizontal kern-style adjustments.
+
+    For each (base, mark) pair, the horizontal correction is:
+      delta_x = baseAnchorX - markAnchorX - base_advanceX
+
+    This positions the mark relative to the base glyph's visual anchor rather
+    than the post-advance cursor, encoded as a kern pair so the existing
+    class-based compression and runtime apply it automatically.
+
+    Returns dict of {(baseCp, markCp): fp4_adjust}.
+    """
+    try:
+        font = TTFont(font_path)
+    except Exception:
+        return {}
+
+    if 'GPOS' not in font:
+        font.close()
+        return {}
+
+    units_per_em = font['head'].unitsPerEm
+    scale = ppem / units_per_em
+    cmap = font.getBestCmap() or {}
+
+    cp_to_glyph = {}
+    glyph_to_cp = {}
+    for cp in (base_cps_for_face | mark_cps_for_face):
+        gname = cmap.get(cp)
+        if gname:
+            cp_to_glyph[cp] = gname
+            glyph_to_cp[gname] = cp
+
+    base_glyph_names = set(cp_to_glyph.get(cp) for cp in base_cps_for_face
+                           if cp in cp_to_glyph)
+    mark_glyph_names = set(cp_to_glyph.get(cp) for cp in mark_cps_for_face
+                           if cp in cp_to_glyph)
+
+    gpos = font['GPOS'].table
+    mark_lookup_indices = set()
+    if gpos.FeatureList:
+        for fr in gpos.FeatureList.FeatureRecord:
+            if fr.FeatureTag == 'mark':
+                mark_lookup_indices.update(fr.Feature.LookupListIndex)
+
+    result = {}
+
+    for li in mark_lookup_indices:
+        lookup = gpos.LookupList.Lookup[li]
+        for st in lookup.SubTable:
+            actual = st
+            if lookup.LookupType == 9 and hasattr(st, 'ExtSubTable'):
+                actual = st.ExtSubTable
+            # MarkBasePos is GPOS lookup type 4
+            if not hasattr(actual, 'Format') or actual.__class__.__name__ != 'MarkBasePos':
+                continue
+
+            mark_coverage = actual.MarkCoverage.glyphs
+            base_coverage = actual.BaseCoverage.glyphs
+            mark_array = actual.MarkArray.MarkRecord
+            base_array = actual.BaseArray.BaseRecord
+
+            for mi, mark_gname in enumerate(mark_coverage):
+                if mark_gname not in mark_glyph_names:
+                    continue
+                mark_rec = mark_array[mi]
+                mark_class = mark_rec.Class
+                mark_anchor = mark_rec.MarkAnchor
+                if not mark_anchor or not hasattr(mark_anchor, 'XCoordinate'):
+                    continue
+                mark_ax = mark_anchor.XCoordinate
+
+                mark_cp = glyph_to_cp[mark_gname]
+
+                for bi, base_gname in enumerate(base_coverage):
+                    if base_gname not in base_glyph_names:
+                        continue
+                    base_rec = base_array[bi]
+                    if mark_class >= len(base_rec.BaseAnchor):
+                        continue
+                    base_anchor = base_rec.BaseAnchor[mark_class]
+                    if not base_anchor or not hasattr(base_anchor, 'XCoordinate'):
+                        continue
+                    base_ax = base_anchor.XCoordinate
+
+                    base_cp = glyph_to_cp[base_gname]
+                    base_adv_du = round(cp_advance_map.get(base_cp, 0) / 16.0 / scale)
+
+                    delta_du = base_ax - mark_ax - base_adv_du
+                    delta_fp4 = fp4_from_design_units(delta_du, scale)
+                    if delta_fp4 != 0:
+                        key = (base_cp, mark_cp)
+                        result[key] = delta_fp4
+
+    font.close()
+    print(f"  mark positioning: {len(result)} base-mark pairs extracted",
+          file=sys.stderr)
+    return result
+
+
 # The ppem used by the existing glyph rasterization:
 #   face.set_char_size(size << 6, size << 6, 150, 150)
 # means size_pt at 150 DPI -> ppem = size * 150 / 72
 ppem = size * 150.0 / 72.0
 
 kern_map = {}  # (leftCp, rightCp) -> adjust
+
+# 1. Extract base-base kerning (exclude combining marks from kern pairs)
 for face_idx, cps in face_idx_cps.items():
     font_path = args.fontstack[face_idx]
-    kern_map.update(extract_kerning_fonttools(font_path, cps, ppem))
-
+    face_base_cps = cps & base_cps
+    if face_base_cps:
+        kern_map.update(extract_kerning_fonttools(font_path, face_base_cps, ppem))
 print(f"kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
+
+# 2. Extract GPOS mark anchors and bake average correction into glyph `left`.
+# For each combining mark, compute the median horizontal offset from the
+# post-advance cursor to the font's intended anchor, across all base glyphs.
+# Adjusting `left` re-centres the mark bitmap with zero runtime data cost.
+mark_left_adjustments = {}  # markCp -> pixel_adjustment
+for face_idx, cps in face_idx_cps.items():
+    font_path = args.fontstack[face_idx]
+    face_base = cps & base_cps
+    face_marks = cps & combining_cps
+    if face_base and face_marks:
+        mark_kerns = extract_mark_positioning(
+            font_path, face_base, face_marks, cp_advance, ppem)
+        # Group adjustments per mark codepoint
+        per_mark = {}
+        for (base_cp, mark_cp), fp4_adj in mark_kerns.items():
+            per_mark.setdefault(mark_cp, []).append(fp4_adj)
+        for mark_cp, adjs in per_mark.items():
+            adjs.sort()
+            median = adjs[len(adjs) // 2]
+            px_adj = round(median / 16.0)
+            if px_adj != 0:
+                mark_left_adjustments[mark_cp] = px_adj
+
+# Apply the adjustment to glyph_props (modifies the `left` field)
+if mark_left_adjustments:
+    adjusted_count = 0
+    for i, g in enumerate(glyph_props):
+        adj = mark_left_adjustments.get(g.code_point, 0)
+        if adj != 0:
+            glyph_props[i] = g._replace(left=g.left + adj)
+            adjusted_count += 1
+    print(f"mark positioning: adjusted `left` for {adjusted_count} combining glyphs "
+          f"(median GPOS anchor correction)", file=sys.stderr)
 
 # --- Derive class-based kerning from pairs ---
 kern_left_classes = []   # list of (codepoint, classId)
@@ -524,8 +669,6 @@ if kern_map:
 # pairs when an intermediate ligature exists (e.g., ffi = ff + i where ff
 # is itself a ligature). Only pairs where both input codepoints and the
 # output codepoint are in the generated glyph set are included.
-
-all_codepoints_set = set(all_codepoints)
 
 # Standard Unicode ligature codepoints for known input sequences.
 # Used as a fallback when the GSUB substitute glyph has no cmap entry.
@@ -656,8 +799,7 @@ def extract_ligatures_fonttools(font_path, codepoints):
 
     return pairs
 
-ligature_codepoints = set(cp for cp in all_codepoints
-                          if not (COMBINING_MARKS_START <= cp <= COMBINING_MARKS_END))
+ligature_codepoints = base_cps
 
 # Map ligature codepoints to the font-stack index that serves them
 lig_cp_to_face_idx = {}

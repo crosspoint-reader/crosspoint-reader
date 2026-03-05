@@ -16,23 +16,25 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   }
 
   int32_t cursorXFP = fp4::fromPixel(startX);  // 12.4 fixed-point accumulator
-  int lastBaseX = startX;
-  int lastBaseLeft = 0;
-  int lastBaseWidth = 0;
   int lastBaseTop = 0;
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
-    const bool isCombining = utf8IsCombiningMark(cp);
-
-    if (!isCombining) {
-      cp = applyLigatures(cp, string);
-    }
-
     const EpdGlyph* glyph = getGlyph(cp);
     if (!glyph) {
       prevCp = 0;
       continue;
+    }
+
+    const bool isCombining = (glyph->advanceX == 0);
+
+    if (!isCombining) {
+      cp = applyLigatures(cp, string);
+      glyph = getGlyph(cp);
+      if (!glyph) {
+        prevCp = 0;
+        continue;
+      }
     }
 
     const int raiseBy = isCombining ? combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop) : 0;
@@ -41,10 +43,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       cursorXFP += getKerning(prevCp, cp);  // 4.4 fixed-point kern
     }
 
-    const int cursorXPixels = fp4::toPixel(cursorXFP);  // snap 12.4 fixed-point to nearest pixel
-    const int glyphBaseX =
-        isCombining ? combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, glyph->left, glyph->width)
-                    : cursorXPixels;
+    const int glyphBaseX = fp4::toPixel(cursorXFP);  // snap 12.4 fixed-point to nearest pixel
     const int glyphBaseY = startY - raiseBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
@@ -52,10 +51,9 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     *minY = std::min(*minY, glyphBaseY + glyph->top - glyph->height);
     *maxY = std::max(*maxY, glyphBaseY + glyph->top);
 
-    if (!isCombining) {
-      lastBaseX = cursorXPixels;
-      lastBaseLeft = glyph->left;
-      lastBaseWidth = glyph->width;
+    if (isCombining) {
+      lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
+    } else {
       lastBaseTop = glyph->top;
       cursorXFP += glyph->advanceX;  // 12.4 fixed-point advance
       prevCp = cp;
