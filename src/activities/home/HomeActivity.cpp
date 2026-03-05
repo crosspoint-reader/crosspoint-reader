@@ -16,10 +16,11 @@
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "activities/settings/LanguageDownloadActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/ConfirmationActivity.h"
 #include "util/StringUtils.h"
+
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
