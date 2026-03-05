@@ -1,11 +1,13 @@
-#include "MyLibraryActivity.h"
+#include "FileBrowserActivity.h"
 
+#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
 #include <algorithm>
 
+#include "../util/ConfirmationActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -67,7 +69,7 @@ void sortFileList(std::vector<std::string>& strs) {
   });
 }
 
-void MyLibraryActivity::loadFiles() {
+void FileBrowserActivity::loadFiles() {
   files.clear();
 
   auto root = Storage.open(basepath.c_str());
@@ -92,7 +94,7 @@ void MyLibraryActivity::loadFiles() {
       auto filename = std::string(name);
       if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
           StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
-          StringUtils::checkFileExtension(filename, ".md")) {
+          StringUtils::checkFileExtension(filename, ".md") || StringUtils::checkFileExtension(filename, ".bmp")) {
         files.emplace_back(filename);
       }
     }
@@ -102,7 +104,7 @@ void MyLibraryActivity::loadFiles() {
   sortFileList(files);
 }
 
-void MyLibraryActivity::onEnter() {
+void FileBrowserActivity::onEnter() {
   Activity::onEnter();
 
   loadFiles();
@@ -111,12 +113,20 @@ void MyLibraryActivity::onEnter() {
   requestUpdate();
 }
 
-void MyLibraryActivity::onExit() {
+void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
 }
 
-void MyLibraryActivity::loop() {
+void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
+  // Only clear cache for .epub files
+  if (StringUtils::checkFileExtension(fullPath, ".epub")) {
+    Epub(fullPath, "/.crosspoint").clearCache();
+    LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
+  }
+}
+
+void FileBrowserActivity::loop() {
   // Long press BACK (1s+) goes to root folder
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
       basepath != "/") {
@@ -129,20 +139,58 @@ void MyLibraryActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (files.empty()) {
-      return;
-    }
+    if (files.empty()) return;
 
-    if (basepath.back() != '/') basepath += "/";
-    if (files[selectorIndex].back() == '/') {
-      basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
-      loadFiles();
-      selectorIndex = 0;
-      requestUpdate();
-    } else {
-      onSelectBook(basepath + files[selectorIndex]);
+    const std::string& entry = files[selectorIndex];
+    bool isDirectory = (entry.back() == '/');
+
+    if (mappedInput.getHeldTime() >= GO_HOME_MS && !isDirectory) {
+      // --- LONG PRESS ACTION: DELETE FILE ---
+      std::string cleanBasePath = basepath;
+      if (cleanBasePath.back() != '/') cleanBasePath += "/";
+      const std::string fullPath = cleanBasePath + entry;
+
+      auto handler = [this, fullPath](const ActivityResult& res) {
+        if (!res.isCancelled) {
+          LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
+          clearFileMetadata(fullPath);
+          if (Storage.remove(fullPath.c_str())) {
+            LOG_DBG("FileBrowser", "Deleted successfully");
+            loadFiles();
+            if (files.empty()) {
+              selectorIndex = 0;
+            } else if (selectorIndex >= files.size()) {
+              // Move selection to the new "last" item
+              selectorIndex = files.size() - 1;
+            }
+
+            requestUpdate(true);
+          } else {
+            LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
+          }
+        } else {
+          LOG_DBG("FileBrowser", "Delete cancelled by user");
+        }
+      };
+
+      std::string heading = tr(STR_DELETE) + std::string("? ");
+
+      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
       return;
+    } else {
+      // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
+      if (basepath.back() != '/') basepath += "/";
+
+      if (isDirectory) {
+        basepath += entry.substr(0, entry.length() - 1);
+        loadFiles();
+        selectorIndex = 0;
+        requestUpdate();
+      } else {
+        onSelectBook(basepath + entry);
+      }
     }
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -167,7 +215,6 @@ void MyLibraryActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
-
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
@@ -189,12 +236,20 @@ void MyLibraryActivity::loop() {
   });
 }
 
-void MyLibraryActivity::render(Activity::RenderLock&&) {
+std::string getFileName(std::string filename) {
+  if (filename.back() == '/') {
+    return filename.substr(0, filename.length() - 1);
+  }
+  const auto pos = filename.rfind('.');
+  return filename.substr(0, pos);
+}
+
+void FileBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
   std::string folderName = (basepath == "/") ? tr(STR_SD_CARD) : basepath.substr(basepath.rfind('/') + 1);
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
@@ -202,22 +257,24 @@ void MyLibraryActivity::render(Activity::RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
   if (files.empty()) {
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_BOOKS_FOUND));
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return files[index]; }, nullptr, nullptr, nullptr);
+        [this](int index) { return getFileName(files[index]); }, nullptr,
+        [this](int index) { return UITheme::getFileIcon(files[index]); });
   }
 
   // Help text
-  const auto labels = mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP),
-                                            tr(STR_DIR_DOWN));
+  const auto labels =
+      mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK), files.empty() ? "" : tr(STR_OPEN),
+                            files.empty() ? "" : tr(STR_DIR_UP), files.empty() ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }
 
-size_t MyLibraryActivity::findEntry(const std::string& name) const {
+size_t FileBrowserActivity::findEntry(const std::string& name) const {
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i;
   return 0;

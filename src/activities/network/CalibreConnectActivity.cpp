@@ -16,7 +16,7 @@ constexpr const char* HOSTNAME = "crosspoint";
 }  // namespace
 
 void CalibreConnectActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   requestUpdate();
   state = CalibreConnectState::WIFI_SELECTION;
@@ -28,11 +28,19 @@ void CalibreConnectActivity::onEnter() {
   currentUploadName.clear();
   lastCompleteName.clear();
   lastCompleteAt = 0;
+  lastProcessedCompleteAt = 0;
   exitRequested = false;
 
   if (WiFi.status() != WL_CONNECTED) {
-    enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                               [this](const bool connected) { onWifiSelectionComplete(connected); }));
+    startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               const auto& wifi = std::get<WifiResult>(result.data);
+                               connectedIP = wifi.ip;
+                               connectedSSID = wifi.ssid;
+                             }
+                             onWifiSelectionComplete(!result.isCancelled);
+                           });
   } else {
     connectedIP = WiFi.localIP().toString().c_str();
     connectedSSID = WiFi.SSID().c_str();
@@ -41,7 +49,7 @@ void CalibreConnectActivity::onEnter() {
 }
 
 void CalibreConnectActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   stopWebServer();
   MDNS.end();
@@ -55,18 +63,10 @@ void CalibreConnectActivity::onExit() {
 
 void CalibreConnectActivity::onWifiSelectionComplete(const bool connected) {
   if (!connected) {
-    exitActivity();
-    onComplete();
+    finish();
     return;
   }
 
-  if (subActivity) {
-    connectedIP = static_cast<WifiSelectionActivity*>(subActivity.get())->getConnectedIP();
-  } else {
-    connectedIP = WiFi.localIP().toString().c_str();
-  }
-  connectedSSID = WiFi.SSID().c_str();
-  exitActivity();
   startWebServer();
 }
 
@@ -99,11 +99,6 @@ void CalibreConnectActivity::stopWebServer() {
 }
 
 void CalibreConnectActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     exitRequested = true;
   }
@@ -147,14 +142,18 @@ void CalibreConnectActivity::loop() {
       currentUploadName.clear();
       changed = true;
     }
-    if (status.lastCompleteAt != 0 && status.lastCompleteAt != lastCompleteAt) {
+    // Only update lastCompleteAt if the server has a NEW value (not one we already processed)
+    // This prevents restoring an old value after the 6s timeout clears it
+    if (status.lastCompleteAt != 0 && status.lastCompleteAt != lastProcessedCompleteAt) {
       lastCompleteAt = status.lastCompleteAt;
       lastCompleteName = status.lastCompleteName;
+      lastProcessedCompleteAt = status.lastCompleteAt;  // Mark this value as processed
       changed = true;
     }
     if (lastCompleteAt > 0 && (millis() - lastCompleteAt) >= 6000) {
       lastCompleteAt = 0;
       lastCompleteName.clear();
+      // Note: we DON'T reset lastProcessedCompleteAt here, so we won't re-process the old server value
       changed = true;
     }
     if (changed) {
@@ -163,82 +162,68 @@ void CalibreConnectActivity::loop() {
   }
 
   if (exitRequested) {
-    onComplete();
+    finish();
     return;
   }
 }
 
-void CalibreConnectActivity::render(Activity::RenderLock&&) {
-  if (state == CalibreConnectState::SERVER_RUNNING) {
-    renderer.clearScreen();
-    renderServerRunning();
-    renderer.displayBuffer();
-    return;
-  }
+void CalibreConnectActivity::render(RenderLock&&) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  const auto pageHeight = renderer.getScreenHeight();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CALIBRE_WIRELESS));
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height) / 2;
+
   if (state == CalibreConnectState::SERVER_STARTING) {
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, tr(STR_CALIBRE_STARTING), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, top, tr(STR_CALIBRE_STARTING));
   } else if (state == CalibreConnectState::ERROR) {
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, tr(STR_CONNECTION_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, top, tr(STR_CONNECTION_FAILED), true, EpdFontFamily::BOLD);
+  } else if (state == CalibreConnectState::SERVER_RUNNING) {
+    GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                      connectedSSID.c_str(), (std::string(tr(STR_IP_ADDRESS_PREFIX)) + connectedIP).c_str());
+
+    int y = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 4;
+    const auto heightText12 = renderer.getTextHeight(UI_12_FONT_ID);
+    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_SETUP), true, EpdFontFamily::BOLD);
+    y += heightText12 + metrics.verticalSpacing * 2;
+
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_INSTRUCTION_1));
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y + height, tr(STR_CALIBRE_INSTRUCTION_2));
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y + height * 2, tr(STR_CALIBRE_INSTRUCTION_3));
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y + height * 3, tr(STR_CALIBRE_INSTRUCTION_4));
+
+    y += height * 3 + metrics.verticalSpacing * 4;
+    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_STATUS), true, EpdFontFamily::BOLD);
+    y += heightText12 + metrics.verticalSpacing * 2;
+
+    if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {
+      std::string label = tr(STR_CALIBRE_RECEIVING);
+      if (!currentUploadName.empty()) {
+        label += ": " + currentUploadName;
+        label = renderer.truncatedText(SMALL_FONT_ID, label.c_str(), pageWidth - metrics.contentSidePadding * 2,
+                                       EpdFontFamily::REGULAR);
+      }
+      renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y, label.c_str());
+      GUI.drawProgressBar(renderer,
+                          Rect{metrics.contentSidePadding, y + height + metrics.verticalSpacing,
+                               pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
+                          lastProgressReceived, lastProgressTotal);
+      y += height + metrics.verticalSpacing * 2 + metrics.progressBarHeight;
+    }
+
+    if (lastCompleteAt > 0 && (millis() - lastCompleteAt) < 6000) {
+      std::string msg = std::string(tr(STR_CALIBRE_RECEIVED)) + lastCompleteName;
+      msg = renderer.truncatedText(SMALL_FONT_ID, msg.c_str(), pageWidth - metrics.contentSidePadding * 2,
+                                   EpdFontFamily::REGULAR);
+      renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y, msg.c_str());
+    }
+
+    const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
   renderer.displayBuffer();
-}
-
-void CalibreConnectActivity::renderServerRunning() const {
-  constexpr int LINE_SPACING = 24;
-  constexpr int SMALL_SPACING = 20;
-  constexpr int SECTION_SPACING = 40;
-  constexpr int TOP_PADDING = 14;
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_CALIBRE_WIRELESS), true, EpdFontFamily::BOLD);
-
-  int y = 55 + TOP_PADDING;
-  renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_WIFI_NETWORKS), true, EpdFontFamily::BOLD);
-  y += LINE_SPACING;
-  std::string ssidInfo = std::string(tr(STR_NETWORK_PREFIX)) + connectedSSID;
-  if (ssidInfo.length() > 28) {
-    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
-  }
-  renderer.drawCenteredText(UI_10_FONT_ID, y, ssidInfo.c_str());
-  renderer.drawCenteredText(UI_10_FONT_ID, y + LINE_SPACING,
-                            (std::string(tr(STR_IP_ADDRESS_PREFIX)) + connectedIP).c_str());
-
-  y += LINE_SPACING * 2 + SECTION_SPACING;
-  renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_CALIBRE_SETUP), true, EpdFontFamily::BOLD);
-  y += LINE_SPACING;
-  renderer.drawCenteredText(SMALL_FONT_ID, y, tr(STR_CALIBRE_INSTRUCTION_1));
-  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING, tr(STR_CALIBRE_INSTRUCTION_2));
-  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING * 2, tr(STR_CALIBRE_INSTRUCTION_3));
-  renderer.drawCenteredText(SMALL_FONT_ID, y + SMALL_SPACING * 3, tr(STR_CALIBRE_INSTRUCTION_4));
-
-  y += SMALL_SPACING * 3 + SECTION_SPACING;
-  renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_CALIBRE_STATUS), true, EpdFontFamily::BOLD);
-  y += LINE_SPACING;
-  if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {
-    std::string label = tr(STR_CALIBRE_RECEIVING);
-    if (!currentUploadName.empty()) {
-      label += ": " + currentUploadName;
-      if (label.length() > 34) {
-        label.replace(31, label.length() - 31, "...");
-      }
-    }
-    renderer.drawCenteredText(SMALL_FONT_ID, y, label.c_str());
-    constexpr int barWidth = 300;
-    constexpr int barHeight = 16;
-    constexpr int barX = (480 - barWidth) / 2;
-    GUI.drawProgressBar(renderer, Rect{barX, y + 22, barWidth, barHeight}, lastProgressReceived, lastProgressTotal);
-    y += 40;
-  }
-
-  if (lastCompleteAt > 0 && (millis() - lastCompleteAt) < 6000) {
-    std::string msg = std::string(tr(STR_CALIBRE_RECEIVED)) + lastCompleteName;
-    if (msg.length() > 36) {
-      msg.replace(33, msg.length() - 33, "...");
-    }
-    renderer.drawCenteredText(SMALL_FONT_ID, y, msg.c_str());
-  }
-
-  const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

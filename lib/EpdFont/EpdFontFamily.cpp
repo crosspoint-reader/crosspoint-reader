@@ -22,12 +22,16 @@ void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const 
   getFont(style)->getTextDimensions(string, w, h);
 }
 
-bool EpdFontFamily::hasPrintableChars(const char* string, const Style style) const {
-  return getFont(style)->hasPrintableChars(string);
-}
-
 const EpdFontData* EpdFontFamily::getData(const Style style) const { return getFont(style)->data; }
 
 const EpdGlyph* EpdFontFamily::getGlyph(const uint32_t cp, const Style style) const {
   return getFont(style)->getGlyph(cp);
-};
+}
+
+int8_t EpdFontFamily::getKerning(const uint32_t leftCp, const uint32_t rightCp, const Style style) const {
+  return getFont(style)->getKerning(leftCp, rightCp);
+}
+
+uint32_t EpdFontFamily::applyLigatures(const uint32_t cp, const char*& text, const Style style) const {
+  return getFont(style)->applyLigatures(cp, text);
+}

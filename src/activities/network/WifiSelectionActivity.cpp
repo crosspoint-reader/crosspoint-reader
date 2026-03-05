@@ -149,13 +149,12 @@ void WifiSelectionActivity::processWifiScanResults() {
     networks.push_back(pair.second);
   }
 
-  // Sort by signal strength (strongest first)
-  std::sort(networks.begin(), networks.end(),
-            [](const WifiNetworkInfo& a, const WifiNetworkInfo& b) { return a.rssi > b.rssi; });
-
-  // Show networks with PW first
+  // Sort: saved-password networks first, then by signal strength (strongest first)
   std::sort(networks.begin(), networks.end(), [](const WifiNetworkInfo& a, const WifiNetworkInfo& b) {
-    return a.hasSavedPassword && !b.hasSavedPassword;
+    if (a.hasSavedPassword != b.hasSavedPassword) {
+      return a.hasSavedPassword;
+    }
+    return a.rssi > b.rssi;
   });
 
   WiFi.scanDelete();
@@ -191,21 +190,20 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     // Show password entry
     state = WifiSelectionState::PASSWORD_ENTRY;
     // Don't allow screen updates while changing activity
-    enterNewActivity(new KeyboardEntryActivity(
-        renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
-        "",     // No initial text
-        50,     // Y position
-        64,     // Max password length
-        false,  // Show password by default (hard keyboard to use)
-        [this](const std::string& text) {
-          enteredPassword = text;
-          exitActivity();
-        },
-        [this] {
-          state = WifiSelectionState::NETWORK_LIST;
-          exitActivity();
-          requestUpdate();
-        }));
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
+                                                "",    // No initial text
+                                                64,    // Max password length
+                                                false  // Show password by default (hard keyboard to use)
+                                                ),
+        [this](const ActivityResult& result) {
+          if (result.isCancelled) {
+            state = WifiSelectionState::NETWORK_LIST;
+          } else {
+            enteredPassword = std::get<KeyboardResult>(result.data).text;
+            // state will be updated in next loop iteration
+          }
+        });
   } else {
     // Connect directly for open networks
     attemptConnection();
@@ -220,6 +218,12 @@ void WifiSelectionActivity::attemptConnection() {
   requestUpdate();
 
   WiFi.mode(WIFI_STA);
+
+  // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  String hostname = "CrossPoint-Reader-" + mac;
+  WiFi.setHostname(hostname.c_str());
 
   if (selectedRequiresPassword && !enteredPassword.empty()) {
     WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
@@ -287,11 +291,6 @@ void WifiSelectionActivity::checkConnectionStatus() {
 }
 
 void WifiSelectionActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   // Check scan progress
   if (state == WifiSelectionState::SCANNING) {
     processWifiScanResults();
@@ -455,26 +454,34 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
     return "||||";  // Excellent
   }
   if (rssi >= -60) {
-    return "||| ";  // Good
+    return " |||";  // Good
   }
   if (rssi >= -70) {
-    return "||  ";  // Fair
+    return "  ||";  // Fair
   }
-  if (rssi >= -80) {
-    return "|   ";  // Weak
-  }
-  return "    ";  // Very weak
+  return "   |";  // Very weak
 }
 
-void WifiSelectionActivity::render(Activity::RenderLock&&) {
+void WifiSelectionActivity::render(RenderLock&&) {
   // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
   // from the keyboard subactivity back to the main activity
   if (state == WifiSelectionState::PASSWORD_ENTRY) {
-    requestUpdateAndWait();
     return;
   }
 
   renderer.clearScreen();
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  // Draw header
+  char countStr[32];
+  snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), networks.size());
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_WIFI_NETWORKS),
+                 countStr);
+  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                    cachedMacAddress.c_str());
 
   switch (state) {
     case WifiSelectionState::AUTO_CONNECTING:
@@ -507,11 +514,9 @@ void WifiSelectionActivity::render(Activity::RenderLock&&) {
 }
 
 void WifiSelectionActivity::renderNetworkList() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-
-  // Draw header
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_WIFI_NETWORKS), true, EpdFontFamily::BOLD);
 
   if (networks.empty()) {
     // No networks found or scan failed
@@ -520,69 +525,21 @@ void WifiSelectionActivity::renderNetworkList() const {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_NETWORKS));
     renderer.drawCenteredText(SMALL_FONT_ID, top + height + 10, tr(STR_PRESS_OK_SCAN));
   } else {
-    // Calculate how many networks we can display
-    constexpr int startY = 60;
-    constexpr int lineHeight = 25;
-    const int maxVisibleNetworks = (pageHeight - startY - 40) / lineHeight;
-
-    // Calculate scroll offset to keep selected item visible
-    int scrollOffset = 0;
-    if (selectedNetworkIndex >= maxVisibleNetworks) {
-      scrollOffset = selectedNetworkIndex - maxVisibleNetworks + 1;
-    }
-
-    // Draw networks
-    int displayIndex = 0;
-    for (size_t i = scrollOffset; i < networks.size() && displayIndex < maxVisibleNetworks; i++, displayIndex++) {
-      const int networkY = startY + displayIndex * lineHeight;
-      const auto& network = networks[i];
-
-      // Draw selection indicator
-      if (static_cast<int>(i) == selectedNetworkIndex) {
-        renderer.drawText(UI_10_FONT_ID, 5, networkY, ">");
-      }
-
-      // Draw network name (truncate if too long)
-      std::string displayName = network.ssid;
-      if (displayName.length() > 33) {
-        displayName.replace(30, displayName.length() - 30, "...");
-      }
-      renderer.drawText(UI_10_FONT_ID, 20, networkY, displayName.c_str());
-
-      // Draw signal strength indicator
-      std::string signalStr = getSignalStrengthIndicator(network.rssi);
-      renderer.drawText(UI_10_FONT_ID, pageWidth - 90, networkY, signalStr.c_str());
-
-      // Draw saved indicator (checkmark) for networks with saved passwords
-      if (network.hasSavedPassword) {
-        renderer.drawText(UI_10_FONT_ID, pageWidth - 50, networkY, "+");
-      }
-
-      // Draw lock icon for encrypted networks
-      if (network.isEncrypted) {
-        renderer.drawText(UI_10_FONT_ID, pageWidth - 30, networkY, "*");
-      }
-    }
-
-    // Draw scroll indicators if needed
-    if (scrollOffset > 0) {
-      renderer.drawText(SMALL_FONT_ID, pageWidth - 15, startY - 10, "^");
-    }
-    if (scrollOffset + maxVisibleNetworks < static_cast<int>(networks.size())) {
-      renderer.drawText(SMALL_FONT_ID, pageWidth - 15, startY + maxVisibleNetworks * lineHeight, "v");
-    }
-
-    // Show network count
-    char countStr[64];
-    snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), networks.size());
-    renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 90, countStr);
+    int contentTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+    int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+    GUI.drawList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(networks.size()),
+        selectedNetworkIndex, [this](int index) { return networks[index].ssid; }, nullptr, nullptr,
+        [this](int index) {
+          auto network = networks[index];
+          return std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
+                 getSignalStrengthIndicator(network.rssi);
+        });
   }
 
-  // Show MAC address above the network count and legend
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 105, cachedMacAddress.c_str());
-
-  // Draw help text
-  renderer.drawText(SMALL_FONT_ID, 20, pageHeight - 75, tr(STR_NETWORK_LEGEND));
+  GUI.drawHelpText(renderer,
+                   Rect{0, pageHeight - metrics.buttonHintsHeight - metrics.contentSidePadding - 15, pageWidth, 20},
+                   tr(STR_NETWORK_LEGEND));
 
   const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
   const char* forgetLabel = hasSavedPassword ? tr(STR_FORGET_BUTTON) : "";
@@ -729,4 +686,14 @@ void WifiSelectionActivity::renderForgetPrompt() const {
   // Use centralized button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+void WifiSelectionActivity::onComplete(const bool connected) {
+  ActivityResult result;
+  result.isCancelled = !connected;
+  if (connected) {
+    result.data = WifiResult{true, selectedSSID, connectedIP};
+  }
+  setResult(std::move(result));
+  finish();
 }

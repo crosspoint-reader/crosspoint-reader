@@ -6,7 +6,7 @@
 
 /**
  * HTTP client utility for fetching content and downloading files.
- * Wraps WiFiClientSecure and HTTPClient for HTTPS requests.
+ * Wraps NetworkClientSecure and HTTPClient for HTTPS requests.
  */
 class HttpDownloader {
  public:
@@ -38,7 +38,4 @@ class HttpDownloader {
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr);
-
- private:
-  static constexpr size_t DOWNLOAD_CHUNK_SIZE = 1024;
 };
