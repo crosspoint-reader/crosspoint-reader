@@ -1730,10 +1730,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     // If we're about to run out of space, then cut the word off and start a new one.
     // For CJK text (no spaces), this is the primary word-breaking mechanism.
+    // For Thai (no spaces), can have up to 3 UTF-8 continuation bytes (continuation marks).
     // We must avoid splitting multi-byte UTF-8 sequences across word boundaries,
     // otherwise the trailing bytes become orphaned continuation bytes that the
     // decoder can't interpret.
-    if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
+    if (self->partWordBufferIndex >= MAX_WORD_SIZE + 3) {
       int safeLen = utf8SafeTruncateBuffer(self->partWordBuffer, self->partWordBufferIndex);
 
       if (safeLen < self->partWordBufferIndex && safeLen > 0) {
@@ -1746,7 +1747,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
           utf8NextCodepoint(&offsetPtr);
           overflowVisibleOffset++;
         }
-        char saved[4];
+        char saved[7];
         for (int j = 0; j < overflow; j++) {
           saved[j] = self->partWordBuffer[safeLen + j];
         }
