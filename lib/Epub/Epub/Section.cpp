@@ -262,3 +262,23 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   file.close();
   return page;
 }
+
+std::string Section::getTextFromSectionFile() {
+  std::string fullText;
+  auto p = this->loadPageFromSectionFile();
+  if (p) {
+    for (const auto& el : p->elements) {
+      if (el->getTag() == TAG_PageLine) {
+        const auto& line = static_cast<const PageLine&>(*el);
+        if (line.getBlock()) {
+          const auto& words = line.getBlock()->getWords();
+          for (const auto& w : words) {
+            if (!fullText.empty()) fullText += " ";
+            fullText += w;
+          }
+        }
+      }
+    }
+  }
+  return fullText;
+}

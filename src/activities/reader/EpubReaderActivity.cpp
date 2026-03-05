@@ -370,26 +370,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
       if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
-        auto p = section->loadPageFromSectionFile();
-        if (p) {
-          std::string fullText;
-          for (const auto& el : p->elements) {
-            if (el->getTag() == TAG_PageLine) {
-              const auto& line = static_cast<const PageLine&>(*el);
-              if (line.getBlock()) {
-                const auto& words = line.getBlock()->getWords();
-                for (const auto& w : words) {
-                  if (!fullText.empty()) fullText += " ";
-                  fullText += w;
-                }
-              }
-            }
-          }
-          if (!fullText.empty()) {
-            startActivityForResult(std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
-                                   [this](const ActivityResult& result) {});
-            break;
-          }
+        std::string fullText = section->getTextFromSectionFile();
+        if (!fullText.empty()) {
+          startActivityForResult(std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
+                                 [this](const ActivityResult& result) {});
+          break;
         }
       }
       // If no text or page loading failed, just close menu
@@ -437,9 +422,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
       const int currentPage = section ? section->currentPage : 0;
       const int pageCount = section ? section->pageCount : 0;
+
+      std::string pageText;
+      if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
+        pageText = section->getTextFromSectionFile();
+      }
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                 currentPage, pageCount), progressChangeResultHandler);
+                                                 currentPage, pageCount, pageText), progressChangeResultHandler);
     }
   }
 }

@@ -36,4 +36,5 @@ class Section {
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
                          const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
+  std::string getTextFromSectionFile();
 };
