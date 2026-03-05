@@ -4,8 +4,8 @@ Generate I18n C++ files from per-language YAML translations.
 
 Reads YAML files from a translations directory (one file per language) and generates:
 - I18nKeys.h:     Language enum, StrId enum, helper functions
-- I18nStrings.h:  String array declarations
-- I18nStrings.cpp: String array definitions with all translations
+- I18nStrings.h:  Compressed-language data declarations
+- I18nStrings.cpp: Compressed string blobs + lookup table
 
 Each YAML file must contain:
   _language_name: "Native Name"     (e.g. "Español")
@@ -25,6 +25,7 @@ Example:
 import sys
 import os
 import re
+import zlib
 from pathlib import Path
 from typing import List, Dict, Tuple
 
@@ -32,6 +33,7 @@ from typing import List, Dict, Tuple
 # ---------------------------------------------------------------------------
 # YAML file reading (simple key: "value" format, no PyYAML dependency)
 # ---------------------------------------------------------------------------
+
 
 def _unescape_yaml_value(raw: str, filepath: str = "", line_num: int = 0) -> str:
     """
@@ -51,9 +53,7 @@ def _unescape_yaml_value(raw: str, filepath: str = "", line_num: int = 0) -> str
             elif nxt == "n":
                 result.append("\n")
             else:
-                raise ValueError(
-                    f"{filepath}:{line_num}: unknown escape '\\{nxt}'"
-                )
+                raise ValueError(f"{filepath}:{line_num}: unknown escape '\\{nxt}'")
             i += 2
         else:
             result.append(raw[i])
@@ -102,6 +102,7 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 # Load all languages from a directory of YAML files
 # ---------------------------------------------------------------------------
+
 
 def load_translations(
     translations_dir: str,
@@ -207,20 +208,32 @@ def load_translations(
 
 LANG_ABBREVIATIONS = {
     "english": "EN",
-    "español": "ES", "espanol": "ES",
+    "español": "ES",
+    "espanol": "ES",
     "italiano": "IT",
     "svenska": "SV",
-    "français": "FR", "francais": "FR",
-    "deutsch": "DE", "german": "DE",
+    "français": "FR",
+    "francais": "FR",
+    "deutsch": "DE",
+    "german": "DE",
     "polski": "PL",
-    "português": "PT", "portugues": "PT", "português (brasil)": "PO",
-    "中文": "ZH", "chinese": "ZH",
-    "日本語": "JA", "japanese": "JA",
-    "한국어": "KO", "korean": "KO",
-    "русский": "RU", "russian": "RU",
-    "العربية": "AR", "arabic": "AR",
-    "עברית": "HE", "hebrew": "HE",
-    "فارسی": "FA", "persian": "FA",
+    "português": "PT",
+    "portugues": "PT",
+    "português (brasil)": "PO",
+    "中文": "ZH",
+    "chinese": "ZH",
+    "日本語": "JA",
+    "japanese": "JA",
+    "한국어": "KO",
+    "korean": "KO",
+    "русский": "RU",
+    "russian": "RU",
+    "العربية": "AR",
+    "arabic": "AR",
+    "עברית": "HE",
+    "hebrew": "HE",
+    "فارسی": "FA",
+    "persian": "FA",
     "čeština": "CS",
 }
 
@@ -265,12 +278,12 @@ def escape_cpp_string(s: str) -> List[str]:
 
         if ch == "\\" and i + 1 < len(s):
             nxt = s[i + 1]
-            if nxt in "ntr\"\\":
+            if nxt in 'ntr"\\':
                 current.append(ch + nxt)
                 i += 2
             elif nxt == "x" and i + 3 < len(s):
                 current.append(s[i : i + 4])
-                _flush()                       # segment break after hex
+                _flush()  # segment break after hex
                 i += 4
             else:
                 current.append("\\\\")
@@ -284,7 +297,7 @@ def escape_cpp_string(s: str) -> List[str]:
         else:
             for byte in ch.encode("utf-8"):
                 current.append(f"\\x{byte:02X}")
-                _flush()                       # segment break after hex
+                _flush()  # segment break after hex
             i += 1
 
     # Flush remaining content
@@ -319,11 +332,11 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
             last_space = -1
             idx = 0
             while idx <= MAX_CONTENT_LEN and idx < len(current):
-                if current[idx] == ' ':
+                if current[idx] == " ":
                     last_space = idx
 
                 # Handle escapes to step correctly
-                if current[idx] == '\\':
+                if current[idx] == "\\":
                     idx += 2
                 else:
                     idx += 1
@@ -338,7 +351,7 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
                 # No space, forced break at MAX_CONTENT_LEN (or slightly less)
                 cut_at = MAX_CONTENT_LEN
                 # Don't cut in the middle of an escape sequence
-                if current[cut_at - 1] == '\\':
+                if current[cut_at - 1] == "\\":
                     cut_at -= 1
 
                 lines.append(f'{indent}"{current[:cut_at]}"')
@@ -354,6 +367,7 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
 # Character-set computation
 # ---------------------------------------------------------------------------
 
+
 def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -> str:
     """Return a sorted string of every unique character used in a language."""
     chars = set()
@@ -364,32 +378,51 @@ def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -
 
 
 # ---------------------------------------------------------------------------
+# String compression
+# ---------------------------------------------------------------------------
+
+
+def compress_language_strings(
+    string_keys: List[str],
+    translations: Dict[str, List[str]],
+    lang_idx: int,
+) -> Tuple[bytes, int]:
+    """
+    Concatenate all strings for one language (in StrId order), each terminated
+    by a null byte, then zlib-compress the flat blob.
+
+    Returns (compressed_bytes, decompressed_size).
+    """
+    parts = []
+    for key in string_keys:
+        s = translations[key][lang_idx]
+        parts.append(s.encode("utf-8") + b"\x00")
+    blob = b"".join(parts)
+    compressed = zlib.compress(blob, level=9)
+    return compressed, len(blob)
+
+
+# ---------------------------------------------------------------------------
 # Code generators
 # ---------------------------------------------------------------------------
+
 
 def generate_keys_header(
     languages: List[str],
     language_names: List[str],
     string_keys: List[str],
+    max_decompressed_size: int,
     output_path: str,
 ) -> None:
     """Generate I18nKeys.h."""
     lines: List[str] = [
         "#pragma once",
+        "#include <cstddef>",
         "#include <cstdint>",
         "",
         "// THIS FILE IS AUTO-GENERATED BY gen_i18n.py. DO NOT EDIT.",
         "",
-        "// Forward declaration for string arrays",
-        "namespace i18n_strings {",
     ]
-
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"extern const char* const STRINGS_{abbrev}[];")
-
-    lines.append("}  // namespace i18n_strings")
-    lines.append("")
 
     # Language enum
     lines.append("// Language enum")
@@ -400,7 +433,7 @@ def generate_keys_header(
     lines.append("};")
     lines.append("")
 
-    # Extern declarations
+    # Extern declarations for names / character sets
     lines.append("// Language display names (defined in I18nStrings.cpp)")
     lines.append("extern const char* const LANGUAGE_NAMES[];")
     lines.append("")
@@ -418,19 +451,14 @@ def generate_keys_header(
     lines.append("};")
     lines.append("")
 
-    # getStringArray helper
-    lines.append("// Helper function to get string array for a language")
-    lines.append("inline const char* const* getStringArray(Language lang) {")
-    lines.append("  switch (lang) {")
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"    case Language::{code}:")
-        lines.append(f"      return i18n_strings::STRINGS_{abbrev};")
-    first_abbrev = get_lang_abbreviation(languages[0], language_names[0])
-    lines.append("    default:")
-    lines.append(f"      return i18n_strings::STRINGS_{first_abbrev};")
-    lines.append("  }")
-    lines.append("}")
+    # Buffer size for one decompressed language
+    lines.append(
+        "// Size of the RAM buffer needed to hold one decompressed language's strings."
+    )
+    lines.append("// Sized for the largest language; computed by gen_i18n.py.")
+    lines.append(
+        f"constexpr size_t I18N_MAX_DECOMPRESSED_SIZE = {max_decompressed_size};"
+    )
     lines.append("")
 
     # getLanguageCount helper (single line to match checked-in format)
@@ -461,9 +489,7 @@ def generate_keys_header(
     lines.append(
         "static_assert(sizeof(SORTED_LANGUAGE_INDICES) / sizeof(SORTED_LANGUAGE_INDICES[0]) == getLanguageCount(),"
     )
-    lines.append(
-        '              "SORTED_LANGUAGE_INDICES size mismatch");'
-    )
+    lines.append('              "SORTED_LANGUAGE_INDICES size mismatch");')
 
     _write_file(output_path, lines)
 
@@ -476,7 +502,7 @@ def generate_strings_header(
     """Generate I18nStrings.h."""
     lines: List[str] = [
         "#pragma once",
-        '#include <string>',
+        "#include <cstdint>",
         "",
         '#include "I18nKeys.h"',
         "",
@@ -484,14 +510,20 @@ def generate_strings_header(
         "",
         "namespace i18n_strings {",
         "",
+        "// Per-language compressed string blob descriptor.",
+        "// The blob is all StrId strings concatenated in order, each null-terminated,",
+        "// then zlib-compressed. Decompress into a RAM buffer to access strings.",
+        "struct I18nLangData {",
+        "  const uint8_t* compressed;",
+        "  uint16_t compressedLen;",
+        "  uint16_t decompressedLen;",
+        "};",
+        "",
+        "// One entry per Language enum value, in the same order.",
+        "extern const I18nLangData LANG_DATA[];",
+        "",
+        "}  // namespace i18n_strings",
     ]
-
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"extern const char* const STRINGS_{abbrev}[];")
-
-    lines.append("")
-    lines.append("}  // namespace i18n_strings")
 
     _write_file(output_path, lines)
 
@@ -501,6 +533,7 @@ def generate_strings_cpp(
     language_names: List[str],
     string_keys: List[str],
     translations: Dict[str, List[str]],
+    compressed_data: List[Tuple[bytes, int]],
     output_path: str,
 ) -> None:
     """Generate I18nStrings.cpp."""
@@ -511,7 +544,7 @@ def generate_strings_cpp(
         "",
     ]
 
-    # LANGUAGE_NAMES array
+    # LANGUAGE_NAMES array (unchanged — small, accessed by language index)
     lines.append("// Language display names")
     lines.append("const char* const LANGUAGE_NAMES[] = {")
     for name in language_names:
@@ -519,7 +552,7 @@ def generate_strings_cpp(
     lines.append("};")
     lines.append("")
 
-    # CHARACTER_SETS array
+    # CHARACTER_SETS array (unchanged — used for font glyph selection)
     lines.append("// Character sets for each language")
     lines.append("const char* const CHARACTER_SETS[] = {")
     for lang_idx, name in enumerate(language_names):
@@ -528,34 +561,48 @@ def generate_strings_cpp(
     lines.append("};")
     lines.append("")
 
-    # Per-language string arrays
+    # Compressed string blobs
     lines.append("namespace i18n_strings {")
     lines.append("")
 
-    for lang_idx, (code, name) in enumerate(zip(languages, language_names)):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"const char* const STRINGS_{abbrev}[] = {{")
+    abbrevs = [
+        get_lang_abbreviation(code, name)
+        for code, name in zip(languages, language_names)
+    ]
 
-        for key in string_keys:
-            text = translations[key][lang_idx]
-            _append_string_entry(lines, text)
-
+    for lang_idx, (code, name, abbrev) in enumerate(
+        zip(languages, language_names, abbrevs)
+    ):
+        compressed, decompressed_len = compressed_data[lang_idx]
+        var = f"I18N_COMPRESSED_{abbrev}"
+        lines.append(
+            f"// {name} ({code}): {len(compressed)} bytes compressed, {decompressed_len} bytes decompressed"
+        )
+        lines.append(f"const uint8_t {var}[] = {{")
+        # 16 bytes per line
+        for i in range(0, len(compressed), 16):
+            chunk = compressed[i : i + 16]
+            hex_bytes = ", ".join(f"0x{b:02x}" for b in chunk)
+            lines.append(f"    {hex_bytes},")
         lines.append("};")
+        lines.append(
+            f"const uint16_t I18N_COMPRESSED_{abbrev}_LEN = {len(compressed)};"
+        )
+        lines.append(
+            f"const uint16_t I18N_DECOMPRESSED_{abbrev}_LEN = {decompressed_len};"
+        )
         lines.append("")
 
-    lines.append("}  // namespace i18n_strings")
-    lines.append("")
-
-    # Compile-time size checks
-    lines.append("// Compile-time validation of array sizes")
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
+    # Lookup table indexed by Language enum
+    lines.append("// Lookup table: one entry per Language enum value.")
+    lines.append("const I18nLangData LANG_DATA[] = {")
+    for abbrev in abbrevs:
         lines.append(
-            f"static_assert(sizeof(i18n_strings::STRINGS_{abbrev}) "
-            f"/ sizeof(i18n_strings::STRINGS_{abbrev}[0]) =="
+            f"    {{I18N_COMPRESSED_{abbrev}, I18N_COMPRESSED_{abbrev}_LEN, I18N_DECOMPRESSED_{abbrev}_LEN}},"
         )
-        lines.append("                  static_cast<size_t>(StrId::_COUNT),")
-        lines.append(f'              "STRINGS_{abbrev} size mismatch");')
+    lines.append("};")
+    lines.append("")
+    lines.append("}  // namespace i18n_strings")
 
     _write_file(output_path, lines)
 
@@ -564,9 +611,8 @@ def generate_strings_cpp(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _append_string_entry(
-    lines: List[str], text: str, comment: str = ""
-) -> None:
+
+def _append_string_entry(lines: List[str], text: str, comment: str = "") -> None:
     """Escape *text*, format as indented C++ lines, append comma (and optional comment)."""
     segments = escape_cpp_string(text)
     formatted = format_cpp_string_literal(segments)
@@ -586,6 +632,7 @@ def _write_file(path: str, lines: List[str]) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main(translations_dir=None, output_dir=None) -> None:
     # Default paths (relative to project root)
     default_translations_dir = "lib/I18n/translations"
@@ -599,7 +646,6 @@ def main(translations_dir=None, output_dir=None) -> None:
             # Default for no arguments or weird arguments (e.g. SCons)
             translations_dir = default_translations_dir
             output_dir = default_output_dir
-
 
     if not os.path.isdir(translations_dir):
         print(f"Error: Translations directory not found: {translations_dir}")
@@ -618,15 +664,74 @@ def main(translations_dir=None, output_dir=None) -> None:
             translations_dir
         )
 
+        # Pre-compute compressed blobs for all languages
+        print("Compressing string data...")
+        print(f"  {'Lang':<6} {'Raw':>8} {'Compressed':>11} {'Ratio':>6}")
+        print(f"  {'-' * 4:<6} {'-' * 8:>8} {'-' * 11:>11} {'-' * 6:>6}")
+        compressed_data: List[Tuple[bytes, int]] = []
+        total_raw = 0
+        total_compressed = 0
+        for lang_idx, (code, name) in enumerate(zip(languages, language_names)):
+            comp, decomp_len = compress_language_strings(
+                string_keys, translations, lang_idx
+            )
+            abbrev = get_lang_abbreviation(code, name)
+            ratio = 100 * len(comp) // decomp_len if decomp_len else 0
+            print(f"  {abbrev:<6} {decomp_len:>7} B {len(comp):>8} B  {ratio:>5}%")
+            compressed_data.append((comp, decomp_len))
+            total_raw += decomp_len
+            total_compressed += len(comp)
+
+        # Pointer arrays: one pointer per string per language (4 bytes each on 32-bit)
+        ptr_arrays_raw = len(string_keys) * len(languages) * 4
+        lang_data_table = len(languages) * 8  # I18nLangData: ptr(4) + 2x uint16(2+2)
+        ram_buffer = max(decomp_len for _, decomp_len in compressed_data)
+        ram_ptr_table = len(string_keys) * 4
+
+        flash_old = total_raw + ptr_arrays_raw
+        flash_new = total_compressed + lang_data_table
+        flash_saved = flash_old - flash_new
+
+        print(f"  {'-' * 6:<6} {'-' * 8:>8} {'-' * 11:>11} {'-' * 6:>6}")
+        print(
+            f"  {'TOTAL':<6} {total_raw:>7} B {total_compressed:>8} B  {100 * total_compressed // total_raw if total_raw else 0:>5}%"
+        )
+        print()
+        print("Flash usage (estimated compiled binary):")
+        print(
+            f"  Before: {flash_old:>7,} B  ({flash_old // 1024} KB)  [strings + pointer arrays]"
+        )
+        print(
+            f"  After:  {flash_new:>7,} B  ({flash_new // 1024} KB)  [compressed blobs + LANG_DATA table]"
+        )
+        print(f"  Saved:  {flash_saved:>7,} B  ({flash_saved // 1024} KB)")
+        print(
+            f"  RAM cost at runtime: ~{(ram_buffer + ram_ptr_table) // 1024} KB  "
+            f"(string buffer {ram_buffer // 1024} KB + pointer table {ram_ptr_table} B)"
+        )
+
+        max_decompressed_size = max(decomp_len for _, decomp_len in compressed_data)
+
         out = Path(output_dir)
-        generate_keys_header(languages, language_names, string_keys, str(out / "I18nKeys.h"))
+        generate_keys_header(
+            languages,
+            language_names,
+            string_keys,
+            max_decompressed_size,
+            str(out / "I18nKeys.h"),
+        )
         generate_strings_header(languages, language_names, str(out / "I18nStrings.h"))
         generate_strings_cpp(
-            languages, language_names, string_keys, translations, str(out / "I18nStrings.cpp")
+            languages,
+            language_names,
+            string_keys,
+            translations,
+            compressed_data,
+            str(out / "I18nStrings.cpp"),
         )
 
         print()
-        print("✓ Code generation complete!")
+        print("OK: Code generation complete!")
         print(f"  Languages: {len(languages)}")
         print(f"  String keys: {len(string_keys)}")
 

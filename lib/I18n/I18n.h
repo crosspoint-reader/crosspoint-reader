@@ -35,6 +35,13 @@ class I18n {
   I18n() : _language(Language::EN) {}
 
   Language _language;
+
+  // RAM buffer holding the decompressed strings for the active language.
+  // Decompressed once at init and again whenever the language changes.
+  static char _stringBuffer[I18N_MAX_DECOMPRESSED_SIZE];
+  static const char* _stringTable[static_cast<size_t>(StrId::_COUNT)];
+
+  void decompressLanguage(Language lang);
 };
 
 // Convenience macros
