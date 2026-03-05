@@ -110,7 +110,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 - Only ONE framebuffer exists (not double-buffered)
 - Grayscale rendering requires temporary buffer allocation (`renderer.storeBwBuffer()`)
 - Must call `renderer.restoreBwBuffer()` to free temporary buffers
-- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
+- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
 
 ### Directory Structure
 * lib/: Internal libraries (Epub engine, GfxRenderer, UITheme, I18n)
@@ -130,7 +130,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 | `HalGPIO` | `InputManager` | Button input handling | *(none)* |
 | `HalStorage` | `SDCardManager` | SD card file I/O | `Storage` |
 
-**Location**: [lib/hal/](lib/hal/)
+**Location**: [lib/hal/](../lib/hal/)
 
 **Why HAL?**
 - Provides consistent error logging per module
@@ -247,7 +247,7 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Error Handling Philosophy
 
-**Source**: [src/main.cpp:132-143](src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](lib/GfxRenderer/GfxRenderer.cpp)
+**Source**: [src/main.cpp:132-143](../src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](../lib/GfxRenderer/GfxRenderer.cpp)
 
 **Pattern Hierarchy**:
 1. **LOG_ERR + return false** (90%): `LOG_ERR("MOD", "Failed: %s", reason); return false;`
@@ -259,7 +259,7 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Acceptable malloc/free Patterns
 
-**Source**: [src/activities/home/HomeActivity.cpp:166](src/activities/home/HomeActivity.cpp), [lib/GfxRenderer/GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp)
+**Source**: [src/activities/home/HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp), [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
 
 Despite "prefer stack allocation," malloc is acceptable for:
 1. **Large temporary buffers** (> 256 bytes, won't fit on stack)
@@ -290,10 +290,10 @@ buffer = nullptr;
 - **Document size**: Comment why stack allocation was rejected
 
 **Examples in codebase**:
-- Cover image buffers: [HomeActivity.cpp:166](src/activities/home/HomeActivity.cpp#L166)
-- Text chunk buffers: [TxtReaderActivity.cpp:259](src/activities/reader/TxtReaderActivity.cpp#L259)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp#L439-L440)
-- OTA update buffer: [OtaUpdater.cpp:40](src/network/OtaUpdater.cpp#L40)
+- Cover image buffers: [HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp)
+- Text chunk buffers: [TxtReaderActivity.cpp:259](../src/activities/reader/TxtReaderActivity.cpp)
+- Bitmap rendering: [GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
+- OTA update buffer: [OtaUpdater.cpp:40](../src/network/OtaUpdater.cpp)
 
 ---
 
@@ -305,7 +305,7 @@ buffer = nullptr;
 
 ### Logical Button Mapping
 
-**Source**: [src/MappedInputManager.cpp:20-55](src/MappedInputManager.cpp)
+**Source**: [src/MappedInputManager.cpp:20-55](../src/MappedInputManager.cpp)
 
 Constraint: Physical button positions are fixed on hardware, but their logical functions change based on user settings and screen orientation.
 
@@ -352,7 +352,7 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 
 ### Activity Lifecycle and Memory Management
 
-**Source**: [src/main.cpp:132-143](src/main.cpp)
+**Source**: [src/main.cpp:132-143](../src/main.cpp)
 
 **CRITICAL**: Activities are **heap-allocated** and **deleted on exit**.
 
@@ -389,7 +389,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close files */ Activity::on
 
 ### FreeRTOS Task Guidelines
 
-**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](src/activities/util/KeyboardEntryActivity.cpp)
+**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](../src/activities/util/KeyboardEntryActivity.cpp)
 
 **Pattern**: See Activity Lifecycle above. `xTaskCreate(&taskTrampoline, "Name", stackSize, this, 1, &handle)`
 
@@ -402,7 +402,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close files */ Activity::on
 
 ### Global Font Loading
 
-**Source**: [src/main.cpp:40-115](src/main.cpp)
+**Source**: [src/main.cpp:40-115](../src/main.cpp)
 
 **All fonts are loaded as global static objects** at firmware startup:
 - Bookerly: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
@@ -423,7 +423,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close files */ Activity::on
 - Fonts stored in **Flash** (marked as `static const` in `lib/EpdFont/builtinFonts/`)
 - Font rendering data cached in **DRAM** when first used
 - `OMIT_FONTS` can reduce binary size for minimal builds
-- Font IDs defined in [src/fontIds.h](src/fontIds.h)
+- Font IDs defined in [src/fontIds.h](../src/fontIds.h)
 
 **Usage**:
 ```cpp
@@ -517,7 +517,7 @@ clang-format -i src/**/*.cpp src/**/*.h
 4. **Corrupt Cache Files**:
    - Delete `.crosspoint/` directory on SD card
    - Forces clean re-parse of all EPUBs
-   - Check file format versions in [docs/file-formats.md](docs/file-formats.md)
+   - Check file format versions in [docs/file-formats.md](../docs/file-formats.md)
 
 5. **Watchdog Timeout**:
    - Loop/task blocked for >5 seconds

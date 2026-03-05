@@ -2,6 +2,7 @@
 
 #include <Utf8.h>
 
+#include <cctype>
 #include <cstring>
 
 namespace StringUtils {
@@ -79,5 +80,4 @@ bool checkFileExtension(const String& fileName, const char* extension) {
   localExtension.toLowerCase();
   return localFile.endsWith(localExtension);
 }
-
 }  // namespace StringUtils

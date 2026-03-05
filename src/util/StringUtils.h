@@ -1,7 +1,6 @@
 #pragma once
 
 #include <WString.h>
-
 #include <string>
 
 namespace StringUtils {
@@ -26,5 +25,4 @@ std::string formatSeriesLabel(const std::string& series, const std::string& seri
  */
 bool checkFileExtension(const std::string& fileName, const char* extension);
 bool checkFileExtension(const String& fileName, const char* extension);
-
 }  // namespace StringUtils
