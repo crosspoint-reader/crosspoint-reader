@@ -8,7 +8,14 @@
 
 namespace ThaiShaper {
 
-size_t ThaiWordBreak::nextClusterBoundary(const char* text, size_t startOffset) {
+/**
+* Get the byte offset of the next cluster boundary.
+*
+* @param text UTF-8 encoded text
+* @param startOffset Starting byte offset
+* @return Byte offset of next boundary, or string length if at end
+*/
+size_t nextClusterBoundary(const char* text, size_t startOffset) {
   if (text == nullptr) {
     return 0;
   }
@@ -69,7 +76,7 @@ static constexpr size_t MAX_SEGMENT_TEXT_SIZE = 2048;
 // Safe because ESP32 runs single-threaded for this code path
 static char s_segmentTextBuffer[MAX_SEGMENT_TEXT_SIZE];
 
-std::vector<std::string> ThaiWordBreak::segmentWords(const char* text) {
+std::vector<std::string> segmentWords(const char* text) {
   std::vector<std::string> segments;
 
   if (text == nullptr || *text == '\0') {

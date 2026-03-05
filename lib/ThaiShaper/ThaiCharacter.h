@@ -65,7 +65,7 @@ inline bool isThaiAboveVowel(uint32_t cp) {
 }
 
 // Check if codepoint is a below vowel (positioned below base)
-inline bool isThaibelowVowel(uint32_t cp) {
+inline bool isThaiBelowVowel(uint32_t cp) {
   return cp == 0x0E38 ||  // SARA U (ุ)
          cp == 0x0E39 ||  // SARA UU (ู)
          cp == 0x0E3A;    // PHINTHU (ฺ)
@@ -84,7 +84,7 @@ inline bool isThaiDigit(uint32_t cp) { return cp >= 0x0E50 && cp <= 0x0E59; }
 
 // Check if a codepoint is a combining character (needs to attach to base)
 inline bool isThaiCombining(uint32_t cp) {
-  return isThaiAboveVowel(cp) || isThaibelowVowel(cp) || isThaiToneMark(cp) || cp == 0x0E4C ||  // THANTHAKHAT (์)
+  return isThaiAboveVowel(cp) || isThaiBelowVowel(cp) || isThaiToneMark(cp) || cp == 0x0E4C ||  // THANTHAKHAT (์)
          cp == 0x0E4D ||                                                                        // NIKHAHIT (ํ)
          cp == 0x0E4E;                                                                          // YAMAKKAN
 }

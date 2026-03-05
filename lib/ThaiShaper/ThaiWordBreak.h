@@ -9,7 +9,7 @@ namespace ThaiShaper {
 /**
  * Thai Word Break - Cluster-based segmentation
  *
- * Thai text has no spaces between words. This class provides simple
+ * Thai text has no spaces between words. This function provides simple
  * cluster-based segmentation for line breaking. Each Thai syllable
  * (consonant + vowels + tone marks) forms a breakable unit.
  *
@@ -18,24 +18,13 @@ namespace ThaiShaper {
  * than true word boundaries, which provides reasonable line breaking
  * without requiring a large dictionary.
  */
-class ThaiWordBreak {
- public:
-  /**
-   * Segment Thai text into breakable clusters.
-   *
-   * @param text UTF-8 encoded Thai text
-   * @return Vector of cluster strings
-   */
-  static std::vector<std::string> segmentWords(const char* text);
 
-  /**
-   * Get the byte offset of the next cluster boundary.
-   *
-   * @param text UTF-8 encoded text
-   * @param startOffset Starting byte offset
-   * @return Byte offset of next boundary, or string length if at end
-   */
-  static size_t nextClusterBoundary(const char* text, size_t startOffset);
-};
+/**
+* Segment Thai text into breakable clusters.
+*
+* @param text UTF-8 encoded Thai text
+* @return Vector of cluster strings
+*/
+std::vector<std::string> segmentWords(const char* text);
 
 }  // namespace ThaiShaper
