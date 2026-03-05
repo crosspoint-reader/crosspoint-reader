@@ -91,13 +91,13 @@ FEATURES = {
     'web_pokedex_plugin': Feature(
         name='Web Pokedex Plugin',
         flag='ENABLE_WEB_POKEDEX_PLUGIN',
-        size_kb=11,
+        size_kb=15,
         description='Browser-side Pokemon wallpaper generator at /plugins/pokedex'
     ),
     'pokemon_party': Feature(
         name='Pokemon Party',
         flag='ENABLE_POKEMON_PARTY',
-        size_kb=4,
+        size_kb=15,
         description='Per-book Pokemon metadata and REST API for recent-book party views'
     ),
     'epub_support': Feature(
@@ -109,7 +109,7 @@ FEATURES = {
     'hyphenation': Feature(
         name='Hyphenation',
         flag='ENABLE_HYPHENATION',
-        size_kb=458,
+        size_kb=459,
         description='Language-aware hyphenation for justified EPUB text'
     ),
     'xtc_support': Feature(
@@ -169,7 +169,7 @@ FEATURES = {
     'usb_mass_storage': Feature(
         name='USB Mass Storage',
         flag='ENABLE_USB_MASS_STORAGE',
-        size_kb=21,
+        size_kb=18,
         description='On-device prompt for USB SD card access as mass storage'
     ),
 }
@@ -525,7 +525,7 @@ def resolve_profile_name(profile_name: str) -> str:
 
 def calculate_size(enabled_features: Dict[str, bool]) -> float:
     """Calculate estimated firmware size in MB."""
-    base_size_mb = 2.60  # Lean profile size baseline (measured)
+    base_size_mb = 2.62  # Lean profile size baseline (measured)
 
     for feature_key, enabled in enabled_features.items():
         if enabled:
