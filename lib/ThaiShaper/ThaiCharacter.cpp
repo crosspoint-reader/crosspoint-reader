@@ -90,4 +90,60 @@ bool containsThai(const char* text) {
   return false;
 }
 
+static constexpr uint32_t SARA_AM = 0x0E33;
+static constexpr uint32_t SARA_AA = 0x0E32;
+static constexpr uint32_t NIKHAHIT = 0x0E4D;
+
+static void appendUtf8(std::string& out, uint32_t cp) {
+  if (cp < 0x80) {
+    out += static_cast<char>(cp);
+  } else if (cp < 0x800) {
+    out += static_cast<char>(0xC0 | (cp >> 6));
+    out += static_cast<char>(0x80 | (cp & 0x3F));
+  } else {
+    out += static_cast<char>(0xE0 | (cp >> 12));
+    out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+    out += static_cast<char>(0x80 | (cp & 0x3F));
+  }
+}
+
+void decomposeSaraAm(std::string& text) {
+  // Sara Am is U+0E33 → UTF-8: 0xE0 0xB8 0xB3.  Fast byte scan avoids
+  // any allocation or UTF-8 decoding when the string has no Sara Am.
+  if (text.find("\xE0\xB8\xB3") == std::string::npos) return;
+
+  const uint8_t* ptr = reinterpret_cast<const uint8_t*>(text.data());
+  const uint8_t* end = ptr + text.size();
+
+  std::string result;
+  result.reserve(text.size() + 6);
+
+  const uint8_t* cur = ptr;
+  uint32_t prevCp = 0;
+  const uint8_t* prevStart = ptr;
+
+  while (cur < end) {
+    const uint8_t* cpStart = cur;
+    uint32_t cp = utf8NextCodepoint(&cur);
+    if (cp == 0) break;
+
+    if (cp == SARA_AM && prevCp != 0 && (isThaiToneMark(prevCp) || prevCp == NIKHAHIT)) {
+      // Remove the previously appended tone mark / Nikhahit
+      size_t prevLen = static_cast<size_t>(cpStart - prevStart);
+      result.resize(result.size() - prevLen);
+      appendUtf8(result, NIKHAHIT);
+      appendUtf8(result, prevCp);
+      appendUtf8(result, SARA_AA);
+      prevCp = SARA_AA;
+      prevStart = cpStart;
+    } else {
+      result.append(reinterpret_cast<const char*>(cpStart), static_cast<size_t>(cur - cpStart));
+      prevCp = cp;
+      prevStart = cpStart;
+    }
+  }
+
+  text = std::move(result);
+}
+
 }  // namespace ThaiShaper

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 /**
  * Thai Character Classification
@@ -91,5 +92,11 @@ inline bool isThaiCombining(uint32_t cp) {
 
 // Check if text contains any Thai codepoints (for fast path detection)
 bool containsThai(const char* text);
+
+// Decompose Sara Am (U+0E33) in-place when preceded by a tone mark.
+// Replaces [tone_mark] + Sara_Am with Nikhahit + [tone_mark] + Sara_Aa
+// so that the Nikhahit stacks below the tone mark and Sara Aa trails.
+// No-op (no allocation) when the text contains no Sara Am.
+void decomposeSaraAm(std::string& text);
 
 }  // namespace ThaiShaper

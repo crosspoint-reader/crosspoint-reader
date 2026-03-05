@@ -97,6 +97,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   // Candidates: Lao (U+0E80–0EFF), Khmer (U+1780–17FF), Myanmar (U+1000–109F),
   //             Tibetan (U+0F00–0FFF), CJK (per-character breaks).
   if (ThaiShaper::containsThai(word.c_str())) {
+    ThaiShaper::decomposeSaraAm(word);
     addSegmentedWord(word, combinedStyle, firstJoin, ThaiShaper::nextClusterBoundary);
     return;
   }
