@@ -16,9 +16,6 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   }
 
   int32_t cursorXFP = fp4::fromPixel(startX);  // 12.4 fixed-point accumulator
-  int lastBaseX = startX;
-  int lastBaseLeft = 0;
-  int lastBaseWidth = 0;
   int lastBaseTop = 0;
   uint32_t cp;
   uint32_t prevCp = 0;
@@ -42,14 +39,13 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
 
     const int raiseBy = isCombining ? combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop) : 0;
 
-    if (!isCombining && prevCp != 0) {
-      cursorXFP += getKerning(prevCp, cp);  // 4.4 fixed-point kern
+    const int kernFP = (prevCp != 0) ? getKerning(prevCp, cp) : 0;  // 4.4 fixed-point kern / mark adjust
+    if (!isCombining) {
+      cursorXFP += kernFP;
     }
 
-    const int cursorXPixels = fp4::toPixel(cursorXFP);  // snap 12.4 fixed-point to nearest pixel
-    const int glyphBaseX =
-        isCombining ? combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, glyph->left, glyph->width)
-                    : cursorXPixels;
+    // snap 12.4 fixed-point to nearest pixel; combining marks apply kern as one-shot offset
+    const int glyphBaseX = isCombining ? fp4::toPixel(cursorXFP + kernFP) : fp4::toPixel(cursorXFP);
     const int glyphBaseY = startY - raiseBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
@@ -60,9 +56,6 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     if (isCombining) {
       lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
     } else {
-      lastBaseX = cursorXPixels;
-      lastBaseLeft = glyph->left;
-      lastBaseWidth = glyph->width;
       lastBaseTop = glyph->top;
       cursorXFP += glyph->advanceX;  // 12.4 fixed-point advance
       prevCp = cp;
