@@ -522,6 +522,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   };
 
   if (ThaiShaper::containsThai(word.c_str())) {
+    ThaiShaper::decomposeSaraAm(word);
     std::vector<size_t> breakOffsets;
     breakOffsets.reserve(text.size());
 
