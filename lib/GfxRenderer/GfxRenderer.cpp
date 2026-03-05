@@ -222,22 +222,28 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    if (utf8IsCombiningMark(cp)) {
-      const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
-      if (!combiningGlyph) continue;
-      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
-      const int combiningX = combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, combiningGlyph->left,
-                                                       combiningGlyph->width);
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      prevCp = 0;
+      continue;
+    }
+
+    if (glyph->advanceX == 0) {
+      const int raiseBy = combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop);
+      const int combiningX =
+          combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, glyph->left, glyph->width);
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
+      lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
       continue;
     }
 
     cp = font.applyLigatures(cp, text, style);
+    glyph = font.getGlyph(cp, style);
+
     const int kernFP = (prevCp != 0) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
     xPosFP += kernFP;
 
     lastBaseX = fp4::toPixel(xPosFP);  // snap 12.4 fixed-point to nearest pixel
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
@@ -967,14 +973,15 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   int32_t widthFP = 0;  // 12.4 fixed-point accumulator
   const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    if (utf8IsCombiningMark(cp)) {
-      continue;
-    }
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph || glyph->advanceX == 0) continue;
+
     cp = font.applyLigatures(cp, text, style);
+    glyph = font.getGlyph(cp, style);
+
     if (prevCp != 0) {
       widthFP += font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
     }
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
     if (glyph) widthFP += glyph->advanceX;  // 12.4 fixed-point advance
     prevCp = cp;
   }
@@ -1034,24 +1041,30 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    if (utf8IsCombiningMark(cp)) {
-      const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
-      if (!combiningGlyph) continue;
-      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      prevCp = 0;
+      continue;
+    }
+
+    if (glyph->advanceX == 0) {
+      const int raiseBy = combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop);
       const int combiningX = x - raiseBy;
-      const int combiningY = combiningMark::centerOverRotated90CW(lastBaseY, lastBaseLeft, lastBaseWidth,
-                                                                  combiningGlyph->left, combiningGlyph->width);
+      const int combiningY =
+          combiningMark::centerOverRotated90CW(lastBaseY, lastBaseLeft, lastBaseWidth, glyph->left, glyph->width);
       renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
       continue;
     }
 
     cp = font.applyLigatures(cp, text, style);
+    glyph = font.getGlyph(cp, style);
+
     if (prevCp != 0) {
       yPosFP -= font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern (subtract for rotated)
     }
 
     lastBaseY = fp4::toPixel(yPosFP);  // snap 12.4 fixed-point to nearest pixel
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
