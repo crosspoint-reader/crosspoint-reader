@@ -690,15 +690,19 @@ if mark_left_adjustments:
 # base-base left classes: for each (left_class, mark), we average the
 # residuals of all bases in that class.  This extends the matrix rightward
 # (adding mark columns) without changing left class count.
-mark_kern_map = {}  # (baseCp, markCp) -> quantized_fp4
+#
+# Residuals are kept at full fp4 precision here; quantization to whole
+# pixels happens late (after class assignment) to avoid boundary artifacts
+# that would artificially split right classes.
+mark_kern_map = {}  # (baseCp, markCp) -> fp4 residual (full precision)
 for (base_cp, mark_cp), fp4_adj in all_mark_kerns.items():
     median = mark_medians.get(mark_cp, 0)
-    residual_px = round((fp4_adj - median) / 16.0)
-    if residual_px == 0:
+    residual = fp4_adj - median
+    residual = max(-128, min(127, residual))
+    if abs(residual) < 8:  # < 0.5px: can never shift pixel output
         continue
-    quantized = max(-128, min(127, residual_px * 16))
-    mark_kern_map[(base_cp, mark_cp)] = quantized
-print(f"mark positioning: {len(mark_kern_map)} residual pairs (quantized to 1px)",
+    mark_kern_map[(base_cp, mark_cp)] = residual
+print(f"mark positioning: {len(mark_kern_map)} residual pairs (fp4 precision)",
       file=sys.stderr)
 
 # --- Derive class-based kerning from pairs ---
@@ -759,26 +763,51 @@ if kern_map or mark_kern_map:
             class_to_bases.setdefault(cid, []).append(cp)
 
         all_mark_cps = sorted({mcp for _, mcp in mark_kern_map})
-        # For each mark, compute column: left_class -> averaged residual
-        mark_right_class_id = kern_right_class_count + 1
-        mark_col_to_class = {}
+        # For each mark, compute column at full fp4 precision: left_class -> avg residual
+        mark_fp4_cols = {}  # markCp -> tuple of fp4 averages
         for mcp in all_mark_cps:
             col = []
             for lc_id in range(1, kern_left_class_count + 1):
                 bases = class_to_bases.get(lc_id, [])
                 vals = [mark_kern_map.get((b, mcp), 0) for b in bases]
                 nz = [v for v in vals if v != 0]
-                avg = round(sum(nz) / len(nz) / 16.0) * 16 if nz else 0
-                avg = max(-128, min(127, avg))
-                col.append(avg)
+                avg = round(sum(nz) / len(nz)) if nz else 0
+                col.append(max(-128, min(127, avg)))
             col_t = tuple(col)
             if all(v == 0 for v in col_t):
                 continue
-            if col_t not in mark_col_to_class:
-                mark_col_to_class[col_t] = mark_right_class_id
-                mark_class_cols[mark_right_class_id] = col_t
+            mark_fp4_cols[mcp] = col_t
+
+        # Assign marks to right classes using tolerance-based merging.
+        # Two columns within 8 fp4 (0.5px) L-inf distance share a class,
+        # avoiding artificial splits at pixel quantization boundaries.
+        MARK_COL_TOLERANCE = 8  # 0.5px in fp4
+        mark_right_class_id = kern_right_class_count + 1
+        mark_class_representatives = []  # list of (classId, fp4_col)
+        for mcp in sorted(mark_fp4_cols.keys()):
+            col = mark_fp4_cols[mcp]
+            matched_id = None
+            for cid, rep_col in mark_class_representatives:
+                if max(abs(a - b) for a, b in zip(col, rep_col)) <= MARK_COL_TOLERANCE:
+                    matched_id = cid
+                    break
+            if matched_id is not None:
+                mark_right_class_map[mcp] = matched_id
+            else:
+                mark_right_class_map[mcp] = mark_right_class_id
+                mark_class_representatives.append((mark_right_class_id, col))
                 mark_right_class_id += 1
-            mark_right_class_map[mcp] = mark_col_to_class[col_t]
+
+        # Build final quantized columns per class (average of all members, rounded to pixels)
+        class_member_cols = {}  # classId -> list of fp4 columns
+        for mcp, cid in mark_right_class_map.items():
+            class_member_cols.setdefault(cid, []).append(mark_fp4_cols[mcp])
+        for cid, cols in class_member_cols.items():
+            n = len(cols)
+            avg_col = tuple(
+                max(-128, min(127, round(sum(c[i] for c in cols) / n / 16.0) * 16))
+                for i in range(len(cols[0])))
+            mark_class_cols[cid] = avg_col
 
         # Also assign left class to bases that have mark data but no kern data
         for (base_cp, _), _ in mark_kern_map.items():
