@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>

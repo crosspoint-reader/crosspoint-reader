@@ -1,16 +1,19 @@
 #include "ReaderActivity.h"
 
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "I18n.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 #include "util/StringUtils.h"
 
 std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
@@ -131,6 +134,7 @@ void ReaderActivity::onEnter() {
     }
     onGoToTxtReader(std::move(txt));
   } else {
+    GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
     auto epub = loadEpub(initialBookPath);
     if (!epub) {
       onGoBack();

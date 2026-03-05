@@ -1,9 +1,13 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <Arduino.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
+#include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <PngToBmpConverter.h>
 #include <expat.h>
 
 #include "../../Epub.h"
@@ -387,6 +391,41 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     return;
                   }
                   self->currentPageNextY = 0;
+                }
+
+                // X3: Pre-convert image to BMP with Atkinson dithering during indexing
+                if (gpio.deviceIsX3()) {
+                  std::string bmpPath;
+                  size_t dotPos = cachedImagePath.rfind('.');
+                  if (dotPos != std::string::npos) {
+                    bmpPath = cachedImagePath.substr(0, dotPos) + ".bmp";
+                  } else {
+                    bmpPath = cachedImagePath + ".bmp";
+                  }
+
+                  FsFile srcFile;
+                  if (Storage.openFileForRead("EHP", cachedImagePath, srcFile)) {
+                    FsFile bmpFile;
+                    if (Storage.openFileForWrite("EHP", bmpPath, bmpFile)) {
+                      bool converted = false;
+                      if (ext == ".jpg" || ext == ".jpeg" || ext == ".JPG" || ext == ".JPEG") {
+                        converted = JpegToBmpConverter::jpegFileToBmpStreamWithSize(srcFile, bmpFile, displayWidth,
+                                                                                    displayHeight);
+                      } else if (ext == ".png" || ext == ".PNG") {
+                        converted = PngToBmpConverter::pngFileToBmpStreamWithSize(srcFile, bmpFile, displayWidth,
+                                                                                  displayHeight);
+                      }
+                      bmpFile.flush();
+                      bmpFile.close();
+                      if (!converted) {
+                        Storage.remove(bmpPath.c_str());
+                        LOG_ERR("EHP", "BMP pre-conversion failed: %s", cachedImagePath.c_str());
+                      } else {
+                        LOG_DBG("EHP", "Pre-converted to BMP: %s", bmpPath.c_str());
+                      }
+                    }
+                    srcFile.close();
+                  }
                 }
 
                 // Create ImageBlock and add to page
