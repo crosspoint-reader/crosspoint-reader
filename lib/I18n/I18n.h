@@ -1,12 +1,19 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "I18nKeys.h"
-/**
- * Internationalization (i18n) system for CrossPoint Reader
- */
 
+/**
+ * Internationalization (i18n) system for CrossPoint Reader.
+ *
+ * Core languages (EN, DE, FR, ES, PT) are baked into flash — get() returns a
+ * direct flash pointer at zero RAM cost.
+ *
+ * Non-core languages are loaded on demand from SD card
+ * (/.crosspoint/languages/XX.yaml).  Missing strings fall back to English.
+ */
 class I18n {
  public:
   static I18n& getInstance();
@@ -15,26 +22,52 @@ class I18n {
   I18n(const I18n&) = delete;
   I18n& operator=(const I18n&) = delete;
 
-  // Get localized string by ID
+  // Get localized string by ID.
+  // For external languages, falls back per-string to English if missing.
   const char* get(StrId id) const;
 
   const char* operator[](StrId id) const { return get(id); }
 
   Language getLanguage() const { return _language; }
+
+  // Set a core language and persist.
   void setLanguage(Language lang);
+
+  // Load a non-core language from /.crosspoint/languages/XX.yaml and persist.
+  // Returns false if the file is missing or unparseable (language stays unchanged).
+  bool setExternalLanguage(const char* code);
+
+  // Two-letter code of the active language (works for both core and external).
+  const char* getActiveCode() const;
+
+  // Display name of the active language.
+  const char* getActiveName() const;
+
+  // Display name for a core language by enum value.
   const char* getLanguageName(Language lang) const;
 
   void saveSettings();
   void loadSettings();
 
-  // Get all unique characters used in a specific language
-  // Returns a sorted string of unique characters
+  // Character set for the active language (used by font renderer).
+  // Returns EN character set for external languages.
+  const char* getCharacterSet() const;
+
+  // Character set for a specific core language.
   static const char* getCharacterSet(Language lang);
 
  private:
-  I18n() : _language(Language::EN) {}
+  I18n() = default;
 
-  Language _language;
+  // Parse /.crosspoint/languages/XX.yaml into _extBuffer / _extTable.
+  bool loadExternalLanguage(const char* code);
+  void unloadExternalLanguage();
+
+  Language _language = Language::EN;
+  char _extCode[8] = {};                                           // active external language code, e.g. "FI"
+  char _extName[48] = {};                                          // active external language native name, e.g. "Suomi"
+  char* _extBuffer = nullptr;                                      // heap-allocated string data
+  const char* _extTable[static_cast<size_t>(StrId::_COUNT)] = {};  // ptrs into _extBuffer
 };
 
 // Convenience macros
