@@ -16,39 +16,36 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   }
 
   int32_t cursorXFP = fp4::fromPixel(startX);  // 12.4 fixed-point accumulator
-  int lastBaseX = startX;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
   int lastBaseTop = 0;
-  constexpr int MIN_COMBINING_GAP_PX = 1;
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
-    const bool isCombining = utf8IsCombiningMark(cp);
-
-    if (!isCombining) {
-      cp = applyLigatures(cp, string);
-    }
-
     const EpdGlyph* glyph = getGlyph(cp);
     if (!glyph) {
       prevCp = 0;
       continue;
     }
 
-    int raiseBy = 0;
-    if (isCombining) {
-      const int currentGap = glyph->top - glyph->height - lastBaseTop;
-      if (currentGap < MIN_COMBINING_GAP_PX) {
-        raiseBy = MIN_COMBINING_GAP_PX - currentGap;
+    const bool isCombining = (glyph->advanceX == 0);
+
+    if (!isCombining) {
+      cp = applyLigatures(cp, string);
+      glyph = getGlyph(cp);
+      if (!glyph) {
+        prevCp = 0;
+        continue;
       }
     }
 
-    if (!isCombining && prevCp != 0) {
-      cursorXFP += getKerning(prevCp, cp);  // 4.4 fixed-point kern
+    const int raiseBy = isCombining ? combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop) : 0;
+
+    const int kernFP = (prevCp != 0) ? getKerning(prevCp, cp) : 0;  // 4.4 fixed-point kern / mark adjust
+    if (!isCombining) {
+      cursorXFP += kernFP;
     }
 
-    const int cursorXPixels = fp4::toPixel(cursorXFP);  // snap 12.4 fixed-point to nearest pixel
-    const int glyphBaseX = isCombining ? (lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2)) : cursorXPixels;
+    // snap 12.4 fixed-point to nearest pixel; combining marks apply kern as one-shot offset
+    const int glyphBaseX = isCombining ? fp4::toPixel(cursorXFP + kernFP) : fp4::toPixel(cursorXFP);
     const int glyphBaseY = startY - raiseBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
@@ -56,9 +53,9 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     *minY = std::min(*minY, glyphBaseY + glyph->top - glyph->height);
     *maxY = std::max(*maxY, glyphBaseY + glyph->top);
 
-    if (!isCombining) {
-      lastBaseX = cursorXPixels;
-      lastBaseAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
+    if (isCombining) {
+      lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
+    } else {
       lastBaseTop = glyph->top;
       cursorXFP += glyph->advanceX;  // 12.4 fixed-point advance
       prevCp = cp;

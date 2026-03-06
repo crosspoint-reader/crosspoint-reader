@@ -1,6 +1,8 @@
 #include "ParsedText.h"
 
 #include <GfxRenderer.h>
+#include <ThaiCharacter.h>
+#include <ThaiWordBreak.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -80,13 +82,53 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
                          const bool attachToPrevious) {
   if (word.empty()) return;
 
-  words.push_back(std::move(word));
   EpdFontFamily::Style combinedStyle = fontStyle;
   if (underline) {
     combinedStyle = static_cast<EpdFontFamily::Style>(combinedStyle | EpdFontFamily::UNDERLINE);
   }
+
+  const WordJoin firstJoin = attachToPrevious ? WordJoin::ATTACHED : WordJoin::SPACED;
+
+  // Scripts without inter-word spaces need segmentation into breakable clusters
+  // before entering the layout engine. To add a new script:
+  //   1. Write a containsXxx(const char*) detector and a
+  //      nextClusterBoundary(const char*, size_t) function matching ClusterBoundaryFn.
+  //   2. Add a detection block here following the Thai pattern below.
+  // Candidates: Lao (U+0E80–0EFF), Khmer (U+1780–17FF), Myanmar (U+1000–109F),
+  //             Tibetan (U+0F00–0FFF), CJK (per-character breaks).
+  if (ThaiShaper::containsThai(word.c_str())) {
+    ThaiShaper::decomposeSaraAm(word);
+    addSegmentedWord(word, combinedStyle, firstJoin, ThaiShaper::nextClusterBoundary);
+    return;
+  }
+
+  words.push_back(std::move(word));
   wordStyles.push_back(combinedStyle);
-  wordContinues.push_back(attachToPrevious);
+  wordJoins.push_back(firstJoin);
+}
+
+void ParsedText::addSegmentedWord(const std::string& word, const EpdFontFamily::Style style, const WordJoin firstJoin,
+                                  const ClusterBoundaryFn nextBoundary) {
+  const char* text = word.c_str();
+  const size_t len = word.size();
+  size_t offset = 0;
+  bool first = true;
+
+  while (offset < len) {
+    size_t next = nextBoundary(text, offset);
+    if (next <= offset) {
+      // Safety: advance to next valid UTF-8 leading byte
+      next = offset + 1;
+      while (next < len && (static_cast<uint8_t>(text[next]) & 0xC0) == 0x80) {
+        next++;
+      }
+    }
+    words.push_back(word.substr(offset, next - offset));
+    wordStyles.push_back(style);
+    wordJoins.push_back(first ? firstJoin : WordJoin::JOINED);
+    first = false;
+    offset = next;
+  }
 }
 
 // Consumes data to minimize memory usage
@@ -107,14 +149,14 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   std::vector<size_t> lineBreakIndices;
   if (hyphenationEnabled) {
     // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.
-    lineBreakIndices = computeHyphenatedLineBreaks(renderer, fontId, pageWidth, spaceWidth, wordWidths, wordContinues);
+    lineBreakIndices = computeHyphenatedLineBreaks(renderer, fontId, pageWidth, spaceWidth, wordWidths, wordJoins);
   } else {
-    lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, spaceWidth, wordWidths, wordContinues);
+    lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, spaceWidth, wordWidths, wordJoins);
   }
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
   for (size_t i = 0; i < lineCount; ++i) {
-    extractLine(i, pageWidth, spaceWidth, wordWidths, wordContinues, lineBreakIndices, processLine, renderer, fontId);
+    extractLine(i, pageWidth, spaceWidth, wordWidths, wordJoins, lineBreakIndices, processLine, renderer, fontId);
   }
 
   // Remove consumed words so size() reflects only remaining words
@@ -122,7 +164,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     const size_t consumed = lineBreakIndices[lineCount - 1];
     words.erase(words.begin(), words.begin() + consumed);
     wordStyles.erase(wordStyles.begin(), wordStyles.begin() + consumed);
-    wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
+    wordJoins.erase(wordJoins.begin(), wordJoins.begin() + consumed);
   }
 }
 
@@ -139,7 +181,7 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
 
 std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId, const int pageWidth,
                                                   const int spaceWidth, std::vector<uint16_t>& wordWidths,
-                                                  std::vector<bool>& continuesVec) {
+                                                  std::vector<WordJoin>& joinsVec) {
   if (words.empty()) {
     return {};
   }
@@ -184,14 +226,13 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     const int effectivePageWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
 
     for (size_t j = i; j < totalWordCount; ++j) {
-      // Add space before word j, unless it's the first word on the line or a continuation
+      // Add space before word j, unless it's the first word on the line or a continuation/cluster
       int gap = 0;
-      if (j > static_cast<size_t>(i) && !continuesVec[j]) {
+      if (j > static_cast<size_t>(i) && joinsVec[j] == WordJoin::SPACED) {
         gap = spaceWidth;
         gap += renderer.getSpaceKernAdjust(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]),
                                            wordStyles[j - 1]);
-      } else if (j > static_cast<size_t>(i) && continuesVec[j]) {
-        // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
+      } else if (j > static_cast<size_t>(i) && joinsVec[j] != WordJoin::SPACED) {
         gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
       }
       currlen += wordWidths[j] + gap;
@@ -200,8 +241,8 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
         break;
       }
 
-      // Cannot break after word j if the next word attaches to it (continuation group)
-      if (j + 1 < totalWordCount && continuesVec[j + 1]) {
+      // Cannot break after word j if the next word is ATTACHED (continuation group)
+      if (j + 1 < totalWordCount && joinsVec[j + 1] == WordJoin::ATTACHED) {
         continue;
       }
 
@@ -277,7 +318,7 @@ void ParsedText::applyParagraphIndent() {
 std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const int fontId,
                                                             const int pageWidth, const int spaceWidth,
                                                             std::vector<uint16_t>& wordWidths,
-                                                            std::vector<bool>& continuesVec) {
+                                                            std::vector<WordJoin>& joinsVec) {
   // Calculate first line indent (only for left/justified text).
   // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
   // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
@@ -303,12 +344,11 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
     while (currentIndex < wordWidths.size()) {
       const bool isFirstWord = currentIndex == lineStart;
       int spacing = 0;
-      if (!isFirstWord && !continuesVec[currentIndex]) {
+      if (!isFirstWord && joinsVec[currentIndex] == WordJoin::SPACED) {
         spacing = spaceWidth;
         spacing += renderer.getSpaceKernAdjust(fontId, lastCodepoint(words[currentIndex - 1]),
                                                firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
-      } else if (!isFirstWord && continuesVec[currentIndex]) {
-        // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
+      } else if (!isFirstWord && joinsVec[currentIndex] != WordJoin::SPACED) {
         spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
                                       firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
       }
@@ -341,9 +381,10 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       break;
     }
 
-    // Don't break before a continuation word (e.g., orphaned "?" after "question").
+    // Don't break before an ATTACHED word (e.g., orphaned "?" after "question").
     // Backtrack to the start of the continuation group so the whole group moves to the next line.
-    while (currentIndex > lineStart + 1 && currentIndex < wordWidths.size() && continuesVec[currentIndex]) {
+    while (currentIndex > lineStart + 1 && currentIndex < wordWidths.size() &&
+           joinsVec[currentIndex] == WordJoin::ATTACHED) {
       --currentIndex;
     }
 
@@ -430,8 +471,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   //
   // This lets the backtracking loop keep the entire prefix group ("200 Quadrat-") on one
   // line, while "kilometer" moves to the next line.
-  // wordContinues[wordIndex] is intentionally left unchanged — the prefix keeps its original attachment.
-  wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
+  // wordJoins[wordIndex] is intentionally left unchanged — the prefix keeps its original attachment.
+  wordJoins.insert(wordJoins.begin() + wordIndex + 1, WordJoin::SPACED);
 
   // Update cached widths to reflect the new prefix/remainder pairing.
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
@@ -441,7 +482,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 }
 
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const int spaceWidth,
-                             const std::vector<uint16_t>& wordWidths, const std::vector<bool>& continuesVec,
+                             const std::vector<uint16_t>& wordWidths, const std::vector<WordJoin>& joinsVec,
                              const std::vector<size_t>& lineBreakIndices,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              const GfxRenderer& renderer, const int fontId) {
@@ -468,16 +509,15 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
     lineWordWidthSum += wordWidths[lastBreakAt + wordIdx];
-    // Count gaps: each word after the first creates a gap, unless it's a continuation
-    if (wordIdx > 0 && !continuesVec[lastBreakAt + wordIdx]) {
+    // Count gaps: each word after the first creates a gap, unless it's joined/attached
+    if (wordIdx > 0 && joinsVec[lastBreakAt + wordIdx] == WordJoin::SPACED) {
       actualGapCount++;
       int naturalGap = spaceWidth;
       naturalGap += renderer.getSpaceKernAdjust(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
                                                 firstCodepoint(words[lastBreakAt + wordIdx]),
                                                 wordStyles[lastBreakAt + wordIdx - 1]);
       totalNaturalGaps += naturalGap;
-    } else if (wordIdx > 0 && continuesVec[lastBreakAt + wordIdx]) {
-      // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
+    } else if (wordIdx > 0 && joinsVec[lastBreakAt + wordIdx] != WordJoin::SPACED) {
       totalNaturalGaps +=
           renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
                               firstCodepoint(words[lastBreakAt + wordIdx]), wordStyles[lastBreakAt + wordIdx - 1]);
@@ -511,7 +551,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
     lineXPos.push_back(xpos);
 
-    const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
+    const bool nextIsContinuation =
+        wordIdx + 1 < lineWordCount && joinsVec[lastBreakAt + wordIdx + 1] != WordJoin::SPACED;
     if (nextIsContinuation) {
       int advance = wordWidths[lastBreakAt + wordIdx];
       // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)

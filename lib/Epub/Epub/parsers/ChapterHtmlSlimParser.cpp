@@ -758,9 +758,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
     }
 
-    // If we're about to run out of space, then cut the word off and start a new one
-    if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
+    // If we're about to run out of space, then cut the word off and start a new one.
+    // Only flush on a UTF-8 character boundary, continuation bytes (10xxxxxx) must not
+    // be separated from their lead byte. Hard cap at +3 guards against malformed input.
+    if (self->partWordBufferIndex >= MAX_WORD_SIZE &&
+        (self->partWordBufferIndex >= MAX_WORD_SIZE + 3 || (static_cast<uint8_t>(s[i]) & 0xC0) != 0x80)) {
       self->flushPartWordBuffer();
+      self->nextWordContinues = true;  // overflow is not a real word boundary
     }
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
