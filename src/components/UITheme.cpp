@@ -66,6 +66,39 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
   return availableHeight / rowHeight;
 }
 
+// Screen area excluding the button hints 
+Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints, bool hasSideButtonHints) {
+  auto orientation = renderer.getOrientation();
+  const int screenWidth = renderer.getScreenWidth();
+  const int screenHeight = renderer.getScreenHeight();
+  Rect safeArea = Rect{0, 0, screenWidth, screenHeight};
+  switch (orientation) {
+    case GfxRenderer::Orientation::Portrait:
+      if (hasFrontButtonHints) {
+        safeArea.height -= currentMetrics->buttonHintsHeight;
+      }
+      break;
+    case GfxRenderer::Orientation::LandscapeClockwise:
+      if (hasFrontButtonHints) {
+        safeArea.x += currentMetrics->buttonHintsHeight;
+        safeArea.width -= currentMetrics->buttonHintsHeight;
+      }
+      break;
+    case GfxRenderer::Orientation::PortraitInverted:
+      if (hasFrontButtonHints) {
+        safeArea.y += currentMetrics->buttonHintsHeight;
+        safeArea.height -= currentMetrics->buttonHintsHeight;
+      }
+      break;
+    case GfxRenderer::Orientation::LandscapeCounterClockwise:
+      if (hasFrontButtonHints) {
+        safeArea.width -= currentMetrics->buttonHintsHeight;
+      }
+      break;
+  }
+  return safeArea;
+}
+
 std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight) {
   size_t pos = coverBmpPath.find("[HEIGHT]", 0);
   if (pos != std::string::npos) {

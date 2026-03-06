@@ -273,7 +273,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       rect.width -
       (totalPages > 1 ? (LyraMetrics::values.scrollBarWidth + LyraMetrics::values.scrollBarRightOffset) : 1);
   if (selectedIndex >= 0) {
-    renderer.fillRoundedRect(LyraMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
+    renderer.fillRoundedRect(rect.x + LyraMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
                              contentWidth - LyraMetrics::values.contentSidePadding * 2, rowHeight, cornerRadius,
                              Color::LightGray);
   }
@@ -328,7 +328,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     if (!valueText.empty()) {
       if (i == selectedIndex && highlightValue) {
         renderer.fillRoundedRect(
-            contentWidth - LyraMetrics::values.contentSidePadding - hPaddingInSelection - valueWidth, itemY,
+            rect.x + contentWidth - LyraMetrics::values.contentSidePadding - hPaddingInSelection - valueWidth, itemY,
             valueWidth + hPaddingInSelection, rowHeight, cornerRadius, Color::Black);
       }
 
