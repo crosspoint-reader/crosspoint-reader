@@ -72,6 +72,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
       .skip_cert_common_name_check = true,
+      .crt_bundle_attach = esp_crt_bundle_attach,
+      .keep_alive_enable = true,
   };
 
   /* To track life time of local_buf, dtor will be called on exit from that function */
@@ -218,6 +220,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
       .skip_cert_common_name_check = true,
+      .crt_bundle_attach = esp_crt_bundle_attach,
+      .keep_alive_enable = true,
   };
 
   esp_https_ota_config_t ota_config = {
