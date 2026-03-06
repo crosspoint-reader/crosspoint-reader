@@ -1,4 +1,4 @@
-#include "EpubReaderPercentSelectionActivity.h"
+#include "ReaderPercentSelectionActivity.h"
 
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -13,15 +13,15 @@ constexpr int kSmallStep = 1;
 constexpr int kLargeStep = 10;
 }  // namespace
 
-void EpubReaderPercentSelectionActivity::onEnter() {
+void ReaderPercentSelectionActivity::onEnter() {
   Activity::onEnter();
   // Set up rendering task and mark first frame dirty.
   requestUpdate();
 }
 
-void EpubReaderPercentSelectionActivity::onExit() { Activity::onExit(); }
+void ReaderPercentSelectionActivity::onExit() { Activity::onExit(); }
 
-void EpubReaderPercentSelectionActivity::adjustPercent(const int delta) {
+void ReaderPercentSelectionActivity::adjustPercent(const int delta) {
   // Apply delta and clamp within 0-100.
   percent += delta;
   if (percent < 0) {
@@ -32,7 +32,7 @@ void EpubReaderPercentSelectionActivity::adjustPercent(const int delta) {
   requestUpdate();
 }
 
-void EpubReaderPercentSelectionActivity::loop() {
+void ReaderPercentSelectionActivity::loop() {
   // Back cancels, confirm selects, arrows adjust the percent.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
@@ -55,7 +55,7 @@ void EpubReaderPercentSelectionActivity::loop() {
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { adjustPercent(-kLargeStep); });
 }
 
-void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
+void ReaderPercentSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   // Title and numeric percent value.
