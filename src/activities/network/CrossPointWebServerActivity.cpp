@@ -269,60 +269,6 @@ void CrossPointWebServerActivity::stopWebServer() {
 }
 
 void CrossPointWebServerActivity::loop() {
-  // Show on-screen progress while a GitHub (claw) firmware download is in progress.
-  // Renders every ~2s so the display reflects current download state.
-  {
-    static unsigned long lastClawRender = 0;
-    static CrossPointWebServer::ClawUpdateState lastRenderedState = CrossPointWebServer::ClawUpdateState::IDLE;
-    const auto prog = CrossPointWebServer::getClawUpdateProgress();
-    const bool active = (prog.state == CrossPointWebServer::ClawUpdateState::DOWNLOADING ||
-                         prog.state == CrossPointWebServer::ClawUpdateState::CHECKING);
-    if (active || prog.state != lastRenderedState) {
-      if (millis() - lastClawRender > 2000 || prog.state != lastRenderedState) {
-        lastClawRender = millis();
-        lastRenderedState = prog.state;
-        const int pageH = renderer.getScreenHeight();
-        const int pageW = renderer.getScreenWidth();
-        if (prog.state == CrossPointWebServer::ClawUpdateState::DOWNLOADING) {
-          renderer.clearScreen();
-          renderer.drawCenteredText(PULSR_10_FONT_ID, pageH / 2 - 40, "Downloading update...", true, EpdFontFamily::BOLD);
-          if (prog.total > 0) {
-            const int pct = (int)(prog.downloaded * 100 / prog.total);
-            const int barW = pageW - 60;
-            const int barH = 14;
-            const int barX = 30;
-            const int barY = pageH / 2;
-            renderer.drawRect(barX, barY, barW, barH, 0);
-            renderer.fillRect(barX, barY, barW * pct / 100, barH, 0);
-            char pctStr[32];
-            snprintf(pctStr, sizeof(pctStr), "%d%%  (%.1f / %.1f MB)", pct,
-                     prog.downloaded / 1048576.0f, prog.total / 1048576.0f);
-            renderer.drawCenteredText(SMALL_FONT_ID, pageH / 2 + barH + 12, pctStr);
-          }
-          if (!prog.version.empty()) {
-            char verBuf[64];
-            snprintf(verBuf, sizeof(verBuf), "Version: %s", prog.version.c_str());
-            renderer.drawCenteredText(SMALL_FONT_ID, pageH / 2 + 50, verBuf);
-          }
-          renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-        } else if (prog.state == CrossPointWebServer::ClawUpdateState::CHECKING) {
-          renderer.clearScreen();
-          renderer.drawCenteredText(PULSR_10_FONT_ID, pageH / 2, "Checking for updates...", true, EpdFontFamily::BOLD);
-          renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-        }
-      }
-    }
-  }
-
-  // If a DZ firmware flash was requested, exit cleanly first so onExit() stops
-  // the web server and disconnects WiFi before the main loop kills WiFi.
-  // Without this, killing WiFi while the TCP stack is live causes a panic.
-  extern volatile bool dzFlashRequested;
-  if (dzFlashRequested) {
-    onGoHome();
-    return;
-  }
-
   // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
     // Handle DNS requests for captive portal (AP mode only)
