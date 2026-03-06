@@ -1384,7 +1384,7 @@
         <div id="convertInfo" style="display:none; margin-bottom: 10px; font-size: 0.9em;">
         </div>
 
-        <div class="convert-settings" id="convertSettings" style="display:none;">
+        <div class="convert-settings" id="convertSettings" style="display:block;">
           <span>⚫ True-Grayscale</span>
           <span>📏 Max 480×800px</span>
           <span id="qualityDisplaySimple">📦 85% JPEG</span>
@@ -1817,7 +1817,6 @@
     document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
     document.getElementById('convertBeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
-    document.getElementById('convertSettings').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
     // Hide log section
     const logSection = document.getElementById('log-section');
@@ -1845,7 +1844,6 @@
     const uploadBtn = document.getElementById('uploadBtn');
     document.getElementById('convertWarning').style.display = checked ? 'block' : 'none';
     document.getElementById('convertInfo').style.display = checked ? 'block' : 'none';
-    document.getElementById('convertSettings').style.display = checked ? 'block' : 'none';
     // Update button text and style
     if (checked) {
       uploadBtn.textContent = 'Optimize & Upload';
