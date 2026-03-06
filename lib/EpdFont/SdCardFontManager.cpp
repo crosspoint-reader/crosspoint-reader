@@ -98,14 +98,14 @@ int SdCardFontManager::getFontId(const std::string& familyName, uint8_t size, ui
 }
 
 float SdCardFontManager::getLineCompression(uint8_t lineSpacing) {
-  // Same values as NotoSans
+  // Same values as Bookerly (the most neutral built-in font)
   switch (lineSpacing) {
     case 0:  // TIGHT
-      return 0.90f;
+      return 0.95f;
     case 1:  // NORMAL
     default:
-      return 0.95f;
-    case 2:  // WIDE
       return 1.0f;
+    case 2:  // WIDE
+      return 1.1f;
   }
 }

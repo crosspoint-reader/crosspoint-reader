@@ -57,6 +57,7 @@ void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
       break;
   }
 }
+
 }  // namespace
 
 void CrossPointSettings::validateFrontButtonMapping(CrossPointSettings& settings) {
@@ -141,7 +142,7 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, shortPwrBtn, SHORT_PWRBTN_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, statusBar, STATUS_BAR_MODE_COUNT);
+    readAndValidate(inputFile, statusBar, STATUS_BAR_MODE_COUNT);  // legacy
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, orientation, ORIENTATION_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
@@ -225,16 +226,16 @@ bool CrossPointSettings::loadFromBinaryFile() {
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card fonts use same compression as NotoSans
+  // SD card fonts use same compression as Bookerly (the most neutral values)
   if (sdFontFamilyName[0] != '\0') {
     switch (lineSpacing) {
       case TIGHT:
-        return 0.90f;
+        return 0.95f;
       case NORMAL:
       default:
-        return 0.95f;
-      case WIDE:
         return 1.0f;
+      case WIDE:
+        return 1.1f;
     }
   }
 

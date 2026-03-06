@@ -14,8 +14,8 @@ static_assert(sizeof(EpdLigaturePair) == 8, "EpdLigaturePair must be 8 bytes to 
 
 // .cpfont magic bytes
 static constexpr char CPFONT_MAGIC[8] = {'C', 'P', 'F', 'O', 'N', 'T', '\0', '\0'};
-static constexpr uint16_t CPFONT_VERSION_MIN = 1;
-static constexpr uint16_t CPFONT_VERSION_MAX = 2;
+static constexpr uint16_t CPFONT_VERSION_MIN = 3;
+static constexpr uint16_t CPFONT_VERSION_MAX = 3;
 static constexpr uint32_t HEADER_SIZE = 32;
 
 SdCardFont::~SdCardFont() { freeAll(); }

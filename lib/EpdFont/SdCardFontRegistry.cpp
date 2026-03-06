@@ -93,9 +93,10 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
   FsFile dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return;
 
-  FsFile entry;
   char nameBuffer[128];
-  while (entry.openNext(&dir, O_RDONLY)) {
+  while (true) {
+    FsFile entry = dir.openNextFile();
+    if (!entry) break;
     if (entry.isDirectory()) {
       entry.close();
       continue;
@@ -133,9 +134,10 @@ bool SdCardFontRegistry::discover() {
     return false;
   }
 
-  FsFile entry;
   char nameBuffer[128];
-  while (entry.openNext(&root, O_RDONLY)) {
+  while (true) {
+    FsFile entry = root.openNextFile();
+    if (!entry) break;
     if (entry.isDirectory()) {
       // Subdirectory = font family
       entry.getName(nameBuffer, sizeof(nameBuffer));

@@ -1,9 +1,8 @@
 #pragma once
+#include <HalStorage.h>
+
 #include <cstdint>
 #include <iosfwd>
-
-// Forward declarations
-class FsFile;
 
 class CrossPointSettings {
  private:
@@ -35,7 +34,7 @@ class CrossPointSettings {
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
 
-  // Status bar display type enum
+  // Status bar enum - legacy
   enum STATUS_BAR_MODE {
     NONE = 0,
     NO_PROGRESS = 1,
@@ -45,6 +44,19 @@ class CrossPointSettings {
     CHAPTER_PROGRESS_BAR = 5,
     STATUS_BAR_MODE_COUNT
   };
+  enum STATUS_BAR_PROGRESS_BAR {
+    BOOK_PROGRESS = 0,
+    CHAPTER_PROGRESS = 1,
+    HIDE_PROGRESS = 2,
+    STATUS_BAR_PROGRESS_BAR_COUNT
+  };
+  enum STATUS_BAR_PROGRESS_BAR_THICKNESS {
+    PROGRESS_BAR_THIN = 0,
+    PROGRESS_BAR_NORMAL = 1,
+    PROGRESS_BAR_THICK = 2,
+    STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT
+  };
+  enum STATUS_BAR_TITLE { BOOK_TITLE = 0, CHAPTER_TITLE = 1, HIDE_TITLE = 2, STATUS_BAR_TITLE_COUNT };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -122,14 +134,23 @@ class CrossPointSettings {
   // UI Theme
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2 };
 
+  // Image rendering in EPUB reader
+  enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
-  // Status bar settings
+  // Status bar settings (statusBar retained for migration only)
   uint8_t statusBar = FULL;
+  uint8_t statusBarChapterPageCount = 1;
+  uint8_t statusBarBookProgressPercentage = 1;
+  uint8_t statusBarProgressBar = HIDE_PROGRESS;
+  uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
+  uint8_t statusBarTitle = CHAPTER_TITLE;
+  uint8_t statusBarBattery = 1;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
@@ -176,6 +197,10 @@ class CrossPointSettings {
   uint8_t embeddedStyle = 1;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
+  // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
+  uint8_t showHiddenFiles = 0;
+  // Image rendering mode in EPUB reader
+  uint8_t imageRendering = IMAGES_DISPLAY;
 
   ~CrossPointSettings() = default;
 

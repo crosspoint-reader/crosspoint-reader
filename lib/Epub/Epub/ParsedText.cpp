@@ -104,7 +104,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   // For flash-based fonts this is a no-op. For SD card fonts (e.g. CJK), this
   // reads glyph metadata + bitmaps for all unique codepoints in this paragraph.
   {
-    std::string allText;
+    std::string allText(" ");  // Always include space for getSpaceWidth()
     for (const auto& w : words) allText += w;
     renderer.ensureSdCardFontReady(fontId, allText.c_str());
   }
@@ -153,9 +153,12 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     return {};
   }
 
-  // Calculate first line indent (only for left/justified text without extra paragraph spacing)
+  // Calculate first line indent (only for left/justified text).
+  // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
+  // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
+  // it is structural (positions the bullet/marker), not decorative.
   const int firstLineIndent =
-      blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
@@ -284,9 +287,12 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
                                                             const int pageWidth, const int spaceWidth,
                                                             std::vector<uint16_t>& wordWidths,
                                                             std::vector<bool>& continuesVec) {
-  // Calculate first line indent (only for left/justified text without extra paragraph spacing)
+  // Calculate first line indent (only for left/justified text).
+  // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
+  // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
+  // it is structural (positions the bullet/marker), not decorative.
   const int firstLineIndent =
-      blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
@@ -452,10 +458,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
-  // Calculate first line indent (only for left/justified text without extra paragraph spacing)
+  // Calculate first line indent (only for left/justified text).
+  // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
+  // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
+  // it is structural (positions the bullet/marker), not decorative.
   const bool isFirstLine = breakIndex == 0;
   const int firstLineIndent =
-      isFirstLine && blockStyle.textIndent > 0 && !extraParagraphSpacing &&
+      isFirstLine && blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
@@ -494,8 +503,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                ? spareSpace / static_cast<int>(actualGapCount)
                                : 0;
 
-  // Calculate initial x position (first line starts at indent for left/justified text)
-  auto xpos = static_cast<uint16_t>(firstLineIndent);
+  // Calculate initial x position (first line starts at indent for left/justified text;
+  // may be negative for hanging indents, e.g. margin-left:3em; text-indent:-1em).
+  auto xpos = static_cast<int16_t>(firstLineIndent);
   if (blockStyle.alignment == CssTextAlign::Right) {
     xpos = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
   } else if (blockStyle.alignment == CssTextAlign::Center) {
@@ -504,7 +514,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   // Pre-calculate X positions for words
   // Continuation words attach to the previous word with no space before them
-  std::vector<uint16_t> lineXPos;
+  std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {

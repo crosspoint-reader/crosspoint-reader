@@ -83,6 +83,7 @@ GfxRenderer::FontPrewarmScope::FontPrewarmScope(GfxRenderer& renderer) : rendere
   renderer_->clearFontCache();
   renderer_->resetFontStats();
   renderer_->scanText_.clear();
+  renderer_->scanText_.reserve(2048);  // Pre-allocate to avoid heap fragmentation from repeated concat
   memset(renderer_->scanStyleCounts_, 0, sizeof(renderer_->scanStyleCounts_));
   renderer_->scanFontId_ = -1;
 }
@@ -107,8 +108,8 @@ void GfxRenderer::FontPrewarmScope::endScanAndPrewarm() {
 
 GfxRenderer::FontPrewarmScope::~FontPrewarmScope() {
   if (active_) {
+    endScanAndPrewarm();  // no-op if already called (scanText_ is empty)
     renderer_->clearFontCache();
-    renderer_->scanMode_ = ScanMode::None;
   }
 }
 
@@ -169,7 +170,7 @@ enum class TextRotation { None, Rotated90CW };
 // Coordinate mapping and cursor advance direction are selected at compile time via the template parameter.
 template <TextRotation rotation>
 static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
-                           const EpdFontFamily& fontFamily, const uint32_t cp, int* cursorX, int* cursorY,
+                           const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
@@ -191,11 +192,11 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     // For Rotated: outer loop advances screenX, inner loop advances screenY (in reverse)
     int outerBase, innerBase;
     if constexpr (rotation == TextRotation::Rotated90CW) {
-      outerBase = *cursorX + fontData->ascender - top;  // screenX = outerBase + glyphY
-      innerBase = *cursorY - left;                      // screenY = innerBase - glyphX
+      outerBase = cursorX + fontData->ascender - top;  // screenX = outerBase + glyphY
+      innerBase = cursorY - left;                      // screenY = innerBase - glyphX
     } else {
-      outerBase = *cursorY - top;   // screenY = outerBase + glyphY
-      innerBase = *cursorX + left;  // screenX = innerBase + glyphX
+      outerBase = cursorY - top;   // screenY = outerBase + glyphY
+      innerBase = cursorX + left;  // screenX = innerBase + glyphX
     }
 
     if (is2Bit) {
@@ -256,12 +257,6 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
       }
     }
   }
-
-  if constexpr (rotation == TextRotation::Rotated90CW) {
-    *cursorY -= glyph->advanceX;
-  } else {
-    *cursorX += glyph->advanceX;
-  }
 }
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
@@ -310,11 +305,10 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
-  int yPos = y + getFontAscenderSize(fontId);
-  int xPos = x;
+  const int yPos = y + getFontAscenderSize(fontId);
+  int32_t xPosFP = fp4::fromPixel(x);  // 12.4 fixed-point accumulator
   int lastBaseX = x;
-  int lastBaseY = yPos;
-  int lastBaseAdvance = 0;
+  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
   int lastBaseTop = 0;
 
   // cannot draw a NULL / empty string
@@ -357,25 +351,26 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
         }
       }
 
-      int combiningX = lastBaseX + lastBaseAdvance / 2;
-      int combiningY = lastBaseY - raiseBy;
-      renderChar(font, cp, &combiningX, &combiningY, black, style);
+      const int combiningX = lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2);
+      const int combiningY = yPos - raiseBy;
+      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
       continue;
     }
 
     cp = font.applyLigatures(cp, text, style);
-    if (prevCp != 0) {
-      xPos += font.getKerning(prevCp, cp, style);
-    }
+    const int kernFP = (prevCp != 0) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
+    xPosFP += kernFP;
 
+    lastBaseX = fp4::toPixel(xPosFP);  // snap 12.4 fixed-point to nearest pixel
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
-    lastBaseX = xPos;
-    lastBaseY = yPos;
-    lastBaseAdvance = glyph ? glyph->advanceX : 0;
+    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
     lastBaseTop = glyph ? glyph->top : 0;
 
-    renderChar(font, cp, &xPos, &yPos, black, style);
+    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    if (glyph) {
+      xPosFP += glyph->advanceX;  // 12.4 fixed-point advance
+    }
     prevCp = cp;
   }
 }
@@ -950,7 +945,8 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   if (!text || maxWidth <= 0) return "";
 
   std::string item = text;
-  const char* ellipsis = "...";
+  // U+2026 HORIZONTAL ELLIPSIS (UTF-8: 0xE2 0x80 0xA6)
+  const char* ellipsis = "\xe2\x80\xa6";
   int textWidth = getTextWidth(fontId, item.c_str(), style);
   if (textWidth <= maxWidth) {
     // Text fits, return as is
@@ -962,6 +958,70 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   }
 
   return item.empty() ? ellipsis : item + ellipsis;
+}
+
+std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* text, const int maxWidth,
+                                                  const int maxLines, const EpdFontFamily::Style style) const {
+  std::vector<std::string> lines;
+
+  if (!text || maxWidth <= 0 || maxLines <= 0) return lines;
+
+  std::string remaining = text;
+  std::string currentLine;
+
+  while (!remaining.empty()) {
+    if (static_cast<int>(lines.size()) == maxLines - 1) {
+      // Last available line: combine any word already started on this line with
+      // the rest of the text, then let truncatedText fit it with an ellipsis.
+      std::string lastContent = currentLine.empty() ? remaining : currentLine + " " + remaining;
+      lines.push_back(truncatedText(fontId, lastContent.c_str(), maxWidth, style));
+      return lines;
+    }
+
+    // Find next word
+    size_t spacePos = remaining.find(' ');
+    std::string word;
+
+    if (spacePos == std::string::npos) {
+      word = remaining;
+      remaining.clear();
+    } else {
+      word = remaining.substr(0, spacePos);
+      remaining.erase(0, spacePos + 1);
+    }
+
+    std::string testLine = currentLine.empty() ? word : currentLine + " " + word;
+
+    if (getTextWidth(fontId, testLine.c_str(), style) <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (!currentLine.empty()) {
+        lines.push_back(currentLine);
+        // If the carried-over word itself exceeds maxWidth, truncate it and
+        // push it as a complete line immediately — storing it in currentLine
+        // would allow a subsequent short word to be appended after the ellipsis.
+        if (getTextWidth(fontId, word.c_str(), style) > maxWidth) {
+          lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
+          currentLine.clear();
+          if (static_cast<int>(lines.size()) >= maxLines) return lines;
+        } else {
+          currentLine = word;
+        }
+      } else {
+        // Single word wider than maxWidth: truncate and stop to avoid complicated
+        // splitting rules (different between languages). Results in an aesthetically
+        // pleasing end.
+        lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
+        return lines;
+      }
+    }
+  }
+
+  if (!currentLine.empty() && static_cast<int>(lines.size()) < maxLines) {
+    lines.push_back(currentLine);
+  }
+
+  return lines;
 }
 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
@@ -1001,7 +1061,7 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
   }
 
   const EpdGlyph* spaceGlyph = fontIt->second.getGlyph(' ', style);
-  return spaceGlyph ? spaceGlyph->advanceX : 0;
+  return spaceGlyph ? fp4::toPixel(spaceGlyph->advanceX) : 0;  // snap 12.4 fixed-point to nearest pixel
 }
 
 int GfxRenderer::getSpaceKernAdjust(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
@@ -1009,14 +1069,16 @@ int GfxRenderer::getSpaceKernAdjust(const int fontId, const uint32_t leftCp, con
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
   const auto& font = fontIt->second;
-  return font.getKerning(leftCp, ' ', style) + font.getKerning(' ', rightCp, style);
+  const int kernFP = font.getKerning(leftCp, ' ', style) + font.getKerning(' ', rightCp, style);  // 4.4 fixed-point
+  return fp4::toPixel(kernFP);  // snap 4.4 fixed-point to nearest pixel
 }
 
 int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                             const EpdFontFamily::Style style) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
-  return fontIt->second.getKerning(leftCp, rightCp, style);
+  const int kernFP = fontIt->second.getKerning(leftCp, rightCp, style);  // 4.4 fixed-point
+  return fp4::toPixel(kernFP);                                           // snap 4.4 fixed-point to nearest pixel
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
@@ -1028,7 +1090,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 
   uint32_t cp;
   uint32_t prevCp = 0;
-  int width = 0;
+  int32_t widthFP = 0;  // 12.4 fixed-point accumulator
   const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (utf8IsCombiningMark(cp)) {
@@ -1036,13 +1098,13 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     cp = font.applyLigatures(cp, text, style);
     if (prevCp != 0) {
-      width += font.getKerning(prevCp, cp, style);
+      widthFP += font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
     }
     const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (glyph) width += glyph->advanceX;
+    if (glyph) widthFP += glyph->advanceX;  // 12.4 fixed-point advance
     prevCp = cp;
   }
-  return width;
+  return fp4::toPixel(widthFP);  // snap 12.4 fixed-point to nearest pixel
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
@@ -1089,11 +1151,9 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   const auto& font = fontIt->second;
 
-  int xPos = x;
-  int yPos = y;
-  int lastBaseX = x;
+  int32_t yPosFP = fp4::fromPixel(y);  // 12.4 fixed-point accumulator
   int lastBaseY = y;
-  int lastBaseAdvance = 0;
+  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
   int lastBaseTop = 0;
   constexpr int MIN_COMBINING_GAP_PX = 1;
 
@@ -1110,25 +1170,27 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
         }
       }
 
-      int combiningX = lastBaseX - raiseBy;
-      int combiningY = lastBaseY - lastBaseAdvance / 2;
-      renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, &combiningX, &combiningY, black, style);
+      const int combiningX = x - raiseBy;
+      const int combiningY = lastBaseY - fp4::toPixel(lastBaseAdvanceFP / 2);
+      renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
       continue;
     }
 
     cp = font.applyLigatures(cp, text, style);
     if (prevCp != 0) {
-      yPos -= font.getKerning(prevCp, cp, style);
+      yPosFP -= font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern (subtract for rotated)
     }
 
+    lastBaseY = fp4::toPixel(yPosFP);  // snap 12.4 fixed-point to nearest pixel
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
-    lastBaseX = xPos;
-    lastBaseY = yPos;
-    lastBaseAdvance = glyph ? glyph->advanceX : 0;
+    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
     lastBaseTop = glyph ? glyph->top : 0;
 
-    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, &xPos, &yPos, black, style);
+    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
+    if (glyph) {
+      yPosFP -= glyph->advanceX;  // 12.4 fixed-point advance (subtract for rotated)
+    }
     prevCp = cp;
   }
 }
@@ -1227,11 +1289,6 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   if (frameBuffer) {
     display.cleanupGrayscaleBuffers(frameBuffer);
   }
-}
-
-void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
-                             EpdFontFamily::Style style) const {
-  renderCharImpl<TextRotation::None>(*this, renderMode, fontFamily, cp, x, y, pixelState, style);
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {

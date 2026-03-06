@@ -4,7 +4,6 @@
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include <Utf8.h>
 
 #include <cstdint>
 #include <string>
@@ -464,7 +463,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       }
 
       coverBufferStored = storeCoverBuffer();
-      coverRendered = true;
+      coverRendered = coverBufferStored;  // Only consider it rendered if we successfully stored the buffer
     }
 
     bool bookSelected = (selectorIndex == 0);
@@ -485,57 +484,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                                hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
     }
 
-    // Wrap title to up to 3 lines (word-wrap by advance width)
-    const std::string& lastBookTitle = book.title;
-    std::vector<std::string> words;
-    words.reserve(8);
-    std::string::size_type wordStart = 0;
-    std::string::size_type wordEnd = 0;
-    // find_first_not_of skips leading/interstitial spaces
-    while ((wordStart = lastBookTitle.find_first_not_of(' ', wordEnd)) != std::string::npos) {
-      wordEnd = lastBookTitle.find(' ', wordStart);
-      if (wordEnd == std::string::npos) wordEnd = lastBookTitle.size();
-      words.emplace_back(lastBookTitle.substr(wordStart, wordEnd - wordStart));
-    }
-    const int maxLineWidth = textWidth;
-    const int spaceWidth = renderer.getSpaceWidth(UI_12_FONT_ID, EpdFontFamily::BOLD);
-    std::vector<std::string> titleLines;
-    std::string currentLine;
-    for (auto& w : words) {
-      if (titleLines.size() >= 3) {
-        titleLines.back().append("...");
-        while (!titleLines.back().empty() && titleLines.back().size() > 3 &&
-               renderer.getTextWidth(UI_12_FONT_ID, titleLines.back().c_str(), EpdFontFamily::BOLD) > maxLineWidth) {
-          titleLines.back().resize(titleLines.back().size() - 3);
-          utf8RemoveLastChar(titleLines.back());
-          titleLines.back().append("...");
-        }
-        break;
-      }
-      int wordW = renderer.getTextWidth(UI_12_FONT_ID, w.c_str(), EpdFontFamily::BOLD);
-      while (wordW > maxLineWidth && !w.empty()) {
-        utf8RemoveLastChar(w);
-        std::string withE = w + "...";
-        wordW = renderer.getTextWidth(UI_12_FONT_ID, withE.c_str(), EpdFontFamily::BOLD);
-        if (wordW <= maxLineWidth) {
-          w = withE;
-          break;
-        }
-      }
-      if (w.empty()) continue;  // Skip words that couldn't fit even truncated
-      int newW = renderer.getTextAdvanceX(UI_12_FONT_ID, currentLine.c_str(), EpdFontFamily::BOLD);
-      if (newW > 0) newW += spaceWidth;
-      newW += renderer.getTextAdvanceX(UI_12_FONT_ID, w.c_str(), EpdFontFamily::BOLD);
-      if (newW > maxLineWidth && !currentLine.empty()) {
-        titleLines.push_back(currentLine);
-        currentLine = w;
-      } else if (currentLine.empty()) {
-        currentLine = w;
-      } else {
-        currentLine.append(" ").append(w);
-      }
-    }
-    if (!currentLine.empty() && titleLines.size() < 3) titleLines.push_back(currentLine);
+    auto titleLines = renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textWidth, 3, EpdFontFamily::BOLD);
 
     auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
     const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
