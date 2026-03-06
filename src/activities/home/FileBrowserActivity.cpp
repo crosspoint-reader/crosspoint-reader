@@ -1,6 +1,7 @@
 #include "FileBrowserActivity.h"
 
 #include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -11,11 +12,9 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
-constexpr std::array<const char*, 6> SUPPORTED_FORMATS = {".epub", ".xtch", ".xtc", ".txt", ".md", ".bmp"};
 }  // namespace
 
 void sortFileList(std::vector<std::string>& strs) {
@@ -131,7 +130,7 @@ void FileBrowserActivity::onExit() {
 
 void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
   // Only clear cache for .epub files
-  if (StringUtils::checkFileExtension(fullPath, ".epub")) {
+  if (FsHelpers::hasEpubExtension(fullPath)) {
     Epub(fullPath, "/.crosspoint").clearCache();
     LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
   }
@@ -302,10 +301,7 @@ size_t FileBrowserActivity::findEntry(const std::string& name) const {
 }
 
 bool FileBrowserActivity::isSupportedFormat(const std::string& fileName) {
-  for (size_t i = 0; i < SUPPORTED_FORMATS.size(); i++) {
-    if (StringUtils::checkFileExtension(fileName, SUPPORTED_FORMATS[i])) {
-      return true;
-    }
-  }
-  return false;
+  return FsHelpers::hasEpubExtension(fileName) || FsHelpers::hasXtcExtension(fileName) ||
+         FsHelpers::hasTxtExtension(fileName) || FsHelpers::hasMarkdownExtension(fileName) ||
+         FsHelpers::hasBmpExtension(fileName);
 }

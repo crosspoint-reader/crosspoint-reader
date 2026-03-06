@@ -36,12 +36,10 @@ ContentOpfParser::~ContentOpfParser() {
   if (tempItemStore) {
     tempItemStore.close();
   }
-  if (Storage.exists((cachePath + itemCacheFile).c_str())) {
-    Storage.remove((cachePath + itemCacheFile).c_str());
+  const auto itemCachePath = cachePath + itemCacheFile;
+  if (Storage.exists(itemCachePath.c_str())) {
+    Storage.remove(itemCachePath.c_str());
   }
-  itemIndex.clear();
-  itemIndex.shrink_to_fit();
-  useItemIndex = false;
 }
 
 size_t ContentOpfParser::write(const uint8_t data) { return write(&data, 1); }
