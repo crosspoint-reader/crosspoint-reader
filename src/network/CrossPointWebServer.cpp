@@ -312,8 +312,11 @@ void CrossPointWebServer::handleRoot() const {
 }
 
 void CrossPointWebServer::handleJszip() const {
+  server->sendHeader("Content-Type", "application/javascript");
   server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "application/javascript", jszip_minHtml, jszip_minHtmlCompressedSize);
+
+  // Stream content directly instead of using send_P to handle binary gzipped data correctly
+  server->client().write((const uint8_t*)jszip_minHtml, jszip_minHtmlCompressedSize);
   LOG_DBG("WEB", "Served jszip.min.js");
 }
 
