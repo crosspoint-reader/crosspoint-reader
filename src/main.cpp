@@ -970,7 +970,7 @@ void loop() {
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
-  if (millis() - lastActivityTime >= sleepTimeoutMs) {
+  if (millis() - lastActivityTime >= sleepTimeoutMs && !gpio.isUsbConnected()) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     teardownDangerZone("inactivity-timeout");
     enterDeepSleep();
