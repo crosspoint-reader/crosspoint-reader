@@ -331,6 +331,11 @@
     .advanced-options-toggle:hover {
       color: var(--accent-color);
     }
+    /* Disable hover when disabled (opacity < 1) */
+    .advanced-options-toggle[style*="opacity: 0.3"]:hover,
+    .advanced-options-toggle[style*="opacity: 0.5"]:hover {
+      color: var(--label-color);
+    }
     .advanced-options-text {
       font-weight: 500;
     }
@@ -1375,7 +1380,7 @@
             <span>Optimize EPUB</span>
           </label>
           <span class="convert-separator">—</span>
-          <span class="advanced-options-toggle" onclick="toggleAdvancedOptions()">
+          <span class="advanced-options-toggle" id="advancedOptionsToggle" onclick="toggleAdvancedOptions()">
             <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
             <span class="advanced-options-text">Advanced Mode</span>
           </span>
@@ -1858,9 +1863,21 @@
       if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
       document.getElementById('advancedOptionsArrow').classList.remove('expanded');
     }
+    // Disable/enable advanced mode toggle
+    const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
+    if (advancedOptionsToggle) {
+      advancedOptionsToggle.style.opacity = checked ? '1' : '0.5';
+      advancedOptionsToggle.style.pointerEvents = checked ? 'auto' : 'none';
+    }
   }
 
   function toggleAdvancedOptions() {
+    // Check if advanced options toggle is enabled (optimize EPUB must be checked)
+    const convertEnabled = document.getElementById('convertBeforeUpload').checked;
+    if (!convertEnabled) {
+      return; // Don't toggle if optimization is disabled
+    }
+
     const content = document.getElementById('advancedSettingsContent');
     const arrow = document.getElementById('advancedOptionsArrow');
     content.classList.toggle('visible');
@@ -2131,6 +2148,15 @@
   document.addEventListener('DOMContentLoaded', function() {
     const qualitySlider = document.getElementById('qualitySlider');
     const qualityInput = document.getElementById('qualityInput');
+
+    // Initialize advanced mode toggle state based on Optimize EPUB checkbox
+    const convertCheckbox = document.getElementById('convertBeforeUpload');
+    const advancedToggle = document.getElementById('advancedOptionsToggle');
+    if (convertCheckbox && advancedToggle) {
+      const isOptimizeEnabled = convertCheckbox.checked;
+      advancedToggle.style.opacity = isOptimizeEnabled ? '1' : '0.5';
+      advancedToggle.style.pointerEvents = isOptimizeEnabled ? 'auto' : 'none';
+    }
 
     if (qualitySlider && qualityInput) {
       // Initialize converter variables with UI default values
