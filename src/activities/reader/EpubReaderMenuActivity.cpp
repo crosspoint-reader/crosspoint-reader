@@ -10,11 +10,12 @@
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes)
+                                               const bool invertScreen, const bool hasFootnotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
       title(title),
       pendingOrientation(currentOrientation),
+      pendingInvertScreen(invertScreen),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
@@ -27,6 +28,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
+  items.push_back({MenuAction::INVERT_SCREEN, StrId::STR_INVERT_READER_SCREEN});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
@@ -64,6 +66,11 @@ void EpubReaderMenuActivity::loop() {
       requestUpdate();
       return;
     }
+    if (selectedAction == MenuAction::INVERT_SCREEN) {
+      pendingInvertScreen = !pendingInvertScreen;
+      requestUpdate();
+      return;
+    }
 
     if (selectedAction == MenuAction::AUTO_PAGE_TURN) {
       selectedPageTurnOption = (selectedPageTurnOption + 1) % pageTurnLabels.size();
@@ -71,13 +78,14 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption});
+    setResult(
+        MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption, pendingInvertScreen});
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
-    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption};
+    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption, pendingInvertScreen};
     setResult(std::move(result));
     finish();
     return;
@@ -139,6 +147,10 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       const char* value = I18N.get(orientationLabels[pendingOrientation]);
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
       renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+    } else if (menuItems[i].action == MenuAction::INVERT_SCREEN) {
+      const char* value = pendingInvertScreen ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
     }
 
     if (menuItems[i].action == MenuAction::AUTO_PAGE_TURN) {
@@ -152,6 +164,10 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   // Footer / Hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (pendingInvertScreen) {
+    renderer.invertScreen();
+  }
 
   renderer.displayBuffer();
 }
