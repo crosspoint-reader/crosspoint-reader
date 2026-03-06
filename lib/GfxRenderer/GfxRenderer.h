@@ -147,4 +147,10 @@ class GfxRenderer {
   // Low level functions
   uint8_t* getFrameBuffer() const;
   static size_t getBufferSize();
+
+#ifdef ENABLE_RENDERCHAR_BENCHMARK
+  // Legacy per-pixel paths — used only by the renderChar benchmark to establish baselines.
+  void drawTextBWLegacy(int fontId, int x, int y, const char* text) const;
+  void drawText2BitLegacy(int fontId, int x, int y, const char* text) const;
+#endif
 };
