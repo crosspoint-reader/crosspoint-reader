@@ -74,8 +74,8 @@ bool SdCardFont::loadKernLigatureData() {
     kernMatrix_ = new (std::nothrow) int8_t[matrixSize];
 
     if (!kernLeftClasses_ || !kernRightClasses_ || !kernMatrix_) {
-      LOG_ERR("SDCF", "Failed to allocate kern data (%u+%u+%u bytes)",
-              header_.kernLeftEntryCount * 3u, header_.kernRightEntryCount * 3u, matrixSize);
+      LOG_ERR("SDCF", "Failed to allocate kern data (%u+%u+%u bytes)", header_.kernLeftEntryCount * 3u,
+              header_.kernRightEntryCount * 3u, matrixSize);
       freeKernLigatureData();
       file.close();
       return false;
@@ -119,13 +119,28 @@ bool SdCardFont::loadKernLigatureData() {
   // Update stubData_ so kern/ligature is available even before prewarm
   applyKernLigaturePointers(stubData_);
 
-  LOG_DBG("SDCF", "Kern/lig loaded: kernL=%u, kernR=%u, ligs=%u",
-          header_.kernLeftEntryCount, header_.kernRightEntryCount,
-          header_.ligaturePairCount);
+  LOG_DBG("SDCF", "Kern/lig loaded: kernL=%u, kernR=%u, ligs=%u", header_.kernLeftEntryCount,
+          header_.kernRightEntryCount, header_.ligaturePairCount);
   return true;
 }
 
+void SdCardFont::clearOverflow() {
+  for (uint32_t i = 0; i < overflowCount_; i++) {
+    delete[] overflow_[i].bitmap;
+    overflow_[i].bitmap = nullptr;
+    overflow_[i].codepoint = 0;
+  }
+  overflowCount_ = 0;
+  overflowNext_ = 0;
+}
+
+void SdCardFont::applyGlyphMissCallback(EpdFontData& data) {
+  data.glyphMissHandler = &SdCardFont::onGlyphMiss;
+  data.glyphMissCtx = this;
+}
+
 void SdCardFont::freeMiniData() {
+  clearOverflow();
   delete[] miniIntervals_;
   miniIntervals_ = nullptr;
   delete[] miniGlyphs_;
@@ -135,6 +150,7 @@ void SdCardFont::freeMiniData() {
   miniIntervalCount_ = 0;
   miniGlyphCount_ = 0;
   memset(&miniData_, 0, sizeof(miniData_));
+  applyGlyphMissCallback(stubData_);
   epdFont_.data = &stubData_;
 }
 
@@ -199,8 +215,8 @@ bool SdCardFont::load(const char* path) {
   kernLeftFileOffset_ = glyphsFileOffset_ + header_.glyphCount * sizeof(EpdGlyph);
   kernRightFileOffset_ = kernLeftFileOffset_ + header_.kernLeftEntryCount * sizeof(EpdKernClassEntry);
   kernMatrixFileOffset_ = kernRightFileOffset_ + header_.kernRightEntryCount * sizeof(EpdKernClassEntry);
-  ligatureFileOffset_ = kernMatrixFileOffset_ +
-                         static_cast<uint32_t>(header_.kernLeftClassCount) * header_.kernRightClassCount;
+  ligatureFileOffset_ =
+      kernMatrixFileOffset_ + static_cast<uint32_t>(header_.kernLeftClassCount) * header_.kernRightClassCount;
   bitmapFileOffset_ = ligatureFileOffset_ + header_.ligaturePairCount * sizeof(EpdLigaturePair);
 
   // Load full intervals into RAM
@@ -230,16 +246,16 @@ bool SdCardFont::load(const char* path) {
   stubData_.ascender = header_.ascender;
   stubData_.descender = header_.descender;
   stubData_.is2Bit = header_.is2Bit;
+  applyGlyphMissCallback(stubData_);
 
   epdFont_.data = &stubData_;
   loaded_ = true;
 
-  LOG_DBG("SDCF", "Loaded: %s (%u intervals, %u glyphs, advY=%u, asc=%d, desc=%d, "
+  LOG_DBG("SDCF",
+          "Loaded: %s (%u intervals, %u glyphs, advY=%u, asc=%d, desc=%d, "
           "kernL=%u, kernR=%u, ligs=%u)",
-          path, header_.intervalCount, header_.glyphCount,
-          header_.advanceY, header_.ascender, header_.descender,
-          header_.kernLeftEntryCount, header_.kernRightEntryCount,
-          header_.ligaturePairCount);
+          path, header_.intervalCount, header_.glyphCount, header_.advanceY, header_.ascender, header_.descender,
+          header_.kernLeftEntryCount, header_.kernRightEntryCount, header_.ligaturePairCount);
   return true;
 }
 
@@ -288,16 +304,52 @@ int SdCardFont::prewarm(const char* utf8Text, bool metadataOnly) {
     }
   }
 
-  // Always include replacement character
-  bool hasReplacement = false;
-  for (uint32_t i = 0; i < cpCount; i++) {
-    if (codepoints[i] == REPLACEMENT_GLYPH) {
-      hasReplacement = true;
-      break;
+  // Always include the replacement character so getGlyph()'s recursive fallback
+  // to REPLACEMENT_GLYPH has something to return.
+  {
+    bool hasReplacement = false;
+    for (uint32_t i = 0; i < cpCount; i++) {
+      if (codepoints[i] == REPLACEMENT_GLYPH) {
+        hasReplacement = true;
+        break;
+      }
+    }
+    if (!hasReplacement && cpCount < MAX_PAGE_GLYPHS) {
+      codepoints[cpCount++] = REPLACEMENT_GLYPH;
     }
   }
-  if (!hasReplacement && cpCount < MAX_PAGE_GLYPHS) {
-    codepoints[cpCount++] = REPLACEMENT_GLYPH;
+
+  // Add ligature output codepoints: applyLigatures() produces replacement codepoints
+  // (e.g. fi → U+FB01) that getGlyph() must resolve. Load kern/ligature data first
+  // (idempotent) so ligaturePairs_ is available for scanning.
+  loadKernLigatureData();
+  if (ligaturePairs_ && header_.ligaturePairCount > 0) {
+    for (uint8_t li = 0; li < header_.ligaturePairCount && cpCount < MAX_PAGE_GLYPHS; li++) {
+      uint32_t leftCp = ligaturePairs_[li].pair >> 16;
+      uint32_t rightCp = ligaturePairs_[li].pair & 0xFFFF;
+      uint32_t outCp = ligaturePairs_[li].ligatureCp;
+
+      // Check if both input codepoints are in the collected set
+      bool hasLeft = false, hasRight = false;
+      for (uint32_t i = 0; i < cpCount; i++) {
+        if (codepoints[i] == leftCp) hasLeft = true;
+        if (codepoints[i] == rightCp) hasRight = true;
+        if (hasLeft && hasRight) break;
+      }
+      if (!hasLeft || !hasRight) continue;
+
+      // Add output codepoint if not already present
+      bool hasOut = false;
+      for (uint32_t i = 0; i < cpCount; i++) {
+        if (codepoints[i] == outCp) {
+          hasOut = true;
+          break;
+        }
+      }
+      if (!hasOut) {
+        codepoints[cpCount++] = outCp;
+      }
+    }
   }
 
   // Sort codepoints for ordered interval building
@@ -377,9 +429,8 @@ int SdCardFont::prewarm(const char* utf8Text, bool metadataOnly) {
     return static_cast<int>(cpCount);
   }
   for (uint32_t i = 0; i < validCount; i++) readOrder[i] = i;
-  std::sort(readOrder, readOrder + validCount, [&](uint32_t a, uint32_t b) {
-    return mappings[a].globalIndex < mappings[b].globalIndex;
-  });
+  std::sort(readOrder, readOrder + validCount,
+            [&](uint32_t a, uint32_t b) { return mappings[a].globalIndex < mappings[b].globalIndex; });
 
   FsFile file;
   if (!Storage.openFileForRead("SDCF", filePath_, file)) {
@@ -429,9 +480,8 @@ int SdCardFont::prewarm(const char* utf8Text, bool metadataOnly) {
 
     // Step 7: Read bitmap data sorted by file offset for sequential I/O
     // Sort by original dataOffset (file offset within bitmap section)
-    std::sort(readOrder, readOrder + validCount, [&](uint32_t a, uint32_t b) {
-      return miniGlyphs_[a].dataOffset < miniGlyphs_[b].dataOffset;
-    });
+    std::sort(readOrder, readOrder + validCount,
+              [&](uint32_t a, uint32_t b) { return miniGlyphs_[a].dataOffset < miniGlyphs_[b].dataOffset; });
 
     uint32_t miniBitmapOffset = 0;
     uint32_t lastBitmapEnd = UINT32_MAX;
@@ -477,6 +527,7 @@ int SdCardFont::prewarm(const char* utf8Text, bool metadataOnly) {
   miniData_.descender = header_.descender;
   miniData_.is2Bit = header_.is2Bit;
   applyKernLigaturePointers(miniData_);
+  applyGlyphMissCallback(miniData_);
 
   epdFont_.data = &miniData_;
 
@@ -495,9 +546,99 @@ void SdCardFont::clearCache() {
 }
 
 void SdCardFont::logStats(const char* label) {
-  LOG_DBG("SDCF", "[%s] total=%ums sd_read=%ums seeks=%u glyphs=%u bitmap=%u bytes",
-          label, stats_.prewarmTotalMs, stats_.sdReadTimeMs, stats_.seekCount,
-          stats_.uniqueGlyphs, stats_.bitmapBytes);
+  LOG_DBG("SDCF", "[%s] total=%ums sd_read=%ums seeks=%u glyphs=%u bitmap=%u bytes", label, stats_.prewarmTotalMs,
+          stats_.sdReadTimeMs, stats_.seekCount, stats_.uniqueGlyphs, stats_.bitmapBytes);
 }
 
 void SdCardFont::resetStats() { stats_ = Stats{}; }
+
+// --- On-demand glyph loading (overflow buffer) ---
+
+const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
+  auto* self = static_cast<SdCardFont*>(ctx);
+  if (!self->loaded_ || !self->fullIntervals_) return nullptr;
+
+  // Check overflow cache first
+  for (uint32_t i = 0; i < self->overflowCount_; i++) {
+    if (self->overflow_[i].codepoint == codepoint) {
+      return &self->overflow_[i].glyph;
+    }
+  }
+
+  // Look up global glyph index via full intervals
+  int32_t globalIdx = self->findGlobalGlyphIndex(codepoint);
+  if (globalIdx < 0) return nullptr;  // glyph genuinely doesn't exist in this font
+
+  // Pick overflow slot (ring buffer eviction when full)
+  uint32_t slot = self->overflowNext_;
+  if (self->overflowCount_ == OVERFLOW_CAPACITY) {
+    // Evict oldest entry
+    delete[] self->overflow_[slot].bitmap;
+    self->overflow_[slot].bitmap = nullptr;
+  } else {
+    self->overflowCount_++;
+  }
+  self->overflowNext_ = (slot + 1) % OVERFLOW_CAPACITY;
+
+  // Read glyph metadata from SD card
+  FsFile file;
+  if (!Storage.openFileForRead("SDCF", self->filePath_, file)) {
+    LOG_ERR("SDCF", "Overflow: failed to open .cpfont");
+    self->overflowCount_--;
+    return nullptr;
+  }
+
+  uint32_t glyphFileOff = self->glyphsFileOffset_ + static_cast<uint32_t>(globalIdx) * sizeof(EpdGlyph);
+  file.seekSet(glyphFileOff);
+  if (file.read(reinterpret_cast<uint8_t*>(&self->overflow_[slot].glyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
+    LOG_ERR("SDCF", "Overflow: failed to read glyph metadata for U+%04X", codepoint);
+    file.close();
+    self->overflowCount_--;
+    return nullptr;
+  }
+
+  // Read bitmap data (if any)
+  const EpdGlyph& g = self->overflow_[slot].glyph;
+  if (g.dataLength > 0) {
+    uint8_t* bmp = new (std::nothrow) uint8_t[g.dataLength];
+    if (!bmp) {
+      LOG_ERR("SDCF", "Overflow: failed to allocate %u bytes for U+%04X bitmap", g.dataLength, codepoint);
+      file.close();
+      self->overflowCount_--;
+      return nullptr;
+    }
+    file.seekSet(self->bitmapFileOffset_ + g.dataOffset);
+    if (file.read(bmp, g.dataLength) != static_cast<int>(g.dataLength)) {
+      LOG_ERR("SDCF", "Overflow: failed to read bitmap for U+%04X", codepoint);
+      delete[] bmp;
+      file.close();
+      self->overflowCount_--;
+      return nullptr;
+    }
+    self->overflow_[slot].bitmap = bmp;
+  } else {
+    self->overflow_[slot].bitmap = nullptr;
+  }
+
+  file.close();
+  self->overflow_[slot].codepoint = codepoint;
+
+  LOG_DBG("SDCF", "Overflow: loaded U+%04X on demand (slot %u/%u)", codepoint, slot, OVERFLOW_CAPACITY);
+
+  return &self->overflow_[slot].glyph;
+}
+
+bool SdCardFont::isOverflowGlyph(const EpdGlyph* glyph) const {
+  const EpdGlyph* begin = &overflow_[0].glyph;
+  const EpdGlyph* end = &overflow_[OVERFLOW_CAPACITY - 1].glyph;
+  return glyph >= begin && glyph <= end;
+}
+
+const uint8_t* SdCardFont::getOverflowBitmap(const EpdGlyph* glyph) const {
+  for (uint32_t i = 0; i < overflowCount_; i++) {
+    if (&overflow_[i].glyph == glyph) {
+      return overflow_[i].bitmap;
+    }
+  }
+  return nullptr;
+}

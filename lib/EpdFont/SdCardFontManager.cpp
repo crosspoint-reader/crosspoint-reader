@@ -66,9 +66,12 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
 
     for (const auto& other : loaded_) {
       if (other.size != lf.size || other.style == 0) continue;
-      if (other.style == 1) bold = other.font->getEpdFont();
-      else if (other.style == 2) italic = other.font->getEpdFont();
-      else if (other.style == 3) boldItalic = other.font->getEpdFont();
+      if (other.style == 1)
+        bold = other.font->getEpdFont();
+      else if (other.style == 2)
+        italic = other.font->getEpdFont();
+      else if (other.style == 3)
+        boldItalic = other.font->getEpdFont();
     }
 
     EpdFontFamily fontFamily(regular, bold, italic, boldItalic);

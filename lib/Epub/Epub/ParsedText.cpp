@@ -104,8 +104,12 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   // For flash-based fonts this is a no-op. For SD card fonts (e.g. CJK), this
   // reads glyph metadata + bitmaps for all unique codepoints in this paragraph.
   {
-    std::string allText(" ");  // Always include space for getSpaceWidth()
-    for (const auto& w : words) allText += w;
+    std::string allText;
+    for (size_t i = 0; i < words.size(); i++) {
+      if (i > 0) allText += ' ';
+      allText += words[i];
+    }
+    if (hyphenationEnabled) allText += '-';
     renderer.ensureSdCardFontReady(fontId, allText.c_str());
   }
 

@@ -1,9 +1,9 @@
 #pragma once
 
+#include <cstdint>
+
 #include "EpdFont.h"
 #include "EpdFontData.h"
-
-#include <cstdint>
 
 class SdCardFont {
  public:
@@ -28,6 +28,14 @@ class SdCardFont {
 
   // Returns pointer to the managed EpdFont (data pointer swapped by prewarm/clearCache).
   EpdFont* getEpdFont() { return &epdFont_; }
+
+  // Returns true if the glyph pointer points into the overflow buffer.
+  bool isOverflowGlyph(const EpdGlyph* glyph) const;
+
+  // Returns the bitmap for an on-demand-loaded (overflow) glyph.
+  // May return nullptr for zero-width glyphs (e.g. space).
+  // Caller must verify isOverflowGlyph() first.
+  const uint8_t* getOverflowBitmap(const EpdGlyph* glyph) const;
 
   struct Stats {
     uint32_t prewarmTotalMs = 0;
@@ -93,6 +101,18 @@ class SdCardFont {
   // The EpdFont whose data pointer we manage
   EpdFont epdFont_{&stubData_};
 
+  // On-demand overflow buffer: ring buffer of glyphs loaded via glyphMissHandler.
+  // Provides a safety net for glyphs not included in the prewarm set.
+  static constexpr uint32_t OVERFLOW_CAPACITY = 8;
+  struct OverflowEntry {
+    EpdGlyph glyph;
+    uint8_t* bitmap = nullptr;  // heap-allocated bitmap (nullptr for zero-width glyphs)
+    uint32_t codepoint = 0;
+  };
+  OverflowEntry overflow_[OVERFLOW_CAPACITY] = {};
+  uint32_t overflowCount_ = 0;
+  uint32_t overflowNext_ = 0;  // ring buffer write index
+
   Stats stats_;
   bool loaded_ = false;
 
@@ -101,5 +121,10 @@ class SdCardFont {
   void freeKernLigatureData();
   bool loadKernLigatureData();
   void applyKernLigaturePointers(EpdFontData& data) const;
+  void applyGlyphMissCallback(EpdFontData& data);
+  void clearOverflow();
   int32_t findGlobalGlyphIndex(uint32_t codepoint) const;
+
+  // Static callback for EpdFontData::glyphMissHandler
+  static const EpdGlyph* onGlyphMiss(void* ctx, uint32_t codepoint);
 };

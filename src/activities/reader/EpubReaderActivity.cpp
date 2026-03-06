@@ -686,26 +686,18 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
-  renderer.resetFontStats();
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
-  const uint32_t heapBefore = esp_get_free_heap_size();
   auto scope = renderer.createFontPrewarmScope();
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
-  const uint32_t heapAfter = esp_get_free_heap_size();
-  renderer.logFontStats("prewarm");
   const auto tPrewarm = millis();
-
-  LOG_DBG("ERS", "Heap: before=%lu after=%lu delta=%ld", heapBefore, heapAfter,
-          (int32_t)heapAfter - (int32_t)heapBefore);
 
   // Force special handling for pages with images when anti-aliasing is on
   bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
-  renderer.logFontStats("bw_render");
   const auto tBwRender = millis();
 
   if (imagePageWithAA) {
@@ -760,8 +752,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.displayGrayBuffer();
     const auto tGrayDisplay = millis();
     renderer.setRenderMode(GfxRenderer::BW);
-    renderer.logFontStats("gray");
-
     // restore the bw data
     renderer.restoreBwBuffer();
     const auto tBwRestore = millis();

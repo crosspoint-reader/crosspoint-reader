@@ -261,7 +261,6 @@ int resolveSdFontId(const char* familyName, uint8_t fontSizeEnum) {
   return sdFontManager.getFontId(familyName, bestSize, 0);
 }
 
-
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();
