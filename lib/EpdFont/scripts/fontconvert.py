@@ -69,10 +69,13 @@ intervals = [
     (0x0300, 0x036F),
     ### Greek & Coptic ###
     # Used in science, maths, philosophy, some academic texts
-    # (0x0370, 0x03FF),
+    (0x0370, 0x03FF),
     ### Cyrillic ###
     # Russian, Ukrainian, Bulgarian, etc.
     (0x0400, 0x04FF),
+    ### Letterlike Symbols ###
+    # ℓ (script l), ℝ, ℤ, ℂ, ℚ and other letterlike symbols used in maths
+    (0x2100, 0x214F),
     ### Math Symbols (common subset) ###
     # Superscripts and Subscripts
     (0x2070, 0x209F),
