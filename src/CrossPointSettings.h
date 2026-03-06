@@ -91,6 +91,15 @@ class CrossPointSettings {
   // Swapped: Next, Previous
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTON_LAYOUT_COUNT };
 
+  // Front page button layout options (for Left/Right when used as page turn in reader)
+  // Default: Left=Previous, Right=Next
+  // Swapped: Left=Next, Right=Previous
+  enum FRONT_PAGE_BUTTON_LAYOUT {
+    FRONT_LEFT_PREV = 0,
+    FRONT_LEFT_NEXT = 1,
+    FRONT_PAGE_BUTTON_LAYOUT_COUNT
+  };
+
   // Font family options
   enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
   // Font size options
@@ -162,6 +171,7 @@ class CrossPointSettings {
   // Button layouts (front layout retained for migration only)
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
   uint8_t sideButtonLayout = PREV_NEXT;
+  uint8_t frontPageButtonLayout = FRONT_LEFT_PREV;
   // Front button remap (logical -> hardware)
   // Used by MappedInputManager to translate logical buttons into physical front buttons.
   uint8_t frontButtonBack = FRONT_HW_BACK;
