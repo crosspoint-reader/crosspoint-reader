@@ -80,6 +80,13 @@ class PulsrTheme : public BaseTheme {
   void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, int progress) const override;
   void drawTextField(const GfxRenderer& renderer, Rect rect, int textWidth) const override;
   void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, bool isSelected) const override;
+  // PULSR chrome owns the full frame; these shared helpers are no-ops or
+  // PULSR-styled to avoid bleeding Classic/Lyra elements onto PULSR screens.
+  void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage) const override {}
+  void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage) const override {}
+  void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
+                     std::string title, const int paddingBottom = 0, const int textYOffset = 0) const override {}
+  void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const override;
 
  private:
   // Draws the full PULSR chrome: left bar, top bar, bottom bar, inner elbow curves, title and

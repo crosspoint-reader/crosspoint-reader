@@ -858,3 +858,18 @@ void PulsrTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const c
   renderer.drawText(PULSR_12_FONT_ID, rect.x + (rect.width - tw) / 2, rect.y + (rect.height - th) / 2, label,
                     /*black=*/!isSelected);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// drawHelpText  –  Render a small label in the PULSR bottom bar.
+// The bottom bar is already filled black by drawFrame, so draw white text.
+// ─────────────────────────────────────────────────────────────────────────────
+void PulsrTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {
+  if (!label || label[0] == '\0') return;
+  const int maxW = rect.width - 16;
+  auto truncated = renderer.truncatedText(PULSR_10_FONT_ID, label, maxW, EpdFontFamily::REGULAR);
+  const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, truncated.c_str());
+  const int th = renderer.getTextHeight(PULSR_10_FONT_ID);
+  const int x = rect.x + (rect.width - tw) / 2;
+  const int y = rect.y + (rect.height - th) / 2;
+  renderer.drawText(PULSR_10_FONT_ID, x, y, truncated.c_str(), /*black=*/false);
+}
