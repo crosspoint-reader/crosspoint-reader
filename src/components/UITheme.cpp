@@ -51,6 +51,7 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle) {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  auto orientation = renderer.getOrientation();
   int reservedHeight = metrics.topPadding;
   if (hasHeader) {
     reservedHeight += metrics.headerHeight + metrics.verticalSpacing;
@@ -58,7 +59,9 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
   if (hasTabBar) {
     reservedHeight += metrics.tabBarHeight;
   }
-  if (hasButtonHints) {
+  if (hasButtonHints && 
+    orientation != GfxRenderer::Orientation::LandscapeClockwise && 
+    orientation != GfxRenderer::Orientation::LandscapeCounterClockwise) {
     reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
   }
   const int availableHeight = renderer.getScreenHeight() - reservedHeight;
@@ -141,4 +144,11 @@ int UITheme::getProgressBarHeight() {
   const bool showProgressBar =
       SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   return (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+}
+
+// Centered text implementation that takes the safe area into account
+void UITheme::drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text, bool black,
+                        EpdFontFamily::Style style) {
+  const int x = screen.x + (screen.width - renderer.getTextWidth(fontId, text, style)) / 2;
+  renderer.drawText(fontId, x, screen.y + y, text, black, style);
 }
