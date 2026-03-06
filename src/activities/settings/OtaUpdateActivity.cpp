@@ -152,7 +152,7 @@ void OtaUpdateActivity::loop() {
         state = UPDATE_IN_PROGRESS;
       }
       requestUpdateAndWait();
-      const auto res = updater.installUpdate();
+      const auto res = updater.installUpdate([this] { requestUpdate(); });
 
       if (res != OtaUpdater::OK) {
         LOG_DBG("OTA", "Update failed: %d", res);

@@ -72,8 +72,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
       .skip_cert_common_name_check = true,
-      .crt_bundle_attach = esp_crt_bundle_attach,
-      .keep_alive_enable = true,
   };
 
   /* To track life time of local_buf, dtor will be called on exit from that function */
@@ -200,7 +198,7 @@ bool OtaUpdater::isUpdateNewer() const {
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onProgress) {
   if (!isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
@@ -212,7 +210,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
 
   esp_http_client_config_t client_config = {
       .url = otaUrl.c_str(),
-      .timeout_ms = 15000,
+      .timeout_ms = 30000,
       /* Default HTTP client buffer size 512 byte only
        * not sufficent to handle URL redirection cases or
        * parsing of large HTTP headers.
@@ -220,8 +218,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
       .skip_cert_common_name_check = true,
-      .crt_bundle_attach = esp_crt_bundle_attach,
-      .keep_alive_enable = true,
   };
 
   esp_https_ota_config_t ota_config = {
@@ -241,9 +237,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
   do {
     esp_err = esp_https_ota_perform(ota_handle);
     processedSize = esp_https_ota_get_image_len_read(ota_handle);
-    /* Sent signal to  OtaUpdateActivity */
     render = true;
-    delay(100);  // TODO: should we replace this with something better?
+    if (onProgress) onProgress();
+    delay(100);
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 
   /* Return back to default power saving for WiFi in case of failing */

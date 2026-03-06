@@ -67,7 +67,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
 
   http.begin(*client, url.c_str());
-  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+  http.setTimeout(30000);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
   // Add Basic HTTP auth if credentials are configured
@@ -118,7 +119,8 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   LOG_DBG("HTTP", "Destination: %s", destPath.c_str());
 
   http.begin(*client, url.c_str());
-  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+  http.setTimeout(120000);  // 2 min — 5.9 MB download over WiFi needs time
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
   // Add Basic HTTP auth if credentials are configured
@@ -160,6 +162,10 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   FileWriteStream fileStream(file, contentLength, progress);
   const int writeResult = http.writeToStream(&fileStream);
 
+  // Flush before closing to ensure data is written to the SD card.
+  // Without this, Storage.exists() might return false immediately after
+  // even though the file was written (FAT not yet updated on disk).
+  file.flush();
   file.close();
   http.end();
 
