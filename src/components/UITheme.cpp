@@ -22,6 +22,10 @@ UITheme UITheme::instance;
 static bool s_networkConnected = false;
 static bool s_networkTransferring = false;
 
+// setNetworkStatus / isNetworkConnected / isNetworkTransferring track WiFi/transfer state.
+// Currently called by CrossPointWebServerActivity; isNetworkTransferring() drives the
+// PULSR HTTP pill brightness (white = active transfer, gray = idle).
+// isNetworkConnected() is available for future use (e.g. persistent WiFi indicators).
 void UITheme::setNetworkStatus(bool connected, bool transferring) {
   s_networkConnected = connected;
   s_networkTransferring = transferring;

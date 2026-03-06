@@ -316,6 +316,11 @@ void PulsrTheme::drawTabBar(const GfxRenderer& renderer, Rect /*rect*/, const st
       abbr[2] = 'R';
       abbr[3] = 'L';
     }
+    // If abbr is empty (label starts with non-ASCII), skip tab label rendering.
+    // TabInfo has no shortLabel field; callers must provide ASCII-prefixed labels.
+    if (abbr[0] == '\0') {
+      continue;
+    }
 
     const int tx = LEFT_W + i * tabW;
     const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, abbr);
@@ -636,9 +641,16 @@ void PulsrTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std
 
   if (count == 0) {
     const int msgY = cr.y + cr.height / 2 - renderer.getTextHeight(PULSR_10_FONT_ID);
-    renderer.drawCenteredText(PULSR_10_FONT_ID, msgY, tr(STR_NO_OPEN_BOOK), /*black=*/true);
-    renderer.drawCenteredText(PULSR_10_FONT_ID, msgY + renderer.getTextHeight(PULSR_10_FONT_ID) + 4,
-                              tr(STR_START_READING), /*black=*/true);
+    // Center within the content rect (cr), not the full screen — accounts for the PULSR left bar.
+    {
+      const char* line1 = tr(STR_NO_OPEN_BOOK);
+      const char* line2 = tr(STR_START_READING);
+      const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+      const int w1 = renderer.getTextWidth(PULSR_10_FONT_ID, line1);
+      const int w2 = renderer.getTextWidth(PULSR_10_FONT_ID, line2);
+      renderer.drawText(PULSR_10_FONT_ID, cr.x + (cr.width - w1) / 2, msgY, line1, /*black=*/true);
+      renderer.drawText(PULSR_10_FONT_ID, cr.x + (cr.width - w2) / 2, msgY + lh + 4, line2, /*black=*/true);
+    }
     coverRendered = true;
     return;
   }

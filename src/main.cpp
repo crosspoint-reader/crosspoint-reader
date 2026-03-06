@@ -127,7 +127,8 @@ EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
-// PULSR theme: Antonio replaces Ubuntu as the UI font
+// Default UI fonts (Ubuntu). Antonio is used only by the PULSR theme via PULSR_*_FONT_ID macros
+// declared in PulsrTheme.cpp; these variables (ui10/ui12FontFamily) remain Ubuntu for all themes.
 EpdFont ui10RegularFont(&ubuntu_10_regular);
 EpdFont ui10BoldFont(&ubuntu_10_bold);
 EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
