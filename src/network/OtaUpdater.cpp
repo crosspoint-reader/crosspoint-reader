@@ -213,6 +213,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
   esp_http_client_config_t client_config = {
       .url = otaUrl.c_str(),
       .timeout_ms = 30000,
+      /* GitHub release assets redirect to CDN (objects.githubusercontent.com).
+       * Without this, esp_https_ota downloads 0 bytes and stalls on redirect. */
+      .max_redirection_count = 5,
       /* Default HTTP client buffer size 512 byte only
        * not sufficent to handle URL redirection cases or
        * parsing of large HTTP headers.
