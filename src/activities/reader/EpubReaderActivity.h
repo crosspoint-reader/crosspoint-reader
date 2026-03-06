@@ -3,6 +3,9 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <string>
+
+#include "BookmarkStore.h"
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
 
@@ -23,6 +26,7 @@ class EpubReaderActivity final : public Activity {
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
+  std::string statusBarOverride;     // Temporary override text (e.g. "Bookmarked"), cleared on page turn
   bool automaticPageTurnActive = false;
 
   // Footnote support
@@ -43,6 +47,7 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+  void addBookmark();
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
 
