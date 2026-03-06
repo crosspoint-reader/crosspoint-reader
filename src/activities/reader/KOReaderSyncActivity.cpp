@@ -264,30 +264,30 @@ void KOReaderSyncActivity::render(RenderLock&&) {
                              : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(currentSpineIndex + 1));
 
     // Remote progress - chapter and page
-    renderer.drawText(UI_10_FONT_ID, 20, top + 40, tr(STR_REMOTE_LABEL), true);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 40, tr(STR_REMOTE_LABEL), true);
     char remoteChapterStr[128];
     snprintf(remoteChapterStr, sizeof(remoteChapterStr), "  %s", remoteChapter.c_str());
-    renderer.drawText(UI_10_FONT_ID, 20, top + 65, remoteChapterStr);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 65, remoteChapterStr);
     char remotePageStr[64];
     snprintf(remotePageStr, sizeof(remotePageStr), tr(STR_PAGE_OVERALL_FORMAT), remotePosition.pageNumber + 1,
              remoteProgress.percentage * 100);
-    renderer.drawText(UI_10_FONT_ID, 20, top + 90, remotePageStr);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 90, remotePageStr);
 
     if (!remoteProgress.device.empty()) {
       char deviceStr[64];
       snprintf(deviceStr, sizeof(deviceStr), tr(STR_DEVICE_FROM_FORMAT), remoteProgress.device.c_str());
-      renderer.drawText(UI_10_FONT_ID, 20, top + 115, deviceStr);
+      renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 115, deviceStr);
     }
 
     // Local progress - chapter and page
-    renderer.drawText(UI_10_FONT_ID, 20, top + 150, tr(STR_LOCAL_LABEL), true);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 150, tr(STR_LOCAL_LABEL), true);
     char localChapterStr[128];
     snprintf(localChapterStr, sizeof(localChapterStr), "  %s", localChapter.c_str());
-    renderer.drawText(UI_10_FONT_ID, 20, top + 175, localChapterStr);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 175, localChapterStr);
     char localPageStr[64];
     snprintf(localPageStr, sizeof(localPageStr), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), currentPage + 1, totalPagesInSpine,
              localProgress.percentage * 100);
-    renderer.drawText(UI_10_FONT_ID, 20, top + 200, localPageStr);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 200, localPageStr);
 
     const int optionY = top + 230;
     const int optionHeight = 30;
@@ -296,13 +296,15 @@ void KOReaderSyncActivity::render(RenderLock&&) {
     if (selectedOption == 0) {
       renderer.fillRect(screen.x, optionY - 2, screen.width - 1, optionHeight);
     }
-    renderer.drawText(UI_10_FONT_ID, 20, optionY, tr(STR_APPLY_REMOTE), selectedOption != 0);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY, tr(STR_APPLY_REMOTE),
+                      selectedOption != 0);
 
     // Upload option
     if (selectedOption == 1) {
       renderer.fillRect(screen.x, optionY + optionHeight - 2, screen.width - 1, optionHeight);
     }
-    renderer.drawText(UI_10_FONT_ID, 20, optionY + optionHeight, tr(STR_UPLOAD_LOCAL), selectedOption != 1);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY + optionHeight,
+                      tr(STR_UPLOAD_LOCAL), selectedOption != 1);
 
     // Bottom button hints
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

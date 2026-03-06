@@ -83,13 +83,13 @@ class WifiSelectionActivity final : public Activity {
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
   unsigned long connectionStartTime = 0;
 
-  void renderNetworkList(Rect* screen, ThemeMetrics* metrics) const;
-  void renderPasswordEntry(Rect* screen, ThemeMetrics* metrics) const;
-  void renderConnecting(Rect* screen, ThemeMetrics* metrics) const;
-  void renderConnected(Rect* screen, ThemeMetrics* metrics) const;
-  void renderSavePrompt(Rect* screen, ThemeMetrics* metrics) const;
-  void renderConnectionFailed(Rect* screen, ThemeMetrics* metrics) const;
-  void renderForgetPrompt(Rect* screen, ThemeMetrics* metrics) const;
+  void renderNetworkList(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderPasswordEntry(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderConnecting(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderConnected(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderSavePrompt(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderConnectionFailed(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderForgetPrompt(const Rect* screen, const ThemeMetrics* metrics) const;
 
   void startWifiScan();
   void processWifiScanResults();

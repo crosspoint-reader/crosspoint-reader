@@ -111,9 +111,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
   GUI.drawList(
       renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, menuItems.size(), selectedIndex,
-      [this](int index) { return I18N.get(menuItems[index].labelId); }, 
-      nullptr, nullptr,
-      [this](int index) { 
+      [this](int index) { return I18N.get(menuItems[index].labelId); }, nullptr, nullptr,
+      [this](int index) {
         const auto value = menuItems[index].action;
         if (value == MenuAction::ROTATE_SCREEN) {
           // Render current orientation value on the right edge of the content area.
