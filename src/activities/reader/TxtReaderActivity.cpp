@@ -349,7 +349,6 @@ void TxtReaderActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
   renderPage();
-  renderer.clearFontCache();
 
   // Save progress
   saveProgress();
@@ -394,7 +393,12 @@ void TxtReaderActivity::renderPage() {
     }
   };
 
-  // First pass: BW rendering
+  // Font prewarm: scan pass accumulates text, then prewarm, then real render
+  auto scope = renderer.createFontPrewarmScope();
+  renderLines();  // scan pass — text accumulated, no drawing
+  scope.endScanAndPrewarm();
+
+  // BW rendering
   renderLines();
   renderStatusBar();
 
@@ -427,6 +431,7 @@ void TxtReaderActivity::renderPage() {
     // Restore BW buffer
     renderer.restoreBwBuffer();
   }
+  // scope destructor clears font cache
 }
 
 void TxtReaderActivity::renderStatusBar() const {
