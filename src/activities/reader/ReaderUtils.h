@@ -2,6 +2,7 @@
 
 #include <CrossPointSettings.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 
 #include "MappedInputManager.h"
 
@@ -64,7 +65,10 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
 // Kept as a template to avoid std::function overhead; instantiated once per reader type.
 template <typename RenderFn>
 void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
-  renderer.storeBwBuffer();
+  if (!renderer.storeBwBuffer()) {
+    LOG_ERR("READER", "Failed to store BW buffer for anti-aliasing");
+    return;
+  }
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
