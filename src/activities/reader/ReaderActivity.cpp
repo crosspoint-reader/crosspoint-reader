@@ -25,12 +25,11 @@ std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
 bool ReaderActivity::isMdFile(const std::string& path) {
-  return StringUtils::checkFileExtension(path, ".md");
+  return FsHelpers::hasMarkdownExtension(path);
 }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
-  return StringUtils::checkFileExtension(path, ".txt") ||
-         StringUtils::checkFileExtension(path, ".log");
+  return FsHelpers::hasTxtExtension(path);
 }
 
 bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
@@ -105,8 +104,7 @@ void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
 void ReaderActivity::onGoToMdReader(std::unique_ptr<Txt> txt) {
   const auto mdPath = txt->getPath();
   currentBookPath = mdPath;
-  exitActivity();
-  enterNewActivity(new MdReaderActivity(
+  activityManager.replaceActivity(std::make_unique<MdReaderActivity>(
       renderer, mappedInput, std::move(txt), [this, mdPath] { goToLibrary(mdPath); }, [this] { onGoBack(); }));
 }
 
@@ -127,13 +125,6 @@ void ReaderActivity::onEnter() {
   currentBookPath = initialBookPath;
   if (isBmpFile(initialBookPath)) {
     onGoToBmpViewer(initialBookPath);
-  } else if (isXtcFile(initialBookPath)) {
-    auto xtc = loadXtc(initialBookPath);
-    if (!xtc) {
-      onGoBack();
-      return;
-    }
-    onGoToXtcReader(std::move(xtc));
   } else if (isMdFile(initialBookPath)) {
     auto txt = loadTxt(initialBookPath);
     if (!txt) {
@@ -141,6 +132,13 @@ void ReaderActivity::onEnter() {
       return;
     }
     onGoToMdReader(std::move(txt));
+  } else if (isXtcFile(initialBookPath)) {
+    auto xtc = loadXtc(initialBookPath);
+    if (!xtc) {
+      onGoBack();
+      return;
+    }
+    onGoToXtcReader(std::move(xtc));
   } else if (isTxtFile(initialBookPath)) {
     auto txt = loadTxt(initialBookPath);
     if (!txt) {
