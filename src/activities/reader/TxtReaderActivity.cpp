@@ -10,6 +10,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/ActivityResult.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -99,6 +100,18 @@ void TxtReaderActivity::loop() {
                                     mappedInput.wasPressed(MappedInputManager::Button::Right))
                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
                                     mappedInput.wasReleased(MappedInputManager::Button::Right));
+
+  // Confirm button opens the reader menu (orientation, etc.)
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    startActivityForResult(
+        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, txt ? txt->getTitle() : "", currentPage + 1,
+                                                 totalPages, 0, SETTINGS.orientation, false),
+        [this](const ActivityResult& result) {
+          const auto& menu = std::get<MenuResult>(result.data);
+          applyOrientation(menu.orientation);
+        });
+    return;
+  }
 
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -318,6 +331,38 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   free(buffer);
 
   return !outLines.empty();
+}
+
+void TxtReaderActivity::applyOrientation(const uint8_t orientation) {
+  if (SETTINGS.orientation == orientation) return;
+
+  SETTINGS.orientation = orientation;
+  SETTINGS.saveToFile();
+
+  // Apply new orientation to renderer
+  switch (orientation) {
+    case CrossPointSettings::ORIENTATION::PORTRAIT:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
+      break;
+    case CrossPointSettings::ORIENTATION::INVERTED:
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+      break;
+    default:
+      break;
+  }
+
+  // Reset reader state so it re-paginates for the new viewport dimensions
+  initialized = false;
+  pageOffsets.clear();
+  currentPageLines.clear();
+  currentPage = 0;
+  requestUpdate();
 }
 
 void TxtReaderActivity::render(RenderLock&&) {

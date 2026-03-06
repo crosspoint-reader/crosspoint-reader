@@ -6,6 +6,7 @@
 
 #include "CrossPointSettings.h"
 #include "activities/Activity.h"
+#include "activities/reader/EpubReaderMenuActivity.h"
 
 class TxtReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
@@ -32,6 +33,7 @@ class TxtReaderActivity final : public Activity {
 
   void renderPage();
   void renderStatusBar() const;
+  void applyOrientation(uint8_t orientation);
 
   void initializeReader();
   bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);

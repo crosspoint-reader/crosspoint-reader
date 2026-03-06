@@ -107,6 +107,7 @@ class BaseTheme {
   virtual ~BaseTheme() = default;
 
   // Component drawing methods
+  virtual void drawReadingProgressBar(const GfxRenderer& renderer, size_t progress) const;
   virtual void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   virtual void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
                                bool showPercentage = true) const;  // Left aligned (reader mode)

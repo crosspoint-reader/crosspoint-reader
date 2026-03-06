@@ -748,6 +748,19 @@
   </div>
 </div>
 
+
+<!-- Text View Modal -->
+<div class="modal-overlay" id="textViewModal">
+  <div class="modal" style="max-width:700px;width:95%">
+    <button class="modal-close" onclick="closeTextViewModal()">&times;</button>
+    <h3>👁️ <span id="textViewFileName"></span></h3>
+    <div id="textViewContent" style="font-family:monospace;white-space:pre-wrap;overflow-y:auto;max-height:60vh;background:#f8f8f8;padding:10px;border-radius:4px;font-size:13px;"></div>
+    <div id="textViewError" style="color:#c00;display:none;padding:10px;"></div>
+    <div style="margin-top:10px;text-align:right">
+      <button class="delete-btn-cancel" onclick="closeTextViewModal()">Close</button>
+    </div>
+  </div>
+</div>
 <!-- Move Modal -->
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
@@ -870,6 +883,8 @@
           let filePath = currentPath;
           if (!filePath.endsWith("/")) filePath += "/";
           filePath += file.name;
+          const ext = file.name.split('.').pop().toLowerCase();
+          const isViewable = ['log', 'txt', 'md', 'json', 'csv', 'xml', 'ini', 'cfg'].includes(ext);
 
           // Checkbox cell + file row
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
@@ -881,6 +896,7 @@
           fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
+          if (isViewable) fileTableContent += `<button class="rename-btn" onclick="openTextViewModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}'  )" title="View file">👁️</button>`;
           fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
           fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
           fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
@@ -1536,6 +1552,48 @@ function retryAllFailedUploads() {
     xhr.send(formData);
   }
   hydrate();
-</script>
+
+    function openTextViewModal(fileName, filePath) {
+      const MAX_VIEW_BYTES = 256 * 1024; // 256 KB safety limit
+      document.getElementById('textViewFileName').textContent = fileName;
+      document.getElementById('textViewContent').textContent = '';
+      document.getElementById('textViewError').style.display = 'none';
+      document.getElementById('textViewModal').style.display = 'flex';
+
+      const url = '/download?path=' + encodeURIComponent(filePath);
+      fetch(url)
+        .then(function(resp) {
+          const ct = resp.headers.get('content-type') || '';
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          if (ct.startsWith('image/') || ct.startsWith('application/octet-stream')) {
+            throw new Error('Binary file — cannot display as text.');
+          }
+          return resp.text();
+        })
+        .then(function(text) {
+          if (text.length > MAX_VIEW_BYTES) {
+            text = text.substring(0, MAX_VIEW_BYTES) + '\n\n[Truncated — file too large to display fully]';
+          }
+          document.getElementById('textViewContent').textContent = text;
+        })
+        .catch(function(err) {
+          const errEl = document.getElementById('textViewError');
+          errEl.textContent = 'Error loading file: ' + err.message;
+          errEl.style.display = 'block';
+        });
+    }
+
+    function closeTextViewModal() {
+      document.getElementById('textViewModal').style.display = 'none';
+      document.getElementById('textViewContent').textContent = '';
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && document.getElementById('textViewModal').style.display === 'flex') {
+        closeTextViewModal();
+      }
+    });
+
+  </script>
 </body>
 </html>
