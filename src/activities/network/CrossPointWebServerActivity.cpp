@@ -200,6 +200,8 @@ void CrossPointWebServerActivity::startAccessPoint() {
 
   if (!apStarted) {
     LOG_ERR("WEBACT", "ERROR: Failed to start Access Point!");
+    UITheme::setHttpServerActive(false);
+    UITheme::setNetworkStatus(false, false);
     onGoHome();
     return;
   }
@@ -246,6 +248,8 @@ void CrossPointWebServerActivity::startWebServer() {
 
   if (webServer->isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;
+    UITheme::setHttpServerActive(true);
+    UITheme::setNetworkStatus(true, false);
     LOG_DBG("WEBACT", "Web server started successfully");
 
     // Force an immediate render since we're transitioning from a subactivity
@@ -255,6 +259,8 @@ void CrossPointWebServerActivity::startWebServer() {
     LOG_ERR("WEBACT", "ERROR: Failed to start web server!");
     webServer.reset();
     // Go back on error
+    UITheme::setHttpServerActive(false);
+    UITheme::setNetworkStatus(false, false);
     onGoHome();
   }
 }
@@ -368,9 +374,6 @@ void CrossPointWebServerActivity::render(RenderLock&&) {
 }
 
 void CrossPointWebServerActivity::renderServerRunning() const {
-  // Keep UITheme network state in sync so PULSR pills reflect activity
-  UITheme::setHttpServerActive(true);
-  UITheme::setNetworkStatus(true, false);
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
 
@@ -386,17 +389,43 @@ void CrossPointWebServerActivity::renderServerRunning() const {
   const int contentLeft = metrics.contentSidePadding;
   const int contentW = pageWidth - contentLeft;
 
-  // Helper: draw text centered within content area
+  // Helper: draw text centered within content area; wraps to two lines if needed.
+  // Returns total height consumed.
   auto drawCentered = [&](int fontId, int y, const char* text, bool black = true,
-                          EpdFontFamily::Style style = EpdFontFamily::REGULAR) {
-    const int tw = renderer.getTextWidth(fontId, text, style);
-    renderer.drawText(fontId, contentLeft + (contentW - tw) / 2, y, text, black, style);
+                          EpdFontFamily::Style style = EpdFontFamily::REGULAR) -> int {
+    const int lineH = renderer.getTextHeight(fontId);
+    const int fullW = renderer.getTextWidth(fontId, text, style);
+    if (fullW <= contentW) {
+      renderer.drawText(fontId, contentLeft + (contentW - fullW) / 2, y, text, black, style);
+      return lineH;
+    }
+    // Find last word boundary that fits on line 1
+    std::string s(text);
+    int breakAt = (int)s.size() - 1;
+    while (breakAt > 0) {
+      if (s[breakAt] == ' ') {
+        const int w = renderer.getTextWidth(fontId, s.substr(0, breakAt).c_str(), style);
+        if (w <= contentW) break;
+      }
+      breakAt--;
+    }
+    if (breakAt == 0) breakAt = (int)s.size();  // no break found, draw clipped
+    const std::string line1 = s.substr(0, breakAt);
+    const std::string line2 = (breakAt < (int)s.size()) ? s.substr(breakAt + 1) : "";
+    const int w1 = renderer.getTextWidth(fontId, line1.c_str(), style);
+    renderer.drawText(fontId, contentLeft + (contentW - w1) / 2, y, line1.c_str(), black, style);
+    if (!line2.empty()) {
+      const int w2 = renderer.getTextWidth(fontId, line2.c_str(), style);
+      renderer.drawText(fontId, contentLeft + (contentW - w2) / 2, y + lineH, line2.c_str(), black, style);
+      return lineH * 2;
+    }
+    return lineH;
   };
 
   if (isApMode) {
     // AP mode: WiFi QR + URL QR stacked, centered in content area
-    drawCentered(UI_10_FONT_ID, startY, tr(STR_CONNECT_WIFI_HINT), true, EpdFontFamily::BOLD);
-    startY += height10 + metrics.verticalSpacing * 2;
+    startY += drawCentered(UI_10_FONT_ID, startY, tr(STR_CONNECT_WIFI_HINT), true, EpdFontFamily::BOLD) +
+              metrics.verticalSpacing * 2;
 
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
     const Rect qrBoundsWifi(contentLeft + (contentW - QR_CODE_WIDTH) / 2, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
@@ -405,8 +434,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     drawCentered(UI_10_FONT_ID, startY, connectedSSID.c_str());
     startY += height10 + metrics.verticalSpacing * 2;
 
-    drawCentered(UI_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
-    startY += height10 + metrics.verticalSpacing * 2;
+    startY += drawCentered(UI_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD) +
+              metrics.verticalSpacing * 2;
 
     std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
     std::string ipUrl = tr(STR_OR_HTTP_PREFIX) + connectedIP + "/";
