@@ -595,6 +595,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       section->currentPage = nextPageNumber;
     }
 
+    if (!pendingAnchor.empty()) {
+      if (const auto page = section->getPageForAnchor(pendingAnchor)) {
+        section->currentPage = *page;
+        LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), *page);
+      } else {
+        LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
+      }
+      pendingAnchor.clear();
+    }
+
     // handles changes in reader settings and reset to approximate position based on cached progress
     if (cachedChapterTotalPageCount > 0) {
       // only goes to relative position if spine index matches cached value
@@ -790,12 +800,18 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, section->currentPage);
   }
 
+  // Extract fragment anchor (e.g. "#note1" or "chapter2.xhtml#note1")
+  std::string anchor;
+  const auto hashPos = hrefStr.find('#');
+  if (hashPos != std::string::npos && hashPos + 1 < hrefStr.size()) {
+    anchor = hrefStr.substr(hashPos + 1);
+  }
+
   // Check for same-file anchor reference (#anchor only)
   bool sameFile = !hrefStr.empty() && hrefStr[0] == '#';
 
   int targetSpineIndex;
   if (sameFile) {
-    // Same file — navigate to page 0 of current spine item
     targetSpineIndex = currentSpineIndex;
   } else {
     targetSpineIndex = epub->resolveHrefToSpineIndex(hrefStr);
@@ -809,6 +825,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
   {
     RenderLock lock(*this);
+    pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
     section.reset();

@@ -71,7 +71,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
       /* Default HTTP client buffer size 512 byte only */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
-      .skip_cert_common_name_check = true,  };
+      .skip_cert_common_name_check = true,
+  };
 
   /* To track life time of local_buf, dtor will be called on exit from that function */
   struct localBufCleaner {
@@ -216,7 +217,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
        */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
-      .skip_cert_common_name_check = true,  };
+      .skip_cert_common_name_check = true,
+  };
 
   esp_https_ota_config_t ota_config = {
       .http_config = &client_config,
