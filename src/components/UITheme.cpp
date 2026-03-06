@@ -149,5 +149,5 @@ int UITheme::getProgressBarHeight() {
 void UITheme::drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
                                bool black, EpdFontFamily::Style style) {
   const int x = screen.x + (screen.width - renderer.getTextWidth(fontId, text, style)) / 2;
-  renderer.drawText(fontId, x, screen.y + y, text, black, style);
+  renderer.drawText(fontId, x, y, text, black, style);
 }
