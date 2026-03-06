@@ -6,11 +6,13 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
-#include "activities/ActivityResult.h"
 #include "RecentBooksStore.h"
+#include "activities/ActivityResult.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -23,7 +25,7 @@ constexpr int BULLET_INDENT = 20;
 
 // Cache magic distinct from TxtReader ("TXTI") to avoid collisions
 constexpr uint32_t CACHE_MAGIC = 0x4D445249;  // "MDRI"
-constexpr uint8_t CACHE_VERSION = 1;
+constexpr uint8_t CACHE_VERSION = 2;
 }  // namespace
 
 // ── Markdown parsing helpers ──────────────────────────────────────────────────
@@ -40,10 +42,7 @@ static bool isHorizontalRule(const std::string& trimmed) {
   if (trimmed.size() < 3) return false;
   const char c = trimmed[0];
   if (c != '-' && c != '*' && c != '_') return false;
-  for (char ch : trimmed) {
-    if (ch != c) return false;
-  }
-  return true;
+  return std::all_of(trimmed.begin(), trimmed.end(), [c](char ch) { return ch == c; });
 }
 
 // Strip inline Markdown markers, showing link text only (not the URL).
@@ -303,8 +302,8 @@ void MdReaderActivity::loop() {
   // Confirm button opens the reader menu (orientation, etc.)
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     startActivityForResult(
-        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, txt ? txt->getPath() : "",
-                                                 currentPage + 1, totalPages, 0, SETTINGS.orientation, false),
+        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, txt ? txt->getPath() : "", currentPage + 1,
+                                                 totalPages, 0, SETTINGS.orientation, false),
         [this](const ActivityResult& result) {
           const auto& menu = std::get<MenuResult>(result.data);
           applyOrientation(menu.orientation);
@@ -324,7 +323,6 @@ void MdReaderActivity::loop() {
 }
 
 // ── Initialization ────────────────────────────────────────────────────────────
-
 
 void MdReaderActivity::applyOrientation(const uint8_t orientation) {
   if (SETTINGS.orientation == orientation) return;
@@ -396,8 +394,10 @@ void MdReaderActivity::initializeReader() {
 void MdReaderActivity::buildPageIndex() {
   pageOffsets.clear();
   pageCodeFences.clear();
+  pageSubLineStarts.clear();
   pageOffsets.push_back(0);
   pageCodeFences.push_back(false);
+  pageSubLineStarts.push_back(0);
 
   size_t offset = 0;
   bool inCodeFence = false;
@@ -409,13 +409,15 @@ void MdReaderActivity::buildPageIndex() {
   while (offset < fileSize) {
     std::vector<MdLine> tempLines;
     size_t nextOffset = offset;
-    if (!loadPageAtOffset(offset, tempLines, nextOffset, inCodeFence, false)) break;
+    int nextSubLineStart = 0;
+    if (!loadPageAtOffset(offset, 0, tempLines, nextOffset, nextSubLineStart, inCodeFence, false)) break;
     if (nextOffset <= offset) break;
 
     offset = nextOffset;
     if (offset < fileSize) {
       pageOffsets.push_back(offset);
       pageCodeFences.push_back(inCodeFence);
+      pageSubLineStarts.push_back(nextSubLineStart);
     }
     if (pageOffsets.size() % 20 == 0) vTaskDelay(1);
   }
@@ -426,8 +428,9 @@ void MdReaderActivity::buildPageIndex() {
 
 // ── Page loading ──────────────────────────────────────────────────────────────
 
-bool MdReaderActivity::loadPageAtOffset(size_t offset, std::vector<MdLine>& outLines, size_t& nextOffset,
-                                        bool& inCodeFence, bool stripInline) {
+bool MdReaderActivity::loadPageAtOffset(size_t offset, int subLineStart, std::vector<MdLine>& outLines,
+                                        size_t& nextOffset, int& nextSubLineStart, bool& inCodeFence,
+                                        bool stripInline) {
   outLines.clear();
   const size_t fileSize = txt->getFileSize();
   if (offset >= fileSize) return false;
@@ -443,6 +446,9 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, std::vector<MdLine>& outL
     return false;
   }
   buffer[chunkSize] = '\0';
+
+  nextSubLineStart = 0;              // default: next page starts fresh at sub-line 0
+  int remainingSkip = subLineStart;  // sub-lines to skip for first raw line only
 
   size_t pos = 0;
   while (pos < chunkSize && static_cast<int>(outLines.size()) < linesPerPage) {
@@ -539,9 +545,12 @@ void MdReaderActivity::render(RenderLock&&) {
 
   const size_t offset = pageOffsets[currentPage];
   bool inCodeFence = (currentPage < static_cast<int>(pageCodeFences.size())) ? pageCodeFences[currentPage] : false;
+  const int subLineStart =
+      (currentPage < static_cast<int>(pageSubLineStarts.size())) ? pageSubLineStarts[currentPage] : 0;
   size_t nextOffset;
   currentPageLines.clear();
-  loadPageAtOffset(offset, currentPageLines, nextOffset, inCodeFence);
+  int nextSubLineStart = 0;
+  loadPageAtOffset(offset, subLineStart, currentPageLines, nextOffset, nextSubLineStart, inCodeFence);
 
   renderer.clearScreen();
   renderPage();
@@ -789,8 +798,10 @@ bool MdReaderActivity::loadPageIndexCache() {
 
   pageOffsets.clear();
   pageCodeFences.clear();
+  pageSubLineStarts.clear();
   pageOffsets.reserve(numPages);
   pageCodeFences.reserve(numPages);
+  pageSubLineStarts.reserve(numPages);
 
   for (uint32_t i = 0; i < numPages; i++) {
     uint32_t off;
@@ -799,6 +810,9 @@ bool MdReaderActivity::loadPageIndexCache() {
     uint8_t fence;
     serialization::readPod(f, fence);
     pageCodeFences.push_back(fence != 0);
+    uint8_t subLine;
+    serialization::readPod(f, subLine);
+    pageSubLineStarts.push_back(static_cast<int>(subLine));
   }
 
   f.close();
@@ -829,6 +843,8 @@ void MdReaderActivity::savePageIndexCache() const {
     serialization::writePod(f, static_cast<uint32_t>(pageOffsets[i]));
     const uint8_t fence = (i < pageCodeFences.size() && pageCodeFences[i]) ? 1 : 0;
     serialization::writePod(f, fence);
+    const uint8_t subLine = (i < pageSubLineStarts.size()) ? static_cast<uint8_t>(pageSubLineStarts[i]) : 0;
+    serialization::writePod(f, subLine);
   }
 
   f.close();

@@ -9,9 +9,9 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "activities/ActivityResult.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/ActivityResult.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -105,8 +105,8 @@ void TxtReaderActivity::loop() {
   // Confirm button opens the reader menu (orientation, etc.)
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     startActivityForResult(
-        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, txt ? txt->getTitle() : "",
-                                                 currentPage + 1, totalPages, 0, SETTINGS.orientation, false),
+        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, txt ? txt->getTitle() : "", currentPage + 1,
+                                                 totalPages, 0, SETTINGS.orientation, false),
         [this](const ActivityResult& result) {
           const auto& menu = std::get<MenuResult>(result.data);
           applyOrientation(menu.orientation);
@@ -333,7 +333,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
   return !outLines.empty();
 }
-
 
 void TxtReaderActivity::applyOrientation(const uint8_t orientation) {
   if (SETTINGS.orientation == orientation) return;

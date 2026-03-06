@@ -27,6 +27,7 @@ class MdReaderActivity final : public Activity {
   // Streaming reader — stores file byte offsets and code-fence state for each page start.
   std::vector<size_t> pageOffsets;
   std::vector<bool> pageCodeFences;
+  std::vector<int> pageSubLineStarts;
   std::vector<MdLine> currentPageLines;
   int linesPerPage = 0;
   int viewportWidth = 0;
@@ -41,8 +42,8 @@ class MdReaderActivity final : public Activity {
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
 
   void initializeReader();
-  bool loadPageAtOffset(size_t offset, std::vector<MdLine>& outLines, size_t& nextOffset, bool& inCodeFence,
-                        bool stripInline = true);
+  bool loadPageAtOffset(size_t offset, int subLineStart, std::vector<MdLine>& outLines, size_t& nextOffset,
+                        int& nextSubLineStart, bool& inCodeFence, bool stripInline = true);
   void buildPageIndex();
   bool loadPageIndexCache();
   void savePageIndexCache() const;
