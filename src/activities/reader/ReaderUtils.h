@@ -33,7 +33,7 @@ struct PageTurnResult {
   bool next;
 };
 
-inline PageTurnResult detectPageTurn(MappedInputManager& input) {
+inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   const bool usePress = !SETTINGS.longPressChapterSkip;
   const bool prev = usePress ? (input.wasPressed(MappedInputManager::Button::PageBack) ||
                                 input.wasPressed(MappedInputManager::Button::Left))
@@ -48,7 +48,7 @@ inline PageTurnResult detectPageTurn(MappedInputManager& input) {
   return {prev, next};
 }
 
-inline void displayWithRefreshCycle(GfxRenderer& renderer, int& pagesUntilFullRefresh) {
+inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
