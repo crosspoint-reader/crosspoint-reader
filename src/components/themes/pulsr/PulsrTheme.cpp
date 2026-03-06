@@ -111,7 +111,76 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
       const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
       renderer.drawText(PULSR_10_FONT_ID, indX + (indW - lw) / 2, indY + (indH - lh) / 2, lbl, /*black=*/true);
     }
-    // Seg 1: reserved for sync status (RSS Feed PR extends this)
+    // Seg 1 & 2: Up/Down arrows + CHRG pill at bottom of Seg 2
+    {
+      const int divY = zoneTop + segH * 2;  // divider between seg1 and seg2
+      constexpr int TRI_H = 22;             // triangle height (tip→base)
+      constexpr int TRI_W = 30;             // triangle half-width at base (~= pill width / 2)
+      constexpr int GAP = 8;                // gap from divider to base
+      const int cx = LEFT_W / 2;
+
+      // Up triangle: base near divider, tip above
+      for (int row = 0; row < TRI_H; row++) {
+        const int hw = (TRI_W * row) / TRI_H;
+        const int y = divY - GAP - TRI_H + row;
+        renderer.drawLine(cx - hw, y, cx + hw, y, /*black=*/false);
+      }
+
+      // Down triangle: base near divider, tip below
+      for (int row = 0; row < TRI_H; row++) {
+        const int hw = (TRI_W * row) / TRI_H;
+        const int y = divY + GAP + TRI_H - row;
+        renderer.drawLine(cx - hw, y, cx + hw, y, /*black=*/false);
+      }
+
+      // CHRG pill — bottom of Seg 2, just above the Seg 2/3 divider
+      constexpr int PILL_GAP = 3;
+      const int pillW = LEFT_W - SEG_MARGIN * 2;
+      const int pillH = 18;
+      const int pillX = SEG_MARGIN;
+      const bool usbConnected = (digitalRead(20) == HIGH);
+      if (usbConnected) {
+        const int seg2Bottom = zoneTop + segH * 3;
+        const int chrgY = seg2Bottom - SEG_MARGIN - pillH;
+        renderer.fillRoundedRect(pillX, chrgY, pillW, pillH, PILL_R, Color::LightGray);
+        const char* lbl = "CHRG";
+        const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
+        const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+        renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, chrgY + (pillH - lh) / 2, lbl, /*black=*/true);
+      }
+    }
+
+    // Seg 3: Battery — vertical fill bar (white fill = charged) + percentage
+    {
+      const int seg3Top = zoneTop + segH * 3;
+      const uint16_t pct = powerManager.getBatteryPercentage();
+
+      constexpr int BAR_MARGIN_X = 18;
+      constexpr int BAR_MARGIN_TOP = 8;
+      constexpr int BAR_MARGIN_BOT = 20;
+      constexpr int BAR_R = 3;
+      const int barX = BAR_MARGIN_X;
+      const int barY = seg3Top + BAR_MARGIN_TOP;
+      const int barW = LEFT_W - BAR_MARGIN_X * 2;
+      const int barH = segH - BAR_MARGIN_TOP - BAR_MARGIN_BOT;
+
+      // Outline
+      renderer.drawRoundedRect(barX, barY, barW, barH, 1, BAR_R, /*black=*/false);
+
+      // Fill from bottom: white = charged portion
+      const int fillH = (barH * pct) / 100;
+      if (fillH > 0) {
+        renderer.fillRoundedRect(barX, barY + (barH - fillH), barW, fillH, BAR_R, Color::White);
+      }
+
+      // Percentage text centred below bar
+      char pctBuf[8];
+      snprintf(pctBuf, sizeof(pctBuf), "%d%%", pct);
+      const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, pctBuf);
+      const int th = renderer.getTextHeight(PULSR_10_FONT_ID);
+      const int txtY = seg3Top + segH - BAR_MARGIN_BOT + (BAR_MARGIN_BOT - th) / 2;
+      renderer.drawText(PULSR_10_FONT_ID, (LEFT_W - tw) / 2, txtY, pctBuf, /*black=*/false);
+    }
   }
 
   // ── 6. Screen title in top bar (white, uppercase, PULSR-12) ────────────────
@@ -342,24 +411,59 @@ void PulsrTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const 
     renderer.drawLine(lx, barY, lx, barY + barH - 1, /*black=*/false);
   }
 
-  // White uppercase label centered in each zone
+  // White labels or filled directional triangles centered in each zone
   for (int i = 0; i < BTN_COUNT; i++) {
     if (labels[i] == nullptr || labels[i][0] == '\0') continue;
 
-    // Uppercase copy
-    char upper[32];
-    int c = 0;
-    for (; labels[i][c] && c < 31; c++) {
-      upper[c] = (labels[i][c] >= 'a' && labels[i][c] <= 'z') ? labels[i][c] - 32 : labels[i][c];
-    }
-    upper[c] = '\0';
-
     const int x = LEFT_W + i * btnW;
-    const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, upper);
-    const int th = renderer.getTextHeight(PULSR_10_FONT_ID);
-    const int tx = x + (btnW - tw) / 2;
-    const int ty = barY + (barH - th) / 2;
-    renderer.drawText(PULSR_10_FONT_ID, tx, ty, upper, /*black=*/false);
+    const int cy = barY + barH / 2;
+    const int cx = x + btnW / 2;
+
+    auto labelIs = [&](const char* s) {
+      const char* l = labels[i];
+      for (; *s && *l; s++, l++) {
+        if ((*s | 32) != (*l | 32)) return false;
+      }
+      return *s == '\0' && *l == '\0';
+    };
+
+    constexpr int TH = 26;
+    constexpr int TW = 14;
+    constexpr int TD = 6;
+
+    if (labelIs("up")) {
+      for (int row = 0; row < TH; row++) {
+        const int hw = (TW * row) / TH;
+        renderer.drawLine(cx - hw, cy - TH / 2 + row, cx + hw, cy - TH / 2 + row, /*black=*/false);
+      }
+    } else if (labelIs("down")) {
+      for (int row = 0; row < TH; row++) {
+        const int hw = (TW * row) / TH;
+        renderer.drawLine(cx - hw, cy + TH / 2 - row, cx + hw, cy + TH / 2 - row, /*black=*/false);
+      }
+    } else if (labelIs("left")) {
+      const int baseX = x + btnW - TD;
+      for (int j = -TW; j <= TW; j++) {
+        const int w = TH * (TW - abs(j)) / TW;
+        renderer.drawLine(baseX - w, cy + j, baseX, cy + j, /*black=*/false);
+      }
+    } else if (labelIs("right")) {
+      const int baseX = x + TD;
+      for (int j = -TW; j <= TW; j++) {
+        const int w = TH * (TW - abs(j)) / TW;
+        renderer.drawLine(baseX, cy + j, baseX + w, cy + j, /*black=*/false);
+      }
+    } else {
+      char upper[32];
+      int u = 0;
+      for (; labels[i][u] && u < 31; u++) {
+        upper[u] = (labels[i][u] >= 'a' && labels[i][u] <= 'z') ? labels[i][u] - 32 : labels[i][u];
+      }
+      upper[u] = '\0';
+      const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, upper);
+      const int th = renderer.getTextHeight(PULSR_10_FONT_ID);
+      renderer.drawText(PULSR_10_FONT_ID, cx - tw / 2, cy - th / 2, upper, /*black=*/false);
+    }
   }
 
   renderer.setOrientation(origOri);
