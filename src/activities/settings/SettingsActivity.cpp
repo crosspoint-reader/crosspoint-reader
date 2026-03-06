@@ -75,17 +75,10 @@ void SettingsActivity::onExit() {
 void SettingsActivity::loop() {
   bool hasChangedCategory = false;
 
-  // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selectedSettingIndex == 0) {
-      selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
-      hasChangedCategory = true;
-      requestUpdate();
-    } else {
-      toggleCurrentSetting();
-      requestUpdate();
-      return;
-    }
+    toggleCurrentSetting();
+    requestUpdate();
+    return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -94,31 +87,32 @@ void SettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNextRelease([this] {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+  // Up/Down navigate the settings list
+  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPreviousRelease([this] {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
+  // Left/Right switch tabs
+  if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     hasChangedCategory = true;
     selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     hasChangedCategory = true;
     selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
     requestUpdate();
-  });
+  }
 
   if (hasChangedCategory) {
-    selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
+    selectedSettingIndex = 0;
     switch (selectedCategoryIndex) {
       case 0:
         currentSettings = &displaySettings;
