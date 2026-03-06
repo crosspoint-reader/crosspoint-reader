@@ -148,7 +148,7 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
       {
         const char* lbl = "PWR";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
-        const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+        const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
         renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, lbl, /*black=*/true);
       }
       pillY += pillH + PILL_GAP;
@@ -159,7 +159,7 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
         renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, wifiColor);
         const char* lbl = "WIFI";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
-        const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+        const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
         renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, lbl, /*black=*/true);
       }
       pillY += pillH + PILL_GAP;
@@ -172,7 +172,7 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
         renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, httpColor);
         const char* lbl = "HTTP";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
-        const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+        const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
         renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, lbl, /*black=*/true);
       }
       pillY += pillH + PILL_GAP;
@@ -232,13 +232,13 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
               snprintf(countBuf, sizeof(countBuf), "#%d", dlCurrent);
             }
             const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, countBuf);
-            const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+            const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
             renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, countBuf,
                               /*black=*/true);
           } else {
             renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, feedColor);
             const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, pillLabel);
-            const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+            const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
             renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, pillLabel,
                               /*black=*/true);
           }
@@ -278,7 +278,7 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
         renderer.fillRoundedRect(pillX, chrgY, pillW, pillH, PILL_R, Color::LightGray);
         const char* lbl = "CHRG";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
-        const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+        const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
         renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, chrgY + (pillH - lh) / 2, lbl, /*black=*/true);
       }
     }
@@ -418,7 +418,7 @@ void PulsrTheme::drawTabBar(const GfxRenderer& renderer, Rect /*rect*/, const st
 
     const int tx = LEFT_W + i * tabW;
     const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, abbr);
-    const int th = renderer.getTextHeight(PULSR_10_FONT_ID);
+    const int th = renderer.getCapHeight(PULSR_10_FONT_ID);
     const int ty = (barH - th) / 2;
 
     if (tabs[i].selected) {
@@ -652,7 +652,7 @@ void PulsrTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const 
       }
       upper[c] = '\0';
       const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, upper);
-      const int th = renderer.getTextHeight(PULSR_10_FONT_ID);
+      const int th = renderer.getCapHeight(PULSR_10_FONT_ID);
       renderer.drawText(PULSR_10_FONT_ID, cx - tw / 2, cy - th / 2, upper, /*black=*/false);
     }
   }
@@ -727,7 +727,7 @@ void PulsrTheme::drawButtonMenu(GfxRenderer& renderer, Rect /*rect*/, int button
 
     const std::string labelStr = pulsrLabel(buttonLabel(i));
     const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, labelStr.c_str());
-    const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+    const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
     renderer.drawText(PULSR_10_FONT_ID, tx + (tileW - lw) / 2, ty + (tileH - lh) / 2, labelStr.c_str(), /*black=*/true);
   }
 }
@@ -752,7 +752,7 @@ void PulsrTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std
     {
       const char* line1 = tr(STR_NO_OPEN_BOOK);
       const char* line2 = tr(STR_START_READING);
-      const int lh = renderer.getTextHeight(PULSR_10_FONT_ID);
+      const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
       const int w1 = renderer.getTextWidth(PULSR_10_FONT_ID, line1);
       const int w2 = renderer.getTextWidth(PULSR_10_FONT_ID, line2);
       renderer.drawText(PULSR_10_FONT_ID, cr.x + (cr.width - w1) / 2, msgY, line1, /*black=*/true);

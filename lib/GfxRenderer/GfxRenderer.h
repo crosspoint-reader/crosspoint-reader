@@ -40,8 +40,6 @@ class GfxRenderer {
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   FontDecompressor* fontDecompressor = nullptr;
-  void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
-                  EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
   template <Color color>
   void drawPixelDither(int x, int y) const;
@@ -77,9 +75,6 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
-  // Register a persistent version string drawn in the bottom-left corner of every screen.
-  // Called once from main after fonts are loaded. fontId must remain registered.
-  static void setVersionOverlay(int fontId, const char* version);
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
@@ -135,6 +130,7 @@ class GfxRenderer {
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
+  int getCapHeight(int fontId) const;  ///< Height of uppercase letter (e.g. 'H'), for visual centering
 
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
