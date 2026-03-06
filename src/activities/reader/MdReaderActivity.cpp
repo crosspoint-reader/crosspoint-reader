@@ -746,7 +746,8 @@ void MdReaderActivity::renderStatusBar(const int orientedMarginRight, const int 
 void MdReaderActivity::saveProgress() const {
   FsFile f;
   if (Storage.openFileForWrite("MRS", txt->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4] = {static_cast<uint8_t>(currentPage & 0xFF), static_cast<uint8_t>((currentPage >> 8) & 0xFF), 0, 0};
+    const uint8_t data[4] = {static_cast<uint8_t>(currentPage & 0xFF), static_cast<uint8_t>((currentPage >> 8) & 0xFF),
+                             0, 0};
     f.write(data, 4);
     f.close();
   }
