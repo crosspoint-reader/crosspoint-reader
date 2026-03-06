@@ -181,7 +181,11 @@ void ActivityManager::goToBrowser() {
   replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput));
 }
 
+// Defined in main.cpp — ensures the correct SD card font family is loaded
+extern void ensureSdFontLoaded();
+
 void ActivityManager::goToReader(std::string path) {
+  ensureSdFontLoaded();
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path)));
 }
 

@@ -13,12 +13,28 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
     return 0;
   }
 
-  const int bytes = utf8CodepointLen(**string);
+  const unsigned char lead = **string;
+  const int bytes = utf8CodepointLen(lead);
   const uint8_t* chr = *string;
-  *string += bytes;
+
+  // Invalid lead byte (stray continuation byte 0x80-0xBF, or 0xFE/0xFF)
+  if (bytes == 1 && lead >= 0x80) {
+    (*string)++;
+    return REPLACEMENT_GLYPH;
+  }
 
   if (bytes == 1) {
+    (*string)++;
     return chr[0];
+  }
+
+  // Validate continuation bytes before consuming them
+  for (int i = 1; i < bytes; i++) {
+    if ((chr[i] & 0xC0) != 0x80) {
+      // Missing or invalid continuation byte — skip only the lead byte
+      (*string)++;
+      return REPLACEMENT_GLYPH;
+    }
   }
 
   uint32_t cp = chr[0] & ((1 << (7 - bytes)) - 1);  // mask header bits
@@ -26,6 +42,16 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
   for (int i = 1; i < bytes; i++) {
     cp = (cp << 6) | (chr[i] & 0x3F);
   }
+
+  // Reject overlong encodings, surrogates, and out-of-range values
+  const bool overlong = (bytes == 2 && cp < 0x80) || (bytes == 3 && cp < 0x800) || (bytes == 4 && cp < 0x10000);
+  const bool surrogate = (cp >= 0xD800 && cp <= 0xDFFF);
+  if (overlong || surrogate || cp > 0x10FFFF) {
+    (*string)++;
+    return REPLACEMENT_GLYPH;
+  }
+
+  *string += bytes;
 
   return cp;
 }

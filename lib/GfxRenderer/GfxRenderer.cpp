@@ -1,6 +1,8 @@
 #include "GfxRenderer.h"
 
+#include <FontDecompressor.h>
 #include <Logging.h>
+#include <SdCardFont.h>
 #include <Utf8.h>
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -9,11 +11,118 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
       LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
       return nullptr;
     }
-    uint16_t glyphIndex = static_cast<uint16_t>(glyph - fontData->glyph);
+    uint32_t glyphIndex = static_cast<uint32_t>(glyph - fontData->glyph);
+    // For page-buffer hits the pointer is stable for the page lifetime.
+    // For hot-group hits it is valid only until the next getBitmap() call — callers
+    // must consume it (draw the glyph) before requesting another bitmap.
     return fontDecompressor->getBitmap(fontData, glyph, glyphIndex);
+  }
+  // For SD card fonts, check if the glyph was loaded on demand into the overflow
+  // buffer.  getOverflowBitmap() returns:
+  //   - bitmap pointer for overflow glyphs with bitmap data
+  //   - nullptr for overflow glyphs without bitmap data (e.g. space: width=0, height=0)
+  //   - nullptr for non-overflow glyphs (normal prewarmed path)
+  // We distinguish overflow-with-no-bitmap from non-overflow by checking isOverflowGlyph().
+  if (fontData->glyphMissCtx) {
+    auto* sdFont = static_cast<SdCardFont*>(fontData->glyphMissCtx);
+    if (sdFont->isOverflowGlyph(glyph)) {
+      return sdFont->getOverflowBitmap(glyph);  // may be nullptr for zero-width glyphs
+    }
   }
   return &fontData->bitmap[glyph->dataOffset];
 }
+
+void GfxRenderer::clearFontCache() {
+  if (fontDecompressor) fontDecompressor->clearCache();
+  for (auto& [id, font] : sdCardFonts_) {
+    font->clearCache();
+  }
+}
+
+void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style) {
+  // SD card font prewarm path
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
+    int missed = it->second->prewarm(utf8Text);
+    if (missed > 0) {
+      LOG_DBG("GFX", "prewarmFontCache(SD): %d glyph(s) not found", missed);
+    }
+    return;
+  }
+
+  // Standard compressed font prewarm path
+  if (!fontDecompressor || fontMap.count(fontId) == 0) return;
+  const EpdFontData* data = fontMap.at(fontId).getData(style);
+  if (!data || !data->groups) return;
+  int missed = fontDecompressor->prewarmCache(data, utf8Text);
+  if (missed > 0) {
+    LOG_DBG("GFX", "prewarmFontCache: %d glyph(s) not cached for style %d; hot-group fallback in use", missed,
+            static_cast<int>(style));
+  }
+}
+
+void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text) const {
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
+    // Metadata-only: loads glyph metrics (advanceX) without bitmap data.
+    // Saves ~50-100KB heap vs full prewarm — layout only needs advance widths.
+    int missed = it->second->prewarm(utf8Text, /*metadataOnly=*/true);
+    if (missed > 0) {
+      LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
+    }
+  }
+}
+
+void GfxRenderer::resetFontStats() {
+  if (fontDecompressor) fontDecompressor->resetStats();
+  for (auto& [id, font] : sdCardFonts_) {
+    font->resetStats();
+  }
+}
+
+// --- FontPrewarmScope implementation ---
+
+GfxRenderer::FontPrewarmScope::FontPrewarmScope(GfxRenderer& renderer) : renderer_(&renderer) {
+  renderer_->scanMode_ = ScanMode::Scanning;
+  renderer_->clearFontCache();
+  renderer_->resetFontStats();
+  renderer_->scanText_.clear();
+  renderer_->scanText_.reserve(2048);  // Pre-allocate to avoid heap fragmentation from repeated concat
+  memset(renderer_->scanStyleCounts_, 0, sizeof(renderer_->scanStyleCounts_));
+  renderer_->scanFontId_ = -1;
+}
+
+void GfxRenderer::FontPrewarmScope::endScanAndPrewarm() {
+  renderer_->scanMode_ = ScanMode::None;
+  if (renderer_->scanText_.empty()) return;
+
+  // Determine dominant style from scan counts
+  uint8_t dominantStyle = 0;
+  for (uint8_t i = 1; i < 4; i++) {
+    if (renderer_->scanStyleCounts_[i] > renderer_->scanStyleCounts_[dominantStyle]) dominantStyle = i;
+  }
+
+  renderer_->prewarmFontCache(renderer_->scanFontId_, renderer_->scanText_.c_str(),
+                              static_cast<EpdFontFamily::Style>(dominantStyle));
+
+  // Free scan string memory
+  renderer_->scanText_.clear();
+  renderer_->scanText_.shrink_to_fit();
+}
+
+GfxRenderer::FontPrewarmScope::~FontPrewarmScope() {
+  if (active_) {
+    endScanAndPrewarm();  // no-op if already called (scanText_ is empty)
+    renderer_->clearFontCache();
+  }
+}
+
+GfxRenderer::FontPrewarmScope::FontPrewarmScope(FontPrewarmScope&& other) noexcept
+    : renderer_(other.renderer_), active_(other.active_) {
+  other.active_ = false;
+}
+
+GfxRenderer::FontPrewarmScope GfxRenderer::createFontPrewarmScope() { return FontPrewarmScope(*this); }
 
 void GfxRenderer::begin() {
   frameBuffer = display.getFrameBuffer();
@@ -211,6 +320,20 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
+  if (scanMode_ == ScanMode::Scanning) {
+    scanText_ += text;
+    if (scanFontId_ < 0) scanFontId_ = fontId;
+    const uint8_t baseStyle = static_cast<uint8_t>(style) & 0x03;
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
+    uint32_t cpCount = 0;
+    while (*p) {
+      if ((*p & 0xC0) != 0x80) cpCount++;
+      p++;
+    }
+    scanStyleCounts_[baseStyle] += cpCount;
+    return;
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -257,6 +380,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 }
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
+  if (scanMode_ == ScanMode::Scanning) return;
   if (x1 == x2) {
     if (y2 < y1) {
       std::swap(y1, y2);
@@ -569,6 +693,7 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
+  if (scanMode_ == ScanMode::Scanning) return;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);

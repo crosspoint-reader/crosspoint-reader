@@ -50,7 +50,7 @@ typedef struct {
   uint32_t compressedSize;    ///< Compressed DEFLATE stream size
   uint32_t uncompressedSize;  ///< Decompressed size
   uint16_t glyphCount;        ///< Number of glyphs in this group
-  uint16_t firstGlyphIndex;   ///< First glyph index in the global glyph array
+  uint32_t firstGlyphIndex;   ///< First glyph index in the global glyph array
 } EpdFontGroup;
 
 /// Glyph interval structure
@@ -86,6 +86,7 @@ typedef struct {
   bool is2Bit;
   const EpdFontGroup* groups;                 ///< NULL for uncompressed fonts
   uint16_t groupCount;                        ///< 0 for uncompressed fonts
+  const uint16_t* glyphToGroup;               ///< Per-glyph group ID (nullptr for contiguous-group fonts)
   const EpdKernClassEntry* kernLeftClasses;   ///< Sorted left-side class map (nullptr if none)
   const EpdKernClassEntry* kernRightClasses;  ///< Sorted right-side class map (nullptr if none)
   const int8_t* kernMatrix;              ///< Flat leftClassCount x rightClassCount matrix, 4.4 fixed-point in pixels
@@ -95,4 +96,16 @@ typedef struct {
   uint8_t kernRightClassCount;           ///< Number of distinct right classes (matrix cols)
   const EpdLigaturePair* ligaturePairs;  ///< Sorted ligature pair table (nullptr if none)
   uint32_t ligaturePairCount;            ///< Number of entries in ligaturePairs
+
+  /// On-demand glyph loading for fonts that don't keep all glyphs in RAM (e.g. SD card fonts).
+  /// Called by getGlyph() when a codepoint is not found in the interval table.
+  /// Returns a valid EpdGlyph* with correct metadata, or nullptr to fall back to the
+  /// replacement glyph.  The returned pointer is valid until the next glyphMissHandler
+  /// call that causes a ring-buffer eviction — callers must consume it (measure or draw)
+  /// before requesting another missed glyph.
+  const EpdGlyph* (*glyphMissHandler)(void* ctx, uint32_t codepoint);
+
+  /// Context pointer for glyphMissHandler (typically SdCardFont*).  Also used by
+  /// GfxRenderer::getGlyphBitmap() to retrieve overflow bitmaps via SdCardFont.
+  void* glyphMissCtx;
 } EpdFontData;

@@ -226,6 +226,19 @@ bool CrossPointSettings::loadFromBinaryFile() {
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
+  // SD card fonts use same compression as Bookerly (the most neutral values)
+  if (sdFontFamilyName[0] != '\0') {
+    switch (lineSpacing) {
+      case TIGHT:
+        return 0.95f;
+      case NORMAL:
+      default:
+        return 1.0f;
+      case WIDE:
+        return 1.1f;
+    }
+  }
+
   switch (fontFamily) {
     case BOOKERLY:
     default:
@@ -294,6 +307,13 @@ int CrossPointSettings::getRefreshFrequency() const {
 }
 
 int CrossPointSettings::getReaderFontId() const {
+  // Check SD card font first
+  if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
+    int id = sdFontIdResolver(sdFontFamilyName, fontSize);
+    if (id != 0) return id;
+    // Fall through to built-in if SD font not found
+  }
+
   switch (fontFamily) {
     case BOOKERLY:
     default:
