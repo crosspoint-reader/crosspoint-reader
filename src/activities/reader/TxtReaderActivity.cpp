@@ -429,13 +429,20 @@ void TxtReaderActivity::renderPage() {
   }
 }
 
-void TxtReaderActivity::renderStatusBar() const {
+void TxtReaderActivity::renderStatusBar() {
   const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
   std::string title;
   if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
     title = txt->getTitle();
   }
-  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
+  const int remainingPages = std::max(0, totalPages - (currentPage + 1));
+  std::string etaText;
+  if (SETTINGS.statusBarEta) {
+    const auto etaMinutes = etaTracker.updateAndGetMinutes(0, currentPage, remainingPages);
+    etaText = etaMinutes ? (std::to_string(*etaMinutes) + " m") : "";
+  }
+
+  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title, etaText);
 }
 
 void TxtReaderActivity::saveProgress() const {

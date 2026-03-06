@@ -77,17 +77,29 @@ void EpubReaderActivity::onEnter() {
 
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
-    int dataSize = f.read(data, 6);
-    if (dataSize == 4 || dataSize == 6) {
+    uint8_t data[10] = {0};
+    const int dataSize = f.read(data, sizeof(data));
+
+    if (dataSize >= 4) {
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
       cachedSpineIndex = currentSpineIndex;
       LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
     }
-    if (dataSize == 6) {
+
+    if (dataSize >= 6) {
       cachedChapterTotalPageCount = data[4] + (data[5] << 8);
     }
+
+    if (dataSize >= 10) {
+      const uint32_t ms = (static_cast<uint32_t>(data[6])) | (static_cast<uint32_t>(data[7]) << 8) |
+                          (static_cast<uint32_t>(data[8]) << 16) | (static_cast<uint32_t>(data[9]) << 24);
+
+      etaTracker.restoreAvgMsPerPage(ms);
+    } else {
+      etaTracker.resetTimingAfterSleep();
+    }
+
     f.close();
   }
   // We may want a better condition to detect if we are opening for the first time.
@@ -668,14 +680,21 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   FsFile f;
   if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
+    uint8_t data[10];
     data[0] = currentSpineIndex & 0xFF;
     data[1] = (currentSpineIndex >> 8) & 0xFF;
     data[2] = currentPage & 0xFF;
     data[3] = (currentPage >> 8) & 0xFF;
     data[4] = pageCount & 0xFF;
     data[5] = (pageCount >> 8) & 0xFF;
-    f.write(data, 6);
+
+    const uint32_t avgMs = etaTracker.getAvgMsPerPage();
+    data[6] = (avgMs) & 0xFF;
+    data[7] = (avgMs >> 8) & 0xFF;
+    data[8] = (avgMs >> 16) & 0xFF;
+    data[9] = (avgMs >> 24) & 0xFF;
+
+    f.write(data, sizeof(data));
     f.close();
     LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d", spineIndex, currentPage);
   } else {
@@ -743,7 +762,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   renderer.restoreBwBuffer();
 }
 
-void EpubReaderActivity::renderStatusBar() const {
+void EpubReaderActivity::renderStatusBar() {
   // Calculate progress in book
   const int currentPage = section->currentPage + 1;
   const float pageCount = section->pageCount;
@@ -777,7 +796,14 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
+  const int remainingPages = std::max(0, section->pageCount - currentPage);
+  std::string etaText;
+  if (SETTINGS.statusBarEta) {
+    const auto etaMinutes = etaTracker.updateAndGetMinutes(currentSpineIndex, section->currentPage, remainingPages);
+    etaText = etaMinutes ? (std::to_string(*etaMinutes) + " m") : "";
+  }
+
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, etaText, 0, textYOffset);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {
