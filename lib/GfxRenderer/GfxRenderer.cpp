@@ -1015,7 +1015,6 @@ int GfxRenderer::getTextHeight(const int fontId) const {
   return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
-
 int GfxRenderer::getCapHeight(const int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
