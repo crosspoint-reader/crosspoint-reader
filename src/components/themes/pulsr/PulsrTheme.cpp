@@ -703,7 +703,11 @@ void PulsrTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std
       }
     }
     coverBufferStored = storeCoverBuffer();
-    coverRendered = true;
+    // Only mark covers as rendered when the buffer was successfully stored so
+    // Phase 2 (selection highlights) has a valid frame to restore from.  If
+    // the store failed (e.g. OOM), leave coverRendered = false so Phase 1
+    // retries on the next draw call instead of leaving a stale display.
+    coverRendered = coverBufferStored;
   }
 
   // ── Phase 2: Draw selection highlight + text (every render) ──────────────
