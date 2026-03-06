@@ -325,8 +325,7 @@ void MdReaderActivity::initializeReader() {
   orientedMarginTop += cachedScreenMargin;
   orientedMarginLeft += cachedScreenMargin;
   orientedMarginRight += cachedScreenMargin;
-  orientedMarginBottom +=
-      std::max(cachedScreenMargin, static_cast<int>(UITheme::getInstance().getStatusBarHeight()));
+  orientedMarginBottom += std::max(cachedScreenMargin, static_cast<int>(UITheme::getInstance().getStatusBarHeight()));
 
   viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
@@ -433,9 +432,8 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, std::vector<MdLine>& outL
         } else {
           // Find break point
           size_t breakPos = remaining.length();
-          while (breakPos > 0 &&
-                 renderer.getTextWidth(cachedFontId, remaining.substr(0, breakPos).c_str(), mdLine.style) >
-                     effectiveWidth) {
+          while (breakPos > 0 && renderer.getTextWidth(cachedFontId, remaining.substr(0, breakPos).c_str(),
+                                                       mdLine.style) > effectiveWidth) {
             size_t spacePos = remaining.rfind(' ', breakPos - 1);
             if (spacePos != std::string::npos && spacePos > 0) {
               breakPos = spacePos;
@@ -650,8 +648,7 @@ void MdReaderActivity::renderStatusBar(const int orientedMarginRight, const int 
 void MdReaderActivity::saveProgress() const {
   FsFile f;
   if (Storage.openFileForWrite("MRS", txt->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4] = {static_cast<uint8_t>(currentPage & 0xFF), static_cast<uint8_t>((currentPage >> 8) & 0xFF), 0,
-                       0};
+    uint8_t data[4] = {static_cast<uint8_t>(currentPage & 0xFF), static_cast<uint8_t>((currentPage >> 8) & 0xFF), 0, 0};
     f.write(data, 4);
     f.close();
   }

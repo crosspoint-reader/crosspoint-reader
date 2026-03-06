@@ -1,28 +1,27 @@
 #include "CrossPointWebServer.h"
 
-#include <memory>
-
 #include <ArduinoJson.h>
-#include "../RecentBooksStore.h"
-#include "HttpDownloader.h"
-#include "OtaUpdater.h"
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>
-#include <esp_task_wdt.h>
 #include <esp_heap_caps.h>
+#include <esp_task_wdt.h>
 
 #include <algorithm>
+#include <memory>
 
+#include "../RecentBooksStore.h"
 #include "CrossPointSettings.h"
+#include "HttpDownloader.h"
+#include "OtaUpdater.h"
 #include "RssFeedSync.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
+#include "html/DangerZonePageHtml.generated.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
-#include "html/DangerZonePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "util/StringUtils.h"
 
@@ -99,8 +98,7 @@ char s_clawVersion[32] = {};
 char s_clawError[128] = {};
 TaskHandle_t s_clawTaskHandle = nullptr;
 
-constexpr char CLAW_RELEASE_API_URL[] =
-    "https://api.github.com/repos/laird/crosspoint-claw/releases/latest";
+constexpr char CLAW_RELEASE_API_URL[] = "https://api.github.com/repos/laird/crosspoint-claw/releases/latest";
 
 void clawUpdateTask(void* /*arg*/) {
   s_clawDownloaded = 0;
@@ -131,8 +129,7 @@ void clawUpdateTask(void* /*arg*/) {
     filter["assets"][0]["size"] = true;
 
     JsonDocument doc;
-    const DeserializationError err =
-        deserializeJson(doc, apiJson, DeserializationOption::Filter(filter));
+    const DeserializationError err = deserializeJson(doc, apiJson, DeserializationOption::Filter(filter));
     if (err) {
       snprintf(s_clawError, sizeof(s_clawError), "JSON parse error: %s", err.c_str());
       s_clawState = ClawUpdateState::ERROR;
@@ -161,18 +158,18 @@ void clawUpdateTask(void* /*arg*/) {
   }  // apiJson, filter, doc all freed here — maximise contiguous heap for download
 
   // Explicitly release apiJson storage (std::string doesn't shrink automatically)
-  { std::string().swap(apiJson); }
+  {
+    std::string().swap(apiJson);
+  }
 
   LOG_DBG("CLAWUPD", "Free heap before download: %zu bytes", esp_get_free_heap_size());
 
   // Download firmware to SD card (HttpDownloader follows GitHub's redirect)
   s_clawState = ClawUpdateState::DOWNLOADING;
-  const auto result = HttpDownloader::downloadToFile(
-      firmwareUrl, "/firmware.bin",
-      [](size_t downloaded, size_t total) {
-        s_clawDownloaded = downloaded;
-        if (total > 0) s_clawTotal = total;
-      });
+  const auto result = HttpDownloader::downloadToFile(firmwareUrl, "/firmware.bin", [](size_t downloaded, size_t total) {
+    s_clawDownloaded = downloaded;
+    if (total > 0) s_clawTotal = total;
+  });
 
   if (result != HttpDownloader::OK) {
     snprintf(s_clawError, sizeof(s_clawError), "Download failed (error %d)", (int)result);
@@ -378,8 +375,8 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   // Collect WebDAV headers and Danger Zone auth header
-  const char* davHeaders[] = {"Depth", "Destination", "Overwrite", "If", "Lock-Token", "Timeout",
-                               "X-Danger-Zone-Password"};
+  const char* davHeaders[] = {"Depth",   "Destination",           "Overwrite", "If", "Lock-Token",
+                              "Timeout", "X-Danger-Zone-Password"};
   server->collectHeaders(davHeaders, 7);
   server->addHandler(new WebDAVHandler());  // Note: WebDAVHandler will be deleted by WebServer when server is stopped
   LOG_DBG("WEB", "WebDAV handler initialized");
@@ -577,14 +574,15 @@ void CrossPointWebServer::handleStatus() const {
   doc["build"] = __DATE__ " " __TIME__;
   // Reset reason (useful for diagnosing OTA rollbacks and crashes)
   const esp_reset_reason_t rr = esp_reset_reason();
-  const char* rrStr = (rr == ESP_RST_PANIC)    ? "panic"    :
-                      (rr == ESP_RST_INT_WDT)  ? "int_wdt"  :
-                      (rr == ESP_RST_TASK_WDT) ? "task_wdt" :
-                      (rr == ESP_RST_WDT)      ? "wdt"      :
-                      (rr == ESP_RST_BROWNOUT) ? "brownout" :
-                      (rr == ESP_RST_SW)       ? "sw"       :
-                      (rr == ESP_RST_POWERON)  ? "poweron"  :
-                      (rr == ESP_RST_DEEPSLEEP)? "deepsleep": "other";
+  const char* rrStr = (rr == ESP_RST_PANIC)       ? "panic"
+                      : (rr == ESP_RST_INT_WDT)   ? "int_wdt"
+                      : (rr == ESP_RST_TASK_WDT)  ? "task_wdt"
+                      : (rr == ESP_RST_WDT)       ? "wdt"
+                      : (rr == ESP_RST_BROWNOUT)  ? "brownout"
+                      : (rr == ESP_RST_SW)        ? "sw"
+                      : (rr == ESP_RST_POWERON)   ? "poweron"
+                      : (rr == ESP_RST_DEEPSLEEP) ? "deepsleep"
+                                                  : "other";
   doc["resetReason"] = rrStr;
   doc["ip"] = ipAddr;
   doc["mode"] = apMode ? "AP" : "STA";
@@ -632,12 +630,12 @@ void CrossPointWebServer::handleGetReadingState() const {
       uint8_t data[6] = {0};
       f.read(data, 6);
       f.close();
-      const int spineIndex  = data[0] | (data[1] << 8);
+      const int spineIndex = data[0] | (data[1] << 8);
       const int currentPage = data[2] | (data[3] << 8);
-      const int pageCount   = data[4] | (data[5] << 8);
-      doc["spineIndex"]  = spineIndex;
+      const int pageCount = data[4] | (data[5] << 8);
+      doc["spineIndex"] = spineIndex;
       doc["currentPage"] = currentPage;
-      doc["pageCount"]   = pageCount;
+      doc["pageCount"] = pageCount;
       // Rough position as 0.0–1.0 float based on page within chapter
       if (pageCount > 0) {
         doc["position"] = static_cast<float>(currentPage) / static_cast<float>(pageCount);
@@ -645,10 +643,10 @@ void CrossPointWebServer::handleGetReadingState() const {
         doc["position"] = nullptr;
       }
     } else {
-      doc["spineIndex"]  = nullptr;
+      doc["spineIndex"] = nullptr;
       doc["currentPage"] = nullptr;
-      doc["pageCount"]   = nullptr;
-      doc["position"]    = nullptr;
+      doc["pageCount"] = nullptr;
+      doc["position"] = nullptr;
     }
     doc["lastOpened"] = nullptr;  // timestamp not stored in recent.bin yet
   }
@@ -683,8 +681,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     auto fileName = String(name);
 
     // Hide dot-items, but always show .crosspoint when Danger Zone is enabled
-    bool shouldHide = fileName.startsWith(".") &&
-                      !(SETTINGS.dangerZoneEnabled && fileName.equals(".crosspoint"));
+    bool shouldHide = fileName.startsWith(".") && !(SETTINGS.dangerZoneEnabled && fileName.equals(".crosspoint"));
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
@@ -1032,8 +1029,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
         // Auto-flash: if firmware.bin was uploaded to root and Danger Zone is enabled,
         // trigger install immediately without requiring a manual flash command.
-        if (state.fileName == "firmware.bin" && (state.path == "/" || state.path == "") &&
-            SETTINGS.dangerZoneEnabled) {
+        if (state.fileName == "firmware.bin" && (state.path == "/" || state.path == "") && SETTINGS.dangerZoneEnabled) {
           LOG_DBG("WEB", "[UPLOAD] firmware.bin uploaded with DZ enabled — auto-triggering flash");
           extern volatile bool dzFlashRequested;
           dzFlashRequested = true;
@@ -1823,8 +1819,7 @@ void CrossPointWebServer::handleDangerZonePage() const {
 
 void CrossPointWebServer::handleGetDangerZoneStatus() const {
   char buf[128];
-  snprintf(buf, sizeof(buf), "{\"enabled\":%s,\"passwordSet\":%s}",
-           SETTINGS.dangerZoneEnabled ? "true" : "false",
+  snprintf(buf, sizeof(buf), "{\"enabled\":%s,\"passwordSet\":%s}", SETTINGS.dangerZoneEnabled ? "true" : "false",
            (SETTINGS.dangerZonePassword[0] != '\0') ? "true" : "false");
   server->send(200, "application/json", buf);
 }
@@ -1895,48 +1890,74 @@ void CrossPointWebServer::handlePostClawUpdate() {
 void CrossPointWebServer::handleGetClawUpdateStatus() const {
   const char* stateStr;
   switch (s_clawState) {
-    case ClawUpdateState::IDLE:        stateStr = "idle";        break;
-    case ClawUpdateState::CHECKING:    stateStr = "checking";    break;
-    case ClawUpdateState::DOWNLOADING: stateStr = "downloading"; break;
-    case ClawUpdateState::READY:       stateStr = "ready";       break;
-    case ClawUpdateState::ERROR:       stateStr = "error";       break;
-    default:                           stateStr = "unknown";     break;
+    case ClawUpdateState::IDLE:
+      stateStr = "idle";
+      break;
+    case ClawUpdateState::CHECKING:
+      stateStr = "checking";
+      break;
+    case ClawUpdateState::DOWNLOADING:
+      stateStr = "downloading";
+      break;
+    case ClawUpdateState::READY:
+      stateStr = "ready";
+      break;
+    case ClawUpdateState::ERROR:
+      stateStr = "error";
+      break;
+    default:
+      stateStr = "unknown";
+      break;
   }
   char buf[256];
-  snprintf(buf, sizeof(buf),
-           "{\"state\":\"%s\",\"downloaded\":%zu,\"total\":%zu,\"version\":\"%s\",\"error\":\"%s\"}",
+  snprintf(buf, sizeof(buf), "{\"state\":\"%s\",\"downloaded\":%zu,\"total\":%zu,\"version\":\"%s\",\"error\":\"%s\"}",
            stateStr, (size_t)s_clawDownloaded, (size_t)s_clawTotal, s_clawVersion, s_clawError);
   server->send(200, "application/json", buf);
 }
 
 CrossPointWebServer::ClawUpdateProgress CrossPointWebServer::getClawUpdateProgress() {
   ClawUpdateProgress p;
-  p.state      = s_clawState;
+  p.state = s_clawState;
   p.downloaded = s_clawDownloaded;
-  p.total      = s_clawTotal;
-  p.version    = s_clawVersion;
-  p.error      = s_clawError;
+  p.total = s_clawTotal;
+  p.version = s_clawVersion;
+  p.error = s_clawError;
   return p;
 }
 
 void CrossPointWebServer::handleGetOtaStatus() const {
   const char* stateStr;
   switch (s_otaState) {
-    case OtaApiState::IDLE:             stateStr = "idle";             break;
-    case OtaApiState::CHECKING:         stateStr = "checking";         break;
-    case OtaApiState::UPDATE_AVAILABLE: stateStr = "update_available"; break;
-    case OtaApiState::NO_UPDATE:        stateStr = "no_update";        break;
-    case OtaApiState::INSTALLING:       stateStr = "installing";       break;
-    case OtaApiState::COMPLETE:         stateStr = "complete";         break;
-    case OtaApiState::ERROR:            stateStr = "error";            break;
-    default:                            stateStr = "unknown";          break;
+    case OtaApiState::IDLE:
+      stateStr = "idle";
+      break;
+    case OtaApiState::CHECKING:
+      stateStr = "checking";
+      break;
+    case OtaApiState::UPDATE_AVAILABLE:
+      stateStr = "update_available";
+      break;
+    case OtaApiState::NO_UPDATE:
+      stateStr = "no_update";
+      break;
+    case OtaApiState::INSTALLING:
+      stateStr = "installing";
+      break;
+    case OtaApiState::COMPLETE:
+      stateStr = "complete";
+      break;
+    case OtaApiState::ERROR:
+      stateStr = "error";
+      break;
+    default:
+      stateStr = "unknown";
+      break;
   }
   char buf[256];
   snprintf(buf, sizeof(buf),
            "{\"state\":\"%s\",\"latestVersion\":\"%s\",\"currentVersion\":\"%s\","
            "\"downloaded\":%zu,\"total\":%zu,\"error\":\"%s\"}",
-           stateStr, s_otaLatestVersion, CROSSPOINT_VERSION,
-           (size_t)s_otaDownloaded, (size_t)s_otaTotal, s_otaError);
+           stateStr, s_otaLatestVersion, CROSSPOINT_VERSION, (size_t)s_otaDownloaded, (size_t)s_otaTotal, s_otaError);
   server->send(200, "application/json", buf);
 }
 
@@ -1972,4 +1993,3 @@ void CrossPointWebServer::handlePostOtaInstall() {
   xTaskCreate(otaInstallTask, "OtaInstall", 8192, nullptr, 1, &s_otaInstallTaskHandle);
   server->send(200, "text/plain", "OTA install started");
 }
-

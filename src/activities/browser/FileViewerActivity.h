@@ -13,8 +13,7 @@ class FileViewerActivity final : public Activity {
  public:
   static constexpr size_t MAX_BYTES = 8192;
 
-  explicit FileViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                              const std::string& filePath)
+  explicit FileViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& filePath)
       : Activity("FileViewer", renderer, mappedInput), filePath(filePath) {}
 
   void onEnter() override;

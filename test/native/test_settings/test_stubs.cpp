@@ -1,12 +1,13 @@
 // Link-time stubs for native unit tests.
 // Provides minimal implementations of SDK/device functions that are referenced
 // by the code under test but never actually called during the test scenarios.
+#include <I18n.h>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "RecentBooksStore.h"
 #include "WifiCredentialStore.h"
-#include <I18n.h>
 
 // Static singleton instances (declared extern in the headers)
 CrossPointSettings CrossPointSettings::instance;
@@ -89,8 +90,6 @@ RecentBooksStore RecentBooksStore::instance;
 bool RecentBooksStore::saveToFile() const { return false; }
 bool RecentBooksStore::loadFromFile() { return false; }
 bool RecentBooksStore::loadFromBinaryFile() { return false; }
-void RecentBooksStore::addBook(const std::string&, const std::string&, const std::string&,
-                               const std::string&) {}
-void RecentBooksStore::updateBook(const std::string&, const std::string&, const std::string&,
-                                  const std::string&) {}
+void RecentBooksStore::addBook(const std::string&, const std::string&, const std::string&, const std::string&) {}
+void RecentBooksStore::updateBook(const std::string&, const std::string&, const std::string&, const std::string&) {}
 RecentBook RecentBooksStore::getDataFromBook(std::string) const { return {}; }

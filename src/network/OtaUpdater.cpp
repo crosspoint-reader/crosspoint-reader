@@ -14,20 +14,23 @@
 // image validation (which fails for unsigned Arduino builds lacking an embedded SHA256).
 static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
   if (!newPart) return ESP_ERR_INVALID_ARG;
-  const esp_partition_t* otaPart = esp_partition_find_first(
-      ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
+  const esp_partition_t* otaPart =
+      esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
   if (!otaPart) return ESP_ERR_NOT_FOUND;
 
-  static constexpr size_t ENTRY_SIZE   = 32;
-  static constexpr size_t SECTOR_SIZE  = 0x1000;
+  static constexpr size_t ENTRY_SIZE = 32;
+  static constexpr size_t SECTOR_SIZE = 0x1000;
   struct __attribute__((packed)) OtaEntry {
-    uint32_t seq; uint8_t label[20]; uint32_t state; uint32_t crc;
+    uint32_t seq;
+    uint8_t label[20];
+    uint32_t state;
+    uint32_t crc;
   };
 
   OtaEntry e0, e1;
   memset(&e0, 0xFF, sizeof(e0));
   memset(&e1, 0xFF, sizeof(e1));
-  esp_partition_read(otaPart, 0,           &e0, sizeof(e0));
+  esp_partition_read(otaPart, 0, &e0, sizeof(e0));
   esp_partition_read(otaPart, SECTOR_SIZE, &e1, sizeof(e1));
 
   uint32_t seq0 = (e0.seq == 0xFFFFFFFF) ? 0 : e0.seq;
@@ -52,8 +55,7 @@ static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
   // esp_ota_mark_app_valid_cancel_rollback(), which FAILS for unsigned builds.
   entry.state = ESP_OTA_IMG_VALID;
   // Use official bootloader CRC — covers ota_seq field only (4 bytes)
-  entry.crc = bootloader_common_ota_select_crc(
-      reinterpret_cast<const esp_ota_select_entry_t*>(&entry));
+  entry.crc = bootloader_common_ota_select_crc(reinterpret_cast<const esp_ota_select_entry_t*>(&entry));
 
   esp_err_t err = esp_partition_erase_range(otaPart, writeOffset, SECTOR_SIZE);
   if (err != ESP_OK) return err;

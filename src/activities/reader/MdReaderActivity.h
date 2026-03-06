@@ -50,8 +50,7 @@ class MdReaderActivity final : public Activity {
 
  public:
   explicit MdReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)
-      : Activity("MdReader", renderer, mappedInput),
-        txt(std::move(txt)) {}
+      : Activity("MdReader", renderer, mappedInput), txt(std::move(txt)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

@@ -1,9 +1,10 @@
 #pragma once
 // Stub for native unit tests — all storage ops are no-ops / return safe defaults
-#include "Arduino.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
+
+#include "Arduino.h"
 
 struct FsFile {
   bool operator!() const { return true; }

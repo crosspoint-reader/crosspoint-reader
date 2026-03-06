@@ -6,7 +6,6 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "fontIds.h"
 
 namespace {
 constexpr int MENU_ITEM_COUNT = 3;

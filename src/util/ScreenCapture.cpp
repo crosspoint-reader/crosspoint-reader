@@ -19,12 +19,12 @@ constexpr int OUT_W = EInkDisplay::DISPLAY_HEIGHT;  // 480
 constexpr int OUT_H = EInkDisplay::DISPLAY_WIDTH;   // 800
 
 // Source landscape buffer dimensions
-constexpr int SRC_W = EInkDisplay::DISPLAY_WIDTH;           // 800
-constexpr int SRC_H = EInkDisplay::DISPLAY_HEIGHT;          // 480
+constexpr int SRC_W = EInkDisplay::DISPLAY_WIDTH;                    // 800
+constexpr int SRC_H = EInkDisplay::DISPLAY_HEIGHT;                   // 480
 constexpr int SRC_BYTES_PER_ROW = EInkDisplay::DISPLAY_WIDTH_BYTES;  // 100
 
 // Output 1-bit BMP row width (480 px / 8 = 60 bytes, already 4-byte aligned)
-constexpr int OUT_BYTES_PER_ROW = OUT_W / 8;  // = 60
+constexpr int OUT_BYTES_PER_ROW = OUT_W / 8;                                       // = 60
 constexpr uint32_t IMAGE_SIZE = static_cast<uint32_t>(OUT_BYTES_PER_ROW) * OUT_H;  // 48,000
 
 void writeBmpHeader(FsFile& f) {
@@ -35,20 +35,20 @@ void writeBmpHeader(FsFile& f) {
   f.write('M');
   write32(f, FILE_SIZE);
   write32(f, 0);            // reserved
-  write32(f, 14 + 40 + 8); // offset to pixel data
+  write32(f, 14 + 40 + 8);  // offset to pixel data
 
   // DIB header / BITMAPINFOHEADER (40 bytes)
-  write32(f, 40);           // header size
-  write32s(f, OUT_W);       // image width  (480)
-  write32s(f, -OUT_H);      // image height (-800, negative = top-down row order)
-  write16(f, 1);            // colour planes
-  write16(f, 1);            // bits per pixel
-  write32(f, 0);            // compression (BI_RGB)
-  write32(f, IMAGE_SIZE);   // raw image size
-  write32(f, 2835);         // x pixels/metre (≈72 dpi)
-  write32(f, 2835);         // y pixels/metre
-  write32(f, 2);            // colours in table
-  write32(f, 2);            // important colours
+  write32(f, 40);          // header size
+  write32s(f, OUT_W);      // image width  (480)
+  write32s(f, -OUT_H);     // image height (-800, negative = top-down row order)
+  write16(f, 1);           // colour planes
+  write16(f, 1);           // bits per pixel
+  write32(f, 0);           // compression (BI_RGB)
+  write32(f, IMAGE_SIZE);  // raw image size
+  write32(f, 2835);        // x pixels/metre (≈72 dpi)
+  write32(f, 2835);        // y pixels/metre
+  write32(f, 2);           // colours in table
+  write32(f, 2);           // important colours
 
   // 2-colour palette (8 bytes)
   // Index 0 = black, index 1 = white  (matches frame buffer: 0=black, 1=white)
@@ -69,9 +69,9 @@ void writeRotatedPixels(FsFile& f, const uint8_t* src) {
 
   for (int oy = 0; oy < OUT_H; oy++) {
     // All pixels in this output row share the same source column.
-    const int srcX    = oy;                        // source column (0..799)
-    const int srcBOff = srcX / 8;                  // byte offset within source row
-    const int srcShft = 7 - (srcX % 8);            // bit position within that byte
+    const int srcX = oy;                 // source column (0..799)
+    const int srcBOff = srcX / 8;        // byte offset within source row
+    const int srcShft = 7 - (srcX % 8);  // bit position within that byte
 
     // Start with all-white output row, then punch in black pixels.
     memset(rowBuf, 0xFF, OUT_BYTES_PER_ROW);

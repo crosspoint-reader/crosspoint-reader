@@ -7,8 +7,7 @@
 #define MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL (-0x002A)
 #define MBEDTLS_ERR_BASE64_INVALID_CHARACTER (-0x002C)
 
-inline int mbedtls_base64_decode(unsigned char* dst, size_t dlen, size_t* olen,
-                                  const unsigned char* src, size_t slen) {
+inline int mbedtls_base64_decode(unsigned char* dst, size_t dlen, size_t* olen, const unsigned char* src, size_t slen) {
   if (!dst) {
     if (olen) *olen = slen;
     return MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL;

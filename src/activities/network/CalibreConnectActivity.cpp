@@ -188,7 +188,8 @@ void CalibreConnectActivity::render(RenderLock&&) {
 
     int y = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 4;
     const auto heightText12 = renderer.getTextHeight(PULSR_12_FONT_ID);
-    renderer.drawText(PULSR_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_SETUP), true, EpdFontFamily::BOLD);
+    renderer.drawText(PULSR_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_SETUP), true,
+                      EpdFontFamily::BOLD);
     y += heightText12 + metrics.verticalSpacing * 2;
 
     renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_INSTRUCTION_1));
@@ -197,7 +198,8 @@ void CalibreConnectActivity::render(RenderLock&&) {
     renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y + height * 3, tr(STR_CALIBRE_INSTRUCTION_4));
 
     y += height * 3 + metrics.verticalSpacing * 4;
-    renderer.drawText(PULSR_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_STATUS), true, EpdFontFamily::BOLD);
+    renderer.drawText(PULSR_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_STATUS), true,
+                      EpdFontFamily::BOLD);
     y += heightText12 + metrics.verticalSpacing * 2;
 
     if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {

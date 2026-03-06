@@ -4,12 +4,12 @@
 namespace RssFeedSync {
 
 enum class State {
-  IDLE,        // Not active — pill hidden
-  FETCHING,    // Requesting feed URL
-  PARSING,     // Got response, parsing XML
-  DOWNLOADING, // Downloading individual files (n of total)
-  ERROR,       // Fetch or parse failed
-  DONE,        // All files processed — briefly shown then → IDLE
+  IDLE,         // Not active — pill hidden
+  FETCHING,     // Requesting feed URL
+  PARSING,      // Got response, parsing XML
+  DOWNLOADING,  // Downloading individual files (n of total)
+  ERROR,        // Fetch or parse failed
+  DONE,         // All files processed — briefly shown then → IDLE
 };
 
 /// Start background sync task. No-op if feed URL empty, WiFi not connected, already running, or suppressed.

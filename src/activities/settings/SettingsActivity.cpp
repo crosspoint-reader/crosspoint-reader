@@ -11,11 +11,11 @@
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
-#include "activities/util/KeyboardEntryActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
-#include "activities/network/WifiSelectionActivity.h"
 #include "WifiCredentialStore.h"
+#include "activities/network/WifiSelectionActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -49,13 +49,14 @@ void SettingsActivity::onEnter() {
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  systemSettings.push_back(
-      SettingInfo::DynamicString(StrId::STR_WIFI_NETWORK,
-                                 [] { return WIFI_STORE.getLastConnectedSsid().empty()
-                                          ? std::string("(none)")
-                                          : WIFI_STORE.getLastConnectedSsid(); },
-                                 [](const std::string&) {})
-          .withDeviceOnly());
+  systemSettings.push_back(SettingInfo::DynamicString(
+                               StrId::STR_WIFI_NETWORK,
+                               [] {
+                                 return WIFI_STORE.getLastConnectedSsid().empty() ? std::string("(none)")
+                                                                                  : WIFI_STORE.getLastConnectedSsid();
+                               },
+                               [](const std::string&) {})
+                               .withDeviceOnly());
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
@@ -104,12 +105,12 @@ void SettingsActivity::loop() {
 
   // Up/Down navigate the settings list
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount);
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
     requestUpdate();
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount);
+    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
     requestUpdate();
   }
 
@@ -151,10 +152,18 @@ void SettingsActivity::enterCategory(int categoryIndex) {
   selectedCategoryIndex = categoryIndex;
   selectedSettingIndex = 0;
   switch (selectedCategoryIndex) {
-    case 0: currentSettings = &displaySettings; break;
-    case 1: currentSettings = &readerSettings; break;
-    case 2: currentSettings = &controlsSettings; break;
-    case 3: currentSettings = &systemSettings; break;
+    case 0:
+      currentSettings = &displaySettings;
+      break;
+    case 1:
+      currentSettings = &readerSettings;
+      break;
+    case 2:
+      currentSettings = &controlsSettings;
+      break;
+    case 3:
+      currentSettings = &systemSettings;
+      break;
   }
   settingsCount = static_cast<int>(currentSettings->size());
   requestUpdate();
@@ -297,7 +306,8 @@ void SettingsActivity::render(RenderLock&&) {
       selectedSettingIndex < static_cast<int>(systemSettings.size()) &&
       systemSettings[selectedSettingIndex].action == SettingAction::FeedSync) {
     const char* hint = tr(STR_FEED_SYNC_HINT);
-    const int hintY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - renderer.getTextHeight(SMALL_FONT_ID) - 4;
+    const int hintY =
+        pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - renderer.getTextHeight(SMALL_FONT_ID) - 4;
     const int hintW = renderer.getTextWidth(SMALL_FONT_ID, hint);
     const int hintX = (pageWidth - hintW) / 2;
     renderer.drawText(SMALL_FONT_ID, hintX, hintY, hint, /*black=*/true);

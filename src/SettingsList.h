@@ -29,23 +29,24 @@ inline std::vector<SettingInfo> getSettingsList() {
                                    {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
                                    "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY));
   list.push_back(SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
-                                   {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS},
-                                   "hideBatteryPercentage", StrId::STR_CAT_DISPLAY));
-  list.push_back(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-                                   {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
-                                    StrId::STR_PAGES_30},
-                                   "refreshFrequency", StrId::STR_CAT_DISPLAY));
-  list.push_back(SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                                   {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                                    StrId::STR_THEME_PULSR},
-                                   "uiTheme", StrId::STR_CAT_DISPLAY));
+                                   {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
+                                   StrId::STR_CAT_DISPLAY));
+  list.push_back(SettingInfo::Enum(
+      StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
+      {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
+      "refreshFrequency", StrId::STR_CAT_DISPLAY));
+  list.push_back(SettingInfo::Enum(
+      StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
+      {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED, StrId::STR_THEME_PULSR},
+      "uiTheme", StrId::STR_CAT_DISPLAY));
   list.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                                      StrId::STR_CAT_DISPLAY));
 
   // --- Reader ---
-  list.push_back(SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                                   {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC, StrId::STR_ANTONIO},
-                                   "fontFamily", StrId::STR_CAT_READER));
+  list.push_back(
+      SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
+                        {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC, StrId::STR_ANTONIO},
+                        "fontFamily", StrId::STR_CAT_READER));
   list.push_back(SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
                                    {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE},
                                    "fontSize", StrId::STR_CAT_READER));
@@ -54,18 +55,18 @@ inline std::vector<SettingInfo> getSettingsList() {
                                    StrId::STR_CAT_READER));
   list.push_back(SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5},
                                     "screenMargin", StrId::STR_CAT_READER));
-  list.push_back(SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
-                                   {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER,
-                                    StrId::STR_ALIGN_RIGHT, StrId::STR_BOOK_S_STYLE},
-                                   "paragraphAlignment", StrId::STR_CAT_READER));
+  list.push_back(SettingInfo::Enum(
+      StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
+      {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT, StrId::STR_BOOK_S_STYLE},
+      "paragraphAlignment", StrId::STR_CAT_READER));
   list.push_back(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
                                      StrId::STR_CAT_READER));
   list.push_back(SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled,
                                      "hyphenationEnabled", StrId::STR_CAT_READER));
-  list.push_back(SettingInfo::Enum(StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
-                                   {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
-                                    StrId::STR_LANDSCAPE_CCW},
-                                   "orientation", StrId::STR_CAT_READER));
+  list.push_back(
+      SettingInfo::Enum(StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
+                        {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED, StrId::STR_LANDSCAPE_CCW},
+                        "orientation", StrId::STR_CAT_READER));
   list.push_back(SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
                                      "extraParagraphSpacing", StrId::STR_CAT_READER));
   list.push_back(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
@@ -82,10 +83,10 @@ inline std::vector<SettingInfo> getSettingsList() {
                                    StrId::STR_CAT_CONTROLS));
 
   // --- System ---
-  list.push_back(SettingInfo::Enum(StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
-                                   {StrId::STR_MIN_1, StrId::STR_MIN_5, StrId::STR_MIN_10, StrId::STR_MIN_15,
-                                    StrId::STR_MIN_30},
-                                   "sleepTimeout", StrId::STR_CAT_SYSTEM));
+  list.push_back(
+      SettingInfo::Enum(StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
+                        {StrId::STR_MIN_1, StrId::STR_MIN_5, StrId::STR_MIN_10, StrId::STR_MIN_15, StrId::STR_MIN_30},
+                        "sleepTimeout", StrId::STR_CAT_SYSTEM));
 
   // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
   list.push_back(SettingInfo::DynamicString(
@@ -119,8 +120,8 @@ inline std::vector<SettingInfo> getSettingsList() {
       "koMatchMethod", StrId::STR_KOREADER_SYNC));
 
   // --- OPDS Browser (web-only, uses CrossPointSettings char arrays) ---
-  list.push_back(SettingInfo::String(StrId::STR_OPDS_SERVER_URL, SETTINGS.opdsServerUrl,
-                                     sizeof(SETTINGS.opdsServerUrl), "opdsServerUrl", StrId::STR_OPDS_BROWSER));
+  list.push_back(SettingInfo::String(StrId::STR_OPDS_SERVER_URL, SETTINGS.opdsServerUrl, sizeof(SETTINGS.opdsServerUrl),
+                                     "opdsServerUrl", StrId::STR_OPDS_BROWSER));
   list.push_back(SettingInfo::String(StrId::STR_USERNAME, SETTINGS.opdsUsername, sizeof(SETTINGS.opdsUsername),
                                      "opdsUsername", StrId::STR_OPDS_BROWSER));
   list.push_back(SettingInfo::String(StrId::STR_PASSWORD, SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword),
@@ -130,9 +131,9 @@ inline std::vector<SettingInfo> getSettingsList() {
   // --- Status Bar Settings (web-only) ---
   list.push_back(SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                                      "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR));
-  list.push_back(
-      SettingInfo::Toggle(StrId::STR_BOOK_PROGRESS_PERCENTAGE, &CrossPointSettings::statusBarBookProgressPercentage,
-                          "statusBarBookProgressPercentage", StrId::STR_CUSTOMISE_STATUS_BAR));
+  list.push_back(SettingInfo::Toggle(StrId::STR_BOOK_PROGRESS_PERCENTAGE,
+                                     &CrossPointSettings::statusBarBookProgressPercentage,
+                                     "statusBarBookProgressPercentage", StrId::STR_CUSTOMISE_STATUS_BAR));
   list.push_back(SettingInfo::Enum(StrId::STR_PROGRESS_BAR, &CrossPointSettings::statusBarProgressBar,
                                    {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE}, "statusBarProgressBar",
                                    StrId::STR_CUSTOMISE_STATUS_BAR));

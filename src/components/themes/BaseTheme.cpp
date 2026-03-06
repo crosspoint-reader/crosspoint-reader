@@ -246,8 +246,9 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       // Draw value
       std::string valueText = rowValue(i);
       const auto valueTextWidth = renderer.getTextWidth(PULSR_10_FONT_ID, valueText.c_str());
-      renderer.drawText(PULSR_10_FONT_ID, rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth,
-                        itemY, valueText.c_str(), i != selectedIndex);
+      renderer.drawText(PULSR_10_FONT_ID,
+                        rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth, itemY,
+                        valueText.c_str(), i != selectedIndex);
     }
   }
 }
@@ -300,8 +301,9 @@ void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
     rightSpace += rightLabelWidth + 10;
   }
 
-  auto truncatedLabel = renderer.truncatedText(
-      PULSR_12_FONT_ID, label, rect.width - BaseMetrics::values.contentSidePadding - rightSpace, EpdFontFamily::REGULAR);
+  auto truncatedLabel =
+      renderer.truncatedText(PULSR_12_FONT_ID, label, rect.width - BaseMetrics::values.contentSidePadding - rightSpace,
+                             EpdFontFamily::REGULAR);
   renderer.drawText(PULSR_12_FONT_ID, currentX, rect.y, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
 }
 

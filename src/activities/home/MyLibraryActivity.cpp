@@ -72,7 +72,7 @@ static void sortFileListByDate(std::vector<FileEntry>& entries) {
   std::sort(entries.begin(), entries.end(), [](const FileEntry& a, const FileEntry& b) {
     if (a.isDirectory != b.isDirectory) return a.isDirectory;
     if (a.modTime != b.modTime) return a.modTime > b.modTime;  // newest first
-    return naturalLess(a.name, b.name);  // tie-break alphabetically
+    return naturalLess(a.name, b.name);                        // tie-break alphabetically
   });
 }
 
@@ -90,12 +90,9 @@ static uint32_t getFileModTime(HalFile& file) {
 }
 
 static bool isSupportedFile(const std::string& filename) {
-  return StringUtils::checkFileExtension(filename, ".epub") ||
-         StringUtils::checkFileExtension(filename, ".xtch") ||
-         StringUtils::checkFileExtension(filename, ".xtc") ||
-         StringUtils::checkFileExtension(filename, ".txt") ||
-         StringUtils::checkFileExtension(filename, ".md") ||
-         StringUtils::checkFileExtension(filename, ".bmp") ||
+  return StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
+         StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
+         StringUtils::checkFileExtension(filename, ".md") || StringUtils::checkFileExtension(filename, ".bmp") ||
          StringUtils::checkFileExtension(filename, ".log");
 }
 
@@ -394,20 +391,19 @@ void MyLibraryActivity::render(RenderLock&&) {
   if (files.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
   } else {
-    GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-                 [this](int index) { return getDisplayName(files[index]); }, nullptr,
-                 [this](int index) { return fileEntryIcon(files[index]); });
+    GUI.drawList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
+        [this](int index) { return getDisplayName(files[index]); }, nullptr,
+        [this](int index) { return fileEntryIcon(files[index]); });
   }
 
   // Btn3 (Left): sort toggle — shows what pressing Left will switch TO
   const char* sortLabel = sortByDate ? tr(STR_SORT_NAME) : tr(STR_SORT_DATE);
-  const bool selectedIsText = !files.empty() && selectorIndex < files.size() &&
-                              !files[selectorIndex].isDirectory &&
+  const bool selectedIsText = !files.empty() && selectorIndex < files.size() && !files[selectorIndex].isDirectory &&
                               StringUtils::isTextViewableFile(files[selectorIndex].name);
-  const auto labels =
-      mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK),
-                            files.empty() ? "" : (selectedIsText ? tr(STR_PREVIEW) : tr(STR_OPEN)), sortLabel,
-                            files.empty() ? "" : tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK),
+                                            files.empty() ? "" : (selectedIsText ? tr(STR_PREVIEW) : tr(STR_OPEN)),
+                                            sortLabel, files.empty() ? "" : tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

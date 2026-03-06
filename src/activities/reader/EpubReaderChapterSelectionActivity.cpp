@@ -107,7 +107,8 @@ void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
 
   // Manual centering to honor content gutters.
   const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(PULSR_12_FONT_ID, tr(STR_SELECT_CHAPTER), EpdFontFamily::BOLD)) / 2;
+      contentX +
+      (contentWidth - renderer.getTextWidth(PULSR_12_FONT_ID, tr(STR_SELECT_CHAPTER), EpdFontFamily::BOLD)) / 2;
   renderer.drawText(PULSR_12_FONT_ID, titleX, 15 + contentY, tr(STR_SELECT_CHAPTER), true, EpdFontFamily::BOLD);
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;

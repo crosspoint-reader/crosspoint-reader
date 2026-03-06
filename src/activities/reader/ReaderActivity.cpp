@@ -4,16 +4,16 @@
 #include <I18n.h>
 
 #include "CrossPointSettings.h"
-#include "components/UITheme.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
-#include "Txt.h"
 #include "MdReaderActivity.h"
+#include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 #include "util/StringUtils.h"
 
 std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
@@ -28,13 +28,10 @@ bool ReaderActivity::isXtcFile(const std::string& path) {
   return StringUtils::checkFileExtension(path, ".xtc") || StringUtils::checkFileExtension(path, ".xtch");
 }
 
-bool ReaderActivity::isMdFile(const std::string& path) {
-  return StringUtils::checkFileExtension(path, ".md");
-}
+bool ReaderActivity::isMdFile(const std::string& path) { return StringUtils::checkFileExtension(path, ".md"); }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
-  return StringUtils::checkFileExtension(path, ".txt") ||
-         StringUtils::checkFileExtension(path, ".log");
+  return StringUtils::checkFileExtension(path, ".txt") || StringUtils::checkFileExtension(path, ".log");
 }
 
 bool ReaderActivity::isBmpFile(const std::string& path) { return StringUtils::checkFileExtension(path, ".bmp"); }

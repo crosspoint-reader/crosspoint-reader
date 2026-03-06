@@ -1,6 +1,5 @@
 #include "CrossPointWebServerActivity.h"
 
-#include <algorithm>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
@@ -8,6 +7,7 @@
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
+#include <algorithm>
 #include <cstddef>
 
 #include "MappedInputManager.h"
@@ -16,8 +16,8 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/QrUtils.h"
 #include "network/RssFeedSync.h"
+#include "util/QrUtils.h"
 
 namespace {
 // AP Mode configuration
@@ -310,7 +310,8 @@ void CrossPointWebServerActivity::loop() {
         const int pageW = renderer.getScreenWidth();
         if (prog.state == CrossPointWebServer::ClawUpdateState::DOWNLOADING) {
           renderer.clearScreen();
-          renderer.drawCenteredText(PULSR_10_FONT_ID, pageH / 2 - 40, "Downloading update...", true, EpdFontFamily::BOLD);
+          renderer.drawCenteredText(PULSR_10_FONT_ID, pageH / 2 - 40, "Downloading update...", true,
+                                    EpdFontFamily::BOLD);
           if (prog.total > 0) {
             const int pct = (int)(prog.downloaded * 100 / prog.total);
             const int barW = pageW - 60;
@@ -320,8 +321,8 @@ void CrossPointWebServerActivity::loop() {
             renderer.drawRect(barX, barY, barW, barH, 0);
             renderer.fillRect(barX, barY, barW * pct / 100, barH, 0);
             char pctStr[32];
-            snprintf(pctStr, sizeof(pctStr), "%d%%  (%.1f / %.1f MB)", pct,
-                     prog.downloaded / 1048576.0f, prog.total / 1048576.0f);
+            snprintf(pctStr, sizeof(pctStr), "%d%%  (%.1f / %.1f MB)", pct, prog.downloaded / 1048576.0f,
+                     prog.total / 1048576.0f);
             renderer.drawCenteredText(SMALL_FONT_ID, pageH / 2 + barH + 12, pctStr);
           }
           if (!prog.version.empty()) {
@@ -409,7 +410,6 @@ void CrossPointWebServerActivity::loop() {
             return;
           }
         }
-
       }
       lastHandleClientTime = millis();
     }
@@ -498,8 +498,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Build header title with live connection/transfer status
-  const auto uploadStatus = webServer ? webServer->getUploadStatus()
-                                      : CrossPointWebServer::WsUploadStatus{};
+  const auto uploadStatus = webServer ? webServer->getUploadStatus() : CrossPointWebServer::WsUploadStatus{};
 
   // Sync network status so the PULSR indicator reflects the current transfer state.
   UITheme::setNetworkStatus(true, uploadStatus.inProgress);
@@ -509,15 +508,14 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     // Keep title static during transfer — e-ink too slow for mid-transfer updates
   }
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 headerTitle.c_str(), nullptr);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, headerTitle.c_str(), nullptr);
   GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
                     connectedSSID.c_str());
 
   int startY = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
   // Center QR codes and text within the content area (to the right of any left bar)
   const int contentLeft = metrics.contentSidePadding;
-  const int contentW    = pageWidth - contentLeft;
+  const int contentW = pageWidth - contentLeft;
 
   // Draw centered text within the content area, wrapping to two lines if needed.
   // Returns the total pixel height consumed (one or two lines).
@@ -591,8 +589,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     }
     // In-progress upload
     if (uploadStatus.inProgress && !uploadStatus.filename.empty()) {
-      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY,
-                        (std::string("● ") + uploadStatus.filename).c_str(), true, EpdFontFamily::BOLD);
+      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, (std::string("● ") + uploadStatus.filename).c_str(),
+                        true, EpdFontFamily::BOLD);
     }
   } else {
     startY += metrics.verticalSpacing * 2;
@@ -621,8 +619,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     }
     // In-progress upload
     if (uploadStatus.inProgress && !uploadStatus.filename.empty()) {
-      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY,
-                        (std::string("● ") + uploadStatus.filename).c_str(), true, EpdFontFamily::BOLD);
+      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, (std::string("● ") + uploadStatus.filename).c_str(),
+                        true, EpdFontFamily::BOLD);
     }
   }
 

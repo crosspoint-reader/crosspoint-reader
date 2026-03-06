@@ -1,17 +1,17 @@
-#include <vector>
 #include "UITheme.h"
 
 #include <GfxRenderer.h>
 #include <Logging.h>
 
 #include <memory>
+#include <vector>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
-#include "components/themes/pulsr/PulsrTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
+#include "components/themes/pulsr/PulsrTheme.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -20,28 +20,38 @@ constexpr int SKIP_PAGE_MS = 700;
 
 UITheme UITheme::instance;
 
-static bool s_networkConnected    = false;
+static bool s_networkConnected = false;
 static bool s_networkTransferring = false;
-static bool s_httpServerActive    = false;
-static bool s_wifiAutoConnecting  = false;
+static bool s_httpServerActive = false;
+static bool s_wifiAutoConnecting = false;
 static std::vector<std::string> s_receivedFiles;
 static bool s_receivedFileDirty = false;
 
 void UITheme::setNetworkStatus(bool connected, bool transferring) {
-  s_networkConnected   = connected;
+  s_networkConnected = connected;
   s_networkTransferring = transferring;
 }
-bool UITheme::isNetworkConnected()   { return s_networkConnected; }
+bool UITheme::isNetworkConnected() { return s_networkConnected; }
 bool UITheme::isNetworkTransferring() { return s_networkTransferring; }
 void UITheme::setHttpServerActive(bool active) { s_httpServerActive = active; }
-bool UITheme::isHttpServerActive()    { return s_httpServerActive; }
+bool UITheme::isHttpServerActive() { return s_httpServerActive; }
 void UITheme::setWifiAutoConnecting(bool connecting) { s_wifiAutoConnecting = connecting; }
-bool UITheme::isWifiAutoConnecting()  { return s_wifiAutoConnecting; }
+bool UITheme::isWifiAutoConnecting() { return s_wifiAutoConnecting; }
 
-void UITheme::addReceivedFile(const std::string& name) { s_receivedFiles.push_back(name); s_receivedFileDirty = true; }
+void UITheme::addReceivedFile(const std::string& name) {
+  s_receivedFiles.push_back(name);
+  s_receivedFileDirty = true;
+}
 const std::vector<std::string>& UITheme::getReceivedFiles() { return s_receivedFiles; }
-void UITheme::clearReceivedFiles() { s_receivedFiles.clear(); s_receivedFileDirty = false; }
-bool UITheme::consumeReceivedFileDirty() { const bool d = s_receivedFileDirty; s_receivedFileDirty = false; return d; }
+void UITheme::clearReceivedFiles() {
+  s_receivedFiles.clear();
+  s_receivedFileDirty = false;
+}
+bool UITheme::consumeReceivedFileDirty() {
+  const bool d = s_receivedFileDirty;
+  s_receivedFileDirty = false;
+  return d;
+}
 
 UITheme::UITheme() {
   auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);

@@ -15,8 +15,8 @@ std::string FileViewerActivity::shortName() const {
 }
 
 // Wrap raw text into lines that fit within `maxWidth` pixels using the given font.
-static void wrapText(const std::string& text, std::vector<std::string>& out,
-                     const GfxRenderer& renderer, int fontId, int maxWidth) {
+static void wrapText(const std::string& text, std::vector<std::string>& out, const GfxRenderer& renderer, int fontId,
+                     int maxWidth) {
   std::string current;
   for (size_t i = 0; i <= text.size(); i++) {
     const char ch = (i < text.size()) ? text[i] : '\n';
@@ -66,7 +66,7 @@ void FileViewerActivity::loadFile() {
   }
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth  = renderer.getScreenWidth();
+  const int pageWidth = renderer.getScreenWidth();
   const int maxW = pageWidth - metrics.contentSidePadding - 8;
   wrapText(text, lines, renderer, SMALL_FONT_ID, maxW);
   if (lines.empty()) lines.push_back("[empty file]");
@@ -79,8 +79,8 @@ void FileViewerActivity::onEnter() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageHeight = renderer.getScreenHeight();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentH   = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const int lineH      = renderer.getTextHeight(SMALL_FONT_ID) + 2;
+  const int contentH = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int lineH = renderer.getTextHeight(SMALL_FONT_ID) + 2;
   linesPerPage = (lineH > 0) ? (contentH / lineH) : 20;
 
   requestUpdate();
@@ -124,18 +124,17 @@ void FileViewerActivity::loop() {
 void FileViewerActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto pageWidth  = renderer.getScreenWidth();
+  const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  const auto& metrics   = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 shortName().c_str());
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, shortName().c_str());
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentH   = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const int lineH      = renderer.getTextHeight(SMALL_FONT_ID) + 2;
-  const int textX      = metrics.contentSidePadding;
-  const int total      = static_cast<int>(lines.size());
+  const int contentH = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int lineH = renderer.getTextHeight(SMALL_FONT_ID) + 2;
+  const int textX = metrics.contentSidePadding;
+  const int total = static_cast<int>(lines.size());
 
   int y = contentTop;
   for (int i = scrollLine; i < total && (y + lineH) <= (contentTop + contentH); i++) {
@@ -149,8 +148,7 @@ void FileViewerActivity::render(RenderLock&&) {
     snprintf(pos, sizeof(pos), "%d/%d", scrollLine + 1, total);
     const int pw = renderer.getTextWidth(SMALL_FONT_ID, pos);
     renderer.drawText(SMALL_FONT_ID, pageWidth - pw - 4,
-                      contentTop + contentH - renderer.getTextHeight(SMALL_FONT_ID) - 2,
-                      pos, /*black=*/true);
+                      contentTop + contentH - renderer.getTextHeight(SMALL_FONT_ID) - 2, pos, /*black=*/true);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));

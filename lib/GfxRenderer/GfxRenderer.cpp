@@ -821,8 +821,8 @@ void GfxRenderer::invertScreen() const {
 
 // ── Version overlay (set once from main, drawn on every displayBuffer) ────────
 namespace {
-int    s_versionFontId = -1;
-char   s_versionStr[40] = {};
+int s_versionFontId = -1;
+char s_versionStr[40] = {};
 }  // namespace
 
 void GfxRenderer::setVersionOverlay(int fontId, const char* version) {

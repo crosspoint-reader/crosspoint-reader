@@ -25,10 +25,8 @@ class OtaUpdateActivity : public Activity {
   void onWifiSelectionComplete(bool success);
 
  public:
-  static constexpr char CLAW_RELEASE_URL[] =
-      "https://api.github.com/repos/laird/crosspoint-claw/releases/latest";
-  explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                             const char* releaseUrl = nullptr)
+  static constexpr char CLAW_RELEASE_URL[] = "https://api.github.com/repos/laird/crosspoint-claw/releases/latest";
+  explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* releaseUrl = nullptr)
       : Activity("OtaUpdate", renderer, mappedInput), updater(releaseUrl) {}
   void onEnter() override;
   void onExit() override;

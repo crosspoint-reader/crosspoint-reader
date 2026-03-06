@@ -1,12 +1,11 @@
 #include "TxtReaderActivity.h"
 
-#include <time.h>
-
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Serialization.h>
 #include <Utf8.h>
+#include <time.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"

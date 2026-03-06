@@ -1,5 +1,4 @@
 #include "RssFeedSync.h"
-#include "components/UITheme.h"
 
 #include <HalStorage.h>
 #include <Logging.h>
@@ -12,27 +11,29 @@
 
 #include "CrossPointSettings.h"
 #include "HttpDownloader.h"
+#include "components/UITheme.h"
 
 extern volatile bool dzFlashRequested;
 
 namespace {
 
 constexpr const char* TAG = "FEED";
-constexpr const char* SYNC_TIME_FILE = "/.crosspoint/feed_sync_time.txt";  // decimal Unix epoch of last processed item; SD-persistent across reflashes
-constexpr const char* FEED_MANIFEST_FILE = "/.crosspoint/feed_manifest.txt";  // full paths of files received in the last sync (one per line)
+constexpr const char* SYNC_TIME_FILE =
+    "/.crosspoint/feed_sync_time.txt";  // decimal Unix epoch of last processed item; SD-persistent across reflashes
+constexpr const char* FEED_MANIFEST_FILE =
+    "/.crosspoint/feed_manifest.txt";  // full paths of files received in the last sync (one per line)
 constexpr const char* NEWS_FILE = "/News.md";
 constexpr size_t NEWS_MAX_SIZE = 50 * 1024;
 
 TaskHandle_t syncTaskHandle = nullptr;
 RssFeedSync::State s_state = RssFeedSync::State::IDLE;
 int s_dlCurrent = 0;
-int s_dlTotal   = 0;
+int s_dlTotal = 0;
 unsigned long s_doneTime = 0;         // millis() when DONE was set, for auto-clear
 unsigned long s_suppressStartMs = 0;  // millis() when suppressSync() was called (0 = not suppressed)
 unsigned long s_suppressDurationMs = 0;
 
 static void setState(RssFeedSync::State st) { s_state = st; }
-
 
 // ---------------------------------------------------------------------------
 // RSS item model
@@ -43,9 +44,9 @@ struct RssItem {
   std::string description;
   std::string pubDate;
   std::string enclosureUrl;
-  uint32_t enclosureLength = 0;   // from enclosure length="" attribute; 0 = unknown
-  std::string crosspointType;     // "file", "image", "news", "firmware"
-  std::string crosspointPath;     // target path on SD card
+  uint32_t enclosureLength = 0;  // from enclosure length="" attribute; 0 = unknown
+  std::string crosspointType;    // "file", "image", "news", "firmware"
+  std::string crosspointPath;    // target path on SD card
 };
 
 // ---------------------------------------------------------------------------
@@ -307,19 +308,20 @@ class RssParserStream : public Stream {
 
 // Parse RFC 2822 "Fri, 27 Feb 2026 18:00:11 +0000" → Unix epoch seconds. Returns 0 on failure.
 static uint32_t parseRfc2822(const std::string& s) {
-  static const char* months[] = {"Jan","Feb","Mar","Apr","May","Jun",
-                                  "Jul","Aug","Sep","Oct","Nov","Dec"};
-  int day=0, year=0, hour=0, min=0, sec=0, month=0;
+  static const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  int day = 0, year = 0, hour = 0, min = 0, sec = 0, month = 0;
   char mon[4] = {};
-  if (sscanf(s.c_str(), "%*3s, %d %3s %d %d:%d:%d",
-             &day, mon, &year, &hour, &min, &sec) < 6) return 0;
+  if (sscanf(s.c_str(), "%*3s, %d %3s %d %d:%d:%d", &day, mon, &year, &hour, &min, &sec) < 6) return 0;
   for (int i = 0; i < 12; i++) {
-    if (strncasecmp(mon, months[i], 3) == 0) { month = i + 1; break; }
+    if (strncasecmp(mon, months[i], 3) == 0) {
+      month = i + 1;
+      break;
+    }
   }
   if (month == 0 || year < 1970) return 0;
   int y = year - 1970;
   uint32_t days = (uint32_t)y * 365u + (uint32_t)((y + 1) / 4);
-  static const int md[] = {0,31,59,90,120,151,181,212,243,273,304,334};
+  static const int md[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
   days += (uint32_t)md[month - 1] + (uint32_t)(day - 1);
   if (month > 2 && (year % 4 == 0)) days++;
   return days * 86400u + (uint32_t)hour * 3600u + (uint32_t)min * 60u + (uint32_t)sec;
@@ -503,8 +505,8 @@ void syncTask(void*) {
           if (itemTime > 0) oldestSuccess = itemTime;
           return;
         }
-        LOG_INF(TAG, "Re-download (size %u != expected %u): %s",
-                static_cast<unsigned>(existingSize), static_cast<unsigned>(item.enclosureLength), destPath.c_str());
+        LOG_INF(TAG, "Re-download (size %u != expected %u): %s", static_cast<unsigned>(existingSize),
+                static_cast<unsigned>(item.enclosureLength), destPath.c_str());
       }
       ensureParentDir(destPath);
       if (HttpDownloader::downloadToFile(item.enclosureUrl, destPath) != HttpDownloader::OK) {
@@ -649,7 +651,8 @@ void startSync() {
   if (syncTaskHandle != nullptr) return;
 
   s_state = RssFeedSync::State::FETCHING;  // set immediately so indicator lights before task starts
-  s_dlCurrent = 0; s_dlTotal = 0;
+  s_dlCurrent = 0;
+  s_dlTotal = 0;
   xTaskCreate(syncTask, "FeedSync", 16384, nullptr, 1, &syncTaskHandle);  // 16KB: HTTPS+Expat+std::string need headroom
 }
 
@@ -663,24 +666,37 @@ State getState() {
   if (s_state == State::DONE && millis() - s_doneTime > 5000) s_state = State::IDLE;
   return s_state;
 }
-bool isFeedActive() { return s_state != RssFeedSync::State::IDLE && s_state != RssFeedSync::State::DONE && s_state != RssFeedSync::State::ERROR; }
-bool isSyncing()    { return s_state == RssFeedSync::State::DOWNLOADING; }
-void getProgress(int& current, int& total) { current = s_dlCurrent; total = s_dlTotal; }
+bool isFeedActive() {
+  return s_state != RssFeedSync::State::IDLE && s_state != RssFeedSync::State::DONE &&
+         s_state != RssFeedSync::State::ERROR;
+}
+bool isSyncing() { return s_state == RssFeedSync::State::DOWNLOADING; }
+void getProgress(int& current, int& total) {
+  current = s_dlCurrent;
+  total = s_dlTotal;
+}
 
 const char* getStatusLabel() {
   switch (s_state) {
-    case RssFeedSync::State::FETCHING:    return "FEED";
-    case RssFeedSync::State::PARSING:     return "SYNC";
+    case RssFeedSync::State::FETCHING:
+      return "FEED";
+    case RssFeedSync::State::PARSING:
+      return "SYNC";
     case RssFeedSync::State::DOWNLOADING: {
       // "n/nn" progress — written into a static buffer
       static char buf[8];
-      if (s_dlTotal > 0) snprintf(buf, sizeof(buf), "%d/%d", s_dlCurrent + 1, s_dlTotal);
-      else snprintf(buf, sizeof(buf), "#%d", s_dlCurrent + 1);
+      if (s_dlTotal > 0)
+        snprintf(buf, sizeof(buf), "%d/%d", s_dlCurrent + 1, s_dlTotal);
+      else
+        snprintf(buf, sizeof(buf), "#%d", s_dlCurrent + 1);
       return buf;
     }
-    case RssFeedSync::State::ERROR:       return "ERR!";
-    case RssFeedSync::State::DONE:        return "DONE";
-    default:                 return "FEED";
+    case RssFeedSync::State::ERROR:
+      return "ERR!";
+    case RssFeedSync::State::DONE:
+      return "DONE";
+    default:
+      return "FEED";
   }
 }
 

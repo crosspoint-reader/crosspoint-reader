@@ -1,7 +1,5 @@
 #include "EpubReaderActivity.h"
 
-#include <time.h>
-
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FsHelpers.h>
@@ -9,6 +7,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <time.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"

@@ -9,11 +9,12 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
-#include "../.pio/libdeps/default/SdFat/src/common/FsDateTime.h"  // FsDateTime::setCallback
 #include <Update.h>
+#include <bootloader_common.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
-#include <bootloader_common.h>
+
+#include "../.pio/libdeps/default/SdFat/src/common/FsDateTime.h"  // FsDateTime::setCallback
 
 // Direct OTA data partition write — bypasses esp_ota_set_boot_partition()'s image
 // validation, which fails for Arduino/unsigned builds lacking an embedded SHA256.
@@ -21,8 +22,8 @@
 static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
   if (!newPart) return ESP_ERR_INVALID_ARG;
 
-  const esp_partition_t* otaPart = esp_partition_find_first(
-    ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
+  const esp_partition_t* otaPart =
+      esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
   if (!otaPart) return ESP_ERR_NOT_FOUND;
 
   // OTA select entry: seq(4) + label(20) + state(4) + crc(4) = 32 bytes
@@ -31,7 +32,7 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
 
   struct __attribute__((packed)) OtaEntry {
     uint32_t seq;
-    uint8_t  label[20];
+    uint8_t label[20];
     uint32_t state;
     uint32_t crc;
   };
@@ -40,7 +41,7 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
   OtaEntry e0, e1;
   memset(&e0, 0xFF, sizeof(e0));
   memset(&e1, 0xFF, sizeof(e1));
-  esp_partition_read(otaPart, 0,           &e0, sizeof(e0));
+  esp_partition_read(otaPart, 0, &e0, sizeof(e0));
   esp_partition_read(otaPart, SECTOR_SIZE, &e1, sizeof(e1));
 
   uint32_t seq0 = (e0.seq == 0xFFFFFFFF) ? 0 : e0.seq;
@@ -63,7 +64,7 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
 
   // Build the 32-byte entry matching esp_ota_select_entry_t layout
   OtaEntry entry;
-  entry.seq   = newSeq;
+  entry.seq = newSeq;
   memset(entry.label, 0xFF, sizeof(entry.label));
   // When called from setup() (self-confirm), write VALID so the bootloader
   // never rolls back.  When called during OTA, the caller passes the target
@@ -72,20 +73,19 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
   entry.state = ESP_OTA_IMG_VALID;
   // Use the official bootloader CRC function — guaranteed to match validation.
   // CRC covers ota_seq field only (4 bytes), per esp_flash_partitions.h comment.
-  entry.crc = bootloader_common_ota_select_crc(
-      reinterpret_cast<const esp_ota_select_entry_t*>(&entry));
+  entry.crc = bootloader_common_ota_select_crc(reinterpret_cast<const esp_ota_select_entry_t*>(&entry));
 
   LOG_INF("OTA", "forceSetBootPartition: part=%s(@0x%lx) idx=%lu seq0=%lu seq1=%lu → newSeq=%lu sector=%lu",
-          newPart->label, (unsigned long)newPart->address,
-          (unsigned long)partIdx,
-          (unsigned long)seq0, (unsigned long)seq1,
-          (unsigned long)newSeq, (unsigned long)(writeOffset / SECTOR_SIZE));
+          newPart->label, (unsigned long)newPart->address, (unsigned long)partIdx, (unsigned long)seq0,
+          (unsigned long)seq1, (unsigned long)newSeq, (unsigned long)(writeOffset / SECTOR_SIZE));
 
   esp_err_t err = esp_partition_erase_range(otaPart, writeOffset, SECTOR_SIZE);
   if (err != ESP_OK) return err;
   return esp_partition_write(otaPart, writeOffset, &entry, sizeof(entry));
 }
 
+#include <ESPmDNS.h>
+#include <WiFi.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -95,6 +95,7 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/BootActivity.h"
@@ -106,19 +107,16 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/network/NetworkModeSelectionActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
-#include "activities/util/KeyboardEntryActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/ButtonNavigator.h"
-#include "util/ScreenshotUtil.h"
-#include "util/ScreenCapture.h"
-#include "WifiCredentialStore.h"
 #include "network/CrossPointWebServer.h"
 #include "network/RssFeedSync.h"
-#include <WiFi.h>
-#include <ESPmDNS.h>
+#include "util/ButtonNavigator.h"
+#include "util/ScreenCapture.h"
+#include "util/ScreenshotUtil.h"
 
 // Expose the compile-time version string to other translation units (e.g. PulsrTheme).
 extern "C" const char* getVersionString() { return CROSSPOINT_VERSION; }
@@ -429,11 +427,17 @@ void dangerZoneAutoConnect() {
   LOG_INF("DZ", "Connected! IP=%s", WiFi.localIP().toString().c_str());
 
   configTime(0, 0, "pool.ntp.org");
-  { time_t t = 0; int tries = 0; while (time(&t) < 1000000000L && tries++ < 30) delay(100); }
+  {
+    time_t t = 0;
+    int tries = 0;
+    while (time(&t) < 1000000000L && tries++ < 30) delay(100);
+  }
   FsDateTime::setCallback([](uint16_t* date, uint16_t* tv) {
-    time_t now = ::time(nullptr); struct tm tm; localtime_r(&now, &tm);
-    *date = FS_DATE(tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday);
-    *tv   = FS_TIME(tm.tm_hour, tm.tm_min, tm.tm_sec);
+    time_t now = ::time(nullptr);
+    struct tm tm;
+    localtime_r(&now, &tm);
+    *date = FS_DATE(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
+    *tv = FS_TIME(tm.tm_hour, tm.tm_min, tm.tm_sec);
   });
 
   UITheme::setNetworkStatus(true, false);
@@ -503,14 +507,15 @@ void setup() {
   // Boot log: write early so any subsequent crash is detectable
   {
     const esp_reset_reason_t resetReason = esp_reset_reason();
-    const char* resetStr = (resetReason == ESP_RST_PANIC)    ? "panic"    :
-                           (resetReason == ESP_RST_INT_WDT)  ? "int_wdt"  :
-                           (resetReason == ESP_RST_TASK_WDT) ? "task_wdt" :
-                           (resetReason == ESP_RST_WDT)      ? "wdt"      :
-                           (resetReason == ESP_RST_BROWNOUT) ? "brownout" :
-                           (resetReason == ESP_RST_SW)       ? "sw"       :
-                           (resetReason == ESP_RST_POWERON)  ? "poweron"  :
-                           (resetReason == ESP_RST_DEEPSLEEP)? "deepsleep": "other";
+    const char* resetStr = (resetReason == ESP_RST_PANIC)       ? "panic"
+                           : (resetReason == ESP_RST_INT_WDT)   ? "int_wdt"
+                           : (resetReason == ESP_RST_TASK_WDT)  ? "task_wdt"
+                           : (resetReason == ESP_RST_WDT)       ? "wdt"
+                           : (resetReason == ESP_RST_BROWNOUT)  ? "brownout"
+                           : (resetReason == ESP_RST_SW)        ? "sw"
+                           : (resetReason == ESP_RST_POWERON)   ? "poweron"
+                           : (resetReason == ESP_RST_DEEPSLEEP) ? "deepsleep"
+                                                                : "other";
     Storage.mkdir("/.crosspoint");  // ensure hidden dir exists before writing logs
 
     // Write current firmware version to hidden file (for scripts, feed server, etc.)
@@ -538,8 +543,8 @@ void setup() {
     }
     if ((bootLog = Storage.open("/.crosspoint/boot.log", O_RDWR | O_CREAT | O_AT_END))) {
       char buf[160];
-      snprintf(buf, sizeof(buf), "version=%s reset=%s heap=%u uptime=%lu\n",
-               CROSSPOINT_VERSION, resetStr, ESP.getFreeHeap(), millis());
+      snprintf(buf, sizeof(buf), "version=%s reset=%s heap=%u uptime=%lu\n", CROSSPOINT_VERSION, resetStr,
+               ESP.getFreeHeap(), millis());
       bootLog.print(buf);
       bootLog.close();
       LOG_INF("MAIN", "Boot: version=%s reset=%s", CROSSPOINT_VERSION, resetStr);
@@ -589,7 +594,8 @@ void setup() {
 
     auto drawUpdateScreen = [&](int pct) {
       renderer.clearScreen();
-      renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 20, "Updating firmware...", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 20, "Updating firmware...", true,
+                                EpdFontFamily::BOLD);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 10, "Do not power off");
       renderer.drawRect(barX, barY, barW, barH, true);
       if (pct > 0) {
@@ -633,10 +639,12 @@ void setup() {
       Storage.remove("/firmware.bin");  // Always delete — prevents re-flash loop on next boot
       const bool logged = logOtaError(msg, fileSize, written);
       renderer.clearScreen();
-      renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 30, "Firmware update failed", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(PULSR_10_FONT_ID, pageHeight / 2 - 30, "Firmware update failed", true,
+                                EpdFontFamily::BOLD);
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2, msg);
-      renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 20,
-                                logged ? "Error saved to /.crosspoint/ota_error.log" : "Could not write /.crosspoint/ota_error.log");
+      renderer.drawCenteredText(
+          SMALL_FONT_ID, pageHeight / 2 + 20,
+          logged ? "Error saved to /.crosspoint/ota_error.log" : "Could not write /.crosspoint/ota_error.log");
       renderer.displayBuffer(HalDisplay::FULL_REFRESH);
       delay(15000);
     };
@@ -660,8 +668,7 @@ void setup() {
               if (memcmp(scanBuf + i, prefix, prefixLen) == 0) {
                 const char* ver = scanBuf + i + prefixLen;
                 size_t vLen = 0;
-                while (vLen < 63 && i + prefixLen + vLen < got &&
-                       static_cast<uint8_t>(ver[vLen]) >= 0x20 &&
+                while (vLen < 63 && i + prefixLen + vLen < got && static_cast<uint8_t>(ver[vLen]) >= 0x20 &&
                        static_cast<uint8_t>(ver[vLen]) <= 0x7e) {
                   vLen++;
                 }
@@ -686,8 +693,8 @@ void setup() {
       LOG_INF("MAIN", "firmware.bin is same version (%s) — skipping install, deleting file", CROSSPOINT_VERSION);
       Storage.remove("/firmware.bin");
       renderer.clearScreen();
-      renderer.drawCenteredText(PULSR_10_FONT_ID, renderer.getScreenHeight() / 2 - 20,
-                                "Firmware already up to date", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(PULSR_10_FONT_ID, renderer.getScreenHeight() / 2 - 20, "Firmware already up to date",
+                                true, EpdFontFamily::BOLD);
       char verBuf[80];
       snprintf(verBuf, sizeof(verBuf), "Running: %s", CROSSPOINT_VERSION);
       renderer.drawCenteredText(SMALL_FONT_ID, renderer.getScreenHeight() / 2 + 10, verBuf);
@@ -713,12 +720,10 @@ void setup() {
         // Use ESP-IDF OTA API: always write to the INACTIVE partition so the
         // running partition is never touched (safe even if flash is interrupted).
         const esp_partition_t* runningPart = esp_ota_get_running_partition();
-        const esp_partition_t* updatePart  = esp_ota_get_next_update_partition(nullptr);
-        LOG_INF("MAIN", "OTA: running=%s@0x%lx  target=%s@0x%lx",
-                runningPart ? runningPart->label : "?",
-                runningPart ? (unsigned long)runningPart->address : 0UL,
-                updatePart  ? updatePart->label  : "?",
-                updatePart  ? (unsigned long)updatePart->address  : 0UL);
+        const esp_partition_t* updatePart = esp_ota_get_next_update_partition(nullptr);
+        LOG_INF("MAIN", "OTA: running=%s@0x%lx  target=%s@0x%lx", runningPart ? runningPart->label : "?",
+                runningPart ? (unsigned long)runningPart->address : 0UL, updatePart ? updatePart->label : "?",
+                updatePart ? (unsigned long)updatePart->address : 0UL);
 
         if (!updatePart) {
           firmwareFile.close();
@@ -742,13 +747,22 @@ void setup() {
             while (written < fileSize) {
               const size_t toRead = min(sizeof(buf), fileSize - written);
               const int bytesRead = firmwareFile.read(buf, toRead);
-              if (bytesRead <= 0) { writeOk = false; break; }
+              if (bytesRead <= 0) {
+                writeOk = false;
+                break;
+              }
               err = esp_ota_write(otaHandle, buf, static_cast<size_t>(bytesRead));
-              if (err != ESP_OK) { writeOk = false; break; }
+              if (err != ESP_OK) {
+                writeOk = false;
+                break;
+              }
               written += static_cast<size_t>(bytesRead);
               yield();  // Feed watchdog during long SD read
               const int pct = static_cast<int>((written * 100) / fileSize);
-              if (pct >= lastPct + 5) { lastPct = pct; drawUpdateScreen(pct); }
+              if (pct >= lastPct + 5) {
+                lastPct = pct;
+                drawUpdateScreen(pct);
+              }
             }
             firmwareFile.close();
 
@@ -756,11 +770,10 @@ void setup() {
               esp_ota_abort(otaHandle);
               char errMsg[80];
               if (!writeOk) {
-                snprintf(errMsg, sizeof(errMsg), "ota_write at %u/%u: %s",
-                         (unsigned)written, (unsigned)fileSize, esp_err_to_name(err));
+                snprintf(errMsg, sizeof(errMsg), "ota_write at %u/%u: %s", (unsigned)written, (unsigned)fileSize,
+                         esp_err_to_name(err));
               } else {
-                snprintf(errMsg, sizeof(errMsg), "short read %u/%u",
-                         (unsigned)written, (unsigned)fileSize);
+                snprintf(errMsg, sizeof(errMsg), "short read %u/%u", (unsigned)written, (unsigned)fileSize);
               }
               LOG_ERR("MAIN", "OTA write failed: %s", errMsg);
               showError(errMsg, fileSize, written);
@@ -884,7 +897,8 @@ void runScreenshotTour() {
   activityManager.replaceActivity(std::make_unique<WifiSelectionActivity>(renderer, mappedInputManager, false));
   captureStep("wifi_scan");
 
-  activityManager.replaceActivity(std::make_unique<KeyboardEntryActivity>(renderer, mappedInputManager, "WIFI PASSWORD", "", 64, true));
+  activityManager.replaceActivity(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInputManager, "WIFI PASSWORD", "", 64, true));
   captureStep("keyboard");
 
   activityManager.goToBoot();
@@ -968,10 +982,11 @@ void loop() {
   {
     static unsigned long screenshotHoldStart = 0;
     static bool screenshotTriggered = false;
-    const bool powerHeld   = gpio.isPressed(HalGPIO::BTN_POWER);
+    const bool powerHeld = gpio.isPressed(HalGPIO::BTN_POWER);
     const bool confirmHeld = gpio.isPressed(HalGPIO::BTN_CONFIRM);
     if (powerHeld && confirmHeld && !screenshotTriggered) {
-      if (screenshotHoldStart == 0) screenshotHoldStart = millis();
+      if (screenshotHoldStart == 0)
+        screenshotHoldStart = millis();
       else if (millis() - screenshotHoldStart >= 1500) {
         screenshotTriggered = true;
         runScreenshotTour();

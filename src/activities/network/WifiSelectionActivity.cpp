@@ -1,5 +1,4 @@
 #include "WifiSelectionActivity.h"
-#include "network/RssFeedSync.h"
 
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -13,6 +12,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RssFeedSync.h"
 
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
