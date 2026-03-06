@@ -10,10 +10,10 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 17;
+constexpr uint8_t SECTION_FILE_VERSION = 18;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(uint8_t) + sizeof(uint32_t);
+                                 sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
@@ -44,7 +44,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
                                    sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
                                    sizeof(viewportHeight) + sizeof(pageCount) + sizeof(hyphenationEnabled) +
-                                   sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(uint32_t),
+                                   sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
   serialization::writePod(file, SECTION_FILE_VERSION);
   serialization::writePod(file, fontId);
@@ -56,8 +56,9 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   serialization::writePod(file, hyphenationEnabled);
   serialization::writePod(file, embeddedStyle);
   serialization::writePod(file, imageRendering);
-  serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0 when written)
-  serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset
+  serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
+  serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
+  serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
 }
 
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
@@ -239,10 +240,20 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     return false;
   }
 
-  // Go back and write LUT offset
-  file.seek(HEADER_SIZE - sizeof(uint32_t) - sizeof(pageCount));
+  // Write anchor-to-page map for fragment navigation (e.g. footnote targets)
+  const uint32_t anchorMapOffset = file.position();
+  const auto& anchors = visitor.getAnchors();
+  serialization::writePod(file, static_cast<uint16_t>(anchors.size()));
+  for (const auto& [anchor, page] : anchors) {
+    serialization::writeString(file, anchor);
+    serialization::writePod(file, page);
+  }
+
+  // Patch header with final pageCount, lutOffset, and anchorMapOffset
+  file.seek(HEADER_SIZE - sizeof(uint32_t) * 2 - sizeof(pageCount));
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
+  serialization::writePod(file, anchorMapOffset);
   file.close();
   if (cssParser) {
     cssParser->clear();
@@ -255,7 +266,7 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     return nullptr;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t));
+  file.seek(HEADER_SIZE - sizeof(uint32_t) * 2);
   uint32_t lutOffset;
   serialization::readPod(file, lutOffset);
   file.seek(lutOffset + sizeof(uint32_t) * currentPage);
@@ -266,4 +277,37 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   auto page = Page::deserialize(file);
   file.close();
   return page;
+}
+
+std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
+  FsFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
+  }
+
+  const uint32_t fileSize = f.size();
+  f.seek(HEADER_SIZE - sizeof(uint32_t));
+  uint32_t anchorMapOffset;
+  serialization::readPod(f, anchorMapOffset);
+  if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
+    f.close();
+    return std::nullopt;
+  }
+
+  f.seek(anchorMapOffset);
+  uint16_t count;
+  serialization::readPod(f, count);
+  for (uint16_t i = 0; i < count; i++) {
+    std::string key;
+    uint16_t page;
+    serialization::readString(f, key);
+    serialization::readPod(f, page);
+    if (key == anchor) {
+      f.close();
+      return page;
+    }
+  }
+
+  f.close();
+  return std::nullopt;
 }
