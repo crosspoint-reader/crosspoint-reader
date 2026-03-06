@@ -8,6 +8,7 @@
 
 #include "CrossPointSettings.h"
 #include "activities/Activity.h"
+#include "activities/reader/EpubReaderMenuActivity.h"
 
 struct MdLine {
   std::string text;
@@ -56,4 +57,5 @@ class MdReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  void applyOrientation(uint8_t orientation);
 };

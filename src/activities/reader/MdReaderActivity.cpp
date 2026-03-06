@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "activities/ActivityResult.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -299,6 +300,18 @@ void MdReaderActivity::loop() {
                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
                                     mappedInput.wasReleased(MappedInputManager::Button::Right));
 
+  // Confirm button opens the reader menu (orientation, etc.)
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    startActivityForResult(
+        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, txt ? txt->getPath() : "",
+                                                 currentPage + 1, totalPages, 0, SETTINGS.orientation, false),
+        [this](const ActivityResult& result) {
+          const auto& menu = std::get<MenuResult>(result.data);
+          applyOrientation(menu.orientation);
+        });
+    return;
+  }
+
   if (!prevTriggered && !nextTriggered) return;
 
   if (prevTriggered && currentPage > 0) {
@@ -311,6 +324,40 @@ void MdReaderActivity::loop() {
 }
 
 // ── Initialization ────────────────────────────────────────────────────────────
+
+
+void MdReaderActivity::applyOrientation(const uint8_t orientation) {
+  if (SETTINGS.orientation == orientation) return;
+
+  SETTINGS.orientation = orientation;
+  SETTINGS.saveToFile();
+
+  switch (orientation) {
+    case CrossPointSettings::ORIENTATION::PORTRAIT:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
+      break;
+    case CrossPointSettings::ORIENTATION::INVERTED:
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+      break;
+    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+      break;
+    default:
+      break;
+  }
+
+  // Reset all reader state so it re-paginates for the new viewport dimensions
+  initialized = false;
+  pageOffsets.clear();
+  pageCodeFences.clear();
+  pageSubLineStarts.clear();
+  currentPageLines.clear();
+  currentPage = 0;
+  requestUpdate();
+}
 
 void MdReaderActivity::initializeReader() {
   if (initialized) return;
