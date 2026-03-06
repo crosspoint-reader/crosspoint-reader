@@ -54,6 +54,14 @@ done
 
 python fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf > ../builtinFonts/notosans_8_regular.h
 
+# Recovery firmware is very size-constrained, we can only include a single UI font
+style="Regular"
+size=10
+font_name="recovery_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
+font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
+output_path="../builtinFonts/${font_name}.h"
+python fontconvert.py $font_name $size $font_path --no-default-intervals --additional-intervals 0x0000,0x007F > $output_path
+
 echo ""
 echo "Running compression verification..."
 python verify_compression.py ../builtinFonts/
