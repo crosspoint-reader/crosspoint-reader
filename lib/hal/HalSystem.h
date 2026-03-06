@@ -3,15 +3,6 @@
 #include <cstdint>
 #include <string>
 
-extern "C" {
-
-void __real_panic_abort(const char* message);
-void __wrap_panic_abort(const char* message);
-
-void __real_panic_print_backtrace(const void* frame, int core);
-void __wrap_panic_print_backtrace(const void* frame, int core);
-}
-
 namespace HalSystem {
 struct StackFrame {
   uint32_t sp;
