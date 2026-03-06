@@ -181,7 +181,7 @@ void EpubReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    activityManager.goToMyLibrary(epub ? epub->getPath() : "");
+    activityManager.goToFileBrowser(epub ? epub->getPath() : "");
     return;
   }
 
@@ -572,14 +572,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle)) {
+                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                  SETTINGS.imageRendering)) {
       LOG_DBG("ERS", "Cache not found, building...");
 
       const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, popupFn)) {
+                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                      SETTINGS.imageRendering, popupFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
         return;
@@ -592,6 +594,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       section->currentPage = section->pageCount - 1;
     } else {
       section->currentPage = nextPageNumber;
+    }
+
+    if (!pendingAnchor.empty()) {
+      if (const auto page = section->getPageForAnchor(pendingAnchor)) {
+        section->currentPage = *page;
+        LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), *page);
+      } else {
+        LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
+      }
+      pendingAnchor.clear();
     }
 
     // handles changes in reader settings and reset to approximate position based on cached progress
@@ -805,12 +817,18 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, section->currentPage);
   }
 
+  // Extract fragment anchor (e.g. "#note1" or "chapter2.xhtml#note1")
+  std::string anchor;
+  const auto hashPos = hrefStr.find('#');
+  if (hashPos != std::string::npos && hashPos + 1 < hrefStr.size()) {
+    anchor = hrefStr.substr(hashPos + 1);
+  }
+
   // Check for same-file anchor reference (#anchor only)
   bool sameFile = !hrefStr.empty() && hrefStr[0] == '#';
 
   int targetSpineIndex;
   if (sameFile) {
-    // Same file — navigate to page 0 of current spine item
     targetSpineIndex = currentSpineIndex;
   } else {
     targetSpineIndex = epub->resolveHrefToSpineIndex(hrefStr);
@@ -824,6 +842,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
   {
     RenderLock lock(*this);
+    pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
     section.reset();

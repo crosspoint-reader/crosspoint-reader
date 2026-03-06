@@ -134,6 +134,9 @@ class CrossPointSettings {
   // UI Theme
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, PULSR = 3, UI_THEME_COUNT };
 
+  // Image rendering in EPUB reader
+  enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -201,6 +204,11 @@ class CrossPointSettings {
   // Danger Zone: automated firmware dev cycle (password-protected)
   uint8_t dangerZoneEnabled = 0;     // 0=off, 1=enabled
   char dangerZonePassword[32] = "";  // Set on physical device only; API returns 403 without it
+
+  // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
+  uint8_t showHiddenFiles = 0;
+  // Image rendering mode in EPUB reader
+  uint8_t imageRendering = IMAGES_DISPLAY;
 
   ~CrossPointSettings() = default;
 

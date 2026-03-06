@@ -6,6 +6,7 @@
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
+#include <HalSystem.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
@@ -102,7 +103,7 @@ static esp_err_t forceSetBootPartition(const esp_partition_t* newPart) {
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
-#include "activities/home/MyLibraryActivity.h"
+#include "activities/home/FileBrowserActivity.h"
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/network/NetworkModeSelectionActivity.h"
@@ -478,6 +479,7 @@ void setup() {
 
   t1 = millis();
 
+  HalSystem::begin();
   gpio.begin();
   powerManager.begin();
 
@@ -499,6 +501,9 @@ void setup() {
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
   }
+
+  HalSystem::checkPanic();
+  HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
   SETTINGS.clampToValidRanges();
@@ -874,7 +879,7 @@ void runScreenshotTour() {
   activityManager.goToSettings();
   captureStep("settings");
 
-  activityManager.goToMyLibrary();
+  activityManager.goToFileBrowser();
   captureStep("browse");
 
   activityManager.goToRecentBooks();

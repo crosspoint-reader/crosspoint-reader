@@ -2,7 +2,7 @@
 #include <memory>
 
 #include "../Activity.h"
-#include "activities/home/MyLibraryActivity.h"
+#include "activities/home/FileBrowserActivity.h"
 
 class Epub;
 class Xtc;

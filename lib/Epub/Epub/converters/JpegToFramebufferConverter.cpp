@@ -1,5 +1,6 @@
 #include "JpegToFramebufferConverter.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <JPEGDEC.h>
@@ -486,9 +487,5 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 }
 
 bool JpegToFramebufferConverter::supportsFormat(const std::string& extension) {
-  std::string ext = extension;
-  for (auto& c : ext) {
-    c = tolower(c);
-  }
-  return (ext == ".jpg" || ext == ".jpeg");
+  return FsHelpers::hasJpgExtension(extension);
 }

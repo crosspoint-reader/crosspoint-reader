@@ -2,6 +2,8 @@
 
 #include <HardwareSerial.h>
 
+#include <string>
+
 /*
 Define ENABLE_SERIAL_LOG to enable logging
 Can be set in platformio.ini build_flags or as a compile definition
@@ -52,6 +54,9 @@ void logPrintf(const char* level, const char* origin, const char* format, ...);
 #define LOG_ERR(origin, format, ...)
 #define LOG_INF(origin, format, ...)
 #endif
+
+std::string getLastLogs();
+void clearLastLogs();
 
 class MySerialImpl : public Print {
  public:

@@ -1,5 +1,7 @@
 #include "RecentBooksActivity.h"
 
+#include <FsHelpers.h>
+
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -10,10 +12,9 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
-// StringUtils namespace needed for isTextViewableFile
-using namespace StringUtils;
+
+
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -30,7 +31,7 @@ void RecentBooksActivity::loadRecentBooks() {
     // Skip plain-text/log/system files — they don't belong in the reading history
     const auto slash = book.path.rfind('/');
     const std::string name = (slash == std::string::npos) ? book.path : book.path.substr(slash + 1);
-    if (StringUtils::isTextViewableFile(name)) continue;
+    if (FsHelpers::hasTxtExtension(name) || FsHelpers::hasMarkdownExtension(name)) continue;
     recentBooks.push_back(book);
   }
 }
