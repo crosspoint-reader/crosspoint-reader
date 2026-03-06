@@ -10,6 +10,7 @@
       --bg: #f5f5f5;
       --title-color: #2c3e50;
       --card-bg: #FFF;
+      --alert-bg: #bf1206;
       --label-color: #7f8c8d;
       --border-color: #eee;
       --accent-color: rgb(110, 154, 130);
@@ -22,6 +23,7 @@
         --bg: #333;
         --title-color: #ecf0f1;
         --card-bg: #444;
+        --alert-bg: #bf1206;
         --label-color: #bdc3c7;
         --border-color: #555;
         color-scheme: dark;
@@ -50,6 +52,9 @@
       padding: 20px;
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .card.alert {
+        background: var(--alert-bg);
     }
     .page-header {
       display: flex;
@@ -209,6 +214,15 @@
       font-size: 0.75em;
       margin-left: 8px;
     }
+    .hidden-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background-color: #6f2da8 !important;
+      color: white;
+      border-radius: 10px;
+      font-size: 0.75em;
+      margin-left: 8px;
+    }
     .file-icon {
       margin-right: 8px;
     }
@@ -217,6 +231,10 @@
       color: var(--accent-color);
       text-decoration: none;
       cursor: pointer;
+    }
+    .hidden-link {
+      filter: brightness(0.6);
+      font-style: italic;
     }
     .folder-link:hover,
     .file-link:hover {
@@ -655,6 +673,7 @@
   <div class="action-buttons">
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
+    <button class="action-btn folder-action-btn" id="showHiddenButton" onclick="toggleHidden()">🔎 Show Hidden Files</button>
     <button class="action-btn" style="background-color:#e74c3c" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
   </div>
 </div>
@@ -767,6 +786,7 @@
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  const showHidden = decodeURIComponent(new URLSearchParams(window.location.search).get('showHidden') || "false") == 'true';
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -797,6 +817,9 @@
 
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
+    const showHiddenButton = document.getElementById('showHiddenButton');
+
+    showHiddenButton.innerText = "🔎 " + (showHidden ? "Hide": "Show") + " Hidden Files";
 
     let breadcrumbContent = '<span class="sep">/</span>';
     if (currentPath === '/') {
@@ -805,7 +828,7 @@
       breadcrumbContent += '<a href="/files">🏠</a>';
       const pathSegments = currentPath.split('/');
       pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
-        breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
+        breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + `&showHidden=${showHidden}">` + escapeHtml(segment) + '</a>';
       });
       breadcrumbContent += '<span class="sep">/</span>';
       breadcrumbContent += '<span class="current">' + escapeHtml(pathSegments[pathSegments.length - 1]) + '</span>';
@@ -814,7 +837,7 @@
 
     let files = [];
     try {
-      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath));
+        const response = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}&showhidden=${showHidden}`);
       if (!response.ok) {
         throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
       }
@@ -837,14 +860,21 @@
     if (files.length === 0) {
       fileTable.innerHTML = '<div class="no-files">This folder is empty</div>';
     } else {
-      let fileTableContent = '<table class="file-table">';
+      let fileTableContent = '';
+      if (files.filter(x => x.isProtected).length > 0) {
+        files = files.filter(x => !x.isProtected);
+          fileTableContent = '<div class="card alert"> Protected Files Exist</div>';
+      }
 
-				// Add select-all checkbox column
+      // Add select-all checkbox column
+      fileTableContent += '<table class="file-table">';
       fileTableContent += '<tr><th style="width:40px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
 
 
       const sortedFiles = files.sort((a, b) => {
-        // Directories first, then epub files, then other files, alphabetically within each group
+        // Directories first, then epub files, then other files, then hidden items, alphabetically within each group
+        if (a.isHidden && !b.isHidden) return 1;
+        if (!a.isHidden && b.isHidden) return -1;
         if (a.isDirectory && !b.isDirectory) return -1;
         if (!a.isDirectory && b.isDirectory) return 1;
         if (a.isEpub && !b.isEpub) return -1;
@@ -853,6 +883,8 @@
       });
 
       sortedFiles.forEach(file => {
+        const hiddenBadgeClass = file.isHidden ? "hidden-badge " : "";
+        const hiddenLinkClass = file.isHidden ? "hidden-link " : "";
         if (file.isDirectory) {
           let folderPath = currentPath;
           if (!folderPath.endsWith("/")) folderPath += "/";
@@ -861,7 +893,7 @@
          // Checkbox cell + folder row
           fileTableContent += `<tr class="folder-row">`;
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
-          fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a><span class="folder-badge">FOLDER</span></td>`;
+          fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}&showHidden=${showHidden}" class="${hiddenLinkClass}folder-link">${escapeHtml(file.name)}</a><span class="${hiddenBadgeClass}folder-badge">FOLDER</span></td>`;
           fileTableContent += '<td>Folder</td>';
           fileTableContent += '<td>-</td>';
           fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
@@ -875,8 +907,9 @@
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
           fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>`;
-          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
-          if (file.isEpub) fileTableContent += '<span class="epub-badge">EPUB</span>';
+          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="${hiddenLinkClass}file-link">${escapeHtml(file.name)}</a>`;
+            if (file.isEpub) fileTableContent += `<span class="${hiddenBadgeClass}epub-badge">EPUB</span>`;
+            else if (file.isHidden) fileTableContent += `<span class="${hiddenBadgeClass}">HIDDEN</span>`;
           fileTableContent += '</td>';
           fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
@@ -1452,7 +1485,7 @@ function retryAllFailedUploads() {
 
     async function fetchFolders(path) {
       try {
-        const response = await fetch('/api/files?path=' + encodeURIComponent(path));
+          const response = await fetch(`/api/files?path=${encodeURIComponent(path)}&showhidden=${showHidden}`);
         if (!response.ok) return [];
         return await response.json();
       } catch (e) {
@@ -1534,6 +1567,11 @@ function retryAllFailedUploads() {
     };
 
     xhr.send(formData);
+  }
+
+  function toggleHidden()
+  {
+      window.location.href = `/files?path=${encodeURIComponent(currentPath)}&showHidden=${!showHidden}`;
   }
   hydrate();
 </script>

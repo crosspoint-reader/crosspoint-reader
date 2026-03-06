@@ -104,9 +104,10 @@ curl "http://crosspoint.local/api/files?path=/Books"
 
 **Query Parameters:**
 
-| Parameter | Required | Default | Description            |
-| --------- | -------- | ------- | ---------------------- |
-| `path`    | No       | `/`     | Directory path to list |
+| parameter    | required | default | description            |
+| ------------ | -------- | ------- | ---------------------- |
+| `path`       | No       | `/`     | Directory path to list |
+| `showhidden` | No       | `false` | Show "Hidden" dotfiles |
 
 **Response (200 OK):**
 ```json
@@ -117,16 +118,19 @@ curl "http://crosspoint.local/api/files?path=/Books"
 ]
 ```
 
-| Field         | Type    | Description                              |
-| ------------- | ------- | ---------------------------------------- |
-| `name`        | string  | File or folder name                      |
-| `size`        | number  | Size in bytes (0 for directories)        |
-| `isDirectory` | boolean | `true` if the item is a folder           |
-| `isEpub`      | boolean | `true` if the file has `.epub` extension |
+| Field         | Type    | Description                                         |
+| ------------- | ------- | --------------------------------------------------- |
+| `name`        | string  | File or folder name                                 |
+| `size`        | number  | Size in bytes (0 for directories)                   |
+| `isDirectory` | boolean | `true` if the item is a folder                      |
+| `isEpub`      | boolean | `true` if the file has `.epub` extension            |
+| `isHidden`    | boolean | `true` if the file or folder begins with '.'        |
+| `isProtected` | boolean | `true` if the file or folder is marked as protected |
 
 **Notes:**
-- Hidden files (starting with `.`) are automatically filtered out
-- System folders (`System Volume Information`, `XTCache`) are hidden
+- Hidden files (starting with `.`) are automatically filtered out, unless
+    specified
+- System folders (`System Volume Information`, `XTCache`, `.Crosspoint`) are hidden
 
 ---
 

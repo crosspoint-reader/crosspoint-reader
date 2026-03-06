@@ -19,8 +19,7 @@
 
 namespace {
 // Folders/files to hide from the web interface file browser
-// Note: Items starting with "." are automatically hidden
-const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
+const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache", ".crosspoint"};
 constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
@@ -68,9 +67,6 @@ String normalizeWebPath(const String& inputPath) {
 }
 
 bool isProtectedItemName(const String& name) {
-  if (name.startsWith(".")) {
-    return true;
-  }
   for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
     if (name.equals(HIDDEN_ITEMS[i])) {
       return true;
@@ -332,7 +328,8 @@ void CrossPointWebServer::handleStatus() const {
   server->send(200, "application/json", json);
 }
 
-void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
+void CrossPointWebServer::scanFiles(const char* path, bool showHidden,
+                                    const std::function<void(FileInfo)>& callback) const {
   FsFile root = Storage.open(path);
   if (!root) {
     LOG_DBG("WEB", "Failed to open directory: %s", path);
@@ -355,21 +352,23 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
     // Skip hidden items (starting with ".")
     bool shouldHide = fileName.startsWith(".");
+    bool shouldProtect = false;
 
     // Check against explicitly hidden items list
-    if (!shouldHide) {
-      for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-        if (fileName.equals(HIDDEN_ITEMS[i])) {
-          shouldHide = true;
-          break;
-        }
+    for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+      if (fileName.equals(HIDDEN_ITEMS[i])) {
+        shouldProtect = true;
+        shouldHide = true;
+        break;
       }
     }
 
-    if (!shouldHide) {
+    if (!shouldHide || showHidden) {
       FileInfo info;
       info.name = fileName;
       info.isDirectory = file.isDirectory();
+      info.isHidden = shouldHide;
+      info.isProtected = shouldProtect;
 
       if (info.isDirectory) {
         info.size = 0;
@@ -411,6 +410,11 @@ void CrossPointWebServer::handleFileListData() const {
     }
   }
 
+  bool showHidden = false;
+  if (server->hasArg("showhidden")) {
+    showHidden = strcmp(server->arg("showhidden").c_str(), "true") == 0;
+  }
+
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
   server->sendContent("[");
@@ -419,12 +423,14 @@ void CrossPointWebServer::handleFileListData() const {
   bool seenFirst = false;
   JsonDocument doc;
 
-  scanFiles(currentPath.c_str(), [this, &output, &doc, seenFirst](const FileInfo& info) mutable {
+  scanFiles(currentPath.c_str(), showHidden, [this, &output, &doc, seenFirst](const FileInfo& info) mutable {
     doc.clear();
     doc["name"] = info.name;
     doc["size"] = info.size;
     doc["isDirectory"] = info.isDirectory;
     doc["isEpub"] = info.isEpub;
+    doc["isHidden"] = info.isHidden;
+    doc["isProtected"] = info.isProtected;
 
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) {
@@ -462,10 +468,7 @@ void CrossPointWebServer::handleDownload() const {
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (itemName.startsWith(".")) {
-    server->send(403, "text/plain", "Cannot access system files");
-    return;
-  }
+
   for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
     if (itemName.equals(HIDDEN_ITEMS[i])) {
       server->send(403, "text/plain", "Cannot access protected items");
@@ -958,13 +961,6 @@ void CrossPointWebServer::handleDelete() const {
 
     // Security check: prevent deletion of protected items
     const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-
-    // Hidden/system files are protected
-    if (itemName.startsWith(".")) {
-      failedItems += itemPath + " (hidden/system file); ";
-      allSuccess = false;
-      continue;
-    }
 
     // Check against explicitly protected items
     bool isProtected = false;
