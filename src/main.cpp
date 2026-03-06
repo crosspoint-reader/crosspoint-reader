@@ -230,6 +230,15 @@ EpdFontFamily pulsr10FontFamily(&pulsr10Font);
 
 EpdFont pulsr12Font(&antonio_12_regular);
 EpdFontFamily pulsr12FontFamily(&pulsr12Font);
+// Antonio reading sizes (Regular only)
+EpdFont antonio12Font(&antonio_12_regular);
+EpdFontFamily antonio12FontFamily(&antonio12Font);
+EpdFont antonio14Font(&antonio_14_regular);
+EpdFontFamily antonio14FontFamily(&antonio14Font);
+EpdFont antonio16Font(&antonio_16_regular);
+EpdFontFamily antonio16FontFamily(&antonio16Font);
+EpdFont antonio18Font(&antonio_18_regular);
+EpdFontFamily antonio18FontFamily(&antonio18Font);
 
 // measurement of power button press duration calibration value
 unsigned long t1 = 0;
@@ -365,6 +374,11 @@ void setupDisplayAndFonts() {
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
   renderer.insertFont(PULSR_10_FONT_ID, pulsr10FontFamily);
   renderer.insertFont(PULSR_12_FONT_ID, pulsr12FontFamily);
+  // Antonio reading font sizes
+  renderer.insertFont(ANTONIO_12_FONT_ID, antonio12FontFamily);
+  renderer.insertFont(ANTONIO_14_FONT_ID, antonio14FontFamily);
+  renderer.insertFont(ANTONIO_16_FONT_ID, antonio16FontFamily);
+  renderer.insertFont(ANTONIO_18_FONT_ID, antonio18FontFamily);
   LOG_DBG("MAIN", "Fonts setup");
 }
 
@@ -483,6 +497,7 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
+  SETTINGS.clampToValidRanges();
   I18N.loadSettings();
 
   // Boot log: write early so any subsequent crash is detectable

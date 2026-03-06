@@ -236,6 +236,11 @@ bool CrossPointSettings::loadFromBinaryFile() {
   return true;
 }
 
+void CrossPointSettings::clampToValidRanges() {
+  if (fontFamily >= FONT_FAMILY_COUNT) fontFamily = BOOKERLY;
+  if (uiTheme >= UI_THEME_COUNT) uiTheme = CLASSIC;
+}
+
 float CrossPointSettings::getReaderLineCompression() const {
   switch (fontFamily) {
     case BOOKERLY:
@@ -343,16 +348,17 @@ int CrossPointSettings::getReaderFontId() const {
         case EXTRA_LARGE:
           return OPENDYSLEXIC_14_FONT_ID;
       }
-    case PULSR_FONT:
-      // PULSR font only has 10 and 12 sizes; map all sizes to closest available
+    case ANTONIO:
       switch (fontSize) {
         case SMALL:
+          return ANTONIO_12_FONT_ID;
         case MEDIUM:
         default:
-          return PULSR_10_FONT_ID;
+          return ANTONIO_14_FONT_ID;
         case LARGE:
+          return ANTONIO_16_FONT_ID;
         case EXTRA_LARGE:
-          return PULSR_12_FONT_ID;
+          return ANTONIO_18_FONT_ID;
       }
   }
 }

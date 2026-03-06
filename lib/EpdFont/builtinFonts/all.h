@@ -55,3 +55,6 @@
 #include <builtinFonts/ubuntu_12_regular.h>
 #include <builtinFonts/antonio_10_regular.h>
 #include <builtinFonts/antonio_12_regular.h>
+#include <builtinFonts/antonio_14_regular.h>
+#include <builtinFonts/antonio_16_regular.h>
+#include <builtinFonts/antonio_18_regular.h>
