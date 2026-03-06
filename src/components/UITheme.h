@@ -1,8 +1,9 @@
 #pragma once
 
+#include <EpdFontFamily.h>
+
 #include <functional>
 #include <memory>
-#include <EpdFontFamily.h>
 
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
