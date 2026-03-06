@@ -446,9 +446,8 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, std::vector<MdLine>& outL
         } else {
           // Find break point
           size_t breakPos = remaining.length();
-          while (breakPos > 0 &&
-                 renderer.getTextWidth(cachedFontId, remaining.substr(0, breakPos).c_str(), mdLine.style) >
-                     effectiveWidth) {
+          while (breakPos > 0 && renderer.getTextWidth(cachedFontId, remaining.substr(0, breakPos).c_str(),
+                                                       mdLine.style) > effectiveWidth) {
             size_t spacePos = remaining.rfind(' ', breakPos - 1);
             if (spacePos != std::string::npos && spacePos > 0) {
               breakPos = spacePos;
@@ -524,7 +523,15 @@ void MdReaderActivity::renderPage() {
   orientedMarginTop += cachedScreenMargin;
   orientedMarginLeft += cachedScreenMargin;
   orientedMarginRight += cachedScreenMargin;
-  orientedMarginBottom += statusBarMargin;
+  const auto& margins_metrics = UITheme::getInstance().getMetrics();
+  const bool showProgressBarRM = SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::BOOK_PROGRESS_BAR ||
+                                 SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::ONLY_BOOK_PROGRESS_BAR ||
+                                 SETTINGS.statusBar == CrossPointSettings::STATUS_BAR_MODE::CHAPTER_PROGRESS_BAR;
+  if (SETTINGS.statusBar != CrossPointSettings::STATUS_BAR_MODE::NONE) {
+    orientedMarginBottom +=
+        statusBarMargin - cachedScreenMargin +
+        (showProgressBarRM ? (margins_metrics.progressBarHeight + margins_metrics.progressBarMarginTop) : 0);
+  }
 
   const int lineHeight = renderer.getLineHeight(cachedFontId);
   const int contentWidth = viewportWidth;
@@ -632,10 +639,7 @@ void MdReaderActivity::renderStatusBar(const int orientedMarginRight, const int 
                       progressStr);
   }
 
-  if (showProgressBar) {
-    GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress));
-  }
-  if (showChapterProgressBar) {
+  if (showProgressBar || showChapterProgressBar) {
     GUI.drawReadingProgressBar(renderer, static_cast<size_t>(progress));
   }
 
@@ -663,8 +667,7 @@ void MdReaderActivity::renderStatusBar(const int orientedMarginRight, const int 
 void MdReaderActivity::saveProgress() const {
   FsFile f;
   if (Storage.openFileForWrite("MRS", txt->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4] = {static_cast<uint8_t>(currentPage & 0xFF), static_cast<uint8_t>((currentPage >> 8) & 0xFF), 0,
-                       0};
+    uint8_t data[4] = {static_cast<uint8_t>(currentPage & 0xFF), static_cast<uint8_t>((currentPage >> 8) & 0xFF), 0, 0};
     f.write(data, 4);
     f.close();
   }
@@ -755,6 +758,14 @@ bool MdReaderActivity::loadPageIndexCache() {
 
   uint32_t numPages;
   serialization::readPod(f, numPages);
+
+  // Validate before allocating: each entry is offset(4) + codeFenceState(1)
+  constexpr uint32_t kEntrySize = sizeof(uint32_t) + sizeof(uint8_t);
+  const uint32_t remaining = (f.size() > f.position()) ? (f.size() - f.position()) : 0;
+  if (numPages == 0 || numPages > remaining / kEntrySize || numPages > 1000000u) {
+    f.close();
+    return false;
+  }
 
   pageOffsets.clear();
   pageCodeFences.clear();

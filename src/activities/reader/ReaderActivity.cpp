@@ -6,8 +6,8 @@
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
-#include "Txt.h"
 #include "MdReaderActivity.h"
+#include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
@@ -24,12 +24,10 @@ std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
-bool ReaderActivity::isMdFile(const std::string& path) {
-  return FsHelpers::hasMarkdownExtension(path);
-}
+bool ReaderActivity::isMdFile(const std::string& path) { return FsHelpers::hasMarkdownExtension(path); }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
-  return FsHelpers::hasTxtExtension(path);
+  return FsHelpers::hasTxtExtension(path) || FsHelpers::checkFileExtension(path, ".log");
 }
 
 bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }

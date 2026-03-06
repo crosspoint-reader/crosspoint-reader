@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+
 #include "Activity.h"
 
 class ActivityWithSubactivity : public Activity {
