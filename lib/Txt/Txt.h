@@ -6,6 +6,7 @@
 #include <string>
 
 class Txt {
+ protected:
   std::string filepath;
   std::string cacheBasePath;
   std::string cachePath;
@@ -13,7 +14,7 @@ class Txt {
   size_t fileSize = 0;
 
  public:
-  explicit Txt(std::string path, std::string cacheBasePath);
+  explicit Txt(std::string path, std::string cacheBasePath, const char* cachePrefix = "txt_");
 
   bool load();
   [[nodiscard]] const std::string& getPath() const { return filepath; }

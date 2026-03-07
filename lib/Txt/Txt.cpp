@@ -4,11 +4,11 @@
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 
-Txt::Txt(std::string path, std::string cacheBasePath)
+Txt::Txt(std::string path, std::string cacheBasePath, const char* cachePrefix)
     : filepath(std::move(path)), cacheBasePath(std::move(cacheBasePath)) {
   // Generate cache path from file path hash
   const size_t hash = std::hash<std::string>{}(filepath);
-  cachePath = this->cacheBasePath + "/txt_" + std::to_string(hash);
+  cachePath = this->cacheBasePath + "/" + cachePrefix + std::to_string(hash);
 }
 
 bool Txt::load() {
@@ -40,9 +40,11 @@ std::string Txt::getTitle() const {
   size_t lastSlash = filepath.find_last_of('/');
   std::string filename = (lastSlash != std::string::npos) ? filepath.substr(lastSlash + 1) : filepath;
 
-  // Remove .txt extension
+  // Remove .txt or .md extension
   if (FsHelpers::hasTxtExtension(filename)) {
     filename = filename.substr(0, filename.length() - 4);
+  } else if (FsHelpers::hasMarkdownExtension(filename)) {
+    filename = filename.substr(0, filename.length() - 3);
   }
 
   return filename;
