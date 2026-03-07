@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "../Activity.h"
-#include "./MyLibraryActivity.h"
+#include "./FileBrowserActivity.h"
 #include "util/ButtonNavigator.h"
 
 struct RecentBook;
@@ -21,7 +21,7 @@ class HomeActivity final : public Activity {
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
   std::vector<RecentBook> recentBooks;
   void onSelectBook(const std::string& path);
-  void onMyLibraryOpen();
+  void onFileBrowserOpen();
   void onRecentsOpen();
   void onSettingsOpen();
   void onFileTransferOpen();
