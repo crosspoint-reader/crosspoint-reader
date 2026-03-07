@@ -2280,30 +2280,41 @@
         document.getElementById("share-output").value = buildShareUrl(selections, selectedProfile);
       }
 
+      function buildWorkflowDispatchPayload(selections, matchingProfile, baseProfileName) {
+        const workflowProfile = matchingProfile || baseProfileName || "standard";
+        const profileDefaults = profileToSelections(workflowProfile);
+        const enableFeatures = [];
+        const disableFeatures = [];
+
+        Object.keys(FEATURES).forEach((feature) => {
+          if (selections[feature] === profileDefaults[feature]) return;
+          if (selections[feature]) {
+            enableFeatures.push(feature);
+          } else {
+            disableFeatures.push(feature);
+          }
+        });
+
+        return {
+          profile: workflowProfile,
+          enableFeatures,
+          disableFeatures,
+        };
+      }
+
       function updateBuildLink(selections, selectedProfile) {
         const repo = getRepoInfo();
         const workflow = "build-custom.yml";
         const params = new URLSearchParams();
-        
-        // If we have any overrides compared to a standard profile, we MUST use 'custom' 
-        // as the profile input, otherwise individual toggles are ignored by the workflow.
-        const isStandard = ["lean", "standard", "full"].includes(selectedProfile);
-        let finalProfile = selectedProfile;
-        
-        if (isStandard) {
-          const profileDefaults = profileToSelections(selectedProfile);
-          const hasOverrides = Object.keys(FEATURES).some(f => selections[f] !== profileDefaults[f]);
-          if (hasOverrides) {
-            finalProfile = "custom";
-          }
-        }
+        const payload = buildWorkflowDispatchPayload(selections, detectMatchingProfile(selections), baseProfile);
 
-        params.set("profile", finalProfile);
-        
-        // Map features to workflow inputs
-        Object.keys(FEATURES).forEach((feature) => {
-          params.set(feature, selections[feature] ? "true" : "false");
-        });
+        params.set("profile", payload.profile);
+        if (payload.enableFeatures.length > 0) {
+          params.set("enable_features", payload.enableFeatures.join(","));
+        }
+        if (payload.disableFeatures.length > 0) {
+          params.set("disable_features", payload.disableFeatures.join(","));
+        }
 
         const url = `https://github.com/${repo.owner}/${repo.repo}/actions/workflows/${workflow}?${params.toString()}`;
         document.getElementById("build-link").href = url;
@@ -2438,20 +2449,15 @@
          and surfaces a direct link to the run's artifact download page.
          ───────────────────────────────────────────────────────────────── */
 
-      function buildDispatchInputs(selections, selectedProfile) {
-        // The workflow requires 'custom' profile when the user has overrides so that
-        // per-feature inputs aren't ignored by the profile-preset fast path.
-        const isNamedProfile = ["lean", "standard", "full"].includes(selectedProfile);
-        let finalProfile = selectedProfile;
-        if (isNamedProfile) {
-          const profileDefaults = profileToSelections(selectedProfile);
-          const hasOverrides = Object.keys(FEATURES).some(f => selections[f] !== profileDefaults[f]);
-          if (hasOverrides) finalProfile = "custom";
+      function buildDispatchInputs(selections, matchingProfile) {
+        const payload = buildWorkflowDispatchPayload(selections, matchingProfile, baseProfile);
+        const inputs = { profile: payload.profile };
+        if (payload.enableFeatures.length > 0) {
+          inputs.enable_features = payload.enableFeatures.join(",");
         }
-        const inputs = { profile: finalProfile };
-        Object.keys(FEATURES).forEach(feature => {
-          inputs[feature] = selections[feature] ? "true" : "false";
-        });
+        if (payload.disableFeatures.length > 0) {
+          inputs.disable_features = payload.disableFeatures.join(",");
+        }
         return inputs;
       }
 
@@ -2507,7 +2513,7 @@
         try {
           const repo = getRepoInfo();
           const selections = readSelections();
-          const matchingProfile = detectMatchingProfile(selections) || "custom";
+          const matchingProfile = detectMatchingProfile(selections);
           const inputs = buildDispatchInputs(selections, matchingProfile);
 
           setGhBuildStatus("Dispatching workflow\u2026");
