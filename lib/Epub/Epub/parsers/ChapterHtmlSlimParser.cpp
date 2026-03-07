@@ -266,6 +266,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       if (!src.empty() && self->imageRendering != 1) {
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
 
+        // Image extraction requires an EPUB context (not available for markdown)
+        if (!self->epub) {
+          self->depth += 1;
+          return;
+        }
+
         {
           // Resolve the image path relative to the HTML file
           std::string resolvedPath = FsHelpers::normalisePath(self->contentBase + src);

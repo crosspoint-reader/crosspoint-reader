@@ -261,6 +261,60 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   return true;
 }
 
+bool Section::createFromHtmlFile(const std::string& htmlPath, const std::string& sectionFilePath,
+                                 GfxRenderer& renderer, const int fontId, const float lineCompression,
+                                 const bool extraParagraphSpacing, const uint8_t paragraphAlignment,
+                                 const uint16_t viewportWidth, const uint16_t viewportHeight,
+                                 const bool hyphenationEnabled, const std::function<void()>& popupFn,
+                                 uint16_t& outPageCount) {
+  Section section(sectionFilePath, renderer);
+
+  if (!Storage.openFileForWrite("SCT", sectionFilePath, section.file)) {
+    return false;
+  }
+  section.writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+                                 viewportHeight, hyphenationEnabled, false, 0);
+  std::vector<uint32_t> lut = {};
+
+  ChapterHtmlSlimParser visitor(
+      nullptr, htmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+      viewportHeight, hyphenationEnabled,
+      [&section, &lut](std::unique_ptr<Page> page) { lut.emplace_back(section.onPageComplete(std::move(page))); },
+      false, "", "", 0, popupFn, nullptr);
+  bool success = visitor.parseAndBuildPages();
+
+  if (!success) {
+    LOG_ERR("SCT", "Failed to parse HTML and build pages");
+    section.file.close();
+    Storage.remove(sectionFilePath.c_str());
+    return false;
+  }
+
+  const uint32_t lutOffset = section.file.position();
+  bool hasFailedLutRecords = false;
+  for (const uint32_t& pos : lut) {
+    if (pos == 0) {
+      hasFailedLutRecords = true;
+      break;
+    }
+    serialization::writePod(section.file, pos);
+  }
+
+  if (hasFailedLutRecords) {
+    LOG_ERR("SCT", "Failed to write LUT due to invalid page positions");
+    section.file.close();
+    Storage.remove(sectionFilePath.c_str());
+    return false;
+  }
+
+  section.file.seek(HEADER_SIZE - sizeof(uint32_t) - sizeof(section.pageCount));
+  serialization::writePod(section.file, section.pageCount);
+  serialization::writePod(section.file, lutOffset);
+  section.file.close();
+  outPageCount = section.pageCount;
+  return true;
+}
+
 std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return nullptr;
