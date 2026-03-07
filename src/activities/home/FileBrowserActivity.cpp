@@ -240,8 +240,7 @@ std::string getFileName(std::string filename) {
   if (filename.back() == '/') {
     return filename.substr(0, filename.length() - 1);
   }
-  const auto pos = filename.rfind('.');
-  return filename.substr(0, pos);
+  return filename;
 }
 
 void FileBrowserActivity::render(RenderLock&&) {
