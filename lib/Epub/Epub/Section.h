@@ -49,9 +49,8 @@ class Section {
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
 
   // Create a section file from a standalone HTML file (no EPUB context)
-  static bool createFromHtmlFile(const std::string& htmlPath, const std::string& sectionFilePath,
-                                 GfxRenderer& renderer, int fontId, float lineCompression, bool extraParagraphSpacing,
+  static bool createFromHtmlFile(const std::string& htmlPath, const std::string& sectionFilePath, GfxRenderer& renderer,
+                                 int fontId, float lineCompression, bool extraParagraphSpacing,
                                  uint8_t paragraphAlignment, uint16_t viewportWidth, uint16_t viewportHeight,
-                                 bool hyphenationEnabled, const std::function<void()>& popupFn,
-                                 uint16_t& outPageCount);
+                                 bool hyphenationEnabled, const std::function<void()>& popupFn, uint16_t& outPageCount);
 };

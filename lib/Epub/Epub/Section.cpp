@@ -261,12 +261,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   return true;
 }
 
-bool Section::createFromHtmlFile(const std::string& htmlPath, const std::string& sectionFilePath,
-                                 GfxRenderer& renderer, const int fontId, const float lineCompression,
-                                 const bool extraParagraphSpacing, const uint8_t paragraphAlignment,
-                                 const uint16_t viewportWidth, const uint16_t viewportHeight,
-                                 const bool hyphenationEnabled, const std::function<void()>& popupFn,
-                                 uint16_t& outPageCount) {
+bool Section::createFromHtmlFile(const std::string& htmlPath, const std::string& sectionFilePath, GfxRenderer& renderer,
+                                 const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
+                                 const uint16_t viewportHeight, const bool hyphenationEnabled,
+                                 const std::function<void()>& popupFn, uint16_t& outPageCount) {
   Section section(sectionFilePath, renderer);
 
   if (!Storage.openFileForWrite("SCT", sectionFilePath, section.file)) {
