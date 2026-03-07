@@ -20,13 +20,12 @@ void BookmarkUtil::load(int maxBookmarks) {
         std::string summary;
         if (dataSize == 6) {
           char summaryBuffer[MAX_SUMMARY_LENGTH + 1] = {0};  // MAX_SUMMARY_LENGTH chars + null terminator
-          int summarySize = f.read((uint8_t*)summaryBuffer, MAX_SUMMARY_LENGTH);
+          int summarySize = f.read(summaryBuffer, MAX_SUMMARY_LENGTH);
           if (summarySize > 0) {
             summary = std::string(summaryBuffer, summarySize);
             // Replace null characters with spaces to avoid display issues
-            for (char& c : summary) {
-              if (c == '\0') c = ' ';
-            }
+            std::replace_if(summary.begin(), summary.end(), [](char c) { return c == '\0'; }, ' ');
+
           }
         }
 
@@ -66,9 +65,7 @@ BookmarkItem BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex
       summary.erase(0, summary.find_first_not_of(' '));
       summary.erase(summary.find_last_not_of(' ') + 1);
       // remove new lines and tabs to avoid display issues
-      for (char& c : summary) {
-        if (c == '\n' || c == '\t') c = ' ';
-      }
+      std::replace_if(summary.begin(), summary.end(), [](char c) { return c == '\n' || c == '\t'; }, ' ');
 
       // remove double spaces for display space efficiency
       std::string::size_type pos;
@@ -78,13 +75,11 @@ BookmarkItem BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex
 
       // with max size of 40 chars
       if (summary.size() > MAX_SUMMARY_LENGTH) {
-        summary = summary.substr(0, MAX_SUMMARY_LENGTH);
+        summary.resize(MAX_SUMMARY_LENGTH);
       }
 
       // Replace null characters with spaces to avoid display issues
-      for (char& c : summary) {
-        if (c == '\0') c = ' ';
-      }
+      std::replace_if(summary.begin(), summary.end(), [](char c) { return c == '\0'; }, ' ');
       f.write(summary.c_str(), summary.size());
     }
     f.close();

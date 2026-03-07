@@ -26,7 +26,7 @@ class EpubReaderBookmarksActivity final : public Activity {
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                        const std::shared_ptr<Epub>& epub, const std::string& epubPath,
                                        const int currentSpineIndex, const int currentPage, const int pageCount,
-                                       const std::string pageText)
+                                       const std::string& pageText)
       : Activity("EpubReaderBookmarks", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),
