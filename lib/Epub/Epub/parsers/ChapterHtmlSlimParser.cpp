@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <esp_task_wdt.h>
 #include <expat.h>
 
 #include "../../Epub.h"
@@ -957,6 +958,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Compute the time taken to parse and build pages
   const uint32_t chapterStartTime = millis();
   do {
+    esp_task_wdt_reset();  // Feed watchdog during long chapter parsing
     void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {
       LOG_ERR("EHP", "Couldn't allocate memory for buffer");
