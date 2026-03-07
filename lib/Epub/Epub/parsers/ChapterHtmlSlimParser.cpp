@@ -562,8 +562,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       if (strcmp(name, "li") == 0) {
         if (self->insideOrderedList) {
           self->orderedListCounter++;
-          self->currentTextBlock->addWord(std::to_string(self->orderedListCounter) + ".",
-                                          EpdFontFamily::REGULAR);
+          self->currentTextBlock->addWord(std::to_string(self->orderedListCounter) + ".", EpdFontFamily::REGULAR);
         } else {
           self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
         }
