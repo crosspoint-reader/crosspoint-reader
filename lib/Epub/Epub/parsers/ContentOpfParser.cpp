@@ -67,6 +67,18 @@ std::string stripHtml(const std::string& html) {
   while (!out.empty() && out.back() == ' ') out.pop_back();
   return out;
 }
+
+std::string trim(const std::string& in) {
+  size_t start = 0;
+  while (start < in.size() && (in[start] == ' ' || in[start] == '\n' || in[start] == '\r' || in[start] == '\t')) {
+    ++start;
+  }
+  size_t end = in.size();
+  while (end > start && (in[end - 1] == ' ' || in[end - 1] == '\n' || in[end - 1] == '\r' || in[end - 1] == '\t')) {
+    --end;
+  }
+  return in.substr(start, end - start);
+}
 }  // namespace
 
 bool ContentOpfParser::setup() {
@@ -217,12 +229,15 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_METADATA && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
     const char* metaName = nullptr;
     const char* metaContent = nullptr;
+    const char* metaProperty = nullptr;
 
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "name") == 0) {
         metaName = atts[i + 1];
       } else if (strcmp(atts[i], "content") == 0) {
         metaContent = atts[i + 1];
+      } else if (strcmp(atts[i], "property") == 0) {
+        metaProperty = atts[i + 1];
       }
     }
 
@@ -235,6 +250,23 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         self->seriesIndex = metaContent;
       }
     }
+
+    // EPUB 3 collection metadata:
+    // <meta property="belongs-to-collection">Series Name</meta>
+    // <meta property="group-position">1</meta>
+    if (metaProperty) {
+      if (strcmp(metaProperty, "belongs-to-collection") == 0 && self->series.empty()) {
+        self->series.clear();
+        self->state = IN_BOOK_SERIES;
+        return;
+      }
+      if (strcmp(metaProperty, "group-position") == 0 && self->seriesIndex.empty()) {
+        self->seriesIndex.clear();
+        self->state = IN_BOOK_SERIES_INDEX;
+        return;
+      }
+    }
+
     return;
   }
 
@@ -411,6 +443,16 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     self->description.append(s, len);
     return;
   }
+
+  if (self->state == IN_BOOK_SERIES) {
+    self->series.append(s, len);
+    return;
+  }
+
+  if (self->state == IN_BOOK_SERIES_INDEX) {
+    self->seriesIndex.append(s, len);
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -452,6 +494,18 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_BOOK_DESCRIPTION && strcmp(name, "dc:description") == 0) {
     self->description = stripHtml(self->description);
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_SERIES && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
+    self->series = trim(self->series);
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_SERIES_INDEX && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
+    self->seriesIndex = trim(self->seriesIndex);
     self->state = IN_METADATA;
     return;
   }
