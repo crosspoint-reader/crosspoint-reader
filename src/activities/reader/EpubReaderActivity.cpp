@@ -90,6 +90,13 @@ void EpubReaderActivity::onEnter() {
     }
     f.close();
   }
+
+  float bookProgress = 0.0f;
+  if (cachedChapterTotalPageCount > 0) {
+    float chapterProgress = static_cast<float>(nextPageNumber) / static_cast<float>(cachedChapterTotalPageCount);
+    bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+  }
+
   // We may want a better condition to detect if we are opening for the first time.
   // This will trigger if the book is re-opened at Chapter 0.
   if (currentSpineIndex == 0) {
@@ -103,7 +110,7 @@ void EpubReaderActivity::onEnter() {
   // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath(), bookProgress);
 
   // Trigger first update
   requestUpdate();
@@ -117,6 +124,12 @@ void EpubReaderActivity::onExit() {
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+
+  // Save progress
+  const float sectionChapterProg = static_cast<float>(section->currentPage) / section->pageCount;
+  const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
+  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath(), bookProgress);
+
   section.reset();
   epub.reset();
 }

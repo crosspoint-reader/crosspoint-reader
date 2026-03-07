@@ -610,7 +610,7 @@ uint8_t Xtc::calculateProgress(uint32_t currentPage) const {
   if (!loaded || !parser || parser->getPageCount() == 0) {
     return 0;
   }
-  return static_cast<uint8_t>((currentPage + 1) * 100 / parser->getPageCount());
+  return std::min(static_cast<uint8_t>((currentPage + 1) * 100 / parser->getPageCount()), static_cast<uint8_t>(100));
 }
 
 xtc::XtcError Xtc::getLastError() const {
