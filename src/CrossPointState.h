@@ -8,6 +8,9 @@ class CrossPointState {
 
  public:
   std::string openEpubPath;
+  // Set by USB/HTTP open_book command; drained by main loop to navigate to the book.
+  // Not persisted — cleared on every boot.
+  std::string pendingOpenPath;
   uint8_t lastSleepImage = 0;
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;

@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <Logging.h>  // for logSerial (the real HWCDC)
 #include <ObfuscationUtils.h>
+#include <WiFi.h>
 #include <mbedtls/base64.h>
 
 #include "CrossPointSettings.h"
@@ -22,6 +23,8 @@
 #include "util/PathUtils.h"
 
 namespace {
+
+constexpr uint8_t CROSSPOINT_PROTOCOL_VERSION = 1;
 
 // Sized to fit the largest incoming command: ota_chunk with a 4096-char base64 payload
 // {"cmd":"ota_chunk","arg":{"data":"<4096 chars>"}}  ≈ 4130 bytes + null
@@ -143,9 +146,53 @@ static void handleStatus() {
   JsonDocument resp;
   resp["ok"] = true;
   resp["version"] = CROSSPOINT_VERSION;
+  resp["protocolVersion"] = CROSSPOINT_PROTOCOL_VERSION;
   resp["freeHeap"] = (uint32_t)ESP.getFreeHeap();
   resp["uptime"] = millis() / 1000;
   resp["openBook"] = APP_STATE.openEpubPath.c_str();
+  serializeJson(resp, logSerial);
+  logSerial.write('\n');
+}
+
+static void handleOpenBook(const char* path) {
+  if (!path || path[0] == '\0') {
+    sendError("missing path");
+    return;
+  }
+  if (!PathUtils::isValidSdPath(String(path))) {
+    sendError("invalid path");
+    return;
+  }
+  bool exists = false;
+  {
+    SpiBusMutex::Guard guard;
+    exists = Storage.exists(path);
+  }
+  if (!exists) {
+    sendError("file not found");
+    return;
+  }
+  APP_STATE.pendingOpenPath = path;
+  sendOk();
+}
+
+static void handleWifiStatus() {
+  JsonDocument resp;
+  resp["ok"] = true;
+  const wl_status_t wifiSt = WiFi.status();
+  const bool connected = wifiSt == WL_CONNECTED;
+  resp["connected"] = connected;
+  if (connected) {
+    resp["ssid"] = WiFi.SSID().c_str();
+    resp["ip"] = WiFi.localIP().toString().c_str();
+    resp["rssi"] = WiFi.RSSI();
+  } else {
+    const char* stStr = (wifiSt == WL_CONNECT_FAILED)  ? "failed"
+                        : (wifiSt == WL_NO_SSID_AVAIL) ? "no_ssid"
+                        : (wifiSt == WL_IDLE_STATUS)   ? "connecting"
+                                                       : "disconnected";
+    resp["status"] = stStr;
+  }
   serializeJson(resp, logSerial);
   logSerial.write('\n');
 }
@@ -872,9 +919,13 @@ static void processCommand(const char* line) {
     handleSleepGetPinned();
   } else if (strcmp(name, "sleep_pin") == 0) {
     handleSleepPin(cmd["arg"]["path"] | "");
+  } else if (strcmp(name, "open_book") == 0) {
+    handleOpenBook(cmd["arg"] | "");
   } else if (strcmp(name, "wifi_connect") == 0) {
     const JsonObjectConst arg = cmd["arg"].as<JsonObjectConst>();
     handleWifiConnect(arg["ssid"] | "", arg["password"] | "");
+  } else if (strcmp(name, "wifi_status") == 0) {
+    handleWifiStatus();
   } else if (strcmp(name, "todo_add") == 0) {
     const JsonObjectConst arg = cmd["arg"].as<JsonObjectConst>();
     handleTodoAdd(arg["text"] | "", arg["type"] | "todo");

@@ -14,6 +14,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
 #include "SpiBusMutex.h"
@@ -37,6 +38,7 @@ namespace {
 const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
+constexpr uint8_t CROSSPOINT_PROTOCOL_VERSION = 1;
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 constexpr size_t TODO_ENTRY_MAX_TEXT_LENGTH = 300;
 constexpr size_t WS_CONTROL_MESSAGE_MAX_BYTES = 1024;
@@ -242,6 +244,7 @@ void CrossPointWebServer::begin() {
     server->on("/api/wifi/scan", HTTP_GET, [this] { handleWifiScan(); });
     server->on("/api/wifi/connect", HTTP_POST, [this] { handleWifiConnect(); });
     server->on("/api/wifi/forget", HTTP_POST, [this] { handleWifiForget(); });
+    server->on("/api/wifi/status", HTTP_GET, [this] { handleWifiStatus(); });
   }
 
   // API endpoints for web UI (recent books, cover images, sleep cover picker)
@@ -251,6 +254,8 @@ void CrossPointWebServer::begin() {
   server->on("/api/sleep-images", HTTP_GET, [this] { handleSleepImages(); });
   server->on("/api/sleep-cover", HTTP_GET, [this] { handleSleepCoverGet(); });
   server->on("/api/sleep-cover/pin", HTTP_POST, [this] { handleSleepCoverPin(); });
+  server->on("/api/open-book", HTTP_POST, [this] { handleOpenBook(); });
+  server->on("/api/settings/raw", HTTP_GET, [this] { handleGetSettingsRaw(); });
   if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::OtaApi)) {
     server->on("/api/ota/check", HTTP_POST, [this] { handleOtaCheckPost(); });
     server->on("/api/ota/check", HTTP_GET, [this] { handleOtaCheckGet(); });
@@ -451,12 +456,14 @@ void CrossPointWebServer::handleStatus() const {
 
   JsonDocument doc;
   doc["version"] = CROSSPOINT_VERSION;
+  doc["protocolVersion"] = CROSSPOINT_PROTOCOL_VERSION;
   doc["wifiStatus"] = wifiStatus;
   doc["ip"] = ipAddr;
   doc["mode"] = apMode ? "AP" : "STA";
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+  doc["openBook"] = APP_STATE.openEpubPath.c_str();
   doc["otaSelectedBundle"] = SETTINGS.selectedOtaBundle;
   doc["otaInstalledBundle"] = SETTINGS.installedOtaBundle;
   doc["otaInstalledFeatures"] = SETTINGS.installedOtaFeatureFlags[0] != '\0' ? SETTINGS.installedOtaFeatureFlags
@@ -2435,28 +2442,38 @@ void CrossPointWebServer::handleCover() const {
 }
 
 void CrossPointWebServer::handleSleepImages() const {
-  FsFile dir;
-  {
-    SpiBusMutex::Guard guard;
-    dir = Storage.open("/sleep");
-  }
+#if ENABLE_IMAGE_SLEEP
+  const char* ALLOWED_EXTS[] = {".bmp", ".png", ".jpg", ".jpeg"};
+#else
+  const char* ALLOWED_EXTS[] = {".bmp"};
+#endif
+  constexpr int NUM_ALLOWED = sizeof(ALLOWED_EXTS) / sizeof(ALLOWED_EXTS[0]);
+
+  // Scan both /sleep (user-writable via web UI) and /.sleep (SD-card priority folder)
+  const char* SLEEP_DIRS[] = {"/sleep", "/.sleep"};
+
+  char output[300];
+  constexpr size_t outputSize = sizeof(output);
+  bool seenFirst = false;
+  JsonDocument doc;
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  if (dir && dir.isDirectory()) {
-    char output[300];
-    constexpr size_t outputSize = sizeof(output);
-    bool seenFirst = false;
-    JsonDocument doc;
-
-#if ENABLE_IMAGE_SLEEP
-    const char* ALLOWED_EXTS[] = {".bmp", ".png", ".jpg", ".jpeg"};
-#else
-    const char* ALLOWED_EXTS[] = {".bmp"};
-#endif
-    constexpr int NUM_ALLOWED = sizeof(ALLOWED_EXTS) / sizeof(ALLOWED_EXTS[0]);
+  for (const char* dirName : SLEEP_DIRS) {
+    FsFile dir;
+    {
+      SpiBusMutex::Guard guard;
+      dir = Storage.open(dirName);
+    }
+    if (!dir || !dir.isDirectory()) {
+      if (dir) {
+        SpiBusMutex::Guard guard;
+        dir.close();
+      }
+      continue;
+    }
 
     while (true) {
       std::string entryName;
@@ -2495,7 +2512,7 @@ void CrossPointWebServer::handleSleepImages() const {
       if (!supported) continue;
 
       doc.clear();
-      doc["path"] = std::string("/sleep/") + entryName;
+      doc["path"] = std::string(dirName) + "/" + entryName;
       doc["name"] = entryName;
 
       const size_t written = serializeJson(doc, output, outputSize);
@@ -2665,6 +2682,125 @@ void CrossPointWebServer::handleSleepCoverPin() {
   char respBuf[300];
   serializeJson(respDoc, respBuf, sizeof(respBuf));
   server->send(saved ? 200 : 500, "application/json", respBuf);
+}
+
+void CrossPointWebServer::handleOpenBook() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+  JsonDocument doc;
+  const auto err = deserializeJson(doc, server->arg("plain"));
+  if (err) {
+    server->send(400, "text/plain", "Invalid JSON");
+    return;
+  }
+  const char* path = doc["path"] | "";
+  if (!path || path[0] == '\0') {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+  if (!PathUtils::isValidSdPath(String(path))) {
+    server->send(400, "text/plain", "Invalid path");
+    return;
+  }
+  bool exists = false;
+  {
+    SpiBusMutex::Guard guard;
+    exists = Storage.exists(path);
+  }
+  if (!exists) {
+    server->send(404, "text/plain", "File not found");
+    return;
+  }
+  APP_STATE.pendingOpenPath = path;
+  server->send(202, "application/json", "{\"status\":\"opening\"}");
+}
+
+void CrossPointWebServer::handleGetSettingsRaw() const {
+  const CrossPointSettings& s = SETTINGS;
+  JsonDocument doc;
+  doc["sleepScreen"] = s.sleepScreen;
+  doc["sleepScreenSource"] = s.sleepScreenSource;
+  doc["sleepPinnedPath"] = s.sleepPinnedPath;
+  doc["sleepScreenCoverMode"] = s.sleepScreenCoverMode;
+  doc["sleepScreenCoverFilter"] = s.sleepScreenCoverFilter;
+  doc["statusBar"] = s.statusBar;
+  doc["statusBarChapterPageCount"] = s.statusBarChapterPageCount;
+  doc["statusBarBookProgressPercentage"] = s.statusBarBookProgressPercentage;
+  doc["statusBarProgressBar"] = s.statusBarProgressBar;
+  doc["statusBarProgressBarThickness"] = s.statusBarProgressBarThickness;
+  doc["statusBarTitle"] = s.statusBarTitle;
+  doc["statusBarBattery"] = s.statusBarBattery;
+  doc["extraParagraphSpacing"] = s.extraParagraphSpacing;
+  doc["textAntiAliasing"] = s.textAntiAliasing;
+  doc["shortPwrBtn"] = s.shortPwrBtn;
+  doc["orientation"] = s.orientation;
+  doc["frontButtonLayout"] = s.frontButtonLayout;
+  doc["sideButtonLayout"] = s.sideButtonLayout;
+  doc["frontButtonBack"] = s.frontButtonBack;
+  doc["frontButtonConfirm"] = s.frontButtonConfirm;
+  doc["frontButtonLeft"] = s.frontButtonLeft;
+  doc["frontButtonRight"] = s.frontButtonRight;
+  doc["fontFamily"] = s.fontFamily;
+  doc["fontSize"] = s.fontSize;
+  doc["lineSpacing"] = s.lineSpacing;
+  doc["paragraphAlignment"] = s.paragraphAlignment;
+  doc["sleepTimeout"] = s.sleepTimeout;
+  doc["refreshFrequency"] = s.refreshFrequency;
+  doc["screenMargin"] = s.screenMargin;
+  doc["opdsServerUrl"] = s.opdsServerUrl;
+  doc["opdsUsername"] = s.opdsUsername;
+  doc["hideBatteryPercentage"] = s.hideBatteryPercentage;
+  doc["longPressChapterSkip"] = s.longPressChapterSkip;
+  doc["hyphenationEnabled"] = s.hyphenationEnabled;
+  doc["backgroundServerOnCharge"] = s.backgroundServerOnCharge;
+  doc["todoFallbackCover"] = s.todoFallbackCover;
+  doc["timeMode"] = s.timeMode;
+  doc["timeZoneOffset"] = s.timeZoneOffset;
+  doc["releaseChannel"] = s.releaseChannel;
+  doc["uiTheme"] = s.uiTheme;
+  doc["fadingFix"] = s.fadingFix;
+  doc["darkMode"] = s.darkMode;
+  doc["embeddedStyle"] = s.embeddedStyle;
+  doc["usbMscPromptOnConnect"] = s.usbMscPromptOnConnect;
+  doc["userFontPath"] = s.userFontPath;
+  doc["selectedOtaBundle"] = s.selectedOtaBundle;
+  doc["installedOtaBundle"] = s.installedOtaBundle;
+  doc["deviceName"] = s.deviceName;
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleWifiStatus() const {
+  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::WebWifiSetupApi)) {
+    server->send(404, "text/plain", "WiFi setup API disabled");
+    return;
+  }
+  JsonDocument doc;
+  const wl_status_t wifiSt = WiFi.status();
+  const bool connected = wifiSt == WL_CONNECTED;
+  doc["connected"] = connected;
+  if (apMode) {
+    doc["mode"] = "AP";
+    doc["ssid"] = WiFi.softAPSSID();
+  } else if (connected) {
+    doc["mode"] = "STA";
+    doc["ssid"] = WiFi.SSID();
+    doc["ip"] = WiFi.localIP().toString();
+    doc["rssi"] = WiFi.RSSI();
+  } else {
+    doc["mode"] = "STA";
+    const char* stStr = (wifiSt == WL_CONNECT_FAILED)  ? "failed"
+                        : (wifiSt == WL_NO_SSID_AVAIL) ? "no_ssid"
+                        : (wifiSt == WL_IDLE_STATUS)   ? "connecting"
+                                                       : "disconnected";
+    doc["status"] = stStr;
+  }
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
 }
 
 // WebSocket callback trampoline

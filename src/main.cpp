@@ -574,6 +574,13 @@ void loop() {
     return;
   }
 
+  // Remote open-book: USB or HTTP set pendingOpenPath; drain it here on the main loop.
+  if (!APP_STATE.pendingOpenPath.empty()) {
+    std::string path = std::move(APP_STATE.pendingOpenPath);
+    activityManager.goToReader(std::move(path));
+    return;
+  }
+
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;

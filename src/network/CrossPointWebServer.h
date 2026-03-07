@@ -163,10 +163,15 @@ class CrossPointWebServer {
   void handleSleepCoverGet() const;
   void handleSleepCoverPin();
 
+  // Remote control
+  void handleOpenBook();
+  void handleGetSettingsRaw() const;
+
   // WiFi handlers
   void handleWifiScan() const;
   void handleWifiConnect() const;
   void handleWifiForget() const;
+  void handleWifiStatus() const;
 
   void handleOtaCheckPost();
   void handleOtaCheckGet() const;
