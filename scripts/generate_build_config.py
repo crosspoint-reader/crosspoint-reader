@@ -169,7 +169,7 @@ FEATURES = {
     'usb_mass_storage': Feature(
         name='USB Mass Storage',
         flag='ENABLE_USB_MASS_STORAGE',
-        size_kb=18,
+        size_kb=19,
         description='On-device prompt for USB SD card access as mass storage'
     ),
 }
@@ -525,7 +525,7 @@ def resolve_profile_name(profile_name: str) -> str:
 
 def calculate_size(enabled_features: Dict[str, bool]) -> float:
     """Calculate estimated firmware size in MB."""
-    base_size_mb = 2.62  # Lean profile size baseline (measured)
+    base_size_mb = 2.63  # Lean profile size baseline (measured)
 
     for feature_key, enabled in enabled_features.items():
         if enabled:
