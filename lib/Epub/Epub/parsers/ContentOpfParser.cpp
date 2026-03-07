@@ -10,6 +10,7 @@ namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
 constexpr char itemCacheFile[] = "/.items.bin";
+constexpr size_t MAX_DESCRIPTION_LENGTH = 1024;
 
 // Strip HTML tags and collapse whitespace from a description string.
 // Expat already decodes XML entities (&lt; → <), so we see raw angle brackets.
@@ -20,9 +21,17 @@ std::string stripHtml(const std::string& html) {
   for (size_t i = 0; i < html.size(); ++i) {
     const char c = html[i];
     if (c == '<') {
-      inTag = true;
-      // Ensure words don't merge when a tag is removed
-      if (!result.empty() && result.back() != ' ') result += ' ';
+      // Only treat as a tag if followed by a tag-like character; otherwise keep literal '<'
+      size_t j = i + 1;
+      while (j < html.size() && html[j] == ' ') ++j;
+      if (j < html.size() &&
+          (isalpha(static_cast<unsigned char>(html[j])) || html[j] == '/' || html[j] == '!' || html[j] == '?')) {
+        inTag = true;
+        // Ensure words don't merge when a tag is removed
+        if (!result.empty() && result.back() != ' ') result += ' ';
+      } else {
+        result += c;
+      }
     } else if (c == '>') {
       inTag = false;
     } else if (!inTag) {
@@ -440,7 +449,10 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
   }
 
   if (self->state == IN_BOOK_DESCRIPTION) {
-    self->description.append(s, len);
+    if (self->description.size() < MAX_DESCRIPTION_LENGTH) {
+      const size_t remaining = MAX_DESCRIPTION_LENGTH - self->description.size();
+      self->description.append(s, std::min(static_cast<size_t>(len), remaining));
+    }
     return;
   }
 

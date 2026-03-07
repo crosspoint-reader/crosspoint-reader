@@ -160,14 +160,16 @@ void FileBrowserActivity::loop() {
     const std::string& entry = files[selectorIndex];
     const bool isDirectory = (entry.back() == '/');
 
-    if (basepath.back() != '/') basepath += "/";
     if (isDirectory) {
+      if (basepath.back() != '/') basepath += "/";
       basepath += entry.substr(0, entry.length() - 1);
       loadFiles();
       selectorIndex = 0;
       requestUpdate();
     } else {
-      onSelectBook(basepath + entry);
+      std::string fullPath = basepath;
+      if (fullPath.back() != '/') fullPath += "/";
+      onSelectBook(fullPath + entry);
     }
     return;
   }

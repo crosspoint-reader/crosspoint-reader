@@ -134,7 +134,7 @@ bool RecentBooksStore::loadFromBinaryFile() {
         std::string title, author;
         serialization::readString(inputFile, title);
         serialization::readString(inputFile, author);
-        recentBooks.push_back({path, title, author, ""});
+        recentBooks.push_back({path, title, author, "", ""});
       } else {
         recentBooks.push_back(book);
       }
@@ -160,7 +160,7 @@ bool RecentBooksStore::loadFromBinaryFile() {
         continue;
       }
 
-      recentBooks.push_back({path, title, author, coverBmpPath});
+      recentBooks.push_back({path, title, author, "", coverBmpPath});
     }
 
     if (omitted > 0) {
