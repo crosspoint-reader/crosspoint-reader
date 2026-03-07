@@ -112,6 +112,10 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   }
 
   // No cache - need to decode the image
+  // Show placeholder border while decoding
+  renderer.drawRect(x + 1, y + 1, width - 2, height - 2, true);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
   // Check if image file exists
   FsFile file;
   if (!Storage.openFileForRead("IMG", imagePath, file)) {
