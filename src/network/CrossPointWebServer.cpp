@@ -318,7 +318,7 @@ void CrossPointWebServer::handleJszip() const {
   server->sendHeader("Cache-Control", "public, max-age=3600");
 
   // Stream content directly instead of using send_P to handle binary gzipped data correctly
-  server->client().write_P((const uint8_t*)jszip_minHtml, jszip_minHtmlCompressedSize);
+  server->client().write((const uint8_t*)jszip_minHtml, jszip_minHtmlCompressedSize);
   LOG_DBG("WEB", "Served jszip.min.js");
 }
 
@@ -519,7 +519,7 @@ void CrossPointWebServer::handleDownload() const {
 
   NetworkClient client = server->client();
   client.write(file);
-  client.flush();
+  client.clear();
   file.close();
 }
 
