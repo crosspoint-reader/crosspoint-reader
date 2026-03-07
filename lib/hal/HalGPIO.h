@@ -38,6 +38,11 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
 
+  // Inject a one-frame virtual button activation by physical index.
+  // wasPressed() and wasReleased() will return true for it on the next poll.
+  // Safe to call from any task; consuming the bit happens only in the main-loop task.
+  void injectVirtualButton(uint8_t buttonIndex);
+
   // Check if USB is connected
   bool isUsbConnected() const;
 
@@ -45,6 +50,13 @@ class HalGPIO {
 
   WakeupReason getWakeupReason() const;
 
+ private:
+  // One bit per physical button index. Set by injectVirtualButton(), consumed
+  // (cleared) by wasPressed() / wasReleased(). mutable because consumption
+  // is internal edge-state, not part of the observable logical const-ness.
+  mutable uint8_t virtualButtonMask = 0;
+
+ public:
   // Button indices
   static constexpr uint8_t BTN_BACK = 0;
   static constexpr uint8_t BTN_CONFIRM = 1;

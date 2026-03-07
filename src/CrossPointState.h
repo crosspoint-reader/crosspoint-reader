@@ -11,6 +11,10 @@ class CrossPointState {
   // Set by USB/HTTP open_book command; drained by main loop to navigate to the book.
   // Not persisted — cleared on every boot.
   std::string pendingOpenPath;
+  // Remote page turn: +1 = forward, -1 = back, 0 = none.
+  // Written by WiFi/USB handler tasks, read and cleared by main loop.
+  // volatile guarantees the main loop re-reads after a task switch.
+  volatile int8_t pendingPageTurn = 0;
   uint8_t lastSleepImage = 0;
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;

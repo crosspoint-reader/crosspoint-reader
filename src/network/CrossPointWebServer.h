@@ -165,6 +165,7 @@ class CrossPointWebServer {
 
   // Remote control
   void handleOpenBook();
+  void handleRemoteButton();
   void handleGetSettingsRaw() const;
 
   // WiFi handlers

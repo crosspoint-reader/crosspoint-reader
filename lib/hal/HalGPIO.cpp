@@ -11,13 +11,29 @@ void HalGPIO::update() { inputMgr.update(); }
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+  const uint8_t bit = static_cast<uint8_t>(1u << buttonIndex);
+  if (virtualButtonMask & bit) {
+    virtualButtonMask &= static_cast<uint8_t>(~bit);
+    return true;
+  }
+  return inputMgr.wasPressed(buttonIndex);
+}
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::wasAnyPressed() const { return virtualButtonMask != 0 || inputMgr.wasAnyPressed(); }
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+  const uint8_t bit = static_cast<uint8_t>(1u << buttonIndex);
+  if (virtualButtonMask & bit) {
+    virtualButtonMask &= static_cast<uint8_t>(~bit);
+    return true;
+  }
+  return inputMgr.wasReleased(buttonIndex);
+}
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasAnyReleased() const { return virtualButtonMask != 0 || inputMgr.wasAnyReleased(); }
+
+void HalGPIO::injectVirtualButton(uint8_t buttonIndex) { virtualButtonMask |= static_cast<uint8_t>(1u << buttonIndex); }
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 

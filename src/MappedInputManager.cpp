@@ -5,6 +5,7 @@
 #include "CrossPointSettings.h"
 
 namespace {
+
 // Double-tap window for power button (Back action).
 // Lowering this reduces latency for single-tap Confirm action.
 // Intentional latency: a single tap fires Confirm only after this window expires
@@ -177,6 +178,39 @@ bool MappedInputManager::wasReleased(const Button button) {
     }
   }
   return mapButton(button, &HalGPIO::wasReleased);
+}
+
+void MappedInputManager::injectVirtualActivation(const Button button) {
+  const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
+  const auto& side = kSideLayouts[sideLayout];
+  switch (button) {
+    case Button::PageForward:
+      gpio.injectVirtualButton(side.pageForward);
+      break;
+    case Button::PageBack:
+      gpio.injectVirtualButton(side.pageBack);
+      break;
+    case Button::Confirm:
+      gpio.injectVirtualButton(SETTINGS.frontButtonConfirm);
+      break;
+    case Button::Back:
+      gpio.injectVirtualButton(SETTINGS.frontButtonBack);
+      break;
+    case Button::Left:
+      gpio.injectVirtualButton(SETTINGS.frontButtonLeft);
+      break;
+    case Button::Right:
+      gpio.injectVirtualButton(SETTINGS.frontButtonRight);
+      break;
+    case Button::Up:
+      gpio.injectVirtualButton(HalGPIO::BTN_UP);
+      break;
+    case Button::Down:
+      gpio.injectVirtualButton(HalGPIO::BTN_DOWN);
+      break;
+    default:
+      break;
+  }
 }
 
 bool MappedInputManager::isPressed(const Button button) const {

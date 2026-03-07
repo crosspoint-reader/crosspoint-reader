@@ -197,6 +197,20 @@ static void handleWifiStatus() {
   logSerial.write('\n');
 }
 
+static void handleRemoteButton(const char* btn) {
+  int8_t pageTurn = 0;
+  if (strcmp(btn, "page_forward") == 0 || strcmp(btn, "next") == 0) {
+    pageTurn = 1;
+  } else if (strcmp(btn, "page_back") == 0 || strcmp(btn, "prev") == 0 || strcmp(btn, "previous") == 0) {
+    pageTurn = -1;
+  } else {
+    sendError("unknown button; use page_forward or page_back");
+    return;
+  }
+  APP_STATE.pendingPageTurn = pageTurn;
+  sendOk();
+}
+
 // Android expects: {"ok":true,"files":[{"name":"...","path":"...","dir":false,"size":...,"modified":0}]}
 static void handleList(const char* path) {
   if (!PathUtils::isValidSdPath(String(path))) {
@@ -921,6 +935,8 @@ static void processCommand(const char* line) {
     handleSleepPin(cmd["arg"]["path"] | "");
   } else if (strcmp(name, "open_book") == 0) {
     handleOpenBook(cmd["arg"] | "");
+  } else if (strcmp(name, "remote_button") == 0) {
+    handleRemoteButton(cmd["arg"] | "");
   } else if (strcmp(name, "wifi_connect") == 0) {
     const JsonObjectConst arg = cmd["arg"].as<JsonObjectConst>();
     handleWifiConnect(arg["ssid"] | "", arg["password"] | "");

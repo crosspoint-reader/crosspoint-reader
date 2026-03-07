@@ -581,6 +581,14 @@ void loop() {
     return;
   }
 
+  // Remote page turn: translate cross-task volatile signal into a virtual button injection.
+  const int8_t pageTurn = APP_STATE.pendingPageTurn;
+  if (pageTurn != 0) {
+    APP_STATE.pendingPageTurn = 0;
+    mappedInputManager.injectVirtualActivation(pageTurn > 0 ? MappedInputManager::Button::PageForward
+                                                            : MappedInputManager::Button::PageBack);
+  }
+
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;

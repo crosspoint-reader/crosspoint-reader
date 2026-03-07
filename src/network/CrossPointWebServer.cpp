@@ -256,6 +256,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/sleep-cover/pin", HTTP_POST, [this] { handleSleepCoverPin(); });
   server->on("/api/open-book", HTTP_POST, [this] { handleOpenBook(); });
   server->on("/api/settings/raw", HTTP_GET, [this] { handleGetSettingsRaw(); });
+  server->on("/api/remote/button", HTTP_POST, [this] { handleRemoteButton(); });
   if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::OtaApi)) {
     server->on("/api/ota/check", HTTP_POST, [this] { handleOtaCheckPost(); });
     server->on("/api/ota/check", HTTP_GET, [this] { handleOtaCheckGet(); });
@@ -2717,6 +2718,30 @@ void CrossPointWebServer::handleOpenBook() {
   server->send(202, "application/json", "{\"status\":\"opening\"}");
 }
 
+void CrossPointWebServer::handleRemoteButton() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+  JsonDocument doc;
+  if (deserializeJson(doc, server->arg("plain"))) {
+    server->send(400, "text/plain", "Invalid JSON");
+    return;
+  }
+  const char* btn = doc["button"] | "";
+  int8_t pageTurn = 0;
+  if (strcmp(btn, "page_forward") == 0 || strcmp(btn, "next") == 0) {
+    pageTurn = 1;
+  } else if (strcmp(btn, "page_back") == 0 || strcmp(btn, "prev") == 0 || strcmp(btn, "previous") == 0) {
+    pageTurn = -1;
+  } else {
+    server->send(400, "text/plain", "Unknown button; use page_forward or page_back");
+    return;
+  }
+  APP_STATE.pendingPageTurn = pageTurn;
+  server->send(202, "application/json", "{\"status\":\"ok\"}");
+}
+
 void CrossPointWebServer::handleGetSettingsRaw() const {
   const CrossPointSettings& s = SETTINGS;
   JsonDocument doc;
@@ -2897,6 +2922,18 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         msg += c;
       }
       LOG_DBG("WS", "Text from client %u: %s", num, msg.c_str());
+
+      // Remote page-turn commands — handled before upload guard so they work during idle.
+      if (msg.equalsIgnoreCase("PAGE:NEXT") || msg.equalsIgnoreCase("PAGE:FORWARD")) {
+        APP_STATE.pendingPageTurn = 1;
+        wsServer->sendTXT(num, "OK");
+        return;
+      }
+      if (msg.equalsIgnoreCase("PAGE:PREV") || msg.equalsIgnoreCase("PAGE:BACK")) {
+        APP_STATE.pendingPageTurn = -1;
+        wsServer->sendTXT(num, "OK");
+        return;
+      }
 
       if (!msg.startsWith("START:")) {
         wsServer->sendTXT(num, "ERROR:Unknown command");
