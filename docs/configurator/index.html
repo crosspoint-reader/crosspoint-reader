@@ -1830,11 +1830,13 @@
         <div class="panel-heading">Companion Plugins</div>
         <div class="companion-row">
           <div>
-            <div class="companion-title">Grayscale Pokedex Wallpaper</div>
+            <div class="companion-title">Pokedex and Party Tools</div>
             <div class="companion-desc">
               Generate wallpapers from Pokemon data in the browser, download them, and copy them into
               <code>/sleep/pokedex</code>. The device-hosted page at <code>/plugins/pokedex</code> is optional when you
-              want direct upload from a running CrossPoint web server.
+              want direct upload from a running CrossPoint web server. For the wallpaper generator only, enable
+              <code>web_pokedex_plugin</code>. For the full party flow, also enable <code>pokemon_party</code> so the
+              first six recent books become a Pokemon party with per-book assignments, levels, and evolution state.
             </div>
           </div>
           <div class="actions">
@@ -2075,6 +2077,7 @@
           background_server: true,
           home_media_picker: true,
           web_pokedex_plugin: true,
+          pokemon_party: true,
           dark_mode: true,
           visual_cover_picker: true,
           ble_wifi_provisioning: true,

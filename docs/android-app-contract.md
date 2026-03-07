@@ -19,8 +19,9 @@ the two codebases. Keep it up to date when either side changes.
 
 ## 1. UDP device discovery
 
-**Android:** `DeviceDiscovery.startScan()` — broadcasts `"crosspoint-discover"` to
-255.255.255.255:8134 and listens for 2 s.
+**Android:** `DeviceDiscovery.startScan()` broadcasts `"hello"` to every usable IPv4
+interface broadcast address plus `255.255.255.255` on UDP 8134, then listens for
+replies.
 
 **Firmware must respond with (one UDP packet back to sender):**
 ```
@@ -28,8 +29,8 @@ crosspoint (on <hostname>);<wsPort>
 ```
 Example: `crosspoint (on MyDevice);81`
 
-The Android parser splits on `;`, takes the WS port from part[1], and extracts
-the hostname from the substring after `"on "` up to `)`.
+The Android parser splits on `;`, takes the WS port from part[1], keeps part[0]
+as the display name, and uses the sender IP as the connection host.
 
 **Current status:** ✅ Firmware implements this on UDP 8134.
 

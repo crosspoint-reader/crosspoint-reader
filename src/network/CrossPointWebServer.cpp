@@ -384,7 +384,7 @@ void CrossPointWebServer::handleClient() {
   if (udpActive) {
     int packetSize = udp.parsePacket();
     if (packetSize > 0) {
-      char buffer[16];
+      char buffer[32];
       int len = udp.read(buffer, sizeof(buffer) - 1);
       if (len > 0) {
         buffer[len] = '\0';
