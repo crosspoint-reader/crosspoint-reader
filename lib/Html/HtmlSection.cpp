@@ -194,9 +194,8 @@ bool HtmlSection::createSectionFile(int fontId, float lineCompression, bool extr
       nullptr, htmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
       viewportHeight, hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
-      false,  // embeddedStyle - standalone HTML sections don't apply EPUB CSS rules
-      contentBasePath, cachePath + "/img_", nullptr,
-      nullptr);  // cssParser - not used for standalone HTML
+      false,                                  // embeddedStyle - standalone HTML sections don't apply EPUB CSS rules
+      contentBasePath, cachePath + "/img_");  // imageRendering/popupFn/cssParser use defaults
 
   bool success = visitor.parseAndBuildPages();
   if (!success) {
