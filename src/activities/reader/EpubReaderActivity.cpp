@@ -577,6 +577,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       LOG_DBG("ERS", "Cache not found, building...");
 
       const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
+      popupFn();  // Show immediately before parsing starts
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,

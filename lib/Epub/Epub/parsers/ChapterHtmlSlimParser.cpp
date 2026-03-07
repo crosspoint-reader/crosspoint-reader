@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <esp_task_wdt.h>
 #include <expat.h>
 
 #include "../../Epub.h"
@@ -255,6 +256,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
       if (!src.empty() && self->imageRendering != 1) {
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
+
+        // Image extraction requires an EPUB context (not available for markdown)
+        if (!self->epub) {
+          self->depth += 1;
+          return;
+        }
 
         {
           // Resolve the image path relative to the HTML file
@@ -935,7 +942,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   }
 
   // Get file size to decide whether to show indexing popup.
-  if (popupFn && file.size() >= MIN_SIZE_FOR_POPUP) {
+  if (popupFn) {
     popupFn();
   }
 
@@ -946,6 +953,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Compute the time taken to parse and build pages
   const uint32_t chapterStartTime = millis();
   do {
+    esp_task_wdt_reset();  // Feed watchdog during long chapter parsing
     void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {
       LOG_ERR("EHP", "Couldn't allocate memory for buffer");

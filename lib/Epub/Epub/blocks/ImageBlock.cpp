@@ -111,6 +111,10 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;  // Successfully rendered from cache
   }
 
+  // Show placeholder border while decoding (1-3 seconds for uncached images)
+  renderer.drawRect(x + 1, y + 1, width - 2, height - 2, true);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
   // No cache - need to decode the image
   // Check if image file exists
   FsFile file;
