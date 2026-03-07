@@ -389,11 +389,7 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
       continue;
     }
 
-    // TODO: Consider adding support for ID css selectors in the future
-    // Ensure no # in selector as we don't support ID CSS selectors for now
-    if (key.find('#') != std::string_view::npos) {
-      continue;
-    }
+    // ID selectors (#id, tag#id) are now supported — don't filter them out.
 
     // TODO: Consider adding support for general sibling combinator selectors in the future
     // Ensure no ~ in selector as we don't support general sibling combinator CSS selectors for now
@@ -401,11 +397,9 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
       continue;
     }
 
-    // TODO: Consider adding support for wildcard css selectors in the future
-    // Ensure no * in selector as we don't support wildcard CSS selectors for now
-    if (key.find('*') != std::string_view::npos) {
-      continue;
-    }
+    // Wildcard (*) selectors are supported — don't filter them out.
+    // However, skip complex selectors that use * as part of combinators (e.g. "*.class" is fine, but
+    // we still skip descendant selectors containing spaces below).
 
     // TODO: Add support for more complex selectors in the future
     // At the moment, we only ever check for `tag`, `tag.class1` or `.class1`
@@ -413,6 +407,24 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
     // or some other slightly more advanced CSS selector which we don't support yet
     if (key.find(' ') != std::string_view::npos) {
       continue;
+    }
+
+    // Normalize multi-class selectors by sorting class parts so that
+    // .italic.bold and .bold.italic map to the same key.
+    // A key like "p.italic.bold" becomes "p.bold.italic".
+    {
+      // Count dots to detect multi-class (skip if 0 or 1 dot)
+      size_t firstDot = key.find('.');
+      if (firstDot != std::string::npos && key.find('.', firstDot + 1) != std::string::npos) {
+        // Has 2+ dots: extract tag prefix and sort class parts
+        std::string prefix = key.substr(0, firstDot);  // "" for .class1.class2, "tag" for tag.class1.class2
+        auto classParts = splitOnChar(key.substr(firstDot + 1), '.');
+        std::sort(classParts.begin(), classParts.end());
+        key = prefix;
+        for (const auto& part : classParts) {
+          key += "." + part;
+        }
+      }
     }
 
     // Skip if this would exceed the rule limit
@@ -581,7 +593,8 @@ bool CssParser::loadFromStream(FsFile& source) {
 
 // Style resolution
 
-CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& classAttr) const {
+CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& classAttr,
+                                 const std::string& idAttr) const {
   static bool lowHeapWarningLogged = false;
   if (ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_CSS) {
     if (!lowHeapWarningLogged) {
@@ -594,13 +607,18 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
   CssStyle result;
   const std::string tag = normalized(tagName);
 
-  // 1. Apply element-level style (lowest priority)
+  // 0. Apply wildcard style (lowest priority)
+  const auto wildcardIt = rulesBySelector_.find("*");
+  if (wildcardIt != rulesBySelector_.end()) {
+    result.applyOver(wildcardIt->second);
+  }
+
+  // 1. Apply element-level style
   const auto tagIt = rulesBySelector_.find(tag);
   if (tagIt != rulesBySelector_.end()) {
     result.applyOver(tagIt->second);
   }
 
-  // TODO: Support combinations of classes (e.g. style on .class1.class2)
   // 2. Apply class styles (medium priority)
   if (!classAttr.empty()) {
     const auto classes = splitWhitespace(classAttr);
@@ -614,7 +632,6 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
       }
     }
 
-    // TODO: Support combinations of classes (e.g. style on p.class1.class2)
     // 3. Apply element.class styles (higher priority)
     for (const auto& cls : classes) {
       std::string combinedKey = tag + "." + normalized(cls);
@@ -623,6 +640,64 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
       if (combinedIt != rulesBySelector_.end()) {
         result.applyOver(combinedIt->second);
       }
+    }
+
+    // 3b. Apply multi-class selectors (.class1.class2, tag.class1.class2)
+    // Only for elements with 2-3 classes (more is vanishingly rare in EPUB)
+    if (classes.size() >= 2 && classes.size() <= 3) {
+      // Sort class names to match the normalized key order used at parse time
+      std::vector<std::string> sorted;
+      sorted.reserve(classes.size());
+      for (const auto& cls : classes) {
+        sorted.push_back(normalized(cls));
+      }
+      std::sort(sorted.begin(), sorted.end());
+
+      // Generate all multi-class combinations (pairs and full set)
+      // For 2 classes: .a.b
+      // For 3 classes: .a.b, .a.c, .b.c, .a.b.c
+      for (size_t i = 0; i < sorted.size(); i++) {
+        for (size_t j = i + 1; j < sorted.size(); j++) {
+          std::string pairKey = "." + sorted[i] + "." + sorted[j];
+          auto pairIt = rulesBySelector_.find(pairKey);
+          if (pairIt != rulesBySelector_.end()) {
+            result.applyOver(pairIt->second);
+          }
+          // tag.class1.class2
+          auto tagPairIt = rulesBySelector_.find(tag + pairKey);
+          if (tagPairIt != rulesBySelector_.end()) {
+            result.applyOver(tagPairIt->second);
+          }
+        }
+      }
+      // Full set (all 3 classes)
+      if (sorted.size() == 3) {
+        std::string fullKey = "." + sorted[0] + "." + sorted[1] + "." + sorted[2];
+        auto fullIt = rulesBySelector_.find(fullKey);
+        if (fullIt != rulesBySelector_.end()) {
+          result.applyOver(fullIt->second);
+        }
+        auto tagFullIt = rulesBySelector_.find(tag + fullKey);
+        if (tagFullIt != rulesBySelector_.end()) {
+          result.applyOver(tagFullIt->second);
+        }
+      }
+    }
+  }
+
+  // 4. Apply #id style (higher priority than class)
+  if (!idAttr.empty()) {
+    std::string idKey = "#" + normalized(idAttr);
+    auto idIt = rulesBySelector_.find(idKey);
+    if (idIt != rulesBySelector_.end()) {
+      result.applyOver(idIt->second);
+    }
+
+    // 5. Apply element#id style (highest priority below inline)
+    std::string tagIdKey = tag + "#" + normalized(idAttr);
+    auto tagIdIt = rulesBySelector_.find(tagIdKey);
+    if (tagIdIt != rulesBySelector_.end()) {
+      result.applyOver(tagIdIt->second);
     }
   }
 

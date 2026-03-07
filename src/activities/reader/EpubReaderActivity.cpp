@@ -488,6 +488,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 }
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+  pageLoadFailCount = 0;  // Reset on navigation so user can recover from error state
   if (isForwardTurn) {
     if (section->currentPage < section->pageCount - 1) {
       section->currentPage++;
@@ -640,14 +641,23 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   {
     auto p = section->loadPageFromSectionFile();
     if (!p) {
-      LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
+      pageLoadFailCount++;
+      automaticPageTurnActive = false;
+      if (pageLoadFailCount >= 3) {
+        LOG_ERR("ERS", "Page load failed %d times, giving up", pageLoadFailCount);
+        renderer.clearScreen();
+        renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
+        renderStatusBar();
+        renderer.displayBuffer();
+        return;
+      }
+      LOG_ERR("ERS", "Failed to load page from SD - clearing section cache (attempt %d/3)", pageLoadFailCount);
       section->clearCache();
       section.reset();
-      requestUpdate();  // Try again after clearing cache
-                        // TODO: prevent infinite loop if the page keeps failing to load for some reason
-      automaticPageTurnActive = false;
+      requestUpdate();
       return;
     }
+    pageLoadFailCount = 0;
 
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);

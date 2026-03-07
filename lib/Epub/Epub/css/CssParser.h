@@ -19,11 +19,14 @@
  * Supported selectors:
  *   - Element selectors: p, div, h1, etc.
  *   - Class selectors: .classname
- *   - Combined: element.classname
+ *   - Multi-class selectors: .class1.class2
+ *   - Combined: element.classname, element.class1.class2
+ *   - ID selectors: #id, element#id
+ *   - Wildcard: *
  *   - Grouped: selector1, selector2 { }
  *
  * Not supported (silently ignored):
- *   - Descendant/child selectors
+ *   - Descendant/child/sibling selectors (would require DOM tree context)
  *   - Pseudo-classes and pseudo-elements
  *   - Media queries (content is skipped)
  *   - @import, @font-face, etc.
@@ -31,7 +34,7 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 3;
+  static constexpr uint8_t CSS_CACHE_VERSION = 4;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -49,14 +52,16 @@ class CssParser {
   bool loadFromStream(FsFile& source);
 
   /**
-   * Look up the style for an HTML element, considering tag name and class attributes.
-   * Applies CSS cascade: element style < class style < element.class style
+   * Look up the style for an HTML element, considering tag name, class, and id attributes.
+   * Applies CSS cascade: * < element < .class < element.class < #id < element#id
    *
    * @param tagName The HTML element name (e.g., "p", "div")
    * @param classAttr The class attribute value (may contain multiple space-separated classes)
+   * @param idAttr The id attribute value (single ID, no spaces)
    * @return Combined style with all applicable rules merged
    */
-  [[nodiscard]] CssStyle resolveStyle(const std::string& tagName, const std::string& classAttr) const;
+  [[nodiscard]] CssStyle resolveStyle(const std::string& tagName, const std::string& classAttr,
+                                      const std::string& idAttr = {}) const;
 
   /**
    * Parse an inline style attribute string.
