@@ -67,7 +67,7 @@ FEATURES = {
     'koreader_sync': Feature(
         name='KOReader Sync',
         flag='ENABLE_KOREADER_SYNC',
-        size_kb=0,
+        size_kb=17,
         description='Sync reading progress with KOReader'
     ),
     'calibre_sync': Feature(
@@ -127,7 +127,7 @@ FEATURES = {
     'ota_updates': Feature(
         name='OTA Updates',
         flag='ENABLE_OTA_UPDATES',
-        size_kb=1,
+        size_kb=0,
         description='Over-the-air firmware updates via WiFi'
     ),
     'todo_planner': Feature(
@@ -169,7 +169,7 @@ FEATURES = {
     'usb_mass_storage': Feature(
         name='USB Mass Storage',
         flag='ENABLE_USB_MASS_STORAGE',
-        size_kb=19,
+        size_kb=20,
         description='On-device prompt for USB SD card access as mass storage'
     ),
 }
