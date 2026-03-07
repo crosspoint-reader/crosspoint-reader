@@ -100,7 +100,13 @@ void RecentBooksActivity::render(RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
-        [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
+        [this](int index) { return recentBooks[index].title; },
+        [this](int index) {
+          const auto& book = recentBooks[index];
+          if (!book.author.empty() && !book.series.empty()) return book.author + " \u2022 " + book.series;
+          if (!book.series.empty()) return book.series;
+          return book.author;
+        },
         [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
   }
 

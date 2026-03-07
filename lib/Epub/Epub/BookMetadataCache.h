@@ -14,6 +14,9 @@ class BookMetadataCache {
     std::string language;
     std::string coverItemHref;
     std::string textReferenceHref;
+    std::string series;
+    std::string seriesIndex;
+    std::string description;
   };
 
   struct SpineEntry {
