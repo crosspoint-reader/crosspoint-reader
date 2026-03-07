@@ -15,6 +15,8 @@ class BookInfoActivity final : public Activity {
   std::string seriesIndex;
   std::string description;
   std::string coverBmpPath;
+  std::string loadError;
+  bool loadSucceeded = false;
   size_t fileSizeBytes = 0;
 
   static std::string formatFileSize(size_t bytes);

@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
 #include <Xtc.h>
 
 #include "components/UITheme.h"
@@ -38,6 +39,9 @@ void BookInfoActivity::renderLoading() {
 }
 
 void BookInfoActivity::loadData() {
+  loadSucceeded = false;
+  loadError.clear();
+
   // Get file size
   HalFile f = Storage.open(filePath.c_str());
   if (f) {
@@ -48,7 +52,11 @@ void BookInfoActivity::loadData() {
   // Load epub metadata — builds cache if missing, which also gives us cover
   if (FsHelpers::hasEpubExtension(filePath)) {
     Epub epub(filePath, "/.crosspoint");
-    epub.load(true, true);
+    if (!epub.load(true, true)) {
+      loadError = tr(STR_LOAD_EPUB_FAILED);
+      LOG_ERR("BookInfo", "Failed to load EPUB metadata: %s", filePath.c_str());
+      return;
+    }
 
     title = epub.getTitle();
     author = epub.getAuthor();
@@ -63,19 +71,27 @@ void BookInfoActivity::loadData() {
       epub.generateThumbBmp(metrics.homeCoverHeight);
     }
     coverBmpPath = Storage.exists(thumbPath.c_str()) ? thumbPath : "";
+    loadSucceeded = true;
   } else if (FsHelpers::hasXtcExtension(filePath)) {
     Xtc xtc(filePath, "/.crosspoint");
-    if (xtc.load()) {
-      title = xtc.getTitle();
-      author = xtc.getAuthor();
-
-      const auto& metrics = UITheme::getInstance().getMetrics();
-      const std::string thumbPath = xtc.getThumbBmpPath(metrics.homeCoverHeight);
-      if (!Storage.exists(thumbPath.c_str())) {
-        xtc.generateThumbBmp(metrics.homeCoverHeight);
-      }
-      coverBmpPath = Storage.exists(thumbPath.c_str()) ? thumbPath : "";
+    if (!xtc.load()) {
+      loadError = tr(STR_LOAD_XTC_FAILED);
+      LOG_ERR("BookInfo", "Failed to load XTC metadata: %s", filePath.c_str());
+      return;
     }
+    title = xtc.getTitle();
+    author = xtc.getAuthor();
+
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const std::string thumbPath = xtc.getThumbBmpPath(metrics.homeCoverHeight);
+    if (!Storage.exists(thumbPath.c_str())) {
+      xtc.generateThumbBmp(metrics.homeCoverHeight);
+    }
+    coverBmpPath = Storage.exists(thumbPath.c_str()) ? thumbPath : "";
+    loadSucceeded = true;
+  } else {
+    loadError = tr(STR_ERROR_GENERAL_FAILURE);
+    LOG_ERR("BookInfo", "Unsupported file type for book info: %s", filePath.c_str());
   }
 }
 
@@ -108,6 +124,38 @@ void BookInfoActivity::render(RenderLock&&) {
   const int textWidth = pageWidth - metrics.contentSidePadding * 2;
   const int lineHeightSmall = renderer.getLineHeight(UI_10_FONT_ID);
   const int lineHeightLarge = renderer.getLineHeight(UI_12_FONT_ID);
+
+  if (!loadSucceeded) {
+    const auto lastSlash = filePath.find_last_of('/');
+    const std::string fileName = (lastSlash == std::string::npos) ? filePath : filePath.substr(lastSlash + 1);
+    const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, fileName.c_str(), textWidth, 2);
+    const auto errorLines = renderer.wrappedText(
+        UI_10_FONT_ID, loadError.empty() ? tr(STR_ERROR_GENERAL_FAILURE) : loadError.c_str(), textWidth, 3);
+
+    int y = contentTop + metrics.verticalSpacing;
+    for (const auto& line : titleLines) {
+      if (y + lineHeightLarge > contentBottom) break;
+      renderer.drawText(UI_12_FONT_ID, textX, y, line.c_str(), true, EpdFontFamily::BOLD);
+      y += lineHeightLarge;
+    }
+    y += metrics.verticalSpacing;
+    for (const auto& line : errorLines) {
+      if (y + lineHeightSmall > contentBottom) break;
+      renderer.drawText(UI_10_FONT_ID, textX, y, line.c_str());
+      y += lineHeightSmall;
+    }
+
+    if (fileSizeBytes > 0 && y + lineHeightSmall <= contentBottom) {
+      y += metrics.verticalSpacing;
+      const std::string sizeLine = std::string(tr(STR_FILE_SIZE)) + ": " + formatFileSize(fileSizeBytes);
+      renderer.drawText(UI_10_FONT_ID, textX, y, sizeLine.c_str());
+    }
+
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
 
   // Reserve space so description always gets at least a few lines below the cover block
   const int descReserve = description.empty() ? 0 : (3 * lineHeightSmall + 2 * metrics.verticalSpacing);
