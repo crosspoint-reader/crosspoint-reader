@@ -594,326 +594,353 @@ bool Epub::generateCoverBmp(bool cropped) const {
     LOG_DBG("EBP", "Generating BMP from PNG cover image (%s mode)", cropped ? "cropped" : "fit");
     const auto coverPngTempPath = getCachePath() + "/.cover.png";
 
-    std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
-    std::string Epub::getThumbBmpPath(int height) const {
-      return cachePath + "/thumb_" + std::to_string(height) + ".bmp";
+    FsFile coverPng;
+    if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
+      return false;
     }
+    readItemContentsToStream(coverImageHref, coverPng, 1024);
+    coverPng.close();
 
-    bool Epub::generateThumbBmp(int height) const {
-      // Already generated, return true
-      if (Storage.exists(getThumbBmpPath(height).c_str())) {
-        return true;
-      }
-
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-        LOG_ERR("EBP", "Cannot generate thumb BMP, cache not loaded");
-        return false;
-      }
-
-      const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
-      if (coverImageHref.empty()) {
-        LOG_DBG("EBP", "No known cover image for thumbnail");
-      } else if (FsHelpers::hasJpgExtension(coverImageHref)) {
-        LOG_DBG("EBP", "Generating thumb BMP from JPG cover image");
-        const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
-
-        FsFile coverJpg;
-        if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
-          return false;
-        }
-        readItemContentsToStream(coverImageHref, coverJpg, 1024);
-        coverJpg.close();
-
-        if (!Storage.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
-          return false;
-        }
-
-        FsFile thumbBmp;
-        if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
-          coverJpg.close();
-          return false;
-        }
-        // Use smaller target size for Continue Reading card (half of screen: 240x400)
-        // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-        int THUMB_TARGET_WIDTH = height * 0.6;
-        int THUMB_TARGET_HEIGHT = height;
-        const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
-                                                                                 THUMB_TARGET_HEIGHT);
-        coverJpg.close();
-        thumbBmp.close();
-        Storage.remove(coverJpgTempPath.c_str());
-
-        if (!success) {
-          LOG_ERR("EBP", "Failed to generate thumb BMP from JPG cover image");
-          Storage.remove(getThumbBmpPath(height).c_str());
-        }
-        LOG_DBG("EBP", "Generated thumb BMP from JPG cover image, success: %s", success ? "yes" : "no");
-        return success;
-      } else if (FsHelpers::hasPngExtension(coverImageHref)) {
-        LOG_DBG("EBP", "Generating thumb BMP from PNG cover image");
-        const auto coverPngTempPath = getCachePath() + "/.cover.png";
-
-        FsFile coverPng;
-        if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
-          return false;
-        }
-        readItemContentsToStream(coverImageHref, coverPng, 1024);
-        coverPng.close();
-
-        if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
-          return false;
-        }
-
-        FsFile thumbBmp;
-        if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
-          coverPng.close();
-          return false;
-        }
-        int THUMB_TARGET_WIDTH = height * 0.6;
-        int THUMB_TARGET_HEIGHT = height;
-        const bool success = PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH,
-                                                                               THUMB_TARGET_HEIGHT);
-        coverPng.close();
-        thumbBmp.close();
-        Storage.remove(coverPngTempPath.c_str());
-
-        if (!success) {
-          LOG_ERR("EBP", "Failed to generate thumb BMP from PNG cover image");
-          Storage.remove(getThumbBmpPath(height).c_str());
-        }
-        LOG_DBG("EBP", "Generated thumb BMP from PNG cover image, success: %s", success ? "yes" : "no");
-        return success;
-      } else {
-        const ImageConverter::Format format = ImageConverter::detectFormat(coverImageHref.c_str());
-        if (format == ImageConverter::FORMAT_UNKNOWN) {
-          LOG_ERR("EBP", "Cover image format is not supported, skipping thumbnail");
-        } else {
-          LOG_DBG("EBP", "Generating thumb BMP from %s cover image", coverFormatName(format));
-          const auto coverTempPath = tempImagePathForFormat(getCachePath(), format);
-
-          if (!extractItemToTempFile(this, coverImageHref, coverTempPath)) {
-            Storage.remove(coverTempPath.c_str());
-            return false;
-          }
-
-          FsFile coverImage;
-          if (!Storage.openFileForRead("EBP", coverTempPath, coverImage)) {
-            Storage.remove(coverTempPath.c_str());
-            return false;
-          }
-
-          FsFile thumbBmp;
-          if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
-            coverImage.close();
-            Storage.remove(coverTempPath.c_str());
-            return false;
-          }
-          // Use smaller target size for Continue Reading card (half of screen: 240x400)
-          // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
-          const int thumbTargetWidth = static_cast<int>(height * 0.6f);
-          const int thumbTargetHeight = height;
-          const bool success =
-              ImageConverter::convertTo1BitBmpStream(coverImage, format, thumbBmp, thumbTargetWidth, thumbTargetHeight);
-          coverImage.close();
-          thumbBmp.close();
-          Storage.remove(coverTempPath.c_str());
-
-          if (!success) {
-            LOG_ERR("EBP", "Failed to generate thumb BMP from cover image");
-            Storage.remove(getThumbBmpPath(height).c_str());
-          }
-          LOG_DBG("EBP", "Generated thumb BMP from cover image, success: %s", success ? "yes" : "no");
-          return success;
-        }
-      }
-
-      if (coverImageHref.empty()) {
-        LOG_DBG("EBP", "No cover image for thumbnail, writing empty marker file");
-      }
-
-      // Write an empty bmp file to avoid generation attempts in the future
-      FsFile thumbBmp;
-      Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp);
-      thumbBmp.close();
+    if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
       return false;
     }
 
-    uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte)
-        const {
-      if (itemHref.empty()) {
-        LOG_DBG("EBP", "Failed to read item, empty href");
-        return nullptr;
-      }
+    FsFile coverBmp;
+    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
+      coverPng.close();
+      return false;
+    }
+    const bool success = PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped);
+    coverPng.close();
+    coverBmp.close();
+    Storage.remove(coverPngTempPath.c_str());
 
-      const std::string path = FsHelpers::normalisePath(itemHref);
+    if (!success) {
+      LOG_ERR("EBP", "Failed to generate BMP from PNG cover image");
+      Storage.remove(getCoverBmpPath(cropped).c_str());
+    }
+    LOG_DBG("EBP", "Generated BMP from PNG cover image, success: %s", success ? "yes" : "no");
+    return success;
+  }
 
-      const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
-      if (!content) {
-        LOG_DBG("EBP", "Failed to read item %s", path.c_str());
-        return nullptr;
-      }
+  LOG_ERR("EBP", "Cover image is not a supported format, skipping");
+  return false;
+}
 
-      return content;
+std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
+std::string Epub::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
+
+bool Epub::generateThumbBmp(int height) const {
+  // Already generated, return true
+  if (Storage.exists(getThumbBmpPath(height).c_str())) {
+    return true;
+  }
+
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_ERR("EBP", "Cannot generate thumb BMP, cache not loaded");
+    return false;
+  }
+
+  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+  if (coverImageHref.empty()) {
+    LOG_DBG("EBP", "No known cover image for thumbnail");
+  } else if (FsHelpers::hasJpgExtension(coverImageHref)) {
+    LOG_DBG("EBP", "Generating thumb BMP from JPG cover image");
+    const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
+
+    FsFile coverJpg;
+    if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
+      return false;
+    }
+    readItemContentsToStream(coverImageHref, coverJpg, 1024);
+    coverJpg.close();
+
+    if (!Storage.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
+      return false;
     }
 
-    bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize) const {
-      SpiBusMutex::Guard guard;
-      if (itemHref.empty()) {
-        LOG_DBG("EBP", "Failed to read item, empty href");
+    FsFile thumbBmp;
+    if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
+      coverJpg.close();
+      return false;
+    }
+    // Use smaller target size for Continue Reading card (half of screen: 240x400)
+    // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
+    int THUMB_TARGET_WIDTH = height * 0.6;
+    int THUMB_TARGET_HEIGHT = height;
+    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
+                                                                             THUMB_TARGET_HEIGHT);
+    coverJpg.close();
+    thumbBmp.close();
+    Storage.remove(coverJpgTempPath.c_str());
+
+    if (!success) {
+      LOG_ERR("EBP", "Failed to generate thumb BMP from JPG cover image");
+      Storage.remove(getThumbBmpPath(height).c_str());
+    }
+    LOG_DBG("EBP", "Generated thumb BMP from JPG cover image, success: %s", success ? "yes" : "no");
+    return success;
+  } else if (FsHelpers::hasPngExtension(coverImageHref)) {
+    LOG_DBG("EBP", "Generating thumb BMP from PNG cover image");
+    const auto coverPngTempPath = getCachePath() + "/.cover.png";
+
+    FsFile coverPng;
+    if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
+      return false;
+    }
+    readItemContentsToStream(coverImageHref, coverPng, 1024);
+    coverPng.close();
+
+    if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
+      return false;
+    }
+
+    FsFile thumbBmp;
+    if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
+      coverPng.close();
+      return false;
+    }
+    int THUMB_TARGET_WIDTH = height * 0.6;
+    int THUMB_TARGET_HEIGHT = height;
+    const bool success =
+        PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
+    coverPng.close();
+    thumbBmp.close();
+    Storage.remove(coverPngTempPath.c_str());
+
+    if (!success) {
+      LOG_ERR("EBP", "Failed to generate thumb BMP from PNG cover image");
+      Storage.remove(getThumbBmpPath(height).c_str());
+    }
+    LOG_DBG("EBP", "Generated thumb BMP from PNG cover image, success: %s", success ? "yes" : "no");
+    return success;
+  } else {
+    const ImageConverter::Format format = ImageConverter::detectFormat(coverImageHref.c_str());
+    if (format == ImageConverter::FORMAT_UNKNOWN) {
+      LOG_ERR("EBP", "Cover image format is not supported, skipping thumbnail");
+    } else {
+      LOG_DBG("EBP", "Generating thumb BMP from %s cover image", coverFormatName(format));
+      const auto coverTempPath = tempImagePathForFormat(getCachePath(), format);
+
+      if (!extractItemToTempFile(this, coverImageHref, coverTempPath)) {
+        Storage.remove(coverTempPath.c_str());
         return false;
       }
 
-      const std::string path = FsHelpers::normalisePath(itemHref);
-      return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
+      FsFile coverImage;
+      if (!Storage.openFileForRead("EBP", coverTempPath, coverImage)) {
+        Storage.remove(coverTempPath.c_str());
+        return false;
+      }
+
+      FsFile thumbBmp;
+      if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
+        coverImage.close();
+        Storage.remove(coverTempPath.c_str());
+        return false;
+      }
+      // Use smaller target size for Continue Reading card (half of screen: 240x400)
+      // Generate 1-bit BMP for fast home screen rendering (no gray passes needed)
+      const int thumbTargetWidth = static_cast<int>(height * 0.6f);
+      const int thumbTargetHeight = height;
+      const bool success =
+          ImageConverter::convertTo1BitBmpStream(coverImage, format, thumbBmp, thumbTargetWidth, thumbTargetHeight);
+      coverImage.close();
+      thumbBmp.close();
+      Storage.remove(coverTempPath.c_str());
+
+      if (!success) {
+        LOG_ERR("EBP", "Failed to generate thumb BMP from cover image");
+        Storage.remove(getThumbBmpPath(height).c_str());
+      }
+      LOG_DBG("EBP", "Generated thumb BMP from cover image, success: %s", success ? "yes" : "no");
+      return success;
     }
+  }
 
-    bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
-      const std::string path = FsHelpers::normalisePath(itemHref);
-      return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+  if (coverImageHref.empty()) {
+    LOG_DBG("EBP", "No cover image for thumbnail, writing empty marker file");
+  }
+
+  // Write an empty bmp file to avoid generation attempts in the future
+  FsFile thumbBmp;
+  Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp);
+  thumbBmp.close();
+  return false;
+}
+
+uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
+  if (itemHref.empty()) {
+    LOG_DBG("EBP", "Failed to read item, empty href");
+    return nullptr;
+  }
+
+  const std::string path = FsHelpers::normalisePath(itemHref);
+
+  const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
+  if (!content) {
+    LOG_DBG("EBP", "Failed to read item %s", path.c_str());
+    return nullptr;
+  }
+
+  return content;
+}
+
+bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize) const {
+  SpiBusMutex::Guard guard;
+  if (itemHref.empty()) {
+    LOG_DBG("EBP", "Failed to read item, empty href");
+    return false;
+  }
+
+  const std::string path = FsHelpers::normalisePath(itemHref);
+  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
+}
+
+bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
+  const std::string path = FsHelpers::normalisePath(itemHref);
+  return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+}
+
+int Epub::getSpineItemsCount() const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return 0;
+  }
+  return bookMetadataCache->getSpineCount();
+}
+
+size_t Epub::getCumulativeSpineItemSize(const int spineIndex) const { return getSpineItem(spineIndex).cumulativeSize; }
+
+BookMetadataCache::SpineEntry Epub::getSpineItem(const int spineIndex) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_ERR("EBP", "getSpineItem called but cache not loaded");
+    return {};
+  }
+
+  if (spineIndex < 0 || spineIndex >= bookMetadataCache->getSpineCount()) {
+    LOG_ERR("EBP", "getSpineItem index:%d is out of range", spineIndex);
+    return bookMetadataCache->getSpineEntry(0);
+  }
+
+  return bookMetadataCache->getSpineEntry(spineIndex);
+}
+
+BookMetadataCache::TocEntry Epub::getTocItem(const int tocIndex) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_DBG("EBP", "getTocItem called but cache not loaded");
+    return {};
+  }
+
+  if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
+    LOG_DBG("EBP", "getTocItem index:%d is out of range", tocIndex);
+    return {};
+  }
+
+  return bookMetadataCache->getTocEntry(tocIndex);
+}
+
+int Epub::getTocItemsCount() const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return 0;
+  }
+
+  return bookMetadataCache->getTocCount();
+}
+
+// work out the section index for a toc index
+int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_ERR("EBP", "getSpineIndexForTocIndex called but cache not loaded");
+    return 0;
+  }
+
+  if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
+    LOG_ERR("EBP", "getSpineIndexForTocIndex: tocIndex %d out of range", tocIndex);
+    return 0;
+  }
+
+  const int spineIndex = bookMetadataCache->getTocEntry(tocIndex).spineIndex;
+  if (spineIndex < 0) {
+    LOG_DBG("EBP", "Section not found for TOC index %d", tocIndex);
+    return 0;
+  }
+
+  return spineIndex;
+}
+
+int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }
+
+size_t Epub::getBookSize() const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded() || bookMetadataCache->getSpineCount() == 0) {
+    return 0;
+  }
+  return getCumulativeSpineItemSize(getSpineItemsCount() - 1);
+}
+
+int Epub::getSpineIndexForTextReference() const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_ERR("EBP", "getSpineIndexForTextReference called but cache not loaded");
+    return 0;
+  }
+  LOG_DBG("EBP", "Core Metadata: cover(%d)=%s, textReference(%d)=%s",
+          bookMetadataCache->coreMetadata.coverItemHref.size(), bookMetadataCache->coreMetadata.coverItemHref.c_str(),
+          bookMetadataCache->coreMetadata.textReferenceHref.size(),
+          bookMetadataCache->coreMetadata.textReferenceHref.c_str());
+
+  if (bookMetadataCache->coreMetadata.textReferenceHref.empty()) {
+    // there was no textReference in epub, so we return 0 (the first chapter)
+    return 0;
+  }
+
+  // loop through spine items to get the correct index matching the text href
+  for (size_t i = 0; i < getSpineItemsCount(); i++) {
+    if (getSpineItem(i).href == bookMetadataCache->coreMetadata.textReferenceHref) {
+      LOG_DBG("EBP", "Text reference %s found at index %d", bookMetadataCache->coreMetadata.textReferenceHref.c_str(),
+              i);
+      return i;
     }
+  }
+  // This should not happen, as we checked for empty textReferenceHref earlier
+  LOG_DBG("EBP", "Section not found for text reference");
+  return 0;
+}
 
-    int Epub::getSpineItemsCount() const {
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-        return 0;
-      }
-      return bookMetadataCache->getSpineCount();
-    }
+// Calculate progress in book (returns 0.0-1.0)
+float Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
+  const size_t bookSize = getBookSize();
+  if (bookSize == 0) {
+    return 0.0f;
+  }
+  const size_t prevChapterSize = (currentSpineIndex >= 1) ? getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
+  const size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
+  const float sectionProgSize = currentSpineRead * static_cast<float>(curChapterSize);
+  const float totalProgress = static_cast<float>(prevChapterSize) + sectionProgSize;
+  return totalProgress / static_cast<float>(bookSize);
+}
 
-    size_t Epub::getCumulativeSpineItemSize(const int spineIndex) const {
-      return getSpineItem(spineIndex).cumulativeSize;
-    }
+int Epub::resolveHrefToSpineIndex(const std::string& href) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return -1;
 
-    BookMetadataCache::SpineEntry Epub::getSpineItem(const int spineIndex) const {
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-        LOG_ERR("EBP", "getSpineItem called but cache not loaded");
-        return {};
-      }
+  // Extract filename (remove #anchor)
+  std::string target = href;
+  size_t hashPos = target.find('#');
+  if (hashPos != std::string::npos) target = target.substr(0, hashPos);
 
-      if (spineIndex < 0 || spineIndex >= bookMetadataCache->getSpineCount()) {
-        LOG_ERR("EBP", "getSpineItem index:%d is out of range", spineIndex);
-        return bookMetadataCache->getSpineEntry(0);
-      }
+  // Same-file reference (anchor-only)
+  if (target.empty()) return -1;
 
-      return bookMetadataCache->getSpineEntry(spineIndex);
-    }
+  // Extract just the filename for comparison
+  size_t targetSlash = target.find_last_of('/');
+  std::string targetFilename = (targetSlash != std::string::npos) ? target.substr(targetSlash + 1) : target;
 
-    BookMetadataCache::TocEntry Epub::getTocItem(const int tocIndex) const {
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-        LOG_DBG("EBP", "getTocItem called but cache not loaded");
-        return {};
-      }
-
-      if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
-        LOG_DBG("EBP", "getTocItem index:%d is out of range", tocIndex);
-        return {};
-      }
-
-      return bookMetadataCache->getTocEntry(tocIndex);
-    }
-
-    int Epub::getTocItemsCount() const {
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-        return 0;
-      }
-
-      return bookMetadataCache->getTocCount();
-    }
-
-    // work out the section index for a toc index
-    int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-        LOG_ERR("EBP", "getSpineIndexForTocIndex called but cache not loaded");
-        return 0;
-      }
-
-      if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
-        LOG_ERR("EBP", "getSpineIndexForTocIndex: tocIndex %d out of range", tocIndex);
-        return 0;
-      }
-
-      const int spineIndex = bookMetadataCache->getTocEntry(tocIndex).spineIndex;
-      if (spineIndex < 0) {
-        LOG_DBG("EBP", "Section not found for TOC index %d", tocIndex);
-        return 0;
-      }
-
-      return spineIndex;
-    }
-
-    int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }
-
-    size_t Epub::getBookSize() const {
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded() || bookMetadataCache->getSpineCount() == 0) {
-        return 0;
-      }
-      return getCumulativeSpineItemSize(getSpineItemsCount() - 1);
-    }
-
-    int Epub::getSpineIndexForTextReference() const {
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-        LOG_ERR("EBP", "getSpineIndexForTextReference called but cache not loaded");
-        return 0;
-      }
-      LOG_DBG("EBP", "Core Metadata: cover(%d)=%s, textReference(%d)=%s",
-              bookMetadataCache->coreMetadata.coverItemHref.size(),
-              bookMetadataCache->coreMetadata.coverItemHref.c_str(),
-              bookMetadataCache->coreMetadata.textReferenceHref.size(),
-              bookMetadataCache->coreMetadata.textReferenceHref.c_str());
-
-      if (bookMetadataCache->coreMetadata.textReferenceHref.empty()) {
-        // there was no textReference in epub, so we return 0 (the first chapter)
-        return 0;
-      }
-
-      // loop through spine items to get the correct index matching the text href
-      for (size_t i = 0; i < getSpineItemsCount(); i++) {
-        if (getSpineItem(i).href == bookMetadataCache->coreMetadata.textReferenceHref) {
-          LOG_DBG("EBP", "Text reference %s found at index %d",
-                  bookMetadataCache->coreMetadata.textReferenceHref.c_str(), i);
-          return i;
-        }
-      }
-      // This should not happen, as we checked for empty textReferenceHref earlier
-      LOG_DBG("EBP", "Section not found for text reference");
-      return 0;
-    }
-
-    // Calculate progress in book (returns 0.0-1.0)
-    float Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
-      const size_t bookSize = getBookSize();
-      if (bookSize == 0) {
-        return 0.0f;
-      }
-      const size_t prevChapterSize = (currentSpineIndex >= 1) ? getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
-      const size_t curChapterSize = getCumulativeSpineItemSize(currentSpineIndex) - prevChapterSize;
-      const float sectionProgSize = currentSpineRead * static_cast<float>(curChapterSize);
-      const float totalProgress = static_cast<float>(prevChapterSize) + sectionProgSize;
-      return totalProgress / static_cast<float>(bookSize);
-    }
-
-    int Epub::resolveHrefToSpineIndex(const std::string& href) const {
-      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return -1;
-
-      // Extract filename (remove #anchor)
-      std::string target = href;
-      size_t hashPos = target.find('#');
-      if (hashPos != std::string::npos) target = target.substr(0, hashPos);
-
-      // Same-file reference (anchor-only)
-      if (target.empty()) return -1;
-
-      // Extract just the filename for comparison
-      size_t targetSlash = target.find_last_of('/');
-      std::string targetFilename = (targetSlash != std::string::npos) ? target.substr(targetSlash + 1) : target;
-
-      for (int i = 0; i < getSpineItemsCount(); i++) {
-        const auto& spineHref = getSpineItem(i).href;
-        // Try exact match first
-        if (spineHref == target) return i;
-        // Then filename-only match
-        size_t spineSlash = spineHref.find_last_of('/');
-        std::string spineFilename = (spineSlash != std::string::npos) ? spineHref.substr(spineSlash + 1) : spineHref;
-        if (spineFilename == targetFilename) return i;
-      }
-      return -1;
-    }
+  for (int i = 0; i < getSpineItemsCount(); i++) {
+    const auto& spineHref = getSpineItem(i).href;
+    // Try exact match first
+    if (spineHref == target) return i;
+    // Then filename-only match
+    size_t spineSlash = spineHref.find_last_of('/');
+    std::string spineFilename = (spineSlash != std::string::npos) ? spineHref.substr(spineSlash + 1) : spineHref;
+    if (spineFilename == targetFilename) return i;
+  }
+  return -1;
+}
