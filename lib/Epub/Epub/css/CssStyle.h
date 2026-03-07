@@ -129,10 +129,10 @@ struct CssStyle {
   // Apply properties from another style, only overwriting if the other style
   // has that property explicitly defined
   void applyOver(const CssStyle& base) {
-#define CSS_APPLY(prop)        \
-  if (base.defined.prop) {     \
-    prop = base.prop;          \
-    defined.prop = 1;          \
+#define CSS_APPLY(prop)    \
+  if (base.defined.prop) { \
+    prop = base.prop;      \
+    defined.prop = 1;      \
   }
     CSS_APPLY(textAlign)
     CSS_APPLY(fontStyle)
