@@ -4,6 +4,7 @@
 
 #if ENABLE_USER_FONTS
 
+#include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <util/StringUtils.h>
@@ -51,7 +52,7 @@ void UserFontManager::scanFonts() {
       fileName = fileName.substr(slashPos + 1);
     }
 
-    if (StringUtils::checkFileExtension(fileName, ".cpf")) {
+    if (FsHelpers::n(fileName, ".cpf")) {
       const std::string baseName = fileName.substr(0, fileName.size() - 4);
       if (hasSuffix(baseName, "-Regular")) {
         families.insert(baseName.substr(0, baseName.size() - 8));
