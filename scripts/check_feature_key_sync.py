@@ -433,16 +433,10 @@ def main() -> int:
     configurator_profiles = parse_configurator_profiles(configurator_file)
     configurator_dependencies = parse_configurator_dependencies(configurator_file)
 
-    workflow_file = ROOT / ".github" / "workflows" / "build-custom.yml"
-    workflow_inputs = parse_workflow_inputs(workflow_file)
-    workflow_enables = parse_workflow_cmd_enables(workflow_file)
-
     sources = {
         "measure_feature_sizes.py": parse_python_list(ROOT / "scripts" / "measure_feature_sizes.py", "FEATURES"),
         "test_all_combinations.sh": parse_shell_features(ROOT / "scripts" / "test_all_combinations.sh"),
         "docs/configurator/index.html": list(configurator_specs.keys()),
-        ".github/workflows/build-custom.yml inputs": workflow_inputs,
-        ".github/workflows/build-custom.yml enables": workflow_enables,
     }
 
     errors: list[str] = []

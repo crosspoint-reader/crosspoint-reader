@@ -497,6 +497,7 @@ PROFILES = {
             'background_server': True,
             'home_media_picker': True,
             'web_pokedex_plugin': True,
+            'pokemon_party': True,
             'dark_mode': True,
             'visual_cover_picker': True,
             'ble_wifi_provisioning': True,

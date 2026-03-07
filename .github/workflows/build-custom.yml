@@ -13,131 +13,16 @@ on:
           - standard
           - full
           - custom
-      bookerly_fonts:
-        description: 'Bookerly Fonts (12/16/18pt, ~1.3MB)'
+      enable_features:
+        description: 'Comma or space-separated feature keys to force-enable'
         required: false
-        type: boolean
-        default: true
-      notosans_fonts:
-        description: 'Noto Sans Fonts (12/16/18pt, ~1.3MB)'
+        type: string
+        default: ''
+      disable_features:
+        description: 'Comma or space-separated feature keys to force-disable'
         required: false
-        type: boolean
-        default: true
-      opendyslexic_fonts:
-        description: 'OpenDyslexic Fonts (~1.0MB, requires Bookerly + Noto Sans)'
-        required: false
-        type: boolean
-        default: false
-      image_sleep:
-        description: 'PNG/JPEG/BMP Sleep Images (~0KB base)'
-        required: false
-        type: boolean
-        default: true
-      book_images:
-        description: 'Inline EPUB/Markdown Images (~0KB base)'
-        required: false
-        type: boolean
-        default: true
-      markdown:
-        description: 'Markdown Support (~231KB)'
-        required: false
-        type: boolean
-        default: true
-      integrations:
-        description: 'Integrations base layer (~0KB)'
-        required: false
-        type: boolean
-        default: false
-      koreader_sync:
-        description: 'KOReader Sync (~142KB)'
-        required: false
-        type: boolean
-        default: false
-      calibre_sync:
-        description: 'Calibre Sync (~223KB)'
-        required: false
-        type: boolean
-        default: false
-      background_server:
-        description: 'Background Web Server (~0KB base)'
-        required: false
-        type: boolean
-        default: true
-      home_media_picker:
-        description: 'Home Media Picker UI (~-4KB)'
-        required: false
-        type: boolean
-        default: true
-      web_pokedex_plugin:
-        description: 'Web Pokedex Plugin (~-4KB)'
-        required: false
-        type: boolean
-        default: false
-      pokemon_party:
-        description: 'Pokemon Party metadata API (~4KB, requires Web Pokedex Plugin)'
-        required: false
-        type: boolean
-        default: false
-      epub_support:
-        description: 'EPUB Support (~157KB)'
-        required: false
-        type: boolean
-        default: true
-      hyphenation:
-        description: 'EPUB Hyphenation (~447KB)'
-        required: false
-        type: boolean
-        default: true
-      xtc_support:
-        description: 'XTC support (~13KB)'
-        required: false
-        type: boolean
-        default: true
-      lyra_theme:
-        description: 'Lyra theme (~5KB)'
-        required: false
-        type: boolean
-        default: true
-      ota_updates:
-        description: 'OTA Updates (~230KB)'
-        required: false
-        type: boolean
-        default: true
-      todo_planner:
-        description: 'Todo/Planner (~237KB)'
-        required: false
-        type: boolean
-        default: false
-      dark_mode:
-        description: 'Dark Mode (~0KB base)'
-        required: false
-        type: boolean
-        default: true
-      visual_cover_picker:
-        description: 'Visual Cover Picker (~118KB)'
-        required: false
-        type: boolean
-        default: false
-      ble_wifi_provisioning:
-        description: 'BLE WiFi Provisioning (~619KB)'
-        required: false
-        type: boolean
-        default: false
-      user_fonts:
-        description: 'User Fonts from SD (~4KB)'
-        required: false
-        type: boolean
-        default: true
-      web_wifi_setup:
-        description: 'Web WiFi Setup (~4KB)'
-        required: false
-        type: boolean
-        default: true
-      usb_mass_storage:
-        description: 'USB Mass Storage prompt mode (~8KB)'
-        required: false
-        type: boolean
-        default: true
+        type: string
+        default: ''
 
 jobs:
   build-custom:
@@ -167,46 +52,10 @@ jobs:
       - name: Generate custom build configuration
         id: config
         run: |
-          CMD=(uv run python scripts/generate_build_config.py)
-          
-          # Add base profile if selected
-          if [ "${{ inputs.profile }}" != "custom" ]; then
-            echo "Using base profile: ${{ inputs.profile }}"
-            CMD+=(--profile "${{ inputs.profile }}")
-          fi
-
-          # Apply individual feature toggles as overrides
-          # This ensures toggles are respected even if a profile is selected
-          
-          # Boolean inputs from GitHub Actions are strings "true" or "false"
-          [ "${{ inputs.bookerly_fonts }}" == "true" ] && CMD+=(--enable bookerly_fonts) || CMD+=(--disable bookerly_fonts)
-          [ "${{ inputs.notosans_fonts }}" == "true" ] && CMD+=(--enable notosans_fonts) || CMD+=(--disable notosans_fonts)
-          [ "${{ inputs.opendyslexic_fonts }}" == "true" ] && CMD+=(--enable opendyslexic_fonts) || CMD+=(--disable opendyslexic_fonts)
-          [ "${{ inputs.image_sleep }}" == "true" ] && CMD+=(--enable image_sleep) || CMD+=(--disable image_sleep)
-          [ "${{ inputs.book_images }}" == "true" ] && CMD+=(--enable book_images) || CMD+=(--disable book_images)
-          [ "${{ inputs.markdown }}" == "true" ] && CMD+=(--enable markdown) || CMD+=(--disable markdown)
-          [ "${{ inputs.integrations }}" == "true" ] && CMD+=(--enable integrations) || CMD+=(--disable integrations)
-          [ "${{ inputs.koreader_sync }}" == "true" ] && CMD+=(--enable koreader_sync) || CMD+=(--disable koreader_sync)
-          [ "${{ inputs.calibre_sync }}" == "true" ] && CMD+=(--enable calibre_sync) || CMD+=(--disable calibre_sync)
-          [ "${{ inputs.background_server }}" == "true" ] && CMD+=(--enable background_server) || CMD+=(--disable background_server)
-          [ "${{ inputs.home_media_picker }}" == "true" ] && CMD+=(--enable home_media_picker) || CMD+=(--disable home_media_picker)
-          [ "${{ inputs.web_pokedex_plugin }}" == "true" ] && CMD+=(--enable web_pokedex_plugin) || CMD+=(--disable web_pokedex_plugin)
-          [ "${{ inputs.pokemon_party }}" == "true" ] && CMD+=(--enable pokemon_party) || CMD+=(--disable pokemon_party)
-          [ "${{ inputs.epub_support }}" == "true" ] && CMD+=(--enable epub_support) || CMD+=(--disable epub_support)
-          [ "${{ inputs.hyphenation }}" == "true" ] && CMD+=(--enable hyphenation) || CMD+=(--disable hyphenation)
-          [ "${{ inputs.xtc_support }}" == "true" ] && CMD+=(--enable xtc_support) || CMD+=(--disable xtc_support)
-          [ "${{ inputs.lyra_theme }}" == "true" ] && CMD+=(--enable lyra_theme) || CMD+=(--disable lyra_theme)
-          [ "${{ inputs.ota_updates }}" == "true" ] && CMD+=(--enable ota_updates) || CMD+=(--disable ota_updates)
-          [ "${{ inputs.todo_planner }}" == "true" ] && CMD+=(--enable todo_planner) || CMD+=(--disable todo_planner)
-          [ "${{ inputs.dark_mode }}" == "true" ] && CMD+=(--enable dark_mode) || CMD+=(--disable dark_mode)
-          [ "${{ inputs.visual_cover_picker }}" == "true" ] && CMD+=(--enable visual_cover_picker) || CMD+=(--disable visual_cover_picker)
-          [ "${{ inputs.ble_wifi_provisioning }}" == "true" ] && CMD+=(--enable ble_wifi_provisioning) || CMD+=(--disable ble_wifi_provisioning)
-          [ "${{ inputs.user_fonts }}" == "true" ] && CMD+=(--enable user_fonts) || CMD+=(--disable user_fonts)
-          [ "${{ inputs.web_wifi_setup }}" == "true" ] && CMD+=(--enable web_wifi_setup) || CMD+=(--disable web_wifi_setup)
-          [ "${{ inputs.usb_mass_storage }}" == "true" ] && CMD+=(--enable usb_mass_storage) || CMD+=(--disable usb_mass_storage)
-
-          echo "Executing: ${CMD[@]}"
-          "${CMD[@]}"
+          uv run python scripts/build_custom_workflow.py \
+            --profile "${{ inputs.profile }}" \
+            --enable-features "${{ inputs.enable_features }}" \
+            --disable-features "${{ inputs.disable_features }}"
 
           # Show generated configuration
           echo "### Generated configuration:"
