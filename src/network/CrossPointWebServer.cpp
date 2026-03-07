@@ -2686,6 +2686,10 @@ void CrossPointWebServer::handleSleepCoverPin() {
 }
 
 void CrossPointWebServer::handleOpenBook() {
+  if (!core::FeatureModules::hasCapability(core::Capability::RemoteOpenBook)) {
+    server->send(404, "text/plain", "Remote open-book disabled");
+    return;
+  }
   if (!server->hasArg("plain")) {
     server->send(400, "text/plain", "Missing JSON body");
     return;
@@ -2719,6 +2723,10 @@ void CrossPointWebServer::handleOpenBook() {
 }
 
 void CrossPointWebServer::handleRemoteButton() {
+  if (!core::FeatureModules::hasCapability(core::Capability::RemotePageTurn)) {
+    server->send(404, "text/plain", "Remote page turn disabled");
+    return;
+  }
   if (!server->hasArg("plain")) {
     server->send(400, "text/plain", "Missing JSON body");
     return;

@@ -1,5 +1,6 @@
 #include "core/features/FeatureModules.h"
 
+#include <ArduinoJson.h>
 #include <FeatureFlags.h>
 #include <Logging.h>
 
@@ -249,6 +250,10 @@ bool FeatureModules::hasCapability(const Capability capability) {
       return isEnabled("ota_updates");
     case Capability::PokemonParty:
       return isEnabled("pokemon_party");
+    case Capability::RemoteOpenBook:
+      return true;
+    case Capability::RemotePageTurn:
+      return true;
     case Capability::TodoPlanner:
       return isEnabled("todo_planner");
     case Capability::TrmnlSwitch:
@@ -274,7 +279,16 @@ bool FeatureModules::hasCapability(const Capability capability) {
 
 String FeatureModules::getBuildString() { return FeatureCatalog::buildString(); }
 
-String FeatureModules::getFeatureMapJson() { return FeatureCatalog::toJson(); }
+String FeatureModules::getFeatureMapJson() {
+  JsonDocument doc;
+  deserializeJson(doc, FeatureCatalog::toJson());
+  doc["remote_open_book"] = hasCapability(Capability::RemoteOpenBook);
+  doc["remote_page_turn"] = hasCapability(Capability::RemotePageTurn);
+
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
 
 FeatureModules::ReaderOpenResult FeatureModules::createReaderActivityForPath(
     const std::string& path, GfxRenderer& renderer, MappedInputManager& mappedInput,

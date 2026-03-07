@@ -18,6 +18,7 @@ Firmware endpoints implemented:
     POST /move           (form: path, dest)
     POST /delete         (form: paths JSON array)
     GET  /api/settings
+    GET  /api/settings/raw
     POST /api/settings   (JSON body)
     GET  /api/recent
     GET  /api/cover?path=X
@@ -27,6 +28,8 @@ Firmware endpoints implemented:
     GET  /api/wifi/scan
     POST /api/wifi/connect     (JSON: {ssid, password})
     POST /api/wifi/forget      (JSON: {ssid})
+    POST /api/open-book        (JSON: {path})
+    POST /api/remote/button    (JSON: {button})
     POST /api/ota/check
     GET  /api/ota/check
     POST /api/todo/entry       (form: type, text)
@@ -56,12 +59,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 def _default_status():
     return {
         "version": "1.0.0",
+        "protocolVersion": 1,
         "wifiStatus": "connected",
         "ip": "192.168.4.1",
         "mode": "STA",
         "rssi": -50,
         "freeHeap": 100000,
         "uptime": 1000,
+        "openBook": "",
         "otaSelectedBundle": "",
         "otaInstalledBundle": "",
     }
@@ -71,6 +76,8 @@ def _default_plugins():
     return {
         "web_wifi_setup": False,
         "ota_updates": False,
+        "remote_open_book": True,
+        "remote_page_turn": True,
         "user_fonts": False,
         "todo_planner": False,
     }
@@ -118,6 +125,8 @@ def _default_mutations():
         "todoEntries": [],         # list[[type, text]]
         "wifiConnects": [],        # list[[ssid, password]]
         "wifiForgets": [],         # list[str]
+        "openBookRequests": [],    # list[str]
+        "remoteButtonRequests": [],# list[str]
         "deletedPaths": [],        # list[list[str]]
         "renames": [],             # list[[from_path, new_name]]
         "moves": [],               # list[[from_path, dest_path]]
@@ -213,6 +222,11 @@ class ContractHandler(BaseHTTPRequestHandler):
 
             elif base == "/api/settings":
                 self._json_response(_state["settings"])
+
+            elif base == "/api/settings/raw":
+                self._json_response(
+                    {entry.get("key", ""): entry.get("value") for entry in _state["settings"]}
+                )
 
             elif base == "/api/recent":
                 self._json_response(_state["recentBooks"])
@@ -311,6 +325,18 @@ class ContractHandler(BaseHTTPRequestHandler):
 
             elif base == "/api/sleep-cover/pin":
                 self._handle_sleep_pin(raw)
+
+            elif base == "/api/open-book":
+                body = self._parse_json(raw)
+                path = body.get("path", "")
+                _mutations["openBookRequests"].append(path)
+                _state["status"]["openBook"] = path
+                self._json_response({"status": "opening"}, 202)
+
+            elif base == "/api/remote/button":
+                body = self._parse_json(raw)
+                _mutations["remoteButtonRequests"].append(body.get("button", ""))
+                self._json_response({"status": "ok"}, 202)
 
             elif base == "/api/wifi/connect":
                 body = self._parse_json(raw)

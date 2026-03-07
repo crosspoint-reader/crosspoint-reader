@@ -2,6 +2,10 @@
 
 This document describes the remote control features of CrossPoint Reader, allowing for page turns and button injection over WiFi (HTTP and WebSocket) and USB Serial.
 
+Capability discovery:
+- HTTP clients should read `remote_page_turn` from `GET /api/plugins`.
+- USB clients should read `remote_page_turn` from the `plugins` command response.
+
 ## WiFi Remote Control
 
 When WiFi is enabled and the web server is running, the device accepts remote button commands.

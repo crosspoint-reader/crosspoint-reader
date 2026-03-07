@@ -59,6 +59,7 @@ returned by UDP discovery (§1) rather than assuming a fixed `crosspoint.local`.
 ```json
 {
   "version":            "string",
+  "protocolVersion":    1,
   "wifi_status":        "Connected | Disconnected | AP Mode",
   "ip":                 "192.168.x.x",
   "mode":               "STA | AP",
@@ -74,6 +75,7 @@ returned by UDP discovery (§1) rather than assuming a fixed `crosspoint.local`.
 ```json
 {
   "version":              "string",
+  "protocolVersion":      1,
   "wifiStatus":           "Connected | Disconnected | AP Mode",
   "ip":                   "192.168.x.x",
   "mode":                 "STA | AP",
@@ -234,6 +236,8 @@ Clears Pokemon metadata for a book.
 {
   "web_wifi_setup": false,
   "ota_updates":    false,
+  "remote_open_book": true,
+  "remote_page_turn": true,
   "user_fonts":     false,
   "todo_planner":   false
 }
@@ -244,7 +248,7 @@ Returns the full feature catalog as a flat JSON object with snake_case keys.
 The four keys above are included when the corresponding feature is enabled.
 
 **Current status:** ✅ Matches as long as firmware uses the exact key names above.
-Verify: `web_wifi_setup`, `ota_updates`, `user_fonts`, `todo_planner`.
+Verify: `web_wifi_setup`, `ota_updates`, `remote_open_book`, `remote_page_turn`, `user_fonts`, `todo_planner`.
 
 ---
 
@@ -517,7 +521,8 @@ terminated by `\n`.
 
 | cmd | arg | Expected response |
 |-----|-----|-------------------|
-| `status` | — | `{"ok":true,"version":"...","freeHeap":...,"uptime":...}` |
+| `status` | — | `{"ok":true,"version":"...","protocolVersion":1,"freeHeap":...,"uptime":...}` |
+| `plugins` | — | `{"ok":true,"plugins":{"remote_open_book":true,"remote_page_turn":true,...}}` |
 | `list` | `"/path"` | `{"ok":true,"files":[{"name":"...","path":"...","dir":false,"size":...,"modified":0}]}` |
 | `download` | `"/path/file.epub"` | `{"ok":true,"data":"<base64>"}` |
 | `upload_start` | `{"name":"file.epub","path":"/dir","size":1234}` | `{"ok":true}` |
@@ -532,6 +537,8 @@ terminated by `\n`.
 | `recent` | — | `{"ok":true,"books":[{"path":"...","title":"...","author":"...","last_position":"1/12 8%","last_opened":0,"cover":"<base64-optional>"}]}` |
 | `cover` | `"/path/file.epub"` | `{"ok":true,"data":"<base64>"}` or `{"ok":false}` |
 | `wifi_connect` | `{"ssid":"...","password":"..."}` | `{"ok":true}` |
+| `open_book` | `"/path/file.epub"` | `{"ok":true}` |
+| `remote_button` | `"page_forward"\|"page_back"` | `{"ok":true}` |
 | `todo_add` | `{"text":"...","type":"todo"\|"agenda"}` | `{"ok":true}` |
 
 **Error response** (for any command): `{"ok":false,"error":"<message>"}\n`

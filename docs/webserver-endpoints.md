@@ -84,6 +84,7 @@ curl http://crosspoint.local/api/status
 ```json
 {
   "version": "1.0.0",
+  "protocolVersion": 1,
   "ip": "192.168.1.100",
   "mode": "STA",
   "rssi": -45,
@@ -92,14 +93,15 @@ curl http://crosspoint.local/api/status
 }
 ```
 
-| Field      | Type   | Description                                               |
-| ---------- | ------ | --------------------------------------------------------- |
-| `version`  | string | CrossPoint firmware version                               |
-| `ip`       | string | Device IP address                                         |
-| `mode`     | string | `"STA"` (connected to WiFi) or `"AP"` (access point mode) |
-| `rssi`     | number | WiFi signal strength in dBm (0 in AP mode)                |
-| `freeHeap` | number | Free heap memory in bytes                                 |
-| `uptime`   | number | Seconds since device boot                                 |
+| Field             | Type   | Description                                               |
+| ----------------- | ------ | --------------------------------------------------------- |
+| `version`         | string | CrossPoint firmware version                               |
+| `protocolVersion` | number | Transport schema version for app integrations             |
+| `ip`              | string | Device IP address                                         |
+| `mode`            | string | `"STA"` (connected to WiFi) or `"AP"` (access point mode) |
+| `rssi`            | number | WiFi signal strength in dBm (0 in AP mode)                |
+| `freeHeap`        | number | Free heap memory in bytes                                 |
+| `uptime`          | number | Seconds since device boot                                 |
 
 ---
 
@@ -118,6 +120,8 @@ curl http://crosspoint.local/api/plugins
 ```json
 {
   "markdown": true,
+  "remote_open_book": true,
+  "remote_page_turn": true,
   "todo_planner": true,
   "web_pokedex_plugin": false
 }

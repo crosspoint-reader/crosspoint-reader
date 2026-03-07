@@ -154,7 +154,23 @@ static void handleStatus() {
   logSerial.write('\n');
 }
 
+static void handlePlugins() {
+  JsonDocument resp;
+  resp["ok"] = true;
+
+  JsonDocument featuresDoc;
+  deserializeJson(featuresDoc, core::FeatureModules::getFeatureMapJson());
+  resp["plugins"] = featuresDoc.as<JsonObjectConst>();
+
+  serializeJson(resp, logSerial);
+  logSerial.write('\n');
+}
+
 static void handleOpenBook(const char* path) {
+  if (!core::FeatureModules::hasCapability(core::Capability::RemoteOpenBook)) {
+    sendError("remote_open_book disabled");
+    return;
+  }
   if (!path || path[0] == '\0') {
     sendError("missing path");
     return;
@@ -198,6 +214,10 @@ static void handleWifiStatus() {
 }
 
 static void handleRemoteButton(const char* btn) {
+  if (!core::FeatureModules::hasCapability(core::Capability::RemotePageTurn)) {
+    sendError("remote_page_turn disabled");
+    return;
+  }
   int8_t pageTurn = 0;
   if (strcmp(btn, "page_forward") == 0 || strcmp(btn, "next") == 0) {
     pageTurn = 1;
@@ -898,6 +918,8 @@ static void processCommand(const char* line) {
 
   if (strcmp(name, "status") == 0) {
     handleStatus();
+  } else if (strcmp(name, "plugins") == 0) {
+    handlePlugins();
   } else if (strcmp(name, "list") == 0) {
     handleList(cmd["arg"] | "/");
   } else if (strcmp(name, "download") == 0) {
