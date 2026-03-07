@@ -242,8 +242,14 @@ void SettingsActivity::render(RenderLock&&) {
       },
       true);
 
-  // Draw help text
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Draw help text — use context-appropriate label for the confirm button
+  const char* actionLabel = tr(STR_SELECT);
+  if (selectedSettingIndex > 0 && selectedSettingIndex - 1 < settingsCount) {
+    if ((*currentSettings)[selectedSettingIndex - 1].type == SettingType::TOGGLE) {
+      actionLabel = tr(STR_TOGGLE);
+    }
+  }
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), actionLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen
