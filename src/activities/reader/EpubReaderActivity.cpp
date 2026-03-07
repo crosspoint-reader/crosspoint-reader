@@ -183,7 +183,8 @@ void EpubReaderActivity::loop() {
     if (epub) {
       auto path = epub->getPath();
       auto lastSlash = path.find_last_of('/');
-      activityManager.goToFileBrowser(lastSlash == std::string::npos || lastSlash == 0 ? "/" : path.substr(0, lastSlash));
+      activityManager.goToFileBrowser(lastSlash == std::string::npos || lastSlash == 0 ? "/"
+                                                                                       : path.substr(0, lastSlash));
     } else {
       activityManager.goToFileBrowser("");
     }
