@@ -303,8 +303,7 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
 
 static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
   server->sendHeader("Content-Encoding", "gzip");
-  server->send(200, "text/html", "");
-  server->client().write((const uint8_t*)data, len);
+  server->send_P(200, "text/html", data, len);
 }
 
 void CrossPointWebServer::handleRoot() const {
@@ -313,13 +312,8 @@ void CrossPointWebServer::handleRoot() const {
 }
 
 void CrossPointWebServer::handleJszip() const {
-  server->sendHeader("Content-Type", "application/javascript");
   server->sendHeader("Content-Encoding", "gzip");
-  server->sendHeader("Content-Length", String(jszip_minHtmlCompressedSize));
-  server->sendHeader("Cache-Control", "public, max-age=3600");
-
-  // Stream content directly instead of using send_P to handle binary gzipped data correctly
-  server->client().write((const uint8_t*)jszip_minHtml, jszip_minHtmlCompressedSize);
+  server->send_P(200, "application/javascript", jszip_minHtml, jszip_minHtmlCompressedSize);
   LOG_DBG("WEB", "Served jszip.min.js");
 }
 
@@ -516,11 +510,7 @@ void CrossPointWebServer::handleDownload() const {
 
   server->setContentLength(file.size());
   server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-  server->send(200, contentType.c_str(), "");
-
-  NetworkClient client = server->client();
-  client.write(file);
-  client.clear();
+  server->streamFile(file, contentType.c_str());
   file.close();
 }
 

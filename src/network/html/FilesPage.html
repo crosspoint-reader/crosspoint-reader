@@ -1589,6 +1589,20 @@
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
 
+  // Safe element getter - returns null if element doesn't exist
+  function getEl(id) {
+    return document.getElementById(id);
+  }
+
+  // Safe element getter with check - returns element or throws if not found
+  function getElOrThrow(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+      throw new Error(`Required element with id "${id}" not found`);
+    }
+    return el;
+  }
+
   // Network status monitoring
   let isNetworkOnline = navigator.onLine;
 
@@ -2293,8 +2307,11 @@
   function validateFile() {
     const fileInput = document.getElementById('fileInput');
     const uploadBtn = document.getElementById('uploadBtn');
-    const files = fileInput.files;
     const convertOptions = document.getElementById('convertOptions');
+
+    if (!fileInput || !uploadBtn || !convertOptions) return;
+
+    const files = fileInput.files;
 
     // Show/hide convert options based on file selection
     if (files.length > 0) {
