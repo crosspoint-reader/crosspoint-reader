@@ -3,9 +3,9 @@
 
 #include <memory>
 
+#include "../../util/BookmarkUtil.h"
 #include "../Activity.h"
 #include "util/ButtonNavigator.h"
-#include "../../util/BookmarkUtil.h"
 
 class EpubReaderBookmarksActivity final : public Activity {
   std::shared_ptr<Epub> epub;
@@ -24,8 +24,9 @@ class EpubReaderBookmarksActivity final : public Activity {
 
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                              const std::shared_ptr<Epub>& epub, const std::string& epubPath,
-                                              const int currentSpineIndex, const int currentPage, const int pageCount, const std::string pageText)
+                                       const std::shared_ptr<Epub>& epub, const std::string& epubPath,
+                                       const int currentSpineIndex, const int currentPage, const int pageCount,
+                                       const std::string pageText)
       : Activity("EpubReaderBookmarks", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),

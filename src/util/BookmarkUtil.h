@@ -1,5 +1,6 @@
 #pragma once
 #include <Epub.h>
+
 #include <vector>
 
 struct BookmarkItem {
@@ -15,7 +16,6 @@ struct BookmarkItem {
 // an empty slot while preserving fixed indexing.
 #include <optional>
 class BookmarkUtil final {
-
   const int MAX_SUMMARY_LENGTH = 48;
 
   std::shared_ptr<Epub> epub;
@@ -24,14 +24,13 @@ class BookmarkUtil final {
 
  public:
   explicit BookmarkUtil(const std::shared_ptr<Epub>& epub, const std::string& epubPath)
-      : epub(epub),
-        epubPath(epubPath) {}
+      : epub(epub), epubPath(epubPath) {}
 
   void load(int maxBookmarks);
   std::optional<BookmarkItem> getBookmark(int bookmarkIndex);
   void deleteBookmark(int bookmarkIndex);
   // same as overriding
-  BookmarkItem saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage, int pageCount, std::string summary);
+  BookmarkItem saveBookmark(int bookmarkIndex, int currentSpineIndex, int currentPage, int pageCount,
+                            std::string summary);
   bool doesBookmarkExist(int bookmarkIndex);
-
 };

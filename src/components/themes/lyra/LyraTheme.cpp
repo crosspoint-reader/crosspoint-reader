@@ -13,6 +13,8 @@
 #include "components/UITheme.h"
 #include "components/icons/book.h"
 #include "components/icons/book24.h"
+#include "components/icons/bookmark.h"
+#include "components/icons/bookmark_filled.h"
 #include "components/icons/cover.h"
 #include "components/icons/file24.h"
 #include "components/icons/folder.h"
@@ -25,8 +27,6 @@
 #include "components/icons/text24.h"
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
-#include "components/icons/bookmark.h"
-#include "components/icons/bookmark_filled.h"
 #include "fontIds.h"
 
 // Internal constants
