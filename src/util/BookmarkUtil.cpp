@@ -13,20 +13,17 @@ void BookmarkUtil::load(int maxBookmarks) {
     if (Storage.openFileForRead("BKM", epub->getCachePath() + "/bookmark_" + std::to_string(i) + ".bin", f)) {
       uint8_t data[6];
       int dataSize = f.read(data, 6);
-      if (dataSize == 4 || dataSize == 6) {
+      if (dataSize == 6) {
         int currentSpineIndex = data[0] + (data[1] << 8);
         int pageNumber = data[2] + (data[3] << 8);
         int pageCount = data[4] + (data[5] << 8);
         std::string summary;
-        if (dataSize == 6) {
-          char summaryBuffer[MAX_SUMMARY_LENGTH + 1] = {0};  // MAX_SUMMARY_LENGTH chars + null terminator
-          int summarySize = f.read(summaryBuffer, MAX_SUMMARY_LENGTH);
-          if (summarySize > 0) {
-            summary = std::string(summaryBuffer, summarySize);
-            // Replace null characters with spaces to avoid display issues
-            std::replace_if(summary.begin(), summary.end(), [](char c) { return c == '\0'; }, ' ');
-
-          }
+        char summaryBuffer[MAX_SUMMARY_LENGTH + 1] = {0};  // MAX_SUMMARY_LENGTH chars + null terminator
+        int summarySize = f.read(summaryBuffer, MAX_SUMMARY_LENGTH);
+        if (summarySize > 0) {
+          summary = std::string(summaryBuffer, summarySize);
+          // Replace null characters with spaces to avoid display issues
+          std::replace_if(summary.begin(), summary.end(), [](char c) { return c == '\0'; }, ' ');
         }
 
         LOG_DBG("BKM", "Loaded bookmark: %d, %d/%d with summary: %s", currentSpineIndex, pageNumber, pageCount,

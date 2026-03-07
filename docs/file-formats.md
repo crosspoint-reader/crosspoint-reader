@@ -111,9 +111,7 @@ cache directory (`bookmark_0.bin`, `bookmark_1.bin`, …).
 // bytes 0–1 : u16 current spine index
 // bytes 2–3 : u16 current page in spine
 // bytes 4–5 : u16 page count for the chapter
-// bytes 6-47 : (optional) null terminated char array for the bookmarked page's summary
-
-There is only enough data store to be able to restore progress, as well as display the cached page count of the section.
+// bytes 6..EOF : summary text bytes, max 40 bytes, no null terminator
 ```
 
 ## `section.bin`
