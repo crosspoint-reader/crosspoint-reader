@@ -70,7 +70,7 @@ BookmarkItem BookmarkUtil::saveBookmark(int bookmarkIndex, int currentSpineIndex
         summary.replace(pos, 2, " ");
       }
 
-      // with max size of 40 chars
+      // with max size of MAX_SUMMARY_LENGTH chars
       if (summary.size() > MAX_SUMMARY_LENGTH) {
         summary.resize(MAX_SUMMARY_LENGTH);
       }

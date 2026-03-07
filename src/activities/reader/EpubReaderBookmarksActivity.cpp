@@ -113,10 +113,10 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
           const float chapterProgress =
               static_cast<float>(bookmark.currentPage) / static_cast<float>(bookmark.pageCount);
           float bookProgress = epub->calculateProgress(bookmark.currentSpineIndex, chapterProgress) * 100.0f;
-          auto item = epub->getTocItem(epub->getTocIndexForSpineIndex(bookmark.currentSpineIndex));
-          auto chapter = item.title == "" ? tr(STR_UNNAMED) : item.title;
+          auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.currentSpineIndex);
+          auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
           return std::to_string(static_cast<int>(bookProgress)) + "% - " + std::to_string(bookmark.currentPage + 1) +
-                 "/" + std::to_string(bookmark.pageCount) + " - " + chapter;
+                 "/" + std::to_string(bookmark.pageCount) + " - " + tocTitle;
         } else {
           return std::string();
         }
