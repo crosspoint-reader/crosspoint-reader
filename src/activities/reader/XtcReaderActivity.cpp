@@ -70,7 +70,14 @@ void XtcReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
+    if (xtc) {
+      auto path = xtc->getPath();
+      auto lastSlash = path.find_last_of('/');
+      activityManager.goToFileBrowser(lastSlash == std::string::npos || lastSlash == 0 ? "/"
+                                                                                       : path.substr(0, lastSlash));
+    } else {
+      activityManager.goToFileBrowser("");
+    }
     return;
   }
 
