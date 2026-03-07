@@ -130,66 +130,36 @@ void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
 void FileBrowserActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
-  // Back always navigates to the home screen
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  // Long press BACK always navigates to home
+  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS) {
     onGoHome();
     return;
   }
 
-  // Confirm navigates up one directory (labelled "Back" when in a subdir)
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && basepath != "/") {
-    const std::string oldPath = basepath;
-    basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-    if (basepath.empty()) basepath = "/";
-    loadFiles();
-    const auto pos = oldPath.find_last_of('/');
-    const std::string dirName = oldPath.substr(pos + 1) + "/";
-    selectorIndex = findEntry(dirName);
-    requestUpdate();
+  // Short press BACK goes up one directory (if not root) or home (at root)
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < GO_HOME_MS) {
+    if (basepath != "/") {
+      const std::string oldPath = basepath;
+      basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+      if (basepath.empty()) basepath = "/";
+      loadFiles();
+      const auto pos = oldPath.find_last_of('/');
+      const std::string dirName = oldPath.substr(pos + 1) + "/";
+      selectorIndex = findEntry(dirName);
+      requestUpdate();
+    } else {
+      onGoHome();
+    }
     return;
   }
 
-  // Left opens the selected entry; long press deletes files
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+  // Confirm short press opens selected entry; long press does nothing
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < GO_HOME_MS) {
     if (files.empty()) return;
 
     const std::string& entry = files[selectorIndex];
     const bool isDirectory = (entry.back() == '/');
 
-    if (mappedInput.getHeldTime() >= GO_HOME_MS && !isDirectory) {
-      // Long press: delete file
-      std::string cleanBase = basepath;
-      if (cleanBase.back() != '/') cleanBase += "/";
-      const std::string fullPath = cleanBase + entry;
-
-      auto handler = [this, fullPath](const ActivityResult& res) {
-        if (!res.isCancelled) {
-          LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
-          clearFileMetadata(fullPath);
-          if (Storage.remove(fullPath.c_str())) {
-            LOG_DBG("FileBrowser", "Deleted successfully");
-            loadFiles();
-            if (files.empty()) {
-              selectorIndex = 0;
-            } else if (selectorIndex >= files.size()) {
-              selectorIndex = files.size() - 1;
-            }
-            requestUpdate(true);
-          } else {
-            LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
-          }
-        } else {
-          LOG_DBG("FileBrowser", "Delete cancelled by user");
-        }
-      };
-
-      startActivityForResult(
-          std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), entry),
-          handler);
-      return;
-    }
-
-    // Short press: enter directory or open file
     if (basepath.back() != '/') basepath += "/";
     if (isDirectory) {
       basepath += entry.substr(0, entry.length() - 1);
@@ -199,6 +169,49 @@ void FileBrowserActivity::loop() {
     } else {
       onSelectBook(basepath + entry);
     }
+    return;
+  }
+
+  // Left short press does nothing; long press deletes selected file after confirmation
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    if (mappedInput.getHeldTime() < GO_HOME_MS || files.empty()) {
+      return;
+    }
+
+    const std::string& entry = files[selectorIndex];
+    const bool isDirectory = (entry.back() == '/');
+    if (isDirectory) {
+      return;
+    }
+
+    std::string cleanBase = basepath;
+    if (cleanBase.back() != '/') cleanBase += "/";
+    const std::string fullPath = cleanBase + entry;
+
+    auto handler = [this, fullPath](const ActivityResult& res) {
+      if (!res.isCancelled) {
+        LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
+        clearFileMetadata(fullPath);
+        if (Storage.remove(fullPath.c_str())) {
+          LOG_DBG("FileBrowser", "Deleted successfully");
+          loadFiles();
+          if (files.empty()) {
+            selectorIndex = 0;
+          } else if (selectorIndex >= files.size()) {
+            selectorIndex = files.size() - 1;
+          }
+          requestUpdate(true);
+        } else {
+          LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
+        }
+      } else {
+        LOG_DBG("FileBrowser", "Delete cancelled by user");
+      }
+    };
+
+    startActivityForResult(
+        std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), entry),
+        handler);
     return;
   }
 
@@ -270,12 +283,12 @@ void FileBrowserActivity::render(RenderLock&&) {
   // Side buttons (Up/Down) navigate; show their hints on the side
   GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
 
-  // Front buttons: Back=Home, Confirm=Back(subdir)/empty(root), Left=Open, Right=Info(epub only)
+  // Front buttons: Back=Back(subdir)/Home(root), Confirm=Open, Left=hidden long-press delete, Right=Info
   const bool hasInfo =
       !files.empty() && files[selectorIndex].back() != '/' &&
       (FsHelpers::hasEpubExtension(files[selectorIndex]) || FsHelpers::hasXtcExtension(files[selectorIndex]));
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), basepath == "/" ? "" : tr(STR_BACK),
-                                            files.empty() ? "" : tr(STR_OPEN), hasInfo ? tr(STR_INFO) : "");
+  const auto labels = mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK),
+                                            files.empty() ? "" : tr(STR_OPEN), "", hasInfo ? tr(STR_INFO) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
