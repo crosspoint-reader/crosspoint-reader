@@ -529,6 +529,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   const auto userAlignmentBlockStyle = BlockStyle::fromCssStyle(
       cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
 
+  // Track ordered vs unordered list context for <li> numbering
+  if (strcmp(name, "ol") == 0) {
+    self->insideOrderedList = true;
+    self->orderedListCounter = 0;
+  } else if (strcmp(name, "ul") == 0) {
+    self->insideOrderedList = false;
+  }
+
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
     self->currentCssStyle = cssStyle;
     auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
@@ -552,7 +560,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        if (self->insideOrderedList) {
+          self->orderedListCounter++;
+          self->currentTextBlock->addWord(std::to_string(self->orderedListCounter) + ".",
+                                          EpdFontFamily::REGULAR);
+        } else {
+          self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        }
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS)) {
@@ -872,6 +886,12 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->tableRowIndex = 0;
     self->tableColIndex = 0;
     self->nextWordContinues = false;
+  }
+
+  // Leaving ordered list
+  if (strcmp(name, "ol") == 0) {
+    self->insideOrderedList = false;
+    self->orderedListCounter = 0;
   }
 
   // Leaving bold tag
