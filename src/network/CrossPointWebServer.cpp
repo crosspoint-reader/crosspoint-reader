@@ -510,7 +510,10 @@ void CrossPointWebServer::handleDownload() const {
 
   server->setContentLength(file.size());
   server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-  server->streamFile(file, contentType.c_str());
+  server->send(200, contentType.c_str(), "");
+
+  NetworkClient client = server->client();
+  client.write(file);
   file.close();
 }
 
