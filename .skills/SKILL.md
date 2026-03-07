@@ -132,6 +132,25 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 
 **Location**: [lib/hal/](lib/hal/)
 
+#### Virtual Button Injection
+To support remote control (WiFi/USB), `HalGPIO` includes a **Virtual Button Injection** mechanism:
+- `HalGPIO::injectVirtualButton(uint8_t buttonIndex)`: Sets a bit in `virtualButtonMask`.
+- Methods like `wasPressed()`, `wasReleased()`, `wasAnyPressed()`, and `wasAnyReleased()` check the `virtualButtonMask` *before* delegating to the physical `InputManager`.
+- `MappedInputManager::injectVirtualActivation(Button button)`: Resolves a **logical button** to the current **physical button index** (based on orientation and settings) and then calls the HAL injection.
+- **Draining**: The `main.cpp` loop drains any pending remote signals into the injection system each tick.
+
+**Why use injection?**
+- Allows remote control tasks (WiFi/USB) to simulate button presses without bypassing orientation-aware logic.
+- Consistent with existing input handling in activities.
+
+**Usage**:
+1. Remote task sets `APP_STATE.pendingPageTurn`.
+2. Main loop calls `mappedInput.injectVirtualActivation(Button::PageForward)`.
+3. `HalGPIO` sets the virtual mask.
+4. Current activity's `loop()` sees a "button press" on next input update.
+
+**Location**: [lib/hal/HalGPIO.h](lib/hal/HalGPIO.h), [src/MappedInputManager.cpp](src/MappedInputManager.cpp)
+
 **Why HAL?**
 - Provides consistent error logging per module
 - Abstracts SDK implementation details
