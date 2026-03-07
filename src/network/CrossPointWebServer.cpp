@@ -302,8 +302,10 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
 }
 
 static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
+  server->sendHeader("Content-Type", "text/html");
   server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "text/html", data, len);
+  server->sendHeader("Content-Length", String(len));
+  server->client().write((const uint8_t*)data, len);
 }
 
 void CrossPointWebServer::handleRoot() const {
