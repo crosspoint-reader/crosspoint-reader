@@ -129,66 +129,27 @@ struct CssStyle {
   // Apply properties from another style, only overwriting if the other style
   // has that property explicitly defined
   void applyOver(const CssStyle& base) {
-    if (base.hasTextAlign()) {
-      textAlign = base.textAlign;
-      defined.textAlign = 1;
-    }
-    if (base.hasFontStyle()) {
-      fontStyle = base.fontStyle;
-      defined.fontStyle = 1;
-    }
-    if (base.hasFontWeight()) {
-      fontWeight = base.fontWeight;
-      defined.fontWeight = 1;
-    }
-    if (base.hasTextDecoration()) {
-      textDecoration = base.textDecoration;
-      defined.textDecoration = 1;
-    }
-    if (base.hasTextIndent()) {
-      textIndent = base.textIndent;
-      defined.textIndent = 1;
-    }
-    if (base.hasMarginTop()) {
-      marginTop = base.marginTop;
-      defined.marginTop = 1;
-    }
-    if (base.hasMarginBottom()) {
-      marginBottom = base.marginBottom;
-      defined.marginBottom = 1;
-    }
-    if (base.hasMarginLeft()) {
-      marginLeft = base.marginLeft;
-      defined.marginLeft = 1;
-    }
-    if (base.hasMarginRight()) {
-      marginRight = base.marginRight;
-      defined.marginRight = 1;
-    }
-    if (base.hasPaddingTop()) {
-      paddingTop = base.paddingTop;
-      defined.paddingTop = 1;
-    }
-    if (base.hasPaddingBottom()) {
-      paddingBottom = base.paddingBottom;
-      defined.paddingBottom = 1;
-    }
-    if (base.hasPaddingLeft()) {
-      paddingLeft = base.paddingLeft;
-      defined.paddingLeft = 1;
-    }
-    if (base.hasPaddingRight()) {
-      paddingRight = base.paddingRight;
-      defined.paddingRight = 1;
-    }
-    if (base.hasImageHeight()) {
-      imageHeight = base.imageHeight;
-      defined.imageHeight = 1;
-    }
-    if (base.hasImageWidth()) {
-      imageWidth = base.imageWidth;
-      defined.imageWidth = 1;
-    }
+#define CSS_APPLY(prop)    \
+  if (base.defined.prop) { \
+    prop = base.prop;      \
+    defined.prop = 1;      \
+  }
+    CSS_APPLY(textAlign)
+    CSS_APPLY(fontStyle)
+    CSS_APPLY(fontWeight)
+    CSS_APPLY(textDecoration)
+    CSS_APPLY(textIndent)
+    CSS_APPLY(marginTop)
+    CSS_APPLY(marginBottom)
+    CSS_APPLY(marginLeft)
+    CSS_APPLY(marginRight)
+    CSS_APPLY(paddingTop)
+    CSS_APPLY(paddingBottom)
+    CSS_APPLY(paddingLeft)
+    CSS_APPLY(paddingRight)
+    CSS_APPLY(imageHeight)
+    CSS_APPLY(imageWidth)
+#undef CSS_APPLY
   }
 
   [[nodiscard]] bool hasTextAlign() const { return defined.textAlign; }
