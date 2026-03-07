@@ -86,9 +86,13 @@ struct BlockStyle {
       blockStyle.textIndentDefined = true;
     }
     blockStyle.textAlignDefined = cssStyle.hasTextAlign();
-    // User setting overrides CSS, unless "Book's Style" alignment setting is selected
+    // User setting overrides CSS, unless "Book's Style" alignment setting is selected.
+    // Exception: CSS text-align:center is always respected, as it typically serves a
+    // structural/decorative purpose (ornamental dividers, title pages, etc.)
     if (paragraphAlignment == CssTextAlign::None) {
       blockStyle.alignment = blockStyle.textAlignDefined ? cssStyle.textAlign : CssTextAlign::Justify;
+    } else if (blockStyle.textAlignDefined && cssStyle.textAlign == CssTextAlign::Center) {
+      blockStyle.alignment = CssTextAlign::Center;
     } else {
       blockStyle.alignment = paragraphAlignment;
     }
