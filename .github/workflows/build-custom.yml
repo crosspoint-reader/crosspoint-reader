@@ -283,35 +283,42 @@ jobs:
       - name: Report firmware size
         env:
           REUSED: ${{ steps.reuse.outputs.found }}
+          PROFILE_INPUT: ${{ inputs.profile }}
+          ENABLE_FEATURES_INPUT: ${{ inputs.enable_features }}
+          DISABLE_FEATURES_INPUT: ${{ inputs.disable_features }}
         run: |
           FIRMWARE_PATH="dist/custom-firmware-package/firmware.bin"
           CONFIG_PATH="dist/custom-firmware-package/platformio-custom.ini"
 
+          if [ -n "${ENABLE_FEATURES_INPUT}" ]; then
+            ENABLE_FEATURES_DISPLAY="${ENABLE_FEATURES_INPUT}"
+          else
+            ENABLE_FEATURES_DISPLAY="(none)"
+          fi
+
+          if [ -n "${DISABLE_FEATURES_INPUT}" ]; then
+            DISABLE_FEATURES_DISPLAY="${DISABLE_FEATURES_INPUT}"
+          else
+            DISABLE_FEATURES_DISPLAY="(none)"
+          fi
+
           echo "### Custom Firmware Build" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Base Profile:** ${{ inputs.profile }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Base Profile:** ${PROFILE_INPUT}" >> $GITHUB_STEP_SUMMARY
           echo "**Artifact:** ${{ steps.identity.outputs.artifact_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Feature-set Hash:** \`${{ steps.identity.outputs.featureset_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Requested enable overrides:** \`${ENABLE_FEATURES_DISPLAY}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Requested disable overrides:** \`${DISABLE_FEATURES_DISPLAY}\`" >> $GITHUB_STEP_SUMMARY
           if [ "${REUSED}" == "true" ]; then
             echo "**Build Source:** Reused existing artifact from run #${{ steps.reuse.outputs.source_run_id }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "**Build Source:** Built in this run" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Feature Toggles:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Bookerly Fonts: ${{ inputs.bookerly_fonts }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Noto Sans Fonts: ${{ inputs.notosans_fonts }}" >> $GITHUB_STEP_SUMMARY
-          echo "- OpenDyslexic: ${{ inputs.opendyslexic_fonts }}" >> $GITHUB_STEP_SUMMARY
-          echo "- PNG/JPEG/BMP Sleep: ${{ inputs.image_sleep }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Book Images: ${{ inputs.book_images }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Markdown: ${{ inputs.markdown }}" >> $GITHUB_STEP_SUMMARY
-          # ... simplified for summary ...
-          echo "- EPUB Support: ${{ inputs.epub_support }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Visual Cov Picker: ${{ inputs.visual_cover_picker }}" >> $GITHUB_STEP_SUMMARY
-          echo "- BLE WiFi: ${{ inputs.ble_wifi_provisioning }}" >> $GITHUB_STEP_SUMMARY
-          echo "- User Fonts: ${{ inputs.user_fonts }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Web WiFi Setup: ${{ inputs.web_wifi_setup }}" >> $GITHUB_STEP_SUMMARY
-          echo "- USB Mass Storage: ${{ inputs.usb_mass_storage }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Resolved feature-set string:**" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.identity.outputs.featureset_string }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Firmware Size" >> $GITHUB_STEP_SUMMARY
