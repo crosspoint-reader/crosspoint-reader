@@ -124,9 +124,10 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
       [this](int index) { return bookmarkUtil.doesBookmarkExist(index) ? UIIcon::BookmarkFilled : UIIcon::Bookmark; });
 
   const bool doesSelectedBookmarkExist = bookmarkUtil.doesBookmarkExist(selectorIndex);
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), doesSelectedBookmarkExist ? tr(STR_OPEN) : "-", tr(STR_DELETE),
-                            doesSelectedBookmarkExist ? tr(STR_OVERWRITE) : tr(STR_NEW));
+  const auto openLabel = doesSelectedBookmarkExist ? tr(STR_OPEN) : "-";
+  const auto deleteLabel = doesSelectedBookmarkExist ? tr(STR_DELETE) : "-";
+  const auto saveLabel = doesSelectedBookmarkExist ? tr(STR_OVERWRITE) : tr(STR_NEW);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), openLabel, deleteLabel, saveLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
