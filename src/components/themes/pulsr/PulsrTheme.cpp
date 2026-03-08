@@ -162,8 +162,12 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
 
       int pillY = seg0Top + SEG_MARGIN;
 
+      // In dark mode, pills use solid white background so they're clearly visible against the
+      // black sidebar and text stays readable. Light mode keeps the original LightGray fill.
+      const Color pillBg = inverted_ ? Color::White : Color::LightGray;
+
       // PWR pill — always shown, grey background, black "PWR" label
-      renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, col(Color::LightGray));
+      renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, pillBg);
       {
         const char* lbl = "PWR";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
@@ -174,20 +178,26 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
 
       // WIFI pill — pulsing while DZ is attempting auto-connect on boot
       if (UITheme::isWifiAutoConnecting()) {
-        const Color wifiColor = (millis() / 500) % 2 == 0 ? col(Color::White) : col(Color::DarkGray);
+        // In dark mode: pulse solid White/Black for clear contrast; light mode: White/DarkGray
+        const Color wifiColor = (millis() / 500) % 2 == 0
+                                    ? Color::White
+                                    : (inverted_ ? Color::Black : Color::DarkGray);
         renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, wifiColor);
         const char* lbl = "WIFI";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
         const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
-        renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, lbl, true);  // pill: always black text on light background
+        // White bg → black text; Black bg → white text
+        const bool wifiTextBlack = (wifiColor != Color::Black);
+        renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, lbl, wifiTextBlack);
       }
       pillY += pillH + PILL_GAP;
 
       // HTTP pill — only when web server is active
       if (UITheme::isHttpServerActive()) {
+        // In dark mode: pulse White/White (solid) to avoid gray dither; light mode: original pulsing
         const Color httpColor = UITheme::isNetworkTransferring()
-                                    ? ((millis() / 600) % 2 == 0 ? col(Color::White) : col(Color::LightGray))
-                                    : col(Color::LightGray);
+                                    ? ((millis() / 600) % 2 == 0 ? Color::White : pillBg)
+                                    : pillBg;
         renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, httpColor);
         const char* lbl = "HTTP";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
@@ -202,25 +212,27 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
         Color feedColor = col(Color::Black);  // invisible (IDLE/DONE)
         bool showPill = false;
         const char* pillLabel = nullptr;
+        // In dark mode, all feed pill states use solid fills (White or Black) for e-ink clarity.
+        // Gray colors cause dithered fills which are hard to read on e-ink.
         switch (feedState) {
           case RssFeedSync::State::FETCHING:
-            feedColor = col(Color::LightGray);
+            feedColor = pillBg;  // white in dark mode, LightGray in light
             showPill = true;
             break;
           case RssFeedSync::State::PARSING:
-            feedColor = ((millis() / 500) % 2 == 0 ? col(Color::LightGray) : col(Color::DarkGray));
+            feedColor = (millis() / 500) % 2 == 0 ? pillBg : (inverted_ ? Color::Black : Color::DarkGray);
             showPill = true;
             break;
           case RssFeedSync::State::DOWNLOADING:
-            feedColor = ((millis() / 400) % 2 == 0 ? col(Color::White) : col(Color::LightGray));
+            feedColor = (millis() / 400) % 2 == 0 ? Color::White : pillBg;
             showPill = true;
             break;
           case RssFeedSync::State::ERROR:
-            feedColor = col(Color::White);
+            feedColor = Color::White;
             showPill = true;
             break;
           case RssFeedSync::State::DONE:
-            feedColor = col(Color::LightGray);
+            feedColor = pillBg;
             showPill = true;
             break;
           default:
@@ -300,13 +312,14 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
       // CHRG pill — bottom of Seg 2, just above the Seg 2/3 divider
       const bool usbConnected = (digitalRead(20) == HIGH);
       if (usbConnected) {
+        const Color chrgBg = inverted_ ? Color::White : Color::LightGray;  // solid white in dark mode
         const int seg2Bottom = zoneTop + segH * 3;  // = seg3 top = seg2/3 divider
         const int chrgY = seg2Bottom - SEG_MARGIN - pillH;
-        renderer.fillRoundedRect(pillX, chrgY, pillW, pillH, PILL_R, col(Color::LightGray));
+        renderer.fillRoundedRect(pillX, chrgY, pillW, pillH, PILL_R, chrgBg);
         const char* lbl = "CHRG";
         const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, lbl);
         const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
-        renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, chrgY + (pillH - lh) / 2, lbl, true);  // pill: always black text on light background
+        renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, chrgY + (pillH - lh) / 2, lbl, true);  // pill: always black text on white/lightgray background
       }
     }
 
