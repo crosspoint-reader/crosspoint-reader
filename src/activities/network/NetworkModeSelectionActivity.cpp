@@ -24,6 +24,9 @@ void NetworkModeSelectionActivity::onEnter() {
 void NetworkModeSelectionActivity::onExit() { Activity::onExit(); }
 
 void NetworkModeSelectionActivity::loop() {
+  // Redraw when feed delivers a new file (event-driven via dirty flag)
+  if (UITheme::consumeReceivedFileDirty()) requestUpdate();
+
   // Handle back button - cancel
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onCancel();
@@ -80,6 +83,20 @@ void NetworkModeSelectionActivity::render(RenderLock&&) {
   // Draw help text at bottom
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  // Show recently received files (from feed sync or HTTP uploads) below the menu
+  const auto& received = UITheme::getReceivedFiles();
+  if (!received.empty()) {
+    const bool textBlack = !UITheme::isInverted();  // white text in dark mode
+    const int lineH = renderer.getLineHeight(PULSR_10_FONT_ID);
+    int ry = contentTop + contentHeight - (static_cast<int>(received.size()) * lineH);
+    for (const auto& name : received) {
+      if (ry >= contentTop) {
+        renderer.drawText(PULSR_10_FONT_ID, metrics.contentSidePadding, ry, name.c_str(), textBlack);
+      }
+      ry += lineH;
+    }
+  }
 
   renderer.displayBuffer();
 }
