@@ -1,11 +1,13 @@
 #include "RecentBooksActivity.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
 #include <algorithm>
 
+#include "BookInfoActivity.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -57,6 +59,17 @@ void RecentBooksActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
+      const std::string& path = recentBooks[selectorIndex].path;
+      if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path)) {
+        startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, path),
+                               [this](const ActivityResult&) { requestUpdate(); });
+        return;
+      }
+    }
   }
 
   int listSize = static_cast<int>(recentBooks.size());
@@ -111,8 +124,14 @@ void RecentBooksActivity::render(RenderLock&&) {
   }
 
   // Help text
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const bool hasInfo = !recentBooks.empty() && selectorIndex < recentBooks.size() &&
+                       (FsHelpers::hasEpubExtension(recentBooks[selectorIndex].path) ||
+                        FsHelpers::hasXtcExtension(recentBooks[selectorIndex].path));
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), "", hasInfo ? tr(STR_INFO) : "");
+
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  // Side buttons (Up/Down) navigate; show their hints on the side
+  GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
 
   renderer.displayBuffer();
 }
