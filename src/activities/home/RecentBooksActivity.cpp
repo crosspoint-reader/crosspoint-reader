@@ -1,11 +1,13 @@
 #include "RecentBooksActivity.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
 #include <algorithm>
 
+#include "BookInfoActivity.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -59,6 +61,17 @@ void RecentBooksActivity::loop() {
     onGoHome();
   }
 
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
+      const std::string& path = recentBooks[selectorIndex].path;
+      if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path)) {
+        startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, path),
+                               [this](const ActivityResult&) { requestUpdate(); });
+        return;
+      }
+    }
+  }
+
   int listSize = static_cast<int>(recentBooks.size());
 
   buttonNavigator.onNextRelease([this, listSize] {
@@ -103,7 +116,7 @@ void RecentBooksActivity::render(RenderLock&&) {
         [this](int index) { return recentBooks[index].title; },
         [this](int index) {
           const auto& book = recentBooks[index];
-          if (!book.author.empty() && !book.series.empty()) return book.author + " \u2022 " + book.series;
+          if (!book.author.empty() && !book.series.empty()) return book.author + "\n" + book.series;
           if (!book.series.empty()) return book.series;
           return book.author;
         },
@@ -111,8 +124,14 @@ void RecentBooksActivity::render(RenderLock&&) {
   }
 
   // Help text
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const bool hasInfo = !recentBooks.empty() && selectorIndex < recentBooks.size() &&
+                       (FsHelpers::hasEpubExtension(recentBooks[selectorIndex].path) ||
+                        FsHelpers::hasXtcExtension(recentBooks[selectorIndex].path));
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), "", hasInfo ? tr(STR_INFO) : "");
+
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  // Side buttons (Up/Down) navigate; show their hints on the side
+  GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
 
   renderer.displayBuffer();
 }

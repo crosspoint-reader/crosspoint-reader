@@ -41,13 +41,14 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
 }
 
 void RecentBooksStore::updateBook(const std::string& path, const std::string& title, const std::string& author,
-                                  const std::string& coverBmpPath) {
+                                  const std::string& series, const std::string& coverBmpPath) {
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
     RecentBook& book = *it;
     book.title = title;
     book.author = author;
+    book.series = series;
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
@@ -121,38 +122,57 @@ bool RecentBooksStore::loadFromBinaryFile() {
     // Old version, just read paths
     uint8_t count;
     serialization::readPod(inputFile, count);
-    recentBooks.clear();
-    recentBooks.reserve(count);
+    std::vector<RecentBook> tmpRecentBooks;
+    tmpRecentBooks.reserve(count);
     for (uint8_t i = 0; i < count; i++) {
       std::string path;
-      serialization::readString(inputFile, path);
+      if (!serialization::readString(inputFile, path)) {
+        LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+        inputFile.close();
+        return false;
+      }
 
       // load book to get missing data
       RecentBook book = getDataFromBook(path);
-      if (book.title.empty() && book.author.empty() && version == 2) {
-        // Fall back to loading what we can from the store
-        std::string title, author;
-        serialization::readString(inputFile, title);
-        serialization::readString(inputFile, author);
-        recentBooks.push_back({path, title, author, "", ""});
+      if (version == 2) {
+        // v2 always stores title and author after path; consume them regardless
+        // of whether live metadata was found, to keep the stream aligned.
+        std::string storedTitle, storedAuthor;
+        if (!serialization::readString(inputFile, storedTitle) || !serialization::readString(inputFile, storedAuthor)) {
+          LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+          inputFile.close();
+          return false;
+        }
+        // Prefer live metadata; fall back to stored when live is unavailable.
+        const std::string& title = !book.title.empty() ? book.title : storedTitle;
+        const std::string& author = !book.title.empty() ? book.author : storedAuthor;
+        if (!title.empty()) {
+          tmpRecentBooks.push_back({path, title, author, "", ""});
+        }
       } else {
-        recentBooks.push_back(book);
+        // v1: no stored title/author bytes
+        if (!book.title.empty()) {
+          tmpRecentBooks.push_back(book);
+        }
       }
     }
+    recentBooks = std::move(tmpRecentBooks);
   } else if (version == 3) {
     uint8_t count;
     serialization::readPod(inputFile, count);
 
-    recentBooks.clear();
-    recentBooks.reserve(count);
+    std::vector<RecentBook> tmpRecentBooks;
+    tmpRecentBooks.reserve(count);
     uint8_t omitted = 0;
 
     for (uint8_t i = 0; i < count; i++) {
       std::string path, title, author, coverBmpPath;
-      serialization::readString(inputFile, path);
-      serialization::readString(inputFile, title);
-      serialization::readString(inputFile, author);
-      serialization::readString(inputFile, coverBmpPath);
+      if (!serialization::readString(inputFile, path) || !serialization::readString(inputFile, title) ||
+          !serialization::readString(inputFile, author) || !serialization::readString(inputFile, coverBmpPath)) {
+        LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+        inputFile.close();
+        return false;
+      }
 
       // Omit books with missing title (e.g. saved before metadata was available)
       if (title.empty()) {
@@ -160,8 +180,9 @@ bool RecentBooksStore::loadFromBinaryFile() {
         continue;
       }
 
-      recentBooks.push_back({path, title, author, "", coverBmpPath});
+      tmpRecentBooks.push_back({path, title, author, "", coverBmpPath});
     }
+    recentBooks = std::move(tmpRecentBooks);
 
     if (omitted > 0) {
       inputFile.close();

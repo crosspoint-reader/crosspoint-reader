@@ -235,8 +235,12 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), i != selectedIndex);
 
     if (rowSubtitle != nullptr) {
-      // Draw subtitle
+      // Draw subtitle; if the text is newline-separated (author\nseries), join with • for single-line display
       std::string subtitleText = rowSubtitle(i);
+      const auto nl = subtitleText.find('\n');
+      if (nl != std::string::npos) {
+        subtitleText = subtitleText.substr(0, nl) + " \u2022 " + subtitleText.substr(nl + 1);
+      }
       auto subtitle = renderer.truncatedText(UI_10_FONT_ID, subtitleText.c_str(), textWidth);
       renderer.drawText(UI_10_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 30, subtitle.c_str(),
                         i != selectedIndex);

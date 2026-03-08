@@ -318,10 +318,18 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
 
     if (rowSubtitle != nullptr) {
-      // Draw subtitle
       std::string subtitleText = rowSubtitle(i);
-      auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-      renderer.drawText(SMALL_FONT_ID, textX, itemY + 30, subtitle.c_str(), true);
+      const auto nl = subtitleText.find('\n');
+      if (nl != std::string::npos) {
+        // Two-line subtitle: first line (author) at +24, second line (series) at +40
+        auto line1 = renderer.truncatedText(SMALL_FONT_ID, subtitleText.substr(0, nl).c_str(), rowTextWidth);
+        renderer.drawText(SMALL_FONT_ID, textX, itemY + 24, line1.c_str(), true);
+        auto line2 = renderer.truncatedText(SMALL_FONT_ID, subtitleText.substr(nl + 1).c_str(), rowTextWidth);
+        renderer.drawText(SMALL_FONT_ID, textX, itemY + 40, line2.c_str(), true);
+      } else {
+        auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
+        renderer.drawText(SMALL_FONT_ID, textX, itemY + 30, subtitle.c_str(), true);
+      }
     }
 
     // Draw value

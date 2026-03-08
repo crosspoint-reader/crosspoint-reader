@@ -21,9 +21,8 @@ std::string stripHtml(const std::string& html) {
   for (size_t i = 0; i < html.size(); ++i) {
     const char c = html[i];
     if (c == '<') {
-      // Only treat as a tag if followed by a tag-like character; otherwise keep literal '<'
-      size_t j = i + 1;
-      while (j < html.size() && html[j] == ' ') ++j;
+      // Only treat as a tag if immediately followed (no space skip) by a tag-like character
+      const size_t j = i + 1;
       if (j < html.size() &&
           (isalpha(static_cast<unsigned char>(html[j])) || html[j] == '/' || html[j] == '!' || html[j] == '?')) {
         inTag = true;
@@ -33,7 +32,11 @@ std::string stripHtml(const std::string& html) {
         result += c;
       }
     } else if (c == '>') {
-      inTag = false;
+      if (inTag) {
+        inTag = false;
+      } else {
+        result += c;
+      }
     } else if (!inTag) {
       if (c == '&') {
         // Decode common HTML entities not covered by Expat
@@ -196,7 +199,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && strcmp(name, "dc:description") == 0) {
-    self->state = IN_BOOK_DESCRIPTION;
+    // Only capture the first dc:description element; subsequent ones are alternate/localized variants
+    if (self->description.empty()) {
+      self->state = IN_BOOK_DESCRIPTION;
+    }
     return;
   }
 
@@ -254,25 +260,34 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       if (strcmp(metaName, "cover") == 0) {
         self->coverItemId = metaContent;
       } else if (strcmp(metaName, "calibre:series") == 0 && self->series.empty()) {
-        self->series = metaContent;
+        self->series = trim(std::string(metaContent, std::min(strlen(metaContent), size_t{MAX_DESCRIPTION_LENGTH})));
       } else if (strcmp(metaName, "calibre:series_index") == 0 && self->seriesIndex.empty()) {
-        self->seriesIndex = metaContent;
+        self->seriesIndex =
+            trim(std::string(metaContent, std::min(strlen(metaContent), size_t{MAX_DESCRIPTION_LENGTH})));
       }
     }
 
     // EPUB 3 collection metadata:
-    // <meta property="belongs-to-collection">Series Name</meta>
+    // <meta property="belongs-to-collection">Series Name</meta>  (character data)
+    // <meta property="belongs-to-collection" content="Series Name"/>  (attribute, some generators)
     // <meta property="group-position">1</meta>
     if (metaProperty) {
       if (strcmp(metaProperty, "belongs-to-collection") == 0 && self->series.empty()) {
-        self->series.clear();
-        self->state = IN_BOOK_SERIES;
-        return;
+        if (metaContent) {
+          self->series = trim(std::string(metaContent, std::min(strlen(metaContent), size_t{MAX_DESCRIPTION_LENGTH})));
+        } else {
+          self->state = IN_BOOK_SERIES;
+          return;
+        }
       }
       if (strcmp(metaProperty, "group-position") == 0 && self->seriesIndex.empty()) {
-        self->seriesIndex.clear();
-        self->state = IN_BOOK_SERIES_INDEX;
-        return;
+        if (metaContent) {
+          self->seriesIndex =
+              trim(std::string(metaContent, std::min(strlen(metaContent), size_t{MAX_DESCRIPTION_LENGTH})));
+        } else {
+          self->state = IN_BOOK_SERIES_INDEX;
+          return;
+        }
       }
     }
 
@@ -457,12 +472,18 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
   }
 
   if (self->state == IN_BOOK_SERIES) {
-    self->series.append(s, len);
+    if (self->series.size() < MAX_DESCRIPTION_LENGTH) {
+      const size_t remaining = MAX_DESCRIPTION_LENGTH - self->series.size();
+      self->series.append(s, std::min(static_cast<size_t>(len), remaining));
+    }
     return;
   }
 
   if (self->state == IN_BOOK_SERIES_INDEX) {
-    self->seriesIndex.append(s, len);
+    if (self->seriesIndex.size() < MAX_DESCRIPTION_LENGTH) {
+      const size_t remaining = MAX_DESCRIPTION_LENGTH - self->seriesIndex.size();
+      self->seriesIndex.append(s, std::min(static_cast<size_t>(len), remaining));
+    }
     return;
   }
 }
