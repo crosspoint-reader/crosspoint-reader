@@ -80,6 +80,9 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
 }
 
 std::string getLastLogs() {
+  if (rtcLogMagic != LOG_RTC_MAGIC) {
+    return {};
+  }
   std::string output;
   for (size_t i = 0; i < MAX_LOG_LINES; i++) {
     size_t idx = (logHead + i) % MAX_LOG_LINES;
@@ -91,6 +94,12 @@ std::string getLastLogs() {
   return output;
 }
 
+// Checks whether the RTC log state is consistent: rtcLogMagic must equal
+// LOG_RTC_MAGIC and logHead must be in 0..MAX_LOG_LINES-1. Returns true if
+// corruption is detected, in which case rtcLogMagic is still invalid and
+// logMessages may contain garbage. Callers (e.g. HalSystem::begin on the
+// panic-reboot path) must call clearLastLogs() after a true result to fully
+// reinitialize the ring buffer and stamp the magic before getLastLogs() is used.
 bool sanitizeLogHead() {
   if (rtcLogMagic != LOG_RTC_MAGIC || logHead >= MAX_LOG_LINES) {
     logHead = 0;
