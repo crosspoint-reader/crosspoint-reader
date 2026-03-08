@@ -381,6 +381,39 @@ void setupDisplayAndFonts() {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
+// Reconnect WiFi using saved credentials — called after screenshot tour to restore connectivity
+// regardless of Danger Zone state (so the user isn't left offline after the tour).
+static void reconnectWifiAfterTour() {
+  WIFI_STORE.loadFromFile();
+  const auto& lastSsid = WIFI_STORE.getLastConnectedSsid();
+  if (lastSsid.empty()) {
+    LOG_DBG("SCR", "No last connected SSID — skipping WiFi restore");
+    return;
+  }
+  const auto* cred = WIFI_STORE.findCredential(lastSsid);
+  if (!cred) {
+    LOG_DBG("SCR", "No saved password for '%s' — skipping WiFi restore", lastSsid.c_str());
+    return;
+  }
+  LOG_INF("SCR", "Restoring WiFi to '%s' after screenshot tour...", lastSsid.c_str());
+  UITheme::setWifiAutoConnecting(true);
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+  constexpr unsigned long TIMEOUT_MS = 15000;
+  const unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < TIMEOUT_MS) {
+    delay(100);
+  }
+  UITheme::setWifiAutoConnecting(false);
+  if (WiFi.status() != WL_CONNECTED) {
+    LOG_ERR("SCR", "WiFi restore failed after tour (status=%d)", WiFi.status());
+    WiFi.mode(WIFI_OFF);
+  } else {
+    LOG_INF("SCR", "WiFi restored! IP=%s", WiFi.localIP().toString().c_str());
+  }
+}
+
 // Danger Zone: attempt auto-connect to last known WiFi, start web server + feed sync.
 // Non-blocking: returns quickly regardless of outcome. Logs result.
 void dangerZoneAutoConnect() {
@@ -997,6 +1030,9 @@ void loop() {
       else if (millis() - screenshotHoldStart >= 1500) {
         screenshotTriggered = true;
         runScreenshotTour();
+        // Restore WiFi after tour (button-combo path disconnects for clean screenshots)
+        reconnectWifiAfterTour();
+        if (SETTINGS.dangerZoneEnabled) dangerZoneAutoConnect();
       }
     } else {
       if (!powerHeld || !confirmHeld) screenshotHoldStart = 0;
@@ -1041,7 +1077,8 @@ void loop() {
     // Run the screenshot tour (skipping WiFi/network activities)
     runScreenshotTour();
 
-    // Auto-reconnect WiFi and restart web server
+    // Restore WiFi connectivity (always), then restart DZ web server if enabled
+    reconnectWifiAfterTour();
     dangerZoneAutoConnect();
 
     // Return to home screen
