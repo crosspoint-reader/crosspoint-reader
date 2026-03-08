@@ -11,8 +11,12 @@ RTC_NOINIT_ATTR size_t logHead = 0;
 
 void addToLogRingBuffer(const char* message) {
   // Add the message to the ring buffer, overwriting old messages if necessary
-  // Clamp logHead in case RTC_NOINIT_ATTR left it with garbage on cold boot.
-  logHead = logHead % MAX_LOG_LINES;
+  // If RTC_NOINIT_ATTR left logHead out of range on cold boot, all slots are
+  // garbage too — clear the entire buffer so subsequent reads are safe.
+  if (logHead >= MAX_LOG_LINES) {
+    memset(logMessages, 0, sizeof(logMessages));
+    logHead = 0;
+  }
   strncpy(logMessages[logHead], message, MAX_ENTRY_LEN - 1);
   logMessages[logHead][MAX_ENTRY_LEN - 1] = '\0';
   logHead = (logHead + 1) % MAX_LOG_LINES;
@@ -69,7 +73,8 @@ std::string getLastLogs() {
   for (size_t i = 0; i < MAX_LOG_LINES; i++) {
     size_t idx = (logHead + i) % MAX_LOG_LINES;
     if (logMessages[idx][0] != '\0') {
-      output += logMessages[idx];
+      const size_t len = strnlen(logMessages[idx], MAX_ENTRY_LEN);
+      output.append(logMessages[idx], len);
     }
   }
   return output;
