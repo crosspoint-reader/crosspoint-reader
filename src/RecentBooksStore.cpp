@@ -41,13 +41,14 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
 }
 
 void RecentBooksStore::updateBook(const std::string& path, const std::string& title, const std::string& author,
-                                  const std::string& coverBmpPath) {
+                                  const std::string& series, const std::string& coverBmpPath) {
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
     RecentBook& book = *it;
     book.title = title;
     book.author = author;
+    book.series = series;
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
@@ -125,15 +126,22 @@ bool RecentBooksStore::loadFromBinaryFile() {
     recentBooks.reserve(count);
     for (uint8_t i = 0; i < count; i++) {
       std::string path;
-      serialization::readString(inputFile, path);
+      if (!serialization::readString(inputFile, path)) {
+        LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+        inputFile.close();
+        return false;
+      }
 
       // load book to get missing data
       RecentBook book = getDataFromBook(path);
       if (book.title.empty() && book.author.empty() && version == 2) {
         // Fall back to loading what we can from the store
         std::string title, author;
-        serialization::readString(inputFile, title);
-        serialization::readString(inputFile, author);
+        if (!serialization::readString(inputFile, title) || !serialization::readString(inputFile, author)) {
+          LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+          inputFile.close();
+          return false;
+        }
         recentBooks.push_back({path, title, author, "", ""});
       } else {
         recentBooks.push_back(book);
@@ -149,10 +157,12 @@ bool RecentBooksStore::loadFromBinaryFile() {
 
     for (uint8_t i = 0; i < count; i++) {
       std::string path, title, author, coverBmpPath;
-      serialization::readString(inputFile, path);
-      serialization::readString(inputFile, title);
-      serialization::readString(inputFile, author);
-      serialization::readString(inputFile, coverBmpPath);
+      if (!serialization::readString(inputFile, path) || !serialization::readString(inputFile, title) ||
+          !serialization::readString(inputFile, author) || !serialization::readString(inputFile, coverBmpPath)) {
+        LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+        inputFile.close();
+        return false;
+      }
 
       // Omit books with missing title (e.g. saved before metadata was available)
       if (title.empty()) {
