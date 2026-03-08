@@ -11,12 +11,28 @@
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
+#include "components/themes/pulsr/DarkPulsrTheme.h"
+#include "components/themes/pulsr/PulsrTheme.h"
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
 
 UITheme UITheme::instance;
+
+static bool s_networkConnected = false;
+static bool s_networkTransferring = false;
+
+// setNetworkStatus / isNetworkConnected / isNetworkTransferring track WiFi/transfer state.
+// Currently called by CrossPointWebServerActivity; isNetworkTransferring() drives the
+// PULSR HTTP pill brightness (white = active transfer, gray = idle).
+// isNetworkConnected() is available for future use (e.g. persistent WiFi indicators).
+void UITheme::setNetworkStatus(bool connected, bool transferring) {
+  s_networkConnected = connected;
+  s_networkTransferring = transferring;
+}
+bool UITheme::isNetworkConnected() { return s_networkConnected; }
+bool UITheme::isNetworkTransferring() { return s_networkTransferring; }
 
 UITheme::UITheme() {
   auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
@@ -44,6 +60,16 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Lyra 3 Covers theme");
       currentTheme = std::make_unique<Lyra3CoversTheme>();
       currentMetrics = &Lyra3CoversMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::PULSR:
+      LOG_DBG("UI", "Using PULSR theme");
+      currentTheme = std::make_unique<PulsrTheme>();
+      currentMetrics = &PulsrMetrics::values;
+      break;
+    default:
+      LOG_ERR("UI", "Unknown theme %d, falling back to Classic", static_cast<int>(type));
+      currentTheme = std::make_unique<BaseTheme>();
+      currentMetrics = &BaseMetrics::values;
       break;
   }
 }
@@ -109,3 +135,28 @@ int UITheme::getProgressBarHeight() {
       SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   return (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
 }
+
+static bool s_httpServerActive = false;
+static bool s_wifiAutoConnecting = false;
+
+void UITheme::setHttpServerActive(bool active) { s_httpServerActive = active; }
+bool UITheme::isHttpServerActive() { return s_httpServerActive; }
+void UITheme::setWifiAutoConnecting(bool connecting) { s_wifiAutoConnecting = connecting; }
+bool UITheme::isWifiAutoConnecting() { return s_wifiAutoConnecting; }
+
+static bool s_usbConnected = false;
+void UITheme::setUsbConnected(bool connected) { s_usbConnected = connected; }
+bool UITheme::isUsbConnected() { return s_usbConnected; }
+
+static std::vector<std::string> s_receivedFiles;
+static constexpr size_t MAX_RECEIVED_FILES = 12;
+static constexpr size_t MAX_FILENAME_LEN = 80;
+void UITheme::addReceivedFile(const std::string& name) {
+  if (s_receivedFiles.size() >= MAX_RECEIVED_FILES) {
+    s_receivedFiles.erase(s_receivedFiles.begin());
+  }
+  const std::string truncated = (name.size() <= MAX_FILENAME_LEN) ? name : name.substr(0, MAX_FILENAME_LEN - 3) + "...";
+  s_receivedFiles.push_back(std::move(truncated));
+}
+const std::vector<std::string>& UITheme::getReceivedFiles() { return s_receivedFiles; }
+void UITheme::clearReceivedFiles() { s_receivedFiles.clear(); }

@@ -19,6 +19,15 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
   if (tempValue < maxValue) {
     member = tempValue;
   }
+  // If tempValue >= maxValue, member retains its default (safe fallback)
+}
+
+// Clamp all enum settings to valid ranges after loading, so stale NVS values
+// from older firmware versions never leave the device in an unreadable state.
+void CrossPointSettings::clampToValidRanges() {
+  if (fontFamily >= FONT_FAMILY_COUNT) fontFamily = BOOKERLY;
+  if (fontSize >= FONT_SIZE_COUNT) fontSize = MEDIUM;
+  if (uiTheme >= UI_THEME_COUNT) uiTheme = CLASSIC;
 }
 
 namespace {
@@ -331,6 +340,18 @@ int CrossPointSettings::getReaderFontId() const {
           return OPENDYSLEXIC_12_FONT_ID;
         case EXTRA_LARGE:
           return OPENDYSLEXIC_14_FONT_ID;
+      }
+    case ANTONIO:
+      switch (fontSize) {
+        case SMALL:
+          return ANTONIO_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return ANTONIO_14_FONT_ID;
+        case LARGE:
+          return ANTONIO_16_FONT_ID;
+        case EXTRA_LARGE:
+          return ANTONIO_18_FONT_ID;
       }
   }
 }

@@ -567,6 +567,22 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
+// drawIconInverted: like drawIcon but draws white pixels where the bitmap has set bits.
+// Used by inverted (dark) themes where icons appear on dark backgrounds.
+void GfxRenderer::drawIconInverted(const uint8_t bitmap[], const int x, const int y, const int width,
+                                   const int height) const {
+  for (int row = 0; row < height; row++) {
+    for (int col = 0; col < width; col++) {
+      const int bitIndex = row * width + col;
+      const uint8_t byte = bitmap[bitIndex >> 3];
+      const uint8_t bit = (byte >> (7 - (bitIndex & 7))) & 1;
+      if (bit) {
+        drawPixel(x + col, y + row, /*state=*/false);  // white pixel
+      }
+    }
+  }
+}
+
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
@@ -1013,6 +1029,17 @@ int GfxRenderer::getTextHeight(const int fontId) const {
     return 0;
   }
   return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
+}
+
+int GfxRenderer::getCapHeight(const int fontId) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return 0;
+  }
+  // Use glyph 'H' (U+0048) top value as a reliable cap-height proxy.
+  const EpdGlyph* g = fontIt->second.getGlyph(0x48, EpdFontFamily::REGULAR);
+  return (g != nullptr) ? g->top : fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,

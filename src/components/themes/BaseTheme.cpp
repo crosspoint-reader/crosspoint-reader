@@ -745,3 +745,13 @@ void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const ch
   }
   renderer.drawText(UI_10_FONT_ID, textX, rect.y, label);
 }
+
+void BaseTheme::drawReadingProgressBar(const GfxRenderer& renderer, size_t progress) const {
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const int barThickness = 4;
+  const int barMaxWidth = renderer.getScreenWidth() - left - right;
+  const int barY = renderer.getScreenHeight() - bottom - barThickness;
+  if (progress > 100) progress = 100;
+  renderer.fillRect(left, barY, barMaxWidth * static_cast<int>(progress) / 100, barThickness, true);
+}
