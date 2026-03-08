@@ -55,4 +55,11 @@ inline bool hasTxtExtension(const String& fileName) {
 // Check for .md extension (case-insensitive)
 bool hasMarkdownExtension(std::string_view fileName);
 
+// Return an appropriate MIME type string for the given file path/name.
+// Falls back to "application/octet-stream" for unknown extensions.
+const char* getMimeType(std::string_view fileName);
+inline const char* getMimeType(const String& fileName) {
+  return getMimeType(std::string_view{fileName.c_str(), fileName.length()});
+}
+
 }  // namespace FsHelpers

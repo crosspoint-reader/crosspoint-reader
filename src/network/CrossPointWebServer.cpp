@@ -489,10 +489,7 @@ void CrossPointWebServer::handleDownload() const {
     return;
   }
 
-  String contentType = "application/octet-stream";
-  if (isEpubFile(itemPath)) {
-    contentType = "application/epub+zip";
-  }
+  String contentType = FsHelpers::getMimeType(itemPath);
 
   char nameBuf[128] = {0};
   String filename = "download";
@@ -500,8 +497,15 @@ void CrossPointWebServer::handleDownload() const {
     filename = nameBuf;
   }
 
+  // Use "inline" disposition for text types so the browser/web UI can display them directly;
+  // use "attachment" for binary formats to trigger a download.
+  const bool isInline = (String(contentType).startsWith("text/") ||
+                         String(contentType) == "application/json" ||
+                         String(contentType) == "application/javascript" ||
+                         String(contentType) == "application/xml");
+  const String disposition = (isInline ? "inline" : "attachment");
   server->setContentLength(file.size());
-  server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+  server->sendHeader("Content-Disposition", disposition + "; filename=\"" + filename + "\"");
   server->send(200, contentType.c_str(), "");
 
   NetworkClient client = server->client();

@@ -266,6 +266,10 @@ void MdReaderActivity::onEnter() {
 }
 
 void MdReaderActivity::onExit() {
+  // Save progress before clearing state, in case the user exits before any render completes
+  if (txt && initialized) {
+    saveProgress();
+  }
   ActivityWithSubactivity::onExit();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   pageOffsets.clear();

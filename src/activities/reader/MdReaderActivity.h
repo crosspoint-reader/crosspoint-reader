@@ -65,5 +65,6 @@ class MdReaderActivity final : public ActivityWithSubactivity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  bool supportsOrientation() const override { return true; }
   void applyOrientation(uint8_t orientation);
 };

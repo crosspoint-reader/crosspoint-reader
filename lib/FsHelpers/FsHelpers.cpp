@@ -78,4 +78,23 @@ bool hasTxtExtension(std::string_view fileName) { return checkFileExtension(file
 
 bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension(fileName, ".md"); }
 
+const char* getMimeType(std::string_view fileName) {
+  if (hasEpubExtension(fileName)) return "application/epub+zip";
+  if (checkFileExtension(fileName, ".pdf")) return "application/pdf";
+  if (hasTxtExtension(fileName) || checkFileExtension(fileName, ".log")) return "text/plain";
+  if (hasMarkdownExtension(fileName)) return "text/markdown";
+  if (checkFileExtension(fileName, ".html") || checkFileExtension(fileName, ".htm")) return "text/html";
+  if (checkFileExtension(fileName, ".css")) return "text/css";
+  if (checkFileExtension(fileName, ".js")) return "application/javascript";
+  if (checkFileExtension(fileName, ".json")) return "application/json";
+  if (checkFileExtension(fileName, ".xml")) return "application/xml";
+  if (hasJpgExtension(fileName)) return "image/jpeg";
+  if (hasPngExtension(fileName)) return "image/png";
+  if (checkFileExtension(fileName, ".gif")) return "image/gif";
+  if (checkFileExtension(fileName, ".svg")) return "image/svg+xml";
+  if (checkFileExtension(fileName, ".zip")) return "application/zip";
+  if (checkFileExtension(fileName, ".gz")) return "application/gzip";
+  return "application/octet-stream";
+}
+
 }  // namespace FsHelpers
