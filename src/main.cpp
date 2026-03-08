@@ -224,6 +224,128 @@ void setupDisplayAndFonts() {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
+// Danger Zone: attempt auto-connect to last known WiFi, start web server + feed sync.
+// Non-blocking: returns quickly regardless of outcome. Logs result.
+// Reconnect WiFi using saved credentials — called after screenshot tour to restore connectivity
+// regardless of Danger Zone state (so the user isn't left offline after the tour).
+static void reconnectWifiAfterTour() {
+  WIFI_STORE.loadFromFile();
+  const auto& lastSsid = WIFI_STORE.getLastConnectedSsid();
+  if (lastSsid.empty()) {
+    LOG_DBG("SCR", "No last connected SSID — skipping WiFi restore");
+    return;
+  }
+  const auto* cred = WIFI_STORE.findCredential(lastSsid);
+  if (!cred) {
+    LOG_DBG("SCR", "No saved password for '%s' — skipping WiFi restore", lastSsid.c_str());
+    return;
+  }
+  LOG_INF("SCR", "Restoring WiFi to '%s' after screenshot tour...", lastSsid.c_str());
+  UITheme::setWifiAutoConnecting(true);
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+  constexpr unsigned long TIMEOUT_MS = 15000;
+  const unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < TIMEOUT_MS) {
+    delay(100);
+  }
+  UITheme::setWifiAutoConnecting(false);
+  if (WiFi.status() != WL_CONNECTED) {
+    LOG_ERR("SCR", "WiFi restore failed after tour (status=%d)", WiFi.status());
+    WiFi.mode(WIFI_OFF);
+  } else {
+    LOG_INF("SCR", "WiFi restored! IP=%s", WiFi.localIP().toString().c_str());
+  }
+}
+
+void dangerZoneAutoConnect() {
+  if (!SETTINGS.dangerZoneEnabled) return;
+  if (SETTINGS.dangerZonePassword[0] == '\0') {
+    LOG_DBG("DZ", "Danger Zone enabled but no password set — skipping auto-connect");
+    return;
+  }
+
+  WIFI_STORE.loadFromFile();
+  const auto& lastSsid = WIFI_STORE.getLastConnectedSsid();
+  if (lastSsid.empty()) {
+    LOG_DBG("DZ", "No last connected SSID — skipping auto-connect");
+    return;
+  }
+
+  const auto* cred = WIFI_STORE.findCredential(lastSsid);
+  if (!cred) {
+    LOG_DBG("DZ", "No saved password for '%s' — skipping", lastSsid.c_str());
+    return;
+  }
+
+  LOG_INF("DZ", "Auto-connecting to '%s'...", lastSsid.c_str());
+  UITheme::setWifiAutoConnecting(true);
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+
+  // Block up to 15 seconds for connection
+  constexpr unsigned long TIMEOUT_MS = 15000;
+  const unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < TIMEOUT_MS) {
+    delay(100);
+  }
+
+  UITheme::setWifiAutoConnecting(false);
+
+  if (WiFi.status() != WL_CONNECTED) {
+    LOG_ERR("DZ", "Auto-connect failed (status=%d)", WiFi.status());
+    WiFi.mode(WIFI_OFF);
+    return;
+  }
+
+  dzWifiConnected = true;
+  LOG_INF("DZ", "Connected! IP=%s", WiFi.localIP().toString().c_str());
+
+  configTime(0, 0, "pool.ntp.org");
+  {
+    time_t t = 0;
+    int tries = 0;
+    while (time(&t) < 1000000000L && tries++ < 30) delay(100);
+  }
+  FsDateTime::setCallback([](uint16_t* date, uint16_t* tv) {
+    time_t now = ::time(nullptr);
+    struct tm tm;
+    localtime_r(&now, &tm);
+    *date = FS_DATE(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
+    *tv = FS_TIME(tm.tm_hour, tm.tm_min, tm.tm_sec);
+  });
+
+  UITheme::setNetworkStatus(true, false);
+
+  // Start mDNS
+  {
+    const char* hostname = (SETTINGS.deviceName[0] != '\0') ? SETTINGS.deviceName : "crosspoint";
+    MDNS.begin(hostname);
+    LOG_INF("MDNS", "mDNS started: %s.local", hostname);
+  }
+
+  // Start web server
+  dzWebServer.reset(new CrossPointWebServer());
+  dzWebServer->begin();
+  if (dzWebServer->isRunning()) {
+    UITheme::setHttpServerActive(true);
+    LOG_INF("DZ", "Web server started on port 80");
+  } else {
+    LOG_ERR("DZ", "Web server failed to start");
+    dzWebServer.reset();
+  }
+
+  // Start RSS feed sync — skip if Up or Down is held at connect time
+  gpio.update();
+  if (gpio.isPressed(HalGPIO::BTN_UP) || gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    LOG_INF("DZ", "Button held at WiFi connect — suppressing RSS feed sync");
+    RssFeedSync::suppressSync();
+  }
+  RssFeedSync::startSync();
+}
+
 void setup() {
   t1 = millis();
 

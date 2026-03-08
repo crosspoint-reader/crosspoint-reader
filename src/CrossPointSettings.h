@@ -195,6 +195,19 @@ class CrossPointSettings {
   uint8_t fadingFix = 0;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // RSS feed sync settings (web-only)
+  char feedUrl[256] = "";
+  uint8_t feedNewsDays = 7;
+  uint8_t feedAllowFirmware = 0;  // 0=off, 1=on
+  uint8_t feedLogToFile = 1;      // 1=always log to file (TODO: make this a setting)
+
+  // Device name (used as mDNS hostname, e.g. "crosspoint" → crosspoint.local)
+  char deviceName[32] = "crosspoint";
+
+  // Danger Zone: automated firmware dev cycle (password-protected)
+  uint8_t dangerZoneEnabled = 0;     // 0=off, 1=enabled
+  char dangerZonePassword[32] = "";  // Set on physical device only; API returns 403 without it
+
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
