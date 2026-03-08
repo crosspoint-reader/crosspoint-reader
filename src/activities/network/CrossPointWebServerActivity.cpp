@@ -583,13 +583,21 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // Completed uploads list (oldest first), left-justified in PULSR font
     const int pulsrLineH = renderer.getLineHeight(PULSR_12_FONT_ID);
+    const int maxTextW = pageWidth - contentLeft - metrics.contentSidePadding;
+    auto truncate = [&](const std::string& s) {
+      if (renderer.getTextWidth(PULSR_12_FONT_ID, s.c_str()) <= maxTextW) return s;
+      std::string t = s;
+      while (!t.empty() && renderer.getTextWidth(PULSR_12_FONT_ID, (t + "…").c_str()) > maxTextW) t.pop_back();
+      return t + "…";
+    };
     for (const auto& name : UITheme::getReceivedFiles()) {
-      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, name.c_str(), apTextBlack);
+      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, truncate(name).c_str(), apTextBlack);
       startY += pulsrLineH;
     }
     // In-progress upload
     if (uploadStatus.inProgress && !uploadStatus.filename.empty()) {
-      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, (std::string("● ") + uploadStatus.filename).c_str(),
+      const std::string inProg = "● " + uploadStatus.filename;
+      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, truncate(inProg).c_str(),
                         apTextBlack, EpdFontFamily::BOLD);
     }
   } else {
@@ -615,13 +623,21 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // Completed uploads list (oldest first), left-justified in PULSR font
     const int pulsrLineH = renderer.getLineHeight(PULSR_12_FONT_ID);
+    const int maxTextW = pageWidth - contentLeft - metrics.contentSidePadding;
+    auto truncate = [&](const std::string& s) {
+      if (renderer.getTextWidth(PULSR_12_FONT_ID, s.c_str()) <= maxTextW) return s;
+      std::string t = s;
+      while (!t.empty() && renderer.getTextWidth(PULSR_12_FONT_ID, (t + "…").c_str()) > maxTextW) t.pop_back();
+      return t + "…";
+    };
     for (const auto& name : UITheme::getReceivedFiles()) {
-      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, name.c_str(), textBlack);
+      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, truncate(name).c_str(), textBlack);
       startY += pulsrLineH;
     }
     // In-progress upload
     if (uploadStatus.inProgress && !uploadStatus.filename.empty()) {
-      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, (std::string("● ") + uploadStatus.filename).c_str(),
+      const std::string inProg = "● " + uploadStatus.filename;
+      renderer.drawText(PULSR_12_FONT_ID, contentLeft, startY, truncate(inProg).c_str(),
                         textBlack, EpdFontFamily::BOLD);
     }
   }
