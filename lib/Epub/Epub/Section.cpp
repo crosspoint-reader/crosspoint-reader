@@ -306,9 +306,10 @@ bool Section::createFromHtmlFile(const std::string& htmlPath, const std::string&
     return false;
   }
 
-  section.file.seek(HEADER_SIZE - sizeof(uint32_t) - sizeof(section.pageCount));
+  section.file.seek(HEADER_SIZE - sizeof(uint32_t) * 2 - sizeof(section.pageCount));
   serialization::writePod(section.file, section.pageCount);
   serialization::writePod(section.file, lutOffset);
+  serialization::writePod(section.file, static_cast<uint32_t>(0));  // No anchor map for standalone HTML
   section.file.close();
   outPageCount = section.pageCount;
   return true;
