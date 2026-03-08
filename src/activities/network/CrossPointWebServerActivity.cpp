@@ -472,6 +472,9 @@ void CrossPointWebServerActivity::loop() {
 }
 
 void CrossPointWebServerActivity::render(RenderLock&&) {
+  // Sync HTTP pill state with actual server state before every render
+  UITheme::setHttpServerActive(webServer && webServer->isRunning());
+
   // Only render our own UI when server is running
   // Subactivities handle their own rendering
   if (state == WebServerActivityState::SERVER_RUNNING || state == WebServerActivityState::AP_STARTING) {
