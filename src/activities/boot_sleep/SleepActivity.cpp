@@ -19,7 +19,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
-#include "util/StringUtils.h"
 
 
 namespace {
@@ -295,7 +294,7 @@ std::string SleepActivity::getBookOverlayText(const std::string& bookPath) const
   std::string progressLine = "Reading...";  // Default progress text
 
   // Extract metadata based on file type
-  if (StringUtils::checkFileExtension(bookPath, ".xtc") || StringUtils::checkFileExtension(bookPath, ".xtch")) {
+  if (FsHelpers::checkFileExtension(bookPath, ".xtc") || FsHelpers::checkFileExtension(bookPath, ".xtch")) {
     // Handle XTC file
     Xtc xtc(bookPath, "/.crosspoint");
     if (xtc.load()) {
@@ -318,7 +317,7 @@ std::string SleepActivity::getBookOverlayText(const std::string& bookPath) const
         f.close();
       }
     }
-  } else if (StringUtils::checkFileExtension(bookPath, ".txt")) {
+  } else if (FsHelpers::checkFileExtension(bookPath, ".txt")) {
     // Handle TXT file
     Txt txt(bookPath, "/.crosspoint");
     if (txt.load()) {
@@ -361,7 +360,7 @@ std::string SleepActivity::getBookOverlayText(const std::string& bookPath) const
         f.close();
       }
     }
-  } else if (StringUtils::checkFileExtension(bookPath, ".epub")) {
+  } else if (FsHelpers::checkFileExtension(bookPath, ".epub")) {
     // Handle EPUB file
     Epub epub(bookPath, "/.crosspoint");
     if (epub.load(true, true)) {  // Skip CSS loading for metadata only
