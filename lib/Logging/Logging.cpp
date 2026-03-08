@@ -80,10 +80,12 @@ std::string getLastLogs() {
   return output;
 }
 
-void sanitizeLogHead() {
+bool sanitizeLogHead() {
   if (logHead >= MAX_LOG_LINES) {
     logHead = 0;
+    return true;
   }
+  return false;
 }
 
 void clearLastLogs() {

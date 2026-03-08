@@ -57,9 +57,11 @@ void logPrintf(const char* level, const char* origin, const char* format, ...);
 
 std::string getLastLogs();
 void clearLastLogs();
-// Clamps logHead into range without wiping messages — safe to call on panic
-// reboots where the panic occurred before begin() ever had a chance to run.
-void sanitizeLogHead();
+// Clamps logHead into range. Returns true if logHead was out of range (repaired),
+// which also means logMessages is untrusted garbage. Callers should call
+// clearLastLogs() when this returns true so getLastLogs() does not dump corrupt
+// data into crash reports.
+bool sanitizeLogHead();
 
 class MySerialImpl : public Print {
  public:
