@@ -1,5 +1,7 @@
 #pragma once
 
+#include <GfxRenderer.h>
+
 #include "components/themes/BaseTheme.h"
 
 class GfxRenderer;
@@ -55,6 +57,8 @@ constexpr ThemeMetrics values = {
 
 class PulsrTheme : public BaseTheme {
  public:
+  PulsrTheme() : inverted_(false) {}
+
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const override;
   void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                      const char* rightLabel = nullptr) const override;
@@ -88,7 +92,25 @@ class PulsrTheme : public BaseTheme {
                      std::string title, const int paddingBottom = 0, const int textYOffset = 0) const override {}
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const override;
 
+ protected:
+  explicit PulsrTheme(bool inverted) : inverted_(inverted) {}
+
+  // Color helpers — flip black/white for inverted (dark) theme.
+  bool b(bool black) const { return inverted_ ? !black : black; }
+  Color col(Color c) const {
+    if (!inverted_) return c;
+    switch (c) {
+      case Color::Black:     return Color::White;
+      case Color::White:     return Color::Black;
+      case Color::LightGray: return Color::DarkGray;
+      case Color::DarkGray:  return Color::LightGray;
+      default:               return c;
+    }
+  }
+
  private:
+  bool inverted_;
+
   // Draws the full PULSR chrome: left bar, top bar, bottom bar, inner elbow curves, title and
   // battery text in the top bar, and nav segment decorators in the left bar.
   void drawFrame(const GfxRenderer& renderer, const char* title) const;
