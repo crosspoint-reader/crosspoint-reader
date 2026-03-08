@@ -8,14 +8,25 @@
 // Simple ring buffer log, useful for error reporting when we encounter a crash
 RTC_NOINIT_ATTR char logMessages[MAX_LOG_LINES][MAX_ENTRY_LEN];
 RTC_NOINIT_ATTR size_t logHead = 0;
+// Magic word written alongside logHead to detect uninitialized RTC memory.
+// RTC_NOINIT_ATTR is not zeroed on cold boot, so logHead may appear in-range
+// (0..MAX_LOG_LINES-1) by chance even though logMessages is garbage. The magic
+// value is only set by clearLastLogs(), so its absence means the buffer was
+// never properly initialized.
+RTC_NOINIT_ATTR uint32_t rtcLogMagic;
+static constexpr uint32_t fnv1a32(const char* s, uint32_t h = 2166136261u) {
+  return *s ? fnv1a32(s + 1, (h ^ static_cast<uint32_t>(*s)) * 16777619u) : h;
+}
+static constexpr uint32_t LOG_RTC_MAGIC = fnv1a32("crosspoint-reader");
 
 void addToLogRingBuffer(const char* message) {
-  // Add the message to the ring buffer, overwriting old messages if necessary
-  // If RTC_NOINIT_ATTR left logHead out of range on cold boot, all slots are
-  // garbage too — clear the entire buffer so subsequent reads are safe.
-  if (logHead >= MAX_LOG_LINES) {
+  // Add the message to the ring buffer, overwriting old messages if necessary.
+  // If the magic is wrong or logHead is out of range (RTC_NOINIT_ATTR garbage
+  // on cold boot), clear the entire buffer so subsequent reads are safe.
+  if (rtcLogMagic != LOG_RTC_MAGIC || logHead >= MAX_LOG_LINES) {
     memset(logMessages, 0, sizeof(logMessages));
     logHead = 0;
+    rtcLogMagic = LOG_RTC_MAGIC;
   }
   strncpy(logMessages[logHead], message, MAX_ENTRY_LEN - 1);
   logMessages[logHead][MAX_ENTRY_LEN - 1] = '\0';
@@ -69,6 +80,9 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
 }
 
 std::string getLastLogs() {
+  if (rtcLogMagic != LOG_RTC_MAGIC) {
+    return {};
+  }
   std::string output;
   for (size_t i = 0; i < MAX_LOG_LINES; i++) {
     size_t idx = (logHead + i) % MAX_LOG_LINES;
@@ -80,9 +94,24 @@ std::string getLastLogs() {
   return output;
 }
 
+// Checks whether the RTC log state is consistent: rtcLogMagic must equal
+// LOG_RTC_MAGIC and logHead must be in 0..MAX_LOG_LINES-1. Returns true if
+// corruption is detected, in which case rtcLogMagic is still invalid and
+// logMessages may contain garbage. Callers (e.g. HalSystem::begin on the
+// panic-reboot path) must call clearLastLogs() after a true result to fully
+// reinitialize the ring buffer and stamp the magic before getLastLogs() is used.
+bool sanitizeLogHead() {
+  if (rtcLogMagic != LOG_RTC_MAGIC || logHead >= MAX_LOG_LINES) {
+    logHead = 0;
+    return true;
+  }
+  return false;
+}
+
 void clearLastLogs() {
   for (size_t i = 0; i < MAX_LOG_LINES; i++) {
     logMessages[i][0] = '\0';
   }
   logHead = 0;
+  rtcLogMagic = LOG_RTC_MAGIC;
 }
