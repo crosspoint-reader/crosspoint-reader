@@ -22,6 +22,10 @@ std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
   serialization::readPod(file, yPos);
 
   auto tb = TextBlock::deserialize(file);
+  if (!tb) {
+    LOG_ERR("PGE", "Failed to deserialize TextBlock");
+    return nullptr;
+  }
   return std::unique_ptr<PageLine>(new PageLine(std::move(tb), xPos, yPos));
 }
 
@@ -94,9 +98,17 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
 
     if (tag == TAG_PageLine) {
       auto pl = PageLine::deserialize(file);
+      if (!pl) {
+        LOG_ERR("PGE", "Failed to deserialize PageLine %u", i);
+        return nullptr;
+      }
       page->elements.push_back(std::move(pl));
     } else if (tag == TAG_PageImage) {
       auto pi = PageImage::deserialize(file);
+      if (!pi) {
+        LOG_ERR("PGE", "Failed to deserialize PageImage %u", i);
+        return nullptr;
+      }
       page->elements.push_back(std::move(pi));
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);

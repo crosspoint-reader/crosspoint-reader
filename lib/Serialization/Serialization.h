@@ -37,15 +37,23 @@ static void writeString(FsFile& file, const std::string& s) {
 }
 
 static void readString(std::istream& is, std::string& s) {
-  uint32_t len;
+  uint32_t len = 0;
   readPod(is, len);
+  if (len > 4096) {
+    s.clear();
+    return;
+  }  // Guard against corrupt/truncated length
   s.resize(len);
   is.read(&s[0], len);
 }
 
 static void readString(FsFile& file, std::string& s) {
-  uint32_t len;
+  uint32_t len = 0;
   readPod(file, len);
+  if (len > 4096) {
+    s.clear();
+    return;
+  }  // Guard against corrupt/truncated length
   s.resize(len);
   file.read(&s[0], len);
 }
