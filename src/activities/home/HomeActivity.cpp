@@ -281,7 +281,10 @@ void HomeActivity::onEnter() {
     // Invalidate cached cover buffer only when the recent book list has changed.
     // If the same books are shown, restoreCoverBuffer() will reuse the static
     // buffer and skip the slow SD card BMP reload entirely.
-    if (!isCoverCacheValid()) {
+    // Also skip loadRecentCovers() — thumbnails were already verified last visit.
+    if (isCoverCacheValid()) {
+      recentsLoaded = true;
+    } else {
       freeCoverBuffer();
       coverRendered = false;
     }
