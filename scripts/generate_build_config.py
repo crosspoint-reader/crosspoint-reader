@@ -55,7 +55,7 @@ FEATURES = {
     'markdown': Feature(
         name='Markdown/Obsidian',
         flag='ENABLE_MARKDOWN',
-        size_kb=219,
+        size_kb=295,
         description='Markdown and Obsidian vault reading support'
     ),
     'integrations': Feature(
@@ -67,19 +67,19 @@ FEATURES = {
     'koreader_sync': Feature(
         name='KOReader Sync',
         flag='ENABLE_KOREADER_SYNC',
-        size_kb=17,
+        size_kb=19,
         description='Sync reading progress with KOReader'
     ),
     'calibre_sync': Feature(
         name='Calibre Sync',
         flag='ENABLE_CALIBRE_SYNC',
-        size_kb=0,
+        size_kb=95,
         description='Calibre OPDS browser and metadata sync settings'
     ),
     'background_server': Feature(
         name='Background Server',
         flag='ENABLE_BACKGROUND_SERVER',
-        size_kb=3,
+        size_kb=0,
         description='Background web server for file management'
     ),
     'home_media_picker': Feature(
@@ -91,49 +91,49 @@ FEATURES = {
     'web_pokedex_plugin': Feature(
         name='Web Pokedex Plugin',
         flag='ENABLE_WEB_POKEDEX_PLUGIN',
-        size_kb=15,
+        size_kb=20,
         description='Browser-side Pokemon wallpaper generator at /plugins/pokedex'
     ),
     'pokemon_party': Feature(
         name='Pokemon Party',
         flag='ENABLE_POKEMON_PARTY',
-        size_kb=15,
+        size_kb=20,
         description='Per-book Pokemon metadata and REST API for recent-book party views'
     ),
     'epub_support': Feature(
         name='EPUB Support',
         flag='ENABLE_EPUB_SUPPORT',
-        size_kb=152,
+        size_kb=232,
         description='EPUB e-book reader with CSS and chapter navigation'
     ),
     'hyphenation': Feature(
         name='Hyphenation',
         flag='ENABLE_HYPHENATION',
-        size_kb=465,
+        size_kb=545,
         description='Language-aware hyphenation for justified EPUB text'
     ),
     'xtc_support': Feature(
         name='XTC Support',
         flag='ENABLE_XTC_SUPPORT',
-        size_kb=17,
+        size_kb=18,
         description='XTC format reader with chapter navigation'
     ),
     'lyra_theme': Feature(
         name='Lyra Theme',
         flag='ENABLE_LYRA_THEME',
-        size_kb=13,
+        size_kb=0,
         description='Alternative UI theme with refined spacing and layout'
     ),
     'ota_updates': Feature(
         name='OTA Updates',
         flag='ENABLE_OTA_UPDATES',
-        size_kb=0,
+        size_kb=5,
         description='Over-the-air firmware updates via WiFi'
     ),
     'todo_planner': Feature(
         name='Todo Planner',
         flag='ENABLE_TODO_PLANNER',
-        size_kb=9,
+        size_kb=10,
         description='Standalone daily TODO/agenda planner with .md/.txt fallback and web quick-entry'
     ),
     'dark_mode': Feature(
@@ -151,19 +151,19 @@ FEATURES = {
     'ble_wifi_provisioning': Feature(
         name='BLE WiFi Provisioning',
         flag='ENABLE_BLE_WIFI_PROVISIONING',
-        size_kb=671,
+        size_kb=673,
         description='Initial WiFi setup via Bluetooth LE'
     ),
     'user_fonts': Feature(
         name='User Fonts',
         flag='ENABLE_USER_FONTS',
-        size_kb=7,
+        size_kb=11,
         description='Load custom .ttf/.otf fonts from SD card (pre-converted)'
     ),
     'web_wifi_setup': Feature(
         name='Web WiFi Setup',
         flag='ENABLE_WEB_WIFI_SETUP',
-        size_kb=3,
+        size_kb=5,
         description='Manage WiFi networks directly from the web interface'
     ),
     'usb_mass_storage': Feature(
@@ -526,7 +526,7 @@ def resolve_profile_name(profile_name: str) -> str:
 
 def calculate_size(enabled_features: Dict[str, bool]) -> float:
     """Calculate estimated firmware size in MB."""
-    base_size_mb = 2.65  # Lean profile size baseline (measured)
+    base_size_mb = 2.55  # Lean profile size baseline (measured)
 
     for feature_key, enabled in enabled_features.items():
         if enabled:
