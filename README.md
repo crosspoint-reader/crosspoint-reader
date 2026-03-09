@@ -1,179 +1,126 @@
-# CrossPoint Reader
+# CrossPoint Reader — Laird's Fork
 
-Firmware for the **Xteink X4** e-paper display reader (unaffiliated with Xteink).
-Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
+This is a fork of [crosspoint-reader/crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader), the open-source firmware for the **Xteink X4** e-paper reader (ESP32-C3).
 
-CrossPoint Reader is a purpose-built firmware designed to be a drop-in, fully open-source replacement for the official 
-Xteink firmware. It aims to match or improve upon the standard EPUB reading experience.
+**For standard features, installation, and the user guide, see the [upstream repository](https://github.com/crosspoint-reader/crosspoint-reader).**
 
-![](./docs/images/cover.jpg)
-
-## Motivation
-
-E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited 
-customisation. The **Xteink X4** is an affordable, e-paper device, however the official firmware remains closed.
-CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truely unlock the device's
-potential.
-
-CrossPoint Reader aims to:
-* Provide a **fully open-source alternative** to the official firmware.
-* Offer a **document reader** capable of handling EPUB content on constrained hardware.
-* Support **customisable font, layout, and display** options.
-* Run purely on the **Xteink X4 hardware**.
-
-This project is **not affiliated with Xteink**; it's built as a community project.
-
-## Features & Usage
-
-- [x] EPUB parsing and rendering (EPUB 2 and EPUB 3)
-- [x] Image support within EPUB
-- [x] Saved reading position
-- [x] File explorer with file picker
-  - [x] Basic EPUB picker from root directory
-  - [x] Support nested folders
-  - [ ] EPUB picker with cover art
-- [x] Custom sleep screen
-  - [x] Cover sleep screen
-- [x] Wifi book upload
-- [x] Wifi OTA updates
-- [x] KOReader Sync integration for cross-device reading progress
-- [x] Configurable font, layout, and display options
-  - [ ] User provided fonts
-  - [ ] Full UTF support
-- [x] Screen rotation
-
-Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
-
-See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint, including the
-[KOReader Sync quick setup](./USER_GUIDE.md#365-koreader-sync-quick-setup).
-
-For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
-
-## Installing
-
-### Web (latest firmware)
-
-1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
-2. Go to https://xteink.dve.al/ and click "Flash CrossPoint firmware"
-
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
-
-### Web (specific firmware version)
-
-1. Connect your Xteink X4 to your computer via USB-C
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
-3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
-
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
-
-### Manual
-
-See [Development](#development) below.
-
-## Development
-
-### Prerequisites
-
-* **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
-* Python 3.8+
-* USB-C cable for flashing the ESP32-C3
-* Xteink X4
-
-### Checking out the code
-
-CrossPoint uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
-
-```
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
-
-# Or, if you've already cloned without --recursive:
-git submodule update --init --recursive
-```
-
-### Flashing your device
-
-Connect your Xteink X4 to your computer via USB-C and run the following command.
-
-```sh
-pio run --target upload
-```
-### Debugging
-
-After flashing the new features, it’s recommended to capture detailed logs from the serial port.
-
-First, make sure all required Python packages are installed:
-
-```python
-python3 -m pip install pyserial colorama matplotlib
-```
-after that run the script:
-```sh
-# For Linux
-# This was tested on Debian and should work on most Linux systems.
-python3 scripts/debugging_monitor.py
-
-# For macOS
-python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
-```
-Minor adjustments may be required for Windows.
-
-## Internals
-
-CrossPoint Reader is pretty aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only
-has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based
-on this constraint.
-
-### Data caching
-
-The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the 
-cache. This cache directory exists at `.crosspoint` on the SD card. The structure is as follows:
-
-
-```
-.crosspoint/
-├── epub_12471232/       # Each EPUB is cached to a subdirectory named `epub_<hash>`
-│   ├── progress.bin     # Stores reading progress (chapter, page, etc.)
-│   ├── cover.bmp        # Book cover image (once generated)
-│   ├── book.bin         # Book metadata (title, author, spine, table of contents, etc.)
-│   └── sections/        # All chapter data is stored in the sections subdirectory
-│       ├── 0.bin        # Chapter data (screen count, all text layout info, etc.)
-│       ├── 1.bin        #     files are named by their index in the spine
-│       └── ...
-│
-└── epub_189013891/
-```
-
-Deleting the `.crosspoint` directory will clear the entire cache. 
-
-Due the way it's currently implemented, the cache is not automatically cleared when a book is deleted and moving a book
-file will use a new cache directory, resetting the reading progress.
-
-For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
-
-## Contributing
-
-Contributions are very welcome!
-
-If you are new to the codebase, start with the [contributing docs](./docs/contributing/README.md).
-
-If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
-If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
-
-Everyone here is a volunteer, so please be respectful and patient. For more details on our goverance and community 
-principles, please see [GOVERNANCE.md](GOVERNANCE.md).
-
-### To submit a contribution:
-
-1. Fork the repo
-2. Create a branch (`feature/dithering-improvement`)
-3. Make changes
-4. Submit a PR
+This fork adds a new visual theme, OpenClaw integration, and a collection of features contributed back upstream as PRs.
 
 ---
 
-CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 hardware**.
+## What's Different in This Fork
 
-Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
-was making CrossPoint.
+### PULSR Theme (PR [#1331](https://github.com/crosspoint-reader/crosspoint-reader/pull/1331))
+
+A new visual design built for the Xteink X4's e-ink display.
+
+- **4-segment left navigation bar** — compact icons replace the traditional bottom tab bar, freeing reading space
+- **Antonio font** for headers — clean, legible sans-serif at all sizes  
+- **PULSR Dark** — inverted variant for comfortable night/low-light reading
+- Customisable tab labels with short abbreviations for compact mode
+
+### OpenClaw Integration
+
+The reader integrates with [OpenClaw](https://github.com/openclaw/openclaw), an AI personal assistant, enabling automated content delivery and device management.
+
+#### Content Feed (`feat/rss-feed-sync`, PR [#1362](https://github.com/crosspoint-reader/crosspoint-reader/pull/1362)–[#1368](https://github.com/crosspoint-reader/crosspoint-reader/pull/1368))
+- RSS/Atom feed server running on the NUC serves EPUBs, news briefings, and other content
+- Reader polls the feed and syncs new files automatically over WiFi
+- Daily erotic fiction, thought leadership articles, and road trip guides delivered overnight
+
+#### Danger Zone (PR [#1368](https://github.com/crosspoint-reader/crosspoint-reader/pull/1368))
+- Web-based device management interface accessible from the local network
+- Screenshot tour: capture full-device screenshot sequences for debugging
+- OTA firmware flashing via HTTP upload (no USB required)
+
+#### Automatic Sync
+- OpenClaw cron job polls both readers (192.168.0.234 and 192.168.0.194) every 15 minutes
+- When readers come online, content and firmware sync automatically
+- `crosspoint-feed/` staging directory mirrors to device on each sync
+
+### On-Device Linking Support (PR [#1376](https://github.com/crosspoint-reader/crosspoint-reader/pull/1376)) — *draft*
+
+Navigate links embedded in EPUB files using physical buttons — no touchscreen required.
+
+- All `<a href>` links in an EPUB page are tracked with pixel-level bounding rects during layout
+- **Down** button → enter link cursor mode (first link highlighted)
+- **Up / Down** → cycle through links on the page with an inverted highlight
+- **Confirm** → follow the focused link (`navigateToHref`)
+- **Back** → exit cursor mode, return to reading
+- "Footnotes" menu renamed to **"Links"** to reflect that it surfaces all inline links, not just footnotes
+- Enables cross-referenced EPUB collections (e.g. SCP Foundation) to be navigated naturally
+
+### OTA Improvements (PR [#1336](https://github.com/crosspoint-reader/crosspoint-reader/pull/1336))
+- GitHub release assets redirect to CDN — follow up to 5 redirects (`max_redirection_count=5`)
+- `file.flush()` before close ensures firmware file is visible after download completes
+- Progress callback wired to render live progress bar during download
+- Boot partition marked valid early to prevent rollback on reboot
+
+### Nav Arrows (PR [#1362](https://github.com/crosspoint-reader/crosspoint-reader/pull/1362))
+- Left/right arrows display correctly in reader and settings tab navigation
+
+### Web UI Improvements (PR [#1364](https://github.com/crosspoint-reader/crosspoint-reader/pull/1364))
+- File transfer UI shows upload progress status
+- Long filenames truncated with ellipsis in the received file list
+
+### Status Bar Clock (`feat/status-bar-clock`)
+- Optional clock display in the reader status bar
+
+### File Browser Sort (`feat/file-browser-sort`)
+- Sort files alphabetically or by date in the file picker
+
+---
+
+## Content Automation
+
+This fork is paired with OpenClaw automations that run on a home server:
+
+| Cron | Schedule | What it does |
+|------|----------|--------------|
+| `daily-erotic-story` | 4:00 AM | Generates a new erotic fiction story (GLM-5), saves as EPUB |
+| `daily-erotic-art` | 9:00 AM | Fetches public-domain art from Wikimedia, converts to sleep screen BMP |
+| `morning-audio-briefing` | 6:20 AM | Generates daily news briefing podcast (ChipCast) |
+| `daily-trip-suggestion` | 8:00 AM Wed | Road trip suggestion with illustrated poster |
+| `maxs-book-update` | 6:00 AM Wed | Checks SpaceBattles for new chapters of Max's book, rebuilds EPUB |
+| `reader-sync` | Every 15 min | Polls readers; syncs new content and firmware when online |
+
+### Content Library
+
+The following libraries are staged and delivered automatically:
+
+- **SCP Foundation** — 153 EPUBs from [lselden/scp-to-epub](https://github.com/lselden/scp-to-epub), organised into Series, Canons, Groups, International, Wanderers, BestOf
+- **AO3 erotic fiction** — organised by genre (Alien-SciFi, BDSM-Kink, Paranormal, LGBTQ, Romance)
+- **AI-generated stories** — saved to `Books/chip/YYYY-MM/` monthly subdirs
+- **Thought leadership articles** — EPUB versions of published articles
+- **WhatsNew.epub** — navigable index of recently added content, updated automatically
+
+---
+
+## Building
+
+See the [upstream development guide](https://github.com/crosspoint-reader/crosspoint-reader#development).
+
+```bash
+git clone https://github.com/laird/crosspoint-claw
+cd crosspoint-claw
+pio run
+```
+
+The `feature/claw` branch is the main integration branch. All upstream PRs are also available as standalone branches.
+
+---
+
+## Open PRs Upstream
+
+| PR | Status | Description |
+|----|--------|-------------|
+| [#1331](https://github.com/crosspoint-reader/crosspoint-reader/pull/1331) | Open | PULSR theme — 4-segment left nav bar with Antonio font |
+| [#1336](https://github.com/crosspoint-reader/crosspoint-reader/pull/1336) | Open | OTA improvements — redirect follow, progress bar, flush fix |
+| [#1362](https://github.com/crosspoint-reader/crosspoint-reader/pull/1362) | Open | Nav arrows — correct left/right display in reader/settings |
+| [#1364](https://github.com/crosspoint-reader/crosspoint-reader/pull/1364) | Open | Web UI improvements — upload status, filename truncation |
+| [#1368](https://github.com/crosspoint-reader/crosspoint-reader/pull/1368) | Open | Danger Zone — web-based device management |
+| [#1376](https://github.com/crosspoint-reader/crosspoint-reader/pull/1376) | Draft | On-device linking support for EPUB |
+
+---
+
+*This fork is maintained by [@laird](https://github.com/laird). Upstream project: [crosspoint-reader/crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader).*
