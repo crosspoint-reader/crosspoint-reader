@@ -40,6 +40,8 @@ FEATURES = [
     'koreader_sync',
     'calibre_sync',
     'background_server',
+    'background_server_on_charge',
+    'background_server_always',
     'home_media_picker',
     'web_pokedex_plugin',
     'pokemon_party',

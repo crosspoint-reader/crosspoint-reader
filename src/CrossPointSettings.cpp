@@ -410,6 +410,12 @@ void CrossPointSettings::validateAndClamp() {
   statusBarBattery = statusBarBattery ? 1 : 0;
   backgroundServerOnCharge = backgroundServerOnCharge ? 1 : 0;
   wifiAutoConnect = wifiAutoConnect ? 1 : 0;
+  if (!supportsBackgroundServerOnChargeMode()) {
+    backgroundServerOnCharge = 0;
+  }
+  if (!supportsBackgroundServerAlwaysMode()) {
+    wifiAutoConnect = 0;
+  }
   if (wifiAutoConnect) {
     backgroundServerOnCharge = 1;
   }

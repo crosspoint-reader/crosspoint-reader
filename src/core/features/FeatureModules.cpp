@@ -88,7 +88,12 @@ bool FeatureModules::hasCapability(const Capability capability) {
     case Capability::AnkiSupport:
       return isEnabled("anki_support");
     case Capability::BackgroundServer:
-      return isEnabled("background_server");
+      return isEnabled("background_server") || isEnabled("background_server_on_charge") ||
+             isEnabled("background_server_always");
+    case Capability::BackgroundServerAlways:
+      return isEnabled("background_server_always");
+    case Capability::BackgroundServerOnCharge:
+      return isEnabled("background_server_on_charge") || isEnabled("background_server_always");
     case Capability::BleWifiProvisioning:
       return isEnabled("ble_wifi_provisioning");
     case Capability::CalibreSync:

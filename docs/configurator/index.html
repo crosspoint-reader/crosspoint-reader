@@ -1385,7 +1385,7 @@
                     <input type="checkbox" id="web_pokedex_plugin" data-feature="web_pokedex_plugin" />
                     <div class="card-icon"><span>&#x26A1;</span></div>
                     <div class="card-body">
-                      <div class="card-name">Web Pokedex Plugin</div>
+                      <div class="card-name">Pokedex</div>
                       <div class="card-size"></div>
                       <div class="card-desc">Browser-side Pokemon wallpaper generator at /plugins/pokedex</div>
                     </div>
@@ -1441,16 +1441,40 @@
           <div class="cat-body">
             <div class="skill-grid">
 
-              <label class="skill-card" data-feature="background_server" data-node-id="background_server">
-                <input type="checkbox" id="background_server" data-feature="background_server" />
-                <div class="card-icon"><span>&#x25A1;</span></div>
-                <div class="card-body">
-                  <div class="card-name">Background Server</div>
-                  <div class="card-size"></div>
-                  <div class="card-desc">Background web server for file management</div>
+              <div class="dep-group">
+                <label class="skill-card dep-parent" data-feature="background_server" data-node-id="background_server">
+                  <input type="checkbox" id="background_server" data-feature="background_server" />
+                  <div class="card-icon"><span>&#x25A1;</span></div>
+                  <div class="card-body">
+                    <div class="card-name">Background Server</div>
+                    <div class="card-size"></div>
+                    <div class="card-desc">Background web server for file management</div>
+                  </div>
+                  <div class="card-toggle"><span class="toggle-box"></span></div>
+                </label>
+                <div class="dep-children">
+                  <label class="skill-card dep-child" data-feature="background_server_on_charge" data-node-id="background_server_on_charge">
+                    <input type="checkbox" id="background_server_on_charge" data-feature="background_server_on_charge" />
+                    <div class="card-icon"><span>&#x26A1;</span></div>
+                    <div class="card-body">
+                      <div class="card-name">On Charge</div>
+                      <div class="card-size"></div>
+                      <div class="card-desc">Start server automatically when USB power is connected</div>
+                    </div>
+                    <div class="card-toggle"><span class="toggle-box"></span></div>
+                  </label>
+                  <label class="skill-card dep-child" data-feature="background_server_always" data-node-id="background_server_always">
+                    <input type="checkbox" id="background_server_always" data-feature="background_server_always" />
+                    <div class="card-icon"><span>&#x221E;</span></div>
+                    <div class="card-body">
+                      <div class="card-name">Always On</div>
+                      <div class="card-size"></div>
+                      <div class="card-desc">Auto-connect to WiFi on wake even when not charging</div>
+                    </div>
+                    <div class="card-toggle"><span class="toggle-box"></span></div>
+                  </label>
                 </div>
-                <div class="card-toggle"><span class="toggle-box"></span></div>
-              </label>
+              </div>
 
               <div class="dep-group" data-dep-parent="web_wifi_setup">
                 <label class="skill-card dep-parent" data-feature="web_wifi_setup" data-node-id="web_wifi_setup">
@@ -1525,17 +1549,6 @@
 
             </div>
 
-            <!-- Network notes -->
-            <div class="note-grid">
-              <div class="note-item runtime-selectable" data-node-id="webserver_always_on_note" data-runtime-mode="always_on">
-                <span class="note-icon">&#x221E;</span>
-                <span class="note-label">Always on</span>
-              </div>
-              <div class="note-item runtime-selectable" data-node-id="webserver_on_charge_note" data-runtime-mode="on_charge">
-                <span class="note-icon">&#x26A1;</span>
-                <span class="note-label">On charge</span>
-              </div>
-            </div>
             <div class="info-bar" style="margin-top: 12px;">
               Android/app clients discover remote open-book and remote page-turn support from the plugin flags <code>remote_open_book</code> and <code>remote_page_turn</code>.
             </div>
@@ -1926,6 +1939,16 @@
           flag: "ENABLE_BACKGROUND_SERVER",
           default: true,
         },
+        background_server_on_charge: {
+          sizeKb: 0,
+          flag: "ENABLE_BACKGROUND_SERVER_ON_CHARGE",
+          default: false,
+        },
+        background_server_always: {
+          sizeKb: 0,
+          flag: "ENABLE_BACKGROUND_SERVER_ALWAYS",
+          default: false,
+        },
         home_media_picker: {
           sizeKb: 0,
           flag: "ENABLE_HOME_MEDIA_PICKER",
@@ -2029,14 +2052,11 @@
       const HUB_FEATURES = {
         reader_hub: ["markdown", "xtc_support", "epub_support", "book_images", "hyphenation", "todo_planner"],
         interface_hub: ["opendyslexic_fonts", "notosans_fonts", "bookerly_fonts", "home_media_picker", "lyra_theme", "visual_cover_picker", "image_sleep", "web_pokedex_plugin", "pokemon_party", "dark_mode", "user_fonts"],
-        network_hub: ["background_server", "web_wifi_setup", "ble_wifi_provisioning", "ota_updates", "integrations", "koreader_sync", "calibre_sync"],
+        network_hub: ["background_server", "background_server_on_charge", "background_server_always", "web_wifi_setup", "ble_wifi_provisioning", "ota_updates", "integrations", "koreader_sync", "calibre_sync"],
         storage_hub: ["usb_mass_storage"],
       };
 
-      const NOTE_FEATURES = {
-        webserver_always_on_note: ["background_server"],
-        webserver_on_charge_note: ["background_server"],
-      };
+      const NOTE_FEATURES = {};
 
       const PROFILES = {
         lean: {},
@@ -2051,6 +2071,7 @@
           lyra_theme: true,
           ota_updates: true,
           background_server: true,
+          background_server_on_charge: true,
           web_wifi_setup: true,
           home_media_picker: true,
           dark_mode: true,
@@ -2075,6 +2096,7 @@
           ota_updates: true,
           todo_planner: true,
           background_server: true,
+          background_server_on_charge: true,
           home_media_picker: true,
           web_pokedex_plugin: true,
           pokemon_party: true,

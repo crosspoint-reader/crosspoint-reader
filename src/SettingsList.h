@@ -8,6 +8,49 @@
 #include "activities/settings/SettingsActivity.h"
 #include "core/features/FeatureModules.h"
 
+inline bool supportsBackgroundServerModeSetting() {
+  return core::FeatureModules::hasCapability(core::Capability::BackgroundServerOnCharge);
+}
+
+inline bool supportsBackgroundServerAlwaysSetting() {
+  return core::FeatureModules::hasCapability(core::Capability::BackgroundServerAlways);
+}
+
+inline std::vector<std::string> backgroundServerModeOptions() {
+  std::vector<std::string> options = {std::string(I18N.get(StrId::STR_NEVER)),
+                                      std::string(I18N.get(StrId::STR_ONLY_ON_CHARGE))};
+  if (supportsBackgroundServerAlwaysSetting()) {
+    options.emplace_back(I18N.get(StrId::STR_ALWAYS));
+  }
+  return options;
+}
+
+inline uint8_t getBackgroundServerModeSettingIndex() {
+  const uint8_t mode = SETTINGS.getBackgroundServerMode();
+  if (supportsBackgroundServerAlwaysSetting()) {
+    if (mode == CrossPointSettings::BACKGROUND_SERVER_ALWAYS) {
+      return 2;
+    }
+    if (mode == CrossPointSettings::BACKGROUND_SERVER_ON_CHARGE) {
+      return 1;
+    }
+    return 0;
+  }
+  return mode == CrossPointSettings::BACKGROUND_SERVER_ON_CHARGE ? 1 : 0;
+}
+
+inline void setBackgroundServerModeSettingIndex(const uint8_t index) {
+  if (supportsBackgroundServerAlwaysSetting()) {
+    SETTINGS.setBackgroundServerMode(index <= CrossPointSettings::BACKGROUND_SERVER_ALWAYS
+                                         ? index
+                                         : CrossPointSettings::BACKGROUND_SERVER_NEVER);
+    return;
+  }
+
+  SETTINGS.setBackgroundServerMode(index == 1 ? CrossPointSettings::BACKGROUND_SERVER_ON_CHARGE
+                                              : CrossPointSettings::BACKGROUND_SERVER_NEVER);
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -127,11 +170,11 @@ inline std::vector<SettingInfo> getSettingsList() {
                                        "usbMscPromptOnConnect", StrId::STR_CAT_SYSTEM));
   }
 
-  if (core::FeatureModules::hasCapability(core::Capability::BackgroundServer)) {
+  if (supportsBackgroundServerModeSetting()) {
     list.push_back(SettingInfo::DynamicEnum(
-        StrId::STR_BACKGROUND_SERVER, {StrId::STR_NEVER, StrId::STR_ONLY_ON_CHARGE, StrId::STR_ALWAYS},
-        [] { return SETTINGS.getBackgroundServerMode(); },
-        [](uint8_t value) { SETTINGS.setBackgroundServerMode(value); }, "backgroundServerMode", StrId::STR_CAT_SYSTEM));
+        StrId::STR_BACKGROUND_SERVER, {}, [] { return getBackgroundServerModeSettingIndex(); },
+        [](uint8_t value) { setBackgroundServerModeSettingIndex(value); }, "backgroundServerMode", StrId::STR_CAT_SYSTEM,
+        [] { return backgroundServerModeOptions(); }));
   }
 
   // Device name for mDNS/DHCP/AP SSID. Editable on-device via keyboard (STRING handler).

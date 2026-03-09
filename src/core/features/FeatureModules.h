@@ -37,6 +37,8 @@ enum class HomeOptionalAction {
 enum class Capability {
   AnkiSupport,
   BackgroundServer,
+  BackgroundServerAlways,
+  BackgroundServerOnCharge,
   BleWifiProvisioning,
   CalibreSync,
   DarkMode,

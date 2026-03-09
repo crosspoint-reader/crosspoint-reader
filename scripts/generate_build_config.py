@@ -82,6 +82,18 @@ FEATURES = {
         size_kb=0,
         description='Background web server for file management'
     ),
+    'background_server_on_charge': Feature(
+        name='Background Server On Charge',
+        flag='ENABLE_BACKGROUND_SERVER_ON_CHARGE',
+        size_kb=0,
+        description='Start server automatically when USB power is connected'
+    ),
+    'background_server_always': Feature(
+        name='Background Server Always',
+        flag='ENABLE_BACKGROUND_SERVER_ALWAYS',
+        size_kb=0,
+        description='Auto-connect to WiFi on wake even when not charging'
+    ),
     'home_media_picker': Feature(
         name='Home Media Picker',
         flag='ENABLE_HOME_MEDIA_PICKER',
@@ -89,7 +101,7 @@ FEATURES = {
         description='Streamlined home UI with horizontal book shelf + vertical menu'
     ),
     'web_pokedex_plugin': Feature(
-        name='Web Pokedex Plugin',
+        name='Pokedex',
         flag='ENABLE_WEB_POKEDEX_PLUGIN',
         size_kb=20,
         description='Browser-side Pokemon wallpaper generator at /plugins/pokedex'
@@ -253,6 +265,20 @@ FEATURE_METADATA = {
         recommends=[]
     ),
     'background_server': FeatureMetadata(
+        implemented=True,
+        stable=True,
+        requires=[],
+        conflicts=[],
+        recommends=[]
+    ),
+    'background_server_on_charge': FeatureMetadata(
+        implemented=True,
+        stable=True,
+        requires=[],
+        conflicts=[],
+        recommends=[]
+    ),
+    'background_server_always': FeatureMetadata(
         implemented=True,
         stable=True,
         requires=[],
@@ -468,6 +494,7 @@ PROFILES = {
             'lyra_theme': True,
             'ota_updates': True,
             'background_server': True,
+            'background_server_on_charge': True,
             'web_wifi_setup': True,
             'home_media_picker': True,
             'dark_mode': True,
@@ -495,6 +522,7 @@ PROFILES = {
             'ota_updates': True,
             'todo_planner': True,
             'background_server': True,
+            'background_server_on_charge': True,
             'home_media_picker': True,
             'web_pokedex_plugin': True,
             'pokemon_party': True,

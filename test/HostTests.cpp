@@ -140,6 +140,14 @@ void testFeatureCatalogApi() {
   assert(core::FeatureCatalog::isEnabled("pokemon_party") == (ENABLE_POKEMON_PARTY != 0));
   assert(core::FeatureCatalog::isEnabled("missing_feature") == false);
   assert(core::FeatureCatalog::find("missing_feature") == nullptr);
+  const core::FeatureDescriptor* backgroundServerOnCharge = core::FeatureCatalog::find("background_server_on_charge");
+  assert(backgroundServerOnCharge != nullptr);
+  assert(backgroundServerOnCharge->requiresAllCount == 0);
+  assert(backgroundServerOnCharge->requiresAnyCount == 0);
+  const core::FeatureDescriptor* backgroundServerAlways = core::FeatureCatalog::find("background_server_always");
+  assert(backgroundServerAlways != nullptr);
+  assert(backgroundServerAlways->requiresAllCount == 0);
+  assert(backgroundServerAlways->requiresAnyCount == 0);
 
   const String json = core::FeatureCatalog::toJson();
   assert(!json.isEmpty());
@@ -476,13 +484,14 @@ void testSettingsRoundTrip() {
   s.hideBatteryPercentage = CrossPointSettings::HIDE_READER;
   s.uiTheme = CrossPointSettings::LYRA;
   s.longPressChapterSkip = 0;
-  s.backgroundServerOnCharge = 1;
+  s.backgroundServerOnCharge = CrossPointSettings::supportsBackgroundServerOnChargeMode() ? 1 : 0;
   s.todoFallbackCover = 1;
   s.timeMode = CrossPointSettings::TIME_MODE_LOCAL;
   s.timeZoneOffset = 14;
   s.lastTimeSyncEpoch = 1700000000UL;
   s.releaseChannel = CrossPointSettings::RELEASE_NIGHTLY;
   s.usbMscPromptOnConnect = 1;
+  s.wifiAutoConnect = CrossPointSettings::supportsBackgroundServerAlwaysMode() ? 1 : 0;
   strncpy(s.userFontPath, "/fonts/MyFont.ttf", sizeof(s.userFontPath) - 1);
   strncpy(s.selectedOtaBundle, "bundle-abc123", sizeof(s.selectedOtaBundle) - 1);
   strncpy(s.installedOtaBundle, "bundle-xyz789", sizeof(s.installedOtaBundle) - 1);
@@ -528,6 +537,7 @@ void testSettingsRoundTrip() {
   s.lastTimeSyncEpoch = 0;
   s.releaseChannel = CrossPointSettings::RELEASE_STABLE;
   s.usbMscPromptOnConnect = 0;
+  s.wifiAutoConnect = 0;
   s.userFontPath[0] = '\0';
   s.selectedOtaBundle[0] = '\0';
   s.installedOtaBundle[0] = '\0';
@@ -558,13 +568,14 @@ void testSettingsRoundTrip() {
   assert(std::string(s.opdsPassword) == "s3cr3t!");
   assert(s.hideBatteryPercentage == CrossPointSettings::HIDE_READER);
   assert(s.longPressChapterSkip == 0);
-  assert(s.backgroundServerOnCharge == 1);
+  assert(s.backgroundServerOnCharge == (CrossPointSettings::supportsBackgroundServerOnChargeMode() ? 1 : 0));
   assert(s.todoFallbackCover == 1);
   assert(s.timeMode == CrossPointSettings::TIME_MODE_LOCAL);
   assert(s.timeZoneOffset == 14);
   assert(s.lastTimeSyncEpoch == 1700000000UL);
   assert(s.releaseChannel == CrossPointSettings::RELEASE_NIGHTLY);
   assert(s.usbMscPromptOnConnect == 1);
+  assert(s.wifiAutoConnect == (CrossPointSettings::supportsBackgroundServerAlwaysMode() ? 1 : 0));
   assert(std::string(s.userFontPath) == "/fonts/MyFont.ttf");
   assert(std::string(s.selectedOtaBundle) == "bundle-abc123");
   assert(std::string(s.installedOtaBundle) == "bundle-xyz789");
@@ -580,6 +591,40 @@ void testSettingsRoundTrip() {
   assert(s.frontButtonRight == CrossPointSettings::FRONT_HW_CONFIRM);
 
   std::cout << "CrossPointSettings round-trip tests passed!" << std::endl;
+}
+
+void testBackgroundServerModeClamping() {
+  std::cout << "Testing background server mode clamping..." << std::endl;
+
+  CrossPointSettings& s = CrossPointSettings::getInstance();
+
+  s.backgroundServerOnCharge = 1;
+  s.wifiAutoConnect = 1;
+  s.validateAndClamp();
+
+  assert(s.backgroundServerOnCharge == (CrossPointSettings::supportsBackgroundServerOnChargeMode() ? 1 : 0));
+  assert(s.wifiAutoConnect == (CrossPointSettings::supportsBackgroundServerAlwaysMode() ? 1 : 0));
+
+  s.setBackgroundServerMode(CrossPointSettings::BACKGROUND_SERVER_ALWAYS);
+  if (CrossPointSettings::supportsBackgroundServerAlwaysMode()) {
+    assert(s.getBackgroundServerMode() == CrossPointSettings::BACKGROUND_SERVER_ALWAYS);
+  } else if (CrossPointSettings::supportsBackgroundServerOnChargeMode()) {
+    assert(s.getBackgroundServerMode() == CrossPointSettings::BACKGROUND_SERVER_NEVER);
+  } else {
+    assert(s.getBackgroundServerMode() == CrossPointSettings::BACKGROUND_SERVER_NEVER);
+  }
+
+  s.setBackgroundServerMode(CrossPointSettings::BACKGROUND_SERVER_ON_CHARGE);
+  if (CrossPointSettings::supportsBackgroundServerOnChargeMode()) {
+    assert(s.getBackgroundServerMode() == CrossPointSettings::BACKGROUND_SERVER_ON_CHARGE);
+  } else {
+    assert(s.getBackgroundServerMode() == CrossPointSettings::BACKGROUND_SERVER_NEVER);
+  }
+
+  s.setBackgroundServerMode(CrossPointSettings::BACKGROUND_SERVER_NEVER);
+  assert(s.getBackgroundServerMode() == CrossPointSettings::BACKGROUND_SERVER_NEVER);
+
+  std::cout << "Background server mode clamping tests passed!" << std::endl;
 }
 
 void testSettingsTruncatedLoad() {
@@ -828,6 +873,7 @@ int main() {
   testPokemonBookDataStore();
   testBookProgressDataStore();
   testSettingsRoundTrip();
+  testBackgroundServerModeClamping();
   testSettingsTruncatedLoad();
   testPathUtilsSecurity();
   testForkDriftCoverNavigation();

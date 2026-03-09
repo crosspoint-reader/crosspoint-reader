@@ -1,4 +1,5 @@
 #pragma once
+#include <FeatureFlags.h>
 #include <HalStorage.h>
 
 #include <cstdint>
@@ -226,7 +227,7 @@ class CrossPointSettings {
   // Use book's embedded CSS styles for EPUB rendering
   uint8_t embeddedStyle = 1;
   // Persisted background server flag for charge-only and always-on modes.
-  uint8_t backgroundServerOnCharge = 0;
+  uint8_t backgroundServerOnCharge = ENABLE_BACKGROUND_SERVER_ON_CHARGE || ENABLE_BACKGROUND_SERVER_ALWAYS;
   // Deprecated: persisted for backward compat, not consumed at runtime
   uint8_t todoFallbackCover = 0;
   // Time settings
@@ -247,7 +248,7 @@ class CrossPointSettings {
   // Only [a-z0-9-] chars; max 24 chars. Empty = fall back to last-4-MAC.
   char deviceName[32] = "";
   // Persisted background server flag for always-on mode while the device is awake.
-  uint8_t wifiAutoConnect = 0;
+  uint8_t wifiAutoConnect = ENABLE_BACKGROUND_SERVER_ALWAYS;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
@@ -258,11 +259,17 @@ class CrossPointSettings {
   // Get singleton instance
   static CrossPointSettings& getInstance() { return instance; }
 
+  static constexpr bool supportsBackgroundServerOnChargeMode() {
+    return ENABLE_BACKGROUND_SERVER_ON_CHARGE != 0 || ENABLE_BACKGROUND_SERVER_ALWAYS != 0;
+  }
+
+  static constexpr bool supportsBackgroundServerAlwaysMode() { return ENABLE_BACKGROUND_SERVER_ALWAYS != 0; }
+
   uint8_t getBackgroundServerMode() const {
-    if (wifiAutoConnect) {
+    if (supportsBackgroundServerAlwaysMode() && wifiAutoConnect) {
       return BACKGROUND_SERVER_ALWAYS;
     }
-    if (backgroundServerOnCharge) {
+    if (supportsBackgroundServerOnChargeMode() && backgroundServerOnCharge) {
       return BACKGROUND_SERVER_ON_CHARGE;
     }
     return BACKGROUND_SERVER_NEVER;
@@ -271,13 +278,19 @@ class CrossPointSettings {
   void setBackgroundServerMode(const uint8_t mode) {
     switch (mode) {
       case BACKGROUND_SERVER_ALWAYS:
-        backgroundServerOnCharge = 1;
-        wifiAutoConnect = 1;
-        break;
+        if (supportsBackgroundServerAlwaysMode()) {
+          backgroundServerOnCharge = 1;
+          wifiAutoConnect = 1;
+          break;
+        }
+        [[fallthrough]];
       case BACKGROUND_SERVER_ON_CHARGE:
-        backgroundServerOnCharge = 1;
-        wifiAutoConnect = 0;
-        break;
+        if (supportsBackgroundServerOnChargeMode()) {
+          backgroundServerOnCharge = 1;
+          wifiAutoConnect = 0;
+          break;
+        }
+        [[fallthrough]];
       case BACKGROUND_SERVER_NEVER:
       default:
         backgroundServerOnCharge = 0;
