@@ -1,5 +1,7 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <cassert>
+
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -1049,6 +1051,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     const auto& words = line->getWords();
     const auto& xpos = line->getWordXpos();
     const auto& styles = line->getWordStyles();
+    assert(linkHrefs.size() == words.size() && words.size() == xpos.size() && xpos.size() == styles.size());
     size_t i = 0;
     while (i < linkHrefs.size()) {
       if (linkHrefs[i].empty()) {

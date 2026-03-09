@@ -149,6 +149,7 @@ void EpubReaderActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       std::string href = currentPageLinks[linkCursorIndex].href;
       linkCursorIndex = -1;
+      currentPageLinks.clear();
       navigateToHref(href, true);
       return;
     }
@@ -160,8 +161,8 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Confirm: enter link cursor mode if links exist, otherwise open reader menu
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !currentPageLinks.empty() &&
+  // Down button: enter link cursor mode if links exist and cursor is inactive
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down) && !currentPageLinks.empty() &&
       linkCursorIndex < 0) {
     linkCursorIndex = 0;
     requestUpdate();
@@ -226,6 +227,7 @@ void EpubReaderActivity::loop() {
 
   if (skipChapter) {
     linkCursorIndex = -1;
+    currentPageLinks.clear();
     lastPageTurnTime = millis();
     // We don't want to delete the section mid-render, so grab the semaphore
     {
@@ -492,6 +494,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   linkCursorIndex = -1;
+  currentPageLinks.clear();
   if (isForwardTurn) {
     if (section->currentPage < section->pageCount - 1) {
       section->currentPage++;
@@ -705,12 +708,24 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
 
-  // Draw link cursor highlight (border around the focused link)
+  // Draw link cursor highlight (border around the focused link), clamped to viewport
   if (linkCursorIndex >= 0 && static_cast<size_t>(linkCursorIndex) < currentPageLinks.size()) {
     const auto& link = currentPageLinks[linkCursorIndex];
     constexpr int pad = 2;
-    renderer.drawRect(link.x + orientedMarginLeft - pad, link.y + orientedMarginTop - pad, link.w + 2 * pad,
-                      link.h + 2 * pad, 2, true);
+    const int screenW = renderer.getScreenWidth();
+    const int screenH = renderer.getScreenHeight();
+    int rx = link.x + orientedMarginLeft - pad;
+    int ry = link.y + orientedMarginTop - pad;
+    int rw = link.w + 2 * pad;
+    int rh = link.h + 2 * pad;
+    // Clamp to viewport bounds
+    if (rx < 0) { rw += rx; rx = 0; }
+    if (ry < 0) { rh += ry; ry = 0; }
+    if (rx + rw > screenW) { rw = screenW - rx; }
+    if (ry + rh > screenH) { rh = screenH - ry; }
+    if (rw > 0 && rh > 0) {
+      renderer.drawRect(rx, ry, rw, rh, 2, true);
+    }
   }
 
   renderStatusBar();
@@ -802,6 +817,7 @@ void EpubReaderActivity::renderStatusBar() const {
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {
   linkCursorIndex = -1;
+  currentPageLinks.clear();
   if (!epub) return;
 
   // Push current position onto saved stack
@@ -847,6 +863,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
 void EpubReaderActivity::restoreSavedPosition() {
   linkCursorIndex = -1;
+  currentPageLinks.clear();
   if (footnoteDepth <= 0) return;
   footnoteDepth--;
   const auto& pos = savedPositions[footnoteDepth];

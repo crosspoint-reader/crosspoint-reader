@@ -2,6 +2,7 @@
 #include <EpdFontFamily.h>
 #include <HalStorage.h>
 
+#include <cassert>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,7 +27,11 @@ class TextBlock final : public Block {
         wordXpos(std::move(word_xpos)),
         wordStyles(std::move(word_styles)),
         blockStyle(blockStyle),
-        wordLinkHrefs(std::move(word_link_hrefs)) {}
+        wordLinkHrefs(std::move(word_link_hrefs)) {
+    assert(this->words.size() == this->wordXpos.size());
+    assert(this->words.size() == this->wordStyles.size());
+    assert(this->wordLinkHrefs.empty() || this->words.size() == this->wordLinkHrefs.size());
+  }
   ~TextBlock() override = default;
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
