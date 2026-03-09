@@ -441,26 +441,29 @@ void PulsrTheme::drawTabBar(const GfxRenderer& renderer, Rect /*rect*/, const st
   const int barH = TOP_H;
 
   for (int i = 0; i < tabCount; i++) {
-    // Abbreviate label: uppercase, max 4 ASCII codepoints.
-    // Tab labels are expected to be ASCII; non-ASCII labels should provide
-    // a pre-abbreviated shortLabel via the tab structure instead.
-    const char* full = tabs[i].label;
-    char abbr[5] = {0};
-    int abbrLen = 0;
-    for (int c = 0; full[c] != '\0' && abbrLen < 4; c++) {
-      unsigned char ch = static_cast<unsigned char>(full[c]);
-      if (ch > 0x7F) break;  // Stop at first non-ASCII byte
-      abbr[abbrLen++] = (ch >= 'a' && ch <= 'z') ? ch - 32 : ch;
+    // Abbreviate label: prefer a pre-computed shortLabel if the tab provides
+    // one, falling back to the first ≤4 ASCII bytes of the full label uppercased.
+    // Non-ASCII labels that don't supply a shortLabel are silently skipped.
+    const char* abbr = nullptr;
+    char abbrBuf[5] = {0};
+    if (tabs[i].shortLabel && tabs[i].shortLabel[0] != '\0') {
+      abbr = tabs[i].shortLabel;
+    } else {
+      const char* full = tabs[i].label;
+      int abbrLen = 0;
+      for (int c = 0; full[c] != '\0' && abbrLen < 4; c++) {
+        unsigned char ch = static_cast<unsigned char>(full[c]);
+        if (ch > 0x7F) break;  // non-ASCII: stop (shortLabel should be used instead)
+        abbrBuf[abbrLen++] = (ch >= 'a' && ch <= 'z') ? ch - 32 : ch;
+      }
+      if (abbrBuf[0] == '\0') continue;  // no usable abbreviation; skip tab
+      abbr = abbrBuf;
     }
     // "Controls" → "CONT" is ambiguous; override to the universal abbreviation
     if (abbr[0] == 'C' && abbr[1] == 'O' && abbr[2] == 'N' && abbr[3] == 'T') {
-      abbr[0] = 'C';
-      abbr[1] = 'T';
-      abbr[2] = 'R';
-      abbr[3] = 'L';
+      abbrBuf[0] = 'C'; abbrBuf[1] = 'T'; abbrBuf[2] = 'R'; abbrBuf[3] = 'L'; abbrBuf[4] = '\0';
+      abbr = abbrBuf;
     }
-    // If abbr is empty (label starts with non-ASCII), skip tab label rendering.
-    if (abbr[0] == '\0') continue;
 
     const int tx = LEFT_W + i * tabW;
     const int tw = renderer.getTextWidth(PULSR_10_FONT_ID, abbr);
@@ -827,7 +830,8 @@ void PulsrTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std
       renderer.drawText(PULSR_10_FONT_ID, cr.x + (cr.width - w1) / 2, msgY, line1, b(true));
       renderer.drawText(PULSR_10_FONT_ID, cr.x + (cr.width - w2) / 2, msgY + lh + 4, line2, b(true));
     }
-    coverRendered = true;
+    // Don't set coverRendered: no cover buffer to cache, and books may appear
+    // on a later render — Phase 1 must remain eligible to run then.
     return;
   }
 
@@ -875,7 +879,9 @@ void PulsrTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std
       }
     }
     coverBufferStored = storeCoverBuffer();
-    coverRendered = true;
+    // Only latch coverRendered if the buffer was actually stored and is
+    // reusable. If storage failed, allow Phase 1 to retry next render.
+    coverRendered = coverBufferStored;
   }
 
   // ── Phase 2: Draw selection highlight + text (every render) ──────────────

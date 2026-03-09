@@ -250,8 +250,13 @@ void setupDisplayAndFonts() {
   renderer.insertFont(ANTONIO_14_FONT_ID, antonio14FontFamily);
   renderer.insertFont(ANTONIO_16_FONT_ID, antonio16FontFamily);
   renderer.insertFont(ANTONIO_18_FONT_ID, antonio18FontFamily);
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
+  // When PULSR (or Dark PULSR) is active, bind the shared UI_* slots to the
+  // PULSR Antonio family so screens rendered via legacy UI_* IDs also use the
+  // PULSR typeface consistently. Otherwise use the default Ubuntu families.
+  const bool isPulsr = (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::PULSR ||
+                        SETTINGS.uiTheme == CrossPointSettings::UI_THEME::DARK_PULSR);
+  renderer.insertFont(UI_10_FONT_ID, isPulsr ? pulsr10FontFamily : ui10FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, isPulsr ? pulsr12FontFamily : ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
   LOG_DBG("MAIN", "Fonts setup");
 }
