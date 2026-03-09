@@ -180,6 +180,21 @@ bool MappedInputManager::wasReleased(const Button button) {
   return mapButton(button, &HalGPIO::wasReleased);
 }
 
+void MappedInputManager::clearTransientState() {
+  // Discard any queued virtual activations before clearing hardware edge events.
+  for (uint8_t button = HalGPIO::BTN_BACK; button <= HalGPIO::BTN_POWER; ++button) {
+    (void)gpio.wasPressed(button);
+    (void)gpio.wasReleased(button);
+  }
+
+  // Resample immediately so pressed/released edges from the previous activity
+  // do not leak into the next screen after a transition.
+  gpio.update();
+  pendingPowerRelease = false;
+  doubleTapReady = false;
+  powerReleaseConsumed = false;
+}
+
 void MappedInputManager::injectVirtualActivation(const Button button) {
   const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
   const auto& side = kSideLayouts[sideLayout];

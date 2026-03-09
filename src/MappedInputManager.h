@@ -19,6 +19,7 @@ class MappedInputManager {
   bool wasPressed(Button button);
   bool wasReleased(Button button);
   bool isPressed(Button button) const;
+  void clearTransientState();
   // Inject a one-frame virtual activation for the given button.
   // Both wasPressed() and wasReleased() will fire for it on the next check.
   // Call from the main-loop task only (virtualActivatedMask is not thread-safe).

@@ -87,6 +87,8 @@ void ActivityManager::renderTaskLoop() {
 }
 
 void ActivityManager::loop() {
+  bool activityChanged = false;
+
   if (currentActivity) {
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     currentActivity->loop();
@@ -124,6 +126,7 @@ void ActivityManager::loop() {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
+        activityChanged = true;
         // Handle result if necessary
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");
@@ -163,6 +166,7 @@ void ActivityManager::loop() {
       }
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);
+      activityChanged = true;
 
       lock.unlock();  // onEnter may acquire its own lock
       currentActivity->onEnter();
@@ -170,6 +174,10 @@ void ActivityManager::loop() {
       // onEnter may request another pending action, we will handle it in the next loop iteration
       continue;
     }
+  }
+
+  if (activityChanged) {
+    mappedInput.clearTransientState();
   }
 
   if (requestedUpdate) {
