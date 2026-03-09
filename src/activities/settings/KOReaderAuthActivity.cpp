@@ -12,8 +12,6 @@
 #include "fontIds.h"
 
 void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
-  exitActivity();
-
   if (!success) {
     {
       RenderLock lock(*this);
@@ -51,35 +49,21 @@ void KOReaderAuthActivity::performAuthentication() {
 }
 
 void KOReaderAuthActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
-
-  // Turn on WiFi
-  WiFi.mode(WIFI_STA);
+  Activity::onEnter();
 
   // Check if already connected
   if (WiFi.status() == WL_CONNECTED) {
-    state = AUTHENTICATING;
-    statusMessage = tr(STR_AUTHENTICATING);
-    requestUpdate();
-
-    // Perform authentication in a separate task
-    xTaskCreate(
-        [](void* param) {
-          auto* self = static_cast<KOReaderAuthActivity*>(param);
-          self->performAuthentication();
-          vTaskDelete(nullptr);
-        },
-        "AuthTask", 4096, this, 1, nullptr);
+    onWifiSelectionComplete(true);
     return;
   }
 
   // Launch WiFi selection
-  enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                             [this](const bool connected) { onWifiSelectionComplete(connected); }));
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
 void KOReaderAuthActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   // Turn off wifi
   WiFi.disconnect(false);
@@ -88,7 +72,7 @@ void KOReaderAuthActivity::onExit() {
   delay(100);
 }
 
-void KOReaderAuthActivity::render(Activity::RenderLock&&) {
+void KOReaderAuthActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -115,15 +99,10 @@ void KOReaderAuthActivity::render(Activity::RenderLock&&) {
 }
 
 void KOReaderAuthActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (state == SUCCESS || state == FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      onComplete();
+      finish();
     }
   }
 }
