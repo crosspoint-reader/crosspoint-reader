@@ -275,8 +275,15 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
             }
             const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, countBuf);
             const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
-            renderer.drawText(PULSR_10_FONT_ID, pillX + (pillW - lw) / 2, pillY + (pillH - lh) / 2, countBuf,
-                              pillTextBlack);
+            // Choose counter text color so it contrasts against whatever is
+            // painted at its centre — fill if covered, pill-bg if not.
+            const int textCx = pillX + (pillW - lw) / 2;
+            const int fillWNow = (dlTotal > 0 && dlCurrent > 0)
+                                     ? std::min((dlCurrent * pillW) / dlTotal, pillW)
+                                     : 0;
+            const bool coveredByFill = (textCx < pillX + fillWNow);
+            const bool counterBlack = coveredByFill ? (progressFill == Color::White) : pillTextBlack;
+            renderer.drawText(PULSR_10_FONT_ID, textCx, pillY + (pillH - lh) / 2, countBuf, counterBlack);
           } else {
             renderer.fillRoundedRect(pillX, pillY, pillW, pillH, PILL_R, feedColor);
             const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, pillLabel);
@@ -365,11 +372,18 @@ void PulsrTheme::drawFrame(const GfxRenderer& renderer, const char* title) const
   }
 
   // ── 6. Screen title in top bar (white, uppercase, PULSR-12) ────────────────
+  // Reserve space for the right-aligned version string so long titles don't
+  // overlap it.  We re-measure ver here (same block used above at step 2).
   {
     const char* raw = (title != nullptr) ? title : "HOME";
     std::string upper(raw);
     for (char& c : upper) c = (c >= 'a' && c <= 'z') ? c - 32 : c;
-    const int maxW = W - LEFT_W - 12;
+    constexpr int margin = 8;
+    const char* ver = getVersionString();
+    const int verReserve = (ver && ver[0] != '\0')
+                               ? renderer.getTextWidth(SMALL_FONT_ID, ver) + margin * 2
+                               : 0;
+    const int maxW = W - LEFT_W - 12 - verReserve;
     const auto lbl = renderer.truncatedText(PULSR_12_FONT_ID, upper.c_str(), maxW);
     const int txtH = renderer.getTextHeight(PULSR_12_FONT_ID);
     const int txtY = (TOP_H - txtH) / 2;
@@ -797,7 +811,10 @@ void PulsrTheme::drawButtonMenu(GfxRenderer& renderer, Rect /*rect*/, int button
     // Always draw outline (selected and unselected)
     renderer.drawRoundedRect(tx, ty, tileW, tileH, /*lineWidth=*/1, radius, b(true));
 
-    const std::string labelStr = pulsrLabel(buttonLabel(i));
+    const std::string labelRaw = pulsrLabel(buttonLabel(i));
+    constexpr int tilePad = 6;
+    const int maxLabelW = tileW - tilePad * 2;
+    const std::string labelStr = renderer.truncatedText(PULSR_10_FONT_ID, labelRaw.c_str(), maxLabelW);
     const int lw = renderer.getTextWidth(PULSR_10_FONT_ID, labelStr.c_str());
     const int lh = renderer.getCapHeight(PULSR_10_FONT_ID);
     renderer.drawText(PULSR_10_FONT_ID, tx + (tileW - lw) / 2, ty + (tileH - lh) / 2, labelStr.c_str(), b(true));
@@ -938,7 +955,8 @@ void PulsrTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t 
   if (total == 0) return;
 
   const Rect cr = contentRect(rect);
-  const int pct = static_cast<int>((static_cast<uint64_t>(current) * 100) / total);
+  const int pctRaw = static_cast<int>((static_cast<uint64_t>(current) * 100) / total);
+  const int pct = pctRaw < 0 ? 0 : (pctRaw > 100 ? 100 : pctRaw);
 
   constexpr int SEG_COUNT = 20;
   constexpr int SEG_GAP = 2;
