@@ -166,8 +166,6 @@ void mountUserFontsRoutes(WebServer* server) {
       "/api/user-fonts/upload", HTTP_POST, [server] { handleFontUploadPost(server); },
       [server] { handleFontUpload(server); });
 }
-#endif
-
 void onStorageReady() { UserFontManager::getInstance().scanFonts(); }
 
 void onSettingsLoaded(GfxRenderer& renderer) {
@@ -221,6 +219,8 @@ void onUploadCompleted(const char* uploadPath, const char* uploadFileName) {
     manager.scanFonts();
   }
 }
+
+#endif
 
 }  // namespace
 
