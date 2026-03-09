@@ -4,7 +4,11 @@ This is a fork of [crosspoint-reader/crosspoint-reader](https://github.com/cross
 
 **For standard features, installation, and the user guide, see the [upstream repository](https://github.com/crosspoint-reader/crosspoint-reader).**
 
-This fork adds a new visual theme, OpenClaw integration, and a collection of features contributed back upstream as PRs.
+## Philosophy
+
+I use this fork to scratch my own itch — adding features I personally want on my reader, integrating it with my home AI setup ([OpenClaw](https://github.com/openclaw/openclaw)), and generally making it work the way I want it to work.
+
+Because I believe in open source and want to give back to the project that made this possible, I commit to upstreaming anything that's generally useful. If I build something that could benefit other CrossPoint users, I open a PR. The features listed below are either already submitted upstream or on the list to be.
 
 ---
 
