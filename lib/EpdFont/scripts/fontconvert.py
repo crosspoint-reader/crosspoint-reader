@@ -720,6 +720,7 @@ if compress:
         (0x20A0, 0x20CF),   # Currency Symbols
         (0x2190, 0x21FF),   # Arrows
         (0x2200, 0x22FF),   # Math Operators
+        (0x2600, 0x26FF),   # Miscellaneous Symbols
         (0xFB00, 0xFB06),   # Alphabetic Presentation Forms (ligatures)
         (0xFFFD, 0xFFFD),   # Replacement Character
     ]
