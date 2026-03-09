@@ -20,6 +20,7 @@ struct Rect {
 
 struct TabInfo {
   const char* label;
+  const char* shortLabel = nullptr;  // Optional abbreviated label for compact displays (e.g. PULSR tab bar)
   bool selected;
 };
 
