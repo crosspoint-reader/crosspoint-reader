@@ -1,0 +1,8 @@
+{
+  "name": "MdParser",
+  "version": "1.0.0",
+  "description": "Lightweight Markdown line parser for CrossPoint Reader — no dependencies beyond EpdFont",
+  "build": {
+    "flags": ["-std=gnu++17"]
+  }
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <MdParser.h>
 #include <Txt.h>
 
 #include <string>
@@ -9,13 +10,6 @@
 #include "CrossPointSettings.h"
 #include "Activity.h"
 #include "activities/reader/EpubReaderMenuActivity.h"
-
-struct MdLine {
-  std::string text;
-  EpdFontFamily::Style style = EpdFontFamily::REGULAR;
-  int indentPixels = 0;  // left indent for bullets and blockquotes
-  bool isHRule = false;  // draw a horizontal rule instead of text
-};
 
 class MdReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
