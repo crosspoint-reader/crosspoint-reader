@@ -12,13 +12,27 @@
 
 #define MAX_PANIC_STACK_DEPTH 32
 
+// Linker-wrapper declarations and StackFrame kept private to this TU.
+// __wrap_panic_abort and __wrap_panic_print_backtrace are registered via
+// linker -Wl,--wrap= flags in platformio.ini; they do not need to appear
+// in the public HalSystem.h header.
+struct StackFrame {
+  uint32_t sp;
+  uint32_t spp[8];
+};
+
 RTC_NOINIT_ATTR char panicMessage[256];
-RTC_NOINIT_ATTR HalSystem::StackFrame panicStack[MAX_PANIC_STACK_DEPTH];
+RTC_NOINIT_ATTR StackFrame panicStack[MAX_PANIC_STACK_DEPTH];
 
 extern "C" {
 
+void __attribute__((__noreturn__)) __real_panic_abort(const char* message);
+void __attribute__((__noreturn__)) __wrap_panic_abort(const char* message);
+void __real_panic_print_backtrace(const void* frame, int core);
+void __wrap_panic_print_backtrace(const void* frame, int core);
+
 static DRAM_ATTR const char PANIC_REASON_UNKNOWN[] = "(unknown panic reason)";
-void IRAM_ATTR __wrap_panic_abort(const char* message) {
+void __attribute__((__noreturn__)) IRAM_ATTR __wrap_panic_abort(const char* message) {
   if (!message) message = PANIC_REASON_UNKNOWN;
   // IRAM-safe bounded copy (strncpy is not IRAM-safe in panic context)
   int i = 0;
@@ -81,11 +95,19 @@ void checkPanic() {
     auto panicInfo = getPanicInfo(true);
     auto file = Storage.open("/crash_report.txt", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {
-      file.write(panicInfo.c_str(), panicInfo.size());
+      size_t written = file.write(panicInfo.c_str(), panicInfo.size());
       file.close();
-      LOG_INF("SYS", "Dumped panic info to SD card");
+      if (written == panicInfo.size()) {
+        LOG_INF("SYS", "Dumped panic info to SD card (%zu bytes)", written);
+        // Clear only after a confirmed successful write so the info survives
+        // boot if the SD card write fails.
+        clearPanic();
+      } else {
+        LOG_ERR("SYS", "Partial write to crash_report.txt: %zu/%zu bytes — panic info retained", written,
+                panicInfo.size());
+      }
     } else {
-      LOG_ERR("SYS", "Failed to open crash_report.txt for writing");
+      LOG_ERR("SYS", "Failed to open crash_report.txt for writing — panic info retained");
     }
   }
 }

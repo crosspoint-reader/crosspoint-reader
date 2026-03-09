@@ -6,7 +6,6 @@
 #include <NetworkClientSecure.h>
 #include <StreamString.h>
 #include <base64.h>
-#include <esp_heap_caps.h>
 
 #include <cstring>
 #include <memory>
@@ -72,9 +71,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   http.setTimeout(30000);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
-  // Add Basic HTTP auth only for OPDS URLs (not for feed or firmware downloads)
-  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0 && strlen(SETTINGS.opdsServerUrl) > 0 &&
-      url.rfind(SETTINGS.opdsServerUrl, 0) == 0) {
+  // Add Basic HTTP auth if credentials are configured
+  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
     std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
     String encoded = base64::encode(credentials.c_str());
     http.addHeader("Authorization", "Basic " + encoded);
@@ -106,13 +104,6 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress) {
-  // HTTPS needs ~30KB for a TLS session + ~8KB HTTP buffer.
-  const size_t freeHeap = esp_get_free_heap_size();
-  if (freeHeap < 50 * 1024) {
-    LOG_ERR("HTTP", "Insufficient heap for download: %zu bytes free (need ≥50KB)", freeHeap);
-    return HTTP_ERROR;
-  }
-
   // Use NetworkClientSecure for HTTPS, regular NetworkClient for HTTP
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
@@ -126,16 +117,14 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   LOG_DBG("HTTP", "Downloading: %s", url.c_str());
   LOG_DBG("HTTP", "Destination: %s", destPath.c_str());
-  LOG_DBG("HTTP", "Free heap: %zu bytes", freeHeap);
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-  http.setTimeout(120000);  // 2 min — 5.9 MB download over WiFi needs time
+  http.setTimeout(65535);  // max uint16_t (~65s) — HTTPClient::setTimeout takes uint16_t ms
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
-  // Add Basic HTTP auth only for OPDS URLs (not for feed or firmware downloads)
-  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0 && strlen(SETTINGS.opdsServerUrl) > 0 &&
-      url.rfind(SETTINGS.opdsServerUrl, 0) == 0) {
+  // Add Basic HTTP auth if credentials are configured
+  if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
     std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
     String encoded = base64::encode(credentials.c_str());
     http.addHeader("Authorization", "Basic " + encoded);
@@ -173,6 +162,10 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   FileWriteStream fileStream(file, contentLength, progress);
   const int writeResult = http.writeToStream(&fileStream);
 
+  // Flush before closing to ensure data is written to the SD card.
+  // Without this, Storage.exists() might return false immediately after
+  // even though the file was written (FAT not yet updated on disk).
+  file.flush();
   file.close();
   http.end();
 

@@ -10,8 +10,9 @@
 #include "esp_partition.h"
 #include "esp_wifi.h"
 
-// Mirrors forceSetBootPartition() in main.cpp — bypasses esp_ota_set_boot_partition()'s
-// image validation (which fails for unsigned Arduino builds lacking an embedded SHA256).
+// Bypasses esp_ota_set_boot_partition()'s image validation (which fails for
+// unsigned Arduino builds due to missing embedded SHA256 and strict chip
+// efuse-block-revision checks). Writes the otadata entry directly.
 static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
   if (!newPart) return ESP_ERR_INVALID_ARG;
   const esp_partition_t* otaPart =
@@ -30,11 +31,14 @@ static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
   OtaEntry e0, e1;
   memset(&e0, 0xFF, sizeof(e0));
   memset(&e1, 0xFF, sizeof(e1));
-  esp_partition_read(otaPart, 0, &e0, sizeof(e0));
-  esp_partition_read(otaPart, SECTOR_SIZE, &e1, sizeof(e1));
+  bool e0Valid = (esp_partition_read(otaPart, 0, &e0, sizeof(e0)) == ESP_OK);
+  bool e1Valid = (esp_partition_read(otaPart, SECTOR_SIZE, &e1, sizeof(e1)) == ESP_OK);
+  if (!e0Valid) LOG_ERR("OTA", "Failed to read OTA sector 0 — treating as erased");
+  if (!e1Valid) LOG_ERR("OTA", "Failed to read OTA sector 1 — treating as erased");
 
-  uint32_t seq0 = (e0.seq == 0xFFFFFFFF) ? 0 : e0.seq;
-  uint32_t seq1 = (e1.seq == 0xFFFFFFFF) ? 0 : e1.seq;
+  // Unreadable sectors are treated as erased (seq == 0), matching the memset(0xFF) sentinel.
+  uint32_t seq0 = (e0Valid && e0.seq != 0xFFFFFFFF) ? e0.seq : 0;
+  uint32_t seq1 = (e1Valid && e1.seq != 0xFFFFFFFF) ? e1.seq : 0;
   uint32_t maxSeq = (seq0 > seq1) ? seq0 : seq1;
   uint32_t partIdx = newPart->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0;
 
@@ -50,11 +54,11 @@ static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
   OtaEntry entry;
   entry.seq = newSeq;
   memset(entry.label, 0xFF, sizeof(entry.label));
-  // Write VALID directly — the next boot's forceSetBootPartition(self) will
-  // re-confirm anyway.  PENDING_VERIFY triggers image_validate() inside
-  // esp_ota_mark_app_valid_cancel_rollback(), which FAILS for unsigned builds.
+  // Write VALID directly — next boot confirms anyway.
+  // PENDING_VERIFY triggers image_validate() inside esp_ota_mark_app_valid_cancel_rollback()
+  // which also fails for unsigned builds.
   entry.state = ESP_OTA_IMG_VALID;
-  // Use official bootloader CRC — covers ota_seq field only (4 bytes)
+  // Use official bootloader CRC (covers ota_seq field only, 4 bytes).
   entry.crc = bootloader_common_ota_select_crc(reinterpret_cast<const esp_ota_select_entry_t*>(&entry));
 
   esp_err_t err = esp_partition_erase_range(otaPart, writeOffset, SECTOR_SIZE);
@@ -63,7 +67,7 @@ static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
 }
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/laird/crosspoint-claw/releases/latest";
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
 
 /* This is buffer and size holder to keep upcoming data from latestReleaseUrl */
 char* local_buf;
@@ -120,14 +124,12 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   esp_err_t esp_err;
   JsonDocument doc;
 
-  const char* url = (releaseUrl != nullptr) ? releaseUrl : latestReleaseUrl;
   esp_http_client_config_t client_config = {
-      .url = url,
+      .url = latestReleaseUrl,
       .event_handler = event_handler,
       /* Default HTTP client buffer size 512 byte only */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
-      .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
@@ -212,13 +214,46 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
 }
 
 bool OtaUpdater::isUpdateNewer() const {
-  if (!updateAvailable || latestVersion.empty()) {
+  if (!updateAvailable || latestVersion.empty() || latestVersion == CROSSPOINT_VERSION) {
     return false;
   }
-  // Any version string that differs from the running firmware is considered
-  // an update. This prevents re-flashing identical firmware (flash-loop guard)
-  // while allowing both upgrades and downgrades.
-  return latestVersion != CROSSPOINT_VERSION;
+
+  int currentMajor, currentMinor, currentPatch;
+  int latestMajor, latestMinor, latestPatch;
+
+  const auto currentVersion = CROSSPOINT_VERSION;
+
+  // semantic version check (only match on 3 segments)
+  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
+  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
+
+  /*
+   * Compare major versions.
+   * If they differ, return true if latest major version greater than current major version
+   * otherwise return false.
+   */
+  if (latestMajor != currentMajor) return latestMajor > currentMajor;
+
+  /*
+   * Compare minor versions.
+   * If they differ, return true if latest minor version greater than current minor version
+   * otherwise return false.
+   */
+  if (latestMinor != currentMinor) return latestMinor > currentMinor;
+
+  /*
+   * Check patch versions.
+   */
+  if (latestPatch != currentPatch) return latestPatch > currentPatch;
+
+  // If we reach here, it means all segments are equal.
+  // One final check, if we're on an RC build (contains "-rc"), we should consider the latest version as newer even if
+  // the segments are equal, since RC builds are pre-release versions.
+  if (strstr(currentVersion, "-rc") != nullptr) {
+    return true;
+  }
+
+  return false;
 }
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
@@ -237,7 +272,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
       .url = otaUrl.c_str(),
       .timeout_ms = 30000,
       /* GitHub release assets redirect to CDN (objects.githubusercontent.com).
-       * Without this, esp_https_ota downloads 0 bytes and stalls. */
+       * Without this, esp_https_ota downloads 0 bytes and stalls on redirect. */
       .max_redirection_count = 5,
       /* Default HTTP client buffer size 512 byte only
        * not sufficent to handle URL redirection cases or
@@ -245,7 +280,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
        */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
-      .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
@@ -259,13 +293,14 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
   esp_wifi_set_ps(WIFI_PS_NONE);
 
   // Determine the update partition upfront (the inactive OTA slot) so we can
-  // call forceSetBootPartitionOta() after the download, bypassing the unsigned-build
-  // SHA256 validation that causes esp_https_ota_finish to return VALIDATE_FAILED.
+  // call forceSetBootPartitionOta() after the download, bypassing the
+  // image validation in esp_https_ota_finish() that fails for unsigned builds.
   const esp_partition_t* updatePart = esp_ota_get_next_update_partition(nullptr);
 
   esp_err = esp_https_ota_begin(&ota_config, &ota_handle);
   if (esp_err != ESP_OK) {
     LOG_DBG("OTA", "HTTP OTA Begin Failed: %s", esp_err_to_name(esp_err));
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);  // Restore power save on early failure
     return INTERNAL_UPDATE_ERROR;
   }
 
@@ -292,23 +327,27 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
     return INTERNAL_UPDATE_ERROR;
   }
 
-  // esp_https_ota_finish internally calls esp_ota_set_boot_partition(), which validates
-  // the firmware image and returns ESP_ERR_OTA_VALIDATE_FAILED for unsigned Arduino builds
-  // (no embedded SHA256). The firmware data was written correctly; ignore that error and
-  // use forceSetBootPartitionOta() to write the otadata entry directly instead.
+  // esp_https_ota_finish() calls esp_ota_set_boot_partition() internally.
+  // On unsigned Arduino builds it returns ESP_ERR_OTA_VALIDATE_FAILED because
+  // the image has no embedded SHA256 (no secure boot). The firmware data was
+  // written correctly; in that specific case use forceSetBootPartitionOta() to
+  // write the otadata entry directly. Any other error is a genuine failure.
   esp_err = esp_https_ota_finish(ota_handle);
-  if (esp_err != ESP_OK && esp_err != ESP_ERR_OTA_VALIDATE_FAILED) {
+  if (esp_err == ESP_OK) {
+    // Normal path: otadata already updated by esp_https_ota_finish().
+    LOG_INF("OTA", "Update completed");
+    return OK;
+  }
+  if (esp_err != ESP_ERR_OTA_VALIDATE_FAILED) {
     LOG_ERR("OTA", "esp_https_ota_finish Failed: %s", esp_err_to_name(esp_err));
     return INTERNAL_UPDATE_ERROR;
   }
-  if (esp_err == ESP_ERR_OTA_VALIDATE_FAILED) {
-    LOG_INF("OTA", "SHA256 validation skipped (unsigned build) — writing otadata directly");
-  }
 
-  // Write otadata directly, bypassing image validation.
+  // ESP_ERR_OTA_VALIDATE_FAILED: unsigned Arduino build — write otadata directly.
+  LOG_INF("OTA", "Image validation skipped (unsigned build) — writing otadata directly");
   esp_err = forceSetBootPartitionOta(updatePart);
   if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "forceSetBootPartition failed: %s", esp_err_to_name(esp_err));
+    LOG_ERR("OTA", "forceSetBootPartitionOta Failed: %s", esp_err_to_name(esp_err));
     return INTERNAL_UPDATE_ERROR;
   }
 
