@@ -93,12 +93,9 @@ class BookmarkStore {
 
   // Check if a page is starred.
   [[nodiscard]] bool has(uint16_t spineIndex, uint16_t pageNumber) const {
-    for (const auto& bm : bookmarks) {
-      if (bm.spineIndex == spineIndex && bm.pageNumber == pageNumber) {
-        return true;
-      }
-    }
-    return false;
+    return std::any_of(bookmarks.begin(), bookmarks.end(), [spineIndex, pageNumber](const Bookmark& bm) {
+      return bm.spineIndex == spineIndex && bm.pageNumber == pageNumber;
+    });
   }
 
   [[nodiscard]] const std::vector<Bookmark>& getAll() const { return bookmarks; }

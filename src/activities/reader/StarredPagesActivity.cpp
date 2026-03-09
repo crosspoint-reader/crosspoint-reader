@@ -111,8 +111,7 @@ void StarredPagesActivity::render(RenderLock&&) {
 
   // Title
   const int titleX =
-      contentX +
-      (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_STARRED_PAGES), EpdFontFamily::BOLD)) / 2;
+      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_STARRED_PAGES), EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_STARRED_PAGES), true, EpdFontFamily::BOLD);
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;

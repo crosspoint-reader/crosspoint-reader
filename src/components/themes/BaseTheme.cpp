@@ -629,8 +629,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                              const int pageCount, std::string title, const int paddingBottom,
-                              const int textYOffset, const bool isStarred) const {
+                              const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
+                              const bool isStarred) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,

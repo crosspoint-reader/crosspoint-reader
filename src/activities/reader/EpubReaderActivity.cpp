@@ -185,8 +185,7 @@ void EpubReaderActivity::loop() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::STAR_PAGE &&
       mappedInput.wasReleased(MappedInputManager::Button::Power)) {
     if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
-      bookmarkStore.toggle(static_cast<uint16_t>(currentSpineIndex),
-                           static_cast<uint16_t>(section->currentPage));
+      bookmarkStore.toggle(static_cast<uint16_t>(currentSpineIndex), static_cast<uint16_t>(section->currentPage));
       requestUpdate();
     }
     return;
@@ -374,8 +373,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               const auto& starred = std::get<StarredPageResult>(result.data);
-              if (currentSpineIndex != starred.spineIndex ||
-                  (section && section->currentPage != starred.pageNumber)) {
+              if (currentSpineIndex != starred.spineIndex || (section && section->currentPage != starred.pageNumber)) {
                 RenderLock lock(*this);
                 currentSpineIndex = starred.spineIndex;
                 nextPageNumber = starred.pageNumber;
@@ -785,9 +783,8 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
-  const bool isStarred =
-      section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
-                                   static_cast<uint16_t>(section->currentPage));
+  const bool isStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
+                                                      static_cast<uint16_t>(section->currentPage));
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, isStarred);
 }
 
