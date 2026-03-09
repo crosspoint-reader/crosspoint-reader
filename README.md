@@ -1,329 +1,126 @@
-# CrossPoint OpenClaw — AI-Curated E-Reader
+# CrossPoint Reader — Laird's Fork
 
-This is a fork of [CrossPoint Reader](CROSSPOINT-README.md) that extends it with **AI-driven content delivery**: an RSS feed pipeline that lets a personal AI agent (OpenClaw/Chip) automatically generate, package, and push content — news digests, EPUBs, markdown articles, sleep screen art, and firmware updates — directly to the device over WiFi.
+This is a fork of [crosspoint-reader/crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader), the open-source firmware for the **Xteink X4** e-paper reader (ESP32-C3).
 
----
+**For standard features, installation, and the user guide, see the [upstream repository](https://github.com/crosspoint-reader/crosspoint-reader).**
 
-## ⚡ Quick Install
-
-> **Requirements:** Chrome or Edge browser (Web Serial API required — Firefox not supported)
-
-**Step 1 — Download the firmware**
-
-Download `firmware.bin` from the [latest release](https://github.com/laird/crosspoint-claw/releases/latest).
-
-**Step 2 — Open the installer**
-
-Go to **[https://xteink.dve.al/](https://xteink.dve.al/)** and connect your Xteink X4 via USB-C. Wake/unlock the device, then click the connect button on the site and select your device from the browser's serial port prompt.
-
-**Step 3 — Flash the firmware**
-
-Scroll down to the **"OTA fast flash controls"** section. Click **Choose File**, select the `firmware.bin` you downloaded, then click **Flash**. The progress bar will fill as it uploads. When complete, the device reboots automatically into CrossPoint OpenClaw.
-
-> **To revert** to official CrossPoint firmware, use the **"Flash CrossPoint firmware"** button on [https://xteink.dve.al/](https://xteink.dve.al/), or swap back via [https://xteink.dve.al/debug](https://xteink.dve.al/debug).
+This fork adds a new visual theme, OpenClaw integration, and a collection of features contributed back upstream as PRs.
 
 ---
 
-![Home screen](docs/images/screenshots/home.png)
-*The home screen — recent books surface automatically as new content arrives.*
+## What's Different in This Fork
+
+### PULSR Theme (PR [#1331](https://github.com/crosspoint-reader/crosspoint-reader/pull/1331))
+
+A new visual design built for the Xteink X4's e-ink display.
+
+- **4-segment left navigation bar** — compact icons replace the traditional bottom tab bar, freeing reading space
+- **Antonio font** for headers — clean, legible sans-serif at all sizes  
+- **PULSR Dark** — inverted variant for comfortable night/low-light reading
+- Customisable tab labels with short abbreviations for compact mode
+
+### OpenClaw Integration
+
+The reader integrates with [OpenClaw](https://github.com/openclaw/openclaw), an AI personal assistant, enabling automated content delivery and device management.
+
+#### Content Feed (`feat/rss-feed-sync`, PR [#1362](https://github.com/crosspoint-reader/crosspoint-reader/pull/1362)–[#1368](https://github.com/crosspoint-reader/crosspoint-reader/pull/1368))
+- RSS/Atom feed server running on the NUC serves EPUBs, news briefings, and other content
+- Reader polls the feed and syncs new files automatically over WiFi
+- Daily erotic fiction, thought leadership articles, and road trip guides delivered overnight
+
+#### Danger Zone (PR [#1368](https://github.com/crosspoint-reader/crosspoint-reader/pull/1368))
+- Web-based device management interface accessible from the local network
+- Screenshot tour: capture full-device screenshot sequences for debugging
+- OTA firmware flashing via HTTP upload (no USB required)
+
+#### Automatic Sync
+- OpenClaw cron job polls both readers (192.168.0.234 and 192.168.0.194) every 15 minutes
+- When readers come online, content and firmware sync automatically
+- `crosspoint-feed/` staging directory mirrors to device on each sync
+
+### On-Device Linking Support (PR [#1376](https://github.com/crosspoint-reader/crosspoint-reader/pull/1376)) — *draft*
+
+Navigate links embedded in EPUB files using physical buttons — no touchscreen required.
+
+- All `<a href>` links in an EPUB page are tracked with pixel-level bounding rects during layout
+- **Down** button → enter link cursor mode (first link highlighted)
+- **Up / Down** → cycle through links on the page with an inverted highlight
+- **Confirm** → follow the focused link (`navigateToHref`)
+- **Back** → exit cursor mode, return to reading
+- "Footnotes" menu renamed to **"Links"** to reflect that it surfaces all inline links, not just footnotes
+- Enables cross-referenced EPUB collections (e.g. SCP Foundation) to be navigated naturally
+
+### OTA Improvements (PR [#1336](https://github.com/crosspoint-reader/crosspoint-reader/pull/1336))
+- GitHub release assets redirect to CDN — follow up to 5 redirects (`max_redirection_count=5`)
+- `file.flush()` before close ensures firmware file is visible after download completes
+- Progress callback wired to render live progress bar during download
+- Boot partition marked valid early to prevent rollback on reboot
+
+### Nav Arrows (PR [#1362](https://github.com/crosspoint-reader/crosspoint-reader/pull/1362))
+- Left/right arrows display correctly in reader and settings tab navigation
+
+### Web UI Improvements (PR [#1364](https://github.com/crosspoint-reader/crosspoint-reader/pull/1364))
+- File transfer UI shows upload progress status
+- Long filenames truncated with ellipsis in the received file list
+
+### Status Bar Clock (`feat/status-bar-clock`)
+- Optional clock display in the reader status bar
+
+### File Browser Sort (`feat/file-browser-sort`)
+- Sort files alphabetically or by date in the file picker
 
 ---
 
-## What this fork adds
+## Content Automation
 
-### RSS Feed Sync
+This fork is paired with OpenClaw automations that run on a home server:
 
-The device polls an RSS feed server on every WiFi connect and automatically downloads new content to the SD card. Supported content types:
+| Cron | Schedule | What it does |
+|------|----------|--------------|
+| `daily-erotic-story` | 4:00 AM | Generates a new erotic fiction story (GLM-5), saves as EPUB |
+| `daily-erotic-art` | 9:00 AM | Fetches public-domain art from Wikimedia, converts to sleep screen BMP |
+| `morning-audio-briefing` | 6:20 AM | Generates daily news briefing podcast (ChipCast) |
+| `daily-trip-suggestion` | 8:00 AM Wed | Road trip suggestion with illustrated poster |
+| `maxs-book-update` | 6:00 AM Wed | Checks SpaceBattles for new chapters of Max's book, rebuilds EPUB |
+| `reader-sync` | Every 15 min | Polls readers; syncs new content and firmware when online |
 
-| Type | Extension | Notes |
-|------|-----------|-------|
-| EPUB books | `.epub` | Full e-reader support |
-| Articles / news | `.md`, `.txt` | Rendered natively |
-| Sleep screen art | `.bmp` | Displayed on sleep screen |
-| Firmware updates | `.bin` | Flashed on next boot |
+### Content Library
 
-The feed server runs anywhere on your local network (or internet). A simple Python HTTP server with an RSS XML feed is all that's needed. See `docs/rss-content-feeds.md` for the full feed format spec.
+The following libraries are staged and delivered automatically:
 
-**Smart deduplication:** Items are deduplicated by timestamp + file-exists + size check — not just GUID. This means the device never re-downloads files that are already on the SD card, even after a firmware reflash wipes GUID history.
-
-**Skip sync:** Hold Up or Down at WiFi connect to suppress the sync for that session — useful when you want to connect without triggering a 70-file download.
-
----
-
-### OTA Safety — Never Overwrite the Running Firmware
-
-This fork is strict about OTA partition safety:
-
-- **Always writes to the inactive partition** — the currently-running firmware is never touched
-- **Firmware.bin deleted from SD after any flash attempt** (success or failure) — no flash loops
-- **SHA-based GUID check** — the device won't re-flash firmware it's already running
-- **ESP-IDF rollback** — if new firmware crashes before calling `markValid()`, the bootloader automatically rolls back to the previous partition
-
-The result: there is always a known-good firmware in the inactive partition as a fallback.
+- **SCP Foundation** — 153 EPUBs from [lselden/scp-to-epub](https://github.com/lselden/scp-to-epub), organised into Series, Canons, Groups, International, Wanderers, BestOf
+- **AO3 erotic fiction** — organised by genre (Alien-SciFi, BDSM-Kink, Paranormal, LGBTQ, Romance)
+- **AI-generated stories** — saved to `Books/chip/YYYY-MM/` monthly subdirs
+- **Thought leadership articles** — EPUB versions of published articles
+- **WhatsNew.epub** — navigable index of recently added content, updated automatically
 
 ---
 
-### Pulsr Theme
+## Building
 
-A custom theme (upstream only includes Classic and Lyra) with:
-
-- Clean top bar showing WiFi/Feed status pills and battery
-- Feed sync progress states: FEED → SYNC → n/total → DONE / ERR
-- **Version string right-aligned in the top bar** — `1.1.1-claw (44a2001)` visible on every screen
-- File transfer screen live-updates as content arrives from the feed
-
----
-
-### Hidden System Logs
-
-System log files are stored in `/.crosspoint/` on the SD card — invisible in the library browser (which filters dot-prefixed names) but still accessible via the web API:
-
-| File | Purpose | API endpoint |
-|------|---------|--------------|
-| `/.crosspoint/boot.log` | Boot events and OTA flash results | `GET /api/boot-log` |
-| `/.crosspoint/ota_error.log` | OTA error details | `GET /api/boot-log` |
-| `/.crosspoint/feed_sync_time.txt` | Timestamp of last successful sync | internal |
-
----
-
-### Danger Zone — Remote OTA & Auto-Connect
-
-The **Danger Zone** (enabled in Settings → SYST) unlocks remote management:
-
-- **Auto-connect on boot**: device rejoins known WiFi automatically, no manual interaction needed
-- **Background web server**: file upload, EPUB management, and feed sync all accessible via browser while reading
-- **Remote OTA flash**: push new firmware to the SD card and it flashes on next sleep/wake
-- **QR code on boot**: device lands on the file transfer screen after auto-connect, ready to receive content
-
-| | |
-|---|---|
-| ![File transfer screen with QR code](docs/images/screenshots/file_transfer.png) | ![System settings — Danger Zone toggle](docs/images/screenshots/settings_syst.png) |
-| *On boot with Danger Zone enabled, the device auto-connects and shows the QR code screen* | *Enable Danger Zone in Settings → SYST, then set a password* |
-
----
-
-### Web Interface
-
-Once connected, the full web interface is accessible from any browser on the network — upload EPUBs, browse files, trigger syncs, and push firmware.
-
-| | |
-|---|---|
-| ![Web interface — file manager](docs/images/wifi/webserver_files.png) | ![Web interface — upload](docs/images/wifi/webserver_upload.png) |
-| *Browser-based file manager* | *Drag-and-drop EPUB upload* |
-
----
-
-### Reading
-
-![Reader](docs/images/screenshots/reader.png)
-*Reading an EPUB — delivered automatically via the RSS feed.*
-
----
-
-### Network Setup
-
-| | |
-|---|---|
-| ![Network mode](docs/images/screenshots/network_mode.png) | ![WiFi scan](docs/images/screenshots/wifi_scan.png) |
-| *Choose between joining a network or creating a hotspot* | *Select your WiFi network* |
-
----
-
-### OpenClaw / Chip Integration
-
-**OpenClaw** is a personal AI agent (Claude Sonnet, running as `claude-code`) that acts as the content brain for the device. It:
-
-- Generates daily news digests as markdown files and pushes them via RSS
-- Summarises and packages articles into readable `.md` or `.epub` files
-- Creates sleep screen artwork (`.bmp`) tailored to the reader's preferences
-- Monitors the feed server and triggers firmware updates autonomously
-- Runs the full build → deploy → flash → verify loop without human intervention
-
-The reader becomes a **passive delivery target**: Chip generates content on a schedule, the device syncs on boot, and new reading material appears automatically.
-
----
-
-## How it works end to end
-
-```
-OpenClaw/Chip (AI agent)
-    │
-    │  generates content, builds firmware
-    ▼
-Feed Server (Python HTTP, local network)
-    │  serves RSS feed + files at http://192.168.x.x:8090/feed.xml
-    ▼
-CrossPoint Device (ESP32-C3, Xteink X4)
-    │  syncs on WiFi connect, downloads new items to SD card
-    │  flashes firmware on next boot if firmware.bin present (version-checked)
-    ▼
-Reader (you)
-    opens new articles, books, and art — automatically delivered
-```
-
----
-
-## Setup
-
-### 1. Flash CrossPoint OpenClaw firmware
-
-Use the web flasher at https://xteink.dve.al/ with a firmware build from this fork, or follow the USB flash instructions in [Development — Safe Flash](#safe-usb-flash).
-
-### 2. Enable Danger Zone
-
-On the device:
-1. Settings → SYST tab → toggle **Danger Zone** ON
-2. Tap **Danger Zone Password** → set a password
-3. Reboot
-
-After reboot, the device auto-connects to WiFi and shows the QR code screen.
-
-### 3. Start a feed server
+See the [upstream development guide](https://github.com/crosspoint-reader/crosspoint-reader#development).
 
 ```bash
-# Minimal feed server (Python)
-cd /path/to/your/feed/content
-python3 -m http.server 8090
-```
-
-See `docs/rss-content-feeds.md` for the full feed format spec and `scripts/crosspoint-feed-server.py` for a production-ready feed server with directory auto-scanning.
-
-### 4. Configure the feed URL on the device
-
-Settings → NETW → Feed URL → `http://192.168.x.x:8090/feed.xml`
-
----
-
-## Development
-
-### Prerequisites
-
-- **PlatformIO** (VS Code extension or CLI: `pip install platformio`)
-- **Python 3** (for i18n code generation and flash scripts)
-- **USB cable** (for initial flash only — after that, everything is OTA)
-
-### Clone and Build
-
-```bash
-git clone https://github.com/laird/crosspoint-claw.git
+git clone https://github.com/laird/crosspoint-claw
 cd crosspoint-claw
-git submodule update --init --recursive
-
-# Build firmware
 pio run
 ```
 
-### Safe USB Flash
-
-> ⚠️ **Always commit before flashing.** The feed server identifies firmware by SHA. If you flash uncommitted code, the feed re-downloads the old firmware on next sync and overwrites your work. `flash-crosspoint.sh` enforces this with a pre-flight check.
-
-Use `scripts/crosspoint-flash.py` — an OTA-aware flash script that always writes to the **inactive** partition and preserves the running firmware as a rollback fallback:
-
-```bash
-# Prerequisites: esptool in a venv
-pip install esptool
-
-# Check partition state without flashing
-python3 scripts/crosspoint-flash.py --status --port /dev/cu.usbmodem101
-
-# Build, commit-check, update feed, and flash safely (wrapper script)
-scripts/flash-crosspoint.sh
-
-# Or flash a pre-built binary directly
-python3 scripts/crosspoint-flash.py .pio/build/default/firmware.bin --port /dev/cu.usbmodem101
-```
-
-**What the script does:**
-1. Reads `otadata` to determine which partition (app0/app1) is currently active
-2. Flashes new firmware to the **inactive** partition only
-3. Updates `otadata` to boot from the new partition on next reset
-4. Resets the device
-
-**Rollback safety:** If the new firmware crashes before calling `esp_ota_mark_app_valid_cancel_rollback()`, the ESP-IDF bootloader automatically reverts to the previous partition. The old firmware is never overwritten.
-
-### OTA via Feed (Preferred After First Flash)
-
-Once the device is running this firmware, USB is rarely needed. Push a new build via the feed server instead:
-
-```bash
-# Build
-pio run
-
-# Copy firmware to feed server content dir
-cp .pio/build/default/firmware.bin ~/crosspoint-feed/firmware/firmware.bin
-
-# Restart feed server so it picks up the new file
-systemctl --user restart crosspoint-feed
-
-# Trigger a sync on the device
-curl -X POST http://192.168.x.x/api/feed/sync
-```
-
-The device downloads `firmware.bin`, writes it to SD card, and flashes on next boot. After a successful flash, `firmware.bin` is automatically deleted from the SD card to prevent re-flashing.
-
-### Iterative Development Loop
-
-```
-Write code → commit → pio run → copy firmware.bin to feed server
-    → device syncs on next WiFi connect (or trigger manually)
-    → check /.crosspoint/boot.log for flash result
-    → monitor Serial for runtime logs
-    → repeat
-```
-
-No USB flashing after the first setup. No physical access to the device needed.
-
-### Serial Debugging
-
-```bash
-# Linux/Mac
-python3 scripts/debugging_monitor.py
-
-# macOS (adjust port)
-python3 scripts/debugging_monitor.py /dev/cu.usbmodem101
-```
-
-RSS sync logs all activity to Serial in real time. System log files on the SD card (`/.crosspoint/boot.log`, `/.crosspoint/ota_error.log`) are also accessible via `GET /api/boot-log`.
-
-### Screen Captures
-
-```bash
-# Capture current screen as PNG
-curl http://192.168.x.x/api/screenshot > screen.png
-```
-
-Useful for verifying UI changes, attaching to bug reports, and documenting UI states.
-
-### GitHub Issues
-
-Always use `--repo laird/crosspoint-claw` when filing issues with `gh`:
-
-```bash
-gh issue create --repo laird/crosspoint-claw --title "..." --body "..."
-```
-
-Without `--repo`, `gh` defaults to the upstream repo (`crosspoint-reader/crosspoint-reader`).
+The `feature/claw` branch is the main integration branch. All upstream PRs are also available as standalone branches.
 
 ---
 
-## Troubleshooting
+## Open PRs Upstream
 
-| Symptom | Where to look |
-|---------|---------------|
-| Sync not starting | Check feed URL is set in Settings → NETW |
-| Feed fetched but no files downloaded | Check `/.crosspoint/feed_sync_time.txt`; pull SD and inspect boot.log |
-| Firmware not flashing | Confirm `firmware.bin` is in SD root; check `/.crosspoint/ota_error.log` |
-| Device stuck in flash loop | Remove `firmware.bin` from SD card root; check GUID dedup in feed |
-| Firmware re-flashing same version | GUID in feed must change between releases |
-| Device booting old firmware after USB flash | otadata points to wrong partition — use https://xteink.dve.al/debug → "Swap boot partition" |
-| Feed sync not triggering after WiFi connect | Hold Up/Down suppresses sync for that session — reconnect without holding |
-
----
-
-## Original CrossPoint documentation
-
-For hardware specs, standard EPUB reader features, development setup, contributing guidelines, and the full internals writeup, see **[CROSSPOINT-README.md](CROSSPOINT-README.md)**.
+| PR | Status | Description |
+|----|--------|-------------|
+| [#1331](https://github.com/crosspoint-reader/crosspoint-reader/pull/1331) | Open | PULSR theme — 4-segment left nav bar with Antonio font |
+| [#1336](https://github.com/crosspoint-reader/crosspoint-reader/pull/1336) | Open | OTA improvements — redirect follow, progress bar, flush fix |
+| [#1362](https://github.com/crosspoint-reader/crosspoint-reader/pull/1362) | Open | Nav arrows — correct left/right display in reader/settings |
+| [#1364](https://github.com/crosspoint-reader/crosspoint-reader/pull/1364) | Open | Web UI improvements — upload status, filename truncation |
+| [#1368](https://github.com/crosspoint-reader/crosspoint-reader/pull/1368) | Open | Danger Zone — web-based device management |
+| [#1376](https://github.com/crosspoint-reader/crosspoint-reader/pull/1376) | Draft | On-device linking support for EPUB |
 
 ---
 
-*CrossPoint OpenClaw is not affiliated with Xteink. Built on top of the open-source [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) project.*
+*This fork is maintained by [@laird](https://github.com/laird). Upstream project: [crosspoint-reader/crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader).*
