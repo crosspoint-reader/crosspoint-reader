@@ -340,6 +340,7 @@
     /* Action button styles */
     .delete-btn,
     .rename-btn,
+    .view-btn,
     .move-btn {
       background: none;
       border: none;
@@ -356,10 +357,12 @@
       background-color: #fee;
       color: #e74c3c;
     }
-    .rename-btn {
+    .rename-btn,
+    .view-btn {
       color: #2980b9;
     }
-    .rename-btn:hover {
+    .rename-btn:hover,
+    .view-btn:hover {
       background-color: #e8f4fd;
     }
     .move-btn {
@@ -896,7 +899,7 @@
           fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          if (isViewable) fileTableContent += `<button class="rename-btn" onclick="openTextViewModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}'  )" title="View file">👁️</button>`;
+          if (isViewable) fileTableContent += `<button class="view-btn" onclick="openTextViewModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}'  )" title="View file">👁️</button>`;
           fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
           fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
           fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;

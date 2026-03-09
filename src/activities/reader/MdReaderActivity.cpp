@@ -234,7 +234,7 @@ static MdLine parseMdLine(const std::string& raw, bool& inCodeFence, bool stripI
 // ── Activity lifecycle ────────────────────────────────────────────────────────
 
 void MdReaderActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
   if (!txt) return;
 
   switch (SETTINGS.orientation) {
@@ -270,7 +270,7 @@ void MdReaderActivity::onExit() {
   if (txt && initialized) {
     saveProgress();
   }
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   pageOffsets.clear();
   pageCodeFences.clear();
@@ -281,11 +281,6 @@ void MdReaderActivity::onExit() {
 }
 
 void MdReaderActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
     onGoBack();
     return;

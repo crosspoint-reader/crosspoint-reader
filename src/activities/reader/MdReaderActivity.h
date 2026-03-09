@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "activities/ActivityWithSubactivity.h"
+#include "Activity.h"
 #include "activities/reader/EpubReaderMenuActivity.h"
 
 struct MdLine {
@@ -17,7 +17,7 @@ struct MdLine {
   bool isHRule = false;  // draw a horizontal rule instead of text
 };
 
-class MdReaderActivity final : public ActivityWithSubactivity {
+class MdReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;
@@ -56,7 +56,7 @@ class MdReaderActivity final : public ActivityWithSubactivity {
  public:
   explicit MdReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt,
                             const std::function<void()>& onGoBack, const std::function<void()>& onGoHome)
-      : ActivityWithSubactivity("MdReader", renderer, mappedInput),
+      : Activity("MdReader", renderer, mappedInput),
         txt(std::move(txt)),
         onGoBack(onGoBack),
         onGoHome(onGoHome) {}
