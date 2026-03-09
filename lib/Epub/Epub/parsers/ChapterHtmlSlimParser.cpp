@@ -772,8 +772,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // Spotted when reading Intermezzo, there are some really long text blocks in there.
   if (self->currentTextBlock->size() > 750) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
+    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
+    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
+                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
+                                        : self->viewportWidth;
     self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, self->viewportWidth,
+        self->renderer, self->fontId, effectiveWidth,
         [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
   }
 }
@@ -1019,6 +1023,11 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage));
