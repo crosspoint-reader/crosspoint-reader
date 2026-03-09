@@ -20,6 +20,7 @@ class WebRouteRegistry {
   static constexpr int kMaxEntries = 24;
 
   static void add(const WebRouteEntry& entry) {
+    // cppcheck-suppress knownConditionTrueFalse
     if (count >= kMaxEntries) {
       LOG_ERR("REG", "WebRouteRegistry full (%d), entry dropped", kMaxEntries);
       return;

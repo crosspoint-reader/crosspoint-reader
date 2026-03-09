@@ -22,6 +22,7 @@ class LifecycleRegistry {
   static constexpr int kMaxEntries = 16;
 
   static void add(const LifecycleEntry& entry) {
+    // cppcheck-suppress knownConditionTrueFalse
     if (count >= kMaxEntries) {
       LOG_ERR("REG", "LifecycleRegistry full (%d), entry dropped", kMaxEntries);
       return;

@@ -37,6 +37,7 @@ class ReaderRegistry {
   static constexpr int kMaxEntries = 16;
 
   static void add(const ReaderEntry& entry) {
+    // cppcheck-suppress knownConditionTrueFalse
     if (count >= kMaxEntries) {
       LOG_ERR("REG", "ReaderRegistry full (%d), entry dropped", kMaxEntries);
       return;

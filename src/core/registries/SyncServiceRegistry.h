@@ -49,6 +49,7 @@ class SyncServiceRegistry {
   }
 
   // Returns nullptr when ENABLE_KOREADER_SYNC is off (feature not registered).
+  // cppcheck-suppress knownConditionTrueFalse
   static const KoreaderServiceApi* getKoreaderApi() { return koreaderRegistered ? &koreaderApi : nullptr; }
 
  private:

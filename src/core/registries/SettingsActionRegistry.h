@@ -24,6 +24,7 @@ class SettingsActionRegistry {
   static constexpr int kMaxEntries = 24;
 
   static void add(const SettingsActionEntry& entry) {
+    // cppcheck-suppress knownConditionTrueFalse
     if (count >= kMaxEntries) {
       LOG_ERR("REG", "SettingsActionRegistry full (%d), entry dropped", kMaxEntries);
       return;

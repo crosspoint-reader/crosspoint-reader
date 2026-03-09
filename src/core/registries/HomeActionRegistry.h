@@ -30,6 +30,7 @@ class HomeActionRegistry {
   static constexpr int kMaxEntries = 16;
 
   static void add(const HomeActionEntry& entry) {
+    // cppcheck-suppress knownConditionTrueFalse
     if (count >= kMaxEntries) {
       LOG_ERR("REG", "HomeActionRegistry full (%d), entry dropped", kMaxEntries);
       return;
