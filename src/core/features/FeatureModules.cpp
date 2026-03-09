@@ -375,34 +375,36 @@ Activity* FeatureModules::createKoreaderSyncActivity(GfxRenderer& renderer, Mapp
 }
 
 Activity* FeatureModules::createTodoPlannerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                    std::string filePath, std::string dateTitle,
-                                                    const std::function<void()>& onBack) {
+                                                    std::string filePath, std::string dateTitle, void* onBackCtx,
+                                                    void (*onBack)(void*)) {
 #if ENABLE_TODO_PLANNER
   if (!hasCapability(Capability::TodoPlanner)) {
     return nullptr;
   }
-  return new TodoActivity(renderer, mappedInput, std::move(filePath), std::move(dateTitle), onBack);
+  return new TodoActivity(renderer, mappedInput, std::move(filePath), std::move(dateTitle), onBackCtx, onBack);
 #else
   (void)renderer;
   (void)mappedInput;
   (void)filePath;
   (void)dateTitle;
+  (void)onBackCtx;
   (void)onBack;
   return nullptr;
 #endif
 }
 
 Activity* FeatureModules::createTodoFallbackActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                     std::string dateText, const std::function<void()>& onBack) {
+                                                     std::string dateText, void* onBackCtx, void (*onBack)(void*)) {
 #if ENABLE_TODO_PLANNER
   if (!hasCapability(Capability::TodoPlanner)) {
     return nullptr;
   }
-  return new TodoFallbackActivity(renderer, mappedInput, std::move(dateText), onBack);
+  return new TodoFallbackActivity(renderer, mappedInput, std::move(dateText), onBackCtx, onBack);
 #else
   (void)renderer;
   (void)mappedInput;
   (void)dateText;
+  (void)onBackCtx;
   (void)onBack;
   return nullptr;
 #endif

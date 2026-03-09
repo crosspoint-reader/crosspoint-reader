@@ -15,6 +15,7 @@
 #include "SpiBusMutex.h"
 #include "activities/TaskShutdown.h"
 #include "components/UITheme.h"
+#include "features/markdown/MarkdownLineProcessor.h"
 #include "fontIds.h"
 
 namespace {
@@ -25,115 +26,6 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
 
-#if ENABLE_MARKDOWN
-// Return true if the string consists solely of >= 3 repetitions of `ch` (with optional spaces).
-bool isHorizontalRule(const std::string& s, char ch) {
-  int count = 0;
-  for (char c : s) {
-    if (c == ch) {
-      count++;
-    } else if (c != ' ') {
-      return false;
-    }
-  }
-  return count >= 3;
-}
-
-// Pre-process a single raw source line for markdown block-level elements.
-// Inline markers (**bold**, *italic*, etc.) are left as-is in the text so that
-// word-wrap width measurements stay accurate; they are stripped at render time.
-TxtReaderActivity::StyledLine processMarkdownLine(const std::string& raw) {
-  TxtReaderActivity::StyledLine result;
-
-  // --- Heading detection: count leading '#' chars followed by a space ---
-  int hashCount = 0;
-  while (hashCount < static_cast<int>(raw.size()) && raw[hashCount] == '#') {
-    hashCount++;
-  }
-  if (hashCount > 0 && hashCount < static_cast<int>(raw.size()) && raw[hashCount] == ' ') {
-    result.style = EpdFontFamily::BOLD;
-    result.text = raw.substr(hashCount + 1);
-    return result;
-  }
-
-  // --- Horizontal rule: a line of >=3 dashes, asterisks, or underscores ---
-  if (isHorizontalRule(raw, '-') || isHorizontalRule(raw, '*') || isHorizontalRule(raw, '_')) {
-    result.isHRule = true;
-    return result;
-  }
-
-  // --- Blockquote: strip leading "> " or ">" ---
-  if (raw.size() >= 2 && raw[0] == '>' && raw[1] == ' ') {
-    result.text = raw.substr(2);
-  } else if (!raw.empty() && raw[0] == '>') {
-    result.text = raw.substr(1);
-  } else {
-    result.text = raw;
-  }
-  return result;
-}
-
-// Strip common inline markdown markers from a display string for rendering.
-// Called at render time so word-wrap measurements (done on raw text) stay consistent.
-std::string stripInlineMarkdown(const std::string& input) {
-  std::string out;
-  out.reserve(input.size());
-  const size_t n = input.size();
-  size_t i = 0;
-  while (i < n) {
-    // ** bold ** or __ bold __
-    if (i + 1 < n && ((input[i] == '*' && input[i + 1] == '*') || (input[i] == '_' && input[i + 1] == '_'))) {
-      const char m = input[i];
-      const size_t start = i + 2;
-      // Find matching closing marker
-      size_t end = input.find({m, m}, start);
-      if (end != std::string::npos) {
-        out += input.substr(start, end - start);
-        i = end + 2;
-        continue;
-      }
-    }
-    // * italic * or _ italic _ (single marker)
-    if ((input[i] == '*' || input[i] == '_') && (i == 0 || (input[i - 1] != '*' && input[i - 1] != '_'))) {
-      const char m = input[i];
-      const size_t start = i + 1;
-      size_t end = start;
-      while (end < n && input[end] != m) {
-        end++;
-      }
-      if (end < n) {
-        out += input.substr(start, end - start);
-        i = end + 1;
-        continue;
-      }
-    }
-    // `code`
-    if (input[i] == '`') {
-      const size_t start = i + 1;
-      size_t end = input.find('`', start);
-      if (end != std::string::npos) {
-        out += input.substr(start, end - start);
-        i = end + 1;
-        continue;
-      }
-    }
-    // [link text](url)
-    if (input[i] == '[') {
-      const size_t textEnd = input.find(']', i + 1);
-      if (textEnd != std::string::npos && textEnd + 1 < n && input[textEnd + 1] == '(') {
-        const size_t urlEnd = input.find(')', textEnd + 2);
-        if (urlEnd != std::string::npos) {
-          out += input.substr(i + 1, textEnd - i - 1);
-          i = urlEnd + 1;
-          continue;
-        }
-      }
-    }
-    out += input[i++];
-  }
-  return out;
-}
-#endif  // ENABLE_MARKDOWN
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -161,12 +53,9 @@ void TxtReaderActivity::onEnter() {
       break;
   }
 
-  // Detect markdown mode from file extension (only when built with markdown support)
-  if constexpr (ENABLE_MARKDOWN != 0) {
-    const std::string& path = txt->getPath();
-    isMarkdown = path.size() >= 3 && path.compare(path.size() - 3, 3, ".md") == 0;
-    LOG_DBG("TRS", "File: %s, markdown mode: %s", path.c_str(), isMarkdown ? "yes" : "no");
-  }
+  // Detect markdown mode from file extension
+  isMarkdown = features::markdown::isMarkdownPath(txt->getPath());
+  LOG_DBG("TRS", "File: %s, markdown mode: %s", txt->getPath().c_str(), isMarkdown ? "yes" : "no");
 
   txt->setupCacheDir();
 
@@ -377,16 +266,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<StyledLine>&
     // Apply markdown block-level preprocessing if needed.
     // Inline markers (**, *, `code`, etc.) are left in the text here and stripped at render
     // time, so word-wrap width measurements remain accurate.
-    StyledLine processed;
-#if ENABLE_MARKDOWN
-    if (isMarkdown) {
-      processed = processMarkdownLine(rawLine);
-    } else {
-      processed.text = rawLine;
-    }
-#else
-    processed.text = rawLine;
-#endif
+    StyledLine processed = features::markdown::processLine(isMarkdown, rawLine);
 
     // Horizontal rules occupy exactly one display line; advance past raw line and continue.
     if (processed.isHRule) {
@@ -531,12 +411,7 @@ void TxtReaderActivity::renderPage() {
         const int midY = y + lineHeight / 2;
         renderer.drawLine(cachedOrientedMarginLeft, midY, cachedOrientedMarginLeft + contentWidth, midY, true);
       } else if (!sline.text.empty()) {
-        // Strip inline markers at render time so alignment widths are based on display text
-#if ENABLE_MARKDOWN
-        const std::string display = isMarkdown ? stripInlineMarkdown(sline.text) : sline.text;
-#else
-        const std::string& display = sline.text;
-#endif
+        const std::string display = features::markdown::stripInline(isMarkdown, sline.text);
         int x = cachedOrientedMarginLeft;
 
         // Apply text alignment

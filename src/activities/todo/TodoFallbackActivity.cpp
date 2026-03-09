@@ -14,7 +14,7 @@ void TodoFallbackActivity::onEnter() {
 void TodoFallbackActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
       mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    onBack();
+    if (onBack != nullptr) onBack(onBackCtx);
   }
 }
 

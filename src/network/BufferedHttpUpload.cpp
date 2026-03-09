@@ -67,15 +67,16 @@ void BufferedHttpUploadSession::handleUpload(WebServer* server, const BufferedHt
     writeCount = 0;
     uploadLastLoggedSize = 0;
 
-    uploadTarget = {};
     if (config.resolveTarget == nullptr ||
-        !config.resolveTarget(server, uploadFileName, uploadTarget, uploadError, sizeof(uploadError))) {
+        !config.resolveTarget(server, uploadFileName, uploadPathValue, sizeof(uploadPathValue), targetFilePath,
+                              sizeof(targetFilePath), uploadError, sizeof(uploadError))) {
       return;
     }
 
-    const char* resolvedPath = (uploadTarget.uploadPath[0] != '\0') ? uploadTarget.uploadPath : "/";
-    snprintf(uploadPathValue, sizeof(uploadPathValue), "%s", resolvedPath);
-    snprintf(targetFilePath, sizeof(targetFilePath), "%s", uploadTarget.filePath);
+    if (uploadPathValue[0] == '\0') {
+      uploadPathValue[0] = '/';
+      uploadPathValue[1] = '\0';
+    }
     if (targetFilePath[0] == '\0') {
       snprintf(uploadError, sizeof(uploadError), "Missing upload target");
       return;
@@ -201,7 +202,6 @@ void BufferedHttpUploadSession::reset() {
   uploadPathValue[0] = '/';
   uploadPathValue[1] = '\0';
   targetFilePath[0] = '\0';
-  uploadTarget = {};
   uploadSize = 0;
   uploadSuccess = false;
   uploadError[0] = '\0';

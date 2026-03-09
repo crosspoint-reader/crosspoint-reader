@@ -85,8 +85,8 @@ void invalidateFeatureCachesIfNeeded(const String& filePath) {
 
 network::BufferedHttpUploadSession& httpUploadSession() { return network::sharedBufferedHttpUploadSession(); }
 
-bool resolveWebUploadTarget(WebServer* server, const char* uploadFileName, network::BufferedHttpUploadTarget& target,
-                            char* error, size_t errorSize) {
+bool resolveWebUploadTarget(WebServer* server, const char* uploadFileName, char* uploadPath, size_t uploadPathSize,
+                            char* filePath, size_t filePathSize, char* error, size_t errorSize) {
   if (server == nullptr) {
     snprintf(error, errorSize, "Upload server unavailable");
     return false;
@@ -103,32 +103,45 @@ bool resolveWebUploadTarget(WebServer* server, const char* uploadFileName, netwo
     return false;
   }
 
-  // PathUtils requires String parameters and returns String by value, so one String allocation
-  // per urlDecode/normalizePath call is unavoidable here without a PathUtils API change.
-  String uploadPath = "/";
+  uploadPath[0] = '/';
+  uploadPath[1] = '\0';
   if (server->hasArg("path")) {
-    uploadPath = PathUtils::urlDecode(server->arg("path"));
-    if (!PathUtils::isValidSdPath(uploadPath)) {
-      snprintf(error, errorSize, "Invalid path");
-      LOG_WRN("WEB", "[UPLOAD] Path validation failed: %s", uploadPath.c_str());
+    if (!PathUtils::urlDecode(server->arg("path").c_str(), uploadPath, uploadPathSize)) {
+      snprintf(error, errorSize, "Path too long");
+      LOG_WRN("WEB", "[UPLOAD] Path decode exceeded %u bytes", static_cast<unsigned int>(uploadPathSize));
       return false;
     }
 
-    uploadPath = PathUtils::normalizePath(uploadPath);
+    if (!PathUtils::isValidSdPath(uploadPath)) {
+      snprintf(error, errorSize, "Invalid path");
+      LOG_WRN("WEB", "[UPLOAD] Path validation failed: %s", uploadPath);
+      return false;
+    }
+
+    if (!PathUtils::normalizePathInPlace(uploadPath, uploadPathSize)) {
+      snprintf(error, errorSize, "Path too long");
+      LOG_WRN("WEB", "[UPLOAD] Path normalization exceeded %u bytes", static_cast<unsigned int>(uploadPathSize));
+      return false;
+    }
+
     if (PathUtils::pathContainsProtectedItem(uploadPath)) {
       snprintf(error, errorSize, "Cannot upload to protected path");
-      LOG_WRN("WEB", "[UPLOAD] Protected upload path rejected: %s", uploadPath.c_str());
+      LOG_WRN("WEB", "[UPLOAD] Protected upload path rejected: %s", uploadPath);
       return false;
     }
   }
 
-  const bool endsWithSlash = uploadPath.length() > 0 && uploadPath[uploadPath.length() - 1] == '/';
-  snprintf(target.uploadPath, sizeof(target.uploadPath), "%s", uploadPath.c_str());
-  const int written = snprintf(target.filePath, sizeof(target.filePath), "%s%s%s", uploadPath.c_str(),
-                               endsWithSlash ? "" : "/", uploadFileName);
-  if (written < 0 || static_cast<size_t>(written) >= sizeof(target.filePath)) {
+  const size_t uploadPathLength = std::strlen(uploadPath);
+  const bool endsWithSlash = uploadPathLength > 0 && uploadPath[uploadPathLength - 1] == '/';
+  const int written = snprintf(filePath, filePathSize, "%s%s%s", uploadPath, endsWithSlash ? "" : "/", uploadFileName);
+  if (written < 0 || static_cast<size_t>(written) >= filePathSize) {
     snprintf(error, errorSize, "Path too long");
     LOG_WRN("WEB", "[UPLOAD] Combined upload path exceeds limit (%d chars)", written);
+    return false;
+  }
+  if (!PathUtils::isValidSdPath(filePath)) {
+    snprintf(error, errorSize, "Path too long");
+    LOG_WRN("WEB", "[UPLOAD] Combined upload path rejected: %s", filePath);
     return false;
   }
   return true;
@@ -981,9 +994,8 @@ void CrossPointWebServer::handleUploadPost() {
     core::FeatureModules::onUploadCompleted(httpUploadSession().uploadPath(), httpUploadSession().fileName());
     server->send(200, "text/plain", String("File uploaded successfully: ") + httpUploadSession().fileName());
   } else {
-    const char* error =
-        httpUploadSession().error()[0] == '\0' ? "Unknown error during upload" : httpUploadSession().error();
-    server->send(400, "text/plain", error);
+    const char* uploadError = httpUploadSession().error();
+    server->send(400, "text/plain", uploadError[0] == '\0' ? "Unknown error during upload" : uploadError);
   }
 }
 

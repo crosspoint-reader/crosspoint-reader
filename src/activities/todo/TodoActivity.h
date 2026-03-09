@@ -16,7 +16,7 @@ struct TodoItem {
 class TodoActivity final : public ActivityWithSubactivity {
  public:
   explicit TodoActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
-                        std::string dateTitle, const std::function<void()>& onBack);
+                        std::string dateTitle, void* onBackCtx, void (*onBack)(void*));
 
   void onEnter() override;
   void onExit() override;
@@ -26,7 +26,8 @@ class TodoActivity final : public ActivityWithSubactivity {
  private:
   std::string filePath;
   std::string dateTitle;
-  const std::function<void()> onBack;
+  void* onBackCtx;
+  void (*onBack)(void*);
 
   std::vector<TodoItem> items;
   int selectedIndex = 0;

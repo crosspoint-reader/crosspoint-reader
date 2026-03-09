@@ -64,8 +64,8 @@ FontScanSnapshot rescanUserFonts() {
   return {static_cast<int>(fontManager.getAvailableFonts().size()), activeLoaded};
 }
 
-bool resolveUserFontUploadTarget(WebServer* server, const char* uploadFileName,
-                                 network::BufferedHttpUploadTarget& target, char* error, size_t errorSize) {
+bool resolveUserFontUploadTarget(WebServer* server, const char* uploadFileName, char* uploadPath, size_t uploadPathSize,
+                                 char* filePath, size_t filePathSize, char* error, size_t errorSize) {
   (void)server;
 
   if (!PathUtils::isValidFilename(uploadFileName) || PathUtils::isProtectedWebComponent(uploadFileName)) {
@@ -92,8 +92,17 @@ bool resolveUserFontUploadTarget(WebServer* server, const char* uploadFileName,
     }
   }
 
-  snprintf(target.uploadPath, sizeof(target.uploadPath), "/fonts");
-  snprintf(target.filePath, sizeof(target.filePath), "/fonts/%s", uploadFileName);
+  const int pathWritten = snprintf(uploadPath, uploadPathSize, "/fonts");
+  const int fileWritten = snprintf(filePath, filePathSize, "/fonts/%s", uploadFileName);
+  if (pathWritten < 0 || static_cast<size_t>(pathWritten) >= uploadPathSize || fileWritten < 0 ||
+      static_cast<size_t>(fileWritten) >= filePathSize) {
+    snprintf(error, errorSize, "Path too long");
+    return false;
+  }
+  if (!PathUtils::isValidSdPath(filePath)) {
+    snprintf(error, errorSize, "Path too long");
+    return false;
+  }
   return true;
 }
 
@@ -130,8 +139,8 @@ void handleFontUploadPost(WebServer* server) {
   }
 
   if (!uploadSession().succeeded()) {
-    const char* error = uploadSession().error()[0] == '\0' ? "Upload failed" : uploadSession().error();
-    server->send(400, "text/plain", error);
+    const char* uploadError = uploadSession().error();
+    server->send(400, "text/plain", uploadError[0] == '\0' ? "Upload failed" : uploadError);
     return;
   }
 

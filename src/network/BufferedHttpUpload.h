@@ -7,13 +7,6 @@
 
 namespace network {
 
-struct BufferedHttpUploadTarget {
-  static constexpr size_t kMaxPathLen = 256;
-
-  char uploadPath[kMaxPathLen] = "/";
-  char filePath[kMaxPathLen] = {};
-};
-
 struct BufferedHttpUploadConfig {
   const char* logLabel = "UPLOAD";
   const char* storageTag = nullptr;
@@ -22,15 +15,16 @@ struct BufferedHttpUploadConfig {
   const char* finalWriteError = "Failed to write final upload data";
   const char* abortedError = "Upload aborted";
   bool logProgress = false;
-  bool (*resolveTarget)(WebServer* server, const char* fileName, BufferedHttpUploadTarget& target, char* error,
-                        size_t errorSize) = nullptr;
+  bool (*resolveTarget)(WebServer* server, const char* fileName, char* uploadPath, size_t uploadPathSize,
+                        char* filePath, size_t filePathSize, char* error, size_t errorSize) = nullptr;
 };
 
 class BufferedHttpUploadSession {
  public:
   static constexpr size_t kBufferSize = 4096;
   static constexpr size_t kMaxFileNameLen = 256;
-  static constexpr size_t kMaxPathLen = BufferedHttpUploadTarget::kMaxPathLen;
+  static constexpr size_t kMaxUploadPathLen = 256;
+  static constexpr size_t kMaxTargetFilePathLen = 512;
   static constexpr size_t kMaxErrorLen = 128;
 
   void handleUpload(WebServer* server, const BufferedHttpUploadConfig& config);
@@ -48,9 +42,8 @@ class BufferedHttpUploadSession {
 
   FsFile uploadFile;
   char uploadFileName[kMaxFileNameLen] = {};
-  char uploadPathValue[kMaxPathLen] = "/";
-  char targetFilePath[kMaxPathLen] = {};
-  BufferedHttpUploadTarget uploadTarget = {};
+  char uploadPathValue[kMaxUploadPathLen] = "/";
+  char targetFilePath[kMaxTargetFilePathLen] = {};
   size_t uploadSize = 0;
   bool uploadSuccess = false;
   char uploadError[kMaxErrorLen] = {};

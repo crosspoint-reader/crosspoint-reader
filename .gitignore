@@ -24,6 +24,7 @@ platformio.local.ini
 .pio-ci-sim/
 
 .pio-size-*/
+/.plans/
 
 # Crash dumps
 core.*

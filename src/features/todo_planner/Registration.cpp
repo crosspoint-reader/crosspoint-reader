@@ -37,11 +37,7 @@ static Activity* createTodoPlannerHomeActionActivity(GfxRenderer& renderer, Mapp
     dateTitle = today;
   }
 
-  return new TodoActivity(renderer, mappedInput, filePath, dateTitle, [callbackCtx, onBack] {
-    if (onBack != nullptr) {
-      onBack(callbackCtx);
-    }
-  });
+  return new TodoActivity(renderer, mappedInput, filePath, dateTitle, callbackCtx, onBack);
 }
 #endif
 

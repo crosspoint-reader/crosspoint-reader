@@ -98,10 +98,10 @@ class FeatureModules {
                                               const std::function<void()>& onCancel,
                                               const std::function<void(int, int)>& onSyncComplete);
   static Activity* createTodoPlannerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             std::string filePath, std::string dateTitle,
-                                             const std::function<void()>& onBack);
+                                             std::string filePath, std::string dateTitle, void* onBackCtx,
+                                             void (*onBack)(void*));
   static Activity* createTodoFallbackActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                              std::string dateText, const std::function<void()>& onBack);
+                                              std::string dateText, void* onBackCtx, void (*onBack)(void*));
 
   static void onFontFamilySettingChanged(uint8_t newValue);
   static void onWebSettingsApplied();

@@ -12,6 +12,7 @@
 #include "components/themes/lyra/ForkDriftTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
+#include "core/features/FeatureCatalog.h"
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
@@ -30,9 +31,9 @@ void UITheme::reload() {
 }
 
 void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
-#if !ENABLE_LYRA_THEME
-  type = CrossPointSettings::UI_THEME::CLASSIC;
-#endif
+  if (!core::FeatureCatalog::isEnabled("lyra_theme")) {
+    type = CrossPointSettings::UI_THEME::CLASSIC;
+  }
   switch (type) {
     case CrossPointSettings::UI_THEME::CLASSIC:
       LOG_DBG("UI", "Using Classic theme");

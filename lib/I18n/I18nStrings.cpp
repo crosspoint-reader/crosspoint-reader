@@ -91,6 +91,11 @@ const char* const LANGUAGE_NAMES[] = {
     "Suomi",
     "Dansk",
     "Nederlands",
+    "T\xC3"
+    "\xBC"
+    "rk\xC3"
+    "\xA7"
+    "e",
 };
 
 // Character sets for each language
@@ -756,6 +761,33 @@ const char* const CHARACTER_SETS[] = {
     "\xC3"
     "\xBC"
     "",  // Nederlands
+    "\n !\"%'()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghiklmnoprstuvwxyz|\xC2"
+    "\xAB"
+    "\xC3"
+    "\x87"
+    "\xC3"
+    "\x96"
+    "\xC3"
+    "\x9C"
+    "\xC3"
+    "\xA7"
+    "\xC3"
+    "\xB6"
+    "\xC3"
+    "\xBC"
+    "\xC4"
+    "\x9E"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB0"
+    "\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9E"
+    "\xC5"
+    "\x9F"
+    "",  // Türkçe
 };
 
 namespace i18n_strings {
@@ -851,6 +883,10 @@ const char* const STRINGS_EN[] = {
     "Hide Battery %",
     "Extra Paragraph Spacing",
     "Text Anti-Aliasing",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Short Power Button Click",
     "Reading Orientation",
     "Front Button Layout",
@@ -1293,6 +1329,10 @@ const char* const STRINGS_ES[] = {
     "\xA1"
     "rrafos",
     "Suavizado de texto",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Toque corto bot\xC3"
     "\xB3"
     "n encendido",
@@ -2068,6 +2108,10 @@ const char* const STRINGS_FR[] = {
     "Masquer % batterie",
     "Espacement des paragraphes",
     "Lissage du texte",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Appui court bout. alim.",
     "Orientation de lecture",
     "Disposition des boutons avant",
@@ -2735,7 +2779,7 @@ const char* const STRINGS_DE[] = {
     "",
     "WLAN-Passwort eingeben",
     "Text eingeben",
-    "bis",
+    "mit ",
     "Calibre finden...",
     "Verbinden mit",
     "Verbunden mit",
@@ -2782,6 +2826,10 @@ const char* const STRINGS_DE[] = {
     "Schriftgl\xC3"
     "\xA4"
     "ttung",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "An-Taste kurz dr\xC3"
     "\xBC"
     "cken",
@@ -2819,14 +2867,12 @@ const char* const STRINGS_DE[] = {
     "Nach Updates suchen",
     "Sprache",
     "Bildauswahl Standby",
-    "Werksreset",
+    "Factory Reset",
     "Switch to TRMNL",
     "Lese-Cache leeren",
     "Calibre",
     "Benutzername",
-    "Passwort n\xC3"
-    "\xB6"
-    "tig",
+    "Passwort",
     "Sync-Server-URL",
     "Dateizuordnung",
     "Authentifizieren",
@@ -2908,9 +2954,9 @@ const char* const STRINGS_DE[] = {
     "Zur\xC3"
     "\xBC"
     "ck/Weiter",
-    "Weiter/Zu\xC3"
+    "Weiter/Zur\xC3"
     "\xBC"
-    "rck",
+    "ck",
     "Bookerly",
     "Noto Sans",
     "Open Dyslexic",
@@ -3022,8 +3068,8 @@ const char* const STRINGS_DE[] = {
     "Wiederh.",
     "Ja",
     "Nein",
-    "Show",
-    "Hide",
+    "Zeigen",
+    "Ausblenden",
     "An",
     "Aus",
     "Leer",
@@ -3037,10 +3083,12 @@ const char* const STRINGS_DE[] = {
     "Standby-Coverfilter",
     "Kontrast",
     "Statusleiste anpassen",
-    "Kapitelseiten",
-    "Buchfortschritt in Prozent",
-    "Fortschrittsleiste",
-    "Dicke der Fortschrittsleiste",
+    "Kapitel-Seitenanzahl",
+    "Buchfortschritt in %",
+    "Fortschrittsbalken",
+    "Balkenst\xC3"
+    "\xA4"
+    "rke",
     "D\xC3"
     "\xBC"
     "nn",
@@ -3052,7 +3100,7 @@ const char* const STRINGS_DE[] = {
     "Buchtitel",
     "Vorschau",
     "Titel",
-    "Akku",
+    "Batterie",
     "System-Design",
     "Klassisch",
     "Lyra",
@@ -3115,7 +3163,7 @@ const char* const STRINGS_DE[] = {
     "\xA4"
     "nzen",
     "links/rechts: 1% hoch/runter: 10%",
-    "Zeit synchonisieren\xE2"
+    "Zeit synchronisieren\xE2"
     "\x80"
     "\xA6"
     "",
@@ -3137,10 +3185,10 @@ const char* const STRINGS_DE[] = {
     "  Seite %d, %.2f%% insgesamt",
     "  Seite %d/%d, %.2f%% insgesamt",
     "  Von: %s",
-    "Ext. Fortschritt \xC3"
+    "Externen Fortschritt \xC3"
     "\xBC"
-    "bern.",
-    "Lokalen Fortschritt hochl.",
+    "bernehmen",
+    "Lokalen Fortschritt hochladen",
     "Kein externer Fortschritt",
     "Aktuelle Position hochladen?",
     "Hochgeladen!",
@@ -3158,12 +3206,20 @@ const char* const STRINGS_DE[] = {
     "Always keeps WiFi on while awake.",
     "Schlafbilder validieren",
     "Device Name",
-    "Footnotes",
-    "No footnotes on this page",
-    "[link]",
-    "Take screenshot",
-    "Auto Turn Enabled: ",
-    "Auto Turn (Pages Per Minute)",
+    "Fu\xC3"
+    "\x9F"
+    "noten",
+    "Keine Fu\xC3"
+    "\x9F"
+    "noten auf dieser Seite",
+    "[Link]",
+    "Screenshot aufnehmen",
+    "Auto-Umbl\xC3"
+    "\xA4"
+    "ttern aktiv: ",
+    "Auto-Umbl\xC3"
+    "\xA4"
+    "ttern (Seiten/Min.)",
     "Transparent",
     "Notes",
     "No notes yet. Add one below.",
@@ -3698,6 +3754,10 @@ const char* const STRINGS_CS[] = {
     "n\xC3"
     "\xAD"
     " textu",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Kr\xC3"
     "\xA1"
     "tk\xC3"
@@ -5056,6 +5116,10 @@ const char* const STRINGS_PO[] = {
     "\xC3"
     "\xA3"
     "o de texto",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Clique curto bot\xC3"
     "\xA3"
     "o ligar",
@@ -8324,6 +8388,10 @@ const char* const STRINGS_RU[] = {
     "\xD0"
     "\xB0"
     "",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "\xD0"
     "\x9A"
     "\xD0"
@@ -14595,7 +14663,7 @@ const char* const STRINGS_SV[] = {
     "\xB6"
     "senord",
     "Skriv text",
-    "till",
+    "till ",
     "S\xC3"
     "\xB6"
     "ker Calibre\xE2"
@@ -14709,6 +14777,14 @@ const char* const STRINGS_SV[] = {
     "Textkantutj\xC3"
     "\xA4"
     "mning",
+    "Bilder",
+    "Visa",
+    "Platsh\xC3"
+    "\xA5"
+    "llare",
+    "D\xC3"
+    "\xB6"
+    "lj",
     "Kort str\xC3"
     "\xB6"
     "mknappsklick",
@@ -14778,11 +14854,7 @@ const char* const STRINGS_SV[] = {
     "V\xC3"
     "\xA4"
     "lj bakgrundsbild",
-    "Fabriks\xC3"
-    "\xA5"
-    "terst\xC3"
-    "\xA4"
-    "llning",
+    "Factory Reset",
     "Switch to TRMNL",
     "Rensa Eboksl\xC3"
     "\xA4"
@@ -15037,7 +15109,7 @@ const char* const STRINGS_SV[] = {
     "V\xC3"
     "\xA4"
     "lj ",
-    "Selected",
+    "Vald",
     "V\xC3"
     "\xA4"
     "xla",
@@ -15057,8 +15129,10 @@ const char* const STRINGS_SV[] = {
     "k igen",
     "Ja",
     "Nej",
-    "Show",
-    "Hide",
+    "Visa",
+    "D\xC3"
+    "\xB6"
+    "lj",
     "P\xC3"
     "\x85"
     "",
@@ -15084,16 +15158,14 @@ const char* const STRINGS_SV[] = {
     "Anpassa statusf\xC3"
     "\xA4"
     "lt",
-    "Kapitel sidantal",
-    "Bokens procentuella progress",
-    "F\xC3"
-    "\xB6"
-    "rloppsindikator",
-    "F\xC3"
-    "\xB6"
-    "rloppsindikatorns tjocklek",
+    "Antal sidor i kapitel",
+    "Procentuellt bokframsteg",
+    "Framstegsindikator",
+    "Tjocklek p\xC3"
+    "\xA5"
+    " framstegsindikator",
     "Tunn",
-    "Medel",
+    "Mellan",
     "Tjock",
     "Bok",
     "Kapitel",
@@ -15101,7 +15173,7 @@ const char* const STRINGS_SV[] = {
     "Boktitel",
     "F\xC3"
     "\xB6"
-    "rhandsvisning",
+    "rhandsgranskning",
     "Titel",
     "Batteri",
     "Anv\xC3"
@@ -15168,26 +15240,26 @@ const char* const STRINGS_SV[] = {
     "Redan tilldelad",
     "\xC3"
     "\x96"
-    "versta sidoknapp: \xC3"
+    "versta sidoknappen: \xC3"
     "\x85"
     "terst\xC3"
     "\xA4"
     "ll standardlayout",
-    "Nedre sidoknapp: Avbryt tilldelning",
+    "Nedre sidoknappen: Avbryt tilldelning",
     "Bak (F\xC3"
     "\xB6"
-    "rsta knapp)",
+    "rsta knappen)",
     "Bekr\xC3"
     "\xA4"
-    "fta (Andra knapp)",
+    "fta (Andra knappen)",
     "V\xC3"
     "\xA4"
-    "nster (Tredje knapp)",
+    "nster (Tredje knappen)",
     "H\xC3"
     "\xB6"
     "ger (Fj\xC3"
     "\xA4"
-    "rde knapp)",
+    "rde knappen)",
     "G\xC3"
     "\xA5"
     " till %",
@@ -15197,7 +15269,7 @@ const char* const STRINGS_SV[] = {
     "Synkroniseringsframsteg",
     "Radera bokcache",
     "Radera",
-    "Visa sida som QR",
+    "Visa sida som QR-kod",
     "Kapitel:",
     " sidor  |  ",
     "Bok:",
@@ -15277,12 +15349,24 @@ const char* const STRINGS_SV[] = {
     "\xA4"
     "gesbilder",
     "Device Name",
-    "Footnotes",
-    "No footnotes on this page",
-    "[link]",
-    "Take screenshot",
-    "Auto Turn Enabled: ",
-    "Auto Turn (Pages Per Minute)",
+    "Fotnoter",
+    "Inga fotnoter p\xC3"
+    "\xA5"
+    " den h\xC3"
+    "\xA4"
+    "r sidan",
+    "[l\xC3"
+    "\xA4"
+    "nk]",
+    "Ta en sk\xC3"
+    "\xA4"
+    "rmdump",
+    "Automatisk v\xC3"
+    "\xA4"
+    "ndning aktiverad: ",
+    "Automatisk v\xC3"
+    "\xA4"
+    "ndning (sidor per minut)",
     "Transparent",
     "Notes",
     "No notes yet. Add one below.",
@@ -15646,6 +15730,10 @@ const char* const STRINGS_RO[] = {
     "\xAE"
     "ntre paragrafe",
     "Anti-Aliasing text",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Ap\xC4"
     "\x83"
     "sare scurt\xC4"
@@ -16215,7 +16303,11 @@ const char* const STRINGS_RO[] = {
     "r\xC5"
     "\xA3"
     "i",
-    "Delete",
+    "\xC5"
+    "\x9E"
+    "terge\xC8"
+    "\x9B"
+    "i",
     "Afi\xC8"
     "\x99"
     "a\xC8"
@@ -16335,12 +16427,20 @@ const char* const STRINGS_RO[] = {
     "Always keeps WiFi on while awake.",
     "Validare imagini repaus",
     "Device Name",
-    "Footnotes",
-    "No footnotes on this page",
+    "Note de subsol",
+    "Nicio not\xC4"
+    "\x83"
+    " de subsol",
     "[link]",
-    "Take screenshot",
-    "Auto Turn Enabled: ",
-    "Auto Turn (Pages Per Minute)",
+    "Captur\xC4"
+    "\x83"
+    " ecran",
+    "R\xC4"
+    "\x83"
+    "sfoire automat\xC4"
+    "\x83"
+    ": ",
+    "Pagini pe minut",
     "Transparent",
     "Notes",
     "No notes yet. Add one below.",
@@ -16540,6 +16640,10 @@ const char* const STRINGS_CA[] = {
     "Antiali\xC3"
     "\xA0"
     "sing del text",
+    "Imatges",
+    "Mostrar",
+    "Text de mostra",
+    "Suprimir",
     "Clic curt del bot\xC3"
     "\xB3"
     " d'engegada",
@@ -16807,7 +16911,7 @@ const char* const STRINGS_CA[] = {
     "\xAB"
     " Desa",
     "Selecciona",
-    "Selected",
+    "Seleccionat",
     "Canvia",
     "Confirma",
     "Cancel\xC2"
@@ -16821,8 +16925,8 @@ const char* const STRINGS_CA[] = {
     "\xAD"
     "",
     "No",
-    "Show",
-    "Hide",
+    "Mostrar",
+    "Amagar",
     "ON",
     "OFF",
     "No establert",
@@ -16838,7 +16942,7 @@ const char* const STRINGS_CA[] = {
     "s",
     "Contrast",
     "Personalitza la barra d'estat",
-    "P\xC3"
+    "Comptador de p\xC3"
     "\xA0"
     "gines del cap\xC3"
     "\xAD"
@@ -16865,9 +16969,9 @@ const char* const STRINGS_CA[] = {
     "T\xC3"
     "\xAD"
     "tol del llibre",
-    "Previsualitzaci\xC3"
-    "\xB3"
-    "",
+    "Vista pr\xC3"
+    "\xA8"
+    "via",
     "T\xC3"
     "\xAD"
     "tol",
@@ -16941,8 +17045,8 @@ const char* const STRINGS_CA[] = {
     "Esborra la mem\xC3"
     "\xB2"
     "ria cau del llibre",
-    "Delete",
-    "Mostra p\xC3"
+    "Esborra",
+    "Mostra la p\xC3"
     "\xA0"
     "gina com a QR",
     "Cap\xC3"
@@ -17027,12 +17131,22 @@ const char* const STRINGS_CA[] = {
     "\xB2"
     "s",
     "Device Name",
-    "Footnotes",
-    "No footnotes on this page",
-    "[link]",
-    "Take screenshot",
-    "Auto Turn Enabled: ",
-    "Auto Turn (Pages Per Minute)",
+    "Notes al peu",
+    "No hi ha notes al peu en aquesta p\xC3"
+    "\xA0"
+    "gina",
+    "[enlla\xC3"
+    "\xA7"
+    "]",
+    "Fes una captura de pantalla",
+    "Passar autom\xC3"
+    "\xA0"
+    "tic activat: ",
+    "Passar autom\xC3"
+    "\xA0"
+    "tic (p\xC3"
+    "\xA0"
+    "gines per minut)",
     "Transparent",
     "Notes",
     "No notes yet. Add one below.",
@@ -20140,6 +20254,10 @@ const char* const STRINGS_UK[] = {
     "\xD1"
     "\x83"
     "",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "\xD0"
     "\x9A"
     "\xD0"
@@ -29972,6 +30090,10 @@ const char* const STRINGS_BE[] = {
     "\xD1"
     "\x83"
     "",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "\xD0"
     "\x9A"
     "\xD0"
@@ -36209,6 +36331,10 @@ const char* const STRINGS_IT[] = {
     "Nascondi % batteria",
     "Spaziatura extra paragrafi",
     "Anti-Aliasing testo",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Pressione breve tasto accensione",
     "Orientamento di lettura",
     "Layout pulsanti frontali",
@@ -36855,6 +36981,10 @@ const char* const STRINGS_PL[] = {
     "Wyg\xC5"
     "\x82"
     "adzanie tekstu",
+    "Obrazki",
+    "Pokazuj",
+    "Ramki",
+    "Pomijaj",
     "Kr\xC3"
     "\xB3"
     "tkie naci\xC5"
@@ -37482,7 +37612,9 @@ const char* const STRINGS_PL[] = {
     "\xC5"
     "\xBC"
     "ek",
-    "Delete",
+    "Usu\xC5"
+    "\x84"
+    "",
     "Poka\xC5"
     "\xBC"
     " stron\xC4"
@@ -37849,6 +37981,10 @@ const char* const STRINGS_FI[] = {
     "\xA4"
     "li",
     "Tekstin reunanpehmennys",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Lyhyt virtapainikkeen painallus",
     "Lukusuunta",
     "Etupainikkeiden asettelu",
@@ -38683,6 +38819,10 @@ const char* const STRINGS_DA[] = {
     "Skjul batteri %",
     "Ekstra afsnitsafstand",
     "Tekst Anti-Aliasing",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Kort tryk p\xC3"
     "\xA5"
     " t\xC3"
@@ -39193,6 +39333,10 @@ const char* const STRINGS_NL[] = {
     "Batterij % verbergen",
     "Extra regelafstand alinea",
     "Tekst Anti-Aliasing",
+    "Images",
+    "Display",
+    "Placeholder",
+    "Suppress",
     "Korte klik aan/uit-knop",
     "Leesstand",
     "Indeling knoppen voorzijde",
@@ -39482,6 +39626,1444 @@ const char* const STRINGS_NL[] = {
     "Press OK to save card",
 };
 
+const char* const STRINGS_TR[] = {
+    "CrossPoint",
+    "BA\xC5"
+    "\x9E"
+    "LATILIYOR",
+    "UYKU MODU",
+    "Uyku moduna ge\xC3"
+    "\xA7"
+    "iliyor",
+    "Dosyalara G\xC3"
+    "\xB6"
+    "z At",
+    "Dosya Transferi",
+    "Ayarlar",
+    "Calibre K\xC3"
+    "\xBC"
+    "t\xC3"
+    "\xBC"
+    "phanesi",
+    "Okumaya Devam Et",
+    "A\xC3"
+    "\xA7"
+    "\xC4"
+    "\xB1"
+    "k kitap yok",
+    "A\xC5"
+    "\x9F"
+    "a\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "dan okumaya ba\xC5"
+    "\x9F"
+    "lay\xC4"
+    "\xB1"
+    "n",
+    "Kitaplar",
+    "Dosya bulunamad\xC4"
+    "\xB1"
+    "",
+    "B\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m Se\xC3"
+    "\xA7"
+    "",
+    "B\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m yok",
+    "Kitab\xC4"
+    "\xB1"
+    "n sonu",
+    "Bo\xC5"
+    "\x9F"
+    " b\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m",
+    "Endeksleniyor",
+    "Bellek hatas\xC4"
+    "\xB1"
+    "",
+    "Sayfa y\xC3"
+    "\xBC"
+    "kleme hatas\xC4"
+    "\xB1"
+    "",
+    "Bo\xC5"
+    "\x9F"
+    " dosya",
+    "S\xC4"
+    "\xB1"
+    "n\xC4"
+    "\xB1"
+    "rlar\xC4"
+    "\xB1"
+    "n d\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "nda",
+    "Y\xC3"
+    "\xBC"
+    "kleniyor...",
+    "Y\xC3"
+    "\xBC"
+    "kleniyor",
+    "XTC y\xC3"
+    "\xBC"
+    "klenemedi",
+    "TXT y\xC3"
+    "\xBC"
+    "klenemedi",
+    "EPUB y\xC3"
+    "\xBC"
+    "klenemedi",
+    "SD card hatas\xC4"
+    "\xB1"
+    "",
+    "WiFi A\xC4"
+    "\x9F"
+    "lar\xC4"
+    "\xB1"
+    "",
+    "A\xC4"
+    "\x9F"
+    " bulunamad\xC4"
+    "\xB1"
+    "",
+    "%zu a\xC4"
+    "\x9F"
+    " bulundu",
+    "Tar\xC4"
+    "\xB1"
+    "yor...",
+    "Ba\xC4"
+    "\x9F"
+    "lan\xC4"
+    "\xB1"
+    "yor...",
+    "Ba\xC4"
+    "\x9F"
+    "land\xC4"
+    "\xB1"
+    "!",
+    "Ba\xC4"
+    "\x9F"
+    "lant\xC4"
+    "\xB1"
+    " Ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z",
+    "Ba\xC4"
+    "\x9F"
+    "lant\xC4"
+    "\xB1"
+    " zaman a\xC5"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "m\xC4"
+    "\xB1"
+    "",
+    "A\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    " Unut?",
+    "\xC5"
+    "\x9E"
+    "ifre kaydedilsin mi?",
+    "Kay\xC4"
+    "\xB1"
+    "tl\xC4"
+    "\xB1"
+    " \xC5"
+    "\x9F"
+    "ifre silinsin mi?",
+    "Tekrar taramak i\xC3"
+    "\xA7"
+    "in OK'e bas\xC4"
+    "\xB1"
+    "n",
+    "Devam etmek i\xC3"
+    "\xA7"
+    "in bir tu\xC5"
+    "\x9F"
+    "a bas\xC4"
+    "\xB1"
+    "n",
+    "SOL/SA\xC4"
+    "\x9E"
+    ": Se\xC3"
+    "\xA7"
+    " | OK: Onayla",
+    "Nas\xC4"
+    "\xB1"
+    "l ba\xC4"
+    "\x9F"
+    "lanmak istersiniz?",
+    "Bir A\xC4"
+    "\x9F"
+    "a Kat\xC4"
+    "\xB1"
+    "l",
+    "Eri\xC5"
+    "\x9F"
+    "im Noktas\xC4"
+    "\xB1"
+    " Olu\xC5"
+    "\x9F"
+    "tur",
+    "Mevcut bir WiFi a\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "na ba\xC4"
+    "\x9F"
+    "lan",
+    "Ba\xC5"
+    "\x9F"
+    "kalar\xC4"
+    "\xB1"
+    "n\xC4"
+    "\xB1"
+    "n kat\xC4"
+    "\xB1"
+    "labilece\xC4"
+    "\x9F"
+    "i a\xC4"
+    "\x9F"
+    " olu\xC5"
+    "\x9F"
+    "tur",
+    "Eri\xC5"
+    "\x9F"
+    "im Noktas\xC4"
+    "\xB1"
+    " Ba\xC5"
+    "\x9F"
+    "lat\xC4"
+    "\xB1"
+    "l\xC4"
+    "\xB1"
+    "yor...",
+    "Eri\xC5"
+    "\x9F"
+    "im Noktas\xC4"
+    "\xB1"
+    " Modu",
+    "Cihaz\xC4"
+    "\xB1"
+    "n\xC4"
+    "\xB1"
+    "z\xC4"
+    "\xB1"
+    " bu WiFi a\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "na ba\xC4"
+    "\x9F"
+    "lay\xC4"
+    "\xB1"
+    "n",
+    "Taray\xC4"
+    "\xB1"
+    "c\xC4"
+    "\xB1"
+    "n\xC4"
+    "\xB1"
+    "zda bu adresi a\xC3"
+    "\xA7"
+    "\xC4"
+    "\xB1"
+    "n",
+    "veya http://",
+    "veya telefonunuzla QR kodu taray\xC4"
+    "\xB1"
+    "n:",
+    "Calibre Kablosuz",
+    "Calibre Web Adresi",
+    "Kablosuz Cihaz Olarak Ba\xC4"
+    "\x9F"
+    "lan",
+    "* = \xC5"
+    "\x9E"
+    "ifreli | + = Kay\xC4"
+    "\xB1"
+    "tl\xC4"
+    "\xB1"
+    "",
+    "MAC adresi:",
+    "WiFi kontrol ediliyor...",
+    "WiFi \xC5"
+    "\x9E"
+    "ifresini Girin",
+    "Metin Girin",
+    "A\xC4"
+    "\x9F"
+    ": ",
+    "Calibre aran\xC4"
+    "\xB1"
+    "yor...",
+    "Ba\xC4"
+    "\x9F"
+    "lan\xC4"
+    "\xB1"
+    "l\xC4"
+    "\xB1"
+    "yor: ",
+    "Ba\xC4"
+    "\x9F"
+    "land\xC4"
+    "\xB1"
+    ": ",
+    "Komutlar bekleniyor...",
+    "(Ba\xC4"
+    "\x9F"
+    "lant\xC4"
+    "\xB1"
+    " ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z, tekrar deneniyor)",
+    "Calibre ba\xC4"
+    "\x9F"
+    "lant\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    " kesildi",
+    "Transfer bekleniyor...",
+    "Transfer ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z olursa, Calibre\nSmartDevice eklenti ayarlar\xC4"
+    "\xB1"
+    "ndan\n'Ignore free space'i etkinle\xC5"
+    "\x9F"
+    "tirin.",
+    "Al\xC4"
+    "\xB1"
+    "n\xC4"
+    "\xB1"
+    "yor: ",
+    "Al\xC4"
+    "\xB1"
+    "nd\xC4"
+    "\xB1"
+    ": ",
+    "Devam\xC4"
+    "\xB1"
+    " bekleniyor...",
+    "Dosya olu\xC5"
+    "\x9F"
+    "turulamad\xC4"
+    "\xB1"
+    "",
+    "\xC5"
+    "\x9E"
+    "ifre gerekli",
+    "Transfer kesintiye u\xC4"
+    "\x9F"
+    "rad\xC4"
+    "\xB1"
+    "",
+    "1) CrossPoint Reader eklentisini kurun",
+    "2) Ayn\xC4"
+    "\xB1"
+    " WiFi a\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "nda olun",
+    "3) Calibre'de: \"Cihaza g\xC3"
+    "\xB6"
+    "nder\"",
+    "\"G\xC3"
+    "\xB6"
+    "nderim s\xC4"
+    "\xB1"
+    "ras\xC4"
+    "\xB1"
+    "nda bu ekran\xC4"
+    "\xB1"
+    " a\xC3"
+    "\xA7"
+    "\xC4"
+    "\xB1"
+    "k tutun\"",
+    "Ekran",
+    "Okuyucu",
+    "Kontroller",
+    "Sistem",
+    "Uyku Ekran\xC4"
+    "\xB1"
+    "",
+    "Uyku Ekran\xC4"
+    "\xB1"
+    " Kapak Modu",
+    "Durum \xC3"
+    "\x87"
+    "ubu\xC4"
+    "\x9F"
+    "u",
+    "Pil Y\xC3"
+    "\xBC"
+    "zdesini Gizle",
+    "Ekstra Paragraf Bo\xC5"
+    "\x9F"
+    "lu\xC4"
+    "\x9F"
+    "u",
+    "Metin Yumu\xC5"
+    "\x9F"
+    "atma (AA)",
+    "G\xC3"
+    "\xB6"
+    "rseller",
+    "G\xC3"
+    "\xB6"
+    "ster",
+    "Yer Tutucu",
+    "Bast\xC4"
+    "\xB1"
+    "r",
+    "K\xC4"
+    "\xB1"
+    "sa G\xC3"
+    "\xBC"
+    "\xC3"
+    "\xA7"
+    " Tu\xC5"
+    "\x9F"
+    "u T\xC4"
+    "\xB1"
+    "klamas\xC4"
+    "\xB1"
+    "",
+    "Okuma Y\xC3"
+    "\xB6"
+    "n\xC3"
+    "\xBC"
+    "",
+    "\xC3"
+    "\x96"
+    "n Tu\xC5"
+    "\x9F"
+    " Dizilimi",
+    "Yan Tu\xC5"
+    "\x9F"
+    " Dizilimi (okuyucu)",
+    "Uzun Bas\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "la B\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m Atla",
+    "Okuyucu Yaz\xC4"
+    "\xB1"
+    " Tipi Ailesi",
+    "Harici Okuyucu Yaz\xC4"
+    "\xB1"
+    " Tipi",
+    "Okuyucu Yaz\xC4"
+    "\xB1"
+    " Tipi",
+    "Aray\xC3"
+    "\xBC"
+    "z Yaz\xC4"
+    "\xB1"
+    " Tipi",
+    "Aray\xC3"
+    "\xBC"
+    "z Yaz\xC4"
+    "\xB1"
+    " Boyutu",
+    "Okuyucu Sat\xC4"
+    "\xB1"
+    "r Aral\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "",
+    "ASCII Harf Aral\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "",
+    "ASCII Rakam Aral\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "",
+    "CJK Aral\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "",
+    "Renk Modu",
+    "Okuyucu Ekran Kenar Bo\xC5"
+    "\x9F"
+    "lu\xC4"
+    "\x9F"
+    "u",
+    "Okuyucu Paragraf Hizalamas\xC4"
+    "\xB1"
+    "",
+    "Hecelerden Ay\xC4"
+    "\xB1"
+    "rma",
+    "Uykuya Ge\xC3"
+    "\xA7"
+    "me S\xC3"
+    "\xBC"
+    "resi",
+    "Yenileme S\xC4"
+    "\xB1"
+    "kl\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "",
+    "Calibre Ayarlar\xC4"
+    "\xB1"
+    "",
+    "KOReader Senkronizasyonu",
+    "G\xC3"
+    "\xBC"
+    "ncellemeleri denetle",
+    "Dil",
+    "Duvar Ka\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "d\xC4"
+    "\xB1"
+    " Se\xC3"
+    "\xA7"
+    "",
+    "Factory Reset",
+    "Switch to TRMNL",
+    "Okuma \xC3"
+    "\x96"
+    "nbelle\xC4"
+    "\x9F"
+    "ini Temizle",
+    "Calibre",
+    "Kullan\xC4"
+    "\xB1"
+    "c\xC4"
+    "\xB1"
+    " Ad\xC4"
+    "\xB1"
+    "",
+    "\xC5"
+    "\x9E"
+    "ifre",
+    "Senkronizasyon Sunucu Adresi",
+    "Belge E\xC5"
+    "\x9F"
+    "le\xC5"
+    "\x9F"
+    "tirme",
+    "Kimlik Do\xC4"
+    "\x9F"
+    "rula",
+    "KOReader Kullan\xC4"
+    "\xB1"
+    "c\xC4"
+    "\xB1"
+    " Ad\xC4"
+    "\xB1"
+    "",
+    "KOReader \xC5"
+    "\x9E"
+    "ifresi",
+    "Dosya Ad\xC4"
+    "\xB1"
+    "",
+    "\xC4"
+    "\xB0"
+    "kili",
+    "\xC3"
+    "\x96"
+    "nce kimlik bilgilerini ayarlay\xC4"
+    "\xB1"
+    "n",
+    "WiFi ba\xC4"
+    "\x9F"
+    "lant\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    " ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z",
+    "Kimlik do\xC4"
+    "\x9F"
+    "rulan\xC4"
+    "\xB1"
+    "yor...",
+    "Kimlik do\xC4"
+    "\x9F"
+    "rulama ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "l\xC4"
+    "\xB1"
+    "!",
+    "KOReader Do\xC4"
+    "\x9F"
+    "rulamas\xC4"
+    "\xB1"
+    "",
+    "KOReader senkronizasyonu haz\xC4"
+    "\xB1"
+    "r",
+    "Kimlik Do\xC4"
+    "\x9F"
+    "rulama Ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z",
+    "Tamamland\xC4"
+    "\xB1"
+    "",
+    "Bu i\xC5"
+    "\x9F"
+    "lem t\xC3"
+    "\xBC"
+    "m \xC3"
+    "\xB6"
+    "nbelle\xC4"
+    "\x9F"
+    "e al\xC4"
+    "\xB1"
+    "nm\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    " verileri siler.",
+    "T\xC3"
+    "\xBC"
+    "m okuma ilerlemesi kaybolacak!",
+    "Kitaplar\xC4"
+    "\xB1"
+    "n tekrar a\xC3"
+    "\xA7"
+    "\xC4"
+    "\xB1"
+    "ld\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "nda yeniden",
+    "endekslenmesi gerekecek.",
+    "\xC3"
+    "\x96"
+    "nbellek temizleniyor...",
+    "\xC3"
+    "\x96"
+    "nbellek Temizlendi",
+    "\xC3"
+    "\xB6"
+    "\xC4"
+    "\x9F"
+    "e kald\xC4"
+    "\xB1"
+    "r\xC4"
+    "\xB1"
+    "ld\xC4"
+    "\xB1"
+    "",
+    "ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z",
+    "\xC3"
+    "\x96"
+    "nbellek temizlenemedi",
+    "Detaylar i\xC3"
+    "\xA7"
+    "in seri \xC3"
+    "\xA7"
+    "\xC4"
+    "\xB1"
+    "kt\xC4"
+    "\xB1"
+    "ya bak\xC4"
+    "\xB1"
+    "n",
+    "Koyu",
+    "A\xC3"
+    "\xA7"
+    "\xC4"
+    "\xB1"
+    "k",
+    "\xC3"
+    "\x96"
+    "zel",
+    "Image Source",
+    "Pokedex",
+    "All",
+    "Kapak",
+    "Yok",
+    "S\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "d\xC4"
+    "\xB1"
+    "r",
+    "K\xC4"
+    "\xB1"
+    "rp",
+    "\xC4"
+    "\xB0"
+    "lerleme Yok",
+    "Tam",
+    "Asla",
+    "Okuyucuda",
+    "Her Zaman",
+    "Yoksay",
+    "Uyku",
+    "Sayfa \xC3"
+    "\x87"
+    "evirme",
+    "Dikey",
+    "Yatay (Saat Y\xC3"
+    "\xB6"
+    "n\xC3"
+    "\xBC"
+    ")",
+    "Ters",
+    "Yatay (Saat Y\xC3"
+    "\xB6"
+    "n\xC3"
+    "\xBC"
+    " Tersi)",
+    "Geri, Onayla, Sol, Sa\xC4"
+    "\x9F"
+    "",
+    "Sol, Sa\xC4"
+    "\x9F"
+    ", Geri, Onayla",
+    "Sol, Geri, Onayla, Sa\xC4"
+    "\x9F"
+    "",
+    "\xC3"
+    "\x96"
+    "nceki/Sonraki",
+    "Sonraki/\xC3"
+    "\x96"
+    "nceki",
+    "Bookerly",
+    "Noto Sans",
+    "Open Dyslexic",
+    "K\xC3"
+    "\xBC"
+    "\xC3"
+    "\xA7"
+    "\xC3"
+    "\xBC"
+    "k",
+    "Orta",
+    "B\xC3"
+    "\xBC"
+    "y\xC3"
+    "\xBC"
+    "k",
+    "\xC3"
+    "\x87"
+    "ok B\xC3"
+    "\xBC"
+    "y\xC3"
+    "\xBC"
+    "k",
+    "Dar",
+    "Normal",
+    "Geni\xC5"
+    "\x9F"
+    "",
+    "\xC4"
+    "\xB0"
+    "ki Yana Yasla",
+    "Sola Yasla",
+    "Ortala",
+    "Sa\xC4"
+    "\x9F"
+    "a Yasla",
+    "1 dak",
+    "5 dak",
+    "10 dak",
+    "15 dak",
+    "30 dak",
+    "1 sayfa",
+    "5 sayfa",
+    "10 sayfa",
+    "15 sayfa",
+    "30 sayfa",
+    "G\xC3"
+    "\xBC"
+    "ncelle",
+    "G\xC3"
+    "\xBC"
+    "ncelleme denetleniyor...",
+    "Yeni g\xC3"
+    "\xBC"
+    "ncelleme mevcut!",
+    "Mevcut S\xC3"
+    "\xBC"
+    "r\xC3"
+    "\xBC"
+    "m: ",
+    "Yeni S\xC3"
+    "\xBC"
+    "r\xC3"
+    "\xBC"
+    "m: ",
+    "G\xC3"
+    "\xBC"
+    "ncelleniyor...",
+    "G\xC3"
+    "\xBC"
+    "ncelleme yok",
+    "G\xC3"
+    "\xBC"
+    "ncelleme ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z",
+    "G\xC3"
+    "\xBC"
+    "ncelleme tamamland\xC4"
+    "\xB1"
+    "",
+    "A\xC3"
+    "\xA7"
+    "mak i\xC3"
+    "\xA7"
+    "in g\xC3"
+    "\xBC"
+    "\xC3"
+    "\xA7"
+    " tu\xC5"
+    "\x9F"
+    "una bas\xC4"
+    "\xB1"
+    "l\xC4"
+    "\xB1"
+    " tutun",
+    "Harici Yaz\xC4"
+    "\xB1"
+    " Tipi",
+    "Yerle\xC5"
+    "\x9F"
+    "ik (Devre D\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    ")",
+    "Girdi bulunamad\xC4"
+    "\xB1"
+    "",
+    "\xC4"
+    "\xB0"
+    "ndiriliyor...",
+    "\xC4"
+    "\xB0"
+    "ndirme ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z",
+    "Hata:",
+    "\xC4"
+    "\xB0"
+    "simsiz",
+    "Sunucu adresi ayarlanmam\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "",
+    "Ak\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    " al\xC4"
+    "\xB1"
+    "namad\xC4"
+    "\xB1"
+    "",
+    "Ak\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    " ayr\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "t\xC4"
+    "\xB1"
+    "r\xC4"
+    "\xB1"
+    "lamad\xC4"
+    "\xB1"
+    "",
+    "A\xC4"
+    "\x9F"
+    ": ",
+    "IP Adresi: ",
+    "veya WiFi'ye ba\xC4"
+    "\x9F"
+    "lanmak i\xC3"
+    "\xA7"
+    "in QR kodu taray\xC4"
+    "\xB1"
+    "n.",
+    "Hata: Genel hata",
+    "Hata: A\xC4"
+    "\x9F"
+    " bulunamad\xC4"
+    "\xB1"
+    "",
+    "Hata: Ba\xC4"
+    "\x9F"
+    "lant\xC4"
+    "\xB1"
+    " zaman a\xC5"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "m\xC4"
+    "\xB1"
+    "",
+    "SD kart",
+    "\xC2"
+    "\xAB"
+    " Geri",
+    "\xC2"
+    "\xAB"
+    " \xC3"
+    "\x87"
+    "\xC4"
+    "\xB1"
+    "k\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "",
+    "\xC2"
+    "\xAB"
+    " Ana Sayfa",
+    "\xC2"
+    "\xAB"
+    " Kaydet",
+    "Se\xC3"
+    "\xA7"
+    "",
+    "Se\xC3"
+    "\xA7"
+    "ili",
+    "De\xC4"
+    "\x9F"
+    "i\xC5"
+    "\x9F"
+    "tir",
+    "Onayla",
+    "\xC4"
+    "\xB0"
+    "ptal",
+    "Ba\xC4"
+    "\x9F"
+    "lan",
+    "A\xC3"
+    "\xA7"
+    "",
+    "\xC4"
+    "\xB0"
+    "ndir",
+    "Tekrar Dene",
+    "Evet",
+    "Hay\xC4"
+    "\xB1"
+    "r",
+    "G\xC3"
+    "\xB6"
+    "ster",
+    "Gizle",
+    "A\xC3"
+    "\x87"
+    "IK",
+    "KAPALI",
+    "Ayarlanmad\xC4"
+    "\xB1"
+    "",
+    "Sol",
+    "Sa\xC4"
+    "\x9F"
+    "",
+    "Yukar\xC4"
+    "\xB1"
+    "",
+    "A\xC5"
+    "\x9F"
+    "a\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "",
+    "B\xC3"
+    "\x9C"
+    "Y\xC3"
+    "\x9C"
+    "K",
+    "k\xC3"
+    "\xBC"
+    "\xC3"
+    "\xA7"
+    "\xC3"
+    "\xBC"
+    "k",
+    "Tamam",
+    "Uyku Ekran\xC4"
+    "\xB1"
+    " Kapak Filtresi",
+    "Kontrast",
+    "Durum \xC3"
+    "\x87"
+    "ubu\xC4"
+    "\x9F"
+    "unu \xC3"
+    "\x96"
+    "zelle\xC5"
+    "\x9F"
+    "tir",
+    "B\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m Sayfa Say\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "",
+    "Kitap \xC4"
+    "\xB0"
+    "lerleme Y\xC3"
+    "\xBC"
+    "zdesi",
+    "\xC4"
+    "\xB0"
+    "lerleme \xC3"
+    "\x87"
+    "ubu\xC4"
+    "\x9F"
+    "u",
+    "\xC4"
+    "\xB0"
+    "lerleme \xC3"
+    "\x87"
+    "ubu\xC4"
+    "\x9F"
+    "u Kal\xC4"
+    "\xB1"
+    "nl\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "",
+    "\xC4"
+    "\xB0"
+    "nce",
+    "Orta",
+    "Kal\xC4"
+    "\xB1"
+    "n",
+    "Kitap",
+    "B\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m",
+    "B\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m 21",
+    "Kitap Ba\xC5"
+    "\x9F"
+    "l\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "",
+    "\xC3"
+    "\x96"
+    "nizleme",
+    "Ba\xC5"
+    "\x9F"
+    "l\xC4"
+    "\xB1"
+    "k",
+    "Pil",
+    "Aray\xC3"
+    "\xBC"
+    "z Temas\xC4"
+    "\xB1"
+    "",
+    "Klasik",
+    "Lyra",
+    "Lyra Geni\xC5"
+    "\x9F"
+    "letilmi\xC5"
+    "\x9F"
+    "",
+    "Fork Drift",
+    "G\xC3"
+    "\xBC"
+    "ne\xC5"
+    "\x9F"
+    " I\xC5"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    "\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    " Solma D\xC3"
+    "\xBC"
+    "zeltmesi",
+    "\xC3"
+    "\x96"
+    "n Tu\xC5"
+    "\x9F"
+    "lar\xC4"
+    "\xB1"
+    " Yeniden Ata",
+    "OPDS Taray\xC4"
+    "\xB1"
+    "c\xC4"
+    "\xB1"
+    "",
+    "Kapak + \xC3"
+    "\x96"
+    "zel",
+    "Son Okunanlar",
+    "Son Kitaplar",
+    "Son okunan kitap yok",
+    "Calibre kablosuz cihaz transferini kullan",
+    "A\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    " unut ve kay\xC4"
+    "\xB1"
+    "tl\xC4"
+    "\xB1"
+    " \xC5"
+    "\x9F"
+    "ifreyi sil?",
+    "Unut",
+    "Calibre Ba\xC5"
+    "\x9F"
+    "lat\xC4"
+    "\xB1"
+    "l\xC4"
+    "\xB1"
+    "yor...",
+    "Kurulum",
+    "Durum",
+    "Temizle",
+    "Varsay\xC4"
+    "\xB1"
+    "lan",
+    "Her rol i\xC3"
+    "\xA7"
+    "in bir \xC3"
+    "\xB6"
+    "n tu\xC5"
+    "\x9F"
+    "a bas\xC4"
+    "\xB1"
+    "n",
+    "Atanmam\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "",
+    "Zaten atanm\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "",
+    "Yan tu\xC5"
+    "\x9F"
+    " Yukar\xC4"
+    "\xB1"
+    ": Varsay\xC4"
+    "\xB1"
+    "lan dizilime d\xC3"
+    "\xB6"
+    "n",
+    "Yan tu\xC5"
+    "\x9F"
+    " A\xC5"
+    "\x9F"
+    "a\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    ": Atamay\xC4"
+    "\xB1"
+    " iptal et",
+    "Geri (1. tu\xC5"
+    "\x9F"
+    ")",
+    "Onayla (2. tu\xC5"
+    "\x9F"
+    ")",
+    "Sol (3. tu\xC5"
+    "\x9F"
+    ")",
+    "Sa\xC4"
+    "\x9F"
+    " (4. tu\xC5"
+    "\x9F"
+    ")",
+    "%'ye git",
+    "Ana Sayfaya Git",
+    "Okuma \xC4"
+    "\xB0"
+    "lerlemesini Senkronize Et",
+    "Kitap \xC3"
+    "\x96"
+    "nbelle\xC4"
+    "\x9F"
+    "ini Sil",
+    "Sil",
+    "Sayfay\xC4"
+    "\xB1"
+    " QR olarak g\xC3"
+    "\xB6"
+    "ster",
+    "B\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m: ",
+    " sayfa  |  ",
+    "Kitap: ",
+    "shift",
+    "\xC3"
+    "\x9C"
+    "ST",
+    "K\xC4"
+    "\xB0"
+    "L\xC4"
+    "\xB0"
+    "T",
+    "Calibre i\xC3"
+    "\xA7"
+    "in URL'nize /opds ekleyin",
+    "Sol/Sa\xC4"
+    "\x9F"
+    ": %1  Yukar\xC4"
+    "\xB1"
+    "/A\xC5"
+    "\x9F"
+    "a\xC4"
+    "\x9F"
+    "\xC4"
+    "\xB1"
+    ": %10",
+    "Zaman senkronize ediliyor...",
+    "Belge \xC3"
+    "\xB6"
+    "zeti hesaplan\xC4"
+    "\xB1"
+    "yor...",
+    "Belge \xC3"
+    "\xB6"
+    "zeti hesaplanamad\xC4"
+    "\xB1"
+    "",
+    "Uzak ilerleme al\xC4"
+    "\xB1"
+    "n\xC4"
+    "\xB1"
+    "yor...",
+    "\xC4"
+    "\xB0"
+    "lerleme y\xC3"
+    "\xBC"
+    "kleniyor...",
+    "Kimlik bilgisi ayarlanmam\xC4"
+    "\xB1"
+    "\xC5"
+    "\x9F"
+    "",
+    "Ayarlar'da KOReader hesab\xC4"
+    "\xB1"
+    "n\xC4"
+    "\xB1"
+    " kurun",
+    "\xC4"
+    "\xB0"
+    "lerleme bulundu!",
+    "Uzak:",
+    "Yerel:",
+    "Sayfa %d, genel %.2f%%",
+    "Sayfa %d/%d, genel %.2f%%",
+    "  \xC5"
+    "\x9E"
+    "uradan: %s",
+    "Uzak ilerlemeyi uygula",
+    "Yerel ilerlemeyi y\xC3"
+    "\xBC"
+    "kle",
+    "Uzak ilerleme bulunamad\xC4"
+    "\xB1"
+    "",
+    "Mevcut konumu y\xC3"
+    "\xBC"
+    "kle?",
+    "\xC4"
+    "\xB0"
+    "lerleme y\xC3"
+    "\xBC"
+    "klendi!",
+    "Senkronizasyon ba\xC5"
+    "\x9F"
+    "ar\xC4"
+    "\xB1"
+    "s\xC4"
+    "\xB1"
+    "z",
+    "B\xC3"
+    "\xB6"
+    "l\xC3"
+    "\xBC"
+    "m ",
+    "Y\xC3"
+    "\xBC"
+    "kle",
+    "Kitab\xC4"
+    "\xB1"
+    "n Stili",
+    "G\xC3"
+    "\xB6"
+    "m\xC3"
+    "\xBC"
+    "l\xC3"
+    "\xBC"
+    " Stil",
+    "OPDS Sunucu Adresi",
+    "Dark Mode",
+    "Background Server",
+    "Background Server on Charge",
+    "Only on Charge",
+    "Much More Battery Use",
+    "Always keeps WiFi on while awake.",
+    "Validate Sleep Images",
+    "Device Name",
+    "Dipnotlar",
+    "Bu sayfada dipnot yok",
+    "[ba\xC4"
+    "\x9F"
+    "lant\xC4"
+    "\xB1"
+    "]",
+    "Ekran g\xC3"
+    "\xB6"
+    "r\xC3"
+    "\xBC"
+    "nt\xC3"
+    "\xBC"
+    "s\xC3"
+    "\xBC"
+    " al",
+    "Otomatik \xC3"
+    "\x87"
+    "evirme Etkin: ",
+    "Otomatik \xC3"
+    "\x87"
+    "evirme (Dakikada Sayfa)",
+    "Transparent",
+    "Notes",
+    "No notes yet. Add one below.",
+    "+ Add Note",
+    "WiFi Auto-Connect",
+    "Add to Anki",
+    "Anki Cards",
+    "No cards found.",
+    "Add cards from the reader menu.",
+    "FRONT",
+    "BACK",
+    "Source: %s",
+    "Saved!",
+    "Press OK to save card",
+};
+
 }  // namespace i18n_strings
 
 // Compile-time validation of array sizes
@@ -39536,3 +41118,6 @@ static_assert(sizeof(i18n_strings::STRINGS_DA) / sizeof(i18n_strings::STRINGS_DA
 static_assert(sizeof(i18n_strings::STRINGS_NL) / sizeof(i18n_strings::STRINGS_NL[0]) ==
                   static_cast<size_t>(StrId::_COUNT),
               "STRINGS_NL size mismatch");
+static_assert(sizeof(i18n_strings::STRINGS_TR) / sizeof(i18n_strings::STRINGS_TR[0]) ==
+                  static_cast<size_t>(StrId::_COUNT),
+              "STRINGS_TR size mismatch");

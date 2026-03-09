@@ -9,6 +9,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include "SpiBusMutex.h"
 #include "WifiCredentialStore.h"
 #include "core/features/FeatureCatalog.h"
 #include "core/registries/WebRouteRegistry.h"
@@ -79,7 +80,15 @@ void mountWifiRoutes(WebServer* server) {
       return;
     }
     WIFI_STORE.addCredential(ssid.c_str(), password.c_str());
-    WIFI_STORE.saveToFile();
+    bool saved = false;
+    {
+      SpiBusMutex::Guard guard;
+      saved = WIFI_STORE.saveToFile();
+    }
+    if (!saved) {
+      server->send(500, "text/plain", "Failed to save WiFi credentials");
+      return;
+    }
     server->send(200, "text/plain", "WiFi credentials saved");
   });
 
@@ -93,7 +102,15 @@ void mountWifiRoutes(WebServer* server) {
     String ssid = doc["ssid"];
     if (ssid.length() > 0) {
       WIFI_STORE.removeCredential(ssid.c_str());
-      WIFI_STORE.saveToFile();
+      bool saved = false;
+      {
+        SpiBusMutex::Guard guard;
+        saved = WIFI_STORE.saveToFile();
+      }
+      if (!saved) {
+        server->send(500, "text/plain", "Failed to remove WiFi credentials");
+        return;
+      }
       server->send(200, "text/plain", "WiFi credentials removed");
     } else {
       server->send(400, "text/plain", "SSID required");

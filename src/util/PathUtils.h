@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include <cstddef>
+
 /**
  * Path validation utilities for SD card file operations.
  * Protects against path traversal attacks and normalizes paths.
@@ -16,6 +18,7 @@ namespace PathUtils {
  * @return true if path contains traversal attempts (UNSAFE)
  */
 bool containsTraversal(const String& path);
+bool containsTraversal(const char* path);
 
 /**
  * Validate that a path is safe for SD card operations.
@@ -27,6 +30,7 @@ bool containsTraversal(const String& path);
  * @return true if path is valid and safe
  */
 bool isValidSdPath(const String& path);
+bool isValidSdPath(const char* path);
 
 /**
  * Normalize a path for consistent handling.
@@ -38,6 +42,7 @@ bool isValidSdPath(const String& path);
  * @return Normalized path (empty input becomes "/")
  */
 String normalizePath(const String& path);
+bool normalizePathInPlace(char* path, size_t pathSize);
 
 /**
  * Decode URL-encoded path fragments (e.g. %2F, %20).
@@ -47,6 +52,7 @@ String normalizePath(const String& path);
  * @return Decoded path
  */
 String urlDecode(const String& path);
+bool urlDecode(const char* path, char* out, size_t outSize);
 
 /**
  * Validate a filename (no path separators or traversal).
@@ -56,6 +62,7 @@ String urlDecode(const String& path);
  * @return true if filename is valid
  */
 bool isValidFilename(const String& filename);
+bool isValidFilename(const char* filename);
 
 /**
  * Check if a single path component (filename or directory name) is a
@@ -66,6 +73,7 @@ bool isValidFilename(const String& filename);
  * @return true if the component should be blocked from web access
  */
 bool isProtectedWebComponent(const String& component);
+bool isProtectedWebComponent(const char* component);
 
 /**
  * Check if any component of a path is a protected web item.
@@ -76,5 +84,6 @@ bool isProtectedWebComponent(const String& component);
  * @return true if any component is protected
  */
 bool pathContainsProtectedItem(const String& path);
+bool pathContainsProtectedItem(const char* path);
 
 }  // namespace PathUtils

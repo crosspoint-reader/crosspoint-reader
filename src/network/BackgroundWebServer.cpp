@@ -14,6 +14,7 @@
 #include "CrossPointWebServer.h"
 #include "FeatureFlags.h"
 #include "Logging.h"
+#include "core/features/FeatureModules.h"
 #include "util/NetworkNames.h"
 #include "util/TimeSync.h"
 
@@ -215,10 +216,9 @@ bool BackgroundWebServer::hasSessionExpired() const {
 }
 
 void BackgroundWebServer::loop(const bool usbConnected, const bool allowRun) {
-#if !ENABLE_BACKGROUND_SERVER
-  // Background server feature disabled at compile time
-  return;
-#endif
+  if (!core::FeatureModules::hasCapability(core::Capability::BackgroundServer)) {
+    return;
+  }
 
   usbConnectedCached = usbConnected;
   allowRunCached = allowRun;

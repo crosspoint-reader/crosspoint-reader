@@ -45,10 +45,11 @@ std::string trimEntryText(const std::string& text) {
 }  // namespace
 
 TodoActivity::TodoActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
-                           std::string dateTitle, const std::function<void()>& onBack)
+                           std::string dateTitle, void* onBackCtx, void (*onBack)(void*))
     : ActivityWithSubactivity("Todo", renderer, mappedInput),
       filePath(std::move(filePath)),
       dateTitle(std::move(dateTitle)),
+      onBackCtx(onBackCtx),
       onBack(onBack) {}
 
 void TodoActivity::onEnter() {
@@ -79,7 +80,7 @@ void TodoActivity::loop() {
 
   // Handle Back
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onBack();
+    if (onBack != nullptr) onBack(onBackCtx);
     return;
   }
 
