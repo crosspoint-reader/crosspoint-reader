@@ -20,8 +20,9 @@ class MarkdownReaderActivity final : public ActivityWithSubactivity {
   std::atomic<bool> astReady{false};  // AST parsed for navigation
   int savedPage = 0;
   bool hasSavedPage = false;
-  const std::function<void()> onGoBack;
-  const std::function<void()> onGoHome;
+  void* callbackCtx;
+  void (*onBackToLibraryFn)(void* ctx, const std::string& path);
+  void (*onBackHomeFn)(void* ctx);
 
   void render(Activity::RenderLock&& lock) override;
   void renderScreen();
@@ -43,12 +44,14 @@ class MarkdownReaderActivity final : public ActivityWithSubactivity {
 
  public:
   explicit MarkdownReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                  std::unique_ptr<Markdown> markdown, const std::function<void()>& onGoBack,
-                                  const std::function<void()>& onGoHome)
+                                  std::unique_ptr<Markdown> markdown, void* callbackCtx,
+                                  void (*onBackToLibrary)(void* ctx, const std::string& path),
+                                  void (*onBackHome)(void* ctx))
       : ActivityWithSubactivity("MarkdownReader", renderer, mappedInput),
         markdown(std::move(markdown)),
-        onGoBack(onGoBack),
-        onGoHome(onGoHome) {}
+        callbackCtx(callbackCtx),
+        onBackToLibraryFn(onBackToLibrary),
+        onBackHomeFn(onBackHome) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

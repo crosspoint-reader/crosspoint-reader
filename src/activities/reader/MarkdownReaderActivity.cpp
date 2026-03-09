@@ -81,12 +81,12 @@ void MarkdownReaderActivity::loop() {
   }
 
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    onGoHome();
+    if (onBackHomeFn != nullptr) onBackHomeFn(callbackCtx);
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
-    onGoBack();
+    if (onBackToLibraryFn != nullptr) onBackToLibraryFn(callbackCtx, markdown->getPath());
     return;
   }
 

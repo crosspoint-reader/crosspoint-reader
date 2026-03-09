@@ -57,4 +57,24 @@ String urlDecode(const String& path);
  */
 bool isValidFilename(const String& filename);
 
+/**
+ * Check if a single path component (filename or directory name) is a
+ * protected/hidden web item. Protects dotfiles and known system folders
+ * (System Volume Information, XTCache).
+ *
+ * @param component A single path component (no slashes)
+ * @return true if the component should be blocked from web access
+ */
+bool isProtectedWebComponent(const String& component);
+
+/**
+ * Check if any component of a path is a protected web item.
+ * Splits the normalized path on '/' and tests each component.
+ * Used by web handlers to gate access to hidden/system items.
+ *
+ * @param path An absolute SD path (will be normalized internally)
+ * @return true if any component is protected
+ */
+bool pathContainsProtectedItem(const String& path);
+
 }  // namespace PathUtils

@@ -21,6 +21,7 @@
 #include "activities/TaskShutdown.h"
 #include "components/UITheme.h"
 #include "core/features/FeatureModules.h"
+#include "core/registries/HomeActionRegistry.h"
 #include "fontIds.h"
 #include "util/ForkDriftNavigation.h"
 #include "util/StringUtils.h"
@@ -28,9 +29,9 @@
 int HomeActivity::getMenuItemCount() const {
   int count = 3;  // My Library, File transfer, Settings
   if (hasContinueReading) count++;
-  if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::OpdsBrowser, hasOpdsUrl)) count++;
-  if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false)) count++;
-  if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false)) count++;
+  if (core::HomeActionRegistry::shouldExpose("opds_browser", {hasOpdsUrl})) count++;
+  if (core::HomeActionRegistry::shouldExpose("todo_planner", {false})) count++;
+  if (core::HomeActionRegistry::shouldExpose("anki", {false})) count++;
   return count;
 }
 
@@ -81,10 +82,8 @@ void HomeActivity::rebuildMenuLayout() {
     int idx = 0;
     menuMyLibraryIndex = idx++;
     menuOpdsIndex = -1;
-    menuTodoIndex =
-        core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false) ? idx++ : -1;
-    menuAnkiIndex =
-        core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false) ? idx++ : -1;
+    menuTodoIndex = core::HomeActionRegistry::shouldExpose("todo_planner", {false}) ? idx++ : -1;
+    menuAnkiIndex = core::HomeActionRegistry::shouldExpose("anki", {false}) ? idx++ : -1;
     menuFileTransferIndex = idx++;
     menuSettingsIndex = idx++;
     menuItemCount = idx;
@@ -93,12 +92,9 @@ void HomeActivity::rebuildMenuLayout() {
   int idx = 0;
   menuOpenBookIndex = idx++;
   menuMyLibraryIndex = idx++;
-  menuOpdsIndex =
-      core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::OpdsBrowser, hasOpdsUrl) ? idx++ : -1;
-  menuTodoIndex =
-      core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false) ? idx++ : -1;
-  menuAnkiIndex =
-      core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false) ? idx++ : -1;
+  menuOpdsIndex = core::HomeActionRegistry::shouldExpose("opds_browser", {hasOpdsUrl}) ? idx++ : -1;
+  menuTodoIndex = core::HomeActionRegistry::shouldExpose("todo_planner", {false}) ? idx++ : -1;
+  menuAnkiIndex = core::HomeActionRegistry::shouldExpose("anki", {false}) ? idx++ : -1;
   menuFileTransferIndex = idx++;
   menuSettingsIndex = idx++;
   menuItemCount = idx;
@@ -537,12 +533,9 @@ void HomeActivity::loop() {
     int idx = 0;
     const int continueIdx = hasContinueReading ? idx++ : -1;
     const int myLibraryIdx = idx++;
-    const int opdsLibraryIdx =
-        core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::OpdsBrowser, hasOpdsUrl) ? idx++ : -1;
-    const int todoIdx =
-        core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false) ? idx++ : -1;
-    const int ankiIdx =
-        core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false) ? idx++ : -1;
+    const int opdsLibraryIdx = core::HomeActionRegistry::shouldExpose("opds_browser", {hasOpdsUrl}) ? idx++ : -1;
+    const int todoIdx = core::HomeActionRegistry::shouldExpose("todo_planner", {false}) ? idx++ : -1;
+    const int ankiIdx = core::HomeActionRegistry::shouldExpose("anki", {false}) ? idx++ : -1;
     const int notesIdx = idx++;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
@@ -603,11 +596,11 @@ void HomeActivity::render(RenderLock&&) {
         menuLabels.push_back(tr(STR_SETTINGS_TITLE));
         menuIcons.push_back(Settings);
       } else {
-        if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false)) {
+        if (core::HomeActionRegistry::shouldExpose("todo_planner", {false})) {
           menuLabels.push_back("Agenda");
           menuIcons.push_back(Text);
         }
-        if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false)) {
+        if (core::HomeActionRegistry::shouldExpose("anki", {false})) {
           menuLabels.push_back("Anki");
           menuIcons.push_back(Text);  // Using Text icon as placeholder
         }
@@ -621,15 +614,15 @@ void HomeActivity::render(RenderLock&&) {
       menuIcons.push_back(Book);
       menuLabels.push_back("My Library");
       menuIcons.push_back(Folder);
-      if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::OpdsBrowser, hasOpdsUrl)) {
+      if (core::HomeActionRegistry::shouldExpose("opds_browser", {hasOpdsUrl})) {
         menuLabels.push_back("OPDS Browser");
         menuIcons.push_back(Library);
       }
-      if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false)) {
+      if (core::HomeActionRegistry::shouldExpose("todo_planner", {false})) {
         menuLabels.push_back("TODO");
         menuIcons.push_back(Text);
       }
-      if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false)) {
+      if (core::HomeActionRegistry::shouldExpose("anki", {false})) {
         menuLabels.push_back("Anki");
         menuIcons.push_back(Text);
       }
@@ -843,13 +836,13 @@ void HomeActivity::render(RenderLock&&) {
     int menuSpacing = 10;
 
     std::vector<const char*> labels_text = {"My Library"};
-    if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::OpdsBrowser, hasOpdsUrl)) {
+    if (core::HomeActionRegistry::shouldExpose("opds_browser", {hasOpdsUrl})) {
       labels_text.push_back("OPDS Browser");
     }
-    if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false)) {
+    if (core::HomeActionRegistry::shouldExpose("todo_planner", {false})) {
       labels_text.push_back("TODO");
     }
-    if (core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::AnkiSupport, false)) {
+    if (core::HomeActionRegistry::shouldExpose("anki", {false})) {
       labels_text.push_back("Anki");
     }
     labels_text.push_back("File Transfer");

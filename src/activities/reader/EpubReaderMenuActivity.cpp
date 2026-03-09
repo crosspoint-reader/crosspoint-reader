@@ -1,11 +1,11 @@
 #include "EpubReaderMenuActivity.h"
 
-#include <FeatureFlags.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "core/features/FeatureCatalog.h"
 #include "fontIds.h"
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -34,9 +34,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
   items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
   items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
-#if ENABLE_ANKI_SUPPORT
-  items.push_back({MenuAction::ADD_TO_ANKI, StrId::STR_ADD_TO_ANKI});
-#endif
+  if (core::FeatureCatalog::isEnabled("anki_support")) {
+    items.push_back({MenuAction::ADD_TO_ANKI, StrId::STR_ADD_TO_ANKI});
+  }
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   return items;
 }

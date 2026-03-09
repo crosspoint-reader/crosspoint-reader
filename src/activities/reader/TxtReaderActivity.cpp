@@ -1,5 +1,6 @@
 #include "TxtReaderActivity.h"
 
+#include <FeatureFlags.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -8,7 +9,6 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "FeatureManifest.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "ScreenComponents.h"
@@ -162,7 +162,7 @@ void TxtReaderActivity::onEnter() {
   }
 
   // Detect markdown mode from file extension (only when built with markdown support)
-  if constexpr (FeatureManifest::hasMarkdown()) {
+  if constexpr (ENABLE_MARKDOWN != 0) {
     const std::string& path = txt->getPath();
     isMarkdown = path.size() >= 3 && path.compare(path.size() - 3, 3, ".md") == 0;
     LOG_DBG("TRS", "File: %s, markdown mode: %s", path.c_str(), isMarkdown ? "yes" : "no");

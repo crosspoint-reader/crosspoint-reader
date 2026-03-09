@@ -4,11 +4,10 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
-#include "AnkiActivity.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
-#include "browser/OpdsBookBrowserActivity.h"
-#include "core/features/FeatureModules.h"
+#include "core/registries/HomeActionRegistry.h"
+#include "core/registries/ReaderRegistry.h"
 #include "home/HomeActivity.h"
 #include "home/MyLibraryActivity.h"
 #include "home/NotesActivity.h"
@@ -17,8 +16,6 @@
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/SettingsActivity.h"
-#include "todo/TodoPlannerStorage.h"
-#include "util/DateUtils.h"
 #include "util/FullScreenMessageActivity.h"
 
 ActivityManager::ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -226,62 +223,24 @@ void ActivityManager::goToRecentBooks() {
 void ActivityManager::goToNotes() { replaceActivity(std::make_unique<NotesActivity>(renderer, mappedInput)); }
 
 void ActivityManager::goToAnki() {
-  if (core::FeatureModules::isEnabled("anki_support")) {
-    replaceActivity(std::make_unique<AnkiActivity>(renderer, mappedInput));
+  if (Activity* anki = core::HomeActionRegistry::create("anki", renderer, mappedInput, {false}, nullptr, nullptr)) {
+    replaceActivity(std::unique_ptr<Activity>(anki));
   }
 }
 
 void ActivityManager::goToBrowser() {
-  replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput));
+  // hasOpdsUrl=true: navigation already confirmed by the caller; bypass the display gate.
+  if (Activity* browser =
+          core::HomeActionRegistry::create("opds_browser", renderer, mappedInput, {true}, nullptr, nullptr)) {
+    replaceActivity(std::unique_ptr<Activity>(browser));
+  }
 }
 
 void ActivityManager::goToTodo() {
-  if (!core::FeatureModules::shouldExposeHomeAction(core::HomeOptionalAction::TodoPlanner, false)) {
-    return;
-  }
-
-  const std::string today = DateUtils::currentDate();
-  if (today.empty()) {
-    // NTP not synced yet — use a fixed "undated" file so the planner is still usable.
-    const bool mdEnabled = core::FeatureModules::hasCapability(core::Capability::MarkdownSupport);
-    const std::string fallbackPath = std::string("/daily/undated") + (mdEnabled ? ".md" : ".txt");
-    if (Activity* todo = core::FeatureModules::createTodoPlannerActivity(renderer, mappedInput, fallbackPath, "Undated",
-                                                                         [] { activityManager.goHome(); })) {
-      replaceActivity(std::unique_ptr<Activity>(todo));
-    } else {
-      goHome();
-    }
-    return;
-  }
-
-  const std::string todoMdPath = "/daily/" + today + ".md";
-  const std::string todoTxtPath = "/daily/" + today + ".txt";
-  const bool todoMdExists = Storage.exists(todoMdPath.c_str());
-  const bool todoTxtExists = Storage.exists(todoTxtPath.c_str());
-  if (todoMdExists || todoTxtExists) {
-    if (Activity* todo = core::FeatureModules::createTodoPlannerActivity(
-            renderer, mappedInput,
-            TodoPlannerStorage::dailyPath(today, core::FeatureModules::hasCapability(core::Capability::MarkdownSupport),
-                                          todoMdExists, todoTxtExists),
-            today, [] { activityManager.goHome(); })) {
-      replaceActivity(std::unique_ptr<Activity>(todo));
-    } else {
-      goHome();
-    }
-    return;
-  }
-
-  const std::string todoEpubPath = "/daily/" + today + ".epub";
-  if (Storage.exists(todoEpubPath.c_str())) {
-    goToReader(todoEpubPath);
-    return;
-  }
-
-  if (Activity* todo = core::FeatureModules::createTodoPlannerActivity(
-          renderer, mappedInput,
-          TodoPlannerStorage::dailyPath(today, core::FeatureModules::hasCapability(core::Capability::MarkdownSupport),
-                                        todoMdExists, todoTxtExists),
-          today, [] { activityManager.goHome(); })) {
+  static const auto onBackCallback = [](void* ctx) { static_cast<ActivityManager*>(ctx)->goHome(); };
+  const core::HomeActionEntry::HomeActionContext ctx{false};
+  if (Activity* todo =
+          core::HomeActionRegistry::create("todo_planner", renderer, mappedInput, ctx, this, onBackCallback)) {
     replaceActivity(std::unique_ptr<Activity>(todo));
   } else {
     goHome();
@@ -289,16 +248,16 @@ void ActivityManager::goToTodo() {
 }
 
 void ActivityManager::goToReader(std::string path) {
-  auto result = core::FeatureModules::createReaderActivityForPath(
-      path, renderer, mappedInput,
-      [path](const std::string& bookPath) {
-        const auto slash = bookPath.rfind('/');
-        const std::string folder = (slash != std::string::npos && slash > 0) ? bookPath.substr(0, slash) : "/";
-        activityManager.goToMyLibrary(folder);
-      },
-      [] { activityManager.goHome(); });
+  // Non-capturing lambdas: activityManager is an extern global, no context needed.
+  static const auto onBackToLibrary = +[](void*, const std::string& bookPath) {
+    const auto slash = bookPath.rfind('/');
+    const std::string folder = (slash != std::string::npos && slash > 0) ? bookPath.substr(0, slash) : "/";
+    activityManager.goToMyLibrary(folder);
+  };
+  static const auto onBackHome = +[](void*) { activityManager.goHome(); };
 
-  if (result.status == core::FeatureModules::ReaderOpenStatus::Opened && result.activity) {
+  const auto result = core::ReaderRegistry::open(path, renderer, mappedInput, nullptr, onBackToLibrary, onBackHome);
+  if (result.status == core::ReaderOpenResult::Status::Opened && result.activity) {
     replaceActivity(std::unique_ptr<Activity>(result.activity));
   } else {
     if (result.logMessage) {

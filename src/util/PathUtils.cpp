@@ -199,4 +199,46 @@ bool isValidFilename(const String& filename) {
   return true;
 }
 
+namespace {
+// Folders and files to hide from the web interface file browser.
+// Items starting with "." are handled separately in isProtectedWebComponent.
+constexpr const char* kHiddenWebItems[] = {"System Volume Information", "XTCache"};
+constexpr size_t kHiddenWebItemsCount = sizeof(kHiddenWebItems) / sizeof(kHiddenWebItems[0]);
+}  // namespace
+
+bool isProtectedWebComponent(const String& component) {
+  if (component.isEmpty()) {
+    return false;
+  }
+  if (component.startsWith(".")) {
+    return true;
+  }
+  for (size_t i = 0; i < kHiddenWebItemsCount; i++) {
+    if (component.equalsIgnoreCase(kHiddenWebItems[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool pathContainsProtectedItem(const String& path) {
+  const String normalized = normalizePath(path);
+  if (normalized == "/") {
+    return false;
+  }
+  int start = normalized.startsWith("/") ? 1 : 0;
+  while (start < static_cast<int>(normalized.length())) {
+    int slash = normalized.indexOf('/', start);
+    if (slash < 0) {
+      slash = normalized.length();
+    }
+    const String component = normalized.substring(start, slash);
+    if (isProtectedWebComponent(component)) {
+      return true;
+    }
+    start = slash + 1;
+  }
+  return false;
+}
+
 }  // namespace PathUtils

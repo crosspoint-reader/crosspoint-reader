@@ -1,7 +1,6 @@
 #include "OtaUpdater.h"
 
 #include <ArduinoJson.h>
-#include <FeatureManifest.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>

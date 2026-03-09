@@ -22,11 +22,14 @@
 #include "WebDAVHandler.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/todo/TodoPlannerStorage.h"
+#include "core/features/FeatureCatalog.h"
 #include "core/features/FeatureModules.h"
+#include "core/registries/WebRouteRegistry.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
-#include "util/AnkiStore.h"
+#include "network/BufferedHttpUpload.h"
+#include "network/WebUtils.h"
 #include "util/BookProgressDataStore.h"
 #include "util/DateUtils.h"
 #include "util/InputValidation.h"
@@ -34,10 +37,6 @@
 #include "util/PokemonBookDataStore.h"
 
 namespace {
-// Folders/files to hide from the web interface file browser
-// Note: Items starting with "." are automatically hidden
-const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint8_t CROSSPOINT_PROTOCOL_VERSION = 1;
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
@@ -83,6 +82,61 @@ void invalidateFeatureCachesIfNeeded(const String& filePath) {
   core::FeatureModules::onWebFileChanged(filePath);
   invalidateSleepCacheIfNeeded(filePath);
 }
+
+network::BufferedHttpUploadSession& httpUploadSession() { return network::sharedBufferedHttpUploadSession(); }
+
+bool resolveWebUploadTarget(WebServer* server, const String& uploadFileName, network::BufferedHttpUploadTarget& target,
+                            String& error) {
+  if (server == nullptr) {
+    error = "Upload server unavailable";
+    return false;
+  }
+
+  if (!PathUtils::isValidFilename(uploadFileName)) {
+    error = "Invalid filename";
+    LOG_WRN("WEB", "[UPLOAD] Invalid filename rejected: %s", uploadFileName.c_str());
+    return false;
+  }
+  if (PathUtils::isProtectedWebComponent(uploadFileName)) {
+    error = "Cannot upload protected files";
+    LOG_WRN("WEB", "[UPLOAD] Protected filename rejected: %s", uploadFileName.c_str());
+    return false;
+  }
+
+  String uploadPath = "/";
+  if (server->hasArg("path")) {
+    uploadPath = PathUtils::urlDecode(server->arg("path"));
+    if (!PathUtils::isValidSdPath(uploadPath)) {
+      error = "Invalid path";
+      LOG_WRN("WEB", "[UPLOAD] Path validation failed: %s", uploadPath.c_str());
+      return false;
+    }
+
+    uploadPath = PathUtils::normalizePath(uploadPath);
+    if (PathUtils::pathContainsProtectedItem(uploadPath)) {
+      error = "Cannot upload to protected path";
+      LOG_WRN("WEB", "[UPLOAD] Protected upload path rejected: %s", uploadPath.c_str());
+      return false;
+    }
+  }
+
+  target.uploadPath = uploadPath;
+  target.filePath = uploadPath;
+  if (!target.filePath.endsWith("/")) {
+    target.filePath += "/";
+  }
+  target.filePath += uploadFileName;
+  return true;
+}
+
+const network::BufferedHttpUploadConfig kWebUploadConfig = {"UPLOAD",
+                                                            "WEB",
+                                                            "Failed to create file on SD card",
+                                                            "Failed to write to SD card - disk may be full",
+                                                            "Failed to write final data to SD card",
+                                                            "Upload aborted",
+                                                            true,
+                                                            resolveWebUploadTarget};
 
 std::string normalizeTodoEntryText(const std::string& input) {
   std::string normalized;
@@ -238,36 +292,10 @@ void CrossPointWebServer::begin() {
 
   // Settings endpoints
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
-  if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::PokedexPluginPage)) {
-    server->on("/plugins/pokedex", HTTP_GET, [this] { handlePokedexPluginPage(); });
-  }
-  if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::PokemonPartyApi)) {
-    server->on("/api/book-pokemon", HTTP_GET, [this] { handleGetBookPokemon(); });
-    server->on("/api/book-pokemon", HTTP_PUT, [this] { handlePutBookPokemon(); });
-    server->on("/api/book-pokemon", HTTP_DELETE, [this] { handleDeleteBookPokemon(); });
-  }
-  if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::WallpaperPluginPage)) {
-    server->on("/plugins/wallpaper", HTTP_GET, [this] { handleWallpaperPluginPage(); });
-  }
-  if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::AnkiPluginPage)) {
-    server->on("/plugins/anki", HTTP_GET, [this] { handleAnkiPluginPage(); });
-    server->on("/api/anki/cards", HTTP_GET, [this] { handleAnkiGetCards(); });
-    server->on("/api/anki/clear", HTTP_POST, [this] { handleAnkiClearCards(); });
-  }
+  // Plugin pages and their API routes are mounted by feature Registration.cpp via WebRouteRegistry.
+  core::WebRouteRegistry::mountAll(server.get());
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
-  if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::UserFontsApi)) {
-    server->on("/api/user-fonts/rescan", HTTP_POST, [this] { handleRescanUserFonts(); });
-    server->on("/api/user-fonts/upload", HTTP_POST, [this] { handleFontUploadPost(); }, [this] { handleFontUpload(); });
-  }
-
-  // WiFi endpoints
-  if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::WebWifiSetupApi)) {
-    server->on("/api/wifi/scan", HTTP_GET, [this] { handleWifiScan(); });
-    server->on("/api/wifi/connect", HTTP_POST, [this] { handleWifiConnect(); });
-    server->on("/api/wifi/forget", HTTP_POST, [this] { handleWifiForget(); });
-    server->on("/api/wifi/status", HTTP_GET, [this] { handleWifiStatus(); });
-  }
 
   // API endpoints for web UI (recent books, cover images, sleep cover picker)
   server->on("/api/book-progress", HTTP_GET, [this] { handleGetBookProgress(); });
@@ -279,11 +307,6 @@ void CrossPointWebServer::begin() {
   server->on("/api/open-book", HTTP_POST, [this] { handleOpenBook(); });
   server->on("/api/settings/raw", HTTP_GET, [this] { handleGetSettingsRaw(); });
   server->on("/api/remote/button", HTTP_POST, [this] { handleRemoteButton(); });
-  if (core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::OtaApi)) {
-    server->on("/api/ota/check", HTTP_POST, [this] { handleOtaCheckPost(); });
-    server->on("/api/ota/check", HTTP_GET, [this] { handleOtaCheckGet(); });
-  }
-
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
@@ -338,13 +361,7 @@ void CrossPointWebServer::stop() {
   wsUploadOwnerClient = 0;
 
   // Close any in-progress HTTP upload
-  if (uploadFile) {
-    uploadFile.close();
-  }
-  uploadBufferPos = 0;
-  uploadSuccess = false;
-  uploadError = "";
-  uploadLastLoggedSize = 0;
+  httpUploadSession().reset();
 
   // Stop WebSocket server
   if (wsServer) {
@@ -441,22 +458,8 @@ static_assert(HomePageHtmlCompressedSize == sizeof(HomePageHtml), "Home page com
 static_assert(FilesPageHtmlCompressedSize == sizeof(FilesPageHtml), "Files page compressed size mismatch");
 static_assert(SettingsPageHtmlCompressedSize == sizeof(SettingsPageHtml), "Settings page compressed size mismatch");
 
-static bool isGzipPayload(const char* data, size_t len) {
-  return len >= 2 && static_cast<unsigned char>(data[0]) == 0x1f && static_cast<unsigned char>(data[1]) == 0x8b;
-}
-
 static bool parseStrictSize(const String& token, size_t& outValue) {
   return InputValidation::parseStrictPositiveSize(token.c_str(), token.length(), WS_UPLOAD_MAX_BYTES, outValue);
-}
-
-static void sendPrecompressedHtml(WebServer* server, const char* data, size_t compressedLen) {
-  if (!isGzipPayload(data, compressedLen)) {
-    LOG_ERR("WEB", "Attempted to serve non-gzip HTML payload");
-    server->send(500, "text/plain", "Invalid precompressed HTML payload");
-    return;
-  }
-  server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "text/html; charset=utf-8", data, compressedLen);
 }
 
 void CrossPointWebServer::handleRoot() const {
@@ -502,7 +505,7 @@ void CrossPointWebServer::handlePlugins() const {
 }
 
 void CrossPointWebServer::handleTodoEntry() {
-  if (!core::FeatureModules::hasCapability(core::Capability::TodoPlanner)) {
+  if (!core::FeatureCatalog::isEnabled("todo_planner")) {
     server->send(404, "text/plain", "TODO planner disabled");
     return;
   }
@@ -542,8 +545,8 @@ void CrossPointWebServer::handleTodoEntry() {
     SpiBusMutex::Guard guard;
     const bool markdownExists = Storage.exists(markdownPath.c_str());
     const bool textExists = Storage.exists(textPath.c_str());
-    targetPath = TodoPlannerStorage::dailyPath(
-        today, core::FeatureModules::hasCapability(core::Capability::MarkdownSupport), markdownExists, textExists);
+    targetPath =
+        TodoPlannerStorage::dailyPath(today, core::FeatureCatalog::isEnabled("markdown"), markdownExists, textExists);
     if (!Storage.exists(dirPath.c_str())) {
       Storage.mkdir(dirPath.c_str());
     }
@@ -553,8 +556,7 @@ void CrossPointWebServer::handleTodoEntry() {
         content.push_back('\n');
       }
     }
-    content += TodoPlannerStorage::formatEntry(text.c_str(), agendaEntry,
-                                               core::FeatureModules::hasCapability(core::Capability::MarkdownSupport));
+    content += TodoPlannerStorage::formatEntry(text.c_str(), agendaEntry, core::FeatureCatalog::isEnabled("markdown"));
     content.push_back('\n');
     writeOk = Storage.writeFile(targetPath.c_str(), content.c_str());
   }
@@ -568,7 +570,7 @@ void CrossPointWebServer::handleTodoEntry() {
 }
 
 void CrossPointWebServer::handleTodoTodayGet() const {
-  if (!core::FeatureModules::hasCapability(core::Capability::TodoPlanner)) {
+  if (!core::FeatureCatalog::isEnabled("todo_planner")) {
     server->send(404, "text/plain", "TODO planner disabled");
     return;
   }
@@ -587,8 +589,8 @@ void CrossPointWebServer::handleTodoTodayGet() const {
     SpiBusMutex::Guard guard;
     const bool markdownExists = Storage.exists(markdownPath.c_str());
     const bool textExists = Storage.exists(textPath.c_str());
-    targetPath = TodoPlannerStorage::dailyPath(
-        today, core::FeatureModules::hasCapability(core::Capability::MarkdownSupport), markdownExists, textExists);
+    targetPath =
+        TodoPlannerStorage::dailyPath(today, core::FeatureCatalog::isEnabled("markdown"), markdownExists, textExists);
     if (Storage.exists(targetPath.c_str())) {
       content = Storage.readFile(targetPath.c_str()).c_str();
     }
@@ -620,7 +622,7 @@ void CrossPointWebServer::handleTodoTodayGet() const {
 }
 
 void CrossPointWebServer::handleTodoTodaySave() const {
-  if (!core::FeatureModules::hasCapability(core::Capability::TodoPlanner)) {
+  if (!core::FeatureCatalog::isEnabled("todo_planner")) {
     server->send(404, "text/plain", "TODO planner disabled");
     return;
   }
@@ -669,7 +671,7 @@ void CrossPointWebServer::handleTodoTodaySave() const {
     const bool checked = item["checked"].as<bool>();
     const char* itemType = item["type"] | "";
     const bool isAgenda = isHeader && strcmp(itemType, "agenda") == 0;
-    const bool markdownEnabled = core::FeatureModules::hasCapability(core::Capability::MarkdownSupport);
+    const bool markdownEnabled = core::FeatureCatalog::isEnabled("markdown");
     if (isHeader) {
       if (isAgenda && markdownEnabled) content += "> ";
       content += text;
@@ -687,8 +689,8 @@ void CrossPointWebServer::handleTodoTodaySave() const {
     SpiBusMutex::Guard guard;
     const bool markdownExists = Storage.exists(markdownPath.c_str());
     const bool textExists = Storage.exists(textPath.c_str());
-    targetPath = TodoPlannerStorage::dailyPath(
-        today, core::FeatureModules::hasCapability(core::Capability::MarkdownSupport), markdownExists, textExists);
+    targetPath =
+        TodoPlannerStorage::dailyPath(today, core::FeatureCatalog::isEnabled("markdown"), markdownExists, textExists);
     if (!Storage.exists(dirPath.c_str())) {
       Storage.mkdir(dirPath.c_str());
     }
@@ -746,18 +748,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
       file.getName(name, sizeof(name));
       auto fileName = String(name);
 
-      // Skip hidden items (starting with ".")
-      shouldHide = fileName.startsWith(".");
-
-      // Check against explicitly hidden items list
-      if (!shouldHide) {
-        for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-          if (fileName.equals(HIDDEN_ITEMS[i])) {
-            shouldHide = true;
-            break;
-          }
-        }
-      }
+      shouldHide = PathUtils::isProtectedWebComponent(fileName);
 
       if (!shouldHide) {
         info.name = fileName;
@@ -791,44 +782,6 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
 bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHelpers::hasEpubExtension(filename); }
 
-bool CrossPointWebServer::isProtectedComponent(const String& component) const {
-  if (component.isEmpty()) {
-    return false;
-  }
-  if (component.startsWith(".")) {
-    return true;
-  }
-  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-    if (component.equalsIgnoreCase(HIDDEN_ITEMS[i])) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool CrossPointWebServer::pathContainsProtectedItem(const String& path) const {
-  String normalized = PathUtils::normalizePath(path);
-  if (normalized == "/") {
-    return false;
-  }
-
-  int start = (normalized.startsWith("/")) ? 1 : 0;
-  while (start < static_cast<int>(normalized.length())) {
-    int slash = normalized.indexOf('/', start);
-    if (slash < 0) {
-      slash = normalized.length();
-    }
-
-    const String component = normalized.substring(start, slash);
-    if (isProtectedComponent(component)) {
-      return true;
-    }
-    start = slash + 1;
-  }
-
-  return false;
-}
-
 void CrossPointWebServer::handleFileList() const {
   sendPrecompressedHtml(server.get(), FilesPageHtml, FilesPageHtmlCompressedSize);
 }
@@ -852,7 +805,7 @@ void CrossPointWebServer::handleFileListData() const {
     LOG_DBG("WEB", "Path validation OK");
 
     currentPath = PathUtils::normalizePath(currentPath);
-    if (pathContainsProtectedItem(currentPath)) {
+    if (PathUtils::pathContainsProtectedItem(currentPath)) {
       server->send(403, "text/plain", "Cannot access protected items");
       return;
     }
@@ -913,21 +866,15 @@ void CrossPointWebServer::handleDownload() const {
     server->send(400, "text/plain", "Invalid path");
     return;
   }
-  if (pathContainsProtectedItem(itemPath)) {
+  if (PathUtils::pathContainsProtectedItem(itemPath)) {
     server->send(403, "text/plain", "Cannot access protected items");
     return;
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (itemName.startsWith(".")) {
-    server->send(403, "text/plain", "Cannot access system files");
+  if (PathUtils::isProtectedWebComponent(itemName)) {
+    server->send(403, "text/plain", "Cannot access protected items");
     return;
-  }
-  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-    if (itemName.equals(HIDDEN_ITEMS[i])) {
-      server->send(403, "text/plain", "Cannot access protected items");
-      return;
-    }
   }
 
   bool exists = false;
@@ -1013,218 +960,24 @@ void CrossPointWebServer::handleDownload() const {
   }
 }
 
-// Upload write buffer - batches small writes into larger SD card operations
-// 4KB is a good balance: large enough to reduce syscall overhead, small enough
-// to keep individual write times short and avoid watchdog issues
-bool CrossPointWebServer::flushUploadBuffer() {
-  if (uploadBufferPos > 0 && uploadFile) {
-    SpiBusMutex::Guard guard;
-    esp_task_wdt_reset();  // Reset watchdog before potentially slow SD write
-    const unsigned long writeStart = millis();
-    const size_t written = uploadFile.write(uploadBuffer, uploadBufferPos);
-    totalWriteTime += millis() - writeStart;
-    writeCount++;
-    esp_task_wdt_reset();  // Reset watchdog after SD write
-
-    if (written != uploadBufferPos) {
-      LOG_DBG("WEB", "[UPLOAD] Buffer flush failed: expected %d, wrote %d", uploadBufferPos, written);
-      uploadBufferPos = 0;
-      return false;
-    }
-    uploadBufferPos = 0;
-  }
-  return true;
-}
-
 void CrossPointWebServer::handleUpload() {
-  // Reset watchdog at start of every upload callback - HTTP parsing can be slow
-  esp_task_wdt_reset();
-
-  // Safety check: ensure server is still valid
   if (!running || !server) {
     LOG_DBG("WEB", "[UPLOAD] ERROR: handleUpload called but server not running!");
     return;
   }
 
-  const HTTPUpload& upload = server->upload();
-
-  if (upload.status == UPLOAD_FILE_START) {
-    // Reset watchdog - this is the critical 1% crash point
-    esp_task_wdt_reset();
-
-    uploadFileName = upload.filename;
-    uploadSize = 0;
-    uploadSuccess = false;
-    uploadError = "";
-    uploadStartTime = millis();
-    uploadLastLoggedSize = 0;
-    uploadBufferPos = 0;
-    totalWriteTime = 0;
-    writeCount = 0;
-
-    // Validate filename to prevent path traversal
-    if (!PathUtils::isValidFilename(uploadFileName)) {
-      uploadError = "Invalid filename";
-      LOG_WRN("WEB", "[UPLOAD] Invalid filename rejected: %s", uploadFileName.c_str());
-      return;
-    }
-    if (isProtectedComponent(uploadFileName)) {
-      uploadError = "Cannot upload protected files";
-      LOG_WRN("WEB", "[UPLOAD] Protected filename rejected: %s", uploadFileName.c_str());
-      return;
-    }
-
-    // Get upload path from query parameter (defaults to root if not specified)
-    // Note: We use query parameter instead of form data because multipart form
-    // fields aren't available until after file upload completes
-    if (server->hasArg("path")) {
-      uploadPath = PathUtils::urlDecode(server->arg("path"));
-
-      // Validate path against traversal attacks
-      if (!PathUtils::isValidSdPath(uploadPath)) {
-        uploadError = "Invalid path";
-        LOG_WRN("WEB", "[UPLOAD] Path validation failed: %s", uploadPath.c_str());
-        return;
-      }
-
-      uploadPath = PathUtils::normalizePath(uploadPath);
-      if (pathContainsProtectedItem(uploadPath)) {
-        uploadError = "Cannot upload to protected path";
-        LOG_WRN("WEB", "[UPLOAD] Protected upload path rejected: %s", uploadPath.c_str());
-        return;
-      }
-    } else {
-      uploadPath = "/";
-    }
-
-    LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", uploadFileName.c_str(), uploadPath.c_str());
-    LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
-
-    // Create file path
-    String filePath = uploadPath;
-    if (!filePath.endsWith("/")) filePath += "/";
-    filePath += uploadFileName;
-
-    // Check if file already exists - SD operations can be slow
-    bool hadExistingFile = false;
-    esp_task_wdt_reset();
-    {
-      SpiBusMutex::Guard guard;
-      hadExistingFile = Storage.exists(filePath.c_str());
-      if (hadExistingFile) {
-        Storage.remove(filePath.c_str());
-      }
-    }
-    if (hadExistingFile) {
-      LOG_DBG("WEB", "[UPLOAD] Overwriting existing file: %s", filePath.c_str());
-    }
-
-    // Open file for writing - this can be slow due to FAT cluster allocation
-    esp_task_wdt_reset();
-    bool opened = false;
-    {
-      SpiBusMutex::Guard guard;
-      opened = Storage.openFileForWrite("WEB", filePath, uploadFile);
-    }
-    if (!opened) {
-      uploadError = "Failed to create file on SD card";
-      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", filePath.c_str());
-      return;
-    }
-    esp_task_wdt_reset();
-
-    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
-  } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadFile && uploadError.isEmpty()) {
-      // Buffer incoming data and flush when buffer is full
-      // This reduces SD card write operations and improves throughput
-      const uint8_t* data = upload.buf;
-      size_t remaining = upload.currentSize;
-
-      while (remaining > 0) {
-        const size_t space = kUploadBufferSize - uploadBufferPos;
-        const size_t toCopy = (remaining < space) ? remaining : space;
-
-        memcpy(uploadBuffer + uploadBufferPos, data, toCopy);
-        uploadBufferPos += toCopy;
-        data += toCopy;
-        remaining -= toCopy;
-
-        // Flush buffer when full
-        if (uploadBufferPos >= kUploadBufferSize) {
-          if (!flushUploadBuffer()) {
-            uploadError = "Failed to write to SD card - disk may be full";
-            {
-              SpiBusMutex::Guard guard;
-              uploadFile.close();
-            }
-            return;
-          }
-        }
-      }
-
-      uploadSize += upload.currentSize;
-
-      // Log progress every 100KB
-      if (uploadSize - uploadLastLoggedSize >= 102400) {
-        const unsigned long elapsed = millis() - uploadStartTime;
-        const float kbps = (elapsed > 0) ? (uploadSize / 1024.0) / (elapsed / 1000.0) : 0;
-        LOG_DBG("WEB", "[UPLOAD] %d bytes (%.1f KB), %.1f KB/s, %d writes", uploadSize, uploadSize / 1024.0, kbps,
-                writeCount);
-        uploadLastLoggedSize = uploadSize;
-      }
-    }
-  } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadFile) {
-      // Flush any remaining buffered data
-      if (!flushUploadBuffer()) {
-        uploadError = "Failed to write final data to SD card";
-      }
-      {
-        SpiBusMutex::Guard guard;
-        uploadFile.close();
-      }
-
-      if (uploadError.isEmpty()) {
-        uploadSuccess = true;
-        const unsigned long elapsed = millis() - uploadStartTime;
-        const float avgKbps = (elapsed > 0) ? (uploadSize / 1024.0) / (elapsed / 1000.0) : 0;
-        const float writePercent = (elapsed > 0) ? (totalWriteTime * 100.0 / elapsed) : 0;
-        LOG_DBG("WEB", "[UPLOAD] Complete: %s (%d bytes in %lu ms, avg %.1f KB/s)", uploadFileName.c_str(), uploadSize,
-                elapsed, avgKbps);
-        LOG_DBG("WEB", "[UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)", writeCount, totalWriteTime,
-                writePercent);
-
-        // Clear epub cache to prevent stale metadata issues when overwriting files
-        String filePath = uploadPath;
-        if (!filePath.endsWith("/")) filePath += "/";
-        filePath += uploadFileName;
-        invalidateFeatureCachesIfNeeded(filePath);
-        core::FeatureModules::onUploadCompleted(uploadPath, uploadFileName);
-      }
-    }
-  } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    uploadBufferPos = 0;  // Discard buffered data
-    if (uploadFile) {
-      SpiBusMutex::Guard guard;
-      uploadFile.close();
-      // Try to delete the incomplete file
-      String filePath = uploadPath;
-      if (!filePath.endsWith("/")) filePath += "/";
-      filePath += uploadFileName;
-      Storage.remove(filePath.c_str());
-    }
-    uploadError = "Upload aborted";
-    LOG_DBG("WEB", "Upload aborted");
-  }
+  httpUploadSession().handleUpload(server.get(), kWebUploadConfig);
 }
 
 void CrossPointWebServer::handleUploadPost() {
   requestCount++;
-  if (uploadSuccess) {
-    server->send(200, "text/plain", "File uploaded successfully: " + uploadFileName);
+  if (httpUploadSession().succeeded()) {
+    invalidateFeatureCachesIfNeeded(httpUploadSession().filePath());
+    core::FeatureModules::onUploadCompleted(httpUploadSession().uploadPath(), httpUploadSession().fileName());
+    server->send(200, "text/plain", "File uploaded successfully: " + httpUploadSession().fileName());
   } else {
-    const String error = uploadError.isEmpty() ? "Unknown error during upload" : uploadError;
+    const String error =
+        httpUploadSession().error().isEmpty() ? "Unknown error during upload" : httpUploadSession().error();
     server->send(400, "text/plain", error);
   }
 }
@@ -1244,7 +997,7 @@ void CrossPointWebServer::handleCreateFolder() const {
     server->send(400, "text/plain", "Invalid folder name");
     return;
   }
-  if (isProtectedComponent(folderName)) {
+  if (PathUtils::isProtectedWebComponent(folderName)) {
     server->send(403, "text/plain", "Cannot create protected folders");
     return;
   }
@@ -1262,7 +1015,7 @@ void CrossPointWebServer::handleCreateFolder() const {
     }
 
     parentPath = PathUtils::normalizePath(parentPath);
-    if (pathContainsProtectedItem(parentPath)) {
+    if (PathUtils::pathContainsProtectedItem(parentPath)) {
       server->send(403, "text/plain", "Cannot access protected items");
       return;
     }
@@ -1338,7 +1091,7 @@ void CrossPointWebServer::handleRename() const {
     server->send(400, "text/plain", "Invalid path");
     return;
   }
-  if (pathContainsProtectedItem(itemPath)) {
+  if (PathUtils::pathContainsProtectedItem(itemPath)) {
     server->send(403, "text/plain", "Cannot rename protected item");
     return;
   }
@@ -1364,7 +1117,7 @@ void CrossPointWebServer::handleRename() const {
       server->send(403, "text/plain", "Cannot rename to hidden name");
       return;
     }
-    if (isProtectedComponent(newName)) {
+    if (PathUtils::isProtectedWebComponent(newName)) {
       server->send(403, "text/plain", "Cannot rename to protected name");
       return;
     }
@@ -1385,7 +1138,7 @@ void CrossPointWebServer::handleRename() const {
       server->send(400, "text/plain", "Invalid path");
       return;
     }
-    if (pathContainsProtectedItem(newPath)) {
+    if (PathUtils::pathContainsProtectedItem(newPath)) {
       server->send(403, "text/plain", "Cannot rename to protected path");
       return;
     }
@@ -1399,7 +1152,7 @@ void CrossPointWebServer::handleRename() const {
       server->send(403, "text/plain", "Cannot rename to hidden name");
       return;
     }
-    if (isProtectedComponent(newName)) {
+    if (PathUtils::isProtectedWebComponent(newName)) {
       server->send(403, "text/plain", "Cannot rename to protected name");
       return;
     }
@@ -1513,7 +1266,7 @@ void CrossPointWebServer::handleMove() const {
     server->send(400, "text/plain", "Invalid path");
     return;
   }
-  if (pathContainsProtectedItem(itemPath) || pathContainsProtectedItem(destPath)) {
+  if (PathUtils::pathContainsProtectedItem(itemPath) || PathUtils::pathContainsProtectedItem(destPath)) {
     server->send(403, "text/plain", "Cannot move protected items");
     return;
   }
@@ -1647,7 +1400,7 @@ void CrossPointWebServer::handleDelete() const {
       return;
     }
 
-    if (pathContainsProtectedItem(itemPath)) {
+    if (PathUtils::pathContainsProtectedItem(itemPath)) {
       failedItems += itemPath + " (protected path); ";
       allSuccess = false;
       return;
@@ -1749,39 +1502,6 @@ void CrossPointWebServer::handleDelete() const {
 void CrossPointWebServer::handleSettingsPage() const {
   sendPrecompressedHtml(server.get(), SettingsPageHtml, SettingsPageHtmlCompressedSize);
   LOG_DBG("WEB", "Served settings page");
-}
-
-void CrossPointWebServer::handlePokedexPluginPage() const {
-  const auto payload = core::FeatureModules::getPokedexPluginPagePayload();
-  if (!payload.available || payload.data == nullptr || payload.compressedSize == 0) {
-    server->send(404, "text/plain", "Pokedex plugin not enabled in this build");
-    return;
-  }
-
-  sendPrecompressedHtml(server.get(), payload.data, payload.compressedSize);
-  LOG_DBG("WEB", "Served pokedex plugin page");
-}
-
-void CrossPointWebServer::handleWallpaperPluginPage() const {
-  const auto payload = core::FeatureModules::getWallpaperPluginPagePayload();
-  if (!payload.available || payload.data == nullptr || payload.compressedSize == 0) {
-    server->send(404, "text/plain", "Wallpaper plugin not enabled in this build");
-    return;
-  }
-
-  sendPrecompressedHtml(server.get(), payload.data, payload.compressedSize);
-  LOG_DBG("WEB", "Served wallpaper plugin page");
-}
-
-void CrossPointWebServer::handleAnkiPluginPage() const {
-  const auto payload = core::FeatureModules::getAnkiPluginPagePayload();
-  if (!payload.available || payload.data == nullptr || payload.compressedSize == 0) {
-    server->send(404, "text/plain", "Anki plugin not enabled in this build");
-    return;
-  }
-
-  sendPrecompressedHtml(server.get(), payload.data, payload.compressedSize);
-  LOG_DBG("WEB", "Served anki plugin page");
 }
 
 void CrossPointWebServer::handleGetSettings() const {
@@ -1978,163 +1698,9 @@ void CrossPointWebServer::handlePostSettings() {
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
 }
 
-void CrossPointWebServer::handleRescanUserFonts() {
-  const auto result = core::FeatureModules::onFontScanRequested();
-  if (!result.available) {
-    server->send(404, "text/plain", "User font API disabled");
-    return;
-  }
-
-  JsonDocument response;
-  response["families"] = result.familyCount;
-  response["activeLoaded"] = result.activeLoaded;
-
-  String output;
-  serializeJson(response, output);
-  server->send(200, "application/json", output);
-}
-
-void CrossPointWebServer::handleFontUpload() {
-  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::UserFontsApi)) {
-    uploadError = "User font API disabled";
-    return;
-  }
-
-  esp_task_wdt_reset();
-
-  if (!running || !server) return;
-
-  const HTTPUpload& upload = server->upload();
-
-  if (upload.status == UPLOAD_FILE_START) {
-    esp_task_wdt_reset();
-    uploadFileName = upload.filename;
-    uploadSize = 0;
-    uploadSuccess = false;
-    uploadError = "";
-    uploadBufferPos = 0;
-    uploadStartTime = millis();
-    totalWriteTime = 0;
-    writeCount = 0;
-
-    if (!PathUtils::isValidFilename(uploadFileName)) {
-      uploadError = "Invalid filename";
-      return;
-    }
-    if (isProtectedComponent(uploadFileName)) {
-      uploadError = "Invalid filename";
-      return;
-    }
-
-    String lowerName = uploadFileName;
-    lowerName.toLowerCase();
-    if (!lowerName.endsWith(".cpf")) {
-      uploadError = "Only .cpf font files are accepted";
-      return;
-    }
-
-    // Ensure /fonts directory exists
-    {
-      SpiBusMutex::Guard guard;
-      if (!Storage.exists("/fonts")) {
-        Storage.mkdir("/fonts");
-      }
-    }
-
-    const String filePath = String("/fonts/") + uploadFileName;
-    esp_task_wdt_reset();
-    {
-      SpiBusMutex::Guard guard;
-      if (Storage.exists(filePath.c_str())) {
-        Storage.remove(filePath.c_str());
-      }
-    }
-    esp_task_wdt_reset();
-    bool opened = false;
-    {
-      SpiBusMutex::Guard guard;
-      opened = Storage.openFileForWrite("FONT", filePath, uploadFile);
-    }
-    if (!opened) {
-      uploadError = "Failed to create font file on SD card";
-    }
-    esp_task_wdt_reset();
-
-  } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadFile && uploadError.isEmpty()) {
-      const uint8_t* data = upload.buf;
-      size_t remaining = upload.currentSize;
-      while (remaining > 0) {
-        const size_t space = kUploadBufferSize - uploadBufferPos;
-        const size_t toCopy = (remaining < space) ? remaining : space;
-        memcpy(uploadBuffer + uploadBufferPos, data, toCopy);
-        uploadBufferPos += toCopy;
-        data += toCopy;
-        remaining -= toCopy;
-        if (uploadBufferPos >= kUploadBufferSize) {
-          if (!flushUploadBuffer()) {
-            uploadError = "Failed to write font data - disk may be full";
-            SpiBusMutex::Guard guard;
-            uploadFile.close();
-            return;
-          }
-        }
-      }
-      uploadSize += upload.currentSize;
-    }
-
-  } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadFile) {
-      if (!flushUploadBuffer()) {
-        uploadError = "Failed to write final font data";
-      }
-      {
-        SpiBusMutex::Guard guard;
-        uploadFile.close();
-      }
-      if (uploadError.isEmpty()) {
-        uploadSuccess = true;
-        LOG_DBG("WEB", "[FONT] Upload complete: %s (%d bytes)", uploadFileName.c_str(), uploadSize);
-      }
-    }
-
-  } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    uploadBufferPos = 0;
-    if (uploadFile) {
-      SpiBusMutex::Guard guard;
-      uploadFile.close();
-      Storage.remove((String("/fonts/") + uploadFileName).c_str());
-    }
-    uploadError = "Font upload aborted";
-  }
-}
-
-void CrossPointWebServer::handleFontUploadPost() {
-  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::UserFontsApi)) {
-    server->send(404, "text/plain", "User font API disabled");
-    return;
-  }
-
-  if (!uploadSuccess) {
-    const String error = uploadError.isEmpty() ? "Upload failed" : uploadError;
-    server->send(400, "text/plain", error);
-    return;
-  }
-
-  const auto result = core::FeatureModules::onFontScanRequested();
-
-  JsonDocument response;
-  response["ok"] = true;
-  response["families"] = result.familyCount;
-
-  String output;
-  serializeJson(response, output);
-  server->send(200, "application/json", output);
-}
-
 void CrossPointWebServer::handleRecentBooks() const {
   const auto& books = RECENT_BOOKS.getBooks();
-  const bool includePokemon = core::FeatureModules::hasCapability(core::Capability::PokemonParty);
+  const bool includePokemon = core::FeatureCatalog::isEnabled("pokemon_party");
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -2195,7 +1761,7 @@ void CrossPointWebServer::handleGetBookProgress() const {
   }
 
   bookPath = PathUtils::normalizePath(bookPath);
-  if (pathContainsProtectedItem(bookPath)) {
+  if (PathUtils::pathContainsProtectedItem(bookPath)) {
     server->send(403, "text/plain", "Cannot access protected items");
     return;
   }
@@ -2225,151 +1791,6 @@ void CrossPointWebServer::handleGetBookProgress() const {
   server->send(200, "application/json", json);
 }
 
-void CrossPointWebServer::handleGetBookPokemon() const {
-  if (!server->hasArg("path")) {
-    server->send(400, "text/plain", "Missing path");
-    return;
-  }
-
-  String bookPath = PathUtils::urlDecode(server->arg("path"));
-  if (!PathUtils::isValidSdPath(bookPath)) {
-    server->send(400, "text/plain", "Invalid path");
-    return;
-  }
-
-  bookPath = PathUtils::normalizePath(bookPath);
-  if (pathContainsProtectedItem(bookPath)) {
-    server->send(403, "text/plain", "Cannot access protected items");
-    return;
-  }
-
-  if (!Storage.exists(bookPath.c_str())) {
-    server->send(404, "text/plain", "Book not found");
-    return;
-  }
-
-  if (!PokemonBookDataStore::supportsBookPath(bookPath.c_str())) {
-    server->send(400, "text/plain", "Unsupported book type");
-    return;
-  }
-
-  JsonDocument response;
-  response["path"] = bookPath;
-
-  JsonDocument pokemonDoc;
-  if (PokemonBookDataStore::loadPokemonDocument(bookPath.c_str(), pokemonDoc) &&
-      pokemonDoc["pokemon"].is<JsonObject>()) {
-    response["pokemon"] = pokemonDoc["pokemon"];
-  } else {
-    response["pokemon"] = nullptr;
-  }
-
-  String json;
-  serializeJson(response, json);
-  server->send(200, "application/json", json);
-}
-
-void CrossPointWebServer::handlePutBookPokemon() {
-  if (!server->hasArg("plain")) {
-    server->send(400, "text/plain", "Missing body");
-    return;
-  }
-
-  JsonDocument request;
-  if (deserializeJson(request, server->arg("plain"))) {
-    server->send(400, "text/plain", "Invalid JSON body");
-    return;
-  }
-
-  const String rawPath = request["path"] | "";
-  if (rawPath.isEmpty()) {
-    server->send(400, "text/plain", "Missing path");
-    return;
-  }
-
-  if (!request["pokemon"].is<JsonObject>()) {
-    server->send(400, "text/plain", "Missing pokemon object");
-    return;
-  }
-
-  if (!PathUtils::isValidSdPath(rawPath)) {
-    server->send(400, "text/plain", "Invalid path");
-    return;
-  }
-
-  const String bookPath = PathUtils::normalizePath(rawPath);
-  if (pathContainsProtectedItem(bookPath)) {
-    server->send(403, "text/plain", "Cannot access protected items");
-    return;
-  }
-
-  if (!Storage.exists(bookPath.c_str())) {
-    server->send(404, "text/plain", "Book not found");
-    return;
-  }
-
-  if (!PokemonBookDataStore::supportsBookPath(bookPath.c_str())) {
-    server->send(400, "text/plain", "Unsupported book type");
-    return;
-  }
-
-  if (!PokemonBookDataStore::savePokemonDocument(bookPath.c_str(), request["pokemon"])) {
-    server->send(500, "text/plain", "Failed to save pokemon data");
-    return;
-  }
-
-  JsonDocument response;
-  response["ok"] = true;
-  response["path"] = bookPath;
-  response["pokemon"] = request["pokemon"];
-
-  String json;
-  serializeJson(response, json);
-  server->send(200, "application/json", json);
-}
-
-void CrossPointWebServer::handleDeleteBookPokemon() {
-  if (!server->hasArg("path")) {
-    server->send(400, "text/plain", "Missing path");
-    return;
-  }
-
-  String bookPath = PathUtils::urlDecode(server->arg("path"));
-  if (!PathUtils::isValidSdPath(bookPath)) {
-    server->send(400, "text/plain", "Invalid path");
-    return;
-  }
-
-  bookPath = PathUtils::normalizePath(bookPath);
-  if (pathContainsProtectedItem(bookPath)) {
-    server->send(403, "text/plain", "Cannot access protected items");
-    return;
-  }
-
-  if (!Storage.exists(bookPath.c_str())) {
-    server->send(404, "text/plain", "Book not found");
-    return;
-  }
-
-  if (!PokemonBookDataStore::supportsBookPath(bookPath.c_str())) {
-    server->send(400, "text/plain", "Unsupported book type");
-    return;
-  }
-
-  if (!PokemonBookDataStore::deletePokemonDocument(bookPath.c_str())) {
-    server->send(500, "text/plain", "Failed to delete pokemon data");
-    return;
-  }
-
-  JsonDocument response;
-  response["ok"] = true;
-  response["path"] = bookPath;
-
-  String json;
-  serializeJson(response, json);
-  server->send(200, "application/json", json);
-}
-
 void CrossPointWebServer::handleCover() const {
   if (!server->hasArg("path")) {
     server->send(400, "text/plain", "Missing path");
@@ -2384,7 +1805,7 @@ void CrossPointWebServer::handleCover() const {
     return;
   }
   bookPath = PathUtils::normalizePath(bookPath);
-  if (pathContainsProtectedItem(bookPath)) {
+  if (PathUtils::pathContainsProtectedItem(bookPath)) {
     server->send(403, "text/plain", "Cannot access protected items");
     return;
   }
@@ -2704,7 +2125,7 @@ void CrossPointWebServer::handleSleepCoverPin() {
 }
 
 void CrossPointWebServer::handleOpenBook() {
-  if (!core::FeatureModules::hasCapability(core::Capability::RemoteOpenBook)) {
+  if (!true) {
     server->send(404, "text/plain", "Remote open-book disabled");
     return;
   }
@@ -2741,7 +2162,7 @@ void CrossPointWebServer::handleOpenBook() {
 }
 
 void CrossPointWebServer::handleRemoteButton() {
-  if (!core::FeatureModules::hasCapability(core::Capability::RemotePageTurn)) {
+  if (!true) {
     server->send(404, "text/plain", "Remote page turn disabled");
     return;
   }
@@ -2819,36 +2240,6 @@ void CrossPointWebServer::handleGetSettingsRaw() const {
   doc["selectedOtaBundle"] = s.selectedOtaBundle;
   doc["installedOtaBundle"] = s.installedOtaBundle;
   doc["deviceName"] = s.deviceName;
-  String json;
-  serializeJson(doc, json);
-  server->send(200, "application/json", json);
-}
-
-void CrossPointWebServer::handleWifiStatus() const {
-  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::WebWifiSetupApi)) {
-    server->send(404, "text/plain", "WiFi setup API disabled");
-    return;
-  }
-  JsonDocument doc;
-  const wl_status_t wifiSt = WiFi.status();
-  const bool connected = wifiSt == WL_CONNECTED;
-  doc["connected"] = connected;
-  if (apMode) {
-    doc["mode"] = "AP";
-    doc["ssid"] = WiFi.softAPSSID();
-  } else if (connected) {
-    doc["mode"] = "STA";
-    doc["ssid"] = WiFi.SSID();
-    doc["ip"] = WiFi.localIP().toString();
-    doc["rssi"] = WiFi.RSSI();
-  } else {
-    doc["mode"] = "STA";
-    const char* stStr = (wifiSt == WL_CONNECT_FAILED)  ? "failed"
-                        : (wifiSt == WL_NO_SSID_AVAIL) ? "no_ssid"
-                        : (wifiSt == WL_IDLE_STATUS)   ? "connecting"
-                                                       : "disconnected";
-    doc["status"] = stStr;
-  }
   String json;
   serializeJson(doc, json);
   server->send(200, "application/json", json);
@@ -2994,7 +2385,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         wsServer->sendTXT(num, "ERROR:Invalid filename");
         return;
       }
-      if (isProtectedComponent(requestedFileName)) {
+      if (PathUtils::isProtectedWebComponent(requestedFileName)) {
         LOG_WRN("WS", "Protected filename rejected: %s", requestedFileName.c_str());
         wsServer->sendTXT(num, "ERROR:Protected filename");
         return;
@@ -3008,7 +2399,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       }
 
       requestedPath = PathUtils::normalizePath(requestedPath);
-      if (pathContainsProtectedItem(requestedPath)) {
+      if (PathUtils::pathContainsProtectedItem(requestedPath)) {
         LOG_WRN("WS", "Protected path rejected: %s", requestedPath.c_str());
         wsServer->sendTXT(num, "ERROR:Protected path");
         return;
@@ -3149,167 +2540,3 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 }
 
 #include "WifiCredentialStore.h"
-
-void CrossPointWebServer::handleWifiScan() const {
-  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::WebWifiSetupApi)) {
-    server->send(404, "text/plain", "WiFi setup API disabled");
-    return;
-  }
-
-  int n = WiFi.scanNetworks();
-  const bool staConnected = (WiFi.getMode() & WIFI_MODE_STA) && (WiFi.status() == WL_CONNECTED);
-  const String activeSsid = staConnected ? WiFi.SSID() : String();
-  JsonDocument doc;
-  JsonArray array = doc.to<JsonArray>();
-
-  for (int i = 0; i < n; ++i) {
-    const String networkSsid = WiFi.SSID(i);
-    const bool encrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
-    JsonObject obj = array.add<JsonObject>();
-    obj["ssid"] = networkSsid;
-    obj["rssi"] = WiFi.RSSI(i);
-    obj["encrypted"] = encrypted;
-    obj["secured"] = encrypted;
-    obj["saved"] = WIFI_STORE.hasSavedCredential(networkSsid.c_str());
-    obj["connected"] = staConnected && (networkSsid == activeSsid);
-  }
-  WiFi.scanDelete();
-
-  String json;
-  serializeJson(doc, json);
-  server->send(200, "application/json", json);
-}
-
-void CrossPointWebServer::handleWifiConnect() const {
-  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::WebWifiSetupApi)) {
-    server->send(404, "text/plain", "WiFi setup API disabled");
-    return;
-  }
-
-  if (!server->hasArg("plain")) {
-    server->send(400, "text/plain", "Missing body");
-    return;
-  }
-  JsonDocument doc;
-  deserializeJson(doc, server->arg("plain"));
-
-  String ssid = doc["ssid"];
-  String password = doc["password"];
-
-  if (ssid.length() == 0) {
-    server->send(400, "text/plain", "SSID required");
-    return;
-  }
-
-  WIFI_STORE.addCredential(ssid.c_str(), password.c_str());
-  WIFI_STORE.saveToFile();
-
-  server->send(200, "text/plain", "WiFi credentials saved");
-}
-
-void CrossPointWebServer::handleWifiForget() const {
-  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::WebWifiSetupApi)) {
-    server->send(404, "text/plain", "WiFi setup API disabled");
-    return;
-  }
-
-  if (!server->hasArg("plain")) {
-    server->send(400, "text/plain", "Missing body");
-    return;
-  }
-  JsonDocument doc;
-  deserializeJson(doc, server->arg("plain"));
-  String ssid = doc["ssid"];
-
-  if (ssid.length() > 0) {
-    WIFI_STORE.removeCredential(ssid.c_str());
-    WIFI_STORE.saveToFile();
-    server->send(200, "text/plain", "WiFi credentials removed");
-  } else {
-    server->send(400, "text/plain", "SSID required");
-  }
-}
-
-void CrossPointWebServer::handleOtaCheckPost() {
-  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::OtaApi)) {
-    server->send(404, "application/json", "{\"status\":\"error\",\"message\":\"OTA API disabled\"}");
-    return;
-  }
-
-  if (WiFi.status() != WL_CONNECTED) {
-    server->send(503, "application/json", "{\"status\":\"error\",\"message\":\"Not connected to WiFi\"}");
-    return;
-  }
-
-  switch (core::FeatureModules::startOtaWebCheck()) {
-    case core::FeatureModules::OtaWebStartResult::AlreadyChecking:
-      server->send(200, "application/json", "{\"status\":\"checking\"}");
-      return;
-    case core::FeatureModules::OtaWebStartResult::Started:
-      server->send(202, "application/json", "{\"status\":\"checking\"}");
-      return;
-    case core::FeatureModules::OtaWebStartResult::StartTaskFailed:
-      server->send(500, "application/json", "{\"status\":\"error\",\"message\":\"Failed to start task\"}");
-      return;
-    case core::FeatureModules::OtaWebStartResult::Disabled:
-      server->send(404, "application/json", "{\"status\":\"error\",\"message\":\"OTA API disabled\"}");
-      return;
-  }
-}
-
-void CrossPointWebServer::handleOtaCheckGet() const {
-  if (!core::FeatureModules::shouldRegisterWebRoute(core::WebOptionalRoute::OtaApi)) {
-    server->send(404, "application/json", "{\"status\":\"error\",\"message\":\"OTA API disabled\"}");
-    return;
-  }
-
-  const core::FeatureModules::OtaWebCheckSnapshot status = core::FeatureModules::getOtaWebCheckSnapshot();
-  if (status.status == core::FeatureModules::OtaWebCheckStatus::Disabled) {
-    server->send(404, "application/json", "{\"status\":\"error\",\"message\":\"OTA API disabled\"}");
-    return;
-  }
-
-  JsonDocument doc;
-  doc["currentVersion"] = CROSSPOINT_VERSION;
-
-  if (status.status == core::FeatureModules::OtaWebCheckStatus::Checking) {
-    doc["status"] = "checking";
-  } else if (status.status == core::FeatureModules::OtaWebCheckStatus::Done) {
-    doc["status"] = "done";
-    doc["available"] = status.available;
-    doc["latestVersion"] = status.latestVersion.c_str();
-    doc["latest_version"] = status.latestVersion.c_str();
-    doc["message"] = status.message.c_str();
-    doc["errorCode"] = status.errorCode;
-    doc["error_code"] = status.errorCode;
-  } else {
-    doc["status"] = "idle";
-  }
-
-  String json;
-  serializeJson(doc, json);
-  server->send(200, "application/json", json);
-}
-
-void CrossPointWebServer::handleAnkiGetCards() const {
-  if (!core::FeatureModules::isEnabled("anki_support")) {
-    server->send(404, "text/plain", "Anki support disabled");
-    return;
-  }
-
-  // buildCardsJson holds the AnkiStore mutex internally; release before send().
-  std::string json;
-  util::AnkiStore::getInstance().buildCardsJson(json);
-  server->send(200, "application/json", json.c_str());
-}
-
-void CrossPointWebServer::handleAnkiClearCards() {
-  if (!core::FeatureModules::isEnabled("anki_support")) {
-    server->send(404, "text/plain", "Anki support disabled");
-    return;
-  }
-
-  util::AnkiStore::getInstance().clear();
-  util::AnkiStore::getInstance().save();
-  server->send(200, "application/json", "{\"status\":\"ok\"}");
-}

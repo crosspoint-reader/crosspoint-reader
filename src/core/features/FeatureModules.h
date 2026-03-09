@@ -62,22 +62,6 @@ enum class Capability {
 
 class FeatureModules {
  public:
-  enum class ReaderOpenStatus {
-    Opened,
-    Unsupported,
-    LoadFailed,
-  };
-
-  struct ReaderOpenResult {
-    // When status == Opened, activity is a newly allocated raw Activity* and ownership
-    // transfers to the caller, which is responsible for handing it off or deleting it.
-    // For all non-Opened statuses, activity stays nullptr.
-    ReaderOpenStatus status = ReaderOpenStatus::LoadFailed;
-    Activity* activity = nullptr;
-    const char* logMessage = nullptr;
-    const char* uiMessage = nullptr;
-  };
-
   struct HomeCardDataResult {
     bool handled = false;
     bool loaded = false;
@@ -98,9 +82,6 @@ class FeatureModules {
   static String getBuildString();
   static String getFeatureMapJson();
   static bool supportsSettingAction(SettingAction action);
-  static ReaderOpenResult createReaderActivityForPath(
-      const std::string& path, GfxRenderer& renderer, MappedInputManager& mappedInput,
-      const std::function<void(const std::string&)>& onBackToLibraryPath, const std::function<void()>& onBackHome);
   static HomeCardDataResult resolveHomeCardData(const std::string& path, int thumbHeight);
   static RecentBookDataResult resolveRecentBookData(const std::string& path);
   static bool isSupportedLibraryFile(const std::string& path);
@@ -143,53 +124,6 @@ class FeatureModules {
   static std::vector<std::string> getUserFontFamilies();
   static uint8_t getSelectedUserFontFamilyIndex();
   static void setSelectedUserFontFamilyIndex(uint8_t index);
-
-  struct FontScanResult {
-    bool available;  // false when ENABLE_USER_FONTS is off
-    int familyCount;
-    bool activeLoaded;
-  };
-
-  struct WebCompressedPayload {
-    bool available;
-    const char* data;
-    size_t compressedSize;
-  };
-
-  enum class OtaWebStartResult {
-    Disabled,
-    Started,
-    AlreadyChecking,
-    StartTaskFailed,
-  };
-
-  enum class OtaWebCheckStatus {
-    Disabled,
-    Idle,
-    Checking,
-    Done,
-  };
-
-  struct OtaWebCheckSnapshot {
-    OtaWebCheckStatus status = OtaWebCheckStatus::Disabled;
-    bool available = false;
-    std::string latestVersion;
-    std::string message;
-    int errorCode = 0;
-  };
-
-  static WebCompressedPayload getPokedexPluginPagePayload();
-  static WebCompressedPayload getWallpaperPluginPagePayload();
-  static WebCompressedPayload getAnkiPluginPagePayload();
-  static OtaWebStartResult startOtaWebCheck();
-  static OtaWebCheckSnapshot getOtaWebCheckSnapshot();
-
-  /**
-   * Scan/reload the user-font library and (if a USER_SD font is selected)
-   * reload the active font family.  Returns metadata for building a JSON
-   * response without the caller needing to know about UserFontManager.
-   */
-  static FontScanResult onFontScanRequested();
 };
 
 }  // namespace core

@@ -92,29 +92,9 @@ class CrossPointWebServer {
   size_t wsLastCompleteSize = 0;
   unsigned long wsLastCompleteAt = 0;
 
-  // HTTP upload state
-  static constexpr size_t kUploadBufferSize = 4096;
-  FsFile uploadFile;
-  String uploadFileName;
-  String uploadPath = "/";
-  size_t uploadSize = 0;
-  bool uploadSuccess = false;
-  String uploadError;
-  uint8_t uploadBuffer[kUploadBufferSize] = {};
-  size_t uploadBufferPos = 0;
-  unsigned long uploadStartTime = 0;
-  unsigned long totalWriteTime = 0;
-  size_t writeCount = 0;
-  size_t uploadLastLoggedSize = 0;
-
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
-  bool flushUploadBuffer();
-
-  // File visibility/protection checks
-  bool isProtectedComponent(const String& component) const;
-  bool pathContainsProtectedItem(const String& path) const;
 
   // File scanning
   void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;
@@ -141,23 +121,12 @@ class CrossPointWebServer {
 
   // Settings handlers
   void handleSettingsPage() const;
-  void handlePokedexPluginPage() const;
-  void handleWallpaperPluginPage() const;
-  void handleAnkiPluginPage() const;
-  void handleAnkiGetCards() const;
-  void handleAnkiClearCards();
   void handleGetSettings() const;
   void handlePostSettings();
-  void handleRescanUserFonts();
-  void handleFontUpload();
-  void handleFontUploadPost();
 
   // API handlers for web UI
   void handleRecentBooks() const;
   void handleGetBookProgress() const;
-  void handleGetBookPokemon() const;
-  void handlePutBookPokemon();
-  void handleDeleteBookPokemon();
   void handleCover() const;
   void handleSleepImages() const;
   void handleSleepCoverGet() const;
@@ -167,13 +136,4 @@ class CrossPointWebServer {
   void handleOpenBook();
   void handleRemoteButton();
   void handleGetSettingsRaw() const;
-
-  // WiFi handlers
-  void handleWifiScan() const;
-  void handleWifiConnect() const;
-  void handleWifiForget() const;
-  void handleWifiStatus() const;
-
-  void handleOtaCheckPost();
-  void handleOtaCheckGet() const;
 };
