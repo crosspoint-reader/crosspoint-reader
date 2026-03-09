@@ -31,11 +31,14 @@ static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
   OtaEntry e0, e1;
   memset(&e0, 0xFF, sizeof(e0));
   memset(&e1, 0xFF, sizeof(e1));
-  esp_partition_read(otaPart, 0, &e0, sizeof(e0));
-  esp_partition_read(otaPart, SECTOR_SIZE, &e1, sizeof(e1));
+  bool e0Valid = (esp_partition_read(otaPart, 0, &e0, sizeof(e0)) == ESP_OK);
+  bool e1Valid = (esp_partition_read(otaPart, SECTOR_SIZE, &e1, sizeof(e1)) == ESP_OK);
+  if (!e0Valid) LOG_ERR("OTA", "Failed to read OTA sector 0 — treating as erased");
+  if (!e1Valid) LOG_ERR("OTA", "Failed to read OTA sector 1 — treating as erased");
 
-  uint32_t seq0 = (e0.seq == 0xFFFFFFFF) ? 0 : e0.seq;
-  uint32_t seq1 = (e1.seq == 0xFFFFFFFF) ? 0 : e1.seq;
+  // Unreadable sectors are treated as erased (seq == 0), matching the memset(0xFF) sentinel.
+  uint32_t seq0 = (e0Valid && e0.seq != 0xFFFFFFFF) ? e0.seq : 0;
+  uint32_t seq1 = (e1Valid && e1.seq != 0xFFFFFFFF) ? e1.seq : 0;
   uint32_t maxSeq = (seq0 > seq1) ? seq0 : seq1;
   uint32_t partIdx = newPart->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0;
 
@@ -127,7 +130,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
       /* Default HTTP client buffer size 512 byte only */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
-      .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
@@ -278,7 +280,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
        */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
-      .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
@@ -299,6 +300,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
   esp_err = esp_https_ota_begin(&ota_config, &ota_handle);
   if (esp_err != ESP_OK) {
     LOG_DBG("OTA", "HTTP OTA Begin Failed: %s", esp_err_to_name(esp_err));
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);  // Restore power save on early failure
     return INTERNAL_UPDATE_ERROR;
   }
 

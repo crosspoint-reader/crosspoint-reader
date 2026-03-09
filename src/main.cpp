@@ -251,8 +251,10 @@ void setup() {
     return;
   }
 
+  // checkPanic() writes the crash report to SD and calls clearPanic() on success.
+  // Clearing is intentionally deferred until a confirmed write so the panic
+  // info persists across reboots if the SD card is unavailable.
   HalSystem::checkPanic();
-  HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
   I18N.loadSettings();

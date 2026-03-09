@@ -120,7 +120,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-  http.setTimeout(120000);  // 2 min — 5.9 MB download over WiFi needs time
+  http.setTimeout(65535);  // max uint16_t (~65s) — HTTPClient::setTimeout takes uint16_t ms
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
   // Add Basic HTTP auth if credentials are configured
