@@ -74,15 +74,6 @@ intervals = [
     # Russian, Ukrainian, Bulgarian, etc.
     (0x0400, 0x04FF),
     ### Miscellaneous Symbols (curated subset) ###
-    # Stars: ★☆
-    (0x2605, 0x2606),
-    # Smileys and sun: ☺☻☼
-    (0x263A, 0x263C),
-    # Gender: ♀ ♂
-    (0x2640, 0x2640),
-    (0x2642, 0x2642),
-    # Card suits: ♠♡♢♣♤♥♦♧
-    (0x2660, 0x2667),
     # Musical symbols: ♩♪♫♬♭♮♯
     (0x2669, 0x266F),
     ### Math Symbols (common subset) ###
