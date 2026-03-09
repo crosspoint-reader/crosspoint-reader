@@ -54,12 +54,13 @@ void BufferedHttpUploadSession::handleUpload(WebServer* server, const BufferedHt
   if (upload.status == UPLOAD_FILE_START) {
     esp_task_wdt_reset();
 
-    uploadFileName = upload.filename;
-    uploadPathValue = "/";
-    targetFilePath = "";
+    snprintf(uploadFileName, sizeof(uploadFileName), "%s", upload.filename.c_str());
+    uploadPathValue[0] = '/';
+    uploadPathValue[1] = '\0';
+    targetFilePath[0] = '\0';
     uploadSize = 0;
     uploadSuccess = false;
-    uploadError = "";
+    uploadError[0] = '\0';
     uploadBufferPos = 0;
     uploadStartTime = millis();
     totalWriteTime = 0;
@@ -67,31 +68,33 @@ void BufferedHttpUploadSession::handleUpload(WebServer* server, const BufferedHt
     uploadLastLoggedSize = 0;
 
     BufferedHttpUploadTarget target{};
-    if (config.resolveTarget == nullptr || !config.resolveTarget(server, uploadFileName, target, uploadError)) {
+    if (config.resolveTarget == nullptr ||
+        !config.resolveTarget(server, uploadFileName, target, uploadError, sizeof(uploadError))) {
       return;
     }
 
-    uploadPathValue = target.uploadPath.isEmpty() ? "/" : target.uploadPath;
-    targetFilePath = target.filePath;
-    if (targetFilePath.isEmpty()) {
-      uploadError = "Missing upload target";
+    const char* resolvedPath = (target.uploadPath[0] != '\0') ? target.uploadPath : "/";
+    snprintf(uploadPathValue, sizeof(uploadPathValue), "%s", resolvedPath);
+    snprintf(targetFilePath, sizeof(targetFilePath), "%s", target.filePath);
+    if (targetFilePath[0] == '\0') {
+      snprintf(uploadError, sizeof(uploadError), "Missing upload target");
       return;
     }
 
-    LOG_DBG("WEB", "[%s] START: %s to path: %s", logLabel, uploadFileName.c_str(), uploadPathValue.c_str());
+    LOG_DBG("WEB", "[%s] START: %s to path: %s", logLabel, uploadFileName, uploadPathValue);
     LOG_DBG("WEB", "[%s] Free heap: %d bytes", logLabel, ESP.getFreeHeap());
 
     bool hadExistingFile = false;
     esp_task_wdt_reset();
     {
       SpiBusMutex::Guard guard;
-      hadExistingFile = Storage.exists(targetFilePath.c_str());
+      hadExistingFile = Storage.exists(targetFilePath);
       if (hadExistingFile) {
-        Storage.remove(targetFilePath.c_str());
+        Storage.remove(targetFilePath);
       }
     }
     if (hadExistingFile) {
-      LOG_DBG("WEB", "[%s] Overwriting existing file: %s", logLabel, targetFilePath.c_str());
+      LOG_DBG("WEB", "[%s] Overwriting existing file: %s", logLabel, targetFilePath);
     }
 
     esp_task_wdt_reset();
@@ -101,18 +104,18 @@ void BufferedHttpUploadSession::handleUpload(WebServer* server, const BufferedHt
       opened = Storage.openFileForWrite(storageTag, targetFilePath, uploadFile);
     }
     if (!opened) {
-      uploadError = config.createFileError;
-      LOG_DBG("WEB", "[%s] FAILED to create file: %s", logLabel, targetFilePath.c_str());
+      snprintf(uploadError, sizeof(uploadError), "%s", config.createFileError);
+      LOG_DBG("WEB", "[%s] FAILED to create file: %s", logLabel, targetFilePath);
       return;
     }
     esp_task_wdt_reset();
 
-    LOG_DBG("WEB", "[%s] File created successfully: %s", logLabel, targetFilePath.c_str());
+    LOG_DBG("WEB", "[%s] File created successfully: %s", logLabel, targetFilePath);
     return;
   }
 
   if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadFile && uploadError.isEmpty()) {
+    if (uploadFile && uploadError[0] == '\0') {
       const uint8_t* data = upload.buf;
       size_t remaining = upload.currentSize;
 
@@ -127,7 +130,7 @@ void BufferedHttpUploadSession::handleUpload(WebServer* server, const BufferedHt
 
         if (uploadBufferPos >= kBufferSize) {
           if (!flushBuffer(logLabel)) {
-            uploadError = config.chunkWriteError;
+            snprintf(uploadError, sizeof(uploadError), "%s", config.chunkWriteError);
             {
               SpiBusMutex::Guard guard;
               uploadFile.close();
@@ -153,19 +156,19 @@ void BufferedHttpUploadSession::handleUpload(WebServer* server, const BufferedHt
   if (upload.status == UPLOAD_FILE_END) {
     if (uploadFile) {
       if (!flushBuffer(logLabel)) {
-        uploadError = config.finalWriteError;
+        snprintf(uploadError, sizeof(uploadError), "%s", config.finalWriteError);
       }
       {
         SpiBusMutex::Guard guard;
         uploadFile.close();
       }
 
-      if (uploadError.isEmpty()) {
+      if (uploadError[0] == '\0') {
         uploadSuccess = true;
         const unsigned long elapsed = millis() - uploadStartTime;
         const float avgKbps = (elapsed > 0) ? (uploadSize / 1024.0F) / (elapsed / 1000.0F) : 0.0F;
         const float writePercent = (elapsed > 0) ? (totalWriteTime * 100.0F / elapsed) : 0.0F;
-        LOG_DBG("WEB", "[%s] Complete: %s (%u bytes in %lu ms, avg %.1f KB/s)", logLabel, uploadFileName.c_str(),
+        LOG_DBG("WEB", "[%s] Complete: %s (%u bytes in %lu ms, avg %.1f KB/s)", logLabel, uploadFileName,
                 static_cast<unsigned int>(uploadSize), elapsed, avgKbps);
         LOG_DBG("WEB", "[%s] Diagnostics: %u writes, total write time: %lu ms (%.1f%%)", logLabel,
                 static_cast<unsigned int>(writeCount), totalWriteTime, writePercent);
@@ -179,11 +182,11 @@ void BufferedHttpUploadSession::handleUpload(WebServer* server, const BufferedHt
     if (uploadFile) {
       SpiBusMutex::Guard guard;
       uploadFile.close();
-      if (!targetFilePath.isEmpty()) {
-        Storage.remove(targetFilePath.c_str());
+      if (targetFilePath[0] != '\0') {
+        Storage.remove(targetFilePath);
       }
     }
-    uploadError = config.abortedError;
+    snprintf(uploadError, sizeof(uploadError), "%s", config.abortedError);
     LOG_DBG("WEB", "[%s] Upload aborted", logLabel);
   }
 }
@@ -194,12 +197,13 @@ void BufferedHttpUploadSession::reset() {
     uploadFile.close();
   }
 
-  uploadFileName = "";
-  uploadPathValue = "/";
-  targetFilePath = "";
+  uploadFileName[0] = '\0';
+  uploadPathValue[0] = '/';
+  uploadPathValue[1] = '\0';
+  targetFilePath[0] = '\0';
   uploadSize = 0;
   uploadSuccess = false;
-  uploadError = "";
+  uploadError[0] = '\0';
   uploadBufferPos = 0;
   uploadStartTime = 0;
   totalWriteTime = 0;

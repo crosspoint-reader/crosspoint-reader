@@ -85,21 +85,21 @@ void invalidateFeatureCachesIfNeeded(const String& filePath) {
 
 network::BufferedHttpUploadSession& httpUploadSession() { return network::sharedBufferedHttpUploadSession(); }
 
-bool resolveWebUploadTarget(WebServer* server, const String& uploadFileName, network::BufferedHttpUploadTarget& target,
-                            String& error) {
+bool resolveWebUploadTarget(WebServer* server, const char* uploadFileName, network::BufferedHttpUploadTarget& target,
+                            char* error, size_t errorSize) {
   if (server == nullptr) {
-    error = "Upload server unavailable";
+    snprintf(error, errorSize, "Upload server unavailable");
     return false;
   }
 
   if (!PathUtils::isValidFilename(uploadFileName)) {
-    error = "Invalid filename";
-    LOG_WRN("WEB", "[UPLOAD] Invalid filename rejected: %s", uploadFileName.c_str());
+    snprintf(error, errorSize, "Invalid filename");
+    LOG_WRN("WEB", "[UPLOAD] Invalid filename rejected: %s", uploadFileName);
     return false;
   }
   if (PathUtils::isProtectedWebComponent(uploadFileName)) {
-    error = "Cannot upload protected files";
-    LOG_WRN("WEB", "[UPLOAD] Protected filename rejected: %s", uploadFileName.c_str());
+    snprintf(error, errorSize, "Cannot upload protected files");
+    LOG_WRN("WEB", "[UPLOAD] Protected filename rejected: %s", uploadFileName);
     return false;
   }
 
@@ -107,25 +107,23 @@ bool resolveWebUploadTarget(WebServer* server, const String& uploadFileName, net
   if (server->hasArg("path")) {
     uploadPath = PathUtils::urlDecode(server->arg("path"));
     if (!PathUtils::isValidSdPath(uploadPath)) {
-      error = "Invalid path";
+      snprintf(error, errorSize, "Invalid path");
       LOG_WRN("WEB", "[UPLOAD] Path validation failed: %s", uploadPath.c_str());
       return false;
     }
 
     uploadPath = PathUtils::normalizePath(uploadPath);
     if (PathUtils::pathContainsProtectedItem(uploadPath)) {
-      error = "Cannot upload to protected path";
+      snprintf(error, errorSize, "Cannot upload to protected path");
       LOG_WRN("WEB", "[UPLOAD] Protected upload path rejected: %s", uploadPath.c_str());
       return false;
     }
   }
 
-  target.uploadPath = uploadPath;
-  target.filePath = uploadPath;
-  if (!target.filePath.endsWith("/")) {
-    target.filePath += "/";
-  }
-  target.filePath += uploadFileName;
+  const bool endsWithSlash = uploadPath.length() > 0 && uploadPath[uploadPath.length() - 1] == '/';
+  snprintf(target.uploadPath, sizeof(target.uploadPath), "%s", uploadPath.c_str());
+  snprintf(target.filePath, sizeof(target.filePath), "%s%s%s", uploadPath.c_str(), endsWithSlash ? "" : "/",
+           uploadFileName);
   return true;
 }
 
@@ -974,10 +972,10 @@ void CrossPointWebServer::handleUploadPost() {
   if (httpUploadSession().succeeded()) {
     invalidateFeatureCachesIfNeeded(httpUploadSession().filePath());
     core::FeatureModules::onUploadCompleted(httpUploadSession().uploadPath(), httpUploadSession().fileName());
-    server->send(200, "text/plain", "File uploaded successfully: " + httpUploadSession().fileName());
+    server->send(200, "text/plain", String("File uploaded successfully: ") + httpUploadSession().fileName());
   } else {
-    const String error =
-        httpUploadSession().error().isEmpty() ? "Unknown error during upload" : httpUploadSession().error();
+    const char* error =
+        httpUploadSession().error()[0] == '\0' ? "Unknown error during upload" : httpUploadSession().error();
     server->send(400, "text/plain", error);
   }
 }

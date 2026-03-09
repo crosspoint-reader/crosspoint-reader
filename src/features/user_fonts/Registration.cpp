@@ -7,6 +7,7 @@
 #include <Logging.h>
 #include <WebServer.h>
 
+#include <cctype>
 #include <cstring>
 
 #include "CrossPointSettings.h"
@@ -58,19 +59,24 @@ FontScanSnapshot rescanUserFonts() {
   return {static_cast<int>(fontManager.getAvailableFonts().size()), activeLoaded};
 }
 
-bool resolveUserFontUploadTarget(WebServer* server, const String& uploadFileName,
-                                 network::BufferedHttpUploadTarget& target, String& error) {
+bool resolveUserFontUploadTarget(WebServer* server, const char* uploadFileName,
+                                 network::BufferedHttpUploadTarget& target, char* error, size_t errorSize) {
   (void)server;
 
   if (!PathUtils::isValidFilename(uploadFileName) || PathUtils::isProtectedWebComponent(uploadFileName)) {
-    error = "Invalid filename";
+    snprintf(error, errorSize, "Invalid filename");
     return false;
   }
 
-  String lowerName = uploadFileName;
-  lowerName.toLowerCase();
-  if (!lowerName.endsWith(".cpf")) {
-    error = "Only .cpf font files are accepted";
+  // Case-insensitive .cpf check: copy to stack buffer, lowercase, compare suffix.
+  char lower[network::BufferedHttpUploadSession::kMaxFileNameLen];
+  snprintf(lower, sizeof(lower), "%s", uploadFileName);
+  for (char* p = lower; *p; ++p) {
+    *p = static_cast<char>(std::tolower(static_cast<unsigned char>(*p)));
+  }
+  const size_t len = std::strlen(lower);
+  if (len < 4 || std::strcmp(lower + len - 4, ".cpf") != 0) {
+    snprintf(error, errorSize, "Only .cpf font files are accepted");
     return false;
   }
 
@@ -81,8 +87,8 @@ bool resolveUserFontUploadTarget(WebServer* server, const String& uploadFileName
     }
   }
 
-  target.uploadPath = "/fonts";
-  target.filePath = String("/fonts/") + uploadFileName;
+  snprintf(target.uploadPath, sizeof(target.uploadPath), "/fonts");
+  snprintf(target.filePath, sizeof(target.filePath), "/fonts/%s", uploadFileName);
   return true;
 }
 
@@ -119,7 +125,7 @@ void handleFontUploadPost(WebServer* server) {
   }
 
   if (!uploadSession().succeeded()) {
-    const String error = uploadSession().error().isEmpty() ? "Upload failed" : uploadSession().error();
+    const char* error = uploadSession().error()[0] == '\0' ? "Upload failed" : uploadSession().error();
     server->send(400, "text/plain", error);
     return;
   }

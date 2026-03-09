@@ -8,8 +8,10 @@
 namespace network {
 
 struct BufferedHttpUploadTarget {
-  String uploadPath = "/";
-  String filePath;
+  static constexpr size_t kMaxPathLen = 512;
+
+  char uploadPath[kMaxPathLen] = "/";
+  char filePath[kMaxPathLen] = {};
 };
 
 struct BufferedHttpUploadConfig {
@@ -20,34 +22,37 @@ struct BufferedHttpUploadConfig {
   const char* finalWriteError = "Failed to write final upload data";
   const char* abortedError = "Upload aborted";
   bool logProgress = false;
-  bool (*resolveTarget)(WebServer* server, const String& fileName, BufferedHttpUploadTarget& target,
-                        String& error) = nullptr;
+  bool (*resolveTarget)(WebServer* server, const char* fileName, BufferedHttpUploadTarget& target, char* error,
+                        size_t errorSize) = nullptr;
 };
 
 class BufferedHttpUploadSession {
  public:
   static constexpr size_t kBufferSize = 4096;
+  static constexpr size_t kMaxFileNameLen = 256;
+  static constexpr size_t kMaxPathLen = BufferedHttpUploadTarget::kMaxPathLen;
+  static constexpr size_t kMaxErrorLen = 128;
 
   void handleUpload(WebServer* server, const BufferedHttpUploadConfig& config);
   void reset();
 
   bool succeeded() const { return uploadSuccess; }
-  const String& fileName() const { return uploadFileName; }
-  const String& uploadPath() const { return uploadPathValue; }
-  const String& filePath() const { return targetFilePath; }
-  const String& error() const { return uploadError; }
+  const char* fileName() const { return uploadFileName; }
+  const char* uploadPath() const { return uploadPathValue; }
+  const char* filePath() const { return targetFilePath; }
+  const char* error() const { return uploadError; }
   size_t size() const { return uploadSize; }
 
  private:
   bool flushBuffer(const char* logLabel);
 
   FsFile uploadFile;
-  String uploadFileName;
-  String uploadPathValue = "/";
-  String targetFilePath;
+  char uploadFileName[kMaxFileNameLen] = {};
+  char uploadPathValue[kMaxPathLen] = "/";
+  char targetFilePath[kMaxPathLen] = {};
   size_t uploadSize = 0;
   bool uploadSuccess = false;
-  String uploadError;
+  char uploadError[kMaxErrorLen] = {};
   uint8_t uploadBuffer[kBufferSize] = {};
   size_t uploadBufferPos = 0;
   unsigned long uploadStartTime = 0;
