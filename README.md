@@ -2,6 +2,21 @@
 
 This is a fork of [CrossPoint Reader](CROSSPOINT-README.md) that extends it with **AI-driven content delivery**: an RSS feed pipeline that lets a personal AI agent (OpenClaw/Chip) automatically generate, package, and push content — news digests, EPUBs, markdown articles, sleep screen art, and firmware updates — directly to the device over WiFi.
 
+---
+
+## ⚡ Quick Install
+
+1. **Connect** your Xteink X4 to your computer via USB-C and wake/unlock the device
+2. **Download** the latest `firmware.bin` from the [releases page](https://github.com/laird/crosspoint-claw/releases/latest)
+3. **Open** [https://xteink.dve.al/](https://xteink.dve.al/) in Chrome or Edge (requires Web Serial — Firefox not supported)
+4. **Flash** using the "OTA fast flash controls" section — select your downloaded `firmware.bin` and click Flash
+
+That's it. The device will reboot into CrossPoint OpenClaw automatically.
+
+> **To revert** to official CrossPoint firmware at any time, flash from [https://xteink.dve.al/](https://xteink.dve.al/) using "Flash CrossPoint firmware", or swap partitions at [https://xteink.dve.al/debug](https://xteink.dve.al/debug).
+
+---
+
 ![Home screen](docs/images/screenshots/home.png)
 *The home screen — recent books surface automatically as new content arrives.*
 
