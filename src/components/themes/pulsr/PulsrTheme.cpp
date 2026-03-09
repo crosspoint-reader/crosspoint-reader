@@ -21,14 +21,14 @@ extern "C" const char* getVersionString();
 #include "components/icons/cover.h"
 #include "components/icons/file24.h"
 #include "components/icons/folder24.h"
-#include "components/icons/hotspot.h"
-#include "components/icons/library.h"
+#include "components/icons/hotspot24.h"
+#include "components/icons/library24.h"
 #include "components/icons/image24.h"
 #include "components/icons/recent.h"
 #include "components/icons/settings2.h"
 #include "components/icons/text24.h"
 #include "components/icons/transfer.h"
-#include "components/icons/wifi.h"
+#include "components/icons/wifi24.h"
 #include "fontIds.h"
 #include "network/RssFeedSync.h"
 
@@ -500,11 +500,11 @@ static const uint8_t* pulsrListIcon(UIIcon icon) {
     case UIIcon::Transfer:
       return TransferIcon;
     case UIIcon::Library:
-      return LibraryIcon;
+      return Library24Icon;
     case UIIcon::Wifi:
-      return WifiIcon;
+      return Wifi24Icon;
     case UIIcon::Hotspot:
-      return HotspotIcon;
+      return Hotspot24Icon;
     default:
       return nullptr;
   }
@@ -671,15 +671,10 @@ void PulsrTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const 
     const int cy = barY + barH / 2;  // vertical centre of bar
     const int cx = x + btnW / 2;     // horizontal centre of zone
 
-    // Check for direction labels and draw filled triangles instead of text
-    // Compare case-insensitively against the English direction strings
-    auto labelIs = [&](const char* s) {
-      const char* l = labels[i];
-      for (; *s && *l; s++, l++) {
-        if ((*s | 32) != (*l | 32)) return false;
-      }
-      return *s == '\0' && *l == '\0';
-    };
+    // Check for direction labels and draw filled triangles instead of text.
+    // Compare against the localized direction strings so the arrow rendering
+    // works regardless of the UI language.
+    auto labelIs = [&](StrId id) { return strcmp(labels[i], I18n::getInstance().get(id)) == 0; };
 
     // Pill-sized triangles: ~26px major axis, ~16px half-minor axis.
     // Up/Down use horizontal scanlines (tip at top/bottom, wider at base).
@@ -690,19 +685,19 @@ void PulsrTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const 
     constexpr int TW = 14;  // half minor axis (half-width for ▲▼, half-height for ◀▶)
     constexpr int TD = 6;   // gap from zone edge for left/right anchor
 
-    if (labelIs("up")) {
+    if (labelIs(StrId::STR_DIR_UP)) {
       // Tip up, base down, centered
       for (int row = 0; row < TH; row++) {
         const int hw = (TW * row) / TH;
         renderer.drawLine(cx - hw, cy - TH / 2 + row, cx + hw, cy - TH / 2 + row, b(false));
       }
-    } else if (labelIs("down")) {
+    } else if (labelIs(StrId::STR_DIR_DOWN)) {
       // Tip down, base up, centered
       for (int row = 0; row < TH; row++) {
         const int hw = (TW * row) / TH;
         renderer.drawLine(cx - hw, cy + TH / 2 - row, cx + hw, cy + TH / 2 - row, b(false));
       }
-    } else if (labelIs("left")) {
+    } else if (labelIs(StrId::STR_DIR_LEFT)) {
       // Tip left, base anchored near RIGHT edge of zone (nearest divider)
       // Drawn with horizontal scanlines: at center row full width, tapering to point at left.
       const int baseX = x + btnW - TD;
@@ -710,7 +705,7 @@ void PulsrTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const 
         const int w = TH * (TW - abs(j)) / TW;
         renderer.drawLine(baseX - w, cy + j, baseX, cy + j, b(false));
       }
-    } else if (labelIs("right")) {
+    } else if (labelIs(StrId::STR_DIR_RIGHT)) {
       // Tip right, base anchored near LEFT edge of zone (nearest divider)
       const int baseX = x + TD;
       for (int j = -TW; j <= TW; j++) {
@@ -1037,4 +1032,11 @@ void PulsrTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const c
   const int th = renderer.getTextHeight(PULSR_12_FONT_ID);
   renderer.drawText(PULSR_12_FONT_ID, rect.x + (rect.width - tw) / 2, rect.y + (rect.height - th) / 2, label,
                     b(!isSelected));
+}
+
+void PulsrTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  auto truncated = renderer.truncatedText(PULSR_10_FONT_ID, label, rect.width - metrics.contentSidePadding * 2);
+  renderer.drawCenteredText(PULSR_10_FONT_ID, rect.y + (rect.height - renderer.getTextHeight(PULSR_10_FONT_ID)) / 2,
+                            truncated.c_str(), b(false));
 }

@@ -5,6 +5,9 @@ void HalGPIO::begin() {
   inputMgr.begin();
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
   pinMode(UART0_RXD, INPUT);  // USB D-/UART0_RXD — do not use PULLDOWN (breaks USB enumeration)
+  // Seed the debounce cache from the current pin state so isUsbConnected()
+  // returns the correct value immediately after begin(), before update() runs.
+  usbConnectedDebounced_ = (digitalRead(UART0_RXD) == HIGH);
 }
 
 void HalGPIO::update() {

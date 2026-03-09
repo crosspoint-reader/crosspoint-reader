@@ -1,5 +1,10 @@
 #include "CrossPointWebServer.h"
 
+// Stub — full implementation in feature/claw (DZ firmware update progress).
+CrossPointWebServer::ClawUpdateProgress CrossPointWebServer::getClawUpdateProgress() {
+  return {};
+}
+
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>

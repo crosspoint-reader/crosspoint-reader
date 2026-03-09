@@ -66,6 +66,11 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentTheme = std::make_unique<PulsrTheme>();
       currentMetrics = &PulsrMetrics::values;
       break;
+    case CrossPointSettings::UI_THEME::DARK_PULSR:
+      LOG_DBG("UI", "Using Dark PULSR theme");
+      currentTheme = std::make_unique<DarkPulsrTheme>();
+      currentMetrics = &PulsrMetrics::values;
+      break;
     default:
       LOG_ERR("UI", "Unknown theme %d, falling back to Classic", static_cast<int>(type));
       currentTheme = std::make_unique<BaseTheme>();
@@ -149,6 +154,7 @@ void UITheme::setUsbConnected(bool connected) { s_usbConnected = connected; }
 bool UITheme::isUsbConnected() { return s_usbConnected; }
 
 static std::vector<std::string> s_receivedFiles;
+static bool s_receivedFileDirty = false;
 static constexpr size_t MAX_RECEIVED_FILES = 12;
 static constexpr size_t MAX_FILENAME_LEN = 80;
 void UITheme::addReceivedFile(const std::string& name) {
@@ -157,6 +163,19 @@ void UITheme::addReceivedFile(const std::string& name) {
   }
   const std::string truncated = (name.size() <= MAX_FILENAME_LEN) ? name : name.substr(0, MAX_FILENAME_LEN - 3) + "...";
   s_receivedFiles.push_back(std::move(truncated));
+  s_receivedFileDirty = true;
 }
 const std::vector<std::string>& UITheme::getReceivedFiles() { return s_receivedFiles; }
-void UITheme::clearReceivedFiles() { s_receivedFiles.clear(); }
+void UITheme::clearReceivedFiles() {
+  s_receivedFiles.clear();
+  s_receivedFileDirty = false;
+}
+bool UITheme::consumeReceivedFileDirty() {
+  const bool dirty = s_receivedFileDirty;
+  s_receivedFileDirty = false;
+  return dirty;
+}
+bool UITheme::isInverted() {
+  const auto& inst = getInstance();
+  return inst.currentTheme && inst.currentTheme->isInverted();
+}

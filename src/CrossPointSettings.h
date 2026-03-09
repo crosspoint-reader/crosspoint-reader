@@ -199,6 +199,9 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Danger Zone: web-based device management (claw extension)
+  uint8_t dangerZoneEnabled = 0;
+  char dangerZonePassword[32] = "";
 
   ~CrossPointSettings() = default;
 

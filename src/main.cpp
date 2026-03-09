@@ -208,6 +208,12 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
+// Version string exposed via C linkage (used by PULSR theme top bar).
+extern "C" const char* getVersionString() { return CROSSPOINT_VERSION; }
+
+// Danger Zone flash request flag (claw extension — stub here).
+volatile bool dzFlashRequested = false;
+
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();

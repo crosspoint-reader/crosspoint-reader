@@ -95,6 +95,8 @@ class PulsrTheme : public BaseTheme {
  protected:
   explicit PulsrTheme(bool inverted) : inverted_(inverted) {}
 
+  bool isInverted() const override { return inverted_; }
+
   // Color helpers — flip black/white for inverted (dark) theme.
   bool b(bool black) const { return inverted_ ? !black : black; }
   Color col(Color c) const {

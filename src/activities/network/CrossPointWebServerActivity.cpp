@@ -430,21 +430,21 @@ void CrossPointWebServerActivity::loop() {
       requestUpdate();
     }
 
-    // Animate RSS sync indicator while feed is active (connected or syncing)
-    if (RssFeedSync::isFeedActive()) {
-      const unsigned long now = millis();
-      static unsigned long lastSyncRender = 0;
-      if (now - lastSyncRender > 600) {
-        lastSyncRender = now;
-        requestUpdate();
-      }
-    } else {
+    // Animate RSS sync indicator; trigger one final refresh on active→idle transition.
+    {
       static bool wasSyncing = false;
-      if (wasSyncing) {
-        wasSyncing = false;
+      const bool nowSyncing = RssFeedSync::isFeedActive();
+      if (nowSyncing) {
+        const unsigned long now = millis();
+        static unsigned long lastSyncRender = 0;
+        if (now - lastSyncRender > 600) {
+          lastSyncRender = now;
+          requestUpdate();
+        }
+      } else if (wasSyncing) {
         requestUpdate();  // final refresh to clear the indicator
       }
-      wasSyncing = RssFeedSync::isSyncing();  // always false here, resets for next sync
+      wasSyncing = nowSyncing;
     }
 
     // Redraw when feed delivers a new file (event-driven via dirty flag)
@@ -453,7 +453,7 @@ void CrossPointWebServerActivity::loop() {
     // Monitor upload status and trigger display refresh on file close only
     // Rate-limited to avoid excessive e-ink refreshes
     if (webServer) {
-      const auto uploadStatus = webServer->getUploadStatus();
+      const auto uploadStatus = webServer->getWsUploadStatus();
       const unsigned long now = millis();
       const bool fileCompleted = uploadStatus.lastCompleteAt > lastKnownCompleteAt;
 
@@ -500,7 +500,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   // Build header title with live connection/transfer status
-  const auto uploadStatus = webServer ? webServer->getUploadStatus() : CrossPointWebServer::WsUploadStatus{};
+  const auto uploadStatus = webServer ? webServer->getWsUploadStatus() : CrossPointWebServer::WsUploadStatus{};
 
   // Sync network status so the PULSR indicator reflects the current transfer state.
   UITheme::setNetworkStatus(true, uploadStatus.inProgress);
