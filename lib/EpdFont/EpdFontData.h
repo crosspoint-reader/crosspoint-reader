@@ -28,6 +28,24 @@ constexpr int toPixel(int32_t fp) { return static_cast<int>((fp + HALF) >> FRAC_
 constexpr float toFloat(int32_t fp) { return fp / static_cast<float>(1 << FRAC_BITS); }
 }  // namespace fp4
 
+/// Helpers for positioning Unicode combining marks (U+0300 ff.) over a
+/// preceding base glyph without GPOS anchor tables.
+namespace combiningMark {
+
+constexpr int MIN_GAP_PX = 1;
+
+/// For combining marks that sit entirely above the baseline, compute how many
+/// pixels to raise the mark so there is at least MIN_GAP_PX between its bottom
+/// edge and the top of the base glyph.  Returns 0 for marks that extend to or
+/// below the baseline (e.g. cedilla, dot-below, ogonek).
+constexpr int raiseAboveBase(int markTop, int markHeight, int baseTop) {
+  if (markTop - markHeight <= 0) return 0;
+  const int gap = markTop - markHeight - baseTop;
+  return (gap < MIN_GAP_PX) ? (MIN_GAP_PX - gap) : 0;
+}
+
+}  // namespace combiningMark
+
 /// Fixed-point conventions used by EpdGlyph and EpdFontData:
 ///   advanceX:   12.4 unsigned fixed-point in uint16_t  (use fp4::toPixel)
 ///   kernMatrix:  4.4 signed fixed-point in int8_t      (use fp4::toPixel)

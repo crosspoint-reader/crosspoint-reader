@@ -33,8 +33,8 @@ class ChapterHtmlSlimParser {
   int italicUntilDepth = INT_MAX;
   int underlineUntilDepth = INT_MAX;
   // buffer for building up words from characters, will auto break if longer than this
-  // leave one char at end for null pointer
-  char partWordBuffer[MAX_WORD_SIZE + 1] = {};
+  // +4: room for up to 3 UTF-8 continuation bytes that cannot be split, plus null terminator
+  char partWordBuffer[MAX_WORD_SIZE + 4] = {};
   int partWordBufferIndex = 0;
   bool nextWordContinues = false;  // true when next flushed word attaches to previous (inline element boundary)
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
