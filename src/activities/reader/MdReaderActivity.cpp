@@ -25,7 +25,7 @@ constexpr int progressBarMarginTop = 1;
 constexpr size_t CHUNK_SIZE = 8 * 1024;
 // Cache magic distinct from TxtReader ("TXTI") to avoid collisions
 constexpr uint32_t CACHE_MAGIC = 0x4D445249;  // "MDRI"
-constexpr uint8_t CACHE_VERSION = 2;
+constexpr uint8_t CACHE_VERSION = 1;
 }  // namespace
 
 // ── Markdown parsing helpers ──────────────────────────────────────────────────
