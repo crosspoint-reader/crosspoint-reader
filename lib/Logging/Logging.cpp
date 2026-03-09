@@ -97,7 +97,8 @@ std::string getLastLogs() {
 
   // Snapshot message pointers outside the critical section to avoid heap
   // allocation (std::string +=) while interrupts are disabled.
-  char snapshot[MAX_LOG_LINES][MAX_ENTRY_LEN];
+  // Static allocation avoids consuming 4KB of task stack on embedded targets.
+  static char snapshot[MAX_LOG_LINES][MAX_ENTRY_LEN];
   size_t snapHead = 0;
   portENTER_CRITICAL(&logMux);
   memcpy(snapshot, logMessages, sizeof(snapshot));
