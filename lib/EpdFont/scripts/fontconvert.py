@@ -74,8 +74,8 @@ intervals = [
     # Russian, Ukrainian, Bulgarian, etc.
     (0x0400, 0x04FF),
     ### Miscellaneous Symbols (curated subset) ###
-    # Musical symbols: ♩♪♫♬♭♮♯
-    (0x2669, 0x266F),
+    # Musical symbols: ♩♪♫♬♭♮
+    (0x2669, 0x266E),
     ### Math Symbols (common subset) ###
     # Superscripts and Subscripts
     (0x2070, 0x209F),
