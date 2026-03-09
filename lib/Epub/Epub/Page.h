@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "FootnoteEntry.h"
+#include "LinkEntry.h"
 #include "blocks/ImageBlock.h"
 #include "blocks/TextBlock.h"
 
@@ -62,6 +63,9 @@ class Page {
   std::vector<FootnoteEntry> footnotes;
   static constexpr uint16_t MAX_FOOTNOTES_PER_PAGE = 16;
 
+  std::vector<LinkEntry> links;
+  static constexpr uint16_t MAX_LINKS_PER_PAGE = 32;
+
   void addFootnote(const char* number, const char* href) {
     if (footnotes.size() >= MAX_FOOTNOTES_PER_PAGE) return;  // Cap per-page footnotes
     FootnoteEntry entry;
@@ -71,6 +75,21 @@ class Page {
     entry.href[sizeof(entry.href) - 1] = '\0';
     footnotes.push_back(entry);
   }
+
+  void addLink(const char* href, int16_t x, int16_t y, int16_t w, int16_t h) {
+    if (links.size() >= MAX_LINKS_PER_PAGE) return;
+    LinkEntry entry;
+    strncpy(entry.href, href, sizeof(entry.href) - 1);
+    entry.href[sizeof(entry.href) - 1] = '\0';
+    entry.x = x;
+    entry.y = y;
+    entry.w = w;
+    entry.h = h;
+    links.push_back(entry);
+  }
+
+  size_t getLinkCount() const { return links.size(); }
+  const LinkEntry& getLink(int i) const { return links[i]; }
 
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(FsFile& file) const;
