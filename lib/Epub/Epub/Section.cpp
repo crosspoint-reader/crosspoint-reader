@@ -312,7 +312,8 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
 
     uint32_t keyLen;
     serialization::readPod(f, keyLen);
-    if (keyLen > fileSize - f.position() - sizeof(uint16_t)) {
+    static constexpr uint32_t MAX_ANCHOR_KEY_LEN = 1024;
+    if (keyLen > MAX_ANCHOR_KEY_LEN || keyLen > fileSize - f.position() - sizeof(uint16_t)) {
       f.close();
       return std::nullopt;
     }
