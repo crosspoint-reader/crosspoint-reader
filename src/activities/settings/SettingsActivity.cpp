@@ -2,8 +2,8 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
-#include "../../SdCardFontSystem.h"
 
+#include "../../SdCardFontSystem.h"
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"

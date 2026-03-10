@@ -3,7 +3,9 @@
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
 
+#include <algorithm>
 #include <cstring>
+#include <iterator>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -23,9 +25,10 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 
   // Reserve: first BUILTIN_FONT_COUNT entries use StrId, rest use strings
   if (registry) {
-    for (const auto& family : registry->getFamilies()) {
-      enumStringValues.push_back(family.name);
-    }
+    const auto& families = registry->getFamilies();
+    enumStringValues.reserve(families.size());
+    std::transform(families.begin(), families.end(), std::back_inserter(enumStringValues),
+                   [](const SdCardFontFamilyInfo& f) { return f.name; });
   }
 
   // Capture the SD font count for the lambdas
@@ -40,9 +43,7 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
     allStringValues.push_back(I18N.get(StrId::STR_BOOKERLY));
     allStringValues.push_back(I18N.get(StrId::STR_NOTO_SANS));
     allStringValues.push_back(I18N.get(StrId::STR_OPEN_DYSLEXIC));
-    for (auto& name : enumStringValues) {
-      allStringValues.push_back(name);
-    }
+    allStringValues.insert(allStringValues.end(), enumStringValues.begin(), enumStringValues.end());
   }
 
   SettingInfo s;
@@ -56,9 +57,10 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   // Capture registry families by copy for the lambdas
   std::vector<std::string> sdFamilyNames;
   if (registry) {
-    for (const auto& f : registry->getFamilies()) {
-      sdFamilyNames.push_back(f.name);
-    }
+    const auto& families = registry->getFamilies();
+    sdFamilyNames.reserve(families.size());
+    std::transform(families.begin(), families.end(), std::back_inserter(sdFamilyNames),
+                   [](const SdCardFontFamilyInfo& f) { return f.name; });
   }
 
   s.valueGetter = [sdFamilyNames]() -> uint8_t {
@@ -80,7 +82,7 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
       SETTINGS.sdFontFamilyName[0] = '\0';
     } else {
       int sdIdx = v - BUILTIN_FONT_COUNT;
-      if (sdIdx >= 0 && sdIdx < static_cast<int>(sdFamilyNames.size())) {
+      if (sdIdx < static_cast<int>(sdFamilyNames.size())) {
         strncpy(SETTINGS.sdFontFamilyName, sdFamilyNames[sdIdx].c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
         SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
       }

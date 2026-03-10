@@ -9,7 +9,6 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
-#include "SdCardFontSystem.h"
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -19,6 +18,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"

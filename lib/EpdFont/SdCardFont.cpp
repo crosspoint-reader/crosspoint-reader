@@ -377,35 +377,40 @@ int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOn
     }
   }
 
-  // Add ligature output codepoints from all styles being prewarmed
-  for (uint8_t si = 0; si < MAX_STYLES; si++) {
-    if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
-    auto& s = styles_[si];
+  // Add ligature output codepoints from all styles being prewarmed.
+  // Skip during metadata-only prewarm (layout measurement) to avoid loading
+  // kern/lig data for all styles upfront (~22KB per style). Kern/lig is
+  // loaded per-style in prewarmStyle() during the full render prewarm instead.
+  if (!metadataOnly) {
+    for (uint8_t si = 0; si < MAX_STYLES; si++) {
+      if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
+      auto& s = styles_[si];
 
-    loadStyleKernLigatureData(s);
-    if (s.ligaturePairs && s.header.ligaturePairCount > 0) {
-      for (uint8_t li = 0; li < s.header.ligaturePairCount && cpCount < MAX_PAGE_GLYPHS; li++) {
-        uint32_t leftCp = s.ligaturePairs[li].pair >> 16;
-        uint32_t rightCp = s.ligaturePairs[li].pair & 0xFFFF;
-        uint32_t outCp = s.ligaturePairs[li].ligatureCp;
+      loadStyleKernLigatureData(s);
+      if (s.ligaturePairs && s.header.ligaturePairCount > 0) {
+        for (uint8_t li = 0; li < s.header.ligaturePairCount && cpCount < MAX_PAGE_GLYPHS; li++) {
+          uint32_t leftCp = s.ligaturePairs[li].pair >> 16;
+          uint32_t rightCp = s.ligaturePairs[li].pair & 0xFFFF;
+          uint32_t outCp = s.ligaturePairs[li].ligatureCp;
 
-        bool hasLeft = false, hasRight = false;
-        for (uint32_t i = 0; i < cpCount; i++) {
-          if (codepoints[i] == leftCp) hasLeft = true;
-          if (codepoints[i] == rightCp) hasRight = true;
-          if (hasLeft && hasRight) break;
-        }
-        if (!hasLeft || !hasRight) continue;
-
-        bool hasOut = false;
-        for (uint32_t i = 0; i < cpCount; i++) {
-          if (codepoints[i] == outCp) {
-            hasOut = true;
-            break;
+          bool hasLeft = false, hasRight = false;
+          for (uint32_t i = 0; i < cpCount; i++) {
+            if (codepoints[i] == leftCp) hasLeft = true;
+            if (codepoints[i] == rightCp) hasRight = true;
+            if (hasLeft && hasRight) break;
           }
-        }
-        if (!hasOut) {
-          codepoints[cpCount++] = outCp;
+          if (!hasLeft || !hasRight) continue;
+
+          bool hasOut = false;
+          for (uint32_t i = 0; i < cpCount; i++) {
+            if (codepoints[i] == outCp) {
+              hasOut = true;
+              break;
+            }
+          }
+          if (!hasOut) {
+            codepoints[cpCount++] = outCp;
+          }
         }
       }
     }
@@ -579,8 +584,11 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   delete[] readOrder;
   delete[] mappings;
 
-  // Lazy-load kern/ligature data
-  loadStyleKernLigatureData(s);
+  // Lazy-load kern/ligature data (skip during metadata-only prewarm to avoid
+  // ~22KB per style allocation during layout measurement — layout only needs advanceX)
+  if (!metadataOnly) {
+    loadStyleKernLigatureData(s);
+  }
 
   // Populate miniData and swap
   memset(&s.miniData, 0, sizeof(s.miniData));
@@ -592,7 +600,9 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   s.miniData.ascender = s.header.ascender;
   s.miniData.descender = s.header.descender;
   s.miniData.is2Bit = s.header.is2Bit;
-  applyKernLigaturePointers(s, s.miniData);
+  if (!metadataOnly) {
+    applyKernLigaturePointers(s, s.miniData);
+  }
   s.miniData.glyphMissHandler = &SdCardFont::onGlyphMiss;
   s.miniData.glyphMissCtx = &overflowCtx_[styleIdx];
 
@@ -634,9 +644,7 @@ EpdFont* SdCardFont::getEpdFont(uint8_t style) {
   return &styles_[style].epdFont;
 }
 
-bool SdCardFont::hasStyle(uint8_t style) const {
-  return style < MAX_STYLES && styles_[style].present;
-}
+bool SdCardFont::hasStyle(uint8_t style) const { return style < MAX_STYLES && styles_[style].present; }
 
 // --- On-demand glyph loading (overflow buffer) ---
 
@@ -735,6 +743,4 @@ const uint8_t* SdCardFont::getOverflowBitmap(const EpdGlyph* glyph) const {
   return nullptr;
 }
 
-SdCardFont* SdCardFont::fromMissCtx(void* ctx) {
-  return static_cast<OverflowContext*>(ctx)->self;
-}
+SdCardFont* SdCardFont::fromMissCtx(void* ctx) { return static_cast<OverflowContext*>(ctx)->self; }

@@ -4,9 +4,9 @@
 # Prerequisites:
 #   pip install freetype-py fonttools
 #
-# Source fonts should be in ../builtinFonts/source/:
-#   NotoSans/NotoSans-Regular.ttf (already in repo)
-#   NotoSansCJK/NotoSansCJKsc-Regular.otf (already in repo)
+# Source fonts are in ../builtinFonts/source/:
+#   Bookerly/, NotoSans/, OpenDyslexic/, Ubuntu/ — committed to git
+#   NotoSansCJK/ — downloaded automatically by this script (gitignored)
 #
 # Output goes to ./output/ (copy to SD card at /.crosspoint/fonts/)
 
@@ -18,6 +18,19 @@ FONT_DIR="../builtinFonts/source"
 OUTPUT_BASE="./output"
 
 SIZES="12,14,16,18"
+
+# --- Download fonts that aren't checked into git ---
+
+NOTOSANSCJK_DIR="$FONT_DIR/NotoSansCJK"
+NOTOSANSCJK_FONT="$NOTOSANSCJK_DIR/NotoSansCJKsc-Regular.otf"
+
+if [ ! -f "$NOTOSANSCJK_FONT" ]; then
+  echo "Downloading NotoSansCJKsc-Regular.otf..."
+  mkdir -p "$NOTOSANSCJK_DIR"
+  curl -fSL -o "$NOTOSANSCJK_FONT" \
+    "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
+  echo "Downloaded $(du -h "$NOTOSANSCJK_FONT" | cut -f1) to $NOTOSANSCJK_FONT"
+fi
 
 # Clean output directories to remove stale v3 files that conflict with new v4 files
 echo "Cleaning output directories..."
