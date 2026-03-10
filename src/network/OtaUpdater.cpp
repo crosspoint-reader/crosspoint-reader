@@ -307,8 +307,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
   do {
     esp_err = esp_https_ota_perform(ota_handle);
     processedSize = esp_https_ota_get_image_len_read(ota_handle);
-    render = true;
-    if (onProgress) onProgress();
+    if (onProgress) {
+      onProgress();
+    } else {
+      render = true;
+    }
     delay(100);
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 
