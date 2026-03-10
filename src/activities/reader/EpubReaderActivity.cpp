@@ -670,6 +670,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // Collect footnotes and link rects from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
     currentPageLinks = std::move(p->links);
+    // Reset link cursor when page changes to avoid out-of-bounds access
+    if (currentPageLinks.empty()) {
+      linkCursorIndex = -1;
+    } else if (linkCursorIndex >= static_cast<int>(currentPageLinks.size())) {
+      linkCursorIndex = 0;
+    }
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
@@ -743,6 +749,24 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
       // Re-render page content to restore images into the blanked area
       page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      // Reapply link highlight after AA image re-render
+      if (linkCursorIndex >= 0 && static_cast<size_t>(linkCursorIndex) < currentPageLinks.size()) {
+        const auto& link = currentPageLinks[linkCursorIndex];
+        constexpr int pad = 2;
+        const int screenW = renderer.getScreenWidth();
+        const int screenH = renderer.getScreenHeight();
+        int rx = link.x + orientedMarginLeft - pad;
+        int ry = link.y + orientedMarginTop - pad;
+        int rw = link.w + 2 * pad;
+        int rh = link.h + 2 * pad;
+        if (rx < 0) { rw += rx; rx = 0; }
+        if (ry < 0) { rh += ry; ry = 0; }
+        if (rx + rw > screenW) { rw = screenW - rx; }
+        if (ry + rh > screenH) { rh = screenH - ry; }
+        if (rw > 0 && rh > 0) {
+          renderer.drawRect(rx, ry, rw, rh, 2, true);
+        }
+      }
       renderStatusBar();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {

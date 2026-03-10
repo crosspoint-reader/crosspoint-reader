@@ -107,6 +107,11 @@ See the [upstream development guide](https://github.com/crosspoint-reader/crossp
 ```bash
 git clone https://github.com/laird/crosspoint-claw
 cd crosspoint-claw
+
+# Clone the SDK as a sibling directory (required — platformio.ini
+# references libraries via symlink://open-x4-sdk/...)
+git clone https://github.com/nicx-x4/open-x4-sdk ../open-x4-sdk
+
 pio run
 ```
 
