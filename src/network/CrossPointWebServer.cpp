@@ -1406,7 +1406,8 @@ void CrossPointWebServer::handleGetSettings() const {
   JsonDocument doc;
 
   for (const auto& s : settings) {
-    if (!s.key) continue;  // Skip ACTION-only entries
+    if (!s.key) continue;         // Skip ACTION-only entries
+    if (s.deviceOnly) continue;   // Skip device-UI-only settings (e.g. Danger Zone)
 
     doc.clear();
     doc["key"] = s.key;
@@ -1495,6 +1496,7 @@ void CrossPointWebServer::handlePostSettings() {
 
   for (const auto& s : settings) {
     if (!s.key) continue;
+    if (s.deviceOnly) continue;   // Reject device-UI-only settings via API
     if (!doc[s.key].is<JsonVariant>()) continue;
 
     switch (s.type) {
