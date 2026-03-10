@@ -215,20 +215,13 @@ void CoverBrowserActivity::loop() {
   }
 }
 
-void CoverBrowserActivity::drawCoverCell(int cellIndex, int gridX, int gridY, int cellW, int cellH) {
+void CoverBrowserActivity::drawCoverCell(int cellIndex, int gridX, int gridY, int /*cellW*/, int /*cellH*/) {
   int absIndex = pageOffset + cellIndex;
   if (absIndex >= static_cast<int>(files.size())) return;
 
-  // Cover area inside cell padding
+  // Stamp cover at native COVER_THUMB_W x COVER_THUMB_H — no scaling
   int coverX = gridX + CELL_PADDING;
   int coverY = gridY + CELL_PADDING;
-  int coverW = cellW - 2 * CELL_PADDING;
-
-  // Reserve space for title (2 lines)
-  int titleLineH = renderer.getLineHeight(SMALL_FONT_ID);
-  int titleAreaH = titleLineH * 2 + 4;
-  int coverH = cellH - 2 * CELL_PADDING - titleAreaH;
-  if (coverH < 20) coverH = 20;
 
   std::string fullPath = basepath;
   if (fullPath.back() != '/') fullPath += "/";
@@ -242,13 +235,7 @@ void CoverBrowserActivity::drawCoverCell(int cellIndex, int gridX, int gridY, in
     if (Storage.openFileForRead("COV", thumbPath, file)) {
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        float bmpH = static_cast<float>(bitmap.getHeight());
-        float bmpW = static_cast<float>(bitmap.getWidth());
-        float ratio = bmpW / bmpH;
-        float tileRatio = static_cast<float>(coverW) / static_cast<float>(coverH);
-        float cropX = 0;
-        if (ratio > tileRatio) cropX = 1.0f - (tileRatio / ratio);
-        renderer.drawBitmap(bitmap, coverX, coverY, coverW, coverH, cropX);
+        renderer.drawBitmap(bitmap, coverX, coverY, COVER_THUMB_W, COVER_THUMB_H);
         hasCover = true;
       }
       file.close();
@@ -256,34 +243,32 @@ void CoverBrowserActivity::drawCoverCell(int cellIndex, int gridX, int gridY, in
   }
 
   // Draw border around cover area
-  renderer.drawRect(coverX, coverY, coverW, coverH, true);
+  renderer.drawRect(coverX, coverY, COVER_THUMB_W, COVER_THUMB_H, true);
 
   if (!hasCover) {
     // Placeholder: fill lower 2/3 and draw book icon
-    renderer.fillRect(coverX, coverY + coverH / 3, coverW, coverH * 2 / 3, true);
-    renderer.drawIcon(CoverIcon, coverX + (coverW - 32) / 2, coverY + (coverH - 32) / 2, 32, 32);
+    renderer.fillRect(coverX, coverY + COVER_THUMB_H / 3, COVER_THUMB_W, COVER_THUMB_H * 2 / 3, true);
+    renderer.drawIcon(CoverIcon, coverX + (COVER_THUMB_W - 32) / 2, coverY + (COVER_THUMB_H - 32) / 2, 32, 32);
   }
 
-  // Title below cover
+  // Title below cover (single line, truncated to cover width)
   std::string filename = files[absIndex];
   auto dotPos = filename.rfind('.');
   if (dotPos != std::string::npos) filename = filename.substr(0, dotPos);
 
-  int titleY = coverY + coverH + 4;
-  auto titleLines = renderer.wrappedText(SMALL_FONT_ID, filename.c_str(), coverW, 2);
+  int titleY = coverY + COVER_THUMB_H + 4;
+  auto titleLines = renderer.wrappedText(SMALL_FONT_ID, filename.c_str(), COVER_THUMB_W, 1);
   for (const auto& line : titleLines) {
     renderer.drawText(SMALL_FONT_ID, coverX, titleY, line.c_str(), true);
-    titleY += titleLineH;
   }
 }
 
-void CoverBrowserActivity::drawSelectionHighlight(int cellIndex, int gridX, int gridY, int cellW, int cellH) {
-  bool selected = (cellIndex == selectorIndex);
-  if (!selected) return;
+void CoverBrowserActivity::drawSelectionHighlight(int cellIndex, int gridX, int gridY) {
+  if (cellIndex != selectorIndex) return;
 
-  // Draw 2px border rect around the entire cell
+  // Draw 2px border rect around the fixed-size cell
   for (int i = 0; i < SELECTION_BORDER; i++) {
-    renderer.drawRect(gridX + i, gridY + i, cellW - 2 * i, cellH - 2 * i, true);
+    renderer.drawRect(gridX + i, gridY + i, CELL_W - 2 * i, CELL_H - 2 * i, true);
   }
 }
 
@@ -292,39 +277,45 @@ void CoverBrowserActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
+  // Fixed grid dimensions: 3x3 cells of CELL_W x CELL_H, centered in content area
+  static constexpr int GRID_W = GRID_COLS * CELL_W;   // 417
+  static constexpr int GRID_H = GRID_ROWS * CELL_H;   // 663
+
+  int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  int availableHeight = contentBottom - contentTop;
+
+  // Center grid in available area
+  int gridOriginX = (pageWidth - GRID_W) / 2;
+  int gridOriginY = contentTop + (availableHeight - GRID_H) / 2;
+
+  int itemsOnPage = std::min(GRID_SIZE, static_cast<int>(files.size()) - pageOffset);
+
+  auto cellPos = [&](int i, int& gx, int& gy) {
+    gx = gridOriginX + (i % GRID_COLS) * CELL_W;
+    gy = gridOriginY + (i / GRID_COLS) * CELL_H;
+  };
+
   if (needFullRefresh || !coverBufferStored) {
     renderer.clearScreen();
 
-    // Header
+    // Header with page indicator
     std::string folderName = (basepath == "/") ? tr(STR_SD_CARD) : basepath.substr(basepath.rfind('/') + 1);
     char headerBuf[128];
     snprintf(headerBuf, sizeof(headerBuf), "%s (%d/%d)", folderName.c_str(), currentPage() + 1, totalPages());
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, headerBuf);
 
-    // Content area
-    int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
-    int availableHeight = contentBottom - contentTop;
-    int contentWidth = pageWidth - 2 * metrics.contentSidePadding;
-
-    int cellW = contentWidth / GRID_COLS;
-    int cellH = availableHeight / GRID_ROWS;
-
-    int itemsOnPage = std::min(GRID_SIZE, static_cast<int>(files.size()) - pageOffset);
-
     if (files.empty()) {
       renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
     } else if (!coverRendered) {
-      // Render all covers (slow - SD reads)
+      // Render all covers at native resolution (slow — SD reads)
       for (int i = 0; i < itemsOnPage; i++) {
-        int row = i / GRID_COLS;
-        int col = i % GRID_COLS;
-        int gridX = metrics.contentSidePadding + col * cellW;
-        int gridY = contentTop + row * cellH;
-        drawCoverCell(i, gridX, gridY, cellW, cellH);
+        int gx, gy;
+        cellPos(i, gx, gy);
+        drawCoverCell(i, gx, gy, CELL_W, CELL_H);
       }
 
-      // Store the cover buffer for fast selection redraws
+      // Store framebuffer for fast selection redraws
       coverBufferStored = renderer.storeBwBuffer();
       coverRendered = coverBufferStored;
     }
@@ -332,11 +323,9 @@ void CoverBrowserActivity::render(RenderLock&&) {
     // Draw selection highlight
     if (coverRendered) {
       for (int i = 0; i < itemsOnPage; i++) {
-        int row = i / GRID_COLS;
-        int col = i % GRID_COLS;
-        int gridX = metrics.contentSidePadding + col * cellW;
-        int gridY = contentTop + row * cellH;
-        drawSelectionHighlight(i, gridX, gridY, cellW, cellH);
+        int gx, gy;
+        cellPos(i, gx, gy);
+        drawSelectionHighlight(i, gx, gy);
       }
     }
 
@@ -350,25 +339,12 @@ void CoverBrowserActivity::render(RenderLock&&) {
     // Fast path: restore stored cover buffer, redraw only selection
     renderer.restoreBwBuffer();
 
-    int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
-    int availableHeight = contentBottom - contentTop;
-    int contentWidth = pageWidth - 2 * metrics.contentSidePadding;
-
-    int cellW = contentWidth / GRID_COLS;
-    int cellH = availableHeight / GRID_ROWS;
-
-    int itemsOnPage = std::min(GRID_SIZE, static_cast<int>(files.size()) - pageOffset);
-
     for (int i = 0; i < itemsOnPage; i++) {
-      int row = i / GRID_COLS;
-      int col = i % GRID_COLS;
-      int gridX = metrics.contentSidePadding + col * cellW;
-      int gridY = contentTop + row * cellH;
-      drawSelectionHighlight(i, gridX, gridY, cellW, cellH);
+      int gx, gy;
+      cellPos(i, gx, gy);
+      drawSelectionHighlight(i, gx, gy);
     }
 
-    // Redraw button hints (they're above the stored buffer)
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

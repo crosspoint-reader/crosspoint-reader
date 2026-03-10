@@ -10,8 +10,12 @@ class CoverBrowserActivity final : public Activity {
   static constexpr int GRID_COLS = 3;
   static constexpr int GRID_ROWS = 3;
   static constexpr int GRID_SIZE = GRID_COLS * GRID_ROWS;
+  static constexpr int COVER_THUMB_W = 123;
   static constexpr int COVER_THUMB_H = 185;
   static constexpr int CELL_PADDING = 8;
+  static constexpr int TITLE_H = 20;
+  static constexpr int CELL_W = COVER_THUMB_W + 2 * CELL_PADDING;   // 139
+  static constexpr int CELL_H = COVER_THUMB_H + 2 * CELL_PADDING + TITLE_H;  // 221
   static constexpr int SELECTION_BORDER = 2;
 
   std::string basepath;
@@ -29,9 +33,8 @@ class CoverBrowserActivity final : public Activity {
   void loadFiles();
   std::string getServerThumbPath(const std::string& epubFullPath) const;
   std::string findThumbPath(const std::string& epubFullPath) const;
-  void drawGrid();
   void drawCoverCell(int cellIndex, int gridX, int gridY, int cellW, int cellH);
-  void drawSelectionHighlight(int cellIndex, int gridX, int gridY, int cellW, int cellH);
+  void drawSelectionHighlight(int cellIndex, int gridX, int gridY);
 
   int totalPages() const;
   int currentPage() const;
