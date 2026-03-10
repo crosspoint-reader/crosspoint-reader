@@ -12,13 +12,17 @@
 #include "lib/Markdown/MarkdownParser.h"
 #include "lib/Serialization/Serialization.h"
 #include "src/core/features/FeatureCatalog.h"
+#include "src/core/registries/WebRouteRegistry.h"
 #include "src/fontIds.h"
+#include "src/features/pokemon_party/Registration.h"
+#include "src/network/RecentBookJson.h"
 #include "src/util/BookProgressDataStore.h"
 #include "src/util/ForkDriftNavigation.h"
 #include "src/util/PokemonBookDataStore.h"
 #include "test/mock/Arduino.h"
 #include "test/mock/HalStorage.h"
 #include "test/mock/SpiBusMutex.h"
+#include <WebServer.h>
 // Keep this undef as a defensive guard for host builds that include pthread/time headers.
 #undef TIME_UTC
 #include "src/CrossPointSettings.h"
@@ -201,6 +205,120 @@ void testPokemonBookDataStore() {
   assert(!PokemonBookDataStore::loadPokemonDocument("/books/missing.epub", missingDoc));
 
   std::cout << "Pokemon book data storage tests passed!" << std::endl;
+}
+
+void testPokemonPartyApiRoutes() {
+  std::cout << "Testing Pokemon party API routes..." << std::endl;
+
+  Storage.reset();
+
+  features::pokemon_party::registerFeature();
+  assert(core::WebRouteRegistry::shouldRegister("pokemon_party_api"));
+
+  WebServer server;
+  core::WebRouteRegistry::mountAll(&server);
+  assert(server.hasRoute("/api/book-pokemon", HTTP_GET));
+  assert(server.hasRoute("/api/book-pokemon", HTTP_PUT));
+  assert(server.hasRoute("/api/book-pokemon", HTTP_DELETE));
+
+  server.setRequest(HTTP_GET, "/api/book-pokemon");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 400);
+  assert(server.response().body == "Missing path");
+
+  server.setRequest(HTTP_GET, "/api/book-pokemon");
+  server.setArg("path", "../relative.epub");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 400);
+  assert(server.response().body == "Invalid path");
+
+  server.setRequest(HTTP_GET, "/api/book-pokemon");
+  server.setArg("path", "/.crosspoint/private.epub");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 403);
+  assert(server.response().body == "Cannot access protected items");
+
+  server.setRequest(HTTP_GET, "/api/book-pokemon");
+  server.setArg("path", "/books/missing.epub");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 404);
+  assert(server.response().body == "Book not found");
+
+  assert(Storage.writeFile("/books/demo.pdf", "demo"));
+  server.setRequest(HTTP_GET, "/api/book-pokemon");
+  server.setArg("path", "/books/demo.pdf");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 400);
+  assert(server.response().body == "Unsupported book type");
+
+  server.setRequest(HTTP_PUT, "/api/book-pokemon");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 400);
+  assert(server.response().body == "Missing body");
+
+  server.setRequest(HTTP_PUT, "/api/book-pokemon");
+  server.setBody("{");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 400);
+  assert(server.response().body == "Invalid JSON body");
+
+  assert(Storage.writeFile("/books/demo.epub", "demo"));
+  server.setRequest(HTTP_PUT, "/api/book-pokemon");
+  server.setBody(
+      "{\"path\":\"/books/demo.epub\",\"pokemon\":{\"id\":25,\"name\":\"pikachu\",\"types\":[\"electric\"],"
+      "\"sleepImagePath\":\"/sleep/pokedex/party/party_demo.bmp\","
+      "\"partyVisualPath\":\"/sleep/pokedex/party/party_visual_demo.bmp\"}}");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+
+  JsonDocument saveResponse;
+  assert(!deserializeJson(saveResponse, server.response().body.c_str()));
+  assert(std::string(saveResponse["path"] | "") == "/books/demo.epub");
+  assert(saveResponse["pokemon"]["id"] == 25);
+  assert(std::string(saveResponse["pokemon"]["name"] | "") == "pikachu");
+  assert(std::string(saveResponse["pokemon"]["sleepImagePath"] | "") == "/sleep/pokedex/party/party_demo.bmp");
+  assert(std::string(saveResponse["pokemon"]["partyVisualPath"] | "") ==
+         "/sleep/pokedex/party/party_visual_demo.bmp");
+
+  JsonDocument storedDoc;
+  assert(PokemonBookDataStore::loadPokemonDocument("/books/demo.epub", storedDoc));
+  assert(storedDoc["pokemon"]["id"] == 25);
+  assert(std::string(storedDoc["pokemon"]["partyVisualPath"] | "") == "/sleep/pokedex/party/party_visual_demo.bmp");
+
+  server.setRequest(HTTP_GET, "/api/book-pokemon");
+  server.setArg("path", "/books/demo.epub");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+
+  JsonDocument getResponse;
+  assert(!deserializeJson(getResponse, server.response().body.c_str()));
+  assert(std::string(getResponse["path"] | "") == "/books/demo.epub");
+  assert(getResponse["pokemon"]["id"] == 25);
+  assert(std::string(getResponse["pokemon"]["partyVisualPath"] | "") == "/sleep/pokedex/party/party_visual_demo.bmp");
+
+  server.setRequest(HTTP_DELETE, "/api/book-pokemon");
+  server.setArg("path", "/books/demo.epub");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+
+  JsonDocument deleteResponse;
+  assert(!deserializeJson(deleteResponse, server.response().body.c_str()));
+  assert(deleteResponse["ok"] == true);
+  assert(std::string(deleteResponse["path"] | "") == "/books/demo.epub");
+
+  JsonDocument clearedDoc;
+  assert(!PokemonBookDataStore::loadPokemonDocument("/books/demo.epub", clearedDoc));
+
+  server.setRequest(HTTP_GET, "/api/book-pokemon");
+  server.setArg("path", "/books/demo.epub");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+
+  JsonDocument clearedResponse;
+  assert(!deserializeJson(clearedResponse, server.response().body.c_str()));
+  assert(clearedResponse["pokemon"].isNull());
+
+  std::cout << "Pokemon party API route tests passed!" << std::endl;
 }
 
 namespace {
@@ -393,6 +511,55 @@ void testBookProgressDataStore() {
   assert(!BookProgressDataStore::supportsBookPath("/books/demo.pdf"));
 
   std::cout << "Book progress data storage tests passed!" << std::endl;
+}
+
+void testRecentBookJsonIncludesPokemon() {
+  std::cout << "Testing recent book JSON Pokemon enrichment..." << std::endl;
+
+  Storage.reset();
+
+  const std::string bookPath = "/books/recent.txt";
+  const std::string cachePath = buildCachePath("txt_", bookPath);
+  assert(Storage.writeFile(bookPath.c_str(), "demo"));
+
+  FsFile progressFile;
+  assert(Storage.openFileForWrite("TST", cachePath + "/progress.bin", progressFile));
+  const uint8_t progressBytes[4] = {9, 0, 0, 0};
+  progressFile.write(progressBytes, sizeof(progressBytes));
+  progressFile.close();
+  writeTxtIndexFile(cachePath + "/index.bin", 40);
+
+  JsonDocument pokemonDoc;
+  JsonObject pokemon = pokemonDoc["pokemon"].to<JsonObject>();
+  pokemon["id"] = 133;
+  pokemon["name"] = "eevee";
+  JsonArray types = pokemon["types"].to<JsonArray>();
+  types.add("normal");
+  assert(PokemonBookDataStore::savePokemonDocument(bookPath.c_str(), pokemon));
+
+  const RecentBook book{bookPath, "Recent Demo", "Unit Tester", "/covers/recent.bmp"};
+  const String enrichedJson = network::buildRecentBookJson(book, true);
+
+  JsonDocument enrichedDoc;
+  assert(!deserializeJson(enrichedDoc, enrichedJson.c_str()));
+  assert(std::string(enrichedDoc["path"] | "") == bookPath);
+  assert(std::string(enrichedDoc["title"] | "") == "Recent Demo");
+  assert(std::string(enrichedDoc["author"] | "") == "Unit Tester");
+  assert(enrichedDoc["hasCover"] == true);
+  assert(std::string(enrichedDoc["last_position"] | "") == "10/40 25%");
+  assert(std::string(enrichedDoc["progress"]["format"] | "") == "txt");
+  assert(enrichedDoc["progress"]["page"] == 10);
+  assert(enrichedDoc["progress"]["pageCount"] == 40);
+  assert(std::fabs(static_cast<float>(enrichedDoc["progress"]["percent"] | 0.0f) - 25.0f) < 0.01f);
+  assert(enrichedDoc["pokemon"]["id"] == 133);
+  assert(std::string(enrichedDoc["pokemon"]["name"] | "") == "eevee");
+
+  const String plainJson = network::buildRecentBookJson(book, false);
+  JsonDocument plainDoc;
+  assert(!deserializeJson(plainDoc, plainJson.c_str()));
+  assert(plainDoc["pokemon"].isNull());
+
+  std::cout << "Recent book JSON Pokemon enrichment tests passed!" << std::endl;
 }
 
 // ── New tests ─────────────────────────────────────────────────────────────
@@ -871,7 +1038,9 @@ int main() {
   testInputValidation();
   testFeatureCatalogApi();
   testPokemonBookDataStore();
+  testPokemonPartyApiRoutes();
   testBookProgressDataStore();
+  testRecentBookJsonIncludesPokemon();
   testSettingsRoundTrip();
   testBackgroundServerModeClamping();
   testSettingsTruncatedLoad();

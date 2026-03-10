@@ -1,5 +1,6 @@
 #include "SleepActivity.h"
 
+#include <ArduinoJson.h>
 #include <Epub/converters/ImageDecoderFactory.h>
 #include <Epub/converters/ImageToFramebufferDecoder.h>
 #include <GfxRenderer.h>
@@ -18,6 +19,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "network/BackgroundWifiService.h"
+#include "util/PokemonBookDataStore.h"
 
 namespace {
 
@@ -369,6 +371,36 @@ void SleepActivity::renderCustomSleepScreen() const {
     }
     LOG_WRN("SLP", "Pinned sleep cover failed, falling back to random");
   }
+
+#if ENABLE_POKEMON_PARTY
+  if (SETTINGS.sleepScreenSource == CrossPointSettings::SLEEP_SCREEN_SOURCE::SLEEP_SOURCE_POKEDEX &&
+      !APP_STATE.openEpubPath.empty()) {
+    JsonDocument pokemonDoc;
+    if (PokemonBookDataStore::loadPokemonDocument(APP_STATE.openEpubPath, pokemonDoc)) {
+      const char* sleepImagePath = pokemonDoc["pokemon"]["sleepImagePath"] | "";
+      if (sleepImagePath[0] != '\0') {
+        const std::string partySleepImagePath(sleepImagePath);
+        LOG_INF("SLP", "Using Pokemon party sleep image: %s", partySleepImagePath.c_str());
+        if (isBmpFile(partySleepImagePath)) {
+          FsFile file;
+          if (Storage.openFileForRead("SLP", partySleepImagePath, file)) {
+            Bitmap bitmap(file, true);
+            if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+              renderBitmapSleepScreen(bitmap);
+              file.close();
+              return;
+            }
+            file.close();
+          }
+        } else if (isSupportedSleepImage(partySleepImagePath)) {
+          renderImageSleepScreen(partySleepImagePath);
+          return;
+        }
+        LOG_WRN("SLP", "Pokemon party sleep image failed, falling back to random");
+      }
+    }
+  }
+#endif
 
   validateSleepImagesOnce();
   const auto numFiles = sleepImageCache.validFiles.size();

@@ -16,6 +16,16 @@ It is not just a fallback for the device-hosted `/plugins/pokedex` page.
 Open `index.html` in a browser and generate wallpapers for the `/sleep/pokedex/` folder.
 The generated `.bmp` files should be copied to `sleep/pokedex` on the SD card.
 
+The companion page can also export a stripped `pokemon_cache.json` for the device-hosted
+`/plugins/pokedex` page. To bake that cache into firmware builds:
+
+```bash
+python scripts/inject_pokemon_cache.py /path/to/pokemon_cache.json
+pio run
+```
+
+Use `python scripts/inject_pokemon_cache.py --clear` to remove the local baked cache sidecar.
+
 ## Attribution
 Original project is MIT licensed by m86-tech.
 See `UPSTREAM_README.md` for original upstream documentation.

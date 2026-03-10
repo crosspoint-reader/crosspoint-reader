@@ -29,12 +29,12 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "network/BufferedHttpUpload.h"
+#include "network/RecentBookJson.h"
 #include "network/WebUtils.h"
 #include "util/BookProgressDataStore.h"
 #include "util/DateUtils.h"
 #include "util/InputValidation.h"
 #include "util/PathUtils.h"
-#include "util/PokemonBookDataStore.h"
 
 namespace {
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
@@ -215,17 +215,6 @@ void appendTodoItemFromLine(JsonArray& array, std::string line) {
     item["type"] = "text";
     item["checked"] = false;
     item["isHeader"] = true;
-  }
-}
-
-void appendProgressJson(JsonObject target, const BookProgressDataStore::ProgressData& progress) {
-  target["format"] = BookProgressDataStore::kindName(progress.kind);
-  target["percent"] = std::round(progress.percent * 100.0f) / 100.0f;
-  target["page"] = progress.page;
-  target["pageCount"] = progress.pageCount;
-  target["position"] = BookProgressDataStore::formatPositionLabel(progress);
-  if (progress.spineIndex >= 0) {
-    target["spineIndex"] = progress.spineIndex;
   }
 }
 
@@ -1724,41 +1713,14 @@ void CrossPointWebServer::handleRecentBooks() const {
   server->sendContent("[");
 
   bool seenFirst = false;
-  JsonDocument doc;
-
   for (const auto& book : books) {
-    doc.clear();
-    doc["path"] = book.path;
-    doc["title"] = book.title;
-    doc["author"] = book.author;
-    doc["last_position"] = "";
-    doc["last_opened"] = 0;
-    doc["hasCover"] = !book.coverBmpPath.empty();
-
-    BookProgressDataStore::ProgressData progress;
-    if (BookProgressDataStore::loadProgress(book.path, progress)) {
-      doc["last_position"] = BookProgressDataStore::formatPositionLabel(progress);
-      appendProgressJson(doc["progress"].to<JsonObject>(), progress);
-    } else {
-      doc["progress"] = nullptr;
-    }
-
-    if (includePokemon) {
-      JsonDocument pokemonDoc;
-      if (PokemonBookDataStore::loadPokemonDocument(book.path, pokemonDoc) && pokemonDoc["pokemon"].is<JsonObject>()) {
-        doc["pokemon"] = pokemonDoc["pokemon"];
-      }
-    }
-
     if (seenFirst) {
       server->sendContent(",");
     } else {
       seenFirst = true;
     }
 
-    String output;
-    serializeJson(doc, output);
-    server->sendContent(output);
+    server->sendContent(network::buildRecentBookJson(book, includePokemon));
   }
 
   server->sendContent("]");
@@ -1798,7 +1760,7 @@ void CrossPointWebServer::handleGetBookProgress() const {
 
   BookProgressDataStore::ProgressData progress;
   if (BookProgressDataStore::loadProgress(bookPath.c_str(), progress)) {
-    appendProgressJson(response["progress"].to<JsonObject>(), progress);
+    network::appendBookProgressJson(response["progress"].to<JsonObject>(), progress);
   } else {
     response["progress"] = nullptr;
   }

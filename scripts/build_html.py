@@ -1,8 +1,42 @@
 import os
 import re
 import gzip
+import json
+from pathlib import Path
 
 SRC_DIR = "src"
+POKEDEX_HTML_NAME = "PokedexPluginPage.html"
+POKEDEX_CACHE_MARKER_RE = re.compile(
+    r"/\* POKEMON_CACHE_INJECT_START \*/.*?/\* POKEMON_CACHE_INJECT_END \*/",
+    re.DOTALL,
+)
+
+
+def inject_pokedex_cache(html_path: str, html: str) -> str:
+    path = Path(html_path)
+    if path.name != POKEDEX_HTML_NAME:
+        return html
+
+    cache_path = path.with_suffix(".cache.json")
+    if not cache_path.exists():
+        return html
+
+    with open(cache_path, "r", encoding="utf-8") as cache_file:
+        cache_data = json.load(cache_file)
+
+    if "POKEMON_CACHE_INJECT_START" not in html:
+        raise RuntimeError(f"Missing Pokedex cache marker in {html_path}")
+
+    json_str = json.dumps(cache_data, separators=(",", ":"), ensure_ascii=False)
+    json_str = json_str.replace("</", "<\\/")
+    replacement = f"/* POKEMON_CACHE_INJECT_START */ {json_str} /* POKEMON_CACHE_INJECT_END */"
+    injected = POKEDEX_CACHE_MARKER_RE.sub(replacement, html)
+
+    if injected == html:
+        raise RuntimeError(f"Failed to inject Pokedex cache from {cache_path}")
+
+    print(f"Injected Pokedex cache from {cache_path} ({len(cache_data)} entries)")
+    return injected
 
 def minify_html(html: str) -> str:
     # Tags where whitespace should be preserved
@@ -38,6 +72,8 @@ for root, _, files in os.walk(SRC_DIR):
             html_path = os.path.join(root, file)
             with open(html_path, "r", encoding="utf-8") as f:
                 html_content = f.read()
+
+            html_content = inject_pokedex_cache(html_path, html_content)
 
             # minified = regex.sub("\g<1>", html_content)
             minified = minify_html(html_content)

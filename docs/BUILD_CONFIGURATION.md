@@ -255,6 +255,16 @@ Adds an optional browser-side wallpaper generator page at `/plugins/pokedex`:
 - Runs in the browser, not on the device CPU
 - Generates grayscale X4 wallpapers from PokeAPI data
 - Uploads directly to `/sleep/pokedex` using the existing web upload API
+- Can optionally use a baked local cache for offline / low-latency firmware previews
+
+Optional baked cache workflow:
+
+1. Export `pokemon_cache.json` from the companion `pokedex.html` tool.
+2. Run `python scripts/inject_pokemon_cache.py /path/to/pokemon_cache.json`
+3. Build normally with `pio run`
+
+The cache is stored in a local sidecar file and injected during `scripts/build_html.py`;
+the source `PokedexPluginPage.html` stays unchanged.
 
 **When disabled:**
 - `/plugins/pokedex` route is not registered
@@ -278,6 +288,7 @@ Pokemon companion layer:
 - Exposes `GET`/`PUT`/`DELETE /api/book-pokemon`
 - Extends `/api/recent` with saved Pokemon metadata plus real cached progress
 - Turns recent books into a six-slot party surface in the Fork Drift home flow
+- Bakes per-book cover+sprite visuals into `/sleep/pokedex/party` for both the recent-party slots and the sleep screen when a Pokemon is assigned from the web UI
 
 **When disabled:**
 - `/api/book-pokemon` routes are not registered

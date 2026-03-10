@@ -25,6 +25,7 @@ platformio.local.ini
 
 .pio-size-*/
 /.plans/
+src/network/html/PokedexPluginPage.cache.json
 
 # Crash dumps
 core.*

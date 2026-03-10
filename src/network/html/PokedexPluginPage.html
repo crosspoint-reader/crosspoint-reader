@@ -227,6 +227,7 @@
       border: 2px solid var(--black);
       background: var(--gray-10);
       overflow: hidden;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -240,6 +241,18 @@
       height: 100%;
       object-fit: cover;
       display: block;
+    }
+
+    .party-cover .party-sprite {
+      position: absolute;
+      right: -4px;
+      bottom: -4px;
+      width: 42px;
+      height: 42px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 0 1px var(--white)) drop-shadow(0 0 1px var(--white));
+      pointer-events: none;
     }
 
     .party-meta {
@@ -491,10 +504,17 @@
 </div>
 
 <script>
+  // Pre-fetched PokeAPI data keyed by URL. Populated by scripts/inject_pokemon_cache.py.
+  // When present, fetchJson() returns this data without making a network request.
+  const POKEMON_CACHE = /* POKEMON_CACHE_INJECT_START */ {} /* POKEMON_CACHE_INJECT_END */;
+
   const SCREEN_WIDTH = 480;
   const SCREEN_HEIGHT = 800;
   const MAX_POKEMON_ID = 1025;
   const UPLOAD_PATH = "/sleep/pokedex";
+  const PARTY_SLEEP_UPLOAD_PATH = "/sleep/pokedex/party";
+  const PARTY_VISUAL_WIDTH = 360;
+  const PARTY_VISUAL_HEIGHT = 480;
   const MIN_SPRITE_SCALE = 0.5; // Match the original companion defaults while keeping explicit bounds.
   const MAX_SPRITE_SCALE = 3.0; // Preserve the old slider range for larger classic renders.
   const MAX_EVOLUTION_CHAIN_LENGTH = 5; // Limit branch traversal so the footer section does not overflow.
@@ -632,6 +652,9 @@
   }
 
   async function fetchJson(url) {
+    if (POKEMON_CACHE[url] !== undefined) {
+      return POKEMON_CACHE[url];
+    }
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error("Request failed: " + response.status);
@@ -1257,12 +1280,14 @@
     drawBoxedWallpaper(bundle.pokemon, sprite, flavorText, evolutionNames, options);
   }
 
-  function canvasToBmpBlob() {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  function canvasToBmpBlob(sourceCanvas) {
+    const outputCanvas = sourceCanvas || canvas;
+    const outputCtx = outputCanvas.getContext("2d");
+    const imageData = outputCtx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
     const data = imageData.data;
     const headerSize = 54;
-    const rowSize = Math.floor((24 * canvas.width + 31) / 32) * 4;
-    const fileSize = headerSize + rowSize * canvas.height;
+    const rowSize = Math.floor((24 * outputCanvas.width + 31) / 32) * 4;
+    const fileSize = headerSize + rowSize * outputCanvas.height;
     const buffer = new ArrayBuffer(fileSize);
     const view = new DataView(buffer);
 
@@ -1270,17 +1295,17 @@
     view.setUint32(2, fileSize, true);
     view.setUint32(10, headerSize, true);
     view.setUint32(14, 40, true);
-    view.setInt32(18, canvas.width, true);
-    view.setInt32(22, -canvas.height, true);
+    view.setInt32(18, outputCanvas.width, true);
+    view.setInt32(22, -outputCanvas.height, true);
     view.setUint16(26, 1, true);
     view.setUint16(28, 24, true);
     view.setUint32(30, 0, true);
 
     let offset = headerSize;
-    for (let y = 0; y < canvas.height; y++) {
+    for (let y = 0; y < outputCanvas.height; y++) {
       const rowStart = offset;
-      for (let x = 0; x < canvas.width; x++) {
-        const i = (y * canvas.width + x) * 4;
+      for (let x = 0; x < outputCanvas.width; x++) {
+        const i = (y * outputCanvas.width + x) * 4;
         view.setUint8(offset++, data[i + 2]);
         view.setUint8(offset++, data[i + 1]);
         view.setUint8(offset++, data[i]);
@@ -1309,6 +1334,216 @@
   async function ensurePokedexFolder() {
     await ensureFolder("/", "sleep");
     await ensureFolder("/sleep", "pokedex");
+  }
+
+  async function ensurePartySleepFolder() {
+    await ensurePokedexFolder();
+    await ensureFolder("/sleep/pokedex", "party");
+  }
+
+  function hashString(value) {
+    let hash = 2166136261;
+    const text = String(value || "");
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  }
+
+  function getPartySleepImageFilename(bookPath) {
+    return "party_" + hashString(bookPath) + ".bmp";
+  }
+
+  function getPartyVisualFilename(bookPath) {
+    return "party_visual_" + hashString(bookPath) + ".bmp";
+  }
+
+  function drawImageContained(targetCtx, image, x, y, width, height) {
+    const imageWidth = image.naturalWidth || image.width;
+    const imageHeight = image.naturalHeight || image.height;
+    if (!imageWidth || !imageHeight) return;
+
+    const scale = Math.min(width / imageWidth, height / imageHeight);
+    const drawWidth = Math.max(1, Math.round(imageWidth * scale));
+    const drawHeight = Math.max(1, Math.round(imageHeight * scale));
+    const drawX = Math.round(x + ((width - drawWidth) / 2));
+    const drawY = Math.round(y + ((height - drawHeight) / 2));
+    targetCtx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  }
+
+  function drawImageCover(targetCtx, image, x, y, width, height) {
+    const imageWidth = image.naturalWidth || image.width;
+    const imageHeight = image.naturalHeight || image.height;
+    if (!imageWidth || !imageHeight) return;
+
+    const scale = Math.max(width / imageWidth, height / imageHeight);
+    const drawWidth = Math.max(1, Math.round(imageWidth * scale));
+    const drawHeight = Math.max(1, Math.round(imageHeight * scale));
+    const drawX = Math.round(x + ((width - drawWidth) / 2));
+    const drawY = Math.round(y + ((height - drawHeight) / 2));
+    targetCtx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  }
+
+  function buildPartyCompositeCanvas(options) {
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = options.width;
+    tempCanvas.height = options.height;
+    const tempCtx = tempCanvas.getContext("2d");
+    tempCtx.fillStyle = "#ffffff";
+    tempCtx.fillRect(0, 0, options.width, options.height);
+    const drawCover = options.coverMode === "cover" ? drawImageCover : drawImageContained;
+    drawCover(
+      tempCtx,
+      options.coverImage,
+      options.coverPadding,
+      options.coverPadding,
+      options.width - (options.coverPadding * 2),
+      options.height - (options.coverPadding * 2)
+    );
+
+    const spriteScale = Math.min(
+      options.spriteTarget / options.spriteBounds.width,
+      options.spriteTarget / options.spriteBounds.height
+    );
+    const spriteWidth = Math.max(1, Math.round(options.spriteBounds.width * spriteScale));
+    const spriteHeight = Math.max(1, Math.round(options.spriteBounds.height * spriteScale));
+    const spriteX = options.width - spriteWidth - options.spritePadding;
+    const spriteY = options.height - spriteHeight - options.spritePadding;
+    drawGrayscaleSprite(
+      tempCtx,
+      options.spriteImage,
+      options.spriteBounds,
+      spriteX,
+      spriteY,
+      spriteWidth,
+      spriteHeight,
+      options.pixelated
+    );
+
+    return tempCanvas;
+  }
+
+  async function uploadCanvasBmp(uploadPath, filename, sourceCanvas) {
+    const formData = new FormData();
+    formData.append("file", canvasToBmpBlob(sourceCanvas), filename);
+    const uploadResponse = await fetch("/upload?path=" + encodeURIComponent(uploadPath), {
+      method: "POST",
+      body: formData
+    });
+    if (!uploadResponse.ok) {
+      throw new Error(await uploadResponse.text());
+    }
+    return uploadPath + "/" + filename;
+  }
+
+  async function bakePartyAssets(bookPath, bundle) {
+    const result = {
+      sleepImagePath: "",
+      partyVisualPath: "",
+      warnings: []
+    };
+    const book = getPartyBook(bookPath);
+    if (!book || !book.hasCover || !bundle || !bundle.pokemon) {
+      result.warnings.push("book cover unavailable");
+      return result;
+    }
+
+    const coverResponse = await fetch("/api/cover?path=" + encodeURIComponent(bookPath));
+    if (!coverResponse.ok) {
+      result.warnings.push("could not load book cover");
+      return result;
+    }
+
+    const pixelSpriteUrl = getSpriteUrl(bundle.pokemon, "pixel");
+    const spriteUrl =
+      pixelSpriteUrl ||
+      getSpriteUrl(bundle.pokemon, "home") ||
+      getSpriteUrl(bundle.pokemon, "official");
+    if (!spriteUrl) {
+      result.warnings.push("Pokemon sprite unavailable");
+      return result;
+    }
+
+    const coverBlob = await coverResponse.blob();
+    const coverObjectUrl = URL.createObjectURL(coverBlob);
+    try {
+      const coverImage = await loadImage(coverObjectUrl);
+      const spriteImage = await loadImage(spriteUrl);
+      const spriteBounds = getSpriteBounds(spriteImage);
+      await ensurePartySleepFolder();
+
+      try {
+        const sleepCanvas = buildPartyCompositeCanvas({
+          width: SCREEN_WIDTH,
+          height: SCREEN_HEIGHT,
+          coverMode: "contain",
+          coverPadding: 20,
+          coverImage: coverImage,
+          spriteImage: spriteImage,
+          spriteBounds: spriteBounds,
+          spriteTarget: 176,
+          spritePadding: 18,
+          pixelated: spriteUrl === pixelSpriteUrl
+        });
+        result.sleepImagePath = await uploadCanvasBmp(
+          PARTY_SLEEP_UPLOAD_PATH,
+          getPartySleepImageFilename(bookPath),
+          sleepCanvas
+        );
+      } catch (error) {
+        console.error(error);
+        result.warnings.push("sleep image bake skipped: " + error.message);
+      }
+
+      try {
+        const partyVisualCanvas = buildPartyCompositeCanvas({
+          width: PARTY_VISUAL_WIDTH,
+          height: PARTY_VISUAL_HEIGHT,
+          coverMode: "cover",
+          coverPadding: 0,
+          coverImage: coverImage,
+          spriteImage: spriteImage,
+          spriteBounds: spriteBounds,
+          spriteTarget: 132,
+          spritePadding: 8,
+          pixelated: spriteUrl === pixelSpriteUrl
+        });
+        result.partyVisualPath = await uploadCanvasBmp(
+          PARTY_SLEEP_UPLOAD_PATH,
+          getPartyVisualFilename(bookPath),
+          partyVisualCanvas
+        );
+      } catch (error) {
+        console.error(error);
+        result.warnings.push("party slot image bake skipped: " + error.message);
+      }
+
+      return result;
+    } finally {
+      URL.revokeObjectURL(coverObjectUrl);
+    }
+  }
+
+  async function deleteUploadedFile(path) {
+    if (!path) {
+      return;
+    }
+    const body = "path=" + encodeURIComponent(path);
+    const response = await fetch("/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body
+    });
+    if (response.ok) {
+      return;
+    }
+
+    const message = await response.text();
+    if (message.toLowerCase().includes("not found")) {
+      return;
+    }
+    throw new Error(message || "Unknown delete error");
   }
 
   function buildPokemonAssignmentPayload(bundle) {
@@ -1349,6 +1584,13 @@
     return partyBooks.find(function(book) { return book && book.path === path; }) || null;
   }
 
+  function getAssignedSpriteUrl(assigned) {
+    if (!assigned || !assigned.sprites) {
+      return "";
+    }
+    return assigned.sprites.pixel || assigned.sprites.home || assigned.sprites.official || "";
+  }
+
   function getProgressState(book) {
     const progress = book && book.progress;
     if (!progress || typeof progress !== "object") {
@@ -1363,7 +1605,7 @@
     return {
       percent: Math.max(0, Math.min(100, rawPercent)),
       percentLabel: String(Math.round(Math.max(0, Math.min(100, rawPercent)))) + "%",
-      level: Math.max(1, Math.floor(Math.max(0, Math.min(100, rawPercent)))),
+      level: Math.max(1, Math.round(Math.max(0, Math.min(100, rawPercent)))),
       position: progress.position ? String(progress.position) : ""
     };
   }
@@ -1410,57 +1652,18 @@
       return;
     }
 
-    const html = partyBooks.map(function(book, index) {
+    const html = partyBooks.map(function(book) {
       const title = escapeHtml(book.title || "Untitled");
-      const author = escapeHtml(book.author || "");
       const assigned = book.pokemon || null;
       const progress = getProgressState(book);
-      const pokemonName = assigned && assigned.name ? titleCase(assigned.name) : "";
-      const pokemonId = assigned && assigned.id ? "#" + String(assigned.id).padStart(4, "0") : "";
-      const types = assigned && Array.isArray(assigned.types) ? assigned.types.slice(0, 2) : [];
-      const chain = assigned && Array.isArray(assigned.evolutionChain) ? assigned.evolutionChain.slice(0, 3) : [];
-      const evolutionState = assigned && progress ? getEvolutionState(assigned, progress.level) : null;
+      const pokemonName = assigned && assigned.name ? titleCase(assigned.name) : "No Pokemon assigned";
+      const spriteUrl = getAssignedSpriteUrl(assigned);
       const progressLine = progress
-        ? "Lv " + progress.level + " - " + (progress.position || progress.percentLabel)
-        : "No reading progress yet.";
-      let pokemonHtml = '<div class="party-pokemon-empty">No Pokemon assigned yet.</div>';
-
-      if (assigned) {
-        let line = "";
-        if (chain.length) {
-          line = chain.map(function(entry) {
-            const label = titleCase(entry.name || "");
-            if (entry && typeof entry.minLevel === "number") {
-              return label + " Lv " + entry.minLevel;
-            }
-            return label;
-          }).join(" -> ");
-        }
-
-        pokemonHtml = '<div class="party-pokemon-name">' + escapeHtml([pokemonId, pokemonName].filter(Boolean).join(" ")) + '</div>';
-        if (types.length) {
-          pokemonHtml += '<div class="party-chip-row">' + types.map(function(type) {
-            return '<span class="party-chip">' + escapeHtml(String(type).toUpperCase()) + '</span>';
-          }).join("") + '</div>';
-        }
-        if (progress) {
-          pokemonHtml += '<div class="party-pokemon-line">Current level: Lv ' + progress.level + ' (' + escapeHtml(progress.percentLabel) + ' read)</div>';
-        }
-        if (evolutionState && evolutionState.current) {
-          pokemonHtml += '<div class="party-pokemon-line">Current form: ' + escapeHtml(titleCase(evolutionState.current.name || pokemonName)) + '</div>';
-          if (evolutionState.next && typeof evolutionState.next.minLevel === "number") {
-            pokemonHtml += '<div class="party-pokemon-line">Next: ' +
-              escapeHtml(titleCase(evolutionState.next.name || "")) + ' at Lv ' + evolutionState.next.minLevel + '</div>';
-          } else if (progress && progress.level >= 100) {
-            pokemonHtml += '<div class="party-pokemon-line">Book complete at Lv 100.</div>';
-          } else if (!evolutionState.next) {
-            pokemonHtml += '<div class="party-pokemon-line">Final form reached.</div>';
-          }
-        }
-        if (line) {
-          pokemonHtml += '<div class="party-pokemon-line">' + escapeHtml(line) + '</div>';
-        }
-      }
+        ? "Lv " + progress.level
+        : "Lv 1";
+      const pokemonHtml = assigned
+        ? '<div class="party-pokemon-name">' + escapeHtml(pokemonName) + '</div>'
+        : '<div class="party-pokemon-empty">No Pokemon assigned yet.</div>';
 
       return [
         '<div class="party-slot">',
@@ -1469,14 +1672,16 @@
                book.hasCover
                  ? '<img src="/api/cover?path=' + encodeURIComponent(book.path) + '" alt="' + title + '" loading="lazy">'
                  : '<span>Book</span>',
+               assigned && spriteUrl
+                 ? '<img class="party-sprite" src="' + escapeHtml(spriteUrl) + '" alt="' + escapeHtml(pokemonName) + '" loading="lazy">'
+                 : '',
         '    </div>',
         '    <div class="party-meta">',
-        '      <div class="party-book-title">' + (index + 1) + '. ' + title + '</div>',
-               author ? '<div class="party-book-author">' + author + '</div>' : '',
+        '      <div class="party-book-title">' + title + '</div>',
+        '      ' + pokemonHtml,
         '      <div class="party-book-progress">' + escapeHtml(progressLine) + '</div>',
         '    </div>',
         '  </div>',
-        '  <div class="party-pokemon">' + pokemonHtml + '</div>',
         '  <div class="party-actions">',
         '    <button class="btn" data-party-action="assign" data-path="' + encodeURIComponent(book.path) + '" data-needs-rendered="1" data-has-assigned="1" type="button">Assign Current</button>',
         '    <button class="btn secondary" data-party-action="use" data-path="' + encodeURIComponent(book.path) + '" data-has-assigned="' + (assigned ? "1" : "0") + '" type="button">Use Assigned</button>',
@@ -1535,7 +1740,10 @@
   async function detectPokemonPartyApi() {
     try {
       const response = await fetch("/api/book-pokemon");
-      return response.status !== 404;
+      if (response.status === 404) return false;
+      if (response.status !== 400) return false;
+      const body = await response.text();
+      return body.indexOf("Missing path") !== -1;
     } catch (error) {
       console.error(error);
       return false;
@@ -1549,23 +1757,48 @@
     }
 
     const book = getPartyBook(path);
+    let bakedPaths = [];
+    let saveSucceeded = false;
     try {
       setBusy(true);
       setPartyStatus("Saving Pokemon for " + (book && book.title ? book.title : path) + "...", false);
+      const pokemonPayload = buildPokemonAssignmentPayload(lastRendered.bundle);
+      const bakeResult = await bakePartyAssets(path, lastRendered.bundle);
+      if (bakeResult.sleepImagePath) {
+        pokemonPayload.sleepImagePath = bakeResult.sleepImagePath;
+        bakedPaths.push(bakeResult.sleepImagePath);
+      }
+      if (bakeResult.partyVisualPath) {
+        pokemonPayload.partyVisualPath = bakeResult.partyVisualPath;
+        bakedPaths.push(bakeResult.partyVisualPath);
+      }
       const response = await fetch("/api/book-pokemon", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           path: path,
-          pokemon: buildPokemonAssignmentPayload(lastRendered.bundle)
+          pokemon: pokemonPayload
         })
       });
       if (!response.ok) {
         throw new Error(await response.text());
       }
+      saveSucceeded = true;
       await loadPartyBooks();
-      setPartyStatus("Saved " + titleCase(lastRendered.bundle.pokemon.name) + " to " + (book && book.title ? book.title : path) + ".", false);
+      const saveMessage = "Saved " + titleCase(lastRendered.bundle.pokemon.name) + " to " +
+        (book && book.title ? book.title : path) + ".";
+      const warningMessage = bakeResult.warnings.join(" ");
+      setPartyStatus(warningMessage ? saveMessage + " " + warningMessage : saveMessage, !!warningMessage);
     } catch (error) {
+      if (!saveSucceeded) {
+        for (const bakedPath of bakedPaths) {
+          try {
+            await deleteUploadedFile(bakedPath);
+          } catch (deleteError) {
+            console.warn("Could not clean up baked asset after save failure", deleteError);
+          }
+        }
+      }
       console.error(error);
       setPartyStatus("Save failed: " + error.message, true);
     } finally {
@@ -1594,6 +1827,19 @@
       });
       if (!response.ok) {
         throw new Error(await response.text());
+      }
+      const pathsToDelete = [
+        book && book.pokemon && book.pokemon.sleepImagePath,
+        book && book.pokemon && book.pokemon.partyVisualPath,
+        PARTY_SLEEP_UPLOAD_PATH + "/" + getPartySleepImageFilename(path),
+        PARTY_SLEEP_UPLOAD_PATH + "/" + getPartyVisualFilename(path)
+      ].filter(Boolean);
+      for (const assetPath of Array.from(new Set(pathsToDelete))) {
+        try {
+          await deleteUploadedFile(assetPath);
+        } catch (error) {
+          console.warn("Could not delete baked party asset", error);
+        }
       }
       await loadPartyBooks();
       setPartyStatus("Pokemon removed from " + (book && book.title ? book.title : path) + ".", false);
@@ -1764,19 +2010,40 @@
       if (!ids.length) throw new Error("No Pokemon found for selected generation/type filters");
       setStatus("Ensuring /sleep/pokedex exists...");
       await ensurePokedexFolder();
+      const failures = [];
+      let uploaded = 0;
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i];
         setStatus("Batch " + (i + 1) + "/" + ids.length + ": #" + id);
-        const pokemon = await renderPokemonByInput(String(id), getRenderOptions());
-        const blob = canvasToBmpBlob();
-        const formData = new FormData();
-        formData.append("file", blob, getPokemonFilename(pokemon.id, pokemon.name));
-        const response = await fetch("/upload?path=" + encodeURIComponent(UPLOAD_PATH), { method: "POST", body: formData });
-        if (!response.ok) {
-          throw new Error("Upload failed for #" + id + " (" + (i + 1) + "/" + ids.length + "): " + (await response.text()));
+        try {
+          const pokemon = await renderPokemonByInput(String(id), getRenderOptions());
+          const blob = canvasToBmpBlob();
+          const formData = new FormData();
+          formData.append("file", blob, getPokemonFilename(pokemon.id, pokemon.name));
+          const response = await fetch("/upload?path=" + encodeURIComponent(UPLOAD_PATH), {
+            method: "POST",
+            body: formData
+          });
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+          uploaded += 1;
+        } catch (error) {
+          console.error("Batch upload failed for #" + id, error);
+          failures.push("#" + id + " (" + (i + 1) + "/" + ids.length + "): " + error.message);
         }
       }
-      setStatus("Batch upload complete (" + ids.length + " wallpapers). Set Image Source to Pokedex on the device.");
+      if (failures.length) {
+        const failurePreview = failures.slice(0, 3).join("; ");
+        const moreFailures = failures.length > 3 ? "; +" + (failures.length - 3) + " more" : "";
+        setStatus(
+          "Batch upload finished with issues: " + uploaded + " uploaded, " + failures.length + " failed. " +
+          failurePreview + moreFailures,
+          true
+        );
+        return;
+      }
+      setStatus("Batch upload complete (" + uploaded + " wallpapers). Set Image Source to Pokedex on the device.");
     } catch (error) {
       console.error(error);
       setStatus("Batch upload failed: " + error.message, true);
@@ -1803,6 +2070,12 @@
   [layoutStyleSelect, artStyleSelect, fontModeSelect, bgStyleSelect, spriteScaleInput, spriteOverlayInput,
    showTypesInput, showFlavorInput, showHpInput, showEvolutionInput, showAbilitiesInput].forEach(el => {
     el.addEventListener("change", renderCurrentPokemon);
+  });
+  customFontInput.addEventListener("change", function() {
+    if (fontModeSelect.value === "custom") renderCurrentPokemon();
+  });
+  customFontInput.addEventListener("input", function() {
+    if (fontModeSelect.value === "custom") renderCurrentPokemon();
   });
 
   spriteScaleInput.addEventListener("input", function() {

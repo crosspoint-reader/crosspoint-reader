@@ -58,60 +58,12 @@ std::string titleCase(const std::string& value) {
 }
 
 std::string summarizePokemonLabel(JsonObjectConst pokemon) {
-  const int pokemonId = pokemon["id"] | 0;
   const char* rawName = pokemon["name"] | "";
   if (rawName[0] == '\0') {
     rawName = pokemon["speciesName"] | "";
   }
   const std::string name = titleCase(rawName);
-  if (pokemonId <= 0) {
-    return name.empty() ? "Pokemon assigned" : name;
-  }
-  char buffer[48];
-  std::snprintf(buffer, sizeof(buffer), "#%04d %s", pokemonId, name.c_str());
-  return buffer;
-}
-
-std::string summarizeCurrentForm(JsonArrayConst chain, const int level, const std::string& fallbackName) {
-  std::string current = fallbackName;
-  for (JsonVariantConst item : chain) {
-    if (!item.is<JsonObjectConst>()) {
-      continue;
-    }
-    const JsonObjectConst stage = item.as<JsonObjectConst>();
-    const std::string stageName = titleCase(stage["name"] | "");
-    const bool hasMinLevel = stage["minLevel"].is<int>();
-    const int minLevel = hasMinLevel ? stage["minLevel"].as<int>() : -1;
-
-    if (current.empty() && !stageName.empty()) {
-      current = stageName;
-    }
-    if (hasMinLevel && level >= minLevel && !stageName.empty()) {
-      current = stageName;
-    }
-  }
-  return current;
-}
-
-std::string summarizeNextForm(JsonArrayConst chain, const int level) {
-  for (JsonVariantConst item : chain) {
-    if (!item.is<JsonObjectConst>()) {
-      continue;
-    }
-    const JsonObjectConst stage = item.as<JsonObjectConst>();
-    if (!stage["minLevel"].is<int>()) {
-      continue;
-    }
-    const int minLevel = stage["minLevel"].as<int>();
-    if (level < minLevel) {
-      const std::string nextName = titleCase(stage["name"] | "");
-      if (nextName.empty()) {
-        return "";
-      }
-      return "Next: " + nextName + " @Lv " + std::to_string(minLevel);
-    }
-  }
-  return level >= 100 ? "Book complete at Lv 100" : "Final form reached";
+  return name.empty() ? "Pokemon assigned" : name;
 }
 }  // namespace
 
@@ -141,11 +93,10 @@ void RecentBooksActivity::loadRecentBooks() {
     if (partyMode) {
       entry.hasProgress = BookProgressDataStore::loadProgress(entry.book.path, entry.progress);
       if (entry.hasProgress) {
-        entry.level = std::max(1, static_cast<int>(std::floor(entry.progress.percent)));
-        entry.progressLabel =
-            "Lv " + std::to_string(entry.level) + "  " + BookProgressDataStore::formatPositionLabel(entry.progress);
+        entry.level = std::max(1, static_cast<int>(std::lround(entry.progress.percent)));
+        entry.progressLabel = "Lv " + std::to_string(entry.level);
       } else {
-        entry.progressLabel = "Lv 1  Not started";
+        entry.progressLabel = "Lv 1";
       }
 
       JsonDocument pokemonDoc;
@@ -154,19 +105,17 @@ void RecentBooksActivity::loadRecentBooks() {
         const JsonObjectConst pokemon = pokemonDoc["pokemon"].as<JsonObjectConst>();
         entry.hasPokemon = true;
         entry.pokemonLabel = summarizePokemonLabel(pokemon);
-
-        const JsonArrayConst chain = pokemon["evolutionChain"].as<JsonArrayConst>();
-        const char* fallbackRawName = pokemon["speciesName"] | "";
-        if (fallbackRawName[0] == '\0') {
-          fallbackRawName = pokemon["name"] | "";
+        const char* partyVisualPath = pokemon["partyVisualPath"] | "";
+        if (partyVisualPath[0] != '\0' && Storage.exists(partyVisualPath)) {
+          entry.partyVisualPath = partyVisualPath;
+        } else {
+          const char* sleepImagePath = pokemon["sleepImagePath"] | "";
+          if (sleepImagePath[0] != '\0' && Storage.exists(sleepImagePath)) {
+            entry.partyVisualPath = sleepImagePath;
+          }
         }
-        const std::string fallbackName = titleCase(fallbackRawName);
-        entry.currentFormLabel = "Form: " + summarizeCurrentForm(chain, entry.level, fallbackName);
-        entry.nextFormLabel = summarizeNextForm(chain, entry.level);
       } else {
         entry.pokemonLabel = "No Pokemon assigned";
-        entry.currentFormLabel = "Assign from the web Pokedex";
-        entry.nextFormLabel.clear();
       }
     }
 
@@ -287,7 +236,8 @@ void RecentBooksActivity::render(RenderLock&&) {
         renderer.drawRect(x, y, slotWidth, slotHeight);
       }
 
-      const std::string thumbPath = UITheme::getCoverThumbPath(entry.book.coverBmpPath, coverHeight);
+      const std::string thumbSource = entry.partyVisualPath.empty() ? entry.book.coverBmpPath : entry.partyVisualPath;
+      const std::string thumbPath = UITheme::getCoverThumbPath(thumbSource, coverHeight);
       if (!drawCoverAt(thumbPath, x + 8, y + 8, coverWidth, coverHeight)) {
         renderer.drawRect(x + 8, y + 8, coverWidth, coverHeight, !selected);
         const int placeholderY = y + 8 + (coverHeight - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
@@ -301,27 +251,7 @@ void RecentBooksActivity::render(RenderLock&&) {
                         renderer.truncatedText(UI_10_FONT_ID, entry.pokemonLabel.c_str(), textW).c_str(), !selected);
       renderer.drawText(UI_10_FONT_ID, textX, titleY + lineH * 2 + 4,
                         renderer.truncatedText(UI_10_FONT_ID, entry.progressLabel.c_str(), textW).c_str(), !selected);
-      renderer.drawText(UI_10_FONT_ID, textX, titleY + lineH * 3 + 6,
-                        renderer.truncatedText(UI_10_FONT_ID, entry.currentFormLabel.c_str(), textW).c_str(),
-                        !selected);
-      if (!entry.nextFormLabel.empty()) {
-        renderer.drawText(UI_10_FONT_ID, textX, titleY + lineH * 4 + 8,
-                          renderer.truncatedText(UI_10_FONT_ID, entry.nextFormLabel.c_str(), textW).c_str(), !selected);
-      }
 
-      const std::string slotLabel = std::to_string(i + 1);
-      const int badgeSize = 20;
-      const int badgeX = x + slotWidth - badgeSize - 8;
-      const int badgeY = y + 8;
-      if (selected) {
-        renderer.fillRect(badgeX, badgeY, badgeSize, badgeSize, false);
-        renderer.drawRect(badgeX, badgeY, badgeSize, badgeSize, true);
-      } else {
-        renderer.fillRect(badgeX, badgeY, badgeSize, badgeSize, true);
-      }
-      const int badgeTextX =
-          badgeX + std::max(0, (badgeSize - renderer.getTextWidth(UI_10_FONT_ID, slotLabel.c_str())) / 2);
-      renderer.drawText(UI_10_FONT_ID, badgeTextX, badgeY + 3, slotLabel.c_str(), selected);
     }
   } else {
     GUI.drawList(

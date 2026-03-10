@@ -4,6 +4,7 @@
 // that is needed by PathUtils and CrossPointSettings under test.
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <string>
 
@@ -137,6 +138,17 @@ class String {
 
   // Capacity hint — no-op on host
   void reserve(size_t) {}
+
+  // ArduinoJson integration
+  size_t write(uint8_t c) {
+    s_.push_back(static_cast<char>(c));
+    return 1;
+  }
+  size_t write(const uint8_t* data, size_t len) {
+    if (!data || len == 0) return 0;
+    s_.append(reinterpret_cast<const char*>(data), len);
+    return len;
+  }
 
   // Conversion
   std::string toStdString() const { return s_; }

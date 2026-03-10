@@ -18,9 +18,8 @@ class RecentBooksActivity final : public Activity {
     int level = 1;
     std::string progressLabel;
     bool hasPokemon = false;
+    std::string partyVisualPath;
     std::string pokemonLabel;
-    std::string currentFormLabel;
-    std::string nextFormLabel;
   };
 
   ButtonNavigator buttonNavigator;

@@ -59,8 +59,9 @@ void mountPokemonRoutes(WebServer* server) {
       server->send(400, "text/plain", "Missing body");
       return;
     }
+    const String requestBody = server->arg("plain");
     JsonDocument request;
-    if (deserializeJson(request, server->arg("plain"))) {
+    if (deserializeJson(request, requestBody.c_str())) {
       server->send(400, "text/plain", "Invalid JSON body");
       return;
     }
