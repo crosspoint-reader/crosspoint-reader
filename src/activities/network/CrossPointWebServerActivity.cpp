@@ -46,7 +46,6 @@ void CrossPointWebServerActivity::onEnter() {
   connectedIP.clear();
   connectedSSID.clear();
   lastHandleClientTime = 0;
-  uploadedFiles.clear();
   // Note: don't clear received files here — feed sync may have already run before user opened this screen
   requestUpdate();
 
@@ -314,7 +313,7 @@ void CrossPointWebServerActivity::loop() {
         const int pageW = renderer.getScreenWidth();
         if (prog.state == CrossPointWebServer::ClawUpdateState::DOWNLOADING) {
           renderer.clearScreen();
-          renderer.drawCenteredText(UI_10_FONT_ID, pageH / 2 - 40, "Downloading update...", true,
+          renderer.drawCenteredText(UI_10_FONT_ID, pageH / 2 - 40, tr(STR_DOWNLOADING_UPDATE), true,
                                     EpdFontFamily::BOLD);
           if (prog.total > 0) {
             const int pct = (int)(prog.downloaded * 100 / prog.total);
@@ -331,13 +330,13 @@ void CrossPointWebServerActivity::loop() {
           }
           if (!prog.version.empty()) {
             char verBuf[64];
-            snprintf(verBuf, sizeof(verBuf), "Version: %s", prog.version.c_str());
+            snprintf(verBuf, sizeof(verBuf), "%s%s", tr(STR_VERSION_PREFIX), prog.version.c_str());
             renderer.drawCenteredText(SMALL_FONT_ID, pageH / 2 + 50, verBuf);
           }
           renderer.displayBuffer(HalDisplay::FAST_REFRESH);
         } else if (prog.state == CrossPointWebServer::ClawUpdateState::CHECKING) {
           renderer.clearScreen();
-          renderer.drawCenteredText(UI_10_FONT_ID, pageH / 2, "Checking for updates...", true, EpdFontFamily::BOLD);
+          renderer.drawCenteredText(UI_10_FONT_ID, pageH / 2, tr(STR_CHECKING_FOR_UPDATES), true, EpdFontFamily::BOLD);
           renderer.displayBuffer(HalDisplay::FAST_REFRESH);
         }
       }
@@ -424,8 +423,8 @@ void CrossPointWebServerActivity::loop() {
       return;
     }
 
-    // Confirm button = manually trigger RSS feed sync
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    // Confirm button = manually trigger RSS feed sync (only in STA mode — AP has no upstream)
+    if (!isApMode && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       RssFeedSync::startSync();
       requestUpdate();
     }
@@ -450,21 +449,18 @@ void CrossPointWebServerActivity::loop() {
     // Redraw when feed delivers a new file (event-driven via dirty flag)
     if (UITheme::consumeReceivedFileDirty()) requestUpdate();
 
-    // Monitor upload status and trigger display refresh on file close only
-    // Rate-limited to avoid excessive e-ink refreshes
+    // Monitor upload status and trigger display refresh on file complete or transfer start
     if (webServer) {
       const auto uploadStatus = webServer->getUploadStatus();
-      const unsigned long now = millis();
       const bool fileCompleted = uploadStatus.lastCompleteAt > lastKnownCompleteAt;
+      const bool transferStateChanged = uploadStatus.inProgress != lastUploadInProgress;
 
-      if (fileCompleted) {
-        if (!uploadStatus.lastCompleteName.empty()) {
-          uploadedFiles.push_back(uploadStatus.lastCompleteName);
+      if (fileCompleted || transferStateChanged) {
+        if (fileCompleted && !uploadStatus.lastCompleteName.empty()) {
           UITheme::addReceivedFile(uploadStatus.lastCompleteName);
         }
         lastKnownCompleteAt = uploadStatus.lastCompleteAt;
         lastUploadInProgress = uploadStatus.inProgress;
-        lastTransferUpdateTime = now;
         requestUpdate();
       }
     }
@@ -567,18 +563,18 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     startY += drawCentered(UI_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
     startY += metrics.verticalSpacing;
 
+    std::string ipUrl = std::string("http://") + connectedIP + "/";
     std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
-    std::string ipUrl = tr(STR_OR_HTTP_PREFIX) + connectedIP + "/";
 
-    // Show QR code for URL
+    // Show QR code for URL — use IP in AP mode (mDNS may not resolve)
     const Rect qrBoundsUrl(contentLeft + (contentW - QR_CODE_WIDTH) / 2, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
-    QrUtils::drawQrCode(renderer, qrBoundsUrl, hostnameUrl);
+    QrUtils::drawQrCode(renderer, qrBoundsUrl, ipUrl);
     startY += QR_CODE_HEIGHT + metrics.verticalSpacing;
 
     // text color: black (default)
-    startY += drawCentered(UI_10_FONT_ID, startY, hostnameUrl.c_str(), apTextBlack);
+    startY += drawCentered(UI_10_FONT_ID, startY, hostnameUrl.c_str(), true);
     startY += metrics.verticalSpacing;
-    startY += drawCentered(UI_10_FONT_ID, startY, ipUrl.c_str(), apTextBlack);
+    startY += drawCentered(UI_10_FONT_ID, startY, ipUrl.c_str(), true);
     startY += metrics.verticalSpacing;
 
     // Completed uploads list (oldest first), left-justified, with ellipsis truncation
@@ -598,7 +594,7 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     if (uploadStatus.inProgress && !uploadStatus.filename.empty()) {
       const std::string inProg = "● " + uploadStatus.filename;
       renderer.drawText(UI_10_FONT_ID, contentLeft, startY, truncate(inProg).c_str(),
-                        apTextBlack, EpdFontFamily::BOLD);
+                        true, EpdFontFamily::BOLD);
     }
   } else {
     startY += metrics.verticalSpacing * 2;
@@ -642,6 +638,6 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_EXIT), tr(STR_CHECK_FEED), "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_EXIT), isApMode ? "" : tr(STR_CHECK_FEED), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

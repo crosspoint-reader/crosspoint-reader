@@ -1,5 +1,3 @@
-#include <string>
-#include <vector>
 #pragma once
 
 #include <functional>
@@ -38,8 +36,8 @@ class CrossPointWebServerActivity final : public Activity {
 
   // Web server - owned by this activity
   std::unique_ptr<CrossPointWebServer> webServer;
-  std::vector<std::string> uploadedFiles;
   unsigned long lastKnownCompleteAt = 0;
+  bool lastUploadInProgress = false;
 
   // Server status
   std::string connectedIP;
