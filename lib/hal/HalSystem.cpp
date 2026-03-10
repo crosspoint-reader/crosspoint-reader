@@ -84,9 +84,13 @@ void checkPanic() {
     auto panicInfo = getPanicInfo(true);
     auto file = Storage.open("/crash_report.txt", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {
-      file.write(panicInfo.c_str(), panicInfo.size());
+      size_t written = file.write(panicInfo.c_str(), panicInfo.size());
       file.close();
-      LOG_INF("SYS", "Dumped panic info to SD card");
+      if (written == panicInfo.size()) {
+        LOG_INF("SYS", "Dumped panic info to SD card");
+      } else {
+        LOG_ERR("SYS", "Partial crash report write (%zu/%zu bytes)", written, panicInfo.size());
+      }
     } else {
       LOG_ERR("SYS", "Failed to open crash_report.txt for writing");
     }

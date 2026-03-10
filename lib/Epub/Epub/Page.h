@@ -1,5 +1,6 @@
 #pragma once
 #include <HalStorage.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <utility>
@@ -78,6 +79,9 @@ class Page {
   void addLink(const char* href, int16_t x, int16_t y, int16_t w, int16_t h) {
     if (links.size() >= MAX_LINKS_PER_PAGE) return;
     LinkEntry entry;
+    if (strlen(href) >= sizeof(entry.href)) {
+      LOG_DBG("PAGE", "Link href truncated (%zu chars)", strlen(href));
+    }
     strncpy(entry.href, href, sizeof(entry.href) - 1);
     entry.href[sizeof(entry.href) - 1] = '\0';
     entry.x = x;
@@ -88,7 +92,7 @@ class Page {
   }
 
   size_t getLinkCount() const { return links.size(); }
-  const LinkEntry& getLink(int i) const { return links[i]; }
+  const LinkEntry& getLink(size_t i) const { return links.at(i); }
 
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(FsFile& file) const;

@@ -140,20 +140,20 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // div's margin should be preserved, even though it has no direct text content.
       currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
 
-      if (!pendingAnchorId.empty()) {
-        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-        pendingAnchorId.clear();
+      for (auto& id : pendingAnchorIds) {
+        anchorData.push_back({std::move(id), static_cast<uint16_t>(completedPageCount)});
       }
+      pendingAnchorIds.clear();
       return;
     }
 
     makePages();
   }
-  // Record deferred anchor after previous block is flushed
-  if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-    pendingAnchorId.clear();
+  // Record deferred anchors after previous block is flushed
+  for (auto& id : pendingAnchorIds) {
+    anchorData.push_back({std::move(id), static_cast<uint16_t>(completedPageCount)});
   }
+  pendingAnchorIds.clear();
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
   wordsExtractedInBlock = 0;
 }
@@ -178,7 +178,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
         // Defer recording until startNewTextBlock, after previous block is flushed to pages
-        self->pendingAnchorId = atts[i + 1];
+        self->pendingAnchorIds.emplace_back(atts[i + 1]);
       }
     }
   }
@@ -1010,10 +1010,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
-    if (!pendingAnchorId.empty()) {
-      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-      pendingAnchorId.clear();
+    for (auto& id : pendingAnchorIds) {
+      anchorData.push_back({std::move(id), static_cast<uint16_t>(completedPageCount)});
     }
+    pendingAnchorIds.clear();
     completePageFn(std::move(currentPage));
     completedPageCount++;
     currentPage.reset();
