@@ -1,21 +1,19 @@
 #include "BmpViewerActivity.h"
 
 #include <Bitmap.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
 #include <algorithm>
 
-#include <FsHelpers.h>
-
 #include "CrossPointSettings.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
-    : Activity("BmpViewer", renderer, mappedInput),
-      filePath(std::move(path)) {}
+    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
 
 void BmpViewerActivity::loadSiblingImages() {
   siblingImages.clear();
