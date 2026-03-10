@@ -301,16 +301,18 @@ void CrossPointWebServerActivity::stopWebServer() {
 void CrossPointWebServerActivity::loop() {
   // Show on-screen progress while a GitHub (claw) firmware download is in progress.
   // Renders every ~2s so the display reflects current download state.
+  // When the overlay stops (state leaves DOWNLOADING/CHECKING), schedule a
+  // normal repaint so the base screen replaces the last progress frame.
   {
     static unsigned long lastClawRender = 0;
-    static CrossPointWebServer::ClawUpdateState lastRenderedState = CrossPointWebServer::ClawUpdateState::IDLE;
+    static bool wasOverlayActive = false;
     const auto prog = CrossPointWebServer::getClawUpdateProgress();
     const bool active = (prog.state == CrossPointWebServer::ClawUpdateState::DOWNLOADING ||
                          prog.state == CrossPointWebServer::ClawUpdateState::CHECKING);
-    if (active || prog.state != lastRenderedState) {
-      if (millis() - lastClawRender > 2000 || prog.state != lastRenderedState) {
+    if (active) {
+      wasOverlayActive = true;
+      if (millis() - lastClawRender > 2000) {
         lastClawRender = millis();
-        lastRenderedState = prog.state;
         const int pageH = renderer.getScreenHeight();
         const int pageW = renderer.getScreenWidth();
         if (prog.state == CrossPointWebServer::ClawUpdateState::DOWNLOADING) {
@@ -332,7 +334,7 @@ void CrossPointWebServerActivity::loop() {
           }
           if (!prog.version.empty()) {
             char verBuf[64];
-            snprintf(verBuf, sizeof(verBuf), "Version: %s", prog.version.c_str());
+            snprintf(verBuf, sizeof(verBuf), tr(STR_VERSION_FMT), prog.version.c_str());
             renderer.drawCenteredText(SMALL_FONT_ID, pageH / 2 + 50, verBuf);
           }
           renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -342,6 +344,9 @@ void CrossPointWebServerActivity::loop() {
           renderer.displayBuffer(HalDisplay::FAST_REFRESH);
         }
       }
+    } else if (wasOverlayActive) {
+      wasOverlayActive = false;
+      requestUpdate();  // repaint base screen after overlay exits
     }
   }
 
@@ -539,12 +544,21 @@ void CrossPointWebServerActivity::renderServerRunning() const {
       if (w <= contentW) breakAt = pos;
       pos++;
     }
-    if (breakAt == 0) breakAt = s.size();  // one word too long — draw as-is
-    const std::string line1 = s.substr(0, breakAt);
-    const std::string line2 = (breakAt < s.size()) ? s.substr(breakAt + 1) : "";
+    if (breakAt == 0) breakAt = s.size();  // one word too long — truncate below
+    std::string line1 = s.substr(0, breakAt);
+    std::string line2 = (breakAt < s.size()) ? s.substr(breakAt + 1) : "";
+    // Truncate lines that exceed contentW (single long token or long second line)
+    auto clipToFit = [&](std::string& line) {
+      if (renderer.getTextWidth(fontId, line.c_str(), style) <= contentW) return;
+      while (!line.empty() && renderer.getTextWidth(fontId, (line + "\xe2\x80\xa6").c_str(), style) > contentW)
+        line.pop_back();
+      line += "\xe2\x80\xa6";  // ellipsis …
+    };
+    clipToFit(line1);
     const int w1 = renderer.getTextWidth(fontId, line1.c_str(), style);
     renderer.drawText(fontId, contentLeft + (contentW - w1) / 2, y, line1.c_str(), black, style);
     if (!line2.empty()) {
+      clipToFit(line2);
       const int w2 = renderer.getTextWidth(fontId, line2.c_str(), style);
       renderer.drawText(fontId, contentLeft + (contentW - w2) / 2, y + lineH + 2, line2.c_str(), black, style);
       return lineH * 2 + 2;
