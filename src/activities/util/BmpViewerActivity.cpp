@@ -149,6 +149,39 @@ void BmpViewerActivity::onExit() {
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
+void BmpViewerActivity::doSetSleepCover() {
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+
+  bool success = false;
+  FsFile inFile, outFile;
+  if (Storage.openFileForRead("BMP", filePath, inFile)) {
+    if (Storage.openFileForWrite("BMP", "/sleep.bmp", outFile)) {
+      char buffer[2048];
+      int bytesRead;
+      success = true;
+      while ((bytesRead = inFile.read(buffer, sizeof(buffer))) > 0) {
+        if (outFile.write(buffer, bytesRead) != bytesRead) {
+          success = false;
+          break;
+        }
+      }
+      outFile.close();
+    }
+    inFile.close();
+  }
+
+  if (success) {
+    SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+    SETTINGS.saveToFile();
+    GUI.drawPopup(renderer, tr(STR_DONE));
+  } else {
+    GUI.drawPopup(renderer, tr(STR_FAILED_LOWER));
+  }
+
+  delay(1000);
+  onEnter();
+}
+
 void BmpViewerActivity::loop() {
   // Keep CPU awake/polling so 1st click works
   Activity::loop();
@@ -195,37 +228,4 @@ void BmpViewerActivity::loop() {
     }
     return;
   }
-}
-
-void BmpViewerActivity::doSetSleepCover() {
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-
-  bool success = false;
-  FsFile inFile, outFile;
-  if (Storage.openFileForRead("BMP", filePath, inFile)) {
-    if (Storage.openFileForWrite("BMP", "/sleep.bmp", outFile)) {
-      char buffer[2048];
-      int bytesRead;
-      success = true;
-      while ((bytesRead = inFile.read(buffer, sizeof(buffer))) > 0) {
-        if (outFile.write(buffer, bytesRead) != bytesRead) {
-          success = false;
-          break;
-        }
-      }
-      outFile.close();
-    }
-    inFile.close();
-  }
-
-  if (success) {
-    SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
-    SETTINGS.saveToFile();
-    GUI.drawPopup(renderer, tr(STR_DONE));
-  } else {
-    GUI.drawPopup(renderer, tr(STR_FAILED_LOWER));
-  }
-
-  delay(1000);
-  onEnter();
 }
