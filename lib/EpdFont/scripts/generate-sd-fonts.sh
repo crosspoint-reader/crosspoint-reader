@@ -2,7 +2,7 @@
 # Generate recommended SD card font packs for CrossPoint.
 #
 # Prerequisites:
-#   pip install freetype-py
+#   pip install freetype-py fonttools
 #
 # Source fonts should be in ../builtinFonts/source/:
 #   NotoSans/NotoSans-Regular.ttf (already in repo)
@@ -19,39 +19,53 @@ OUTPUT_BASE="./output"
 
 SIZES="12,14,16,18"
 
-echo "=== Generating NotoSansExtended (Latin-ext + Greek + Cyrillic + Georgian + Armenian + Ethiopic) ==="
+# Clean output directories to remove stale v3 files that conflict with new v4 files
+echo "Cleaning output directories..."
+rm -rf "$OUTPUT_BASE/NotoSansExtended/" "$OUTPUT_BASE/Bookerly-SD/" "$OUTPUT_BASE/NotoSansCJK/"
+
+# Run all three font families in parallel
+echo "=== Starting parallel font generation ==="
+
+echo "[1/3] NotoSansExtended (Latin-ext + Greek + Cyrillic + Georgian + Armenian + Ethiopic)"
 python3 "$SCRIPT" \
   "$FONT_DIR/NotoSans/NotoSans-Regular.ttf" \
   --intervals latin-ext,greek,cyrillic,georgian,armenian,ethiopic \
   --sizes "$SIZES" --style regular --2bit \
   --name NotoSansExtended \
-  --output-dir "$OUTPUT_BASE/NotoSansExtended/"
+  --output-dir "$OUTPUT_BASE/NotoSansExtended/" &
+PID_NOTO=$!
 
-echo ""
-echo "=== Generating Bookerly-SD (all styles, matching built-in intervals) ==="
-BOOKERLY_STYLES=("regular" "bold" "italic" "bolditalic")
-BOOKERLY_STYLE_FILES=("Regular" "Bold" "Italic" "BoldItalic")
-for i in "${!BOOKERLY_STYLES[@]}"; do
-  style="${BOOKERLY_STYLES[$i]}"
-  style_file="${BOOKERLY_STYLE_FILES[$i]}"
-  echo "--- Style: $style ---"
-  python3 "$SCRIPT" \
-    "$FONT_DIR/Bookerly/Bookerly-${style_file}.ttf" \
-    --intervals builtin \
-    --sizes "$SIZES" --style "$style" --2bit --force-autohint \
-    --name Bookerly-SD \
-    --output-dir "$OUTPUT_BASE/Bookerly-SD/"
-  echo ""
-done
+echo "[2/3] Bookerly-SD (v4 multi-style)"
+python3 "$SCRIPT" \
+  --regular "$FONT_DIR/Bookerly/Bookerly-Regular.ttf" \
+  --bold "$FONT_DIR/Bookerly/Bookerly-Bold.ttf" \
+  --italic "$FONT_DIR/Bookerly/Bookerly-Italic.ttf" \
+  --bolditalic "$FONT_DIR/Bookerly/Bookerly-BoldItalic.ttf" \
+  --intervals builtin \
+  --sizes "$SIZES" --2bit --force-autohint \
+  --name Bookerly-SD \
+  --output-dir "$OUTPUT_BASE/Bookerly-SD/" &
+PID_BOOKERLY=$!
 
-echo ""
-echo "=== Generating NotoSansCJK (CJK + ASCII + Punctuation) ==="
+echo "[3/3] NotoSansCJK (CJK + ASCII + Punctuation)"
 python3 "$SCRIPT" \
   "$FONT_DIR/NotoSansCJK/NotoSansCJKsc-Regular.otf" \
   --intervals ascii,latin1,punctuation,cjk \
   --sizes "$SIZES" --style regular --2bit \
   --name NotoSansCJK \
-  --output-dir "$OUTPUT_BASE/NotoSansCJK/"
+  --output-dir "$OUTPUT_BASE/NotoSansCJK/" &
+PID_CJK=$!
+
+# Wait for all and track failures
+FAILED=0
+wait $PID_NOTO || { echo "ERROR: NotoSansExtended generation failed"; FAILED=1; }
+wait $PID_BOOKERLY || { echo "ERROR: Bookerly-SD generation failed"; FAILED=1; }
+wait $PID_CJK || { echo "ERROR: NotoSansCJK generation failed"; FAILED=1; }
+
+if [ $FAILED -ne 0 ]; then
+  echo "=== Some font generations failed ==="
+  exit 1
+fi
 
 echo ""
 echo "=== Done ==="

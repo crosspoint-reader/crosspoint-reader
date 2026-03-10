@@ -80,7 +80,7 @@ class GfxRenderer {
   void unregisterSdCardFont(int fontId) { sdCardFonts_.erase(fontId); }
   void clearSdCardFonts() { sdCardFonts_.clear(); }
   void clearFontCache();
-  void prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
+  void prewarmFontCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F);
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   void ensureSdCardFontReady(int fontId, const char* utf8Text) const;

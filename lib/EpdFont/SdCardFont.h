@@ -8,34 +8,46 @@
 class SdCardFont {
  public:
   static constexpr uint16_t MAX_PAGE_GLYPHS = 512;
+  static constexpr uint8_t MAX_STYLES = 4;
 
   SdCardFont() = default;
   ~SdCardFont();
 
   // Load .cpfont file: reads header + intervals into RAM, records file layout offsets.
+  // Supports both v3 (single-style) and v4 (multi-style) formats.
   // Returns true on success.
   bool load(const char* path);
 
   // Pre-read glyphs needed for the given UTF-8 text from SD card.
-  // Builds a mini EpdFontData containing only those glyphs.
-  // When metadataOnly=true, only glyph metrics are loaded (no bitmap data) —
-  // useful for layout/measurement passes where only advanceX is needed.
+  // styleMask: bitmask of styles to prewarm (bit 0=regular, 1=bold, 2=italic, 3=bolditalic).
+  // Default 0x0F = all present styles.
+  // When metadataOnly=true, only glyph metrics are loaded (no bitmap data).
   // Returns number of glyphs that couldn't be loaded (0 on full success).
-  int prewarm(const char* utf8Text, bool metadataOnly = false);
+  int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false);
 
-  // Free mini data, restore stub EpdFontData.
+  // Free mini data for all styles, restore stub EpdFontData.
   void clearCache();
 
-  // Returns pointer to the managed EpdFont (data pointer swapped by prewarm/clearCache).
-  EpdFont* getEpdFont() { return &epdFont_; }
+  // Returns pointer to the managed EpdFont for a given style.
+  // For v3 files, only style 0 is valid regardless of what style the file represents.
+  // Returns nullptr if the style is not present.
+  EpdFont* getEpdFont(uint8_t style = 0);
+
+  // Returns true if the given style is present in this font file.
+  bool hasStyle(uint8_t style) const;
+
+  // Number of styles present in this font file.
+  uint8_t styleCount() const { return styleCount_; }
 
   // Returns true if the glyph pointer points into the overflow buffer.
   bool isOverflowGlyph(const EpdGlyph* glyph) const;
 
   // Returns the bitmap for an on-demand-loaded (overflow) glyph.
-  // May return nullptr for zero-width glyphs (e.g. space).
-  // Caller must verify isOverflowGlyph() first.
   const uint8_t* getOverflowBitmap(const EpdGlyph* glyph) const;
+
+  // Extract SdCardFont* from an opaque glyphMissCtx pointer.
+  // Used by GfxRenderer::getGlyphBitmap() to recover the SdCardFont from EpdFontData::glyphMissCtx.
+  static SdCardFont* fromMissCtx(void* ctx);
 
   struct Stats {
     uint32_t prewarmTotalMs = 0;
@@ -49,7 +61,7 @@ class SdCardFont {
   const Stats& getStats() const { return stats_; }
 
  private:
-  // .cpfont header fields
+  // Per-style metadata (parsed from file header/TOC)
   struct CpFontHeader {
     uint32_t intervalCount = 0;
     uint32_t glyphCount = 0;
@@ -57,7 +69,6 @@ class SdCardFont {
     int16_t ascender = 0;
     int16_t descender = 0;
     bool is2Bit = false;
-    // v2 fields (kern/ligature)
     uint16_t kernLeftEntryCount = 0;
     uint16_t kernRightEntryCount = 0;
     uint8_t kernLeftClassCount = 0;
@@ -65,66 +76,88 @@ class SdCardFont {
     uint8_t ligaturePairCount = 0;
   };
 
-  CpFontHeader header_{};
+  // All per-style data: file offsets, intervals, kern/lig, prewarm cache, EpdFont
+  struct PerStyle {
+    CpFontHeader header{};
+
+    // File layout offsets for this style's data sections
+    uint32_t intervalsFileOffset = 0;
+    uint32_t glyphsFileOffset = 0;
+    uint32_t kernLeftFileOffset = 0;
+    uint32_t kernRightFileOffset = 0;
+    uint32_t kernMatrixFileOffset = 0;
+    uint32_t ligatureFileOffset = 0;
+    uint32_t bitmapFileOffset = 0;
+
+    // Full intervals loaded from file (kept in RAM for codepoint lookup)
+    EpdUnicodeInterval* fullIntervals = nullptr;
+
+    // Persistent kern/ligature data (lazy-loaded on first prewarm)
+    EpdKernClassEntry* kernLeftClasses = nullptr;
+    EpdKernClassEntry* kernRightClasses = nullptr;
+    int8_t* kernMatrix = nullptr;
+    EpdLigaturePair* ligaturePairs = nullptr;
+    bool kernLigLoaded = false;
+
+    // Stub EpdFontData returned when not prewarmed
+    EpdFontData stubData{};
+
+    // Mini EpdFontData built during prewarm
+    EpdFontData miniData{};
+    EpdUnicodeInterval* miniIntervals = nullptr;
+    EpdGlyph* miniGlyphs = nullptr;
+    uint8_t* miniBitmap = nullptr;
+    uint32_t miniIntervalCount = 0;
+    uint32_t miniGlyphCount = 0;
+
+    // The EpdFont whose data pointer we manage
+    EpdFont epdFont{&stubData};
+
+    bool present = false;
+  };
+
+  PerStyle styles_[MAX_STYLES] = {};
+  uint8_t styleCount_ = 0;
+
   char filePath_[128] = {};
 
-  // File layout offsets
-  uint32_t intervalsFileOffset_ = 0;
-  uint32_t glyphsFileOffset_ = 0;
-  uint32_t kernLeftFileOffset_ = 0;
-  uint32_t kernRightFileOffset_ = 0;
-  uint32_t kernMatrixFileOffset_ = 0;
-  uint32_t ligatureFileOffset_ = 0;
-  uint32_t bitmapFileOffset_ = 0;
+  // Overflow context: glyphMissHandler needs to know which style it's serving
+  struct OverflowContext {
+    SdCardFont* self;
+    uint8_t styleIdx;
+  };
+  OverflowContext overflowCtx_[MAX_STYLES] = {};
 
-  // Full intervals loaded from file (kept in RAM for codepoint lookup)
-  EpdUnicodeInterval* fullIntervals_ = nullptr;
-
-  // Persistent kern/ligature data (lazy-loaded on first prewarm(), freed in freeAll())
-  EpdKernClassEntry* kernLeftClasses_ = nullptr;
-  EpdKernClassEntry* kernRightClasses_ = nullptr;
-  int8_t* kernMatrix_ = nullptr;
-  EpdLigaturePair* ligaturePairs_ = nullptr;
-  bool kernLigLoaded_ = false;
-
-  // Stub EpdFontData returned when not prewarmed (empty intervals = all lookups return nullptr)
-  EpdFontData stubData_{};
-
-  // Mini EpdFontData built during prewarm
-  EpdFontData miniData_{};
-  EpdUnicodeInterval* miniIntervals_ = nullptr;
-  EpdGlyph* miniGlyphs_ = nullptr;
-  uint8_t* miniBitmap_ = nullptr;
-  uint32_t miniIntervalCount_ = 0;
-  uint32_t miniGlyphCount_ = 0;
-
-  // The EpdFont whose data pointer we manage
-  EpdFont epdFont_{&stubData_};
-
-  // On-demand overflow buffer: ring buffer of glyphs loaded via glyphMissHandler.
-  // Provides a safety net for glyphs not included in the prewarm set.
+  // Shared on-demand overflow buffer (ring buffer of glyphs loaded via glyphMissHandler)
   static constexpr uint32_t OVERFLOW_CAPACITY = 8;
   struct OverflowEntry {
     EpdGlyph glyph;
-    uint8_t* bitmap = nullptr;  // heap-allocated bitmap (nullptr for zero-width glyphs)
+    uint8_t* bitmap = nullptr;
     uint32_t codepoint = 0;
+    uint8_t styleIdx = 0;
   };
   OverflowEntry overflow_[OVERFLOW_CAPACITY] = {};
   uint32_t overflowCount_ = 0;
-  uint32_t overflowNext_ = 0;  // ring buffer write index
+  uint32_t overflowNext_ = 0;
 
   Stats stats_;
   bool loaded_ = false;
 
-  void freeMiniData();
-  void freeAll();
-  void freeKernLigatureData();
-  bool loadKernLigatureData();
-  void applyKernLigaturePointers(EpdFontData& data) const;
-  void applyGlyphMissCallback(EpdFontData& data);
-  void clearOverflow();
-  int32_t findGlobalGlyphIndex(uint32_t codepoint) const;
+  // Per-style helpers
+  void freeStyleMiniData(PerStyle& s);
+  void freeStyleAll(PerStyle& s);
+  void freeStyleKernLigatureData(PerStyle& s);
+  bool loadStyleKernLigatureData(PerStyle& s);
+  void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
+  void applyGlyphMissCallback(uint8_t styleIdx);
+  int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
+  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly);
 
-  // Static callback for EpdFontData::glyphMissHandler
+  // Global helpers
+  void freeAll();
+  void clearOverflow();
+  static void computeStyleFileOffsets(PerStyle& s, uint32_t baseOffset);
+
+  // Static callback for EpdFontData::glyphMissHandler (per-style via OverflowContext)
   static const EpdGlyph* onGlyphMiss(void* ctx, uint32_t codepoint);
 };

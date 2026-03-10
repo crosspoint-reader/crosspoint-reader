@@ -29,7 +29,7 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
     unloadAll(renderer);
   }
 
-  // Pass 1: Load all font files from SD card
+  // Load all font files from SD card
   for (const auto& fileInfo : family.files) {
     auto* font = new (std::nothrow) SdCardFont();
     if (!font) {
@@ -43,38 +43,20 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
       continue;
     }
 
-    int fontId = generateFontId(family.name, fileInfo.pointSize, fileInfo.style);
+    int fontId = generateFontId(family.name, fileInfo.pointSize, 0);
     renderer.registerSdCardFont(fontId, font);
-    loaded_.push_back({font, fontId, fileInfo.pointSize, fileInfo.style});
+    loaded_.push_back({font, fontId, fileInfo.pointSize});
 
-    LOG_DBG("SDMGR", "Loaded %s size=%u style=%u id=%d", fileInfo.path.c_str(), fileInfo.pointSize, fileInfo.style,
-            fontId);
+    LOG_DBG("SDMGR", "Loaded %s size=%u id=%d styles=%u", fileInfo.path.c_str(), fileInfo.pointSize, fontId,
+            font->styleCount());
   }
 
   if (loaded_.empty()) return false;
 
-  // Pass 2: Build EpdFontFamily objects for each regular-style font,
-  // pairing with bold/italic/bold-italic variants if available at the same size.
-  // The regular variant's fontId is used as the family key in the renderer's fontMap.
+  // Build EpdFontFamily objects: each v4 SdCardFont has all styles
   for (const auto& lf : loaded_) {
-    if (lf.style != 0) continue;  // Only create families from regular variants
-
-    EpdFont* regular = lf.font->getEpdFont();
-    EpdFont* bold = nullptr;
-    EpdFont* italic = nullptr;
-    EpdFont* boldItalic = nullptr;
-
-    for (const auto& other : loaded_) {
-      if (other.size != lf.size || other.style == 0) continue;
-      if (other.style == 1)
-        bold = other.font->getEpdFont();
-      else if (other.style == 2)
-        italic = other.font->getEpdFont();
-      else if (other.style == 3)
-        boldItalic = other.font->getEpdFont();
-    }
-
-    EpdFontFamily fontFamily(regular, bold, italic, boldItalic);
+    EpdFontFamily fontFamily(lf.font->getEpdFont(0), lf.font->getEpdFont(1), lf.font->getEpdFont(2),
+                             lf.font->getEpdFont(3));
     renderer.insertFont(lf.fontId, fontFamily);
   }
 
@@ -92,10 +74,10 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
   loadedFamilyName_.clear();
 }
 
-int SdCardFontManager::getFontId(const std::string& familyName, uint8_t size, uint8_t style) const {
+int SdCardFontManager::getFontId(const std::string& familyName, uint8_t size, uint8_t /*style*/) const {
   if (familyName != loadedFamilyName_) return 0;
   for (const auto& lf : loaded_) {
-    if (lf.size == size && lf.style == style) return lf.fontId;
+    if (lf.size == size) return lf.fontId;
   }
   return 0;
 }

@@ -41,13 +41,10 @@ std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
 // --- SdCardFontRegistry ---
 
 bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint8_t& style) {
-  // Expected: <anything>_<size>_<style>.cpfont
-  // Find .cpfont extension
+  // V4 naming: <name>_<size>.cpfont (e.g. Bookerly-SD_14.cpfont)
   const char* ext = strstr(filename, ".cpfont");
   if (!ext) return false;
 
-  // Work backward from extension to find style and size segments
-  // Copy the base name (without extension) for parsing
   size_t baseLen = ext - filename;
   if (baseLen == 0 || baseLen > 127) return false;
 
@@ -55,37 +52,15 @@ bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint
   memcpy(base, filename, baseLen);
   base[baseLen] = '\0';
 
-  // Find last underscore -> style
   char* lastUnderscore = strrchr(base, '_');
   if (!lastUnderscore || lastUnderscore == base) return false;
 
-  const char* styleStr = lastUnderscore + 1;
-  *lastUnderscore = '\0';
-
-  // Find second-to-last underscore -> size
-  char* sizeUnderscore = strrchr(base, '_');
-  if (!sizeUnderscore) return false;
-
-  const char* sizeStr = sizeUnderscore + 1;
-
-  // Parse size
+  const char* sizeStr = lastUnderscore + 1;
   char* endPtr;
   long sizeVal = strtol(sizeStr, &endPtr, 10);
-  if (endPtr == sizeStr || sizeVal < 1 || sizeVal > 255) return false;
+  if (endPtr == sizeStr || *endPtr != '\0' || sizeVal < 1 || sizeVal > 255) return false;
   size = static_cast<uint8_t>(sizeVal);
-
-  // Parse style
-  if (strcmp(styleStr, "regular") == 0)
-    style = 0;
-  else if (strcmp(styleStr, "bold") == 0)
-    style = 1;
-  else if (strcmp(styleStr, "italic") == 0)
-    style = 2;
-  else if (strcmp(styleStr, "bolditalic") == 0)
-    style = 3;
-  else
-    return false;
-
+  style = 0;
   return true;
 }
 
@@ -157,45 +132,7 @@ bool SdCardFontRegistry::discover() {
                 static_cast<int>(families_.back().files.size()));
       }
     } else {
-      // Backward compat: loose .cpfont files in the fonts dir
-      entry.getName(nameBuffer, sizeof(nameBuffer));
       entry.close();
-
-      // Skip macOS resource fork files (._*) and other hidden files
-      if (nameBuffer[0] == '.' || nameBuffer[0] == '_') continue;
-
-      uint8_t size, style;
-      if (!parseFilename(nameBuffer, size, style)) continue;
-
-      // Derive family name from filename prefix (everything before _<size>_<style>.cpfont)
-      char base[128];
-      strncpy(base, nameBuffer, sizeof(base) - 1);
-      base[sizeof(base) - 1] = '\0';
-      // Remove _<size>_<style>.cpfont suffix to get the family name
-      char* lastU = strrchr(base, '_');
-      if (lastU) *lastU = '\0';
-      lastU = strrchr(base, '_');
-      if (lastU) *lastU = '\0';
-      std::string familyName = base;
-
-      // Find or create the family
-      SdCardFontFamilyInfo* existing = nullptr;
-      for (auto& f : families_) {
-        if (f.name == familyName) {
-          existing = &f;
-          break;
-        }
-      }
-      if (!existing) {
-        families_.push_back(SdCardFontFamilyInfo{familyName, {}});
-        existing = &families_.back();
-      }
-
-      SdCardFontFileInfo info;
-      info.path = std::string(FONTS_DIR) + "/" + nameBuffer;
-      info.pointSize = size;
-      info.style = style;
-      existing->files.push_back(std::move(info));
     }
 
     if (static_cast<int>(families_.size()) >= MAX_SD_FAMILIES) break;

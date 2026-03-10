@@ -98,6 +98,18 @@ GlyphProps = namedtuple("GlyphProps", [
     "width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"
 ])
 
+# Intermediate data from rasterizing one font style (used by both v3 and v4 writers)
+StyleRasterData = namedtuple("StyleRasterData", [
+    "style_id",                # 0=regular, 1=bold, 2=italic, 3=bolditalic
+    "intervals",               # validated intervals [(start, end), ...]
+    "all_glyphs",              # [(GlyphProps, packed_bytes), ...]
+    "total_bitmap_size",       # int
+    "advanceY", "ascender", "descender",
+    "kern_left_classes", "kern_right_classes", "kern_matrix",
+    "kern_left_class_count", "kern_right_class_count",
+    "ligature_pairs",
+])
+
 
 def norm_floor(val):
     return int(math.floor(val / (1 << 6)))
@@ -421,8 +433,11 @@ def extract_ligatures_fonttools(font_path, codepoints):
     return pairs
 
 
-def generate_cpfont(fontfile, size, intervals, output_path, is2bit=True, force_autohint=False):
-    """Generate a single .cpfont file."""
+def rasterize_font_style(fontfile, size, intervals, style_id=0, is2bit=True, force_autohint=False):
+    """Rasterize all glyphs for one font style. Returns StyleRasterData."""
+    style_names = {0: "regular", 1: "bold", 2: "italic", 3: "bolditalic"}
+    style_label = style_names.get(style_id, str(style_id))
+
     face = freetype.Face(fontfile)
     load_flags = freetype.FT_LOAD_RENDER
     if force_autohint:
@@ -436,7 +451,7 @@ def generate_cpfont(fontfile, size, intervals, output_path, is2bit=True, force_a
         return None
 
     # Validate intervals: remove codepoints not present in the font
-    print(f"  Validating intervals against font...", file=sys.stderr)
+    print(f"  [{style_label}] Validating intervals against font...", file=sys.stderr)
     validated_intervals = []
     for i_start, i_end in intervals:
         start = i_start
@@ -451,7 +466,7 @@ def generate_cpfont(fontfile, size, intervals, output_path, is2bit=True, force_a
 
     intervals = validated_intervals
     total_glyphs = sum(end - start + 1 for start, end in intervals)
-    print(f"  Validated: {len(intervals)} intervals, {total_glyphs} glyphs", file=sys.stderr)
+    print(f"  [{style_label}] Validated: {len(intervals)} intervals, {total_glyphs} glyphs", file=sys.stderr)
 
     # Set font size at 150 DPI (matching fontconvert.py)
     face.set_char_size(size << 6, size << 6, 150, 150)
@@ -530,15 +545,15 @@ def generate_cpfont(fontfile, size, intervals, output_path, is2bit=True, force_a
     ascender = norm_ceil(face.size.ascender)
     descender = norm_floor(face.size.descender)
 
-    print(f"  Font metrics: advanceY={advanceY}, ascender={ascender}, descender={descender}", file=sys.stderr)
-    print(f"  Total bitmap size: {total_bitmap_size} bytes ({total_bitmap_size / 1024:.1f} KB)", file=sys.stderr)
+    print(f"  [{style_label}] Metrics: advanceY={advanceY}, ascender={ascender}, descender={descender}", file=sys.stderr)
+    print(f"  [{style_label}] Bitmap: {total_bitmap_size} bytes ({total_bitmap_size / 1024:.1f} KB)", file=sys.stderr)
 
     # --- Extract kerning and ligatures ---
     ppem = size * 150.0 / 72.0
     all_cps = set(g.code_point for g, _ in all_glyphs)
 
     kern_map = extract_kerning_fonttools(fontfile, all_cps, ppem)
-    print(f"  Kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
+    print(f"  [{style_label}] Kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
 
     (kern_left_classes, kern_right_classes, kern_matrix,
      kern_left_class_count, kern_right_class_count) = derive_kern_classes(kern_map)
@@ -546,103 +561,209 @@ def generate_cpfont(fontfile, size, intervals, output_path, is2bit=True, force_a
     if kern_map:
         matrix_size = kern_left_class_count * kern_right_class_count
         entries_size = (len(kern_left_classes) + len(kern_right_classes)) * 3
-        print(f"  Kerning classes: {kern_left_class_count} left, {kern_right_class_count} right, "
+        print(f"  [{style_label}] Kerning classes: {kern_left_class_count} left, {kern_right_class_count} right, "
               f"{matrix_size + entries_size} bytes", file=sys.stderr)
 
     ligature_pairs = extract_ligatures_fonttools(fontfile, all_cps)
     if len(ligature_pairs) > 255:
-        print(f"  WARNING: {len(ligature_pairs)} ligature pairs exceeds uint8_t max (255), truncating",
+        print(f"  [{style_label}] WARNING: {len(ligature_pairs)} ligature pairs exceeds uint8_t max (255), truncating",
               file=sys.stderr)
         ligature_pairs = ligature_pairs[:255]
-    print(f"  Ligatures: {len(ligature_pairs)} pairs", file=sys.stderr)
+    print(f"  [{style_label}] Ligatures: {len(ligature_pairs)} pairs", file=sys.stderr)
 
-    # Build binary .cpfont file (v3: advanceX is 12.4 fp, kern is 4.4 fp)
+    return StyleRasterData(
+        style_id=style_id,
+        intervals=intervals,
+        all_glyphs=all_glyphs,
+        total_bitmap_size=total_bitmap_size,
+        advanceY=advanceY,
+        ascender=ascender,
+        descender=descender,
+        kern_left_classes=kern_left_classes,
+        kern_right_classes=kern_right_classes,
+        kern_matrix=kern_matrix,
+        kern_left_class_count=kern_left_class_count,
+        kern_right_class_count=kern_right_class_count,
+        ligature_pairs=ligature_pairs,
+    )
+
+
+# --- Binary packing helpers ---
+
+# EpdGlyph struct: 16 bytes, little-endian
+GLYPH_STRUCT_FORMAT = "<BBHhhH2xI"
+assert struct.calcsize(GLYPH_STRUCT_FORMAT) == 16
+
+
+def pack_style_sections(sd):
+    """Pack one StyleRasterData into binary section bytearrays.
+    Returns (intervals_data, glyphs_data, kern_left, kern_right, kern_matrix, ligatures, bitmaps)."""
+    intervals_data = bytearray()
+    offset = 0
+    for i_start, i_end in sd.intervals:
+        intervals_data += struct.pack("<III", i_start, i_end, offset)
+        offset += i_end - i_start + 1
+
+    glyphs_data = bytearray()
+    for glyph, packed in sd.all_glyphs:
+        glyphs_data += struct.pack(GLYPH_STRUCT_FORMAT,
+                                   glyph.width, glyph.height, glyph.advance_x,
+                                   glyph.left, glyph.top,
+                                   glyph.data_length, glyph.data_offset)
+
+    kern_left_data = bytearray()
+    for cp, cls in sd.kern_left_classes:
+        kern_left_data += struct.pack("<HB", cp, cls)
+
+    kern_right_data = bytearray()
+    for cp, cls in sd.kern_right_classes:
+        kern_right_data += struct.pack("<HB", cp, cls)
+
+    kern_matrix_data = bytearray()
+    if sd.kern_matrix:
+        kern_matrix_data = bytearray(struct.pack(f"<{len(sd.kern_matrix)}b", *sd.kern_matrix))
+
+    ligature_data = bytearray()
+    for packed_pair, lig_cp in sd.ligature_pairs:
+        ligature_data += struct.pack("<II", packed_pair, lig_cp)
+
+    bitmap_data = bytearray()
+    for glyph, packed in sd.all_glyphs:
+        bitmap_data += packed
+    assert len(bitmap_data) == sd.total_bitmap_size
+
+    return (intervals_data, glyphs_data, kern_left_data, kern_right_data,
+            kern_matrix_data, ligature_data, bitmap_data)
+
+
+def style_sections_total_size(sections):
+    """Total byte size of all sections returned by pack_style_sections()."""
+    return sum(len(s) for s in sections)
+
+
+# --- File writers ---
+
+def generate_cpfont(fontfile, size, intervals, output_path, is2bit=True, force_autohint=False):
+    """Generate a single-style v3 .cpfont file (backward compatible)."""
+    sd = rasterize_font_style(fontfile, size, intervals, style_id=0,
+                              is2bit=is2bit, force_autohint=force_autohint)
+
     MAGIC = b"CPFONT\x00\x00"
     VERSION = 3
     flags = 1 if is2bit else 0
 
     header = struct.pack("<8sHHIIBhhHHBBB",
                          MAGIC, VERSION, flags,
-                         len(intervals), len(all_glyphs),
-                         advanceY & 0xFF, ascender, descender,
-                         len(kern_left_classes), len(kern_right_classes),
-                         kern_left_class_count, kern_right_class_count,
-                         len(ligature_pairs))
+                         len(sd.intervals), len(sd.all_glyphs),
+                         sd.advanceY & 0xFF, sd.ascender, sd.descender,
+                         len(sd.kern_left_classes), len(sd.kern_right_classes),
+                         sd.kern_left_class_count, sd.kern_right_class_count,
+                         len(sd.ligature_pairs))
     assert len(header) == 32
 
-    # Intervals section
-    intervals_data = bytearray()
-    offset = 0
-    for i_start, i_end in intervals:
-        intervals_data += struct.pack("<III", i_start, i_end, offset)
-        offset += i_end - i_start + 1
+    sections = pack_style_sections(sd)
 
-    # Glyph section — must match EpdGlyph struct layout (16 bytes, little-endian):
-    #   uint8_t  width        (offset 0)
-    #   uint8_t  height       (offset 1)
-    #   uint16_t advanceX     (offset 2)  — 12.4 fixed-point
-    #   int16_t  left         (offset 4)
-    #   int16_t  top          (offset 6)
-    #   uint16_t dataLength   (offset 8)
-    #   [2 pad]               (offset 10) — for uint32_t alignment
-    #   uint32_t dataOffset   (offset 12)
-    GLYPH_STRUCT_FORMAT = "<BBHhhH2xI"
-    assert struct.calcsize(GLYPH_STRUCT_FORMAT) == 16
-
-    glyphs_data = bytearray()
-    for glyph, packed in all_glyphs:
-        glyphs_data += struct.pack(GLYPH_STRUCT_FORMAT,
-                                   glyph.width, glyph.height, glyph.advance_x,
-                                   glyph.left, glyph.top,
-                                   glyph.data_length, glyph.data_offset)
-
-    # Kern left classes section: uint16_t codepoint + uint8_t classId = 3 bytes each
-    kern_left_data = bytearray()
-    for cp, cls in kern_left_classes:
-        kern_left_data += struct.pack("<HB", cp, cls)
-
-    # Kern right classes section: same format
-    kern_right_data = bytearray()
-    for cp, cls in kern_right_classes:
-        kern_right_data += struct.pack("<HB", cp, cls)
-
-    # Kern matrix section: flat int8_t array
-    kern_matrix_data = bytearray()
-    if kern_matrix:
-        kern_matrix_data = bytearray(struct.pack(f"<{len(kern_matrix)}b", *kern_matrix))
-
-    # Ligature pairs section: uint32_t pair + uint32_t ligatureCp = 8 bytes each
-    ligature_data = bytearray()
-    for packed_pair, lig_cp in ligature_pairs:
-        ligature_data += struct.pack("<II", packed_pair, lig_cp)
-
-    # Bitmap section
-    bitmap_data = bytearray()
-    for glyph, packed in all_glyphs:
-        bitmap_data += packed
-    assert len(bitmap_data) == total_bitmap_size
-
-    # Write output file
     os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True)
     with open(output_path, "wb") as f:
         f.write(header)
-        f.write(intervals_data)
-        f.write(glyphs_data)
-        f.write(kern_left_data)
-        f.write(kern_right_data)
-        f.write(kern_matrix_data)
-        f.write(ligature_data)
-        f.write(bitmap_data)
+        for section in sections:
+            f.write(section)
 
-    kern_lig_size = len(kern_left_data) + len(kern_right_data) + len(kern_matrix_data) + len(ligature_data)
-    total_file_size = len(header) + len(intervals_data) + len(glyphs_data) + kern_lig_size + len(bitmap_data)
+    kern_lig_size = sum(len(sections[i]) for i in range(2, 6))
+    total_file_size = len(header) + style_sections_total_size(sections)
     print(f"  Output: {output_path}", file=sys.stderr)
     print(f"    Header:    {len(header)} bytes", file=sys.stderr)
-    print(f"    Intervals: {len(intervals_data)} bytes ({len(intervals)} intervals)", file=sys.stderr)
-    print(f"    Glyphs:    {len(glyphs_data)} bytes ({len(all_glyphs)} glyphs)", file=sys.stderr)
+    print(f"    Intervals: {len(sections[0])} bytes ({len(sd.intervals)} intervals)", file=sys.stderr)
+    print(f"    Glyphs:    {len(sections[1])} bytes ({len(sd.all_glyphs)} glyphs)", file=sys.stderr)
     print(f"    Kern/Lig:  {kern_lig_size} bytes", file=sys.stderr)
-    print(f"    Bitmaps:   {len(bitmap_data)} bytes", file=sys.stderr)
+    print(f"    Bitmaps:   {len(sections[6])} bytes", file=sys.stderr)
     print(f"    Total:     {total_file_size} bytes ({total_file_size / 1024 / 1024:.2f} MB)", file=sys.stderr)
+    return total_file_size
+
+
+def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
+                               is2bit=True, force_autohint=False):
+    """Generate a multi-style v4 .cpfont file.
+
+    style_fonts: dict of {style_id: fontfile_path} e.g. {0: "Regular.ttf", 2: "Italic.ttf"}
+    """
+    MAGIC = b"CPFONT\x00\x00"
+    VERSION = 4
+    HEADER_SIZE = 32
+    STYLE_TOC_ENTRY_SIZE = 32
+    flags = 1 if is2bit else 0
+    style_count = len(style_fonts)
+
+    # Rasterize each style
+    raster_data = {}  # style_id -> StyleRasterData
+    for style_id in sorted(style_fonts.keys()):
+        fontfile = style_fonts[style_id]
+        print(f"  Rasterizing style {style_id}...", file=sys.stderr)
+        raster_data[style_id] = rasterize_font_style(
+            fontfile, size, intervals, style_id=style_id,
+            is2bit=is2bit, force_autohint=force_autohint)
+
+    # Pack binary sections for each style
+    packed_sections = {}  # style_id -> tuple of section bytearrays
+    for style_id, sd in raster_data.items():
+        packed_sections[style_id] = pack_style_sections(sd)
+
+    # Calculate data offsets (after header + TOC)
+    data_start = HEADER_SIZE + style_count * STYLE_TOC_ENTRY_SIZE
+    current_offset = data_start
+
+    style_offsets = {}  # style_id -> absolute file offset
+    for style_id in sorted(packed_sections.keys()):
+        style_offsets[style_id] = current_offset
+        current_offset += style_sections_total_size(packed_sections[style_id])
+
+    # Build global header
+    # V4 header: magic(8) + version(2) + flags(2) + styleCount(1) + reserved(19) = 32
+    header = struct.pack("<8sHHB19s", MAGIC, VERSION, flags, style_count, bytes(19))
+    assert len(header) == HEADER_SIZE
+
+    # Build style TOC entries
+    # Each entry: styleId(1) + pad(3) + intervalCount(4) + glyphCount(4) +
+    #   advanceY(1) + ascender(2) + descender(2) + kernL(2) + kernR(2) +
+    #   kernLCls(1) + kernRCls(1) + ligCount(1) + dataOffset(4) + reserved(4) = 32
+    STYLE_TOC_FORMAT = "<B3xIIBhhHHBBBI4x"
+    assert struct.calcsize(STYLE_TOC_FORMAT) == STYLE_TOC_ENTRY_SIZE
+
+    toc_data = bytearray()
+    for style_id in sorted(raster_data.keys()):
+        sd = raster_data[style_id]
+        toc_data += struct.pack(STYLE_TOC_FORMAT,
+                                style_id,
+                                len(sd.intervals), len(sd.all_glyphs),
+                                sd.advanceY & 0xFF, sd.ascender, sd.descender,
+                                len(sd.kern_left_classes), len(sd.kern_right_classes),
+                                sd.kern_left_class_count, sd.kern_right_class_count,
+                                len(sd.ligature_pairs),
+                                style_offsets[style_id])
+
+    # Write output
+    os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True)
+    total_file_size = 0
+    with open(output_path, "wb") as f:
+        f.write(header)
+        f.write(toc_data)
+        for style_id in sorted(packed_sections.keys()):
+            for section in packed_sections[style_id]:
+                f.write(section)
+        total_file_size = f.tell()
+
+    # Print summary
+    print(f"  Output: {output_path} (v4, {style_count} styles)", file=sys.stderr)
+    print(f"    Header+TOC: {HEADER_SIZE + len(toc_data)} bytes", file=sys.stderr)
+    for style_id in sorted(raster_data.keys()):
+        sd = raster_data[style_id]
+        secs = packed_sections[style_id]
+        style_names = {0: "regular", 1: "bold", 2: "italic", 3: "bolditalic"}
+        sname = style_names.get(style_id, str(style_id))
+        ssize = style_sections_total_size(secs)
+        print(f"    {sname}: {len(sd.all_glyphs)} glyphs, {len(sd.intervals)} intervals, "
+              f"{ssize} bytes", file=sys.stderr)
+    print(f"    Total: {total_file_size} bytes ({total_file_size / 1024 / 1024:.2f} MB)", file=sys.stderr)
     return total_file_size
 
 
@@ -653,9 +774,9 @@ def main():
         epilog=f"Available interval presets: {', '.join(sorted(INTERVAL_PRESETS.keys()))}"
     )
 
-    # New-style arguments
-    parser.add_argument("fontfile", action="store",
-                        help="Path to the font file (e.g., .otf or .ttf).")
+    # Font file (positional, optional for multi-style mode)
+    parser.add_argument("fontfile", nargs="?", default=None,
+                        help="Path to the font file (single-style mode).")
     parser.add_argument("--intervals", dest="intervals",
                         help="Comma-separated interval presets (e.g., 'latin-ext,greek,cyrillic').")
     parser.add_argument("--size", type=int, dest="size",
@@ -664,7 +785,7 @@ def main():
                         help="Comma-separated sizes (e.g., '12,14,16,18').")
     parser.add_argument("--style", dest="style", default="regular",
                         choices=["regular", "bold", "italic", "bolditalic"],
-                        help="Font style (default: regular).")
+                        help="Font style for single-style mode (default: regular).")
     parser.add_argument("--name", dest="name",
                         help="Font family name for output filenames (default: derived from font filename).")
     parser.add_argument("--2bit", dest="is2Bit", action="store_true", default=True,
@@ -674,9 +795,19 @@ def main():
     parser.add_argument("-o", "--output", dest="output",
                         help="Output file path (for single-size mode).")
     parser.add_argument("--output-dir", dest="output_dir",
-                        help="Output directory (for multi-size mode). Files named <Name>_<size>_<style>.cpfont.")
+                        help="Output directory for multi-size mode.")
     parser.add_argument("--list-presets", action="store_true",
                         help="List available interval presets and exit.")
+
+    # Multi-style mode: per-style font file arguments (generates v4 .cpfont)
+    parser.add_argument("--regular", dest="font_regular",
+                        help="Font file for regular style (enables multi-style v4 mode).")
+    parser.add_argument("--bold", dest="font_bold",
+                        help="Font file for bold style.")
+    parser.add_argument("--italic", dest="font_italic",
+                        help="Font file for italic style.")
+    parser.add_argument("--bolditalic", dest="font_bolditalic",
+                        help="Font file for bold-italic style.")
 
     # Legacy positional arguments for backward compatibility
     parser.add_argument("legacy_args", nargs="*",
@@ -691,10 +822,22 @@ def main():
             print(f"  {name:15s}  {len(ranges)} range(s), ~{total} codepoints")
         sys.exit(0)
 
-    # Detect legacy mode: if fontfile is not a file but legacy_args has items
-    # Legacy: fontconvert_sdcard.py <name> <size> <fontfile> --2bit
+    # Detect multi-style mode
+    style_fonts = {}
+    if args.font_regular:
+        style_fonts[0] = args.font_regular
+    if args.font_bold:
+        style_fonts[1] = args.font_bold
+    if args.font_italic:
+        style_fonts[2] = args.font_italic
+    if args.font_bolditalic:
+        style_fonts[3] = args.font_bolditalic
+
+    is_multistyle = len(style_fonts) > 0
+
+    # Detect legacy mode: fontfile + legacy_args without --intervals
     fontfile = args.fontfile
-    if args.legacy_args and len(args.legacy_args) >= 2 and not args.intervals:
+    if not is_multistyle and fontfile and args.legacy_args and len(args.legacy_args) >= 2 and not args.intervals:
         # Legacy positional mode: name size fontfile
         legacy_name = fontfile
         legacy_size = int(args.legacy_args[0])
@@ -706,7 +849,7 @@ def main():
                         is2bit=True, force_autohint=args.force_autohint)
         return
 
-    # New-style mode
+    # Require --intervals for both modes
     if not args.intervals:
         print("Error: --intervals is required (e.g., --intervals latin-ext,greek,cyrillic)", file=sys.stderr)
         print(f"Available presets: {', '.join(sorted(INTERVAL_PRESETS.keys()))}", file=sys.stderr)
@@ -726,10 +869,18 @@ def main():
     # Determine font name
     if args.name:
         font_name = args.name
+    elif is_multistyle:
+        # Derive from the regular font file
+        ref_file = style_fonts[min(style_fonts.keys())]
+        base = os.path.splitext(os.path.basename(ref_file))[0]
+        for suffix in ["-Regular", "-Bold", "-Italic", "-BoldItalic",
+                       "-regular", "-bold", "-italic", "-bolditalic"]:
+            if base.endswith(suffix):
+                base = base[:-len(suffix)]
+                break
+        font_name = base
     else:
-        # Derive from font filename: NotoSans-Regular.ttf -> NotoSans
         base = os.path.splitext(os.path.basename(fontfile))[0]
-        # Remove style suffix (-Regular, -Bold, etc.)
         for suffix in ["-Regular", "-Bold", "-Italic", "-BoldItalic",
                        "-regular", "-bold", "-italic", "-bolditalic"]:
             if base.endswith(suffix):
@@ -737,25 +888,25 @@ def main():
                 break
         font_name = base
 
-    style = args.style
+    if not is_multistyle:
+        # Single font file provided: wrap as a single-style v4 font
+        if not fontfile:
+            print("Error: fontfile is required in single-style mode", file=sys.stderr)
+            sys.exit(1)
+        style_map = {"regular": 0, "bold": 1, "italic": 2, "bolditalic": 3}
+        style_fonts[style_map[args.style]] = fontfile
 
-    if len(sizes) == 1 and args.output:
-        # Single file mode
-        output_path = args.output
-        print(f"Generating {output_path} (size {sizes[0]}, style {style})...", file=sys.stderr)
-        generate_cpfont(fontfile, sizes[0], intervals, output_path,
-                        is2bit=True, force_autohint=args.force_autohint)
-    else:
-        # Multi-size mode
-        output_dir = args.output_dir if args.output_dir else f"{font_name}/"
-        total_size = 0
-        for sz in sizes:
-            filename = f"{font_name}_{sz}_{style}.cpfont"
-            output_path = os.path.join(output_dir, filename)
-            print(f"Generating {output_path} (size {sz}, style {style})...", file=sys.stderr)
-            total_size += generate_cpfont(fontfile, sz, intervals, output_path,
-                                          is2bit=True, force_autohint=args.force_autohint)
-        print(f"\nTotal: {len(sizes)} files, {total_size / 1024 / 1024:.2f} MB", file=sys.stderr)
+    # Always generate v4 format
+    output_dir = args.output_dir if args.output_dir else f"{font_name}/"
+    total_size = 0
+    for sz in sizes:
+        filename = f"{font_name}_{sz}.cpfont"
+        output_path = os.path.join(output_dir, filename)
+        print(f"Generating {output_path} (size {sz}, {len(style_fonts)} style(s), v4)...", file=sys.stderr)
+        total_size += generate_cpfont_multistyle(
+            style_fonts, sz, intervals, output_path,
+            is2bit=True, force_autohint=args.force_autohint)
+    print(f"\nTotal: {len(sizes)} files, {total_size / 1024 / 1024:.2f} MB", file=sys.stderr)
 
 
 if __name__ == "__main__":

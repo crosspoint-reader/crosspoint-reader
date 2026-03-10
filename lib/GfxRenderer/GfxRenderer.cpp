@@ -24,7 +24,7 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
   //   - nullptr for non-overflow glyphs (normal prewarmed path)
   // We distinguish overflow-with-no-bitmap from non-overflow by checking isOverflowGlyph().
   if (fontData->glyphMissCtx) {
-    auto* sdFont = static_cast<SdCardFont*>(fontData->glyphMissCtx);
+    auto* sdFont = SdCardFont::fromMissCtx(fontData->glyphMissCtx);
     if (sdFont->isOverflowGlyph(glyph)) {
       return sdFont->getOverflowBitmap(glyph);  // may be nullptr for zero-width glyphs
     }
@@ -39,19 +39,27 @@ void GfxRenderer::clearFontCache() {
   }
 }
 
-void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style) {
-  // SD card font prewarm path
+void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, uint8_t styleMask) {
+  // SD card font prewarm path: prewarm all requested styles in one call
   auto it = sdCardFonts_.find(fontId);
   if (it != sdCardFonts_.end()) {
-    int missed = it->second->prewarm(utf8Text);
+    int missed = it->second->prewarm(utf8Text, styleMask);
     if (missed > 0) {
-      LOG_DBG("GFX", "prewarmFontCache(SD): %d glyph(s) not found", missed);
+      LOG_DBG("GFX", "prewarmFontCache(SD): %d glyph(s) not found (styleMask=0x%02X)", missed, styleMask);
     }
     return;
   }
 
-  // Standard compressed font prewarm path
+  // Standard compressed font prewarm path: extract dominant style from mask
   if (!fontDecompressor || fontMap.count(fontId) == 0) return;
+  // Find the dominant style from the mask (prefer regular if tied)
+  EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+  for (uint8_t i = 0; i < 4; i++) {
+    if (styleMask & (1 << i)) {
+      style = static_cast<EpdFontFamily::Style>(i);
+      break;
+    }
+  }
   const EpdFontData* data = fontMap.at(fontId).getData(style);
   if (!data || !data->groups) return;
   int missed = fontDecompressor->prewarmCache(data, utf8Text);
@@ -66,7 +74,8 @@ void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text) const 
   if (it != sdCardFonts_.end()) {
     // Metadata-only: loads glyph metrics (advanceX) without bitmap data.
     // Saves ~50-100KB heap vs full prewarm — layout only needs advance widths.
-    int missed = it->second->prewarm(utf8Text, /*metadataOnly=*/true);
+    // Prewarm all present styles (0x0F) for layout measurement.
+    int missed = it->second->prewarm(utf8Text, 0x0F, /*metadataOnly=*/true);
     if (missed > 0) {
       LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
     }
@@ -96,14 +105,14 @@ void GfxRenderer::FontPrewarmScope::endScanAndPrewarm() {
   renderer_->scanMode_ = ScanMode::None;
   if (renderer_->scanText_.empty()) return;
 
-  // Determine dominant style from scan counts
-  uint8_t dominantStyle = 0;
-  for (uint8_t i = 1; i < 4; i++) {
-    if (renderer_->scanStyleCounts_[i] > renderer_->scanStyleCounts_[dominantStyle]) dominantStyle = i;
+  // Build style bitmask from all styles that appeared during the scan
+  uint8_t styleMask = 0;
+  for (uint8_t i = 0; i < 4; i++) {
+    if (renderer_->scanStyleCounts_[i] > 0) styleMask |= (1 << i);
   }
+  if (styleMask == 0) styleMask = 1;  // default to regular
 
-  renderer_->prewarmFontCache(renderer_->scanFontId_, renderer_->scanText_.c_str(),
-                              static_cast<EpdFontFamily::Style>(dominantStyle));
+  renderer_->prewarmFontCache(renderer_->scanFontId_, renderer_->scanText_.c_str(), styleMask);
 
   // Free scan string memory
   renderer_->scanText_.clear();

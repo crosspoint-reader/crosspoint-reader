@@ -20,8 +20,7 @@ class SdCardFontManager {
   // Unload everything, unregister from renderer.
   void unloadAll(GfxRenderer& renderer);
 
-  // Look up the font ID for a loaded family + size + style.
-  // Returns 0 if not found.
+  // Look up the font ID for a loaded family + size. Returns 0 if not found.
   int getFontId(const std::string& familyName, uint8_t size, uint8_t style = 0) const;
 
   // Get name of currently loaded family (empty if none).
@@ -38,7 +37,6 @@ class SdCardFontManager {
     SdCardFont* font;  // heap-allocated, owned
     int fontId;
     uint8_t size;
-    uint8_t style;
   };
   std::string loadedFamilyName_;
   std::vector<LoadedFont> loaded_;
