@@ -14,7 +14,8 @@ void ConfirmationActivity::onEnter() {
   inputArmed = false;
 
   lineHeight = renderer.getLineHeight(fontId);
-  const int maxWidth = renderer.getScreenWidth() - (margin * 2);
+  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const int maxWidth = contentRect.width - (margin * 2);
 
   if (!heading.empty()) {
     safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::BOLD);
@@ -28,7 +29,7 @@ void ConfirmationActivity::onEnter() {
   if (!safeBody.empty()) totalHeight += lineHeight;
   if (!safeHeading.empty() && !safeBody.empty()) totalHeight += spacing;
 
-  startY = (renderer.getScreenHeight() - totalHeight) / 2;
+  startY = contentRect.y + (contentRect.height - totalHeight) / 2;
 
   requestUpdate(true);
 }

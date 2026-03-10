@@ -27,13 +27,14 @@ std::string BookInfoActivity::formatFileSize(const size_t bytes) {
 void BookInfoActivity::renderLoading() {
   renderer.clearScreen();
 
-  const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_INFO));
+  GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
+                 tr(STR_INFO));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, contentTop, tr(STR_LOADING));
+  renderer.drawText(UI_12_FONT_ID, contentRect.x + metrics.contentSidePadding, contentTop, tr(STR_LOADING));
 
   renderer.displayBuffer();
 }
@@ -111,17 +112,17 @@ void BookInfoActivity::loop() {
 void BookInfoActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
 
   // Header
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_INFO));
+  GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
+                 tr(STR_INFO));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const int textX = metrics.contentSidePadding;
-  const int textWidth = pageWidth - metrics.contentSidePadding * 2;
+  const int contentBottom = contentRect.y + contentRect.height - metrics.verticalSpacing;
+  const int textX = contentRect.x + metrics.contentSidePadding;
+  const int textWidth = contentRect.width - metrics.contentSidePadding * 2;
   const int lineHeightSmall = renderer.getLineHeight(UI_10_FONT_ID);
   const int lineHeightLarge = renderer.getLineHeight(UI_12_FONT_ID);
 
@@ -240,7 +241,7 @@ void BookInfoActivity::render(RenderLock&&) {
   if (!description.empty()) {
     int y = topSectionBottom + metrics.verticalSpacing;
     if (y + lineHeightSmall + 4 < contentBottom) {
-      renderer.drawLine(textX, y, pageWidth - metrics.contentSidePadding, y);
+      renderer.drawLine(textX, y, contentRect.x + contentRect.width - metrics.contentSidePadding, y);
       y += 4;
 
       const int descMaxLines = (contentBottom - y) / lineHeightSmall;
