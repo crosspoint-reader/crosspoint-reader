@@ -25,7 +25,7 @@ void PromptActivity::loop() {
   }
 }
 
-void PromptActivity::render(Activity::RenderLock&&) {
+void PromptActivity::render(RenderLock&&) {
   GUI.drawPopup(renderer, message.c_str());
 
   const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CONFIRM), "", "");

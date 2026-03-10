@@ -3,10 +3,10 @@
 #include <functional>
 #include <string>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "MappedInputManager.h"
 
-class BmpViewerActivity final : public ActivityWithSubactivity {
+class BmpViewerActivity final : public Activity {
  public:
   BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath);
 
@@ -16,7 +16,6 @@ class BmpViewerActivity final : public ActivityWithSubactivity {
 
  private:
   void loadSiblingImages();
-  void doDelete();
   void doSetSleepCover();
 
   std::string filePath;

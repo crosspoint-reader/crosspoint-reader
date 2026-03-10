@@ -8,13 +8,11 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
-#include "PromptActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
-    : ActivityWithSubactivity("BmpViewer", renderer, mappedInput),
+    : Activity("BmpViewer", renderer, mappedInput),
       filePath(std::move(path)) {}
 
 void BmpViewerActivity::loadSiblingImages() {
@@ -44,7 +42,7 @@ void BmpViewerActivity::loadSiblingImages() {
       file.getName(name, sizeof(name));
       if (name[0] != '.') {
         std::string fname(name);
-        if (StringUtils::checkFileExtension(fname, ".bmp")) {
+        if (fname.length() >= 4 && fname.substr(fname.length() - 4) == ".bmp") {
           siblingImages.push_back(fname);
         }
       }
@@ -110,7 +108,7 @@ void BmpViewerActivity::onEnter() {
       }
 
       // 4. Prepare Rendering
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), tr(STR_DELETE), "");
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), "", "");
 
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
@@ -152,12 +150,9 @@ void BmpViewerActivity::onExit() {
 }
 
 void BmpViewerActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
+  // Keep CPU awake/polling so 1st click works
+  Activity::loop();
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
     return;
@@ -165,16 +160,6 @@ void BmpViewerActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     doSetSleepCover();
-    return;
-  }
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    enterNewActivity(new PromptActivity(
-        renderer, mappedInput, tr(STR_DELETE_IMAGE_PROMPT), [this] { doDelete(); },
-        [this] {
-          exitActivity();
-          onEnter();
-        }));
     return;
   }
 
@@ -209,21 +194,6 @@ void BmpViewerActivity::loop() {
       onEnter();
     }
     return;
-  }
-}
-
-void BmpViewerActivity::doDelete() {
-  exitActivity();
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-
-  if (Storage.remove(filePath.c_str())) {
-    GUI.drawPopup(renderer, tr(STR_DONE));
-    delay(1000);
-    onGoHome();
-  } else {
-    GUI.drawPopup(renderer, tr(STR_FAILED_LOWER));
-    delay(1000);
-    onEnter();
   }
 }
 

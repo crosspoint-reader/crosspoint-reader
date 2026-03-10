@@ -12,7 +12,7 @@ class PromptActivity final : public Activity {
 
   void onEnter() override;
   void loop() override;
-  void render(Activity::RenderLock&& lock) override;
+  void render(RenderLock&& lock) override;
 
  private:
   std::string message;
