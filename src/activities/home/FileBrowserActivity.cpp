@@ -9,10 +9,10 @@
 #include <algorithm>
 
 #include "../util/ConfirmationActivity.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "CrossPointSettings.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;

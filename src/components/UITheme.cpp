@@ -143,6 +143,23 @@ void UITheme::setWifiAutoConnecting(bool connecting) { s_wifiAutoConnecting = co
 bool UITheme::isWifiAutoConnecting() { return s_wifiAutoConnecting; }
 
 static std::vector<std::string> s_receivedFiles;
-void UITheme::addReceivedFile(const std::string& name) { s_receivedFiles.push_back(name); }
-const std::vector<std::string>& UITheme::getReceivedFiles() { return s_receivedFiles; }
-void UITheme::clearReceivedFiles() { s_receivedFiles.clear(); }
+static SemaphoreHandle_t s_receivedFilesMutex = xSemaphoreCreateMutex();
+
+void UITheme::addReceivedFile(const std::string& name) {
+  xSemaphoreTake(s_receivedFilesMutex, portMAX_DELAY);
+  s_receivedFiles.push_back(name);
+  xSemaphoreGive(s_receivedFilesMutex);
+}
+
+std::vector<std::string> UITheme::getReceivedFiles() {
+  xSemaphoreTake(s_receivedFilesMutex, portMAX_DELAY);
+  auto copy = s_receivedFiles;
+  xSemaphoreGive(s_receivedFilesMutex);
+  return copy;
+}
+
+void UITheme::clearReceivedFiles() {
+  xSemaphoreTake(s_receivedFilesMutex, portMAX_DELAY);
+  s_receivedFiles.clear();
+  xSemaphoreGive(s_receivedFilesMutex);
+}
