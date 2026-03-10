@@ -77,8 +77,12 @@ bool ZipFile::loadAllFileStatSlims() {
       itemName[nameLen] = '\0';
       fileStatSlimCache.emplace(itemName, fileStat);
     } else {
-      // Skip over oversized entry names to avoid writing past fixed buffer.
-      file.seekCur(nameLen);
+      // Name exceeds fixed buffer — use temporary heap allocation so the
+      // entry still appears in fileStatSlimCache (avoids false cache misses).
+      std::vector<char> longName(nameLen + 1);
+      file.read(longName.data(), nameLen);
+      longName[nameLen] = '\0';
+      fileStatSlimCache.emplace(longName.data(), fileStat);
     }
 
     // Skip the rest of this entry (extra field + comment)

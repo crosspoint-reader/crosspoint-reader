@@ -298,9 +298,26 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   uint16_t count;
   serialization::readPod(f, count);
   for (uint16_t i = 0; i < count; i++) {
-    std::string key;
+    // Validate there is room for at least the string length + page fields
+    if (f.position() + sizeof(uint32_t) + sizeof(uint16_t) > fileSize) {
+      f.close();
+      return std::nullopt;
+    }
+
+    uint32_t keyLen;
+    serialization::readPod(f, keyLen);
+    if (keyLen > fileSize - f.position() - sizeof(uint16_t)) {
+      f.close();
+      return std::nullopt;
+    }
+
+    std::string key(keyLen, '\0');
+    if (keyLen > 0 && f.read(&key[0], keyLen) != static_cast<int>(keyLen)) {
+      f.close();
+      return std::nullopt;
+    }
+
     uint16_t page;
-    serialization::readString(f, key);
     serialization::readPod(f, page);
     if (key == anchor) {
       f.close();

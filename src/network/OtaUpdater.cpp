@@ -19,7 +19,6 @@ static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
       esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
   if (!otaPart) return ESP_ERR_NOT_FOUND;
 
-  static constexpr size_t ENTRY_SIZE = 32;
   static constexpr size_t SECTOR_SIZE = 0x1000;
   struct __attribute__((packed)) OtaEntry {
     uint32_t seq;
@@ -27,6 +26,7 @@ static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
     uint32_t state;
     uint32_t crc;
   };
+  static_assert(sizeof(OtaEntry) == 32, "OtaEntry must match esp_ota_select_entry_t size");
 
   OtaEntry e0, e1;
   memset(&e0, 0xFF, sizeof(e0));
@@ -41,6 +41,11 @@ static esp_err_t forceSetBootPartitionOta(const esp_partition_t* newPart) {
   uint32_t seq1 = (e1Valid && e1.seq != 0xFFFFFFFF) ? e1.seq : 0;
   uint32_t maxSeq = (seq0 > seq1) ? seq0 : seq1;
   uint32_t partIdx = newPart->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0;
+
+  if (maxSeq >= UINT32_MAX - 1) {
+    LOG_ERR("OTA", "Sequence counter exhausted");
+    return ESP_ERR_INVALID_STATE;
+  }
 
   uint32_t newSeq = maxSeq + 1;
   while (((newSeq - 1) % 2) != partIdx) newSeq++;
@@ -306,13 +311,18 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(std::function<void()> onPr
 
   do {
     esp_err = esp_https_ota_perform(ota_handle);
-    processedSize = esp_https_ota_get_image_len_read(ota_handle);
+    size_t newSize = esp_https_ota_get_image_len_read(ota_handle);
+    bool hasProgress = (newSize != processedSize);
+    processedSize = newSize;
     if (onProgress) {
       onProgress();
     } else {
       render = true;
     }
-    delay(100);
+    // Only delay when progress was made (throttle UI updates without blocking I/O)
+    if (hasProgress) {
+      delay(10);
+    }
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 
   /* Return back to default power saving for WiFi in case of failing */

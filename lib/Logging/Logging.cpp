@@ -25,8 +25,9 @@ static portMUX_TYPE logMux = portMUX_INITIALIZER_UNLOCKED;
 // Advance pointer by `len` bytes, clamping so it never exceeds `end`.
 static inline char* clamp_advance(char* c, int len, const char* end) {
   if (len <= 0) return c;
+  if (c >= end) return const_cast<char*>(end);
   size_t avail = static_cast<size_t>(end - c);
-  return c + (static_cast<size_t>(len) < avail ? static_cast<size_t>(len) : avail - 1);
+  return c + (static_cast<size_t>(len) < avail ? static_cast<size_t>(len) : avail);
 }
 
 void addToLogRingBuffer(const char* message) {
@@ -109,12 +110,18 @@ std::string getLastLogs() {
   // We use a second portMUX (snapshotMux) to serialize concurrent callers of
   // getLastLogs() without holding logMux (which would block the logging ISR
   // path) during the heap work that follows.
+  // Heap-allocate snapshot to avoid 4KB stack usage (16 * 256) which can
+  // overflow ESP32 task stacks (typically 4-8KB).
+  auto* snapshot = static_cast<char(*)[MAX_ENTRY_LEN]>(malloc(MAX_LOG_LINES * MAX_ENTRY_LEN));
+  if (!snapshot) {
+    return {};
+  }
+
   static portMUX_TYPE snapshotMux = portMUX_INITIALIZER_UNLOCKED;
   portENTER_CRITICAL(&snapshotMux);
-  char snapshot[MAX_LOG_LINES][MAX_ENTRY_LEN];
   size_t snapHead = 0;
   portENTER_CRITICAL(&logMux);
-  memcpy(snapshot, logMessages, sizeof(snapshot));
+  memcpy(snapshot, logMessages, MAX_LOG_LINES * MAX_ENTRY_LEN);
   snapHead = logHead;
   portEXIT_CRITICAL(&logMux);
 
@@ -127,6 +134,7 @@ std::string getLastLogs() {
     }
   }
   portEXIT_CRITICAL(&snapshotMux);
+  free(snapshot);
   return output;
 }
 
