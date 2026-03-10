@@ -7,6 +7,8 @@
 
 #include <algorithm>
 
+#include <FsHelpers.h>
+
 #include "CrossPointSettings.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -51,13 +53,7 @@ void BmpViewerActivity::loadSiblingImages() {
   }
   dir.close();
 
-  // Sort case-insensitively
-  std::sort(siblingImages.begin(), siblingImages.end(), [](const std::string& a, const std::string& b) {
-    std::string aLow = a, bLow = b;
-    std::transform(aLow.begin(), aLow.end(), aLow.begin(), ::tolower);
-    std::transform(bLow.begin(), bLow.end(), bLow.begin(), ::tolower);
-    return aLow < bLow;
-  });
+  FsHelpers::sortFileList(siblingImages);
 
   for (size_t i = 0; i < siblingImages.size(); ++i) {
     if (siblingImages[i] == fileName) {
