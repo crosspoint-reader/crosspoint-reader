@@ -2,7 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
-#include <SdCardFontRegistry.h>
+#include "../../SdCardFontSystem.h"
 
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
@@ -18,8 +18,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-// Global font registry defined in main.cpp
-extern SdCardFontRegistry fontRegistry;
+// Global SD font system defined in main.cpp
+extern SdCardFontSystem sdFontSystem;
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -33,7 +33,7 @@ void SettingsActivity::onEnter() {
   controlsSettings.clear();
   systemSettings.clear();
 
-  for (auto& setting : getSettingsList(&fontRegistry)) {
+  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
