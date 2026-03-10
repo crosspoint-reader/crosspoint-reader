@@ -92,9 +92,7 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   // add the user message
   vsnprintf(c, static_cast<size_t>(end - c), format, args);
   va_end(args);
-  if (logSerial) {
-    logSerial.print(buf);
-  }
+  logSerial.print(buf);
   addToLogRingBuffer(buf);
 }
 

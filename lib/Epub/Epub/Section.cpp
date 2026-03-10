@@ -266,6 +266,12 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     return nullptr;
   }
 
+  if (currentPage >= pageCount) {
+    LOG_ERR("SCT", "currentPage %d out of range (pageCount %d)", currentPage, pageCount);
+    file.close();
+    return nullptr;
+  }
+
   file.seek(HEADER_SIZE - sizeof(uint32_t) * 2);
   uint32_t lutOffset;
   serialization::readPod(file, lutOffset);
@@ -321,6 +327,10 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
     serialization::readPod(f, page);
     if (key == anchor) {
       f.close();
+      if (page >= pageCount) {
+        LOG_ERR("SCT", "Anchor '%s' maps to page %u but pageCount is %d", anchor.c_str(), page, pageCount);
+        return std::nullopt;
+      }
       return page;
     }
   }
