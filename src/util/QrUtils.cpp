@@ -1,31 +1,55 @@
 #include "QrUtils.h"
 
+#include <I18n.h>
 #include <qrcode.h>
 
 #include <algorithm>
 #include <memory>
+#include <string>
 
 #include "Logging.h"
+#include "fontIds.h"
 
 void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const std::string& textPayload) {
-  // Dynamically calculate the QR code version based on text length
-  // Version 4 holds ~114 bytes, Version 10 ~395, Version 20 ~1066, up to 40
-  // qrcode.h max version is 40.
-  // Formula: approx version = size / 26 + 1 (very rough estimate, better to find best fit)
-  const size_t len = textPayload.length();
-  int version = 4;
-  if (len > 114) version = 10;
-  if (len > 395) version = 20;
-  if (len > 1066) version = 30;
-  if (len > 2110) version = 40;
+  // Dynamically calculate the QR code version based on text length (Byte Mode,
+  // ECC_LOW) Max capacities for Byte Mode and ECC_LOW for Versions 1-40.
+  static const int MAX_VERSION = 30;
+  static const uint16_t MAX_CAPACITY[40] = {17,   32,   53,   78,   106,  134,  154,  192,  230,  271,
+                                            321,  367,  425,  458,  520,  586,  644,  718,  792,  858,
+                                            929,  1003, 1091, 1171, 1273, 1367, 1465, 1528, 1628, 1732,
+                                            1840, 1952, 2068, 2188, 2303, 2431, 2563, 2699, 2809, 2953};
 
-  // Make sure we have a large enough buffer on the heap to avoid blowing the stack
+  const size_t maxCapacity = MAX_CAPACITY[MAX_VERSION];
+  bool truncated = false;
+  std::string qrText = textPayload;
+
+  if (qrText.length() > maxCapacity) {
+    size_t truncationPoint = maxCapacity;
+    while (truncationPoint > 0 && (static_cast<unsigned char>(qrText[truncationPoint]) & 0xC0) == 0x80) {
+      --truncationPoint;
+    }
+    qrText.erase(truncationPoint);
+    truncated = true;
+    LOG_ERR("QR", "Text payload truncated to %zu bytes", maxCapacity);
+  }
+
+  const size_t len = qrText.length();
+  int version = 4;
+  for (int i = 0; i < 40; i++) {
+    if (len <= MAX_CAPACITY[i]) {
+      version = std::max(4, i + 1);
+      break;
+    }
+  }
+
+  // Make sure we have a large enough buffer on the heap to avoid blowing the
+  // stack
   uint32_t bufferSize = qrcode_getBufferSize(version);
   auto qrcodeBytes = std::make_unique<uint8_t[]>(bufferSize);
 
   QRCode qrcode;
   // Initialize the QR code. We use ECC_LOW for max capacity.
-  int8_t res = qrcode_initText(&qrcode, qrcodeBytes.get(), version, ECC_LOW, textPayload.c_str());
+  int8_t res = qrcode_initText(&qrcode, qrcodeBytes.get(), version, ECC_LOW, qrText.c_str());
 
   if (res == 0) {
     // Determine the optimal pixel size.
@@ -47,8 +71,13 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
         }
       }
     }
+
+    if (truncated) {
+      renderer.drawCenteredText(UI_12_FONT_ID, bounds.y + bounds.height, tr(STR_QR_TEXT_TRUNCATED), true);
+    }
   } else {
     // If it fails (e.g. text too large), log an error
     LOG_ERR("QR", "Text too large for QR Code version %d", version);
+    renderer.drawCenteredText(UI_12_FONT_ID, bounds.y, tr(STR_QR_GENERATION_FAILED), true);
   }
 }
