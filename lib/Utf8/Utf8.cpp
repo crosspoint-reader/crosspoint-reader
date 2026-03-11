@@ -31,8 +31,8 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
   // Validate continuation bytes before consuming them
   for (int i = 1; i < bytes; i++) {
     if ((chr[i] & 0xC0) != 0x80) {
-      // Missing or invalid continuation byte — skip only the lead byte
-      (*string)++;
+      // Missing or invalid continuation byte — skip all bytes consumed so far
+      *string += i;
       return REPLACEMENT_GLYPH;
     }
   }
@@ -54,6 +54,26 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
   *string += bytes;
 
   return cp;
+}
+
+int utf8SafeTruncateBuffer(const char* buf, int len) {
+  if (len <= 0) return 0;
+
+  // Walk back past continuation bytes (10xxxxxx) to find the lead byte
+  int leadPos = len - 1;
+  while (leadPos > 0 && (static_cast<uint8_t>(buf[leadPos]) & 0xC0) == 0x80) {
+    leadPos--;
+  }
+
+  // Determine expected length of the sequence starting at leadPos
+  int expectedLen = utf8CodepointLen(static_cast<unsigned char>(buf[leadPos]));
+  int actualLen = len - leadPos;
+
+  if (actualLen < expectedLen && leadPos > 0) {
+    // Incomplete UTF-8 sequence at the end — exclude it
+    return leadPos;
+  }
+  return len;
 }
 
 size_t utf8RemoveLastChar(std::string& str) {
