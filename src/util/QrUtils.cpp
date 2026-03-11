@@ -38,10 +38,6 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
     }
   }
 
-  // Adjust bounds for warning text if truncated
-  const int warningFont = UI_10_FONT_ID;
-  const int warningHeight = truncated ? renderer.getLineHeight(warningFont) + 4 : 0;
-
   // Make sure we have a large enough buffer on the heap to avoid blowing the
   // stack
   uint32_t bufferSize = qrcode_getBufferSize(version);
