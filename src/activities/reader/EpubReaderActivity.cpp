@@ -2,6 +2,7 @@
 
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -686,15 +687,16 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
-  renderer.resetFontStats();
+  auto* fcm = renderer.getFontCacheManager();
+  fcm->resetStats();
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   const uint32_t heapBefore = esp_get_free_heap_size();
-  auto scope = renderer.createFontPrewarmScope();
+  auto scope = fcm->createPrewarmScope();
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
   const uint32_t heapAfter = esp_get_free_heap_size();
-  renderer.logFontStats("prewarm");
+  fcm->logStats("prewarm");
   const auto tPrewarm = millis();
 
   LOG_DBG("ERS", "Heap: before=%lu after=%lu delta=%ld", heapBefore, heapAfter,
@@ -705,7 +707,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
-  renderer.logFontStats("bw_render");
+  fcm->logStats("bw_render");
   const auto tBwRender = millis();
 
   if (imagePageWithAA) {
@@ -760,7 +762,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.displayGrayBuffer();
     const auto tGrayDisplay = millis();
     renderer.setRenderMode(GfxRenderer::BW);
-    renderer.logFontStats("gray");
+    fcm->logStats("gray");
 
     // restore the bw data
     renderer.restoreBwBuffer();

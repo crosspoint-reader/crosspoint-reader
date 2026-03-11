@@ -4,9 +4,12 @@
 #include <Logging.h>
 #include <Utf8.h>
 
+#include "FontCacheManager.h"
+
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
   if (fontData->groups != nullptr) {
-    if (!fontDecompressor) {
+    auto* fd = fontCacheManager_ ? fontCacheManager_->getDecompressor() : nullptr;
+    if (!fd) {
       LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
       return nullptr;
     }
@@ -14,77 +17,10 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
     // For page-buffer hits the pointer is stable for the page lifetime.
     // For hot-group hits it is valid only until the next getBitmap() call — callers
     // must consume it (draw the glyph) before requesting another bitmap.
-    return fontDecompressor->getBitmap(fontData, glyph, glyphIndex);
+    return fd->getBitmap(fontData, glyph, glyphIndex);
   }
   return &fontData->bitmap[glyph->dataOffset];
 }
-
-void GfxRenderer::clearFontCache() {
-  if (fontDecompressor) fontDecompressor->clearCache();
-}
-
-void GfxRenderer::prewarmFontCache(int fontId, const char* utf8Text, EpdFontFamily::Style style) {
-  if (!fontDecompressor || fontMap.count(fontId) == 0) return;
-  const EpdFontData* data = fontMap.at(fontId).getData(style);
-  if (!data || !data->groups) return;
-  int missed = fontDecompressor->prewarmCache(data, utf8Text);
-  if (missed > 0) {
-    LOG_DBG("GFX", "prewarmFontCache: %d glyph(s) not cached for style %d; hot-group fallback in use", missed,
-            static_cast<int>(style));
-  }
-}
-
-void GfxRenderer::logFontStats(const char* label) {
-  if (fontDecompressor) fontDecompressor->logStats(label);
-}
-
-void GfxRenderer::resetFontStats() {
-  if (fontDecompressor) fontDecompressor->resetStats();
-}
-
-// --- FontPrewarmScope implementation ---
-
-GfxRenderer::FontPrewarmScope::FontPrewarmScope(GfxRenderer& renderer) : renderer_(&renderer) {
-  renderer_->scanMode_ = ScanMode::Scanning;
-  renderer_->clearFontCache();
-  renderer_->resetFontStats();
-  renderer_->scanText_.clear();
-  renderer_->scanText_.reserve(2048);  // Pre-allocate to avoid heap fragmentation from repeated concat
-  memset(renderer_->scanStyleCounts_, 0, sizeof(renderer_->scanStyleCounts_));
-  renderer_->scanFontId_ = -1;
-}
-
-void GfxRenderer::FontPrewarmScope::endScanAndPrewarm() {
-  renderer_->scanMode_ = ScanMode::None;
-  if (renderer_->scanText_.empty()) return;
-
-  // Determine dominant style from scan counts
-  uint8_t dominantStyle = 0;
-  for (uint8_t i = 1; i < 4; i++) {
-    if (renderer_->scanStyleCounts_[i] > renderer_->scanStyleCounts_[dominantStyle]) dominantStyle = i;
-  }
-
-  renderer_->prewarmFontCache(renderer_->scanFontId_, renderer_->scanText_.c_str(),
-                              static_cast<EpdFontFamily::Style>(dominantStyle));
-
-  // Free scan string memory
-  renderer_->scanText_.clear();
-  renderer_->scanText_.shrink_to_fit();
-}
-
-GfxRenderer::FontPrewarmScope::~FontPrewarmScope() {
-  if (active_) {
-    endScanAndPrewarm();  // no-op if already called (scanText_ is empty)
-    renderer_->clearFontCache();
-  }
-}
-
-GfxRenderer::FontPrewarmScope::FontPrewarmScope(FontPrewarmScope&& other) noexcept
-    : renderer_(other.renderer_), active_(other.active_) {
-  other.active_ = false;
-}
-
-GfxRenderer::FontPrewarmScope GfxRenderer::createFontPrewarmScope() { return FontPrewarmScope(*this); }
 
 void GfxRenderer::begin() {
   frameBuffer = display.getFrameBuffer();
@@ -282,17 +218,8 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
-  if (scanMode_ == ScanMode::Scanning) {
-    scanText_ += text;
-    if (scanFontId_ < 0) scanFontId_ = fontId;
-    const uint8_t baseStyle = static_cast<uint8_t>(style) & 0x03;
-    const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
-    uint32_t cpCount = 0;
-    while (*p) {
-      if ((*p & 0xC0) != 0x80) cpCount++;
-      p++;
-    }
-    scanStyleCounts_[baseStyle] += cpCount;
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    fontCacheManager_->recordText(text, fontId, style);
     return;
   }
 
@@ -342,7 +269,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 }
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
-  if (scanMode_ == ScanMode::Scanning) return;
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
   if (x1 == x2) {
     if (y2 < y1) {
       std::swap(y1, y2);
@@ -655,7 +582,7 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
-  if (scanMode_ == ScanMode::Scanning) return;
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
