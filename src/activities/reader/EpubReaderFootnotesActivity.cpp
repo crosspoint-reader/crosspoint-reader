@@ -64,7 +64,7 @@ void EpubReaderFootnotesActivity::render(RenderLock&&) {
 
   constexpr int startY = 50;
   constexpr int lineHeight = 36;
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
   constexpr int marginLeft = 20;
 
   const int visibleCount = std::max(1, (contentRect.height - startY) / lineHeight);

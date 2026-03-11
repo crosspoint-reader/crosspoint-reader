@@ -221,7 +221,7 @@ void KOReaderSyncActivity::onExit() {
 }
 
 void KOReaderSyncActivity::render(RenderLock&&) {
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
 
   renderer.clearScreen();
   renderer.drawCenteredText(UI_12_FONT_ID, 15 + contentRect.y, tr(STR_KOREADER_SYNC), true, EpdFontFamily::BOLD);

@@ -11,7 +11,7 @@ int EpubReaderChapterSelectionActivity::getTotalItems() const { return epub->get
 
 int EpubReaderChapterSelectionActivity::getPageItems() const {
   constexpr int lineHeight = 30;
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
   const int startY = 60 + contentRect.y;
   const int availableHeight = contentRect.y + contentRect.height - startY - lineHeight;
   // Clamp to at least one item to avoid division by zero and empty paging.
@@ -82,7 +82,7 @@ void EpubReaderChapterSelectionActivity::loop() {
 void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
@@ -106,11 +106,12 @@ void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
     auto item = epub->getTocItem(itemIndex);
 
     // Indent per TOC level while keeping content within the gutter-safe region.
-    const int indentSize = contentRect.x + 20 + (item.level - 1) * 15;
+    const int indentOffset = 20 + (item.level - 1) * 15;
+    const int indentX = contentRect.x + indentOffset;
     const std::string chapterName =
-        renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), contentRect.width - 40 - indentSize);
+        renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), contentRect.width - 20 - indentOffset);
 
-    renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
+    renderer.drawText(UI_10_FONT_ID, indentX, displayY, chapterName.c_str(), !isSelected);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

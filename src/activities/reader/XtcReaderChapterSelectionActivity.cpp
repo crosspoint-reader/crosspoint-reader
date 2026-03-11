@@ -11,7 +11,7 @@
 
 int XtcReaderChapterSelectionActivity::getPageItems() const {
   constexpr int lineHeight = 30;
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
   constexpr int startY = 60;
   const int availableHeight = contentRect.height - startY - lineHeight;
   // Clamp to at least one item to prevent empty page math.
@@ -87,7 +87,7 @@ void XtcReaderChapterSelectionActivity::loop() {
 void XtcReaderChapterSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
   const int pageItems = getPageItems();
 
   const int titleX =

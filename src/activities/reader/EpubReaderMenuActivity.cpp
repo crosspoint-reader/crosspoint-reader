@@ -86,7 +86,7 @@ void EpubReaderMenuActivity::loop() {
 
 void EpubReaderMenuActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
 
   // Title
   const std::string truncTitle =

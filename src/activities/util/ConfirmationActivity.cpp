@@ -13,7 +13,7 @@ void ConfirmationActivity::onEnter() {
   Activity::onEnter();
 
   lineHeight = renderer.getLineHeight(fontId);
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
   const int maxWidth = contentRect.width - (margin * 2);
 
   if (!heading.empty()) {
