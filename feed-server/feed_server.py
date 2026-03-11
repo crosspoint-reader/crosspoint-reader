@@ -20,6 +20,8 @@ See docs/rss-content-feeds.md for the full content model and integration guide.
 
 import argparse
 import os
+import threading
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from datetime import datetime, timezone
@@ -200,50 +202,115 @@ def build_feed(content_dir: Path, feed_url: str, feed_title: str) -> str:
 </rss>"""
 
 
+FEED_CACHE_TTL = 30  # seconds — rebuild feed XML at most once per interval
+_feed_cache_lock = threading.Lock()
+_feed_cache: dict = {"xml": None, "ts": 0.0}
+
+
+def get_cached_feed(content_dir: Path, feed_url: str, feed_title: str) -> bytes:
+    """Return cached feed XML bytes, rebuilding if stale (TTL=30s)."""
+    now = time.monotonic()
+    with _feed_cache_lock:
+        if _feed_cache["xml"] is None or (now - _feed_cache["ts"]) > FEED_CACHE_TTL:
+            _feed_cache["xml"] = build_feed(content_dir, feed_url, feed_title).encode("utf-8")
+            _feed_cache["ts"] = now
+        return _feed_cache["xml"]
+
+
+def invalidate_feed_cache():
+    """Force next request to rebuild the feed XML."""
+    with _feed_cache_lock:
+        _feed_cache["ts"] = 0.0
+
+
+CHUNK_SIZE = 65536  # 64 KB chunks for streaming file downloads
+
+
 def make_handler(content_dir, feed_url, feed_title, access_log, reader_feed_file=None):
     class FeedHandler(BaseHTTPRequestHandler):
+        timeout = 90  # socket timeout in seconds — prevents slow clients blocking threads forever
         def do_GET(self):
-            if self.path == "/reader-feed.xml" and reader_feed_file:
-                # Proxy an external news/reader feed so the ESP32 can fetch it
-                # over HTTP/1.1 (python3 -m http.server only does HTTP/1.0)
-                p = Path(reader_feed_file)
-                if p.exists():
-                    body = p.read_bytes()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/rss+xml; charset=utf-8")
-                    self.send_header("Content-Length", len(body))
-                    self.end_headers()
-                    self.wfile.write(body)
-                else:
-                    self.send_response(404)
-                    self.end_headers()
-                return
+            try:
+                self._handle_get()
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # client disconnected mid-transfer — not an error
 
-            elif self.path == "/feed.xml":
-                body = build_feed(content_dir, feed_url, feed_title).encode("utf-8")
+        def _handle_get(self):
+            if self.path == "/feed.xml" or self.path == "/feed.xml?force":
+                if "force" in self.path:
+                    invalidate_feed_cache()
+                body = get_cached_feed(content_dir, feed_url, feed_title)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/rss+xml; charset=utf-8")
                 self.send_header("Content-Length", len(body))
                 self.end_headers()
                 self.wfile.write(body)
 
+            elif self.path == "/reader-feed.xml" and reader_feed_file:
+                # Proxy an external news/reader feed so the ESP32 can fetch it
+                # over HTTP/1.1 (python3 -m http.server only does HTTP/1.0)
+                p = Path(reader_feed_file)
+                if p.exists():
+                    data = p.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/rss+xml; charset=utf-8")
+                    self.send_header("Content-Length", len(data))
+                    self.end_headers()
+                    self.wfile.write(data)
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
             elif self.path.startswith("/content/"):
                 rel = self.path[len("/content/"):]
+                # Strip query string
+                if "?" in rel:
+                    rel = rel[:rel.index("?")]
                 # Security: block path traversal
-                file_path = (content_dir / rel).resolve()
+                try:
+                    file_path = (content_dir / rel).resolve()
+                except Exception:
+                    self.send_response(400)
+                    self.end_headers()
+                    return
                 if not str(file_path).startswith(str(content_dir.resolve())):
                     self.send_response(403)
                     self.end_headers()
                     return
                 if file_path.exists() and file_path.is_file():
-                    body = file_path.read_bytes()
+                    size = file_path.stat().st_size
+                    # Pick Content-Type based on extension
+                    ext = file_path.suffix.lower()
+                    mime = {
+                        ".epub": "application/epub+zip",
+                        ".bmp":  "image/bmp",
+                        ".bin":  "application/octet-stream",
+                        ".xml":  "application/rss+xml",
+                        ".json": "application/json",
+                    }.get(ext, "application/octet-stream")
                     self.send_response(200)
-                    self.send_header("Content-Length", len(body))
+                    self.send_header("Content-Type", mime)
+                    self.send_header("Content-Length", size)
                     self.end_headers()
-                    self.wfile.write(body)
+                    # Stream in chunks — avoids loading large EPUBs into RAM,
+                    # releases GIL between reads so other threads can run.
+                    with open(file_path, "rb") as fh:
+                        while True:
+                            chunk = fh.read(CHUNK_SIZE)
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
                 else:
                     self.send_response(404)
                     self.end_headers()
+
+            elif self.path == "/api/sync":
+                # Trigger feed rebuild + cache invalidation
+                invalidate_feed_cache()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"Feed cache invalidated\n")
 
             else:
                 self.send_response(404)

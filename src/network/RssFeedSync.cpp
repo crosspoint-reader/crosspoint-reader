@@ -600,14 +600,39 @@ void syncTask(void*) {
     LOG_INF(TAG, "Downloading %d items...", s_dlTotal);
   }
 
+  constexpr uint32_t MIN_HEAP_PER_DOWNLOAD = 25000;  // bail on a download if heap is critically low
+  int consecutiveFails = 0;
+  constexpr int MAX_CONSECUTIVE_FAILS = 5;  // abort sync if server is consistently unreachable
+
   for (const auto& dl : downloads) {
+    // Per-download heap guard: a failed HTTPS connection can fragment heap; abort rather than crash.
+    const uint32_t heapNow = ESP.getFreeHeap();
+    if (heapNow < MIN_HEAP_PER_DOWNLOAD) {
+      LOG_ERR(TAG, "Heap too low (%lu bytes) — stopping downloads", (unsigned long)heapNow);
+      feedLog("ABORT: heap exhausted");
+      break;
+    }
+
+    // Brief yield between downloads — lets the TCP stack release prior connection state,
+    // prevents connection-refused errors from overwhelming a busy feed server.
+    if (s_dlCurrent > 0) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
     if (dl.isFirmware) {
       ensureParentDir(dl.destPath);
       if (HttpDownloader::downloadToFile(dl.url, dl.destPath) != HttpDownloader::OK) {
-        LOG_ERR(TAG, "Firmware download failed: %s", dl.url.c_str());
+        LOG_ERR(TAG, "Firmware download failed: %s (heap: %lu)", dl.url.c_str(), (unsigned long)ESP.getFreeHeap());
         Storage.remove("/firmware.bin");  // Delete any partial download — prevent flash loop
+        consecutiveFails++;
+        if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) {
+          LOG_ERR(TAG, "Too many consecutive failures — aborting sync");
+          feedLog("ABORT: too many failures");
+          break;
+        }
         continue;
       }
+      consecutiveFails = 0;
       LOG_DBG(TAG, "Firmware downloaded — will apply on next boot");
       if (SETTINGS.dangerZoneEnabled) {
         // Persist the current watermark NOW before reboot — new firmware reads this file on
@@ -619,9 +644,17 @@ void syncTask(void*) {
     } else {
       ensureParentDir(dl.destPath);
       if (HttpDownloader::downloadToFile(dl.url, dl.destPath) != HttpDownloader::OK) {
-        LOG_ERR(TAG, "Download failed: %s -> %s", dl.url.c_str(), dl.destPath.c_str());
+        LOG_ERR(TAG, "Download failed: %s -> %s (heap: %lu)", dl.url.c_str(), dl.destPath.c_str(),
+                (unsigned long)ESP.getFreeHeap());
+        consecutiveFails++;
+        if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) {
+          LOG_ERR(TAG, "Too many consecutive failures — aborting sync");
+          feedLog("ABORT: too many failures");
+          break;
+        }
         continue;
       }
+      consecutiveFails = 0;
       const auto slash = dl.destPath.rfind('/');
       UITheme::addReceivedFile(slash == std::string::npos ? dl.destPath : dl.destPath.substr(slash + 1));
       // Append to manifest so Browse → Feed virtual folder surfaces this file
@@ -679,7 +712,7 @@ void startSync() {
   s_state = RssFeedSync::State::FETCHING;  // set immediately so indicator lights before task starts
   s_dlCurrent = 0;
   s_dlTotal = 0;
-  xTaskCreate(syncTask, "FeedSync", 16384, nullptr, 1, &syncTaskHandle);  // 16KB: HTTPS+Expat+std::string need headroom
+  xTaskCreate(syncTask, "FeedSync", 24576, nullptr, 1, &syncTaskHandle);  // 24KB: HTTPS+Expat+std::string+download loop headroom
 }
 
 void suppressSync(unsigned long durationMs) {
