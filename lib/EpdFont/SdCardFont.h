@@ -14,7 +14,7 @@ class SdCardFont {
   ~SdCardFont();
 
   // Load .cpfont file: reads header + intervals into RAM, records file layout offsets.
-  // Supports both v3 (single-style) and v4 (multi-style) formats.
+  // Supports v4 (multi-style) format.
   // Returns true on success.
   bool load(const char* path);
 

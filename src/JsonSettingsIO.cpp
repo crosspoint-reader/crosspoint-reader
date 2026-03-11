@@ -120,6 +120,8 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["frontButtonConfirm"] = s.frontButtonConfirm;
   doc["frontButtonLeft"] = s.frontButtonLeft;
   doc["frontButtonRight"] = s.frontButtonRight;
+  // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
+  doc["fontFamily"] = s.fontFamily;
   // SD card font family name — not in SettingsList, save manually
   if (s.sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = s.sdFontFamilyName;
@@ -204,6 +206,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       clamp(doc["frontButtonRight"] | (uint8_t)S::FRONT_HW_RIGHT, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_RIGHT);
   CrossPointSettings::validateFrontButtonMapping(s);
 
+  // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
+  s.fontFamily = clamp(doc["fontFamily"] | (uint8_t)0, BUILTIN_FONT_COUNT, 0);
   // SD card font family name — not in SettingsList, load manually
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);

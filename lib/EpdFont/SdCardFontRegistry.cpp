@@ -97,6 +97,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
 
 bool SdCardFontRegistry::discover() {
   families_.clear();
+  families_.reserve(MAX_SD_FAMILIES);
 
   FsFile root = Storage.open(FONTS_DIR);
   if (!root) {

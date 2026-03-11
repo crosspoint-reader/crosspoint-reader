@@ -30,6 +30,7 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
   }
 
   // Load all font files from SD card
+  loaded_.reserve(family.files.size());
   for (const auto& fileInfo : family.files) {
     auto* font = new (std::nothrow) SdCardFont();
     if (!font) {

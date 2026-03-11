@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
 
 static_assert(sizeof(EpdGlyph) == 16, "EpdGlyph must be 16 bytes to match .cpfont file layout");
 static_assert(sizeof(EpdUnicodeInterval) == 12, "EpdUnicodeInterval must be 12 bytes to match .cpfont file layout");
@@ -343,7 +344,12 @@ int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOn
   unsigned long startMs = millis();
 
   // Step 1: Extract unique codepoints from UTF-8 text (shared across all styles)
-  uint32_t codepoints[MAX_PAGE_GLYPHS];
+  // Heap-allocated: MAX_PAGE_GLYPHS * 4 = 2048 bytes, too large for stack (limit < 256 bytes)
+  std::unique_ptr<uint32_t[]> codepoints(new (std::nothrow) uint32_t[MAX_PAGE_GLYPHS]);
+  if (!codepoints) {
+    LOG_ERR("SDCF", "Failed to allocate codepoint buffer (%u bytes)", MAX_PAGE_GLYPHS * 4);
+    return -1;
+  }
   uint32_t cpCount = 0;
 
   const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8Text);
@@ -417,13 +423,13 @@ int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOn
   }
 
   // Sort codepoints for ordered interval building
-  std::sort(codepoints, codepoints + cpCount);
+  std::sort(codepoints.get(), codepoints.get() + cpCount);
 
   // Prewarm each requested style
   int totalMissed = 0;
   for (uint8_t si = 0; si < MAX_STYLES; si++) {
     if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
-    totalMissed += prewarmStyle(si, codepoints, cpCount, metadataOnly);
+    totalMissed += prewarmStyle(si, codepoints.get(), cpCount, metadataOnly);
   }
 
   stats_.prewarmTotalMs = millis() - startMs;
@@ -670,7 +676,8 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
 
   // Pick overflow slot (ring buffer eviction when full)
   uint32_t slot = self->overflowNext_;
-  if (self->overflowCount_ == OVERFLOW_CAPACITY) {
+  bool wasAtCapacity = (self->overflowCount_ == OVERFLOW_CAPACITY);
+  if (wasAtCapacity) {
     delete[] self->overflow_[slot].bitmap;
     self->overflow_[slot].bitmap = nullptr;
   } else {
@@ -682,7 +689,7 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   FsFile file;
   if (!Storage.openFileForRead("SDCF", self->filePath_, file)) {
     LOG_ERR("SDCF", "Overflow: failed to open .cpfont");
-    self->overflowCount_--;
+    if (!wasAtCapacity) self->overflowCount_--;
     return nullptr;
   }
 
@@ -691,7 +698,7 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   if (file.read(reinterpret_cast<uint8_t*>(&self->overflow_[slot].glyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
     LOG_ERR("SDCF", "Overflow: failed to read glyph metadata for U+%04X style %u", codepoint, styleIdx);
     file.close();
-    self->overflowCount_--;
+    if (!wasAtCapacity) self->overflowCount_--;
     return nullptr;
   }
 
@@ -702,7 +709,7 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
     if (!bmp) {
       LOG_ERR("SDCF", "Overflow: failed to allocate %u bytes for U+%04X bitmap", g.dataLength, codepoint);
       file.close();
-      self->overflowCount_--;
+      if (!wasAtCapacity) self->overflowCount_--;
       return nullptr;
     }
     file.seekSet(s.bitmapFileOffset + g.dataOffset);
@@ -710,7 +717,7 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
       LOG_ERR("SDCF", "Overflow: failed to read bitmap for U+%04X", codepoint);
       delete[] bmp;
       file.close();
-      self->overflowCount_--;
+      if (!wasAtCapacity) self->overflowCount_--;
       return nullptr;
     }
     self->overflow_[slot].bitmap = bmp;
@@ -729,9 +736,10 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
 }
 
 bool SdCardFont::isOverflowGlyph(const EpdGlyph* glyph) const {
-  const EpdGlyph* begin = &overflow_[0].glyph;
-  const EpdGlyph* end = &overflow_[OVERFLOW_CAPACITY - 1].glyph;
-  return glyph >= begin && glyph <= end;
+  for (uint32_t i = 0; i < OVERFLOW_CAPACITY; i++) {
+    if (&overflow_[i].glyph == glyph) return true;
+  }
+  return false;
 }
 
 const uint8_t* SdCardFont::getOverflowBitmap(const EpdGlyph* glyph) const {
