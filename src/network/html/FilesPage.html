@@ -161,6 +161,39 @@
       overflow-y: auto;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     }
+    .modal.picker-mode {
+      max-width: 920px;
+    }
+    .picker-columns.picker-active {
+      display: flex;
+      flex-direction: row;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .picker-columns.picker-active > .convert-options {
+      flex: 0 0 340px;
+      width: 340px;
+      margin-bottom: 0;
+    }
+    .picker-columns.picker-active > .image-picker-section {
+      flex: 1;
+      margin-top: 0;
+      max-height: 55vh;
+      overflow-y: auto;
+    }
+    @media (max-width: 850px) {
+      .modal.picker-mode { max-width: 95%; }
+      .picker-columns.picker-active {
+        flex-direction: column;
+      }
+      .picker-columns.picker-active > .convert-options {
+        flex: 0 0 auto;
+        width: 100%;
+      }
+      .picker-columns.picker-active > .image-picker-section {
+        max-height: 40vh;
+      }
+    }
     .modal h3 {
       margin: 0 0 15px 0;
       color: var(--title-color);
@@ -358,10 +391,23 @@
       display: block;
     }
     .advanced-setting-row {
-      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-top: 14px;
     }
     .advanced-setting-row:first-child {
-      margin-top: 0;
+      margin-top: 12px;
+    }
+    .setting-label {
+      flex-shrink: 0;
+    }
+    .setting-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
     }
     .setting-row-header {
       display: flex;
@@ -455,38 +501,36 @@
       width: 32px;
       font-size: 0.8em;
     }
-    /* Quality Presets */
+    /* Quality Presets - Compact Single Row */
     .quality-presets {
       display: flex;
-      gap: 6px;
-      flex-wrap: nowrap;
+      gap: 0;
+      background: var(--border-color);
+      border-radius: 6px;
+      padding: 3px;
+      width: fit-content;
     }
     .quality-preset {
-      flex: 1;
-      padding: 6px 4px;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
+      padding: 6px 14px;
+      background: transparent;
+      border: none;
       border-radius: 4px;
-      font-size: 0.7em;
+      font-size: 0.75em;
+      font-weight: 500;
       color: var(--label-color);
       text-align: center;
       cursor: pointer;
       transition: all 0.15s;
       white-space: nowrap;
     }
-    .quality-preset small {
-      font-size: 0.85em;
-      white-space: nowrap;
-    }
     .quality-preset:hover {
-      border-color: var(--accent-color);
+      background: var(--accent-color-10);
       color: var(--accent-color);
     }
     .quality-preset.active {
-      border-color: var(--accent-color);
-      background: var(--accent-color-10);
-      color: var(--accent-color);
-      font-weight: 600;
+      background: var(--accent-color);
+      color: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
     /* Toggle Switch */
     .setting-toggle {
@@ -537,16 +581,27 @@
       line-height: 1.3;
     }
     /* Rotate & Crop Mode Selector */
+    .rotate-crop-row {
+      flex-direction: column;
+      align-items: stretch !important;
+      gap: 8px !important;
+    }
+    .rotate-crop-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
     .rotate-crop-selector {
       display: flex;
-      gap: 2px;
+      gap: 0;
       background: var(--border-color);
-      border-radius: 4px;
-      padding: 2px;
-      flex-shrink: 0;
+      border-radius: 6px;
+      padding: 3px;
     }
     .rotate-crop-option {
       position: relative;
+      display: flex;
     }
     .rotate-crop-option input {
       opacity: 0;
@@ -555,17 +610,19 @@
       height: 0;
     }
     .rotate-crop-option label {
-      display: block;
-      padding: 4px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 12px;
       font-size: 0.75em;
       font-weight: 500;
       color: var(--label-color);
-      border-radius: 3px;
+      border-radius: 4px;
       cursor: pointer;
       text-align: center;
-      min-width: 60px;
       transition: all 0.2s;
       user-select: none;
+      white-space: nowrap;
     }
     .rotate-crop-option input:disabled + label {
       opacity: 0.4;
@@ -574,60 +631,56 @@
     .rotate-crop-option input:checked + label {
       background: var(--accent-color);
       color: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
     .rotate-crop-option input:not(:checked):not(:disabled) + label:hover {
       background: var(--accent-color-10);
       color: var(--accent-color);
     }
-    /* Handedness options */
-    .handedness-options {
-      padding: 10px;
-      background: rgba(0, 0, 0, 0.02);
-      border-radius: 6px;
-    }
-    .handedness-options-inline {
+    /* Rotation Buttons Row */
+    .rotation-buttons-row {
       display: flex;
       align-items: center;
       gap: 10px;
-      flex-wrap: nowrap;
     }
-    .handedness-options-inline .setting-title {
-      margin: 0;
-      white-space: nowrap;
+    .rotation-info {
+      font-size: 0.7em;
+      color: var(--label-color);
+      font-style: italic;
     }
-    .handedness-buttons {
+    .rotation-buttons {
       display: flex;
-      gap: 6px;
-      flex-wrap: nowrap;
-      justify-content: center;
-      width: 100%;
+      gap: 0;
+      background: var(--border-color);
+      border-radius: 6px;
+      padding: 3px;
     }
-    .handedness-btn {
-      flex: 0 1 auto;
-      padding: 8px 10px;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
+    .rotation-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 14px;
+      background: transparent;
+      border: none;
       border-radius: 4px;
       font-size: 0.75em;
+      font-weight: 500;
       color: var(--label-color);
-      text-align: center;
       cursor: pointer;
       transition: all 0.15s;
       white-space: nowrap;
     }
-    .handedness-btn:hover {
-      border-color: var(--accent-color);
-      color: var(--accent-color);
-    }
-    .handedness-btn.active {
-      border-color: var(--accent-color);
+    .rotation-btn:hover {
       background: var(--accent-color-10);
       color: var(--accent-color);
-      font-weight: 600;
     }
-    .handedness-btn small {
-      font-size: 0.85em;
-      opacity: 0.8;
+    .rotation-btn.active {
+      background: var(--accent-color);
+      color: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .rotation-btn .rot-icon {
+      font-size: 1.1em;
     }
     /* Image Picker Grid Styles */
     .image-picker-section {
@@ -682,18 +735,18 @@
       border-color: #e74c3c;
       background: rgba(231, 76, 60, 0.1);
     }
-    .image-item.locked {
-      border-color: #27ae60;
-      background: rgba(39, 174, 96, 0.1);
+    .image-item.cover-locked {
+      border-color: #e67e22;
+      background: rgba(230, 126, 34, 0.1);
       cursor: default;
-      opacity: 0.8;
+      opacity: 0.85;
     }
-    .image-item.locked:hover {
+    .image-item.cover-locked:hover {
       transform: none;
-      border-color: #27ae60;
+      border-color: #e67e22;
     }
-    .image-item.locked .image-state-badge {
-      background: #27ae60;
+    .image-item.cover-locked .image-state-badge {
+      background: #e67e22;
     }
     .image-item img {
       width: 100%;
@@ -733,20 +786,22 @@
     .image-picker-actions {
       display: flex;
       gap: 8px;
-      margin-top: 10px;
+      margin-top: 12px;
       justify-content: flex-end;
     }
     .image-picker-btn {
-      padding: 6px 12px;
+      padding: 8px 16px;
       border: none;
-      border-radius: 4px;
-      font-size: 0.85em;
+      border-radius: 6px;
+      font-size: 0.8em;
       cursor: pointer;
       font-weight: 500;
+      transition: all 0.15s;
     }
     .image-picker-btn.primary {
       background: var(--accent-color);
       color: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
     .image-picker-btn.primary:hover {
       background: var(--accent-hover-color);
@@ -761,20 +816,24 @@
     }
     .state-legend {
       display: flex;
-      gap: 12px;
+      gap: 16px;
       font-size: 0.7em;
-      margin-top: 8px;
+      margin: 10px 0;
       flex-wrap: wrap;
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.02);
+      border-radius: 6px;
     }
     .legend-item {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
+      white-space: nowrap;
     }
     .legend-color {
-      width: 12px;
-      height: 12px;
-      border-radius: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
     }
     .file-info {
       color: var(--label-color);
@@ -1169,9 +1228,11 @@
         font-size: 0.9em;
       }
       .handedness-btn {
-        flex-basis: 100%;
-        max-width: 100%;
-        min-width: unset;
+        padding: 6px 10px;
+      }
+      .handedness-buttons {
+        width: 100%;
+        justify-content: center;
       }
       .quality-slider-container-inline {
         max-width: 215px;
@@ -1387,24 +1448,25 @@
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <input type="file" id="fileInput" onchange="validateFile()" multiple>
-      <div class="convert-options" id="convertOptions" style="display:none;">
-        <div class="convert-row">
-          <label class="convert-checkbox">
-            <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
-            <span>Optimize EPUB</span>
-          </label>
-          <span class="convert-separator">—</span>
-          <span class="advanced-options-toggle" id="advancedOptionsToggle" onclick="toggleAdvancedOptions()">
-            <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
-            <span class="advanced-options-text">Advanced Mode</span>
-          </span>
-        </div>
+      <div class="picker-columns" id="pickerColumns">
+        <div class="convert-options" id="convertOptions" style="display:none;">
+          <div class="convert-row">
+            <label class="convert-checkbox">
+              <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
+              <span>Optimize EPUB</span>
+            </label>
+            <span class="convert-separator">—</span>
+            <span class="advanced-options-toggle" id="advancedOptionsToggle" onclick="toggleAdvancedOptions()">
+              <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
+              <span class="advanced-options-text">Advanced Mode</span>
+            </span>
+          </div>
 
-        <div id="convertInfo" style="display:none; margin-bottom: 10px; font-size: 0.9em;">
-        </div>
+          <div id="convertInfo" style="display:none; margin-bottom: 10px; font-size: 0.9em;">
+          </div>
 
-        <div class="convert-settings" id="convertSettings" style="display:block;">
-          <span>⚫ True-Grayscale</span>
+          <div class="convert-settings" id="convertSettings" style="display:block;">
+            <span>⚫ True-Grayscale</span>
           <span>📏 Max 480×800px</span>
           <span>📦 85% JPEG</span>
           <span>🔧 Fix SVG</span>
@@ -1412,9 +1474,11 @@
         <!-- Advanced Settings Content -->
         <div class="advanced-settings-content" id="advancedSettingsContent">
           <!-- JPEG Quality -->
-          <div class="advanced-setting-row" style="margin-top: 12px;">
-            <div class="setting-row-header">
-              <span class="setting-title">📦 JPEG Quality</span>
+          <div class="advanced-setting-row">
+            <div class="setting-label">
+              <div class="setting-title">📦 JPEG Quality</div>
+            </div>
+            <div class="setting-controls">
               <div class="quality-slider-container-inline">
                 <input type="range" class="quality-slider" id="qualitySlider" min="1" max="95" value="85">
                 <div class="quality-input-wrapper">
@@ -1422,12 +1486,12 @@
                   <span class="quality-unit">%</span>
                 </div>
               </div>
-            </div>
-            <div class="quality-presets">
-              <button class="quality-preset" data-value="60" onclick="setQualityPreset(60)">Low<br><small>60%</small></button>
-              <button class="quality-preset" data-value="75" onclick="setQualityPreset(75)">Medium<br><small>75%</small></button>
-              <button class="quality-preset active" data-value="85" onclick="setQualityPreset(85)">High<br><small>85%</small></button>
-              <button class="quality-preset" data-value="95" onclick="setQualityPreset(95)">Max<br><small>95%</small></button>
+              <div class="quality-presets">
+                <button class="quality-preset" data-value="60" onclick="setQualityPreset(60)" title="Low quality">60%</button>
+                <button class="quality-preset" data-value="75" onclick="setQualityPreset(75)" title="Medium quality">75%</button>
+                <button class="quality-preset active" data-value="85" onclick="setQualityPreset(85)" title="High quality">85%</button>
+                <button class="quality-preset" data-value="95" onclick="setQualityPreset(95)" title="Maximum quality">95%</button>
+              </div>
             </div>
           </div>
           <!-- Grayscale Toggle (commented for e-ink optimization, kept for compatibility with other devices/web apps)
@@ -1445,12 +1509,9 @@
           </div>
           -->
           <!-- Rotate & Crop Mode -->
-          <div class="advanced-setting-row">
-            <div class="setting-toggle">
-              <div>
-                <div class="setting-title">📐 Rotate & Crop</div>
-                <div class="setting-desc">Select image processing mode</div>
-              </div>
+          <div class="advanced-setting-row rotate-crop-row">
+            <div class="setting-title">📐 Rotate & Crop</div>
+            <div class="rotate-crop-controls">
               <div class="rotate-crop-selector">
                 <div class="rotate-crop-option">
                   <input type="radio" name="rotateCropMode" id="rotateCropOff" value="off" onchange="setRotateCropMode('off')" checked>
@@ -1458,31 +1519,33 @@
                 </div>
                 <div class="rotate-crop-option">
                   <input type="radio" name="rotateCropMode" id="rotateCropLightNovel" value="light_novel" onchange="setRotateCropMode('light_novel')">
-                  <label for="rotateCropLightNovel">Light Novel</label>
+                  <label for="rotateCropLightNovel">Auto</label>
                 </div>
                 <div class="rotate-crop-option">
                   <input type="radio" name="rotateCropMode" id="rotateCropManualPicker" value="manual_picker" onchange="setRotateCropMode('manual_picker')">
-                  <label for="rotateCropManualPicker">Manual Picker</label>
+                  <label for="rotateCropManualPicker">Manual</label>
                 </div>
               </div>
-            </div>
-            <!-- Handedness options (shown when mode is Light Novel or Manual Picker) -->
-            <div class="handedness-buttons" id="handednessOptions" style="display:none; margin-top: 12px;">
-              <button class="handedness-btn" id="handednessLeft" data-value="left" onclick="setHandedness('left')">
-                <span style="float: right; transform: scaleX(-1);">🤚</span><span>Left-handed<br><small>(CCW)</small></span>
-              </button>
-              <button class="handedness-btn active" id="handednessRight" data-value="right" onclick="setHandedness('right')">
-                <span style="float: left;">🤚</span><span>Right-handed<br><small>(CW)</small></span>
-              </button>
+              <div class="rotation-buttons-row" id="rotationRow" style="display:none;">
+                <span class="rotation-info">5% min overlap</span>
+                <div class="rotation-buttons">
+                  <button class="rotation-btn" id="rotationCCW" onclick="setHandedness('left')">
+                    <span class="rot-icon">↺</span> CCW
+                  </button>
+                  <button class="rotation-btn active" id="rotationCW" onclick="setHandedness('right')">
+                    <span class="rot-icon">↻</span> CW
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <!-- Conversion Log Export -->
           <div class="advanced-setting-row">
-            <div class="setting-toggle">
-              <div>
-                <div class="setting-title">📥 Auto-download Conversion Log</div>
-                <div class="setting-desc">Export detailed log with statistics</div>
-              </div>
+            <div class="setting-label">
+              <div class="setting-title">📥 Auto-download Log</div>
+              <div class="setting-desc">Export detailed log with statistics</div>
+            </div>
+            <div class="setting-controls">
               <label class="toggle-switch">
                 <input type="checkbox" id="export-log-checkbox">
                 <span class="toggle-slider"></span>
@@ -1490,12 +1553,42 @@
             </div>
           </div>
           </div><!-- advanced-settings-content -->
+      </div><!-- end convert-options -->
+      <!-- Image Picker Section - in picker-columns for two-column layout -->
+      <div class="image-picker-section" id="imagePickerSection" style="display:none;">
+        <div class="image-picker-header">
+          <span class="image-picker-title">🖼️ Image Processing Options</span>
+          <span class="image-picker-count" id="imagePickerCount">0 images</span>
         </div>
-      <!-- Sync compatibility warning -->
+        <div class="state-legend">
+          <div class="legend-item">
+            <div class="legend-color" style="background:#e67e22"></div>
+            <span>Cover (locked)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:var(--label-color)"></div>
+            <span>Normal</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#3498db"></div>
+            <span>H-Split</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#e74c3c"></div>
+            <span>V-Split</span>
+          </div>
+        </div>
+        <div class="image-grid" id="imageGrid"></div>
+        <div class="image-picker-actions">
+          <button class="image-picker-btn secondary" onclick="resetAllImageStates()">Reset All</button>
+          <button class="image-picker-btn primary" onclick="startConversionWithImageStates()">Start Conversion</button>
+        </div>
+      </div>
+      </div><!-- end picker-columns -->
+      <!-- Sync compatibility warning - outside picker-columns -->
       <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
         ⚠️ Converting will modify files and can break hash‑based sync. ⚠️<br>
         Please back up or disable sync before proceeding.
-      </div>
       </div>
       <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
       <div id="progress-container">
@@ -1507,36 +1600,6 @@
           <div class="log-title">📋 Conversion Log</div>
         </div>
         <div class="log-container" id="log-container"></div>
-      </div>
-      <!-- Image Picker Section -->
-      <div class="image-picker-section" id="imagePickerSection" style="display:none;">
-        <div class="image-picker-header">
-          <span class="image-picker-title">🖼️ Image Processing Options</span>
-          <span class="image-picker-count" id="imagePickerCount">0 images</span>
-        </div>
-        <div class="state-legend">
-          <div class="legend-item">
-            <div class="legend-color" style="background:#27ae60"></div>
-            <span>✓ Fits 480×800</span>
-          </div>
-          <div class="legend-item">
-            <div class="legend-color" style="background:var(--label-color)"></div>
-            <span>Normal (scale only)</span>
-          </div>
-          <div class="legend-item">
-            <div class="legend-color" style="background:#3498db"></div>
-            <span>H-Split (rotate+cut)</span>
-          </div>
-          <div class="legend-item">
-            <div class="legend-color" style="background:#e74c3c"></div>
-            <span>V-Split (cut only)</span>
-          </div>
-        </div>
-        <div class="image-grid" id="imageGrid"></div>
-        <div class="image-picker-actions">
-          <button class="image-picker-btn secondary" onclick="resetAllImageStates()">Reset All</button>
-          <button class="image-picker-btn primary" onclick="startConversionWithImageStates()">Start Conversion</button>
-        </div>
       </div>
     </div>
   </div>
@@ -1824,7 +1887,7 @@
 
     // Reset Rotate & Crop selector
     document.getElementById('rotateCropOff').checked = true;
-    document.getElementById('handednessOptions').style.display = 'none';
+    document.getElementById('rotationRow').style.display = 'none';
     setHandedness('right');
     updateRotateCropOptions();
     // Hide log section from previous session
@@ -1841,12 +1904,17 @@
     document.getElementById('uploadModal').classList.remove('open');
     document.getElementById('fileInput').value = '';
     document.getElementById('uploadBtn').disabled = true;
+    document.getElementById('uploadBtn').style.display = 'block';
     document.getElementById('progress-container').style.display = 'none';
     document.getElementById('progress-fill').style.width = '0%';
     document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
     document.getElementById('convertBeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
+    // Hide image picker and reset two-column layout
+    document.getElementById('imagePickerSection').style.display = 'none';
+    document.querySelector('#uploadModal .modal').classList.remove('picker-mode');
+    document.getElementById('pickerColumns').classList.remove('picker-active');
     // Hide log section
     if (logSection) logSection.classList.remove('visible');
     // Reset advanced options
@@ -1861,10 +1929,9 @@
     if (grayscaleToggle) grayscaleToggle.checked = true; // Always grayscale for e-ink
     // Reset Light Novel Mode
     document.getElementById('lightNovelToggle').checked = false;
-    document.getElementById('handednessOptions').style.display = 'none';
+    document.getElementById('rotationRow').style.display = 'none';
     setHandedness('right');
     // Update converter variables
-    console.log('[CALL] updateQualitySettings triggered from event handler');
     updateQualitySettings();
   }
 
@@ -1918,74 +1985,41 @@
         btn.classList.add('active');
       }
     });
-    console.log('[CALL] updateQualitySettings triggered from event handler');
     updateQualitySettings();
   }
 
-  // DEBUG: Temporal logging function - REMOVE AFTER DEBUG
-  function debugLog(message, data) {
-    console.log(`[DEBUG ${new Date().toISOString()}] ${message}`, data || '');
-  }
-
-  // DEBUG: Check for missing elements
-  function checkRequiredElements() {
-    const requiredElements = [
-      'qualitySlider',
-      'qualityDisplaySimple',
-      'grayscaleToggle'
-    ];
-
-    requiredElements.forEach(id => {
-      const element = document.getElementById(id);
-      if (!element) {
-        console.warn(`[MISSING ELEMENT] Element with ID '${id}' not found`);
-      } else {
-        console.log(`[FOUND ELEMENT] ${id}:`, element);
-      }
-    });
-  }
-
   function updateQualitySettings() {
-    console.log('[DEBUG] updateQualitySettings called');
     const quality = document.getElementById('qualitySlider').value;
-    console.log('[DEBUG] quality slider value:', quality);
-    console.log('[DEBUG] qualitySlider element:', document.getElementById('qualitySlider'));
-
     // Check if grayscaleToggle exists (may be hidden for compatibility with other devices)
     const grayscaleToggle = document.getElementById('grayscaleToggle');
-    console.log('[DEBUG] grayscaleToggle element:', grayscaleToggle);
     const grayscale = grayscaleToggle ? grayscaleToggle.checked : true; // Default to true for e-ink
-    console.log('[DEBUG] grayscale value:', grayscale);
 
-    // Update displays (grayscale is always enabled for e-ink)
-    const qualityDisplaySimple = document.getElementById('qualityDisplaySimple');
-    console.log('[DEBUG] qualityDisplaySimple element:', qualityDisplaySimple);
-    if (qualityDisplaySimple) {
-      qualityDisplaySimple.textContent = '📦 ' + quality + '% JPEG';
-    } else {
-      console.warn('[WARNING] qualityDisplaySimple element not found');
+    // Update displays (if element exists)
+    const qualityDisplay = document.getElementById('qualityDisplaySimple');
+    if (qualityDisplay) {
+      qualityDisplay.textContent = '📦 ' + quality + '% JPEG';
     }
 
     // Update converter variables (used by processImage and applyGrayscale)
     JPEG_QUALITY = parseInt(quality, 10);
     ENABLE_GRAYSCALE = true; // Always grayscale for e-ink
-    console.log('[DEBUG] JPEG_QUALITY set to:', JPEG_QUALITY);
   }
 
   function setHandedness(value) {
     HANDEDNESS = value;
     // Update UI
-    document.getElementById('handednessRight').classList.remove('active');
-    document.getElementById('handednessLeft').classList.remove('active');
-    document.getElementById('handedness' + (value === 'right' ? 'Right' : 'Left')).classList.add('active');
+    document.getElementById('rotationCW').classList.remove('active');
+    document.getElementById('rotationCCW').classList.remove('active');
+    document.getElementById(value === 'right' ? 'rotationCW' : 'rotationCCW').classList.add('active');
   }
 
   function setRotateCropMode(mode) {
     ROTATE_CROP_MODE = mode;
     ENABLE_LIGHT_NOVEL_MODE = (mode === 'light_novel');
 
-    // Show/hide handedness options (hidden when OFF, visible for Light Novel and Manual Picker)
-    document.getElementById('handednessOptions').style.display = (mode === 'off') ? 'none' : 'block';
+    // Show/hide rotation row (hidden when OFF, visible for Light Novel and Manual Picker)
+    const showOptions = (mode !== 'off');
+    document.getElementById('rotationRow').style.display = showOptions ? 'flex' : 'none';
 
     // If switching to/from Manual Picker, handle image picker visibility
     const fileInput = document.getElementById('fileInput');
@@ -2001,6 +2035,9 @@
       document.getElementById('imagePickerSection').style.display = 'none';
       document.getElementById('uploadBtn').style.display = 'block';
       document.getElementById('uploadBtn').disabled = false;
+      // Remove two-column layout
+      document.querySelector('#uploadModal .modal').classList.remove('picker-mode');
+      document.getElementById('pickerColumns').classList.remove('picker-active');
     }
   }
 
@@ -2033,7 +2070,7 @@
   async function extractImagesForPreview(file) {
     const zip = await JSZip.loadAsync(file);
     const imageExtensions = ['.png', '.gif', '.webp', '.bmp', '.jpg', '.jpeg'];
-    
+
     // Collect all image paths first
     const allImages = [];
     for (const [path, fileObj] of Object.entries(zip.files)) {
@@ -2043,18 +2080,29 @@
         allImages.push(path);
       }
     }
-    
+
     // Try to get images in reading order from OPF spine
     let orderedImages = [];
+    let coverImagePath = null; // Track cover image
     try {
       // Find OPF file
       let opfPath = null;
       zip.forEach(p => { if (p.toLowerCase().endsWith('.opf')) opfPath = p; });
-      
+
       if (opfPath) {
         const opfContent = await zip.files[opfPath].async('string');
         const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')) : '';
-        
+
+        // Detect cover image from OPF
+        let coverId = null;
+        let m;
+        // Try 1: properties="cover-image"
+        if (m = opfContent.match(/<item[^>]+id=["']([^"']+)["'][^>]+properties="[^"]*cover-image[^"]*"/)) coverId = m[1];
+        if (!coverId && (m = opfContent.match(/<item[^>]+properties="[^"]*cover-image[^"]*"[^>]+id=["']([^"']+)["']/))) coverId = m[1];
+        // Try 2: meta name="cover" content="id"
+        if (!coverId && (m = opfContent.match(/<meta\s+name=["']cover["']\s+content=["']([^"']+)["']/))) coverId = m[1];
+        if (!coverId && (m = opfContent.match(/<meta\s+content=["']([^"']+)["']\s+name=["']cover["']/))) coverId = m[1];
+
         // Parse manifest to get id -> href mapping
         const manifest = {};
         const manifestRegex = /<item[^>]+id=["']([^"']+)["'][^>]+href=["']([^"']+)["'][^>]*>/gi;
@@ -2064,6 +2112,7 @@
           const href = match[2];
           const fullPath = opfDir ? opfDir + '/' + href : href;
           manifest[id] = fullPath;
+          if (id === coverId) coverImagePath = fullPath;
         }
         // Also check reversed attribute order
         const manifestRegex2 = /<item[^>]+href=["']([^"']+)["'][^>]+id=["']([^"']+)["'][^>]*>/gi;
@@ -2072,8 +2121,9 @@
           const id = match[2];
           const fullPath = opfDir ? opfDir + '/' + href : href;
           manifest[id] = fullPath;
+          if (id === coverId) coverImagePath = fullPath;
         }
-        
+
         // Parse spine to get reading order
         const spineOrder = [];
         const spineRegex = /<itemref[^>]+idref=["']([^"']+)["'][^>]*>/gi;
@@ -2081,21 +2131,21 @@
           const idref = match[1];
           if (manifest[idref]) spineOrder.push(manifest[idref]);
         }
-        
+
         // For each spine item (XHTML), extract images in order
         const seenImages = new Set();
         for (const xhtmlPath of spineOrder) {
           if (!zip.files[xhtmlPath]) continue;
           const xhtmlContent = await zip.files[xhtmlPath].async('string');
           const xhtmlDir = xhtmlPath.includes('/') ? xhtmlPath.substring(0, xhtmlPath.lastIndexOf('/')) : '';
-          
+
           // Find all image references
           const imgRegex = /(?:src|xlink:href)=["']([^"']+)["']/gi;
           while ((match = imgRegex.exec(xhtmlContent)) !== null) {
             let imgHref = match[1];
             // Skip non-image references
             if (!imageExtensions.some(ext => imgHref.toLowerCase().endsWith(ext))) continue;
-            
+
             // Resolve relative path
             let imgPath;
             if (imgHref.startsWith('../')) {
@@ -2110,7 +2160,7 @@
             }
             // Normalize path
             imgPath = imgPath.replace(/\/+/g, '/');
-            
+
             // Check if this is actually an image in our list
             for (const realPath of allImages) {
               if (realPath === imgPath || realPath.endsWith('/' + imgHref) || realPath.endsWith(imgHref)) {
@@ -2123,7 +2173,7 @@
             }
           }
         }
-        
+
         // Add any remaining images that weren't in XHTML files (e.g., unused images)
         for (const imgPath of allImages) {
           if (!seenImages.has(imgPath)) {
@@ -2134,28 +2184,33 @@
     } catch (e) {
       console.warn('Failed to parse reading order, using default:', e);
     }
-    
+
     // Fallback to alphabetical if parsing failed
     if (orderedImages.length === 0) {
       orderedImages = [...allImages].sort();
     }
-    
+
     // Load image data in order
     const images = [];
     for (const path of orderedImages) {
       const data = await zip.files[path].async('arraybuffer');
       const blob = new Blob([data]);
       const dataUrl = URL.createObjectURL(blob);
-      
+
       // Get dimensions
       const dims = await getImageDimensions(data);
       
+      // Check if this is the cover image
+      const isCover = (path === coverImagePath) || 
+                      path.toLowerCase().includes('cover') && images.length === 0;
+
       images.push({
         path: path,
         name: path.split('/').pop(),
         dataUrl: dataUrl,
         width: dims.width,
-        height: dims.height
+        height: dims.height,
+        isCover: isCover
       });
     }
 
@@ -2212,21 +2267,36 @@
         imageStates[img.path] = 0;
       });
 
+      // Pre-select images based on Auto mode logic (landscape images that exceed screen get H-Split)
+      images.forEach(img => {
+        if (!img.isCover) {
+          const isLandscape = img.width > img.height;
+          const exceedsScreen = img.width > 480 || img.height > 800;
+          if (isLandscape && exceedsScreen) {
+            imageStates[img.path] = 1; // H-Split
+          }
+        }
+      });
+
       // Build UI
       renderImageGrid();
+
+      // Count images - only cover is locked
+      const coverCount = images.filter(img => img.isCover).length;
+      const selectableCount = images.length - coverCount;
       
-      // Count selectable vs locked images
-      const selectableCount = images.filter(img => img.width > 480 || img.height > 800).length;
-      const lockedCount = images.length - selectableCount;
-      if (lockedCount > 0) {
-        countDisplay.textContent = `${images.length} images (${selectableCount} selectable, ${lockedCount} fit screen)`;
+      if (coverCount > 0) {
+        countDisplay.textContent = `${images.length} images (${selectableCount} selectable, ${coverCount} cover)`;
       } else {
-        countDisplay.textContent = `${images.length} image${images.length !== 1 ? 's' : ''}`;
+        countDisplay.textContent = `${images.length} image${images.length !== 1 ? 's' : ''} (all selectable)`;
       }
 
       // Show picker, hide upload button temporarily
       pickerSection.style.display = 'block';
       document.getElementById('uploadBtn').style.display = 'none';
+      // Enable two-column layout
+      document.querySelector('#uploadModal .modal').classList.add('picker-mode');
+      document.getElementById('pickerColumns').classList.add('picker-active');
 
     } catch (error) {
       console.error('Failed to extract images:', error);
@@ -2247,21 +2317,23 @@
     const stateClasses = ['state-0', 'state-1', 'state-2'];
 
     epubImagesCache.forEach(img => {
-      // Check if image already fits in 480x800 - no processing needed
-      const fitsInScreen = img.width <= 480 && img.height <= 800;
+      // Cover images are always locked (no splitting/rotation)
+      const isCover = img.isCover;
       const state = imageStates[img.path] || 0;
 
       const item = document.createElement('div');
-      
-      if (fitsInScreen) {
-        item.className = 'image-item locked';
-        item.title = `${img.width}×${img.height} - Fits in 480×800, no processing needed`;
+
+      if (isCover) {
+        // Cover image - locked, cannot be split
+        item.className = 'image-item cover-locked';
+        item.title = `${img.width}×${img.height} - Cover image (locked)`;
         item.innerHTML = `
-          <span class="image-state-badge">✓</span>
+          <span class="image-state-badge cover-badge">📕</span>
           <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
           <div class="image-name">${img.name}</div>
         `;
       } else {
+        // All other images are selectable
         item.className = `image-item ${stateClasses[state]}`;
         item.onclick = () => cycleImageState(img.path);
         item.title = `${img.width}×${img.height} - Click to cycle: ${stateLabels[state] || 'Normal'}`;
@@ -2302,8 +2374,10 @@
     const pickerSection = document.getElementById('imagePickerSection');
     const uploadBtn = document.getElementById('uploadBtn');
 
-    // Hide picker
+    // Hide picker and remove two-column layout
     pickerSection.style.display = 'none';
+    document.querySelector('#uploadModal .modal').classList.remove('picker-mode');
+    document.getElementById('pickerColumns').classList.remove('picker-active');
 
     // Show upload button and trigger upload
     uploadBtn.style.display = 'block';
@@ -2329,8 +2403,6 @@
 
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
-    debugLog('DOM fully loaded');
-    checkRequiredElements();
     const qualitySlider = document.getElementById('qualitySlider');
     const qualityInput = document.getElementById('qualityInput');
 
@@ -2345,8 +2417,7 @@
 
     if (qualitySlider && qualityInput) {
       // Initialize converter variables with UI default values
-      console.log('[CALL] updateQualitySettings triggered from event handler');
-    updateQualitySettings();
+      updateQualitySettings();
 
       // Deselect all presets when slider is manually changed
       const deselectPresets = function() {
@@ -2358,16 +2429,14 @@
       qualitySlider.oninput = function() {
         qualityInput.value = this.value;
         deselectPresets();
-        console.log('[CALL] updateQualitySettings triggered from event handler');
-    updateQualitySettings();
+        updateQualitySettings();
       };
       qualityInput.onchange = function() {
         let v = Math.max(1, Math.min(95, parseInt(this.value, 10) || 85));
         this.value = v;
         qualitySlider.value = v;
         deselectPresets();
-        console.log('[CALL] updateQualitySettings triggered from event handler');
-    updateQualitySettings();
+        updateQualitySettings();
       };
       qualityInput.onblur = function() {
         this.value = qualitySlider.value;
@@ -2542,7 +2611,7 @@ const DEFAULT_MAX_WIDTH = 480;
 const DEFAULT_MAX_HEIGHT = 800;
 const DEFAULT_JPEG_QUALITY = 85;
 const DEFAULT_ENABLE_GRAYSCALE = true;
-const OVERLAP = 0.05; // 5% overlap for split images
+// Note: Overlap is now always centered distribution (min 5%)
 
 // Dynamic conversion settings (updated by UI)
 let MAX_WIDTH = DEFAULT_MAX_WIDTH;
@@ -2925,20 +2994,20 @@ function fixSvgCover(content) {
     let imgHref = null;
     const svgNS = 'http://www.w3.org/2000/svg';
     const xlinkNS = 'http://www.w3.org/1999/xlink';
-    
+
     // Try to find all SVG elements
     const svgs = [
       ...doc.getElementsByTagName('svg'),
       ...doc.getElementsByTagNameNS(svgNS, 'svg'),
       ...doc.getElementsByTagName('svg:svg')
     ];
-    
+
     for (const svg of svgs) {
       // Find image element inside - try all variants
       const imageEl = svg.getElementsByTagName('image')[0] ||
                       svg.getElementsByTagNameNS(svgNS, 'image')[0] ||
                       svg.getElementsByTagName('svg:image')[0];
-      
+
       if (imageEl) {
         imgHref = imageEl.getAttributeNS(xlinkNS, 'href') ||
                   imageEl.getAttribute('xlink:href') ||
@@ -2999,14 +3068,14 @@ function fixSvgWrappedImages(content) {
 
     const svgNS = 'http://www.w3.org/2000/svg';
     const xlinkNS = 'http://www.w3.org/1999/xlink';
-    
+
     // Find all SVG elements - check both standard and namespaced variants
     const allSvgs = [
       ...doc.getElementsByTagName('svg'),
       ...doc.getElementsByTagNameNS(svgNS, 'svg'),
       ...doc.getElementsByTagName('svg:svg')
     ];
-    
+
     // Filter to unique, non-nested SVGs
     const uniqueSvgs = [];
     for (const svg of allSvgs) {
@@ -3041,16 +3110,11 @@ function fixSvgWrappedImages(content) {
 
       if (!href) continue;
 
-      // Get dimensions from image or svg
-      const width = imageEl.getAttribute('width') || svg.getAttribute('width');
-      const height = imageEl.getAttribute('height') || svg.getAttribute('height');
-
-      // Create replacement img element
+      // Create replacement img element - NO width/height attributes
+      // (the image may be resized, old dimensions would be wrong)
       const img = doc.createElementNS('http://www.w3.org/1999/xhtml', 'img');
       img.setAttribute('src', href);
       img.setAttribute('alt', '');
-      if (width) img.setAttribute('width', width);
-      if (height) img.setAttribute('height', height);
 
       // Replace SVG with img
       if (svg.parentNode) {
@@ -3064,7 +3128,7 @@ function fixSvgWrappedImages(content) {
     // Serialize and restore DOCTYPE/XML declaration
     const serializer = new XMLSerializer();
     let result = serializer.serializeToString(doc);
-    
+
     // Restore DOCTYPE if missing
     const dtdMatch = content.match(/<!DOCTYPE[^>]*>/i);
     const xmlMatch = content.match(/<\?xml[^?]*\?>/i);
@@ -3074,7 +3138,7 @@ function fixSvgWrappedImages(content) {
     if (xmlMatch && !result.startsWith('<?xml')) {
       result = xmlMatch[0] + '\n' + result;
     }
-    
+
     return { c: result, fixed: true, count: fixedCount };
 
   } catch (e) {
@@ -3174,13 +3238,11 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // Step 3: If WIDTH > 480, split vertically with overlap
       // ========================================================================
       if (imageState === 1) {
-        const overlap = OVERLAP;
-        
         // Step 1: Scale WIDTH to 800 (this is the key difference!)
         const scale = MAX_HEIGHT / origW;  // 800 / origW
         const scaledW = MAX_HEIGHT;  // 800
         const scaledH = Math.round(origH * scale);
-        
+
         const scaledCanvas = document.createElement('canvas');
         scaledCanvas.width = scaledW;
         scaledCanvas.height = scaledH;
@@ -3190,18 +3252,18 @@ async function processImage(data, imageState = 0, imagePath = '') {
         scaledCtx.fillStyle = '#FFF';
         scaledCtx.fillRect(0, 0, scaledW, scaledH);
         scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
-        
+
         // Step 2: Rotate 90° CW or CCW
         const rotW = scaledH;
         const rotH = scaledW;  // 800
-        
+
         const rotCanvas = document.createElement('canvas');
         rotCanvas.width = rotW;
         rotCanvas.height = rotH;
         const rotCtx = rotCanvas.getContext('2d');
         rotCtx.fillStyle = '#FFF';
         rotCtx.fillRect(0, 0, rotW, rotH);
-        
+
         const isClockwise = HANDEDNESS === 'right';
         if (isClockwise) {
           // Rotate 90° CW
@@ -3215,7 +3277,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
         rotCtx.drawImage(scaledCanvas, 0, 0);
         rotCtx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
         applyGrayscale(rotCtx, rotW, rotH);
-        
+
         // Step 3: If WIDTH > 480, split vertically
         if (rotW <= MAX_WIDTH) {
           const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
@@ -3228,10 +3290,22 @@ async function processImage(data, imageState = 0, imagePath = '') {
           // Split by WIDTH (vertical cuts) - from RIGHT to LEFT for CW, LEFT to RIGHT for CCW
           const parts = [];
           const maxW = MAX_WIDTH;  // 480
-          const overlapPx = Math.round(maxW * overlap);
-          const step = maxW - overlapPx;
-          const numParts = Math.ceil((rotW - overlapPx) / step);
           
+          // Centered distribution: calculate numParts first, then distribute evenly
+          let overlapPx, step, numParts;
+          const minOverlapPx = Math.round(maxW * 0.05);  // Minimum 5% overlap
+          const maxStep = maxW - minOverlapPx;
+          numParts = Math.ceil((rotW - minOverlapPx) / maxStep);
+          if (numParts < 2) numParts = 2;
+          // Now calculate step to distribute evenly
+          step = Math.round((rotW - maxW) / (numParts - 1));
+          overlapPx = maxW - step;
+          // Ensure minimum 5% overlap
+          if (overlapPx < minOverlapPx) {
+            overlapPx = minOverlapPx;
+            step = maxW - overlapPx;
+          }
+
           // Calculate all x positions first to ensure consistency
           const positions = [];
           for (let i = 0; i < numParts; i++) {
@@ -3247,7 +3321,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
             x = Math.max(0, Math.min(x, rotW - maxW));
             positions.push(x);
           }
-          
+
           // Ensure first and last positions are at edges
           if (isClockwise) {
             positions[0] = rotW - maxW; // First part at right edge
@@ -3256,11 +3330,11 @@ async function processImage(data, imageState = 0, imagePath = '') {
             positions[0] = 0; // First part at left edge
             positions[numParts - 1] = rotW - maxW; // Last part at right edge
           }
-          
+
           for (let i = 0; i < numParts; i++) {
             const x = positions[i];
             const partW = maxW; // Always full width for consistency
-            
+
             const partCanvas = document.createElement('canvas');
             partCanvas.width = partW;
             partCanvas.height = rotH;
@@ -3270,12 +3344,12 @@ async function processImage(data, imageState = 0, imagePath = '') {
             partCtx.fillRect(0, 0, partW, rotH);
             // Draw the slice
             partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
-            
+
             const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
             const arrBuf = await blob.arrayBuffer();
             parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
           }
-          
+
           const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
           resolve({
             parts,
@@ -3284,21 +3358,16 @@ async function processImage(data, imageState = 0, imagePath = '') {
         }
       }
       // ========================================================================
-      // STATE 2: V-Split (Vertical Split, no rotation) - EXACT COPY FROM index.html
-      // Step 1: Scale HEIGHT to fit 800px
+      // STATE 2: V-Split (Vertical Split, no rotation)
+      // Step 1: Scale HEIGHT to 800px (up or down)
       // Step 2: If WIDTH > 480, split vertically with overlap
       // ========================================================================
       else if (imageState === 2) {
-        const overlap = OVERLAP;
-        
-        // First scale to fit height
-        let scaledW = origW, scaledH = origH;
-        if (origH > MAX_HEIGHT) {
-          const scale = MAX_HEIGHT / origH;
-          scaledW = Math.round(origW * scale);
-          scaledH = MAX_HEIGHT;
-        }
-        
+        // ALWAYS scale height to 800 (up or down)
+        const scale = MAX_HEIGHT / origH;  // 800 / origH
+        const scaledW = Math.round(origW * scale);
+        const scaledH = MAX_HEIGHT;  // Always 800
+
         const scaledCanvas = document.createElement('canvas');
         scaledCanvas.width = scaledW;
         scaledCanvas.height = scaledH;
@@ -3309,7 +3378,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
         scaledCtx.fillRect(0, 0, scaledW, scaledH);
         scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
         applyGrayscale(scaledCtx, scaledW, scaledH);
-        
+
         // Check if split needed
         if (scaledW <= MAX_WIDTH) {
           const blob = await new Promise(res => scaledCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
@@ -3322,10 +3391,22 @@ async function processImage(data, imageState = 0, imagePath = '') {
           // Split by WIDTH (vertical cuts) - LEFT to RIGHT (natural reading order)
           const parts = [];
           const maxW = MAX_WIDTH;
-          const overlapPx = Math.round(maxW * overlap);
-          const step = maxW - overlapPx;
-          const numParts = Math.ceil((scaledW - overlapPx) / step);
           
+          // Centered distribution: calculate numParts first, then distribute evenly
+          let overlapPx, step, numParts;
+          const minOverlapPx = Math.round(maxW * 0.05);  // Minimum 5% overlap
+          const maxStep = maxW - minOverlapPx;
+          numParts = Math.ceil((scaledW - minOverlapPx) / maxStep);
+          if (numParts < 2) numParts = 2;
+          // Now calculate step to distribute evenly
+          step = Math.round((scaledW - maxW) / (numParts - 1));
+          overlapPx = maxW - step;
+          // Ensure minimum 5% overlap
+          if (overlapPx < minOverlapPx) {
+            overlapPx = minOverlapPx;
+            step = maxW - overlapPx;
+          }
+
           // Calculate all x positions first to ensure consistency
           const positions = [];
           for (let i = 0; i < numParts; i++) {
@@ -3337,11 +3418,11 @@ async function processImage(data, imageState = 0, imagePath = '') {
           // Ensure last position is at right edge
           positions[0] = 0;
           positions[numParts - 1] = scaledW - maxW;
-          
+
           for (let i = 0; i < numParts; i++) {
             const x = positions[i];
             const partW = maxW; // Always full width for consistency
-            
+
             const partCanvas = document.createElement('canvas');
             partCanvas.width = partW;
             partCanvas.height = scaledH;
@@ -3351,12 +3432,12 @@ async function processImage(data, imageState = 0, imagePath = '') {
             partCtx.fillRect(0, 0, partW, scaledH);
             // Draw the slice
             partCtx.drawImage(scaledCanvas, x, 0, partW, scaledH, 0, 0, partW, scaledH);
-            
+
             const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
             const arrBuf = await blob.arrayBuffer();
             parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: scaledH, size: arrBuf.byteLength });
           }
-          
+
           const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
           resolve({
             parts,
@@ -3376,13 +3457,11 @@ async function processImage(data, imageState = 0, imagePath = '') {
 
         if (needsRotation) {
           // Light Novel Mode auto-rotation - use EXACT same logic as STATE 1
-          const overlap = OVERLAP;
-          
           // Scale WIDTH to 800 (same as H-Split)
           const scale = MAX_HEIGHT / origW;  // 800 / origW
           const scaledW = MAX_HEIGHT;  // 800
           const scaledH = Math.round(origH * scale);
-          
+
           const scaledCanvas = document.createElement('canvas');
           scaledCanvas.width = scaledW;
           scaledCanvas.height = scaledH;
@@ -3392,18 +3471,18 @@ async function processImage(data, imageState = 0, imagePath = '') {
           scaledCtx.fillStyle = '#FFF';
           scaledCtx.fillRect(0, 0, scaledW, scaledH);
           scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
-          
+
           // Rotate 90 based on handedness
           const rotW = scaledH;
           const rotH = scaledW;  // 800
-          
+
           const rotCanvas = document.createElement('canvas');
           rotCanvas.width = rotW;
           rotCanvas.height = rotH;
           const rotCtx = rotCanvas.getContext('2d');
           rotCtx.fillStyle = '#FFF';
           rotCtx.fillRect(0, 0, rotW, rotH);
-          
+
           const isClockwise = HANDEDNESS === 'right';
           if (isClockwise) {
             rotCtx.translate(rotW, 0);
@@ -3415,7 +3494,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
           rotCtx.drawImage(scaledCanvas, 0, 0);
           rotCtx.setTransform(1, 0, 0, 1, 0, 0);
           applyGrayscale(rotCtx, rotW, rotH);
-          
+
           if (rotW <= MAX_WIDTH) {
             const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
             const arrBuf = await blob.arrayBuffer();
@@ -3427,10 +3506,22 @@ async function processImage(data, imageState = 0, imagePath = '') {
             // Split by WIDTH (vertical cuts)
             const parts = [];
             const maxW = MAX_WIDTH;
-            const overlapPx = Math.round(maxW * overlap);
-            const step = maxW - overlapPx;
-            const numParts = Math.ceil((rotW - overlapPx) / step);
             
+            // Centered distribution: calculate numParts first, then distribute evenly
+            let overlapPx, step, numParts;
+            const minOverlapPx = Math.round(maxW * 0.05);  // Minimum 5% overlap
+            const maxStep = maxW - minOverlapPx;
+            numParts = Math.ceil((rotW - minOverlapPx) / maxStep);
+            if (numParts < 2) numParts = 2;
+            // Now calculate step to distribute evenly
+            step = Math.round((rotW - maxW) / (numParts - 1));
+            overlapPx = maxW - step;
+            // Ensure minimum 5% overlap
+            if (overlapPx < minOverlapPx) {
+              overlapPx = minOverlapPx;
+              step = maxW - overlapPx;
+            }
+
             const positions = [];
             for (let i = 0; i < numParts; i++) {
               let x;
@@ -3442,7 +3533,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
               x = Math.max(0, Math.min(x, rotW - maxW));
               positions.push(x);
             }
-            
+
             if (isClockwise) {
               positions[0] = rotW - maxW;
               positions[numParts - 1] = 0;
@@ -3450,11 +3541,11 @@ async function processImage(data, imageState = 0, imagePath = '') {
               positions[0] = 0;
               positions[numParts - 1] = rotW - maxW;
             }
-            
+
             for (let i = 0; i < numParts; i++) {
               const x = positions[i];
               const partW = maxW;
-              
+
               const partCanvas = document.createElement('canvas');
               partCanvas.width = partW;
               partCanvas.height = rotH;
@@ -3462,12 +3553,12 @@ async function processImage(data, imageState = 0, imagePath = '') {
               partCtx.fillStyle = '#FFFFFF';
               partCtx.fillRect(0, 0, partW, rotH);
               partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
-              
+
               const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
               const arrBuf = await blob.arrayBuffer();
               parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
             }
-            
+
             const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
             resolve({
               parts,
@@ -3542,7 +3633,7 @@ async function convertEpubFile(file, progressCallback) {
   clearLog();
   showLog();
   log(`<strong>${file.name}</strong> <span class="log-detail">(${formatBytes(originalSize)})</span>`, '', 'INFO');
-  log(`Quality: ${JPEG_QUALITY}% | Light Novel Mode: ${ENABLE_LIGHT_NOVEL_MODE ? 'ON' : 'OFF'} | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'}`, '', 'INFO');
+  log(`Quality: ${JPEG_QUALITY}% | Light Novel: ${ENABLE_LIGHT_NOVEL_MODE ? 'ON' : 'OFF'} | Overlap: Centered | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'}`, '', 'INFO');
 
   const zip = await JSZip.loadAsync(file);
   const renamed = {};
@@ -3630,14 +3721,14 @@ async function convertEpubFile(file, progressCallback) {
         // Store with full path for collision prevention, but also keep original filename
         const origName = path.split('/').pop();
         const origDir = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
-        
+
         // Key by full path to avoid collisions
         splitImages[path] = {
           origName: origName,
           origDir: origDir,
           parts: []
         };
-        
+
         for (const part of parts) {
           const partName = baseName.split('/').pop() + part.suffix + newExt;
           const partPath = (path.includes('/') ? path.substring(0, path.lastIndexOf('/') + 1) : '') + partName;
@@ -3674,46 +3765,57 @@ async function convertEpubFile(file, progressCallback) {
       t = t.split(o.split('/').pop()).join(n.split('/').pop());
     }
 
+    // Remove width/height attributes from ALL img tags (dimensions may have changed)
+    // This prevents CrossPoint and other readers from using wrong dimensions
+    t = t.replace(/<img\s+([^>]*?)\s*(width|height)=["'][^"']*["']\s*([^>]*?)\s*(width|height)=["'][^"']*["']([^>]*)\/?\s*>/gi, (match, pre, attr1, mid, attr2, post) => {
+      // Remove both width and height
+      return `<img ${pre.trim()} ${mid.trim()} ${post.trim()}/>`.replace(/\s+/g, ' ').replace(' />', '/>');
+    });
+    // Handle single width or height attribute
+    t = t.replace(/<img\s+([^>]*?)\s*(width|height)=["'][^"']*["']([^>]*)\/?\s*>/gi, (match, pre, attr, post) => {
+      return `<img ${pre.trim()} ${post.trim()}/>`.replace(/\s+/g, ' ').replace(' />', '/>');
+    });
+
     // Handle split images using DOMParser with path collision prevention
     if (Object.keys(splitImages).length > 0) {
       try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(t, 'application/xhtml+xml');
         const parseError = doc.querySelector('parsererror');
-        
+
         if (!parseError) {
           let modified = false;
-          
+
           // Get XHTML directory for resolving relative paths
           const xhtmlDir = xhtmlPath.includes('/') ? xhtmlPath.substring(0, xhtmlPath.lastIndexOf('/')) : '';
           const rootFolders = ['ops', 'oebps', 'epub', 'content'];
-          
+
           for (const [fullPath, splitInfo] of Object.entries(splitImages)) {
             const origName = splitInfo.origName;
             const origDir = splitInfo.origDir;
             const parts = splitInfo.parts;
             const newName = origName.replace(/\.(png|gif|webp|bmp|jpeg)$/i, '.jpg');
-            
+
             // Extract immediate parent directory for collision prevention
             const splitDirParts = origDir.split('/').filter(p => p);
             const lastDir = splitDirParts.length > 0 ? splitDirParts[splitDirParts.length - 1].toLowerCase() : null;
             const immediateParent = (lastDir && !rootFolders.includes(lastDir)) ? splitDirParts[splitDirParts.length - 1] : null;
-            
+
             // Get XHTML's parent directory parts for relative path resolution
             const xhtmlDirParts = xhtmlDir.split('/').filter(p => p);
-            
+
             // Find all img elements
             const allImgs = doc.querySelectorAll('img');
             const matchingImgs = [];
-            
+
             for (const img of allImgs) {
               const src = img.getAttribute('src') || '';
               const srcParts = src.split('/').filter(p => p && p !== '..' && p !== '.');
               const srcName = srcParts.pop() || '';
-              
+
               // Check filename match
               if (srcName !== origName && srcName !== newName) continue;
-              
+
               // Path collision prevention with root folder handling
               if (immediateParent) {
                 // Image is in a specific subfolder (not root like OPS/OEBPS)
@@ -3738,10 +3840,10 @@ async function convertEpubFile(file, progressCallback) {
                 }
                 // If srcParts.length === 0, src is just filename - matches root folder image
               }
-              
+
               matchingImgs.push(img);
             }
-            
+
             // Process each matching img
             for (const img of matchingImgs) {
               // Find the closest safe container to duplicate
@@ -3750,11 +3852,11 @@ async function convertEpubFile(file, progressCallback) {
               while (container && !safeContainers.includes(container.tagName.toLowerCase())) {
                 container = container.parentElement;
               }
-              
+
               if (container && container.parentElement) {
                 const parent = container.parentElement;
                 const nextSibling = container.nextSibling;
-                
+
                 // Create clones for each part
                 const clones = [];
                 for (let i = 0; i < parts.length; i++) {
@@ -3765,6 +3867,12 @@ async function convertEpubFile(file, progressCallback) {
                     const newSrc = src.replace(origName, parts[i].imgName).replace(newName, parts[i].imgName);
                     cloneImg.setAttribute('src', newSrc);
                     
+                    // Remove class, old dimensions and set full-width for split parts
+                    cloneImg.removeAttribute('class');
+                    cloneImg.removeAttribute('width');
+                    cloneImg.removeAttribute('height');
+                    cloneImg.setAttribute('style', 'width:100%; height:auto;');
+
                     // Update IDs to be unique
                     const suffix = parts[i].suffix || '_part' + (i + 1);
                     const allWithId = clone.querySelectorAll('[id]');
@@ -3777,7 +3885,7 @@ async function convertEpubFile(file, progressCallback) {
                   }
                   clones.push(clone);
                 }
-                
+
                 // Remove original and insert all clones
                 parent.removeChild(container);
                 for (const clone of clones) {
@@ -3797,16 +3905,16 @@ async function convertEpubFile(file, progressCallback) {
               }
             }
           }
-          
+
           // Only serialize if we made changes
           if (modified) {
             const serializer = new XMLSerializer();
             let serialized = serializer.serializeToString(doc);
-            
+
             // Restore DOCTYPE if original had one
             const doctypeMatch = content.match(/<!DOCTYPE[^>]*>/i);
             const xmlDeclMatch = content.match(/<\?xml[^?]*\?>/i);
-            
+
             if (doctypeMatch && !serialized.includes('<!DOCTYPE')) {
               if (serialized.startsWith('<?xml')) {
                 const xmlEnd = serialized.indexOf('?>');
@@ -3817,11 +3925,11 @@ async function convertEpubFile(file, progressCallback) {
                 serialized = doctypeMatch[0] + '\n' + serialized;
               }
             }
-            
+
             if (xmlDeclMatch && !serialized.startsWith('<?xml')) {
               serialized = xmlDeclMatch[0] + '\n' + serialized;
             }
-            
+
             t = serialized;
           }
         }
@@ -3878,7 +3986,7 @@ async function convertEpubFile(file, progressCallback) {
       const parts = splitInfo.parts;
       const origBaseName = origName.replace(/\.[^.]+$/, '');
       const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      
+
       // Calculate the href as it would appear in OPF (relative to OPF directory)
       let origHref;
       if (opfDir && fullPath.startsWith(opfDir + '/')) {
@@ -3887,11 +3995,11 @@ async function convertEpubFile(file, progressCallback) {
         origHref = fullPath;
       }
       const origHrefBaseName = origHref.replace(/\.[^.]+$/, '');
-      
+
       // Replace href with part1 version (match full path in OPF)
       const origImgRegex = new RegExp(`(href=["'])(${escapeRegex(origHrefBaseName)})\\.(?:jpg|jpeg|png|gif|webp|bmp)(["'])`, 'gi');
       t = t.replace(origImgRegex, `$1${origHrefBaseName}_part1.jpg$3`);
-      
+
       // Add manifest entries for additional parts with correct relative paths
       let manifestAdditions = '';
       for (let j = 1; j < parts.length; j++) {
@@ -4349,9 +4457,9 @@ function uploadFile() {
 function showFailedUploadsBanner() {
   const banner = document.getElementById('failedUploadsBanner');
   const filesList = document.getElementById('failedFilesList');
-  
+
   filesList.innerHTML = '';
-  
+
   failedUploadsGlobal.forEach((failedFile, index) => {
     const item = document.createElement('div');
     item.className = 'failed-file-item';
@@ -4364,11 +4472,11 @@ function showFailedUploadsBanner() {
     `;
     filesList.appendChild(item);
   });
-  
+
   // Ensure retry all button is visible
   const retryAllBtn = banner.querySelector('.retry-all-btn');
   if (retryAllBtn) retryAllBtn.style.display = '';
-  
+
   banner.classList.add('show');
 }
 
@@ -4381,22 +4489,22 @@ function dismissFailedUploads() {
 function retrySingleUpload(index) {
   const failedFile = failedUploadsGlobal[index];
   if (!failedFile) return;
-  
+
   // Create a DataTransfer to set the file input
   const dt = new DataTransfer();
   dt.items.add(failedFile.file);
-  
+
   const fileInput = document.getElementById('fileInput');
   fileInput.files = dt.files;
-  
+
   // Remove this file from failed list
   failedUploadsGlobal.splice(index, 1);
-  
+
   // If no more failed files, hide banner
   if (failedUploadsGlobal.length === 0) {
     dismissFailedUploads();
   }
-  
+
   // Open modal and trigger upload
   openUploadModal();
   validateFile();
