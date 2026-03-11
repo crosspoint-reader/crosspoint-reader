@@ -13,14 +13,18 @@ void FontCacheManager::clearCache() {
   if (fontDecompressor_) fontDecompressor_->clearCache();
 }
 
-void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, EpdFontFamily::Style style) {
+void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask) {
   if (!fontDecompressor_ || fontMap_.count(fontId) == 0) return;
-  const EpdFontData* data = fontMap_.at(fontId).getData(style);
-  if (!data || !data->groups) return;
-  int missed = fontDecompressor_->prewarmCache(data, utf8Text);
-  if (missed > 0) {
-    LOG_DBG("FCM", "prewarmCache: %d glyph(s) not cached for style %d; hot-group fallback in use", missed,
-            static_cast<int>(style));
+
+  for (uint8_t i = 0; i < 4; i++) {
+    if (!(styleMask & (1 << i))) continue;
+    auto style = static_cast<EpdFontFamily::Style>(i);
+    const EpdFontData* data = fontMap_.at(fontId).getData(style);
+    if (!data || !data->groups) continue;
+    int missed = fontDecompressor_->prewarmCache(data, utf8Text);
+    if (missed > 0) {
+      LOG_DBG("FCM", "prewarmCache: %d glyph(s) not cached for style %d", missed, i);
+    }
   }
 }
 
@@ -63,14 +67,14 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
   manager_->scanMode_ = ScanMode::None;
   if (manager_->scanText_.empty()) return;
 
-  // Determine dominant style from scan counts
-  uint8_t dominantStyle = 0;
-  for (uint8_t i = 1; i < 4; i++) {
-    if (manager_->scanStyleCounts_[i] > manager_->scanStyleCounts_[dominantStyle]) dominantStyle = i;
+  // Build style bitmask from all styles that appeared during the scan
+  uint8_t styleMask = 0;
+  for (uint8_t i = 0; i < 4; i++) {
+    if (manager_->scanStyleCounts_[i] > 0) styleMask |= (1 << i);
   }
+  if (styleMask == 0) styleMask = 1;  // default to regular
 
-  manager_->prewarmCache(manager_->scanFontId_, manager_->scanText_.c_str(),
-                         static_cast<EpdFontFamily::Style>(dominantStyle));
+  manager_->prewarmCache(manager_->scanFontId_, manager_->scanText_.c_str(), styleMask);
 
   // Free scan string memory
   manager_->scanText_.clear();
