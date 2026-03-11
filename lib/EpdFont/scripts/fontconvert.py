@@ -73,6 +73,9 @@ intervals = [
     ### Cyrillic ###
     # Russian, Ukrainian, Bulgarian, etc.
     (0x0400, 0x04FF),
+    ### Miscellaneous Symbols (curated subset) ###
+    # Musical symbols: ♩♪♫♬♭♮
+    (0x2669, 0x266E),
     ### Math Symbols (common subset) ###
     # Superscripts and Subscripts
     (0x2070, 0x209F),
@@ -708,6 +711,7 @@ if compress:
         (0x20A0, 0x20CF),   # Currency Symbols
         (0x2190, 0x21FF),   # Arrows
         (0x2200, 0x22FF),   # Math Operators
+        (0x2600, 0x26FF),   # Miscellaneous Symbols
         (0xFB00, 0xFB06),   # Alphabetic Presentation Forms (ligatures)
         (0xFFFD, 0xFFFD),   # Replacement Character
     ]
