@@ -23,6 +23,8 @@ void SleepActivity::onEnter() {
       return renderBlankSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
       return renderCustomSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::IMAGE_FROM_FOLDER):
+      return renderImageFromFolderSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       return renderCoverSleepScreen();
@@ -110,6 +112,28 @@ void SleepActivity::renderCustomSleepScreen() const {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
+      renderBitmapSleepScreen(bitmap);
+      file.close();
+      return;
+    }
+    file.close();
+  }
+
+  renderDefaultSleepScreen();
+}
+
+
+void SleepActivity::renderImageFromFolderSleepScreen() const {
+  if (SETTINGS.sleepScreenImagePath[0] == '\0') {
+    renderDefaultSleepScreen();
+    return;
+  }
+
+  FsFile file;
+  if (Storage.openFileForRead("SLP", SETTINGS.sleepScreenImagePath, file)) {
+    Bitmap bitmap(file, true);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      LOG_DBG("SLP", "Loading sleep image from path: %s", SETTINGS.sleepScreenImagePath);
       renderBitmapSleepScreen(bitmap);
       file.close();
       return;
