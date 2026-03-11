@@ -3,7 +3,7 @@
 #include <EpdFontFamily.h>
 #include <HalDisplay.h>
 
-class FontDecompressor;
+class FontCacheManager;
 class SdCardFont;
 
 #include <cstring>
@@ -42,16 +42,12 @@ class GfxRenderer {
   uint8_t* frameBuffer = nullptr;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
-  FontDecompressor* fontDecompressor = nullptr;
   std::map<int, SdCardFont*> sdCardFonts_;  // fontId -> SdCardFont*
 
-  // Font prewarm scan state. Mutable because drawText() is const — pragmatic
-  // compromise to avoid cascading non-const signature changes through the codebase.
-  enum class ScanMode : uint8_t { None, Scanning };
-  mutable ScanMode scanMode_ = ScanMode::None;
-  mutable std::string scanText_;
-  mutable uint32_t scanStyleCounts_[4] = {};
-  mutable int scanFontId_ = -1;
+  // Mutable because drawText() is const but needs to delegate scan-mode
+  // recording to the (non-const) FontCacheManager. Same pragmatic compromise
+  // as before, concentrated in a single pointer instead of four fields.
+  mutable FontCacheManager* fontCacheManager_ = nullptr;
 
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
@@ -75,16 +71,16 @@ class GfxRenderer {
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
   void removeFont(int fontId) { fontMap.erase(fontId); }
-  void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
+  void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
+  FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
+  const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
   void unregisterSdCardFont(int fontId) { sdCardFonts_.erase(fontId); }
   void clearSdCardFonts() { sdCardFonts_.clear(); }
-  void clearFontCache();
-  void prewarmFontCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F);
+  const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   void ensureSdCardFontReady(int fontId, const char* utf8Text) const;
-  void resetFontStats();
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
@@ -165,25 +161,6 @@ class GfxRenderer {
 
   // Font helpers
   const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
-
-  // RAII scope for font cache prewarming. A scan pass accumulates text via drawText(),
-  // then endScanAndPrewarm() decompresses the needed glyph groups. Subsequent render
-  // passes hit the warm cache. Destructor clears the cache.
-  class FontPrewarmScope {
-   public:
-    explicit FontPrewarmScope(GfxRenderer& renderer);
-    ~FontPrewarmScope();
-    void endScanAndPrewarm();
-    FontPrewarmScope(FontPrewarmScope&& other) noexcept;
-    FontPrewarmScope& operator=(FontPrewarmScope&&) = delete;
-    FontPrewarmScope(const FontPrewarmScope&) = delete;
-    FontPrewarmScope& operator=(const FontPrewarmScope&) = delete;
-
-   private:
-    GfxRenderer* renderer_;
-    bool active_ = true;
-  };
-  FontPrewarmScope createFontPrewarmScope();
 
   // Low level functions
   uint8_t* getFrameBuffer() const;

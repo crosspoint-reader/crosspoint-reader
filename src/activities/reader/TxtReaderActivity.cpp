@@ -1,5 +1,6 @@
 #include "TxtReaderActivity.h"
 
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -394,7 +395,8 @@ void TxtReaderActivity::renderPage() {
   };
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
-  auto scope = renderer.createFontPrewarmScope();
+  auto* fcm = renderer.getFontCacheManager();
+  auto scope = fcm->createPrewarmScope();
   renderLines();  // scan pass — text accumulated, no drawing
   scope.endScanAndPrewarm();
 
@@ -431,7 +433,7 @@ void TxtReaderActivity::renderPage() {
     // Restore BW buffer
     renderer.restoreBwBuffer();
   }
-  // scope destructor clears font cache
+  // scope destructor clears font cache via FontCacheManager
 }
 
 void TxtReaderActivity::renderStatusBar() const {

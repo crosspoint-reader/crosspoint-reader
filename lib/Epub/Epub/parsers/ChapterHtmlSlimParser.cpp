@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Utf8.h>
 #include <expat.h>
 
 #include "../../Epub.h"
@@ -750,35 +751,21 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     // otherwise the trailing bytes become orphaned continuation bytes that the
     // decoder can't interpret.
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
-      // Walk back past continuation bytes (10xxxxxx) to find the lead byte
-      // of the last character in the buffer
-      int leadPos = self->partWordBufferIndex - 1;
-      while (leadPos > 0 && (static_cast<uint8_t>(self->partWordBuffer[leadPos]) & 0xC0) == 0x80) {
-        leadPos--;
-      }
-      // Check if the character starting at leadPos is incomplete
-      uint8_t lead = static_cast<uint8_t>(self->partWordBuffer[leadPos]);
-      int expectedLen = 1;
-      if ((lead & 0xE0) == 0xC0)
-        expectedLen = 2;
-      else if ((lead & 0xF0) == 0xE0)
-        expectedLen = 3;
-      else if ((lead & 0xF8) == 0xF0)
-        expectedLen = 4;
-      int actualLen = self->partWordBufferIndex - leadPos;
+      int safeLen = utf8SafeTruncateBuffer(self->partWordBuffer, self->partWordBufferIndex);
 
-      if (actualLen < expectedLen && leadPos > 0) {
+      if (safeLen < self->partWordBufferIndex && safeLen > 0) {
         // Incomplete UTF-8 sequence at the end — save it before flushing
+        int overflow = self->partWordBufferIndex - safeLen;
         char saved[4];
-        for (int j = 0; j < actualLen; j++) {
-          saved[j] = self->partWordBuffer[leadPos + j];
+        for (int j = 0; j < overflow; j++) {
+          saved[j] = self->partWordBuffer[safeLen + j];
         }
-        self->partWordBufferIndex = leadPos;
+        self->partWordBufferIndex = safeLen;
         self->flushPartWordBuffer();
-        for (int j = 0; j < actualLen; j++) {
+        for (int j = 0; j < overflow; j++) {
           self->partWordBuffer[j] = saved[j];
         }
-        self->partWordBufferIndex = actualLen;
+        self->partWordBufferIndex = overflow;
       } else {
         self->flushPartWordBuffer();
       }
