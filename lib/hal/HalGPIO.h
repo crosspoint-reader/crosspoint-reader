@@ -23,6 +23,12 @@ class HalGPIO {
   InputManager inputMgr;
 #endif
 
+  // Debounced USB state: requires N consecutive LOW reads to declare disconnected
+  // (GPIO20/UART0_RXD floats HIGH after USB removal without a pull-down)
+  bool usbConnectedDebounced_ = false;
+  uint8_t usbLowCount_ = 0;
+  static constexpr uint8_t USB_DEBOUNCE_COUNT = 5;
+
  public:
   HalGPIO() = default;
 

@@ -75,17 +75,10 @@ void SettingsActivity::onExit() {
 void SettingsActivity::loop() {
   bool hasChangedCategory = false;
 
-  // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selectedSettingIndex == 0) {
-      selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
-      hasChangedCategory = true;
-      requestUpdate();
-    } else {
-      toggleCurrentSetting();
-      requestUpdate();
-      return;
-    }
+    toggleCurrentSetting();
+    requestUpdate();
+    return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -94,31 +87,32 @@ void SettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNextRelease([this] {
+  // Up/Down navigate the settings list
+  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPreviousRelease([this] {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
+  // Left/Right switch tabs
+  if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     hasChangedCategory = true;
     selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     hasChangedCategory = true;
     selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
     requestUpdate();
-  });
+  }
 
   if (hasChangedCategory) {
-    selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
+    selectedSettingIndex = 0;
     switch (selectedCategoryIndex) {
       case 0:
         currentSettings = &displaySettings;
@@ -242,8 +236,9 @@ void SettingsActivity::render(RenderLock&&) {
       },
       true);
 
-  // Draw help text
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Draw help text — hide the Toggle hint when no setting is focused (tab bar state)
+  const char* toggleHint = (selectedSettingIndex > 0) ? tr(STR_TOGGLE) : "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), toggleHint, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

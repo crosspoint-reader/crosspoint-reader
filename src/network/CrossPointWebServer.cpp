@@ -1,5 +1,10 @@
 #include "CrossPointWebServer.h"
 
+// Stub — full implementation in feature/claw (DZ firmware update progress).
+CrossPointWebServer::ClawUpdateProgress CrossPointWebServer::getClawUpdateProgress() {
+  return {};
+}
+
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
@@ -664,6 +669,11 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearEpubCacheIfNeeded(filePath);
+
+        // Update completion tracking so activity loop can display the filename
+        wsLastCompleteName = state.fileName;
+        wsLastCompleteSize = state.size;
+        wsLastCompleteAt = millis();
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {

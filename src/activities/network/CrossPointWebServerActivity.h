@@ -1,3 +1,5 @@
+#include <string>
+#include <vector>
 #pragma once
 
 #include <functional>
@@ -36,13 +38,23 @@ class CrossPointWebServerActivity final : public Activity {
 
   // Web server - owned by this activity
   std::unique_ptr<CrossPointWebServer> webServer;
+  std::vector<std::string> uploadedFiles;
+  unsigned long lastKnownCompleteAt = 0;
 
   // Server status
   std::string connectedIP;
   std::string connectedSSID;  // For STA mode: network name, For AP mode: AP name
 
+  // Transfer state tracking
+  bool lastUploadInProgress = false;
+  size_t lastUploadReceived = 0;
+  unsigned long lastTransferUpdateTime = 0;
+
   // Performance monitoring
   unsigned long lastHandleClientTime = 0;
+
+  // Danger Zone: set true when WiFi was already joined before entering this activity
+  bool preConnected = false;
 
   void renderServerRunning() const;
 

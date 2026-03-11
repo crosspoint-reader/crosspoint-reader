@@ -19,6 +19,16 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
   if (tempValue < maxValue) {
     member = tempValue;
   }
+  // If tempValue >= maxValue, member retains its default (safe fallback)
+}
+
+// Clamp all enum settings to valid ranges after loading, so stale NVS values
+// from older firmware versions never leave the device in an unreadable state.
+void CrossPointSettings::clampToValidRanges() {
+  if (fontFamily >= FONT_FAMILY_COUNT) fontFamily = BOOKERLY;
+  if (fontSize >= FONT_SIZE_COUNT) fontSize = MEDIUM;
+  if (uiTheme >= UI_THEME_COUNT) uiTheme = CLASSIC;
+  if (imageRendering >= IMAGE_RENDERING_COUNT) imageRendering = IMAGES_DISPLAY;
 }
 
 namespace {
@@ -88,6 +98,7 @@ bool CrossPointSettings::loadFromFile() {
     if (!json.isEmpty()) {
       bool resave = false;
       bool result = JsonSettingsIO::loadSettings(*this, json.c_str(), &resave);
+      if (result) clampToValidRanges();
       if (result && resave) {
         if (saveToFile()) {
           LOG_DBG("CPS", "Resaved settings to update format");
@@ -102,6 +113,7 @@ bool CrossPointSettings::loadFromFile() {
   // Fall back to binary migration
   if (Storage.exists(SETTINGS_FILE_BIN)) {
     if (loadFromBinaryFile()) {
+      clampToValidRanges();
       if (saveToFile()) {
         Storage.rename(SETTINGS_FILE_BIN, SETTINGS_FILE_BAK);
         LOG_DBG("CPS", "Migrated settings.bin to settings.json");
@@ -331,6 +343,18 @@ int CrossPointSettings::getReaderFontId() const {
           return OPENDYSLEXIC_12_FONT_ID;
         case EXTRA_LARGE:
           return OPENDYSLEXIC_14_FONT_ID;
+      }
+    case ANTONIO:
+      switch (fontSize) {
+        case SMALL:
+          return ANTONIO_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return ANTONIO_14_FONT_ID;
+        case LARGE:
+          return ANTONIO_16_FONT_ID;
+        case EXTRA_LARGE:
+          return ANTONIO_18_FONT_ID;
       }
   }
 }

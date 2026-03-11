@@ -139,10 +139,11 @@ void OpdsBookBrowserActivity::loop() {
 void OpdsBookBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
+  const auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_OPDS_BROWSER), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "OPDS");
 
   if (state == BrowserState::CHECK_WIFI) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
@@ -172,7 +173,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   if (state == BrowserState::DOWNLOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, tr(STR_DOWNLOADING));
     const auto maxWidth = pageWidth - 40;
-    // Trim long titles to keep them within the screen bounds.
+    // Trim long titles to keep them within the screen bounds, draw once.
     auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), maxWidth);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, title.c_str());
     if (downloadTotal > 0) {
@@ -192,7 +193,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   if (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) {
     confirmLabel = tr(STR_DOWNLOAD);
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (entries.empty()) {

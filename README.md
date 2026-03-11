@@ -177,3 +177,27 @@ CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 
 
 Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
 was making CrossPoint.
+
+## Fonts
+
+### Built-in Fonts
+
+| Font | IDs | Used by |
+|------|-----|---------|
+| [Bookerly](https://fonts.google.com/) | `BOOKERLY_*_FONT_ID` | Bookerly reading family |
+| [Noto Sans](https://fonts.google.com/noto/specimen/Noto+Sans) | `NOTOSANS_*_FONT_ID` | Noto Sans reading family |
+| [OpenDyslexic](https://opendyslexic.org/) | `OPENDYSLEXIC_*_FONT_ID` | OpenDyslexic reading family |
+| [Ubuntu](https://design.ubuntu.com/font) | `UI_10_FONT_ID`, `UI_12_FONT_ID` | Default UI chrome |
+| [Antonio](https://fonts.google.com/specimen/Antonio) | `PULSR_10_FONT_ID`, `PULSR_12_FONT_ID` | Pulsr theme chrome |
+| Small UI font | `SMALL_FONT_ID` | Subtitles, hints |
+
+### Antonio (Pulsr Theme Font)
+
+The Pulsr theme uses **Antonio** for all chrome elements (top bar, left nav bar, labels, button hints).
+
+- **Font**: [Antonio](https://fonts.google.com/specimen/Antonio) by Vernon Adams
+- **License**: [SIL Open Font License 1.1](https://scripts.sil.org/OFL)
+- **IDs**: `PULSR_10_FONT_ID` (10pt), `PULSR_12_FONT_ID` (12pt)
+- **Source**: `lib/EpdFont/builtinFonts/antonio_10_regular.h`, `lib/EpdFont/builtinFonts/antonio_12_regular.h`
+
+Antonio is a condensed sans-serif typeface designed for display use, well suited to the narrow left navigation bar of the Pulsr theme.

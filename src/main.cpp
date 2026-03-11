@@ -22,6 +22,7 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"
+#include "components/themes/pulsr/PulsrTheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
@@ -34,6 +35,19 @@ ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 
 // Fonts
+EpdFont pulsr10Font(&antonio_10_regular);
+EpdFontFamily pulsr10FontFamily(&pulsr10Font);
+EpdFont pulsr12Font(&antonio_12_regular);
+EpdFontFamily pulsr12FontFamily(&pulsr12Font);
+// Antonio reading sizes (Regular only — no bold/italic variants)
+EpdFont antonio12Font(&antonio_12_regular);
+EpdFontFamily antonio12FontFamily(&antonio12Font);
+EpdFont antonio14Font(&antonio_14_regular);
+EpdFontFamily antonio14FontFamily(&antonio14Font);
+EpdFont antonio16Font(&antonio_16_regular);
+EpdFontFamily antonio16FontFamily(&antonio16Font);
+EpdFont antonio18Font(&antonio_18_regular);
+EpdFontFamily antonio18FontFamily(&antonio18Font);
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
 EpdFont bookerly14BoldFont(&bookerly_14_bold);
 EpdFont bookerly14ItalicFont(&bookerly_14_italic);
@@ -114,6 +128,8 @@ EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
+// Default UI fonts (Ubuntu). Antonio is used only by the PULSR theme via PULSR_*_FONT_ID macros
+// declared in PulsrTheme.cpp; these variables (ui10/ui12FontFamily) remain Ubuntu for all themes.
 EpdFont ui10RegularFont(&ubuntu_10_regular);
 EpdFont ui10BoldFont(&ubuntu_10_bold);
 EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
@@ -193,6 +209,14 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
+// Version string exposed via C linkage (used by PULSR theme top bar).
+extern "C" const char* getVersionString() { return CROSSPOINT_VERSION; }
+
+// Danger Zone flash request flag (claw extension — stub here).
+// TODO(claw): Danger Zone sets this flag when a web-triggered firmware flash is
+// requested. Stub here; full implementation is in feature/claw.
+volatile bool dzFlashRequested = false;
+
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();
@@ -219,8 +243,21 @@ void setupDisplayAndFonts() {
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
   renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
+  // PULSR theme fonts are always registered (required for Pulsr theme chrome)
+  renderer.insertFont(PULSR_10_FONT_ID, pulsr10FontFamily);
+  renderer.insertFont(PULSR_12_FONT_ID, pulsr12FontFamily);
+  // Antonio reading font sizes
+  renderer.insertFont(ANTONIO_12_FONT_ID, antonio12FontFamily);
+  renderer.insertFont(ANTONIO_14_FONT_ID, antonio14FontFamily);
+  renderer.insertFont(ANTONIO_16_FONT_ID, antonio16FontFamily);
+  renderer.insertFont(ANTONIO_18_FONT_ID, antonio18FontFamily);
+  // When PULSR (or Dark PULSR) is active, bind the shared UI_* slots to the
+  // PULSR Antonio family so screens rendered via legacy UI_* IDs also use the
+  // PULSR typeface consistently. Otherwise use the default Ubuntu families.
+  const bool isPulsr = (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::PULSR ||
+                        SETTINGS.uiTheme == CrossPointSettings::UI_THEME::DARK_PULSR);
+  renderer.insertFont(UI_10_FONT_ID, isPulsr ? pulsr10FontFamily : ui10FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, isPulsr ? pulsr12FontFamily : ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
   LOG_DBG("MAIN", "Fonts setup");
 }
@@ -255,6 +292,7 @@ void setup() {
   HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
+  SETTINGS.clampToValidRanges();  // Fallback: clamp stale NVS enum values to known-good defaults
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
@@ -342,6 +380,17 @@ void loop() {
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
+  }
+
+  // Redraw when USB connection state changes (CHRG pill on/off)
+  {
+    static bool lastUsbState = gpio.isUsbConnected();
+    const bool usbNow = gpio.isUsbConnected();
+    UITheme::setUsbConnected(usbNow);
+    if (usbNow != lastUsbState) {
+      lastUsbState = usbNow;
+      activityManager.requestUpdate();
+    }
   }
 
   static bool screenshotButtonsReleased = true;

@@ -21,6 +21,7 @@ struct Rect {
 struct TabInfo {
   const char* label;
   bool selected;
+  const char* shortLabel = nullptr;  // Optional 1–4 char ASCII override for themes with narrow tab bars
 };
 
 struct ThemeMetrics {
@@ -107,6 +108,7 @@ class BaseTheme {
   virtual ~BaseTheme() = default;
 
   // Component drawing methods
+  virtual void drawReadingProgressBar(const GfxRenderer& renderer, size_t progress) const;
   virtual void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   virtual void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
                                bool showPercentage = true) const;  // Left aligned (reader mode)
@@ -141,4 +143,5 @@ class BaseTheme {
   virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const;
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const;
+  virtual bool isInverted() const { return false; }
 };

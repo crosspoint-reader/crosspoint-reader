@@ -274,15 +274,22 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 }
 
 bool BookMetadataCache::cleanupTmpFiles() const {
+  bool ok = true;
   const auto spineBinFile = cachePath + tmpSpineBinFile;
   if (Storage.exists(spineBinFile.c_str())) {
-    Storage.remove(spineBinFile.c_str());
+    if (!Storage.remove(spineBinFile.c_str())) {
+      LOG_ERR("BMC", "Failed to remove %s", spineBinFile.c_str());
+      ok = false;
+    }
   }
   const auto tocBinFile = cachePath + tmpTocBinFile;
   if (Storage.exists(tocBinFile.c_str())) {
-    Storage.remove(tocBinFile.c_str());
+    if (!Storage.remove(tocBinFile.c_str())) {
+      LOG_ERR("BMC", "Failed to remove %s", tocBinFile.c_str());
+      ok = false;
+    }
   }
-  return true;
+  return ok;
 }
 
 uint32_t BookMetadataCache::writeSpineEntry(FsFile& file, const SpineEntry& entry) const {
