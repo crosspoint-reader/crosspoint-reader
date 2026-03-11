@@ -103,13 +103,13 @@ FEATURES = {
     'web_pokedex_plugin': Feature(
         name='Pokedex',
         flag='ENABLE_WEB_POKEDEX_PLUGIN',
-        size_kb=20,
+        size_kb=22,
         description='Browser-side Pokemon wallpaper generator at /plugins/pokedex'
     ),
     'pokemon_party': Feature(
         name='Pokemon Party',
         flag='ENABLE_POKEMON_PARTY',
-        size_kb=20,
+        size_kb=23,
         description='Per-book Pokemon metadata and REST API for recent-book party views'
     ),
     'epub_support': Feature(
