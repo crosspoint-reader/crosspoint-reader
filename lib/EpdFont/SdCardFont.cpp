@@ -645,8 +645,9 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
 
   // Lazy-load kern/ligature data (skip during metadata-only prewarm to avoid
   // ~22KB per style allocation during layout measurement — layout only needs advanceX)
+  bool kernLigOk = false;
   if (!metadataOnly) {
-    loadStyleKernLigatureData(s);
+    kernLigOk = loadStyleKernLigatureData(s);
   }
 
   // Populate miniData and swap
@@ -659,7 +660,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   s.miniData.ascender = s.header.ascender;
   s.miniData.descender = s.header.descender;
   s.miniData.is2Bit = s.header.is2Bit;
-  if (!metadataOnly) {
+  if (kernLigOk) {
     applyKernLigaturePointers(s, s.miniData);
   }
   s.miniData.glyphMissHandler = &SdCardFont::onGlyphMiss;

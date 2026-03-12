@@ -9,14 +9,14 @@ Usage:
     # Single file with specific presets
     python fontconvert_sdcard.py \\
       --intervals latin-ext,greek,cyrillic \\
-      --size 14 --style regular --2bit \\
+      --size 14 --style regular \\
       NotoSans-Regular.ttf \\
-      -o NotoSansExt_14_regular.cpfont
+      -o NotoSansExt_14.cpfont
 
     # All 4 sizes at once
     python fontconvert_sdcard.py \\
       --intervals cjk \\
-      --sizes 12,14,16,18 --style regular --2bit \\
+      --sizes 12,14,16,18 --style regular \\
       NotoSansCJKsc-Regular.otf \\
       --output-dir NotoSansCJK/
 
@@ -847,6 +847,9 @@ def main():
         style_fonts[style_map[args.style]] = fontfile
 
     # Always generate v4 format
+    if args.output and len(sizes) != 1:
+        print("Error: --output can only be used with a single size", file=sys.stderr)
+        sys.exit(1)
     output_dir = args.output_dir if args.output_dir else f"{font_name}/"
     total_size = 0
     for sz in sizes:
