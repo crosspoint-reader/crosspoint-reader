@@ -135,7 +135,6 @@ bool SdCardFontRegistry::discover() {
     } else {
       entry.close();
     }
-
   }
   root.close();
 

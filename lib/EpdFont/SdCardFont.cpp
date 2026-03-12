@@ -291,8 +291,8 @@ bool SdCardFont::load(const char* path) {
     static constexpr uint32_t MAX_INTERVALS = 4096;
     static constexpr uint32_t MAX_GLYPHS = 65536;
     if (s.header.intervalCount > MAX_INTERVALS || s.header.glyphCount > MAX_GLYPHS) {
-      LOG_ERR("SDCF", "Style %u: unreasonable counts (intervals=%u, glyphs=%u)", styleId,
-              s.header.intervalCount, s.header.glyphCount);
+      LOG_ERR("SDCF", "Style %u: unreasonable counts (intervals=%u, glyphs=%u)", styleId, s.header.intervalCount,
+              s.header.glyphCount);
       s.present = false;
       continue;
     }
@@ -623,8 +623,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
         file.seekSet(fileOff);
         seekCount++;
       }
-      if (file.read(s.miniBitmap + miniBitmapOffset, glyph.dataLength) !=
-          static_cast<int>(glyph.dataLength)) {
+      if (file.read(s.miniBitmap + miniBitmapOffset, glyph.dataLength) != static_cast<int>(glyph.dataLength)) {
         LOG_ERR("SDCF", "Prewarm: short bitmap read (style %u)", styleIdx);
         file.close();
         delete[] readOrder;
@@ -793,7 +792,7 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
 }
 
 bool SdCardFont::isOverflowGlyph(const EpdGlyph* glyph) const {
-  for (uint32_t i = 0; i < OVERFLOW_CAPACITY; i++) {
+  for (uint32_t i = 0; i < overflowCount_; i++) {
     if (&overflow_[i].glyph == glyph) return true;
   }
   return false;

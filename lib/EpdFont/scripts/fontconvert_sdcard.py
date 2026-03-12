@@ -168,28 +168,41 @@ def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
                     key = (coverage_glyph, pvr.SecondGlyph)
                     raw_kern[key] = raw_kern.get(key, 0) + xa
     elif subtable.Format == 2:
-        # Class-based pairs
+        # Class-based pairs — iterate by class, not by glyph, to avoid
+        # O(glyphs²) explosion for CJK fonts with many requested glyphs.
         class_def1 = subtable.ClassDef1.classDefs if subtable.ClassDef1 else {}
         class_def2 = subtable.ClassDef2.classDefs if subtable.ClassDef2 else {}
         coverage_set = set(subtable.Coverage.glyphs)
-        for left_glyph in glyph_to_cp:
-            if left_glyph not in coverage_set:
+
+        # Build reverse mappings: class_id -> list of glyph names
+        left_by_class = {}   # only glyphs in coverage AND glyph_to_cp
+        for glyph in glyph_to_cp:
+            if glyph not in coverage_set:
                 continue
-            c1 = class_def1.get(left_glyph, 0)
-            if c1 >= len(subtable.Class1Record):
+            c1 = class_def1.get(glyph, 0)
+            left_by_class.setdefault(c1, []).append(glyph)
+
+        right_by_class = {}  # all glyphs in glyph_to_cp
+        for glyph in glyph_to_cp:
+            c2 = class_def2.get(glyph, 0)
+            right_by_class.setdefault(c2, []).append(glyph)
+
+        # Iterate class pairs (typically << glyph pairs)
+        for c1, class1_rec in enumerate(subtable.Class1Record):
+            if c1 not in left_by_class:
                 continue
-            class1_rec = subtable.Class1Record[c1]
-            for right_glyph in glyph_to_cp:
-                c2 = class_def2.get(right_glyph, 0)
-                if c2 >= len(class1_rec.Class2Record):
-                    continue
-                c2_rec = class1_rec.Class2Record[c2]
+            for c2, c2_rec in enumerate(class1_rec.Class2Record):
                 xa = 0
                 if hasattr(c2_rec, 'Value1') and c2_rec.Value1:
                     xa = getattr(c2_rec.Value1, 'XAdvance', 0) or 0
-                if xa != 0:
-                    key = (left_glyph, right_glyph)
-                    raw_kern[key] = raw_kern.get(key, 0) + xa
+                if xa == 0:
+                    continue
+                if c2 not in right_by_class:
+                    continue
+                for lg in left_by_class[c1]:
+                    for rg in right_by_class[c2]:
+                        key = (lg, rg)
+                        raw_kern[key] = raw_kern.get(key, 0) + xa
 
 
 def extract_kerning_fonttools(font_path, codepoints, ppem):
@@ -300,8 +313,10 @@ def derive_kern_classes(kern_map):
 
     if kern_left_class_count > 255 or kern_right_class_count > 255:
         print(f"WARNING: kerning class count exceeds uint8_t range "
-              f"(left={kern_left_class_count}, right={kern_right_class_count})",
+              f"(left={kern_left_class_count}, right={kern_right_class_count}), "
+              f"dropping kerning for this style",
               file=sys.stderr)
+        return ([], [], [], 0, 0)
 
     # Build the class x class matrix
     kern_matrix = [0] * (kern_left_class_count * kern_right_class_count)
@@ -799,6 +814,11 @@ def main():
         print("Error: --size or --sizes is required", file=sys.stderr)
         sys.exit(1)
 
+    # Validate early: single-style mode requires a font file
+    if not is_multistyle and not fontfile:
+        print("Error: fontfile is required in single-style mode", file=sys.stderr)
+        sys.exit(1)
+
     # Determine font name
     if args.name:
         font_name = args.name
@@ -823,9 +843,6 @@ def main():
 
     if not is_multistyle:
         # Single font file provided: wrap as a single-style v4 font
-        if not fontfile:
-            print("Error: fontfile is required in single-style mode", file=sys.stderr)
-            sys.exit(1)
         style_map = {"regular": 0, "bold": 1, "italic": 2, "bolditalic": 3}
         style_fonts[style_map[args.style]] = fontfile
 
@@ -833,8 +850,11 @@ def main():
     output_dir = args.output_dir if args.output_dir else f"{font_name}/"
     total_size = 0
     for sz in sizes:
-        filename = f"{font_name}_{sz}.cpfont"
-        output_path = os.path.join(output_dir, filename)
+        if args.output and len(sizes) == 1:
+            output_path = args.output
+        else:
+            filename = f"{font_name}_{sz}.cpfont"
+            output_path = os.path.join(output_dir, filename)
         print(f"Generating {output_path} (size {sz}, {len(style_fonts)} style(s), v4)...", file=sys.stderr)
         total_size += generate_cpfont_multistyle(
             style_fonts, sz, intervals, output_path,
