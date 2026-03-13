@@ -79,6 +79,21 @@ bool Page::serialize(FsFile& file) const {
     }
   }
 
+  // Serialize links
+  const uint16_t linkCount = std::min<uint16_t>(links.size(), MAX_LINKS_PER_PAGE);
+  serialization::writePod(file, linkCount);
+  for (uint16_t i = 0; i < linkCount; i++) {
+    const auto& lk = links[i];
+    if (file.write(lk.href, sizeof(lk.href)) != sizeof(lk.href)) {
+      LOG_ERR("PGE", "Failed to write link href");
+      return false;
+    }
+    serialization::writePod(file, lk.x);
+    serialization::writePod(file, lk.y);
+    serialization::writePod(file, lk.w);
+    serialization::writePod(file, lk.h);
+  }
+
   return true;
 }
 
@@ -121,6 +136,27 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
     }
     entry.number[sizeof(entry.number) - 1] = '\0';
     entry.href[sizeof(entry.href) - 1] = '\0';
+  }
+
+  // Deserialize links
+  uint16_t linkCount;
+  serialization::readPod(file, linkCount);
+  if (linkCount > Page::MAX_LINKS_PER_PAGE) {
+    LOG_ERR("PGE", "Invalid link count %u", linkCount);
+    return nullptr;
+  }
+  page->links.resize(linkCount);
+  for (uint16_t i = 0; i < linkCount; i++) {
+    auto& lk = page->links[i];
+    if (file.read(lk.href, sizeof(lk.href)) != sizeof(lk.href)) {
+      LOG_ERR("PGE", "Failed to read link %u", i);
+      return nullptr;
+    }
+    lk.href[sizeof(lk.href) - 1] = '\0';
+    serialization::readPod(file, lk.x);
+    serialization::readPod(file, lk.y);
+    serialization::readPod(file, lk.w);
+    serialization::readPod(file, lk.h);
   }
 
   return page;

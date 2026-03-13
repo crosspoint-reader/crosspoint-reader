@@ -10,7 +10,7 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 18;
+constexpr uint8_t SECTION_FILE_VERSION = 19;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);
@@ -285,11 +285,16 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
     return std::nullopt;
   }
 
-  const uint32_t fileSize = f.size();
+  const size_t fileSize = f.size();
+  if (fileSize < HEADER_SIZE) {
+    f.close();
+    return std::nullopt;
+  }
+
   f.seek(HEADER_SIZE - sizeof(uint32_t));
   uint32_t anchorMapOffset;
   serialization::readPod(f, anchorMapOffset);
-  if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
+  if (anchorMapOffset == 0 || anchorMapOffset > fileSize - sizeof(uint16_t)) {
     f.close();
     return std::nullopt;
   }
@@ -298,12 +303,32 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   uint16_t count;
   serialization::readPod(f, count);
   for (uint16_t i = 0; i < count; i++) {
-    std::string key;
+    if (f.position() > fileSize - (sizeof(uint32_t) + sizeof(uint16_t))) {
+      f.close();
+      return std::nullopt;
+    }
+
+    uint32_t keyLen;
+    serialization::readPod(f, keyLen);
+    if (keyLen > fileSize - f.position() - sizeof(uint16_t)) {
+      f.close();
+      return std::nullopt;
+    }
+
+    std::string key(keyLen, '\0');
+    if (keyLen > 0 && f.read(&key[0], keyLen) != static_cast<int>(keyLen)) {
+      f.close();
+      return std::nullopt;
+    }
+
     uint16_t page;
-    serialization::readString(f, key);
     serialization::readPod(f, page);
     if (key == anchor) {
       f.close();
+      if (page >= pageCount) {
+        LOG_ERR("SCT", "Anchor '%s' maps to page %d but section has %d pages", anchor.c_str(), page, pageCount);
+        return std::nullopt;
+      }
       return page;
     }
   }
