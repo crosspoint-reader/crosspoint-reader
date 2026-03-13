@@ -80,6 +80,42 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
+echo "#define LEXICA_12_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./lexica_12_regular.h",
+  "./lexica_12_bold.h",
+  "./lexica_12_bolditalic.h",
+  "./lexica_12_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LEXICA_14_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./lexica_14_regular.h",
+  "./lexica_14_bold.h",
+  "./lexica_14_bolditalic.h",
+  "./lexica_14_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LEXICA_16_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./lexica_16_regular.h",
+  "./lexica_16_bold.h",
+  "./lexica_16_bolditalic.h",
+  "./lexica_16_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LEXICA_18_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./lexica_18_regular.h",
+  "./lexica_18_bold.h",
+  "./lexica_18_bolditalic.h",
+  "./lexica_18_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
 echo "#define OPENDYSLEXIC_8_FONT_ID ($(
 ruby -rdigest -e 'puts [
   "./opendyslexic_8_regular.h",
