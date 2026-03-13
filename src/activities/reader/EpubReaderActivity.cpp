@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
@@ -281,6 +282,18 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 }
 
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
+  auto progressChangeResultHandler = [this](const ActivityResult& result) {
+    if (!result.isCancelled) {
+      const auto& sync = std::get<ProgressChangeResult>(result.data);
+      if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
+        RenderLock lock(*this);
+        currentSpineIndex = sync.spineIndex;
+        nextPageNumber = sync.page;
+        section.reset();
+      }
+    }
+  };
+
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
@@ -326,26 +339,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
       if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
-        auto p = section->loadPageFromSectionFile();
-        if (p) {
-          std::string fullText;
-          for (const auto& el : p->elements) {
-            if (el->getTag() == TAG_PageLine) {
-              const auto& line = static_cast<const PageLine&>(*el);
-              if (line.getBlock()) {
-                const auto& words = line.getBlock()->getWords();
-                for (const auto& w : words) {
-                  if (!fullText.empty()) fullText += " ";
-                  fullText += w;
-                }
-              }
-            }
-          }
-          if (!fullText.empty()) {
-            startActivityForResult(std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
-                                   [this](const ActivityResult& result) {});
-            break;
-          }
+        std::string fullText = section->getTextFromSectionFile();
+        if (!fullText.empty()) {
+          startActivityForResult(std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
+                                 [this](const ActivityResult& result) {});
+          break;
         }
       }
       // If no text or page loading failed, just close menu
@@ -384,22 +382,24 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : 0;
         const int totalPages = section ? section->pageCount : 0;
-        startActivityForResult(
-            std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                   currentPage, totalPages),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                const auto& sync = std::get<SyncResult>(result.data);
-                if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
-                  RenderLock lock(*this);
-                  currentSpineIndex = sync.spineIndex;
-                  nextPageNumber = sync.page;
-                  section.reset();
-                }
-              }
-            });
+        startActivityForResult(std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(),
+                                                                      currentSpineIndex, currentPage, totalPages),
+                               progressChangeResultHandler);
       }
       break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
+      const int currentPage = section ? section->currentPage : 0;
+      const int pageCount = section ? section->pageCount : 0;
+
+      std::string pageText;
+      if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
+        pageText = section->getTextFromSectionFile();
+      }
+      startActivityForResult(
+          std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
+                                                        currentPage, pageCount, pageText),
+          progressChangeResultHandler);
     }
   }
 }

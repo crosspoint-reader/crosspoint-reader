@@ -102,6 +102,18 @@ if (parsedSize != fileSize) {
 }
 ```
 
+## Bookmark files
+
+Each EPUB has a small number of fixed‑index bookmark files stored in the
+cache directory (`bookmark_0.bin`, `bookmark_1.bin`, …).
+
+``c++
+// bytes 0–1 : u16 current spine index
+// bytes 2–3 : u16 current page in spine
+// bytes 4–5 : u16 page count for the chapter
+// bytes 6..EOF : summary text bytes, max 40 bytes, no null terminator
+```
+
 ## `section.bin`
 
 ### Version 8
