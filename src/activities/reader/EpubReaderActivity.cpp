@@ -884,7 +884,7 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) spineIndex = 0;
 
   // Apply the reader orientation so margins match what the reader would produce
-  applyReaderOrientation(renderer, SETTINGS.orientation);
+  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   // Compute margins exactly as render() does
   int marginTop, marginRight, marginBottom, marginLeft;
