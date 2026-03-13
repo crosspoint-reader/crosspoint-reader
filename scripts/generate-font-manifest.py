@@ -38,15 +38,23 @@ CPFONT_VERSION = 4
 
 STYLE_NAMES = {0: "regular", 1: "bold", 2: "italic", 3: "bolditalic"}
 
-# Human-readable descriptions per family. This is the single source of truth
-# for family descriptions used in the manifest. If a family is encountered
-# that isn't listed here, a warning is printed and a generic description is
-# used.
-FAMILY_DESCRIPTIONS = {
-    "Bookerly-SD": "Serif reading font (Latin)",
-    "NotoSansExtended": "Sans-serif (Latin, Greek, Cyrillic, Georgian, Armenian, Ethiopic)",
-    "NotoSansCJK": "Sans-serif (Chinese, Japanese, Korean)",
-}
+# Family descriptions can be loaded from the sd-fonts.yaml config
+# (via --descriptions-from) or fall back to the family name.
+FAMILY_DESCRIPTIONS: dict[str, str] = {}
+
+
+def load_descriptions_from_yaml(yaml_path: Path) -> dict[str, str]:
+    """Load family descriptions from sd-fonts.yaml config."""
+    try:
+        import yaml
+    except ImportError:
+        print("WARNING: pyyaml not installed, cannot load descriptions from YAML", file=sys.stderr)
+        return {}
+
+    with open(yaml_path) as f:
+        config = yaml.safe_load(f)
+
+    return {f["name"]: f["description"] for f in config.get("families", []) if "description" in f}
 
 
 def read_cpfont_styles(filepath: Path) -> list[str]:
@@ -191,6 +199,11 @@ def main():
         required=True,
         help="Output path for fonts.json",
     )
+    parser.add_argument(
+        "--descriptions-from",
+        default=None,
+        help="Path to sd-fonts.yaml to load family descriptions (default: use family name)",
+    )
     args = parser.parse_args()
 
     input_dir = Path(args.input)
@@ -202,6 +215,16 @@ def main():
     base_url = args.base_url
     if not base_url.endswith("/"):
         base_url += "/"
+
+    # Load descriptions from YAML config if provided
+    global FAMILY_DESCRIPTIONS
+    if args.descriptions_from:
+        desc_path = Path(args.descriptions_from)
+        if desc_path.exists():
+            FAMILY_DESCRIPTIONS = load_descriptions_from_yaml(desc_path)
+            print(f"Loaded {len(FAMILY_DESCRIPTIONS)} descriptions from {desc_path}")
+        else:
+            print(f"WARNING: {desc_path} not found, using family names as descriptions", file=sys.stderr)
 
     print(f"Scanning {input_dir} for .cpfont files...")
     families = scan_cpfont_files(input_dir)

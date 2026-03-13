@@ -26,14 +26,13 @@ jobs:
           python-version: '3.14'
 
       - name: Install font tools
-        run: pip install freetype-py fonttools
+        run: pip install freetype-py fonttools pyyaml
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libfreetype6-dev
 
-      - name: Generate SD card fonts
-        working-directory: lib/EpdFont/scripts
-        run: bash generate-sd-fonts.sh
+      - name: Build SD card fonts
+        run: python3 lib/EpdFont/scripts/build-sd-fonts.py --clean
 
       - name: Flatten output for release assets
         run: |
@@ -46,6 +45,7 @@ jobs:
           --input dist
           --base-url "https://github.com/${{ github.repository }}/releases/download/sd-fonts/"
           --output dist/fonts.json
+          --descriptions-from lib/EpdFont/scripts/sd-fonts.yaml
 
       - name: Publish to sd-fonts release
         uses: softprops/action-gh-release@v2.5.0
