@@ -89,8 +89,13 @@ void SettingsActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    SETTINGS.saveToFile();
-    onGoHome();
+    if (selectedSettingIndex > 0) {
+      selectedSettingIndex = 0;
+      requestUpdate();
+    } else {
+      SETTINGS.saveToFile();
+      onGoHome();
+    }
     return;
   }
 

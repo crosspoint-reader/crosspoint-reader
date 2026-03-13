@@ -223,6 +223,7 @@ LANG_ABBREVIATIONS = {
     "فارسی": "FA", "persian": "FA",
     "čeština": "CS",
     "türkçe": "TR", "turkish": "TR",
+    "Қазақша": "KK", "kazakh": "KK",
 }
 
 

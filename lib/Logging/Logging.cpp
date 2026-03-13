@@ -14,10 +14,7 @@ RTC_NOINIT_ATTR size_t logHead = 0;
 // value is only set by clearLastLogs(), so its absence means the buffer was
 // never properly initialized.
 RTC_NOINIT_ATTR uint32_t rtcLogMagic;
-static constexpr uint32_t fnv1a32(const char* s, uint32_t h = 2166136261u) {
-  return *s ? fnv1a32(s + 1, (h ^ static_cast<uint32_t>(*s)) * 16777619u) : h;
-}
-static constexpr uint32_t LOG_RTC_MAGIC = fnv1a32("crosspoint-reader");
+static constexpr uint32_t LOG_RTC_MAGIC = 0xDEADBEEF;
 
 void addToLogRingBuffer(const char* message) {
   // Add the message to the ring buffer, overwriting old messages if necessary.
