@@ -91,10 +91,8 @@ void FileBrowserActivity::loadFiles() {
     if (file.isDirectory()) {
       files.emplace_back(std::string(name) + "/");
     } else {
-      std::string_view filename{name};
-      if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-          FsHelpers::hasBmpExtension(filename)) {
+      auto filename = std::string(name);
+      if (isSupportedFormat(filename)) {
         files.emplace_back(filename);
       }
     }
@@ -107,9 +105,21 @@ void FileBrowserActivity::loadFiles() {
 void FileBrowserActivity::onEnter() {
   Activity::onEnter();
 
+  // Corrects basePath if basepath points to a file instead of directory
+  if (isSupportedFormat(basepath)) {
+    const auto lastSlash = basepath.find_last_of("/");
+    // handles root path file
+    if (lastSlash == std::string::npos || lastSlash == 0) {
+      basepath = "/";
+    } else {
+      basepath.resize(lastSlash);
+    }
+  }
+
   loadFiles();
   selectorIndex = 0;
-
+  // skips input check if back is still held when exiting from reader activity
+  skipNextButtonCheck = mappedInput.isPressed(MappedInputManager::Button::Back);
   requestUpdate();
 }
 
@@ -127,6 +137,16 @@ void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
 }
 
 void FileBrowserActivity::loop() {
+  // skips input check until back is released when returning from reader activity
+  if (skipNextButtonCheck) {
+    const bool backCleared = !mappedInput.isPressed(MappedInputManager::Button::Back) &&
+                             !mappedInput.wasReleased(MappedInputManager::Button::Back);
+    if (backCleared) {
+      skipNextButtonCheck = false;
+    }
+    return;
+  }
+
   // Long press BACK (1s+) goes to root folder
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
       basepath != "/") {
@@ -278,4 +298,10 @@ size_t FileBrowserActivity::findEntry(const std::string& name) const {
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i;
   return 0;
+}
+
+bool FileBrowserActivity::isSupportedFormat(const std::string& fileName) {
+  return FsHelpers::hasEpubExtension(fileName) || FsHelpers::hasXtcExtension(fileName) ||
+         FsHelpers::hasTxtExtension(fileName) || FsHelpers::hasMarkdownExtension(fileName) ||
+         FsHelpers::hasBmpExtension(fileName);
 }

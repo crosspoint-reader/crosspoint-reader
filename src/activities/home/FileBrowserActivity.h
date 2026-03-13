@@ -16,6 +16,7 @@ class FileBrowserActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
+  bool skipNextButtonCheck = false;
 
   // Files state
   std::string basepath = "/";
@@ -24,6 +25,8 @@ class FileBrowserActivity final : public Activity {
   // Data loading
   void loadFiles();
   size_t findEntry(const std::string& name) const;
+
+  bool isSupportedFormat(const std::string& fileName);
 
  public:
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/")
