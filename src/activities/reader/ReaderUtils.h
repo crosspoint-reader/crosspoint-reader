@@ -34,18 +34,18 @@ struct PageTurnResult {
   bool next;
 };
 
-inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
+inline PageTurnResult detectPageTurn(const MappedInputManager& input, const bool blockFront) {
   const bool usePress = !SETTINGS.longPressChapterSkip;
   const bool prev = usePress ? (input.wasPressed(MappedInputManager::Button::PageBack) ||
-                                input.wasPressed(MappedInputManager::Button::Left))
+                                input.wasPressed(MappedInputManager::Button::Left) && !blockFront)
                              : (input.wasReleased(MappedInputManager::Button::PageBack) ||
-                                input.wasReleased(MappedInputManager::Button::Left));
+                                input.wasReleased(MappedInputManager::Button::Left) && !blockFront);
   const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                          input.wasReleased(MappedInputManager::Button::Power);
   const bool next = usePress ? (input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn ||
-                                input.wasPressed(MappedInputManager::Button::Right))
+                                input.wasPressed(MappedInputManager::Button::Right) && !blockFront)
                              : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn ||
-                                input.wasReleased(MappedInputManager::Button::Right));
+                                input.wasReleased(MappedInputManager::Button::Right) && !blockFront);
   return {prev, next};
 }
 
