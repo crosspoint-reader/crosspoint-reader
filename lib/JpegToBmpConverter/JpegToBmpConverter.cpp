@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <picojpeg.h>
 
 #include <cstdio>
@@ -288,24 +289,15 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   // RAII guard: frees all heap resources on any return path, including early exits.
   // Holds references so it always sees the latest pointer values assigned below.
-  struct Cleanup {
-    uint8_t*& rowBuffer;
-    uint8_t*& mcuRowBuffer;
-    AtkinsonDitherer*& atkinsonDitherer;
-    FloydSteinbergDitherer*& fsDitherer;
-    Atkinson1BitDitherer*& atkinson1BitDitherer;
-    uint32_t*& rowAccum;
-    uint32_t*& rowCount;
-    ~Cleanup() {
-      delete[] rowAccum;
-      delete[] rowCount;
-      delete atkinsonDitherer;
-      delete fsDitherer;
-      delete atkinson1BitDitherer;
-      free(mcuRowBuffer);
-      free(rowBuffer);
-    }
-  } cleanup{rowBuffer, mcuRowBuffer, atkinsonDitherer, fsDitherer, atkinson1BitDitherer, rowAccum, rowCount};
+  const ScopedCleanup cleanup{[&](){
+    delete[] rowAccum;
+    delete[] rowCount;
+    delete atkinsonDitherer;
+    delete fsDitherer;
+    delete atkinson1BitDitherer;
+    free(mcuRowBuffer);
+    free(rowBuffer);
+  }};
 
   // Allocate row buffer
   rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
@@ -335,12 +327,24 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // Use OUTPUT dimensions for dithering (after prescaling)
   if (oneBit) {
     // For 1-bit output, use Atkinson dithering for better quality
-    atkinson1BitDitherer = new Atkinson1BitDitherer(outWidth);
+    atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(outWidth);
+    if (!atkinson1BitDitherer) {
+      LOG_ERR("JPG", "Failed to allocate Atkinson1BitDitherer");
+      return false;
+    }
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(outWidth);
+      atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(outWidth);
+      if (!atkinsonDitherer) {
+        LOG_ERR("JPG", "Failed to allocate AtkinsonDitherer");
+        return false;
+      }
     } else if (USE_FLOYD_STEINBERG) {
-      fsDitherer = new FloydSteinbergDitherer(outWidth);
+      fsDitherer = new (std::nothrow) FloydSteinbergDitherer(outWidth);
+      if (!fsDitherer) {
+        LOG_ERR("JPG", "Failed to allocate FloydSteinbergDitherer");
+        return false;
+      }
     }
   }
 
@@ -351,9 +355,18 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   uint32_t nextOutY_srcStart = 0;  // Source Y where next output row starts (16.16 fixed point)
 
   if (needsScaling) {
-    rowAccum = new uint32_t[outWidth]();
-    rowCount = new uint32_t[outWidth]();
+    rowAccum = new (std::nothrow) uint32_t[outWidth]();
+    rowCount = new (std::nothrow) uint32_t[outWidth]();
     nextOutY_srcStart = scaleY_fp;  // First boundary is at scaleY_fp (source Y for outY=1)
+
+    if (!rowAccum) {
+      LOG_ERR("JPG", "Failed to allocate rowAccum");
+      return false;
+    }
+    if (!rowCount) {
+      LOG_ERR("JPG", "Failed to allocate rowCount");
+      return false;
+    }
   }
 
   // Process MCUs row-by-row and write to BMP as we go (top-down)
