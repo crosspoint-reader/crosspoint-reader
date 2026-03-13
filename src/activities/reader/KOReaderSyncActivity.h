@@ -1,7 +1,6 @@
 #pragma once
 #include <Epub.h>
 
-#include <functional>
 #include <memory>
 
 #include "KOReaderSyncClient.h"
@@ -15,14 +14,16 @@
  * 1. Connect to WiFi (if not connected)
  * 2. Calculate document hash
  * 3. Fetch remote progress
- * 4. Show comparison and options (Apply/Upload)
+ * 4. Show comparison and options (Apply/Upload) or Skip when SyncMode::PUSH_ONLY
  * 5. Apply or upload progress
  */
 class KOReaderSyncActivity final : public Activity {
  public:
+  enum class SyncMode { INTERACTIVE, PUSH_ONLY };
+
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                 const std::shared_ptr<Epub>& epub, const std::string& epubPath, int currentSpineIndex,
-                                int currentPage, int totalPagesInSpine)
+                                int currentPage, int totalPagesInSpine, SyncMode syncMode = SyncMode::INTERACTIVE)
       : Activity("KOReaderSync", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),
@@ -31,7 +32,8 @@ class KOReaderSyncActivity final : public Activity {
         totalPagesInSpine(totalPagesInSpine),
         remoteProgress{},
         remotePosition{},
-        localProgress{} {}
+        localProgress{},
+        syncMode(syncMode) {}
 
   void onEnter() override;
   void onExit() override;
@@ -73,6 +75,11 @@ class KOReaderSyncActivity final : public Activity {
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
 
+  SyncMode syncMode;
+  bool pendingFinish = false;
+  ActivityResult pendingFinishResult;
+
+  void deferFinish(ActivityResult&& result);
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
