@@ -153,16 +153,22 @@ void KOReaderCredentialStore::setServerUrl(const std::string& url) {
 }
 
 std::string KOReaderCredentialStore::getBaseUrl() const {
+  std::string url;
   if (serverUrl.empty()) {
-    return DEFAULT_SERVER_URL;
+    url = DEFAULT_SERVER_URL;
+  } else if (serverUrl.find("://") == std::string::npos) {
+    // Normalize URL: add http:// if no protocol specified (local servers typically don't have SSL)
+    url = "http://" + serverUrl;
+  } else {
+    url = serverUrl;
   }
 
-  // Normalize URL: add http:// if no protocol specified (local servers typically don't have SSL)
-  if (serverUrl.find("://") == std::string::npos) {
-    return "http://" + serverUrl;
+  // Strip trailing slashes to avoid double-slash in API paths
+  while (!url.empty() && url.back() == '/') {
+    url.pop_back();
   }
 
-  return serverUrl;
+  return url;
 }
 
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
