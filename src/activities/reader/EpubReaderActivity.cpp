@@ -10,6 +10,8 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <memory>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -854,4 +856,74 @@ void EpubReaderActivity::restoreSavedPosition() {
     section.reset();
   }
   requestUpdate();
+}
+
+bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer) {
+  auto epub = std::make_shared<Epub>(filePath, "/.crosspoint");
+  // Load CSS when embeddedStyle is enabled, as createSectionFile may need it to rebuild the cache.
+  if (!epub->load(true, SETTINGS.embeddedStyle == 0)) {
+    LOG_DBG("SLP", "EPUB: failed to load %s", filePath.c_str());
+    return false;
+  }
+
+  epub->setupCacheDir();
+
+  // Load saved spine index and page number
+  int spineIndex = 0, pageNumber = 0;
+  FsFile f;
+  if (Storage.openFileForRead("SLP", epub->getCachePath() + "/progress.bin", f)) {
+    uint8_t data[6];
+    if (f.read(data, 6) == 6) {
+      spineIndex = (int)((uint32_t)data[0] | ((uint32_t)data[1] << 8));
+      pageNumber = (int)((uint32_t)data[2] | ((uint32_t)data[3] << 8));
+    }
+    f.close();
+  }
+  if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) spineIndex = 0;
+
+  // Apply the reader orientation so margins match what the reader would produce
+  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+
+  // Compute margins exactly as render() does
+  int marginTop, marginRight, marginBottom, marginLeft;
+  renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
+  marginTop += SETTINGS.screenMargin;
+  marginLeft += SETTINGS.screenMargin;
+  marginRight += SETTINGS.screenMargin;
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  marginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
+
+  const uint16_t viewportWidth = renderer.getScreenWidth() - marginLeft - marginRight;
+  const uint16_t viewportHeight = renderer.getScreenHeight() - marginTop - marginBottom;
+
+  // Load or rebuild the section cache. Rebuilding is needed when the cache is missing or stale
+  // (e.g. after a firmware update). A no-op popup callback avoids any UI during sleep preparation.
+  auto section = std::make_unique<Section>(epub, spineIndex, renderer);
+  if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                                SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                                viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                SETTINGS.imageRendering)) {
+    LOG_DBG("SLP", "EPUB: section cache not found for spine %d, rebuilding", spineIndex);
+    if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                                    SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                                    viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                    SETTINGS.imageRendering, []() {})) {
+      LOG_ERR("SLP", "EPUB: failed to rebuild section cache for spine %d", spineIndex);
+      return false;
+    }
+  }
+
+  if (pageNumber < 0 || pageNumber >= section->pageCount) pageNumber = 0;
+  section->currentPage = pageNumber;
+
+  auto page = section->loadPageFromSectionFile();
+  if (!page) {
+    LOG_DBG("SLP", "EPUB: failed to load page %d", pageNumber);
+    return false;
+  }
+
+  renderer.clearScreen();
+  page->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
+  // No displayBuffer call — caller (SleepActivity) handles that after compositing the overlay
+  return true;
 }

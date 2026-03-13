@@ -5,18 +5,166 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <PNGdec.h>
 #include <Txt.h>
 #include <Xtc.h>
 
+#include <new>
+
+#include "../reader/EpubReaderActivity.h"
+#include "../reader/TxtReaderActivity.h"
+#include "../reader/XtcReaderActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
 
+namespace {
+
+// Context passed through PNGdec's decode() user-pointer to the per-scanline draw callback.
+struct PngOverlayCtx {
+  const GfxRenderer* renderer;
+  int screenW;
+  int screenH;
+  int srcWidth;
+  int dstWidth;
+  int dstX;
+  int dstY;
+  float yScale;
+  int lastDstY;
+  // Color-key transparency (tRNS chunk) for TRUECOLOR and GRAYSCALE images.
+  // Initialized lazily on the first draw callback because tRNS is processed during decode(),
+  // not during open() — so hasAlpha()/getTransparentColor() are only valid once decode() starts.
+  // -2 = not yet read; -1 = no color key; >=0 = 0x00RRGGBB (TRUECOLOR) or low-byte gray.
+  int32_t transparentColor;
+  PNG* pngObj;  // for lazy-init of transparentColor on first callback
+};
+
+// PNGdec file I/O callbacks — mirror the pattern in PngToFramebufferConverter.cpp.
+void* pngSleepOpen(const char* filename, int32_t* size) {
+  FsFile* f = new FsFile();
+  if (!Storage.openFileForRead("SLP", std::string(filename), *f)) {
+    delete f;
+    return nullptr;
+  }
+  *size = f->size();
+  return f;
+}
+void pngSleepClose(void* handle) {
+  FsFile* f = reinterpret_cast<FsFile*>(handle);
+  if (f) {
+    f->close();
+    delete f;
+  }
+}
+int32_t pngSleepRead(PNGFILE* pFile, uint8_t* pBuf, int32_t len) {
+  FsFile* f = reinterpret_cast<FsFile*>(pFile->fHandle);
+  return f ? f->read(pBuf, len) : 0;
+}
+int32_t pngSleepSeek(PNGFILE* pFile, int32_t pos) {
+  FsFile* f = reinterpret_cast<FsFile*>(pFile->fHandle);
+  if (!f) return -1;
+  return f->seek(pos);
+}
+
+// Per-scanline draw callback for PNG overlay compositing.
+// Transparent pixels (alpha < 128) are skipped so the reader page shows through.
+// Opaque pixels are drawn in their grayscale brightness (dark → black, light → white).
+int pngOverlayDraw(PNGDRAW* pDraw) {
+  PngOverlayCtx* ctx = reinterpret_cast<PngOverlayCtx*>(pDraw->pUser);
+
+  // Lazy-init: tRNS chunk is processed during decode() before any IDAT data, so by the time
+  // the first draw callback fires, hasAlpha() / getTransparentColor() are already valid.
+  if (ctx->transparentColor == -2) {
+    const int pt = pDraw->iPixelType;
+    ctx->transparentColor = (pDraw->iHasAlpha && (pt == PNG_PIXEL_TRUECOLOR || pt == PNG_PIXEL_GRAYSCALE))
+                                ? (int32_t)ctx->pngObj->getTransparentColor()
+                                : -1;
+  }
+
+  const int destY = ctx->dstY + (int)(pDraw->y * ctx->yScale);
+  if (destY == ctx->lastDstY) return 1;  // skip duplicate rows from Y scaling
+  ctx->lastDstY = destY;
+  if (destY < 0 || destY >= ctx->screenH) return 1;
+
+  const int srcWidth = ctx->srcWidth;
+  const int dstWidth = ctx->dstWidth;
+  const uint8_t* pixels = pDraw->pPixels;
+  const int pixelType = pDraw->iPixelType;
+  const int hasAlpha = pDraw->iHasAlpha;
+
+  int srcX = 0, error = 0;
+  for (int dstX = 0; dstX < dstWidth; dstX++) {
+    const int outX = ctx->dstX + dstX;
+    if (outX >= 0 && outX < ctx->screenW) {
+      uint8_t alpha = 255, gray = 0;
+      switch (pixelType) {
+        case PNG_PIXEL_TRUECOLOR_ALPHA: {
+          const uint8_t* p = &pixels[srcX * 4];
+          alpha = p[3];
+          gray = (uint8_t)((p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8);
+          break;
+        }
+        case PNG_PIXEL_GRAY_ALPHA:
+          gray = pixels[srcX * 2];
+          alpha = pixels[srcX * 2 + 1];
+          break;
+        case PNG_PIXEL_TRUECOLOR: {
+          const uint8_t* p = &pixels[srcX * 3];
+          gray = (uint8_t)((p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8);
+          // tRNS color-key: if pixel matches the designated transparent color, skip it
+          if (ctx->transparentColor >= 0 && p[0] == (uint8_t)((ctx->transparentColor >> 16) & 0xFF) &&
+              p[1] == (uint8_t)((ctx->transparentColor >> 8) & 0xFF) &&
+              p[2] == (uint8_t)(ctx->transparentColor & 0xFF)) {
+            alpha = 0;
+          }
+          break;
+        }
+        case PNG_PIXEL_GRAYSCALE:
+          gray = pixels[srcX];
+          // tRNS color-key: transparent gray value stored in low byte
+          if (ctx->transparentColor >= 0 && gray == (uint8_t)(ctx->transparentColor & 0xFF)) {
+            alpha = 0;
+          }
+          break;
+        case PNG_PIXEL_INDEXED:
+          if (pDraw->pPalette) {
+            const uint8_t idx = pixels[srcX];
+            const uint8_t* p = &pDraw->pPalette[idx * 3];
+            gray = (uint8_t)((p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8);
+            if (hasAlpha) alpha = pDraw->pPalette[768 + idx];
+          }
+          break;
+        default:
+          gray = pixels[srcX];
+          break;
+      }
+
+      if (alpha >= 128) {
+        ctx->renderer->drawPixel(outX, destY, gray < 128);  // true = black, false = white
+      }
+      // alpha < 128: transparent — leave the reader page pixel intact
+    }
+
+    // Bresenham-style X stepping (handles downscaling; 1:1 when srcWidth == dstWidth)
+    error += srcWidth;
+    while (error >= dstWidth) {
+      error -= dstWidth;
+      srcX++;
+    }
+  }
+  return 1;
+}
+
+}  // namespace
+
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  // For OVERLAY mode the popup is suppressed so the frame buffer (reader page) stays intact
+  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::OVERLAY) {
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  }
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
@@ -26,6 +174,8 @@ void SleepActivity::onEnter() {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       return renderCoverSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::OVERLAY):
+      return renderOverlaySleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -292,5 +442,181 @@ void SleepActivity::renderCoverSleepScreen() const {
 
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+void SleepActivity::renderOverlaySleepScreen() const {
+  // Overlay pictures always use portrait orientation regardless of the reader's orientation preference.
+  const auto savedOrientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Portrait);
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  // Step 1: Ensure the frame buffer contains the reader page.
+  // When coming from a reader activity the frame buffer already holds the page.
+  // When coming from a non-reader activity we re-render it from the saved progress.
+  if (!APP_STATE.lastSleepFromReader && !APP_STATE.openEpubPath.empty()) {
+    const auto& path = APP_STATE.openEpubPath;
+    bool rendered = false;
+
+    if (FsHelpers::checkFileExtension(path, ".xtc") || FsHelpers::checkFileExtension(path, ".xtch")) {
+      rendered = XtcReaderActivity::drawCurrentPageToBuffer(path, renderer);
+    } else if (FsHelpers::checkFileExtension(path, ".txt")) {
+      rendered = TxtReaderActivity::drawCurrentPageToBuffer(path, renderer);
+    } else if (FsHelpers::checkFileExtension(path, ".epub")) {
+      rendered = EpubReaderActivity::drawCurrentPageToBuffer(path, renderer);
+    }
+
+    if (!rendered) {
+      LOG_DBG("SLP", "Page re-render failed, using white background");
+      renderer.clearScreen();
+    }
+  }
+
+  // Step 2: Load the overlay image using the same selection logic as renderCustomSleepScreen.
+  // BMP: white pixels are skipped (transparent via drawBitmap), black pixels composited on top.
+  // PNG: pixels with alpha < 128 are skipped; opaque pixels are drawn with their grayscale value.
+  auto tryDrawOverlay = [&](const std::string& filename) -> bool {
+    FsFile file;
+    if (!Storage.openFileForRead("SLP", filename, file)) return false;
+    Bitmap bitmap(file, true);
+    if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+      file.close();
+      return false;
+    }
+
+    int x, y;
+    float cropX = 0, cropY = 0;
+    if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
+      float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+      const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
+      if (ratio > screenRatio) {
+        x = 0;
+        y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
+      } else {
+        x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
+        y = 0;
+      }
+    } else {
+      x = (pageWidth - bitmap.getWidth()) / 2;
+      y = (pageHeight - bitmap.getHeight()) / 2;
+    }
+
+    // Draw without clearScreen so the reader page remains in the frame buffer beneath
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    file.close();
+    return true;
+  };
+
+  auto tryDrawPngOverlay = [&](const std::string& filename) -> bool {
+    constexpr size_t MIN_FREE_HEAP = 60 * 1024;  // PNG decoder ~42 KB + overhead
+    if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
+      LOG_ERR("SLP", "Not enough heap for PNG overlay decoder");
+      return false;
+    }
+    PNG* png = new (std::nothrow) PNG();
+    if (!png) return false;
+
+    int rc = png->open(filename.c_str(), pngSleepOpen, pngSleepClose, pngSleepRead, pngSleepSeek, pngOverlayDraw);
+    if (rc != PNG_SUCCESS) {
+      LOG_DBG("SLP", "PNG open failed: %s (%d)", filename.c_str(), rc);
+      delete png;
+      return false;
+    }
+
+    const int srcW = png->getWidth(), srcH = png->getHeight();
+    float yScale = 1.0f;
+    int dstW = srcW, dstH = srcH;
+    if (srcW > pageWidth || srcH > pageHeight) {
+      const float scaleX = (float)pageWidth / srcW, scaleY = (float)pageHeight / srcH;
+      const float scale = (scaleX < scaleY) ? scaleX : scaleY;
+      dstW = (int)(srcW * scale);
+      dstH = (int)(srcH * scale);
+      yScale = (float)dstH / srcH;
+    }
+
+    PngOverlayCtx ctx;
+    ctx.renderer = &renderer;
+    ctx.screenW = pageWidth;
+    ctx.screenH = pageHeight;
+    ctx.srcWidth = srcW;
+    ctx.dstWidth = dstW;
+    ctx.dstX = (pageWidth - dstW) / 2;
+    ctx.dstY = (pageHeight - dstH) / 2;
+    ctx.yScale = yScale;
+    ctx.lastDstY = -1;
+    ctx.transparentColor = -2;  // will be resolved on first draw callback (after tRNS is parsed)
+    ctx.pngObj = png;
+
+    rc = png->decode(&ctx, 0);
+    png->close();
+    delete png;
+    return rc == PNG_SUCCESS;
+  };
+
+  // Try /sleep/ directory first (random selection, same as renderCustomSleepScreen).
+  // Accepts both .bmp and .png files; .bmp headers are validated during the scan.
+  bool overlayDrawn = false;
+  auto dir = Storage.open("/sleep");
+  if (dir && dir.isDirectory()) {
+    std::vector<std::string> files;
+    char name[500];
+    for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
+      if (file.isDirectory()) {
+        file.close();
+        continue;
+      }
+      file.getName(name, sizeof(name));
+      auto filename = std::string(name);
+      if (filename[0] == '.') {
+        file.close();
+        continue;
+      }
+      const bool isBmp = FsHelpers::checkFileExtension(filename, ".bmp");
+      const bool isPng = FsHelpers::checkFileExtension(filename, ".png");
+      if (!isBmp && !isPng) {
+        file.close();
+        continue;
+      }
+      if (isBmp) {
+        Bitmap bmp(file);
+        if (bmp.parseHeaders() != BmpReaderError::Ok) {
+          file.close();
+          continue;
+        }
+      }
+      files.emplace_back(filename);
+      file.close();
+    }
+    const auto numFiles = files.size();
+    if (numFiles > 0) {
+      auto randomFileIndex = random(numFiles);
+      while (numFiles > 1 && randomFileIndex == APP_STATE.lastSleepImage) {
+        randomFileIndex = random(numFiles);
+      }
+      APP_STATE.lastSleepImage = randomFileIndex;
+      APP_STATE.saveToFile();
+      const std::string selected = "/sleep/" + files[randomFileIndex];
+      if (FsHelpers::checkFileExtension(selected, ".png")) {
+        overlayDrawn = tryDrawPngOverlay(selected);
+      } else {
+        overlayDrawn = tryDrawOverlay(selected);
+      }
+    }
+  }
+  if (dir) dir.close();
+
+  if (!overlayDrawn) {
+    overlayDrawn = tryDrawOverlay("/sleep.bmp");
+  }
+  if (!overlayDrawn) {
+    overlayDrawn = tryDrawPngOverlay("/sleep.png");
+  }
+
+  if (!overlayDrawn) {
+    LOG_DBG("SLP", "No overlay image found, displaying page without overlay");
+  }
+
+  renderer.setOrientation(savedOrientation);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
